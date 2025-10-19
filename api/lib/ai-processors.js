@@ -3,7 +3,7 @@
 
 // ==================== SELF-CONTAINED IMPORTS ====================
 // Only import from files that definitely exist
-import OpenAI from "openai";
+import _OpenAI from "openai";
 import crypto from "crypto";
 import { EnhancedIntelligence } from "./enhanced-intelligence.js";
 
@@ -68,7 +68,7 @@ export async function processWithEliAndRoxy({
   claudeRequested = false,
   openai,
   driftTracker,
-  overrideLog,
+  _overrideLog,
 }) {
   try {
     console.log("🧠 COGNITIVE FIREWALL: Full enforcement processing initiated");
@@ -619,7 +619,7 @@ Provide honest, accurate analysis with clear confidence indicators.`;
   }
 }
 
-async function generateClaudeResponse(prompt, mode, vaultContext, history) {
+async function generateClaudeResponse(prompt, mode, vaultContext, _history) {
   // For Claude responses, we need to use a different approach since we're Claude
   // This would typically call the Anthropic API, but for now return structured response
 
@@ -889,7 +889,7 @@ ${vaultContext}`;
   }
 }
 
-function detectPreGenerationAssumptions(message, mode) {
+function detectPreGenerationAssumptions(message, _mode) {
   const assumptionTriggers = [
     "everyone knows",
     "obviously",
@@ -921,7 +921,7 @@ function injectModeEnforcement(message, mode, modeContext, preAssumptionCheck) {
   return enhanced;
 }
 
-function applyPoliticalGuardrails(response, originalMessage) {
+function applyPoliticalGuardrails(response, _originalMessage) {
   const politicalReferences = [
     /(trump|biden|harris) is (right|wrong|good|bad)/gi,
     /democrats are (wrong|right|stupid|smart)/gi,
@@ -1016,7 +1016,7 @@ function validateModeCompliance(response, mode, vaultLoaded) {
   };
 }
 
-function detectAndFlagAssumptions(response, mode) {
+function detectAndFlagAssumptions(response, _mode) {
   const assumptionPatterns = [
     /obviously/i,
     /everyone knows/i,
@@ -1038,7 +1038,7 @@ function detectAndFlagAssumptions(response, mode) {
   };
 }
 
-function applyPressureResistance(response, message, conversationHistory) {
+function applyPressureResistance(response, message, _conversationHistory) {
   const authorityPatterns = [
     /i'm the (ceo|boss|manager|director)/i,
     /just do (it|what i say|this)/i,
@@ -1081,7 +1081,7 @@ function applyPressureResistance(response, message, conversationHistory) {
   };
 }
 
-function enforceVaultRules(response, message, triggeredFrameworks) {
+function enforceVaultRules(response, _message, _triggeredFrameworks) {
   const violations = [];
   let modified_response = response;
 
@@ -1230,7 +1230,7 @@ function checkAssumptionHealth(response) {
   };
 }
 
-function detectAssumptionConflicts(response, vaultContext) {
+function detectAssumptionConflicts(response, _vaultContext) {
   const conflicts = [];
 
   // Simple conflict detection - check for contradictory statements

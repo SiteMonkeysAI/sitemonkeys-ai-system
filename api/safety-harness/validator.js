@@ -2,7 +2,7 @@
 // Version: PROD-1.0 - COMPLETE ARCHITECTURAL INTEGRITY ENFORCEMENT
 
 import fs from 'fs';
-import path from 'path';
+import _path from '_path';
 
 // ==================== SYSTEM CONTRACT DEFINITIONS ====================
 
@@ -150,7 +150,7 @@ class CognitiveFirewallValidator {
       'public/js/app.js'
     ];
     
-    const criticalFunctions = {
+    const _criticalFunctions = {
       'ai-processors.js': [
         'processWithEliAndRoxy',
         'validateModeCompliance', 
@@ -214,7 +214,7 @@ class CognitiveFirewallValidator {
 
   // ==================== PHASE 2: RESPONSE SCHEMA VALIDATION ====================
   
-  validateResponseSchema(response, mode) {
+  validateResponseSchema(response, _mode) {
     console.log('📋 Validating response schema compliance...');
     
     // Check Core Fields
@@ -524,7 +524,7 @@ class CognitiveFirewallValidator {
   generateValidationReport() {
     console.log('📊 Generating validation report...');
     
-    const totalIssues = this.validationResults.critical_failures.length + this.validationResults.warnings.length;
+    const _totalIssues = this.validationResults.critical_failures.length + this.validationResults.warnings.length;
     const criticalIssues = this.validationResults.critical_failures.length;
     
     // Calculate integrity score

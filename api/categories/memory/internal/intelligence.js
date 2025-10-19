@@ -897,7 +897,7 @@ class IntelligenceSystem {
   // CATEGORY SCORING SYSTEM
   // ================================================================
 
-  async calculateAdvancedCategoryScores(query, semanticAnalysis, userId) {
+  async calculateAdvancedCategoryScores(query, semanticAnalysis, _userId) {
     const scores = new Map();
 
     for (const [categoryName, config] of this.categoryMappings) {
@@ -1155,7 +1155,7 @@ class IntelligenceSystem {
   // CATEGORY DETERMINATION & CONFIDENCE
   // ================================================================
 
-  determineBestCategoryWithConfidence(categoryScores, semanticAnalysis, query) {
+  determineBestCategoryWithConfidence(categoryScores, semanticAnalysis, _query) {
     const sortedCategories = Array.from(categoryScores.entries()).sort(
       ([, a], [, b]) => b - a,
     );
@@ -1212,7 +1212,7 @@ class IntelligenceSystem {
     routingResult,
     query,
     semanticAnalysis,
-    userId,
+    _userId,
   ) {
     let { primaryCategory, confidence } = routingResult;
     let reasoning = routingResult.reasoning;
@@ -1682,7 +1682,7 @@ class IntelligenceSystem {
   // SOPHISTICATED SCORING SYSTEM
   // ================================================================
 
-  async applySophisticatedScoring(memories, query, semanticAnalysis, routing) {
+  async applySophisticatedScoring(memories, query, _semanticAnalysis, _routing) {
     if (!memories || memories.length === 0) return [];
 
     this.logger.log(
@@ -2037,7 +2037,7 @@ class IntelligenceSystem {
       if (lastAccessDays < 1) score += 0.3;
       else if (lastAccessDays < 7) score += 0.2;
       else if (lastAccessDays < 30) score += 0.1;
-    } catch (error) {
+    } catch (_error) {
       score = 0.1;
     }
 
@@ -2088,7 +2088,7 @@ class IntelligenceSystem {
       .map((word) => word.toLowerCase());
   }
 
-  applyIntelligentRanking(memories, semanticAnalysis) {
+  applyIntelligentRanking(memories, _semanticAnalysis) {
     return memories.sort((a, b) => {
       // PRIORITY 1: Content intelligence score (if available from SQL)
       if (a.content_intelligence_score && b.content_intelligence_score) {
@@ -2382,7 +2382,7 @@ class IntelligenceSystem {
   // CROSS-DOMAIN MEMORY CONNECTIONS
   // ================================================================
 
-  async findCrossDomainMemoryConnections(memories, primaryCategory) {
+  async findCrossDomainMemoryConnections(memories, _primaryCategory) {
     const connections = [];
     const categoryMemoryMap = new Map();
 
@@ -2472,7 +2472,7 @@ class IntelligenceSystem {
   // SCENARIO-RELEVANT MEMORY EXTRACTION
   // ================================================================
 
-  extractScenarioRelevantMemories(memories, query) {
+  extractScenarioRelevantMemories(memories, _query) {
     const scenarioMemories = {
       successPatterns: [],
       failurePatterns: [],
@@ -2667,7 +2667,7 @@ class IntelligenceSystem {
     );
   }
 
-  providesEvidence(content, query) {
+  providesEvidence(content, _query) {
     return (
       content.toLowerCase().includes("data") ||
       content.toLowerCase().includes("evidence") ||
@@ -2676,7 +2676,7 @@ class IntelligenceSystem {
     );
   }
 
-  providesCounterexample(content, query) {
+  providesCounterexample(content, _query) {
     return (
       content.toLowerCase().includes("however") ||
       content.toLowerCase().includes("but") ||
@@ -2684,7 +2684,7 @@ class IntelligenceSystem {
     );
   }
 
-  establishesPattern(content, query) {
+  establishesPattern(content, _query) {
     return (
       content.toLowerCase().includes("always") ||
       content.toLowerCase().includes("usually") ||
@@ -2953,7 +2953,7 @@ class IntelligenceSystem {
   // CROSS-CATEGORY FALLBACK SEARCH
   // ================================================================
 
-  async tryRelatedCategories(userId, query, routing, semanticAnalysis) {
+  async tryRelatedCategories(userId, query, routing, _semanticAnalysis) {
     // Define category relationships
     const categoryRelations = {
       personal_life_interests: ["relationships_social", "home_lifestyle"],
@@ -3026,7 +3026,7 @@ class IntelligenceSystem {
   // SIMILARITY-BASED RE-RANKING
   // ================================================================
 
-  rerankBySimilarity(memories, query) {
+  rerankBySimilarity(memories, _query) {
     return memories.sort((a, b) => {
       // PRIMARY: Similarity score to query
       const similarityDiff = b.similarityScore - a.similarityScore;

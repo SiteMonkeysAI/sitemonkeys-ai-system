@@ -367,18 +367,18 @@ function calculateAutomationMetrics(operationalData) {
 }
 
 // PLACEHOLDER FUNCTIONS FOR WORKFLOW STEPS
-async function processStripeWebhook(params) { return { processed: true }; }
-async function createAirtableRecord(params) { return { recordId: 'rec123' }; }
+async function processStripeWebhook(_params) { return { processed: true }; }
+async function createAirtableRecord(_params) { return { recordId: 'rec123' }; }
 async function assignCustomerTier(params, tier) { return { tier: tier }; }
-async function sendWelcomeEmail(params, tier) { return { emailSent: true }; }
-async function createDashboardAccess(params, tier) { return { accessCreated: true }; }
-async function activateInitialServices(params, tier) { return { servicesActive: true }; }
-async function initiateWebsiteScan(params) { return { scanInitiated: true }; }
-async function performTechnicalAnalysis(params) { return { analysisComplete: true }; }
-async function generateOptimizationRecommendations(params, tier) { return { recommendationsGenerated: true }; }
-async function performTopicResearch(params) { return { researchComplete: true }; }
-async function generateAIContent(params, tier) { return { contentGenerated: true }; }
-async function validateContentQuality(params, tier) { return { qualityValidated: true }; }
+async function sendWelcomeEmail(_params, _tier) { return { emailSent: true }; }
+async function createDashboardAccess(_params, _tier) { return { accessCreated: true }; }
+async function activateInitialServices(_params, _tier) { return { servicesActive: true }; }
+async function initiateWebsiteScan(_params) { return { scanInitiated: true }; }
+async function performTechnicalAnalysis(_params) { return { analysisComplete: true }; }
+async function generateOptimizationRecommendations(_params, _tier) { return { recommendationsGenerated: true }; }
+async function performTopicResearch(_params) { return { researchComplete: true }; }
+async function generateAIContent(_params, _tier) { return { contentGenerated: true }; }
+async function validateContentQuality(_params, _tier) { return { qualityValidated: true }; }
 
 export {
   SERVICE_AUTOMATION,

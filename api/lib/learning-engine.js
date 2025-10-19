@@ -691,7 +691,7 @@ class LearningEngine {
     return Math.min(1.0, complexity);
   }
 
-  identifyBusinessDomain(query, context) {
+  identifyBusinessDomain(query, _context) {
     if (/survival|cash|runway|margin/i.test(query)) return "business_survival";
     if (/strategy|competitive|market/i.test(query)) return "strategic_planning";
     if (/financial|revenue|profit|cost/i.test(query))

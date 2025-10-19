@@ -77,7 +77,7 @@ async function validateAIOutput(output, customerTier, contentType) {
 
 // AI FAILOVER ORCHESTRATION  
 async function processWithFailover(prompt, customerTier, maxAttempts = 3) {  
-  const threshold = QUALITY_ENFORCEMENT.thresholds[customerTier];  
+  const _threshold = QUALITY_ENFORCEMENT.thresholds[customerTier];  
   let attempts = 0;  
     
   while (attempts < maxAttempts) {  

@@ -240,7 +240,7 @@ Apply CEO-level strategic thinking to synthesize insights and generate breakthro
     query,
     context,
     businessWisdom,
-    mode,
+    _mode,
     confidenceRequirement,
   }) {
     const requirements = {
@@ -309,7 +309,7 @@ Apply CEO-level strategic thinking to synthesize insights and generate breakthro
     return Array.from(domains);
   }
 
-  determineReasoningType(query, context) {
+  determineReasoningType(query, _context) {
     if (/strategy|strategic|plan|approach/i.test(query))
       return "strategic_reasoning";
     if (/analyze|assessment|evaluation/i.test(query))
@@ -539,7 +539,7 @@ Apply CEO-level strategic thinking to synthesize insights and generate breakthro
     }
   }
 
-  async callClaude(prompt, context, model) {
+  async callClaude(prompt, context, _model) {
     // This would be your actual Claude API call
     // For now, return a structured response that demonstrates the concept
 
@@ -634,7 +634,7 @@ Based on evidence quality and principle alignment: 87% confidence in primary rec
     return aiInsight;
   }
 
-  buildSynthesisPrompt(aiInsight, reasoningContext) {
+  buildSynthesisPrompt(aiInsight, _reasoningContext) {
     return `Based on the following domain-specific analysis, provide cross-domain synthesis that generates novel strategic insights:
 
 DOMAIN ANALYSIS:
@@ -649,7 +649,7 @@ SYNTHESIS REQUIREMENTS:
 Provide strategic synthesis that demonstrates extraordinary intelligence.`;
   }
 
-  assessReasoningQuality(insight, requirements) {
+  assessReasoningQuality(insight, _requirements) {
     let qualityScore = 0.5;
     let confidence = 0.5;
 
@@ -849,7 +849,7 @@ Provide strategic synthesis that demonstrates extraordinary intelligence.`;
     };
   }
 
-  calculateActualCost(insight) {
+  calculateActualCost(_insight) {
     // Calculate actual cost after reasoning
     return {
       actual_tokens: 3000, // Would be actual token count

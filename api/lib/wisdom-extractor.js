@@ -252,7 +252,7 @@ class WisdomExtractor {
     return applicablePrinciples;
   }
 
-  gatherBusinessIntelligence(query, context, mode) {
+  gatherBusinessIntelligence(query, context, _mode) {
     const intelligence = [];
 
     // Always include truth assessment
@@ -289,7 +289,7 @@ class WisdomExtractor {
     return intelligence;
   }
 
-  selectDecisionFrameworks(query, context, mode) {
+  selectDecisionFrameworks(query, context, _mode) {
     const frameworks = [];
 
     // Business decision framework

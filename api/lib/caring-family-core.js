@@ -149,7 +149,7 @@ export function identifyExpertDomain(message) {
   };
 }
 
-export function analyzeCareNeeds(message, conversationHistory) {
+export function analyzeCareNeeds(message, _conversationHistory) {
   const stressIndicators = [
     "urgent",
     "worried",

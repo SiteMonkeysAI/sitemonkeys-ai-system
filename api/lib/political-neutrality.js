@@ -80,7 +80,7 @@ export function determineContentType(analysis) {
   return 'non_political';
 }
 
-export function generateNeutralityResponse(contentType, originalMessage) {
+export function generateNeutralityResponse(contentType, _originalMessage) {
   switch (contentType) {
     case 'voting_recommendation_request':
       return generateVotingResponse();

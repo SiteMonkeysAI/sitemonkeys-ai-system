@@ -93,15 +93,15 @@ class CoreSystem {
       }, 30000);
 
       // Pool event handling with detailed logging
-      this.pool.on("connect", (client) => {
+      this.pool.on("connect", (_client) => {
         this.logger.log("Database client connected");
       });
 
-      this.pool.on("error", (err, client) => {
+      this.pool.on("error", (err, _client) => {
         this.logger.error("Database pool error:", err);
       });
 
-      this.pool.on("remove", (client) => {
+      this.pool.on("remove", (_client) => {
         this.logger.log("Database client removed from pool");
       });
 

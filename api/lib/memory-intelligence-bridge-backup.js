@@ -62,7 +62,7 @@ Use this context to provide continuity. Reference prior discussions with phrases
   }
 }
 
-  formatIntelligentMemory(memoryContext, personality) {
+  formatIntelligentMemory(memoryContext, _personality) {
     let formatted = `=== CONTEXT FROM YOUR MEMORY ===\n`;
     
     // Add standard memories
@@ -91,7 +91,7 @@ Use this context to provide continuity. Reference prior discussions with phrases
     return formatted;
   }
 
-  formatStandardMemory(memories, personality) {
+  formatStandardMemory(memories, _personality) {
     if (!memories || memories.trim() === '') return '';
     
     return `=== CONTEXT FROM YOUR MEMORY ===\n${memories}\n\n`;
@@ -134,7 +134,7 @@ ${formattedMemory}
     }
   }
 
-  getErrorPrompt(personality) {
+  getErrorPrompt(_personality) {
     return `Memory system encountered an error. Proceeding without previous context. If continuity is important, please provide relevant background.`;
   }
 

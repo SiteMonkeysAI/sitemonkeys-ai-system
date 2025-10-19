@@ -6,7 +6,7 @@ export class UnifiedResponseSchema {
   // MASTER SCHEMA BUILDER - Single authority for all response formatting
   static buildUnifiedResponse(processedResponse, systemData, enforcementData) {
     const {
-      content,
+      _content,
       mode,
       personality,
       expertDomain = 'general',

@@ -7,35 +7,35 @@ console.log("[CHAT] 🚀 Chat system initializing...");
 console.log("[DEBUG] Chat imports starting...");
 
 // CORRECTED IMPORTS - Replace existing imports in chat.js
-import { trackApiCall, formatSessionDataForUI } from "./lib/tokenTracker.js";
+import { _trackApiCall, formatSessionDataForUI } from "./lib/tokenTracker.js";
 import {
   EMERGENCY_FALLBACKS,
   validateVaultStructure,
-  getVaultValue,
+  _getVaultValue,
 } from "./lib/site-monkeys/emergency-fallbacks.js";
-import { extractedDocuments } from "./lib/upload-for-analysis.js";
-import { ENFORCEMENT_PROTOCOLS } from "./lib/site-monkeys/site-monkeys/enforcement-protocols.js";
-import { QUALITY_ENFORCEMENT } from "./lib/site-monkeys/site-monkeys/quality-enforcement.js";
-import { AI_ARCHITECTURE } from "./lib/site-monkeys/site-monkeys/ai-architecture.js";
+import { _extractedDocuments } from "./lib/upload-for-analysis.js";
+import { _ENFORCEMENT_PROTOCOLS } from "./lib/site-monkeys/site-monkeys/enforcement-protocols.js";
+import { _QUALITY_ENFORCEMENT } from "./lib/site-monkeys/site-monkeys/quality-enforcement.js";
+import { _AI_ARCHITECTURE } from "./lib/site-monkeys/site-monkeys/ai-architecture.js";
 import {
   getVaultStatus,
-  checkVaultTriggers,
-  generateVaultContext,
-  enforceVaultCompliance,
+  _checkVaultTriggers,
+  _generateVaultContext,
+  _enforceVaultCompliance,
 } from "./lib/vault.js";
 import {
-  integrateSystemIntelligence,
-  enhancePromptWithIntelligence,
+  _integrateSystemIntelligence,
+  _enhancePromptWithIntelligence,
   getSystemIntelligenceStatus,
 } from "./lib/system-intelligence.js";
 import zlib from "zlib";
 import { enhanceMemoryWithStructure } from "./lib/memory-enhancer.js";
 import { masterOrchestrator } from "./lib/master-intelligence-orchestrator.js";
-import { validateContextPriority } from "./lib/context-priority-validator.js";
+import { _validateContextPriority } from "./lib/context-priority-validator.js";
 
 // NEW ENFORCEMENT MODULE IMPORTS (ADD THESE)
 import {
-  FAMILY_PHILOSOPHY,
+  _FAMILY_PHILOSOPHY,
   identifyExpertDomain,
   analyzeCareNeeds,
   calculatePrideMotivation,
@@ -45,14 +45,14 @@ import {
 } from "./caring-family-core.js";
 
 import {
-  requiresQuantitativeReasoning,
+  _requiresQuantitativeReasoning,
   enforceQuantitativeAnalysis,
   enforceCalculationStandards,
   validateCalculationQuality,
 } from "./quantitative-enforcer.js";
 
 import {
-  requiresSurvivalAnalysis,
+  _requiresSurvivalAnalysis,
   enforceBusinessSurvival,
   validateBusinessSurvival,
   applySurvivalProtection,
@@ -78,7 +78,7 @@ import {
 } from "./political-neutrality.js";
 
 import {
-  detectSiteMonkeysViolations,
+  _detectSiteMonkeysViolations,
   enforceSiteMonkeysStandards,
   enforcePricingFloors,
   integrateVaultLogic,
@@ -86,11 +86,11 @@ import {
 
 import { ResponseObjectUnifier } from "./response-object-unifier.js";
 import { MasterModeCompliance } from "./master-mode-compliance.js";
-import { UnifiedResponseSchema } from "./unified-response-schema.js";
+import { _UnifiedResponseSchema } from "./unified-response-schema.js";
 import { EnhancedIntelligence } from "./lib/enhanced-intelligence.js";
 // masterOrchestrator already imported on line 20
 import { IntelligenceOrchestrator } from "./lib/intelligence-orchestrator.js";
-import { coordinator as IntelligenceCoordinator } from "./lib/intelligence-coordinator.js";
+import { coordinator as _IntelligenceCoordinator } from "./lib/intelligence-coordinator.js";
 
 import { intelligenceSystem } from "../categories/memory/index.js";
 
@@ -147,7 +147,7 @@ async function initializeMemoryIntelligenceBridge() {
       const { intelligenceOrchestrator } = await import(
         "./lib/intelligence-orchestrator.js"
       );
-      intelligenceOrchestrator = intelligenceOrchestrator;
+      const _intelligenceOrchestrator = intelligenceOrchestrator;
       console.log("Intelligence Orchestrator loaded successfully");
     } catch (error) {
       console.log("Intelligence orchestrator not available:", error.message);
@@ -214,7 +214,7 @@ export default async function handler(req, res) {
         vaultTokens = Math.ceil(vaultContent.length / 4);
         vaultStatus = "loaded_from_frontend";
         vaultHealthy = true; // vault.js will handle health validation
-        const vaultStatusObj = getVaultStatus();
+        const _vaultStatusObj = getVaultStatus();
       } else {
         const kvVault = process.env.VAULT_CONTENT;
         if (kvVault) {
@@ -226,7 +226,7 @@ export default async function handler(req, res) {
             vaultTokens = Math.ceil(vaultContent.length / 4);
             vaultStatus = "loaded_from_kv";
             vaultHealthy = validateVaultStructure(vaultContent);
-          } catch (decompError) {
+          } catch (_decompError) {
             vaultContent = kvVault;
             vaultTokens = Math.ceil(vaultContent.length / 4);
             vaultStatus = "loaded_from_kv_uncompressed";
@@ -284,7 +284,7 @@ export default async function handler(req, res) {
     );
 
     // 5. CROSS-CONTEXT INTELLIGENCE
-    const crossContextNeeds = assessCrossContextNeeds(
+    const _crossContextNeeds = assessCrossContextNeeds(
       message,
       conversation_history,
       FAMILY_MEMORY.userGoals,
@@ -389,7 +389,7 @@ Would you like to proceed?`,
     console.log("[MEMORY-INTELLIGENCE] Starting integration");
 
     // Initialize the bridge
-    const memoryIntelligenceBridge = await initializeMemoryIntelligenceBridge();
+    const _memoryIntelligenceBridge = await initializeMemoryIntelligenceBridge();
 
     // *** UPDATED INTELLIGENCE SYSTEM INTEGRATION ***
     let intelligenceRouting = null;
@@ -465,7 +465,7 @@ Would you like to proceed?`,
     );
 
     // Memory bridge removed to prevent database race condition
-    let intelligenceResult = {
+    let _intelligenceResult = {
       intelligenceEnhanced: false,
       memoryIntegrated: false,
       enginesActivated: ["intelligence_system_only"],
@@ -595,11 +595,11 @@ Would you like to proceed?`,
       const basePrompt = masterPrompt; // Using master prompt directly as base
 
       // *** SYSTEM INTELLIGENCE INTEGRATION - FALLBACK SAFE ***
-      const intelligence = {
+      const _intelligence = {
         vaultIntelligenceActive: vaultHealthy,
         status: "active",
       };
-      const fullPrompt = basePrompt;
+      const _fullPrompt = basePrompt;
 
       // *** BULLETPROOF UNIFIED INTELLIGENCE PROCESSING ***
       let finalResponse;
@@ -1243,7 +1243,7 @@ function deriveLogicalConclusion(message, expertDomain) {
   return `${expertDomain?.title || "Expert"} perspective suggests an integrated approach considering the identified factors`;
 }
 
-function buildBusinessScenarios(message, vaultContent) {
+function buildBusinessScenarios(message, _vaultContent) {
   // Default scenarios
   let scenarios = {
     best: "optimal outcome with favorable market conditions",
@@ -1308,7 +1308,7 @@ function identifyRelevantDomains(message) {
   return domains;
 }
 
-function buildDomainConnections(domains, message) {
+function buildDomainConnections(domains, _message) {
   const connections = [];
 
   if (domains.includes("business") && domains.includes("health")) {
@@ -1776,7 +1776,7 @@ async function makeEnhancedAPICall(
 }
 
 // *** UTILITY FUNCTIONS ***
-function generateCaringCostMessage(estimatedCost, expertDomain, careNeeds) {
+function generateCaringCostMessage(estimatedCost, expertDomain, _careNeeds) {
   return `As your dedicated family expert in ${expertDomain.domain.replace(/_/g, " ")}, I want to provide the most thorough analysis possible for this important decision.
 
 The estimated cost would be $${estimatedCost.toFixed(4)}, which exceeds our $0.50 limit. I care about managing resources responsibly while delivering the excellence you deserve.
@@ -1789,7 +1789,7 @@ Would you like me to:
 Family takes care of family - what would work best for your situation?`;
 }
 
-function generateCaringEmergencyResponse(error, mode, vaultContent) {
+function generateCaringEmergencyResponse(error, _mode, vaultContent) {
   return `I encountered a technical issue while providing the caring, expert analysis you deserve, and I want to be completely transparent about that.
 
 Even with this system challenge, my commitment to your success remains absolute. Based on the principles of truth-first caring guidance:
@@ -1885,8 +1885,8 @@ function comprehensiveVaultDiagnostic(
     console.log(
       "🔍 Failed components:",
       Object.entries(results)
-        .filter(([k, v]) => v === "FAILED")
-        .map(([k, v]) => k),
+        .filter(([_k, v]) => v === "FAILED")
+        .map(([k, _v]) => k),
     );
   }
 

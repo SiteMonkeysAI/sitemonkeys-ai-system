@@ -553,7 +553,7 @@ class StreamProcessor {
 
   // DATA PROCESSOR IMPLEMENTATIONS
 
-  async processMarketData(data, query, context) {
+  async processMarketData(data, _query, _context) {
     return {
       metrics: {
         market_volatility: data.volatility || 0.05,
@@ -568,7 +568,7 @@ class StreamProcessor {
     };
   }
 
-  async processFinancialData(data, query, context) {
+  async processFinancialData(data, _query, _context) {
     return {
       metrics: {
         revenue_change: data.revenue_change || 0,
@@ -583,7 +583,7 @@ class StreamProcessor {
     };
   }
 
-  async processBusinessMetrics(data, query, context) {
+  async processBusinessMetrics(data, _query, _context) {
     return {
       metrics: {
         customer_acquisition_cost: data.cac || 0,
@@ -598,7 +598,7 @@ class StreamProcessor {
     };
   }
 
-  async processCompetitiveIntel(data, query, context) {
+  async processCompetitiveIntel(data, _query, _context) {
     return {
       metrics: {
         competitive_activity: data.competitive_moves || 0,
@@ -613,7 +613,7 @@ class StreamProcessor {
     };
   }
 
-  async processNewsEvents(data, query, context) {
+  async processNewsEvents(data, _query, _context) {
     return {
       metrics: {
         news_sentiment: data.sentiment_score || 0,
@@ -628,7 +628,7 @@ class StreamProcessor {
     };
   }
 
-  async processCustomerData(data, query, context) {
+  async processCustomerData(data, _query, _context) {
     return {
       metrics: {
         customer_churn: data.churn_rate || 0,
@@ -677,7 +677,7 @@ class StreamProcessor {
 
   // INSIGHTS EXTRACTORS
 
-  extractMarketInsights(processedData, query, context) {
+  extractMarketInsights(processedData, _query, _context) {
     return {
       insights: [
         `Market volatility at ${(processedData.metrics.market_volatility * 100).toFixed(1)}%`,
@@ -690,7 +690,7 @@ class StreamProcessor {
     };
   }
 
-  extractFinancialInsights(processedData, query, context) {
+  extractFinancialInsights(processedData, _query, _context) {
     return {
       insights: [
         `Revenue change: ${(processedData.metrics.revenue_change * 100).toFixed(1)}%`,
@@ -703,7 +703,7 @@ class StreamProcessor {
     };
   }
 
-  extractCompetitiveInsights(processedData, query, context) {
+  extractCompetitiveInsights(processedData, _query, _context) {
     return {
       insights: [
         `Competitive activity level: ${processedData.metrics.competitive_activity}`,
@@ -713,7 +713,7 @@ class StreamProcessor {
     };
   }
 
-  extractBusinessInsights(processedData, query, context) {
+  extractBusinessInsights(processedData, _query, _context) {
     return {
       insights: [
         `Business health: ${processedData.processed_indicators.business_health}`,
@@ -722,7 +722,7 @@ class StreamProcessor {
     };
   }
 
-  extractNewsInsights(processedData, query, context) {
+  extractNewsInsights(processedData, _query, _context) {
     return {
       insights: [
         `Industry sentiment: ${processedData.processed_indicators.public_sentiment}`,
@@ -731,7 +731,7 @@ class StreamProcessor {
     };
   }
 
-  extractCustomerInsights(processedData, query, context) {
+  extractCustomerInsights(processedData, _query, _context) {
     return {
       insights: [
         `Customer health: ${processedData.processed_indicators.customer_health}`,
@@ -742,7 +742,7 @@ class StreamProcessor {
 
   // DATA GENERATORS (Placeholders for real integrations)
 
-  generateMarketData(query, context) {
+  generateMarketData(_query, _context) {
     return {
       volatility: Math.random() * 0.1 + 0.02,
       trend: ['bullish', 'bearish', 'stable'][Math.floor(Math.random() * 3)],
@@ -755,7 +755,7 @@ class StreamProcessor {
     };
   }
 
-  generateFinancialData(query, context) {
+  generateFinancialData(_query, _context) {
     return {
       revenue_change: Math.random() * 0.4 - 0.2, // -20% to +20%
       cash_flow: Math.random() * 200000 - 100000, // -100k to +100k
@@ -764,7 +764,7 @@ class StreamProcessor {
     };
   }
 
-  generateBusinessMetrics(query, context) {
+  generateBusinessMetrics(_query, _context) {
     return {
       cac: Math.random() * 500 + 100, // $100-600 CAC
       ltv: Math.random() * 5000 + 1000, // $1000-6000 LTV
@@ -773,7 +773,7 @@ class StreamProcessor {
     };
   }
 
-  generateCompetitiveIntel(query, context) {
+  generateCompetitiveIntel(_query, _context) {
     return {
       competitive_moves: Math.floor(Math.random() * 5),
       market_share_change: Math.random() * 0.1 - 0.05,
@@ -783,7 +783,7 @@ class StreamProcessor {
     };
   }
 
-  generateNewsEvents(query, context) {
+  generateNewsEvents(_query, _context) {
     return {
       sentiment_score: Math.random() * 2 - 1, // -1 to 1
       industry_mentions: Math.floor(Math.random() * 20),
@@ -792,7 +792,7 @@ class StreamProcessor {
     };
   }
 
-  generateCustomerData(query, context) {
+  generateCustomerData(_query, _context) {
     return {
       churn_rate: Math.random() * 0.15, // 0-15% churn
       satisfaction_score: Math.random() * 0.3 + 0.7, // 0.7-1.0 satisfaction

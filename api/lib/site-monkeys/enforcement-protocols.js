@@ -103,7 +103,7 @@ function validateSystemCompliance(systemSpec) {
   };  
 }
 
-function enforceZeroFailureResponse(response, confidence, context = {}) {  
+function enforceZeroFailureResponse(response, confidence, _context = {}) {  
   const result = {
     response: response,
     confidence: confidence,

@@ -319,7 +319,7 @@ export class MemoryIntelligenceBridge {
   // EXISTING INTELLIGENCE ENGINE ACTIVATION
   // ================================================================
 
-  async activateEnhancedIntelligence(query, mode, memoryContext, vaultContext, activation) {
+  async activateEnhancedIntelligence(query, mode, memoryContext, vaultContext, _activation) {
     try {
       // Call existing enhanced-intelligence.js with properly formatted memory
       const baseResponse = "Processing with enhanced intelligence...";
@@ -347,7 +347,7 @@ export class MemoryIntelligenceBridge {
     }
   }
 
-  async activateReasoningEngine(query, mode, memoryContext, vaultContext, activation) {
+  async activateReasoningEngine(query, mode, memoryContext, _vaultContext, _activation) {
     try {
       // Call existing ai-reasoning-engine.js with properly formatted context
       const reasoningContext = {
@@ -371,7 +371,7 @@ export class MemoryIntelligenceBridge {
     }
   }
 
-  async activateIntelligenceOrchestrator(query, mode, memoryContext, vaultContext, activation) {
+  async activateIntelligenceOrchestrator(query, mode, memoryContext, vaultContext, _activation) {
     try {
       // Call existing intelligence-orchestrator.js with memory context
       const context = {
@@ -403,7 +403,7 @@ export class MemoryIntelligenceBridge {
   // RESPONSE SYNTHESIS
   // ================================================================
 
-  synthesizeIntelligenceResponses(enhancedResponse, reasoningResponse, orchestratorResponse, personality) {
+  synthesizeIntelligenceResponses(enhancedResponse, reasoningResponse, orchestratorResponse, _personality) {
     const responses = [enhancedResponse, reasoningResponse, orchestratorResponse].filter(r => r !== null);
     
     if (responses.length === 0) {
@@ -430,7 +430,7 @@ export class MemoryIntelligenceBridge {
     };
   }
 
-  createFallbackResponse(query, mode, personality) {
+  createFallbackResponse(_query, _mode, _personality) {
     return {
       intelligenceEnhanced: false,
       memoryIntegrated: false,

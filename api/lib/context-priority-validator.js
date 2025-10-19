@@ -1,6 +1,6 @@
 // Context Priority Validator - Ensures vault always wins
 export function validateContextPriority(contexts) {
-  const { vaultContext, documentContext, mode } = contexts;
+  const { vaultContext, documentContext, _mode } = contexts;
 
   if (vaultContext && vaultContext.healthy) {
     console.log("[PRIORITY] Vault detected - suppressing document context");

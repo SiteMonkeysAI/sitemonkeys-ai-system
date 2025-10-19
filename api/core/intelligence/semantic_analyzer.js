@@ -683,7 +683,7 @@ export class SemanticAnalyzer {
 
   // ==================== PERFORMANCE TRACKING ====================
 
-  #trackPerformance(startTime, cacheHit) {
+  #trackPerformance(startTime, _cacheHit) {
     this.stats.totalAnalyses++;
 
     const processingTime = Date.now() - startTime;
@@ -708,7 +708,7 @@ export class SemanticAnalyzer {
 
   // ==================== FALLBACK ANALYSIS ====================
 
-  #generateFallbackAnalysis(query, context) {
+  #generateFallbackAnalysis(query, _context) {
     this.logger.error(
       "Using fallback analysis due to semantic analysis failure",
     );

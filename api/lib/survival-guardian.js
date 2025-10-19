@@ -75,7 +75,7 @@ export function detectMarginViolations(response) {
   return violations;
 }
 
-export function generateSurvivalAnalysis(message, expertDomain, vaultContent) {
+export function generateSurvivalAnalysis(message, expertDomain, _vaultContent) {
   if (!requiresSurvivalAnalysis(message, expertDomain)) {
     return null;
   }
@@ -305,7 +305,7 @@ export function containsSurvivalAnalysis(response) {
   );
 }
 
-export function applySurvivalProtection(response, mode, vaultContent) {
+export function applySurvivalProtection(response, mode, _vaultContent) {
   if (mode !== 'site_monkeys') {
     return response;
   }
