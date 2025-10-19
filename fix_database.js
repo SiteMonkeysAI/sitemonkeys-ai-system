@@ -1,47 +1,59 @@
 // fix_database.js - Complete Database Schema Fix
 // Run this ONCE to fix your persistent_memories table
 
-import pg from 'pg';
+import pg from "pg";
 const { Client } = pg;
 
 async function fixDatabase() {
-    const client = new Client({
-        connectionString: process.env.DATABASE_URL,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-    });
+  const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl:
+      process.env.NODE_ENV === "production"
+        ? { rejectUnauthorized: false }
+        : false,
+  });
 
-    try {
-        await client.connect();
-        console.log('🔌 Connected to database');
+  try {
+    await client.connect();
+    console.log("🔌 Connected to database");
 
-        // Step 1: Check current table structure
-        console.log('📋 Checking current table structure...');
-        const tableInfo = await client.query(`
+    // Step 1: Check current table structure
+    console.log("📋 Checking current table structure...");
+    const tableInfo = await client.query(`
             SELECT column_name, data_type 
             FROM information_schema.columns 
             WHERE table_name = 'persistent_memories'
             ORDER BY ordinal_position;
         `);
-        
-        console.log('Current columns:', tableInfo.rows.map(r => r.column_name));
 
-        // Step 2: Fix column names if needed
-        const hasCorrectColumns = tableInfo.rows.some(r => r.column_name === 'category_name');
-        
-        if (!hasCorrectColumns) {
-            console.log('🔧 Fixing column names...');
-            
-            // Rename columns to match code expectations
-            await client.query('ALTER TABLE persistent_memories RENAME COLUMN category TO category_name;');
-            await client.query('ALTER TABLE persistent_memories RENAME COLUMN subcategory TO subcategory_name;');
-            
-            console.log('✅ Column names fixed');
-        }
+    console.log(
+      "Current columns:",
+      tableInfo.rows.map((r) => r.column_name),
+    );
 
-        // Step 3: Ensure all required columns exist
-        console.log('📋 Ensuring all required columns exist...');
-        
-        await client.query(`
+    // Step 2: Fix column names if needed
+    const hasCorrectColumns = tableInfo.rows.some(
+      (r) => r.column_name === "category_name",
+    );
+
+    if (!hasCorrectColumns) {
+      console.log("🔧 Fixing column names...");
+
+      // Rename columns to match code expectations
+      await client.query(
+        "ALTER TABLE persistent_memories RENAME COLUMN category TO category_name;",
+      );
+      await client.query(
+        "ALTER TABLE persistent_memories RENAME COLUMN subcategory TO subcategory_name;",
+      );
+
+      console.log("✅ Column names fixed");
+    }
+
+    // Step 3: Ensure all required columns exist
+    console.log("📋 Ensuring all required columns exist...");
+
+    await client.query(`
             -- Add missing columns if they don't exist
             DO $$ 
             BEGIN
@@ -71,9 +83,9 @@ async function fixDatabase() {
             END $$;
         `);
 
-        // Step 4: Create memory_categories table if missing
-        console.log('📋 Creating memory_categories table...');
-        await client.query(`
+    // Step 4: Create memory_categories table if missing
+    console.log("📋 Creating memory_categories table...");
+    await client.query(`
             CREATE TABLE IF NOT EXISTS memory_categories (
                 id SERIAL PRIMARY KEY,
                 user_id TEXT NOT NULL,
@@ -89,9 +101,9 @@ async function fixDatabase() {
             );
         `);
 
-        // Step 5: Create user_memory_profiles table if missing
-        console.log('📋 Creating user_memory_profiles table...');
-        await client.query(`
+    // Step 5: Create user_memory_profiles table if missing
+    console.log("📋 Creating user_memory_profiles table...");
+    await client.query(`
             CREATE TABLE IF NOT EXISTS user_memory_profiles (
                 user_id TEXT PRIMARY KEY,
                 total_memories INTEGER DEFAULT 0,
@@ -103,27 +115,27 @@ async function fixDatabase() {
             );
         `);
 
-        // Step 6: Create indexes for performance
-        console.log('📋 Creating performance indexes...');
-        await client.query(`
+    // Step 6: Create indexes for performance
+    console.log("📋 Creating performance indexes...");
+    await client.query(`
             CREATE INDEX IF NOT EXISTS idx_pm_user_cat_rel_created
                 ON persistent_memories (user_id, category_name, relevance_score DESC, created_at DESC);
             CREATE INDEX IF NOT EXISTS idx_pm_last_accessed
                 ON persistent_memories (user_id, last_accessed DESC);
         `);
 
-        // Step 7: Migrate data from memory_entries if it exists
-        console.log('📋 Checking for data migration...');
-        const legacyCheck = await client.query(`
+    // Step 7: Migrate data from memory_entries if it exists
+    console.log("📋 Checking for data migration...");
+    const legacyCheck = await client.query(`
             SELECT EXISTS (
                 SELECT 1 FROM information_schema.tables 
                 WHERE table_name = 'memory_entries'
             );
         `);
 
-        if (legacyCheck.rows[0].exists) {
-            console.log('🔄 Migrating data from memory_entries...');
-            await client.query(`
+    if (legacyCheck.rows[0].exists) {
+      console.log("🔄 Migrating data from memory_entries...");
+      await client.query(`
                 INSERT INTO persistent_memories 
                 (user_id, category_name, subcategory_name, content, token_count, relevance_score, usage_frequency, last_accessed, created_at, metadata)
                 SELECT 
@@ -143,38 +155,44 @@ async function fixDatabase() {
                 ON CONFLICT DO NOTHING;
             `);
 
-            // Rename old table for safety
-            await client.query('ALTER TABLE memory_entries RENAME TO memory_entries_backup;');
-            console.log('✅ Data migration completed');
-        }
+      // Rename old table for safety
+      await client.query(
+        "ALTER TABLE memory_entries RENAME TO memory_entries_backup;",
+      );
+      console.log("✅ Data migration completed");
+    }
 
-        console.log('🎉 Database fix completed successfully!');
-        
-        // Verify final structure
-        const finalCheck = await client.query(`
+    console.log("🎉 Database fix completed successfully!");
+
+    // Verify final structure
+    const finalCheck = await client.query(`
             SELECT column_name 
             FROM information_schema.columns 
             WHERE table_name = 'persistent_memories'
             ORDER BY ordinal_position;
         `);
-        
-        console.log('✅ Final table structure:', finalCheck.rows.map(r => r.column_name));
 
-    } catch (error) {
-        console.error('❌ Database fix failed:', error);
-        throw error;
-    } finally {
-        await client.end();
-    }
+    console.log(
+      "✅ Final table structure:",
+      finalCheck.rows.map((r) => r.column_name),
+    );
+  } catch (error) {
+    console.error("❌ Database fix failed:", error);
+    throw error;
+  } finally {
+    await client.end();
+  }
 }
 
 // Run the fix
 fixDatabase()
-    .then(() => {
-        console.log('🎉 DATABASE FIX COMPLETE - Your persistent memory should now work!');
-        process.exit(0);
-    })
-    .catch((error) => {
-        console.error('💥 FIX FAILED:', error);
-        process.exit(1);
-    });
+  .then(() => {
+    console.log(
+      "🎉 DATABASE FIX COMPLETE - Your persistent memory should now work!",
+    );
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error("💥 FIX FAILED:", error);
+    process.exit(1);
+  });

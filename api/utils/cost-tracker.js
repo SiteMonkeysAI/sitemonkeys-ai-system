@@ -3,28 +3,28 @@
 // Prevents runaway costs and enforces budget limits per mode
 
 const COST_CEILINGS = {
-  truth_general: 2.00,
-  business_validation: 4.00,
-  site_monkeys: 6.00
+  truth_general: 2.0,
+  business_validation: 4.0,
+  site_monkeys: 6.0,
 };
 
 const MODEL_COSTS = {
-  'gpt-4': {
+  "gpt-4": {
     input: 0.03 / 1000,
-    output: 0.06 / 1000
+    output: 0.06 / 1000,
   },
-  'gpt-4o': {
+  "gpt-4o": {
     input: 0.005 / 1000,
-    output: 0.015 / 1000
+    output: 0.015 / 1000,
   },
-  'claude-sonnet-4.5': {
+  "claude-sonnet-4.5": {
     input: 0.003 / 1000,
-    output: 0.015 / 1000
+    output: 0.015 / 1000,
   },
-  'text-embedding-3-small': {
+  "text-embedding-3-small": {
     input: 0.00002 / 1000,
-    output: 0
-  }
+    output: 0,
+  },
 };
 
 class CostTracker {
@@ -46,14 +46,14 @@ class CostTracker {
     const currentCost = this.getSessionCost(sessionId);
     const ceiling = this.getCostCeiling(mode);
     const totalCost = currentCost + estimatedCost;
-    
+
     return {
       wouldExceed: totalCost > ceiling,
       currentCost,
       estimatedCost,
       totalCost,
       ceiling,
-      remaining: Math.max(0, ceiling - totalCost)
+      remaining: Math.max(0, ceiling - totalCost),
     };
   }
 
@@ -64,16 +64,15 @@ class CostTracker {
       const inputTokens = queryTokens + contextTokens;
       const outputTokens = Math.min(1200, inputTokens * 1.5);
 
-      const model = 'claude-sonnet-4.5';
+      const model = "claude-sonnet-4.5";
       const costs = MODEL_COSTS[model];
 
       const inputCost = inputTokens * costs.input;
       const outputCost = outputTokens * costs.output;
 
       return inputCost + outputCost;
-
     } catch (error) {
-      console.error('[COST-TRACKER] Estimation error:', error);
+      console.error("[COST-TRACKER] Estimation error:", error);
       return 0.05;
     }
   }
@@ -84,8 +83,8 @@ class CostTracker {
         this.sessionCosts.set(sessionId, {
           total: 0,
           breakdown: [],
-          mode: metadata.mode || 'unknown',
-          startTime: Date.now()
+          mode: metadata.mode || "unknown",
+          startTime: Date.now(),
         });
       }
 
@@ -95,7 +94,7 @@ class CostTracker {
         timestamp: new Date().toISOString(),
         source,
         cost,
-        metadata
+        metadata,
       });
 
       this.costHistory.push({
@@ -103,7 +102,7 @@ class CostTracker {
         source,
         cost,
         total: session.total,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       if (this.costHistory.length > 1000) {
@@ -111,9 +110,8 @@ class CostTracker {
       }
 
       return session.total;
-
     } catch (error) {
-      console.error('[COST-TRACKER] Record error:', error);
+      console.error("[COST-TRACKER] Record error:", error);
       return 0;
     }
   }
@@ -126,13 +124,14 @@ class CostTracker {
         return 0;
       }
 
-      const inputCost = (usage.prompt_tokens || usage.input_tokens || 0) * costs.input;
-      const outputCost = (usage.completion_tokens || usage.output_tokens || 0) * costs.output;
+      const inputCost =
+        (usage.prompt_tokens || usage.input_tokens || 0) * costs.input;
+      const outputCost =
+        (usage.completion_tokens || usage.output_tokens || 0) * costs.output;
 
       return inputCost + outputCost;
-
     } catch (error) {
-      console.error('[COST-TRACKER] Calculation error:', error);
+      console.error("[COST-TRACKER] Calculation error:", error);
       return 0;
     }
   }
@@ -152,11 +151,11 @@ class CostTracker {
 
   getSessionSummary(sessionId) {
     const session = this.sessionCosts.get(sessionId);
-    
+
     if (!session) {
       return {
         found: false,
-        sessionId
+        sessionId,
       };
     }
 
@@ -171,7 +170,7 @@ class CostTracker {
       remaining: Math.max(0, ceiling - session.total),
       breakdown: session.breakdown,
       mode: session.mode,
-      duration: Date.now() - session.startTime
+      duration: Date.now() - session.startTime,
     };
   }
 
@@ -181,19 +180,23 @@ class CostTracker {
 
   getGlobalStats() {
     const sessions = Array.from(this.sessionCosts.values());
-    
+
     return {
       activeSessions: sessions.length,
       totalCost: sessions.reduce((sum, s) => sum + s.total, 0),
-      averageCost: sessions.length > 0 
-        ? sessions.reduce((sum, s) => sum + s.total, 0) / sessions.length 
-        : 0,
+      averageCost:
+        sessions.length > 0
+          ? sessions.reduce((sum, s) => sum + s.total, 0) / sessions.length
+          : 0,
       byMode: {
-        truth_general: sessions.filter(s => s.mode === 'truth_general').length,
-        business_validation: sessions.filter(s => s.mode === 'business_validation').length,
-        site_monkeys: sessions.filter(s => s.mode === 'site_monkeys').length
+        truth_general: sessions.filter((s) => s.mode === "truth_general")
+          .length,
+        business_validation: sessions.filter(
+          (s) => s.mode === "business_validation",
+        ).length,
+        site_monkeys: sessions.filter((s) => s.mode === "site_monkeys").length,
       },
-      totalRecords: this.costHistory.length
+      totalRecords: this.costHistory.length,
     };
   }
 }

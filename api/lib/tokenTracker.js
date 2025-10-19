@@ -10,40 +10,40 @@ let sessionData = {
   costs: {
     eli: 0,
     roxy: 0,
-    claude: 0
+    claude: 0,
   },
   tokens: {
     eli: 0,
     roxy: 0,
-    claude: 0
+    claude: 0,
   },
   calls: {
     eli: 0,
     roxy: 0,
-    claude: 0
+    claude: 0,
   },
   vaultTokensUsed: 0,
   errorCount: 0,
   lastError: null,
   // NEW numeric totals
   promptTokens: 0,
-  completionTokens: 0
+  completionTokens: 0,
 };
 
 // Pricing constants (per 1K tokens)
 const PRICING = {
   eli: {
     input: 0.001,
-    output: 0.002
+    output: 0.002,
   },
   roxy: {
     input: 0.001,
-    output: 0.002
+    output: 0.002,
   },
   claude: {
     input: 0.003,
-    output: 0.015
-  }
+    output: 0.015,
+  },
 };
 
 /**
@@ -54,35 +54,42 @@ const PRICING = {
  * @param {number} vaultTokens - Vault context tokens included
  * @returns {object} Complete tracking result with costs and session data
  */
-export function trackApiCall(personality, promptTokens, completionTokens, vaultTokens = 0) {
+export function trackApiCall(
+  personality,
+  promptTokens,
+  completionTokens,
+  vaultTokens = 0,
+) {
   try {
-    if (!personality || !['eli', 'roxy', 'claude'].includes(personality)) {
-      throw new Error('Invalid personality: ' + personality);
+    if (!personality || !["eli", "roxy", "claude"].includes(personality)) {
+      throw new Error("Invalid personality: " + personality);
     }
-    
-    if (typeof promptTokens !== 'number' || promptTokens < 0) {
-      throw new Error('Invalid promptTokens: ' + promptTokens);
+
+    if (typeof promptTokens !== "number" || promptTokens < 0) {
+      throw new Error("Invalid promptTokens: " + promptTokens);
     }
-    
-    if (typeof completionTokens !== 'number' || completionTokens < 0) {
-      throw new Error('Invalid completionTokens: ' + completionTokens);
+
+    if (typeof completionTokens !== "number" || completionTokens < 0) {
+      throw new Error("Invalid completionTokens: " + completionTokens);
     }
-    
+
     const totalTokens = promptTokens + completionTokens;
-    
+
     const pricing = PRICING[personality];
     const inputCost = (promptTokens * pricing.input) / 1000;
     const outputCost = (completionTokens * pricing.output) / 1000;
     const callCost = inputCost + outputCost;
-    
+
     sessionData.totalCalls++;
     sessionData.totalTokens += totalTokens;
     sessionData.totalCost += callCost;
     // NEW numeric totals
     sessionData.promptTokens = (sessionData.promptTokens || 0) + promptTokens;
-    sessionData.completionTokens = (sessionData.completionTokens || 0) + completionTokens;
-    sessionData.vaultTokensUsed = (sessionData.vaultTokensUsed || 0) + vaultTokens;
-    
+    sessionData.completionTokens =
+      (sessionData.completionTokens || 0) + completionTokens;
+    sessionData.vaultTokensUsed =
+      (sessionData.vaultTokensUsed || 0) + vaultTokens;
+
     sessionData.lastCall = {
       timestamp: Date.now(),
       personality,
@@ -90,34 +97,52 @@ export function trackApiCall(personality, promptTokens, completionTokens, vaultT
       completionTokens,
       totalTokens,
       callCost,
-      vaultTokens
+      vaultTokens,
     };
-    
+
     sessionData.costs[personality] += callCost;
     sessionData.tokens[personality] += totalTokens;
     sessionData.calls[personality]++;
-    
+
     const warnings = [];
-    
+
     if (callCost > 0.25) {
-      warnings.push('High cost call: $' + callCost.toFixed(4));
+      warnings.push("High cost call: $" + callCost.toFixed(4));
     }
-    
-    if (sessionData.totalCost > 2.00) {
-      warnings.push('Session cost high: $' + sessionData.totalCost.toFixed(4));
+
+    if (sessionData.totalCost > 2.0) {
+      warnings.push("Session cost high: $" + sessionData.totalCost.toFixed(4));
     }
-    
-    if (personality === 'claude' && callCost > 0.50) {
-      warnings.push('Claude cost exceeded limit: $' + callCost.toFixed(4));
+
+    if (personality === "claude" && callCost > 0.5) {
+      warnings.push("Claude cost exceeded limit: $" + callCost.toFixed(4));
     }
-    
-    console.log('💰 Token Tracking - ' + personality + ': ' + promptTokens + '+' + completionTokens + '=' + totalTokens + ' tokens, $' + callCost.toFixed(4));
-    console.log('📊 Session Total: ' + sessionData.totalCalls + ' calls, ' + sessionData.totalTokens + ' tokens, $' + sessionData.totalCost.toFixed(4));
-    
+
+    console.log(
+      "💰 Token Tracking - " +
+        personality +
+        ": " +
+        promptTokens +
+        "+" +
+        completionTokens +
+        "=" +
+        totalTokens +
+        " tokens, $" +
+        callCost.toFixed(4),
+    );
+    console.log(
+      "📊 Session Total: " +
+        sessionData.totalCalls +
+        " calls, " +
+        sessionData.totalTokens +
+        " tokens, $" +
+        sessionData.totalCost.toFixed(4),
+    );
+
     if (warnings.length > 0) {
-      console.log('⚠️ Cost Warnings: ' + warnings.join(', '));
+      console.log("⚠️ Cost Warnings: " + warnings.join(", "));
     }
-    
+
     return {
       tokens_used: totalTokens,
       prompt_tokens: promptTokens,
@@ -131,11 +156,10 @@ export function trackApiCall(personality, promptTokens, completionTokens, vaultT
       cumulative_tokens: sessionData.totalTokens,
       warnings: warnings,
       cost_warning: callCost > 0.25,
-      session_warning: sessionData.totalCost > 2.00,
+      session_warning: sessionData.totalCost > 2.0,
       success: true,
-      tracked_at: Date.now()
+      tracked_at: Date.now(),
     };
-    
   } catch (error) {
     sessionData.errorCount++;
     sessionData.lastError = {
@@ -143,11 +167,11 @@ export function trackApiCall(personality, promptTokens, completionTokens, vaultT
       error: error.message,
       personality,
       promptTokens,
-      completionTokens
+      completionTokens,
     };
-    
-    console.error('❌ Token tracking error:', error.message);
-    
+
+    console.error("❌ Token tracking error:", error.message);
+
     return {
       tokens_used: promptTokens + completionTokens,
       prompt_tokens: promptTokens || 0,
@@ -156,10 +180,10 @@ export function trackApiCall(personality, promptTokens, completionTokens, vaultT
       session_total: sessionData.totalCost,
       session_calls: sessionData.totalCalls,
       cumulative_tokens: sessionData.totalTokens,
-      warnings: ['Tracking error: ' + error.message],
+      warnings: ["Tracking error: " + error.message],
       success: false,
       error: error.message,
-      tracked_at: Date.now()
+      tracked_at: Date.now(),
     };
   }
 }
@@ -172,7 +196,7 @@ export function formatSessionDataForUI() {
   try {
     const sessionDuration = Date.now() - sessionData.sessionStart;
     const sessionHours = sessionDuration / (1000 * 60 * 60);
-    
+
     return {
       // NEW numeric totals (added; do not remove existing display fields)
       promptTokens: sessionData.promptTokens || 0,
@@ -180,27 +204,26 @@ export function formatSessionDataForUI() {
       vaultTokens: sessionData.vaultTokensUsed || 0,
       totalCost: Number(sessionData.totalCost.toFixed(6)),
       totalCalls: sessionData.totalCalls,
-      cost_display: '$' + sessionData.totalCost.toFixed(4),
-      vault_display: sessionData.vaultTokensUsed + ' tokens',
-      efficiency_display: 'Normal',
-      calls_display: sessionData.totalCalls + ' calls',
-      status: 'ACTIVE'
+      cost_display: "$" + sessionData.totalCost.toFixed(4),
+      vault_display: sessionData.vaultTokensUsed + " tokens",
+      efficiency_display: "Normal",
+      calls_display: sessionData.totalCalls + " calls",
+      status: "ACTIVE",
     };
-    
   } catch (error) {
-    console.error('❌ Session data formatting error:', error.message);
-    
+    console.error("❌ Session data formatting error:", error.message);
+
     return {
       promptTokens: 0,
       completionTokens: 0,
       vaultTokens: 0,
       totalCost: 0,
       totalCalls: 0,
-      cost_display: '$0.0000',
-      vault_display: '0 tokens',
-      efficiency_display: 'Error',
-      calls_display: '0 calls',
-      status: 'ERROR'
+      cost_display: "$0.0000",
+      vault_display: "0 tokens",
+      efficiency_display: "Error",
+      calls_display: "0 calls",
+      status: "ERROR",
     };
   }
 }
@@ -213,28 +236,43 @@ export function getSessionStats() {
   return {
     ...sessionData,
     sessionDuration: Date.now() - sessionData.sessionStart,
-    averageCostPerCall: sessionData.totalCalls > 0 ? sessionData.totalCost / sessionData.totalCalls : 0,
-    averageTokensPerCall: sessionData.totalCalls > 0 ? sessionData.totalTokens / sessionData.totalCalls : 0,
+    averageCostPerCall:
+      sessionData.totalCalls > 0
+        ? sessionData.totalCost / sessionData.totalCalls
+        : 0,
+    averageTokensPerCall:
+      sessionData.totalCalls > 0
+        ? sessionData.totalTokens / sessionData.totalCalls
+        : 0,
     costBreakdown: {
       eli: {
         cost: sessionData.costs.eli,
         tokens: sessionData.tokens.eli,
         calls: sessionData.calls.eli,
-        percentage: sessionData.totalCost > 0 ? (sessionData.costs.eli / sessionData.totalCost * 100) : 0
+        percentage:
+          sessionData.totalCost > 0
+            ? (sessionData.costs.eli / sessionData.totalCost) * 100
+            : 0,
       },
       roxy: {
         cost: sessionData.costs.roxy,
         tokens: sessionData.tokens.roxy,
         calls: sessionData.calls.roxy,
-        percentage: sessionData.totalCost > 0 ? (sessionData.costs.roxy / sessionData.totalCost * 100) : 0
+        percentage:
+          sessionData.totalCost > 0
+            ? (sessionData.costs.roxy / sessionData.totalCost) * 100
+            : 0,
       },
       claude: {
         cost: sessionData.costs.claude,
         tokens: sessionData.tokens.claude,
         calls: sessionData.calls.claude,
-        percentage: sessionData.totalCost > 0 ? (sessionData.costs.claude / sessionData.totalCost * 100) : 0
-      }
-    }
+        percentage:
+          sessionData.totalCost > 0
+            ? (sessionData.costs.claude / sessionData.totalCost) * 100
+            : 0,
+      },
+    },
   };
 }
 
@@ -243,7 +281,7 @@ export function getSessionStats() {
  */
 export function resetSession() {
   const previousSession = { ...sessionData };
-  
+
   sessionData = {
     totalCalls: 0,
     totalTokens: 0,
@@ -257,10 +295,10 @@ export function resetSession() {
     errorCount: 0,
     lastError: null,
     promptTokens: 0,
-    completionTokens: 0
+    completionTokens: 0,
   };
-  
-  console.log('🔄 Session tracking reset');
+
+  console.log("🔄 Session tracking reset");
   return previousSession;
 }
 
@@ -271,16 +309,20 @@ export function resetSession() {
  * @param {number} estimatedCompletionTokens - Expected output tokens
  * @returns {object} Cost estimation
  */
-export function estimateCallCost(personality, estimatedPromptTokens, estimatedCompletionTokens) {
+export function estimateCallCost(
+  personality,
+  estimatedPromptTokens,
+  estimatedCompletionTokens,
+) {
   if (!PRICING[personality]) {
-    throw new Error('Invalid personality for cost estimation: ' + personality);
+    throw new Error("Invalid personality for cost estimation: " + personality);
   }
-  
+
   const pricing = PRICING[personality];
   const inputCost = (estimatedPromptTokens * pricing.input) / 1000;
   const outputCost = (estimatedCompletionTokens * pricing.output) / 1000;
   const totalCost = inputCost + outputCost;
-  
+
   return {
     personality,
     estimatedPromptTokens,
@@ -291,7 +333,7 @@ export function estimateCallCost(personality, estimatedPromptTokens, estimatedCo
     totalCost,
     projectedSessionCost: sessionData.totalCost + totalCost,
     costWarning: totalCost > 0.25,
-    sessionWarning: (sessionData.totalCost + totalCost) > 2.00
+    sessionWarning: sessionData.totalCost + totalCost > 2.0,
   };
 }
 
@@ -307,10 +349,13 @@ export function trackError(errorType, errorMessage, context = {}) {
     timestamp: Date.now(),
     type: errorType,
     message: errorMessage,
-    context
+    context,
   };
-  
-  console.error(`❌ Token Tracker Error [${errorType}]: ${errorMessage}`, context);
+
+  console.error(
+    `❌ Token Tracker Error [${errorType}]: ${errorMessage}`,
+    context,
+  );
 }
 
 // Export all session data getters for debugging

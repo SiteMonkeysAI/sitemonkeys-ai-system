@@ -4,23 +4,23 @@
 
 // VERIFIED BASELINES - Matched to your actual semantic_analyzer.js
 const BASELINE_DOMAINS = [
-  'business',
-  'technical', 
-  'personal',
-  'health',
-  'financial',
-  'creative',
-  'general'
+  "business",
+  "technical",
+  "personal",
+  "health",
+  "financial",
+  "creative",
+  "general",
 ];
 
 const BASELINE_INTENTS = [
-  'question',
-  'command',
-  'discussion',
-  'problem_solving',
-  'decision_making',
-  'emotional_expression',
-  'information_sharing'
+  "question",
+  "command",
+  "discussion",
+  "problem_solving",
+  "decision_making",
+  "emotional_expression",
+  "information_sharing",
 ];
 
 class DriftWatcher {
@@ -41,55 +41,54 @@ class DriftWatcher {
         confidenceAdjustment: null,
         warning: null,
         domainValid: true,
-        intentValid: true
+        intentValid: true,
       };
 
       // Check domain drift
       if (domain && !BASELINE_DOMAINS.includes(domain)) {
         result.driftDetected = true;
         result.domainValid = false;
-        
+
         const newConfidence = Math.max(0.5, confidence - 0.2);
-        
+
         result.confidenceAdjustment = {
           from: confidence,
           to: newConfidence,
-          reason: `Domain "${domain}" not in baseline categories`
+          reason: `Domain "${domain}" not in baseline categories`,
         };
-        
+
         result.warning = `Semantic analyzer classified domain as "${domain}" which is not in baseline. Reduced confidence from ${confidence.toFixed(2)} to ${newConfidence.toFixed(2)}.`;
-        
-        this.#recordDrift('domain', domain, context);
+
+        this.#recordDrift("domain", domain, context);
       }
 
       // Check intent drift
       if (intent && !BASELINE_INTENTS.includes(intent)) {
         result.driftDetected = true;
         result.intentValid = false;
-        
+
         const newConfidence = Math.max(0.5, confidence - 0.15);
-        
+
         result.confidenceAdjustment = {
           from: confidence,
           to: newConfidence,
-          reason: `Intent "${intent}" not in baseline categories`
+          reason: `Intent "${intent}" not in baseline categories`,
         };
-        
+
         result.warning = `Semantic analyzer classified intent as "${intent}" which is not in baseline. Reduced confidence from ${confidence.toFixed(2)} to ${newConfidence.toFixed(2)}.`;
-        
-        this.#recordDrift('intent', intent, context);
+
+        this.#recordDrift("intent", intent, context);
       }
 
       return result;
-
     } catch (error) {
-      console.error('[DRIFT-WATCHER] Validation error:', error);
-      
+      console.error("[DRIFT-WATCHER] Validation error:", error);
+
       return {
         driftDetected: false,
         adjustedResponse: response,
         warning: `drift_watcher_exception: ${error.message}`,
-        error: true
+        error: true,
       };
     }
   }
@@ -101,8 +100,8 @@ class DriftWatcher {
       invalidValue: value,
       context: {
         mode: context.mode,
-        userId: context.userId
-      }
+        userId: context.userId,
+      },
     };
 
     this.driftHistory.push(driftRecord);
@@ -117,9 +116,9 @@ class DriftWatcher {
   getDriftStats() {
     return {
       totalDrifts: this.driftHistory.length,
-      domainDrifts: this.driftHistory.filter(d => d.type === 'domain').length,
-      intentDrifts: this.driftHistory.filter(d => d.type === 'intent').length,
-      recentDrifts: this.driftHistory.slice(-10)
+      domainDrifts: this.driftHistory.filter((d) => d.type === "domain").length,
+      intentDrifts: this.driftHistory.filter((d) => d.type === "intent").length,
+      recentDrifts: this.driftHistory.slice(-10),
     };
   }
 

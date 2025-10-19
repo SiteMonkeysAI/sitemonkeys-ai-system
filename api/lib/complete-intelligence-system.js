@@ -1,11 +1,11 @@
 // api/lib/complete-intelligence-system.js
 // INTEGRATION FILE - Coordinates all intelligence components
 
-import { ValidationEngine } from './validation-engine.js';
-import { MultimodalGateway } from './multimodal-gateway.js';
-import { LearningEngine } from './learning-engine.js';
-import { AdaptationEngine } from './adaptation-engine.js';
-import { StreamProcessor } from './stream-processor.js';
+import { ValidationEngine } from "./validation-engine.js";
+import { MultimodalGateway } from "./multimodal-gateway.js";
+import { LearningEngine } from "./learning-engine.js";
+import { AdaptationEngine } from "./adaptation-engine.js";
+import { StreamProcessor } from "./stream-processor.js";
 
 // Simple integration class that coordinates everything
 class CompleteIntelligenceSystem {
@@ -35,9 +35,16 @@ class CompleteIntelligenceSystem {
       learning: this.learning.initialized,
       adaptation: this.adaptation.initialized,
       streams: this.streams.initialized,
-      system_ready: this.initialized
+      system_ready: this.initialized,
     };
   }
 }
 
-export { CompleteIntelligenceSystem, ValidationEngine, MultimodalGateway, LearningEngine, AdaptationEngine, StreamProcessor };
+export {
+  CompleteIntelligenceSystem,
+  ValidationEngine,
+  MultimodalGateway,
+  LearningEngine,
+  AdaptationEngine,
+  StreamProcessor,
+};

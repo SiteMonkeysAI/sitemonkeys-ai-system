@@ -1,5 +1,5 @@
 // OpenAI API Call Module with Retry Logic
-import OpenAI from 'openai';
+import OpenAI from "openai";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -24,49 +24,58 @@ function calculateBackoffWaitTime(attempt) {
  */
 export async function callOpenAI(params, maxRetries = 3) {
   let lastError;
-  
+
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     try {
       const response = await openai.chat.completions.create(params);
       return response;
     } catch (error) {
       lastError = error;
-      
+
       // Don't retry on certain errors
       if (error.status && error.status !== 429 && error.status < 500) {
         throw error;
       }
-      
+
       // Check if we should retry
       if (attempt < maxRetries - 1) {
         // Check if this is a rate limit error
-        const isRateLimited = error.status === 429 || 
-                             (error.message && error.message.includes('rate limit'));
-        
+        const isRateLimited =
+          error.status === 429 ||
+          (error.message && error.message.includes("rate limit"));
+
         if (isRateLimited) {
           // Extract retry-after header if present
           let waitMs;
-          const retryAfter = error.response?.headers?.['retry-after'] || error.headers?.['retry-after'];
+          const retryAfter =
+            error.response?.headers?.["retry-after"] ||
+            error.headers?.["retry-after"];
           if (retryAfter) {
             const parsed = parseInt(retryAfter, 10);
-            waitMs = isNaN(parsed) ? calculateBackoffWaitTime(attempt) : parsed * 1000;
+            waitMs = isNaN(parsed)
+              ? calculateBackoffWaitTime(attempt)
+              : parsed * 1000;
           } else {
             // Exponential backoff with cap
             waitMs = calculateBackoffWaitTime(attempt);
           }
-          
-          console.log(`⏳ Rate limited. Waiting ${waitMs}ms before retry ${attempt + 1}/${maxRetries}...`);
-          await new Promise(resolve => setTimeout(resolve, waitMs));
+
+          console.log(
+            `⏳ Rate limited. Waiting ${waitMs}ms before retry ${attempt + 1}/${maxRetries}...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, waitMs));
         } else {
           // For other errors, use standard exponential backoff
           const waitMs = calculateBackoffWaitTime(attempt);
-          console.log(`⚠️ Request failed. Retrying in ${waitMs}ms (${attempt + 1}/${maxRetries})...`);
-          await new Promise(resolve => setTimeout(resolve, waitMs));
+          console.log(
+            `⚠️ Request failed. Retrying in ${waitMs}ms (${attempt + 1}/${maxRetries})...`,
+          );
+          await new Promise((resolve) => setTimeout(resolve, waitMs));
         }
       }
     }
   }
-  
+
   throw lastError;
 }
 

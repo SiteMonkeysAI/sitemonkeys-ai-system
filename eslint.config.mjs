@@ -10,7 +10,7 @@ export default [
   {
     files: ['**/*.js'],
     languageOptions: {
-      ecmaVersion: 2022,
+      ecmaVersion: 2024,
       sourceType: 'module',
       globals: {
         console: 'readonly',
@@ -24,7 +24,10 @@ export default [
         clearTimeout: 'readonly',
         clearInterval: 'readonly',
         setImmediate: 'readonly',
-        clearImmediate: 'readonly'
+        clearImmediate: 'readonly',
+        fetch: 'readonly',
+        AbortSignal: 'readonly',
+        crypto: 'readonly'
       }
     },
     rules: {
@@ -40,7 +43,7 @@ export default [
   {
     files: ['**/sw.js', '**/service-worker.js'],
     languageOptions: {
-      ecmaVersion: 2022,
+      ecmaVersion: 2024,
       sourceType: 'module',
       globals: {
         self: 'readonly',
@@ -54,7 +57,7 @@ export default [
   {
     files: ['public/**/*.js', 'locked-ui/**/*.js'],
     languageOptions: {
-      ecmaVersion: 2022,
+      ecmaVersion: 2024,
       sourceType: 'module',
       globals: {
         window: 'readonly',
