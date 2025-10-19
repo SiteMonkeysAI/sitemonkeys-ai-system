@@ -106,7 +106,7 @@ class IntelligenceCoordinator {
     }
   }
 
-  async getBaseResponse(query, mode) {
+  async getBaseResponse(query, _mode) {
     // You can upgrade this later to use OpenAI or Claude, but keep it minimal for fallback
     return `Let's work through this together. You asked: ${query}`;
   }

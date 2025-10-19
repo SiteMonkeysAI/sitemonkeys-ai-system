@@ -121,7 +121,7 @@ export function checkExpertIndicators(response, expertDomain) {
   return indicators;
 }
 
-export function performQualityChecks(response, originalMessage) {
+export function performQualityChecks(response, _originalMessage) {
   const checks = {
     has_confidence_scoring: /confidence:|confidence\s+(high|medium|low)/i.test(
       response,
