@@ -2,12 +2,11 @@
 
 html, body {
 margin: 0; padding: 0;
-font-family: 'Carlito', Arial, sans-serif;
+font-family: Carlito, Arial, sans-serif;
 background: #373534; color: white;
 min-height: 100vh; width: 100vw;
 overflow-x: hidden; display: flex; flex-direction: column;
--webkit-text-size-adjust: 100%;
--ms-text-size-adjust: 100%;
+text-size-adjust: 100%;
 }
 
 header {
@@ -28,12 +27,12 @@ position: relative; margin: 0 auto; padding: 12px 0;
 
 .site-title {
 font-family: 'Luckiest Guy', cursive; color: #FFD811;
-font-size: clamp(1.8rem, 4vw, 2.1em); margin: 0; letter-spacing: 2px; line-height: 1; text-align: center;
+font-size: clamp(1.8rem, 4vw, 2.1em); margin: 0; letter-spacing: 2px; line-height: 1;
 white-space: nowrap; width: 100%; text-align: center;
 }
 
 .subtitle {
-font-family: 'Carlito', Arial, sans-serif; color: #fff; font-size: clamp(1rem, 2.5vw, 1.2em);
+font-family: Carlito, Arial, sans-serif; color: #fff; font-size: clamp(1rem, 2.5vw, 1.2em);
 margin-top: 8px; letter-spacing: 1px; text-align: center; font-weight: bold;
 }
 
@@ -43,7 +42,7 @@ margin-top: 8px; letter-spacing: 1px; text-align: center; font-weight: bold;
 
 .main-wrapper {
 flex: 1; display: flex; justify-content: center; align-items: flex-start;
-position: relative; width: 100%; min-height: 0; padding: 10px 0 50px 0;
+position: relative; width: 100%; min-height: 0; padding: 10px 0 50px;
 }
 
 .main-content {
@@ -62,7 +61,7 @@ border: 3px solid #fff; z-index: 1; box-sizing: border-box;
 
 .status-panel {
 width: 38%; min-width: 350px;
-background: rgba(17,17,17,0.97); border-radius: 24px 0 0 24px;
+background: rgb(17 17 17 / 97%); border-radius: 24px 0 0 24px;
 box-shadow: 0 0 30px 10px #54545444 inset; padding: 25px 15px;
 display: flex; flex-direction: column; position: relative; z-index: 2; justify-content: flex-start;
 }
@@ -74,13 +73,13 @@ position: static; background: none; border: none; padding: 0;
 line-height: 1.2;
 }
 
-.status-list { list-style: none; padding: 0; margin: 0 0 20px 0; width: 100%; }
+.status-list { list-style: none; padding: 0; margin: 0 0 20px; width: 100%; }
 
 .status-list li { font-size: 1.0em; margin-bottom: 6px; opacity: 0; transform: translateX(-20px); transition: all 0.6s ease-in-out; display: flex; align-items: center; color: #fff; justify-content: flex-start; text-align: left; line-height: 1.4; }
 
 .status-list li.loaded { opacity: 1; transform: translateX(0); color: #fff; }
 
-.status-list li .check { color: #00FF00; margin-right: 8px; font-size: 1.0em; display: none; flex-shrink: 0; animation: checkmarkPop 0.8s ease-out; }
+.status-list li .check { color: #0F0; margin-right: 8px; font-size: 1.0em; display: none; flex-shrink: 0; animation: checkmarkPop 0.8s ease-out; }
 
 .status-list li.loaded .check { display: inline; }
 
@@ -88,9 +87,9 @@ line-height: 1.2;
 
 .system-ready {
 color: #fff; font-weight: bold; font-size: 1.05em; margin-top: 20px; margin-bottom: 20px;
-display: none; text-align: center; letter-spacing: 1px; background: #FF2222;
-border-radius: 20px; padding: 12px 10px; box-shadow: 0 4px 12px rgba(255,34,34,0.4);
-width: 100%; box-sizing: border-box; border: 2px solid rgba(255,255,255,0.2);
+display: none; text-align: center; letter-spacing: 1px; background: #F22;
+border-radius: 20px; padding: 12px 10px; box-shadow: 0 4px 12px rgb(255 34 34 / 40%);
+width: 100%; box-sizing: border-box; border: 2px solid rgb(255 255 255 / 20%);
 transform: scale(0.8); transition: all 0.4s ease-in-out;
 }
 
@@ -98,14 +97,14 @@ transform: scale(0.8); transition: all 0.4s ease-in-out;
 
 .system-ready.active { display: block; transform: scale(1); animation: systemGlow 2s ease-in-out infinite alternate; }
 
-@keyframes systemGlow { from { box-shadow: 0 4px 12px rgba(255,34,34,0.4);} to { box-shadow: 0 4px 20px rgba(255,34,34,0.7);} }
+@keyframes systemGlow { from { box-shadow: 0 4px 12px rgb(255 34 34 / 40%);} to { box-shadow: 0 4px 20px rgb(255 34 34 / 70%);} }
 
 .vault-info {
 background: #545454; border-radius: 16px; padding: 14px 12px; margin-top: auto; margin-bottom: 0;
 width: 100%; font-size: 0.85em; color: #fff; text-align: left; min-height: 110px;
 display: flex; flex-direction: column; justify-content: center; border: 2px solid #fff;
 box-sizing: border-box; line-height: 1.4;
-overflow: hidden; word-wrap: break-word;
+overflow: hidden; overflow-wrap: break-word;
 }
 
 .vault-info span { color: #fff; font-weight: bold; }
@@ -138,14 +137,14 @@ animation: bubbleFadeIn 0.3s ease-out;
 .bubble.ai { justify-content: flex-start; margin-right: auto; }
 
 .bubble-content {
-background: rgba(0,0,0,0.3); padding: 12px 16px; border-radius: 12px;
+background: rgb(0 0 0 / 30%); padding: 12px 16px; border-radius: 12px;
 color: white; font-size: 1em; line-height: 1.5; box-shadow: 0 2px 4px #0002;
-word-wrap: break-word; max-width: 100%;
+overflow-wrap: break-word; max-width: 100%;
 }
 
-.bubble.user .bubble-content { background: rgba(255, 216, 17, 0.2); border: 1px solid #FFD811; }
+.bubble.user .bubble-content { background: rgb(255 216 17 / 20%); border: 1px solid #FFD811; }
 
-.bubble.ai .bubble-content { background: rgba(84, 84, 84, 0.3); border: 1px solid #888; }
+.bubble.ai .bubble-content { background: rgb(84 84 84 / 30%); border: 1px solid #888; }
 
 .thinking-bubble { animation: pulse 1.5s ease-in-out infinite; }
 
@@ -176,11 +175,11 @@ transition: color 0.2s ease; z-index: 10;
 
 .chat-input {
 flex: 1; padding: 12px 16px 12px 40px; border-radius: 18px; border: none; font-size: 1em;
-background: transparent; color: white; outline: none; text-align: left; min-height: 80px; resize: vertical; font-family: 'Carlito', Arial, sans-serif;
+background: transparent; color: white; outline: none; text-align: left; min-height: 80px; resize: vertical; font-family: Carlito, Arial, sans-serif;
 }
 
 .chat-input::placeholder {
-color: rgba(255,255,255,0.45); opacity: 1; font-size: 1em; font-family: 'Carlito', Arial, sans-serif; letter-spacing: 0.5px; text-align: left;
+color: rgb(255 255 255 / 45%); opacity: 1; font-size: 1em; font-family: Carlito, Arial, sans-serif; letter-spacing: 0.5px; text-align: left;
 }
 
 .send-button {
@@ -197,7 +196,7 @@ transition: all 0.2s ease; outline: none; box-shadow: 0 2px 8px #0002; cursor: p
 
 .footer {
 width: 100vw; background: #1A1A1A; color: #FFD811; text-align: center;
-font-family: 'Carlito', Arial, sans-serif; padding: 8px 0; letter-spacing: 1px;
+font-family: Carlito, Arial, sans-serif; padding: 8px 0; letter-spacing: 1px;
 box-shadow: 0 -2px 8px #0008; display: flex; justify-content: center; align-items: center; gap: 1rem; flex-shrink: 0; position: fixed; bottom: 0; left: 0; z-index: 100;
 }
 
@@ -228,8 +227,8 @@ display: flex; justify-content: center; align-items: center; gap: 8px; margin-to
 }
 
 .mode-btn {
-background: rgba(255, 255, 255, 0.1); border: 2px solid #fff;
-border-radius: 6px; padding: 6px 14px; font-family: 'Carlito', Arial, sans-serif;
+background: rgb(255 255 255 / 10%); border: 2px solid #fff;
+border-radius: 6px; padding: 6px 14px; font-family: Carlito, Arial, sans-serif;
 font-size: clamp(0.8rem,2.2vw, 1rem); font-weight: bold; color: white;
 cursor: pointer; transition: all 0.3s ease; white-space: nowrap; min-height: 32px;
 display: flex; align-items: center; justify-content: center;
@@ -237,15 +236,15 @@ display: flex; align-items: center; justify-content: center;
 
 .mode-btn[data-mode="truth_general"] { background: #4A90E2; color: white; }
 .mode-btn[data-mode="business_validation"] { background: #FFD811; color: #373534; }
-.mode-btn[data-mode="site_monkeys"] { background: #fff; color: #373534; box-shadow: 0 0 12px rgba(255, 255, 255, 0.6); }
+.mode-btn[data-mode="site_monkeys"] { background: #fff; color: #373534; box-shadow: 0 0 12px rgb(255 255 255 / 60%); }
 
-.mode-btn[data-mode="truth_general"].active { background: #545454; color: white; box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4); }
-.mode-btn[data-mode="business_validation"].active { background: #545454; color: white; box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4); }
-.mode-btn[data-mode="site_monkeys"].active { background: #545454; color: white; box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4); }
+.mode-btn[data-mode="truth_general"].active { background: #545454; color: white; box-shadow: 0 4px 12px rgb(84 84 84 / 40%); }
+.mode-btn[data-mode="business_validation"].active { background: #545454; color: white; box-shadow: 0 4px 12px rgb(84 84 84 / 40%); }
+.mode-btn[data-mode="site_monkeys"].active { background: #545454; color: white; box-shadow: 0 4px 12px rgb(84 84 84 / 40%); }
 
 .mode-btn:hover:not(.active) { transform: translateY(-1px); opacity: 0.9; }
 
-@media (max-width: 768px) and (orientation: portrait) {
+@media (width <= 768px) and (orientation: portrait) {
 header { min-height: clamp(60px, 10vh, 80px); }
 .header-row { max-width: 100vw; padding: clamp(0.2rem, 1vh, 0.5rem) 0; flex-direction: row; justify-content: center; gap: clamp(15px, 4vw, 25px); align-items: center; }
 .logo { position: static; height: clamp(70px, 12vw, 100px); margin: 0; order: 1; }
@@ -257,16 +256,19 @@ header { min-height: clamp(60px, 10vh, 80px); }
 .rocket-top { display: none; }
 .mobile-rocket { display: block; }
 .main-wrapper { padding: 0.5rem 0; }
+
 .main-content {
 flex-direction: column; width: 95vw; height: calc(100vh - 100px); 
 position: relative; margin-bottom: 10px; border: 3px solid #fff; 
 box-shadow: 0 8px 32px #0004; border-radius: 24px; padding: 1rem;
 display: flex; overflow: visible;
 }
+
 .status-panel {
 width: 100%; min-width: 0; border-radius: 0; padding: 0.5rem;
 background: transparent; border: none; box-shadow: none; position: relative;
 }
+
 .status-title {
 color: #FFD811; font-size: 0.95em; margin-top: -10px; margin-bottom: 8px;
 font-weight: bold; text-align: center; width: 100%; white-space: normal;
@@ -276,12 +278,14 @@ line-height: 1.1;
 .status-list { display: none; }
 .system-ready { margin: 0.5rem 0; font-size: 0.9rem; padding: 10px; }
 .vault-info { margin: 0.5rem 0; padding: 0.75rem; font-size: 0.8rem; border: none; }
+
 .chat-panel {
 width: 100%; min-width: 0; border-radius: 0; border-left: none;
 padding: 0.5rem; flex: 1; min-height: 50vh; margin-top: 0; border: none; margin-bottom: 0;
 }
 .chat-box { min-height: 40vh; margin-bottom: 0.5rem; }
 .input-area { padding: 0.1rem; min-height: 2rem; margin-bottom: 0; border-radius: 20px; }
+
 .chat-input {
 font-size: 0.9em; padding: 0.3rem 1em 0.3rem 2.5em; height: 2rem; line-height: 1.4; text-align: left; display: flex; align-items: center;
 }
@@ -294,7 +298,7 @@ font-size: 0.9em; padding: 0.3rem 1em 0.3rem 2.5em; height: 2rem; line-height: 1
 .mode-btn { padding: 4px 8px; font-size: 0.75rem; min-height: 24px; }
 }
 
-@media (max-width: 950px) and (orientation: landscape) {
+@media (width <= 950px) and (orientation: landscape) {
 header {
   min-height: clamp(90px, 14vh, 130px);
   width: 100vw;
@@ -406,7 +410,7 @@ header {
   .status-panel {
     width: 32%; 
     min-width: 220px;
-    background: rgba(17,17,17,0.97); 
+    background: rgb(17 17 17 / 97%); 
     border-radius: 22px 0 0 22px;
     box-shadow: 0 0 25px 8px #54545444 inset; 
     padding: 14px 10px;
@@ -437,7 +441,7 @@ header {
     display: block; 
     list-style: none; 
     padding: 0; 
-    margin: 0 0 12px 0; 
+    margin: 0 0 12px; 
     width: 100%; 
   }
   
@@ -448,7 +452,7 @@ header {
   }
   
   .status-list li .check { 
-    color: #00FF00; 
+    color: #0F0; 
     margin-right: 5px; 
     font-size: 0.9em; 
     display: inline; 
@@ -462,7 +466,7 @@ header {
   }
   
   .vault-info { 
-    margin: 4px 0 0 0; 
+    margin: 4px 0 0; 
     padding: 6px; 
     font-size: 0.65rem; 
     min-height: 40px;
@@ -540,15 +544,15 @@ header {
     text-align: left; 
     min-height: 35px; 
     resize: vertical; 
-    font-family: 'Carlito', Arial, sans-serif;
+    font-family: Carlito, Arial, sans-serif;
   }
   
   .chat-input::placeholder { 
     text-align: left; 
     font-size: 0.85em; 
-    color: rgba(255,255,255,0.45); 
+    color: rgb(255 255 255 / 45%); 
     opacity: 1; 
-    font-family: 'Carlito', Arial, sans-serif; 
+    font-family: Carlito, Arial, sans-serif; 
     letter-spacing: 0.3px; 
   }
   
@@ -575,6 +579,7 @@ header {
   }
   
   .footer { display: none; }
+
   .mobile-footer { 
   display: flex; 
   position: fixed; 
