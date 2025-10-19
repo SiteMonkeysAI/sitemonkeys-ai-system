@@ -106,7 +106,7 @@ class FileLogger {
             if (filter.sessionId && trace.sessionId !== filter.sessionId) continue;
             
             traces.push(trace);
-          } catch (e) {
+          } catch (_e) {
             // Skip malformed lines
           }
         }

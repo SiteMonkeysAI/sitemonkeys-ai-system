@@ -1243,7 +1243,7 @@ function deriveLogicalConclusion(message, expertDomain) {
   return `${expertDomain?.title || "Expert"} perspective suggests an integrated approach considering the identified factors`;
 }
 
-function buildBusinessScenarios(message, vaultContent) {
+function buildBusinessScenarios(message, _vaultContent) {
   // Default scenarios
   let scenarios = {
     best: "optimal outcome with favorable market conditions",
@@ -1308,7 +1308,7 @@ function identifyRelevantDomains(message) {
   return domains;
 }
 
-function buildDomainConnections(domains, message) {
+function buildDomainConnections(domains, _message) {
   const connections = [];
 
   if (domains.includes("business") && domains.includes("health")) {
@@ -1776,7 +1776,7 @@ async function makeEnhancedAPICall(
 }
 
 // *** UTILITY FUNCTIONS ***
-function generateCaringCostMessage(estimatedCost, expertDomain, careNeeds) {
+function generateCaringCostMessage(estimatedCost, expertDomain, _careNeeds) {
   return `As your dedicated family expert in ${expertDomain.domain.replace(/_/g, " ")}, I want to provide the most thorough analysis possible for this important decision.
 
 The estimated cost would be $${estimatedCost.toFixed(4)}, which exceeds our $0.50 limit. I care about managing resources responsibly while delivering the excellence you deserve.
@@ -1789,7 +1789,7 @@ Would you like me to:
 Family takes care of family - what would work best for your situation?`;
 }
 
-function generateCaringEmergencyResponse(error, mode, vaultContent) {
+function generateCaringEmergencyResponse(error, _mode, vaultContent) {
   return `I encountered a technical issue while providing the caring, expert analysis you deserve, and I want to be completely transparent about that.
 
 Even with this system challenge, my commitment to your success remains absolute. Based on the principles of truth-first caring guidance:
@@ -1885,8 +1885,8 @@ function comprehensiveVaultDiagnostic(
     console.log(
       "🔍 Failed components:",
       Object.entries(results)
-        .filter(([k, v]) => v === "FAILED")
-        .map(([k, v]) => k),
+        .filter(([_k, v]) => v === "FAILED")
+        .map(([k, _v]) => k),
     );
   }
 

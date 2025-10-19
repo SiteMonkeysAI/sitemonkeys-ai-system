@@ -377,8 +377,8 @@ async function initiateWebsiteScan(_params) { return { scanInitiated: true }; }
 async function performTechnicalAnalysis(_params) { return { analysisComplete: true }; }
 async function generateOptimizationRecommendations(_params, _tier) { return { recommendationsGenerated: true }; }
 async function performTopicResearch(_params) { return { researchComplete: true }; }
-async function generateAIContent(params, tier) { return { contentGenerated: true }; }
-async function validateContentQuality(params, tier) { return { qualityValidated: true }; }
+async function generateAIContent(_params, _tier) { return { contentGenerated: true }; }
+async function validateContentQuality(_params, _tier) { return { qualityValidated: true }; }
 
 export {
   SERVICE_AUTOMATION,

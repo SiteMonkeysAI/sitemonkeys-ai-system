@@ -68,7 +68,7 @@ export function integrateSystemIntelligence(message, vaultContent, vaultHealthy)
  * PROMPT ENHANCEMENT FUNCTION - CORRECTED
  * Adds intelligence context to AI prompts using your actual vault data
  */
-export function enhancePromptWithIntelligence(basePrompt, intelligence, message) {
+export function enhancePromptWithIntelligence(basePrompt, intelligence, _message) {
   let enhancedPrompt = basePrompt;
 
   try {
