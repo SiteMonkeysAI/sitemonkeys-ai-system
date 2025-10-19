@@ -125,7 +125,7 @@ export class ResponseObjectUnifier {
     if (mode !== 'site_monkeys') return this.masterResponse;
 
     return this.modifyResponse(
-      (content, ctx) => {
+      (content, _ctx) => {
         let violations = [];
         let modifiedContent = content;
 

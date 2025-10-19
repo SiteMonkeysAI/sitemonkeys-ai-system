@@ -6,11 +6,11 @@ import { EnhancedIntelligence } from "./enhanced-intelligence.js";
 import { IntelligenceCoordinator } from "./intelligence-coordinator.js";
 import { ResponseObjectUnifier } from "./response-object-unifier.js";
 import {
-  EMERGENCY_FALLBACKS,
+  _EMERGENCY_FALLBACKS,
   _validateSystemCompliance,
   _enforceZeroFailureResponse,
 } from "./site-monkeys/emergency-fallbacks.js";
-import { applyPoliticalGuardrails } from "./politicalGuardrails.js";
+import { _applyPoliticalGuardrails } from "./politicalGuardrails.js";
 import { _validateProduct } from "./productValidation.js";
 
 export class MasterIntelligenceOrchestrator {

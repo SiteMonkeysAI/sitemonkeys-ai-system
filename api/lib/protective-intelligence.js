@@ -162,7 +162,7 @@ export const SOLUTION_DISCOVERY_PATTERNS = {
   }
 };
 
-export function scanForProtectiveAlerts(message, expertDomain, conversationHistory) {
+export function scanForProtectiveAlerts(message, expertDomain, _conversationHistory) {
   const alerts = [];
   const messageLower = message.toLowerCase();
   
@@ -241,7 +241,7 @@ export function calculateRiskSeverity(triggers, config, messageLower) {
   return severity;
 }
 
-export function generateAlertMessage(riskType, config, triggers) {
+export function generateAlertMessage(riskType, _config, _triggers) {
   const riskTypeFormatted = riskType.replace(/_/g, ' ').toUpperCase();
   return `${riskTypeFormatted} detected - potential exposure requires protective analysis`;
 }
@@ -314,7 +314,7 @@ export function calculateSolutionConfidence(triggers, config, messageLower) {
   return confidence;
 }
 
-export function generateSolutionDescription(solutionType, config) {
+export function generateSolutionDescription(solutionType, _config) {
   const descriptions = {
     cost_optimization: 'Identify ways to achieve the same outcome with reduced costs',
     time_compression: 'Find approaches to accelerate delivery without sacrificing quality',
@@ -325,7 +325,7 @@ export function generateSolutionDescription(solutionType, config) {
   return descriptions[solutionType] || 'Explore alternative approaches to improve outcomes';
 }
 
-export function generateInitiativeSuggestions(solutionType, config) {
+export function generateInitiativeSuggestions(solutionType, _config) {
   const suggestions = {
     cost_optimization: [
       'Negotiate volume discounts with providers',
@@ -384,7 +384,7 @@ export function generateRiskBasedSolutions(alert) {
   return solutions;
 }
 
-export function generateInitiativeBasedResponse(protectiveAlerts, solutionOpportunities, originalMessage) {
+export function generateInitiativeBasedResponse(protectiveAlerts, solutionOpportunities, _originalMessage) {
   if (protectiveAlerts.length === 0 && solutionOpportunities.length === 0) {
     return null;
   }

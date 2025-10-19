@@ -390,7 +390,7 @@ export {
   containsGuessing
 };
 
-export async function checkFounderProtection({ response, mode, context }) {
+export async function checkFounderProtection({ response, mode, _context }) {
   try {
     const violations = [];
 
@@ -470,7 +470,7 @@ export async function checkFounderProtection({ response, mode, context }) {
   }
 }
 
-export async function handleCostCeiling({ query, context, reason, currentCost }) {
+export async function handleCostCeiling({ _query, _context, reason, currentCost }) {
   return {
     response: `I've reached the cost ceiling for this session ($${currentCost.toFixed(4)}). 
 

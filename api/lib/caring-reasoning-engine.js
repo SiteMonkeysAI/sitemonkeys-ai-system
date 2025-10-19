@@ -452,7 +452,7 @@ export class CaringReasoningEngine {
     return "low";
   }
 
-  identifyExpertiseNeeded(userMessage, intentAnalysis) {
+  identifyExpertiseNeeded(userMessage, _intentAnalysis) {
     const message = userMessage.toLowerCase();
     const expertise = [];
 
@@ -536,7 +536,7 @@ export class CaringReasoningEngine {
     return "normal";
   }
 
-  identifyKnownAreas(userMessage, intentAnalysis) {
+  identifyKnownAreas(userMessage, _intentAnalysis) {
     const knownAreas = [];
     const message = userMessage.toLowerCase();
 
@@ -608,7 +608,7 @@ export class CaringReasoningEngine {
     return uncertainAreas;
   }
 
-  identifyOutsideExpertise(userMessage, intentAnalysis) {
+  identifyOutsideExpertise(userMessage, _intentAnalysis) {
     const outsideExpertise = [];
     const message = userMessage.toLowerCase();
 
@@ -766,7 +766,7 @@ export class CaringReasoningEngine {
     return businessContext;
   }
 
-  assessPersonalContext(userMessage, context) {
+  assessPersonalContext(userMessage, _context) {
     const personalContext = {
       personal_decision: false,
       emotional_investment: false,
@@ -815,7 +815,7 @@ export class CaringReasoningEngine {
     return personalContext;
   }
 
-  identifyStakeholders(userMessage, context) {
+  identifyStakeholders(userMessage, _context) {
     const stakeholders = [];
     const message = userMessage.toLowerCase();
 
@@ -1040,7 +1040,7 @@ export class CaringReasoningEngine {
     };
   }
 
-  craftResponseWithCare(responseStrategy, userMessage, context, mode) {
+  craftResponseWithCare(responseStrategy, _userMessage, _context, _mode) {
     // This would integrate with existing AI processors to craft actual response
     // For now, return strategy that can be used by existing response generation
     return {
@@ -1379,7 +1379,7 @@ export class CaringReasoningEngine {
     principleType,
     principleData,
     comprehension,
-    context,
+    _context,
   ) {
     const guidance = {
       principle_applied: principleType,
@@ -1616,7 +1616,7 @@ export class CaringReasoningEngine {
     };
   }
 
-  synthesizeCaringStrategy(principleGuidance, comprehension, context) {
+  synthesizeCaringStrategy(principleGuidance, _comprehension, _context) {
     // Combine all principle guidance into caring response strategy
 
     const allGuidance = Object.values(principleGuidance);

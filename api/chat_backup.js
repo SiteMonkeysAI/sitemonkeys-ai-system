@@ -106,12 +106,12 @@ function generateModeFingerprint(mode, vaultHealthy) {
 // Removed duplicate local declaration
 
 // SYSTEM GLOBALS
-let _lastPersonality = "roxy";
-let _conversationCount = 0;
+let lastPersonality = "roxy";
+let conversationCount = 0;
 let systemDriftHistory = [];
 
-const _intelligence = new EnhancedIntelligence();
-const _intelligenceOrchestrator = new IntelligenceOrchestrator();
+const intelligence = new EnhancedIntelligence();
+const intelligenceOrchestrator = new IntelligenceOrchestrator();
 
 async function initializeMemoryIntelligenceBridge() {
   try {

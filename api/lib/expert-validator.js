@@ -83,7 +83,7 @@ export function checkExpertIndicators(response, expertDomain) {
     anticipates_problems: false,
   };
 
-  const responseLower = response.toLowerCase();
+  const _responseLower = response.toLowerCase();
 
   // Domain-specific expert indicators
   if (expertDomain === "financial_analysis") {

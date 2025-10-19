@@ -143,7 +143,7 @@ class OverrideAuditor {
     return Math.min(impact, 0.3);
   }
 
-  static generateJustification(type, context) {
+  static generateJustification(type, _context) {
     const justifications = {
       TRUTH_ACCOMMODATION: "Response modified to meet truth-first standards",
       BUSINESS_RISK_MINIMIZATION:
@@ -349,7 +349,7 @@ export async function processRequest(requestBody) {
     );
 
     // VAULT SYSTEM - ONLY FOR SITE MONKEYS
-    let vaultResults = [];
+    let _vaultResults = [];
     let vaultStatus = { loaded: false, required: mode === "site_monkeys" };
 
     if (mode === "site_monkeys") {
@@ -369,7 +369,7 @@ export async function processRequest(requestBody) {
 
         session.vaultCache = embeddedVault;
         vaultStatus = { loaded: true, source: "EMBEDDED", required: true };
-        vaultResults = analyzeForVault(message);
+        _vaultResults = analyzeForVault(message);
       } else {
         return {
           response: `🔐 SITE MONKEYS MODE REQUIRES VAULT ACTIVATION\n\nSite Monkeys mode cannot operate without company-specific business logic loaded.\n\nRequired Actions:\n1. Click "Load Vault" to activate Site Monkeys business rules\n2. Or switch to Business Validation mode for general business analysis\n\nSite Monkeys vault contains:\n• Pricing enforcement ($697 minimum)\n• Expense analysis thresholds\n• Company-specific risk factors\n• Compliance requirements\n\nVault activation required for cognitive firewall protection.`,

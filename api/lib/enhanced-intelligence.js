@@ -115,7 +115,7 @@ export class EnhancedIntelligence {
   // MULTI-STEP REASONING ENGINE
   // ================================================================
 
-  async buildReasoningChain(query, memoryContext, vaultContext) {
+  async buildReasoningChain(query, memoryContext, _vaultContext) {
     const reasoning = {
       steps: [],
       assumptions: [],
@@ -184,7 +184,7 @@ export class EnhancedIntelligence {
     };
   }
 
-  deriveConsequence(premise, memoryContext) {
+  deriveConsequence(premise, _memoryContext) {
     return {
       statement: "Logical consequence follows from premise",
       confidence: premise.confidence * 0.9,
@@ -196,7 +196,7 @@ export class EnhancedIntelligence {
   // CROSS-DOMAIN KNOWLEDGE SYNTHESIS
   // ================================================================
 
-  async synthesizeKnowledgeDomains(query, memoryContext, vaultContext) {
+  async synthesizeKnowledgeDomains(query, memoryContext, _vaultContext) {
     const synthesis = {
       primaryDomain: this.identifyPrimaryDomain(query),
       connectedDomains: [],
@@ -257,7 +257,7 @@ export class EnhancedIntelligence {
     return domains.slice(0, 4); // Limit to 4 domains for processing efficiency
   }
 
-  async buildKnowledgeBridge(domain1, domain2, query) {
+  async buildKnowledgeBridge(domain1, domain2, _query) {
     const connections = {
       "business-legal":
         "Business decisions require legal compliance assessment",
@@ -290,7 +290,7 @@ export class EnhancedIntelligence {
   // BUSINESS SCENARIO MODELING
   // ================================================================
 
-  async modelBusinessScenarios(query, vaultContext, memoryContext) {
+  async modelBusinessScenarios(query, _vaultContext, _memoryContext) {
     const scenarios = {
       bestCase: null,
       mostLikely: null,
@@ -381,7 +381,7 @@ export class EnhancedIntelligence {
   // QUANTITATIVE ANALYSIS ENGINE
   // ================================================================
 
-  async performQuantitativeAnalysis(query, numbers, memoryContext) {
+  async performQuantitativeAnalysis(query, numbers, _memoryContext) {
     const analysis = {
       numbersFound: numbers,
       calculations: [],
@@ -432,7 +432,7 @@ export class EnhancedIntelligence {
     return matches.map((match) => parseFloat(match.replace(/[$,]/g, "")));
   }
 
-  selectQuantitativeModel(query, numbers) {
+  selectQuantitativeModel(query, _numbers) {
     if (/roi|return|investment/i.test(query)) return "roi";
     if (/profit|margin|revenue/i.test(query)) return "profitability";
     if (/cost|expense|budget/i.test(query)) return "cost_analysis";
@@ -677,7 +677,7 @@ export class EnhancedIntelligence {
     );
   }
 
-  performCalculations(model, numbers, query) {
+  performCalculations(model, numbers, _query) {
     // Simplified calculation logic
     return [
       {
@@ -688,11 +688,11 @@ export class EnhancedIntelligence {
     ];
   }
 
-  extractCalculationResults(calculations) {
+  extractCalculationResults(_calculations) {
     return { summary: "Quantitative analysis completed" };
   }
 
-  identifyQuantitativeAssumptions(query, numbers) {
+  identifyQuantitativeAssumptions(_query, _numbers) {
     return [
       "Numbers represent current values",
       "Standard calculation methods applied",
@@ -706,7 +706,7 @@ export class EnhancedIntelligence {
     ];
   }
 
-  determineRecommendedAction(scenarios) {
+  determineRecommendedAction(_scenarios) {
     return "Proceed with caution, monitoring key risk factors";
   }
 

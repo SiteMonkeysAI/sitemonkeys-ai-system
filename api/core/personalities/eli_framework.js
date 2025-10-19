@@ -580,7 +580,7 @@ export class EliFramework {
     }
   }
 
-  #findBlindSpots(response, analysis, context) {
+  #findBlindSpots(response, analysis, _context) {
     const blindSpots = [];
 
     try {
@@ -748,7 +748,7 @@ export class EliFramework {
     return response + enhancement;
   }
 
-  #enhanceWithAlternatives(response, analysis, context) {
+  #enhanceWithAlternatives(response, analysis, _context) {
     if (analysis.complexity < 0.7) {
       return { added: false, enhanced: response, alternatives: [] };
     }
