@@ -1155,7 +1155,11 @@ class IntelligenceSystem {
   // CATEGORY DETERMINATION & CONFIDENCE
   // ================================================================
 
-  determineBestCategoryWithConfidence(categoryScores, semanticAnalysis, _query) {
+  determineBestCategoryWithConfidence(
+    categoryScores,
+    semanticAnalysis,
+    _query,
+  ) {
     const sortedCategories = Array.from(categoryScores.entries()).sort(
       ([, a], [, b]) => b - a,
     );
@@ -1682,7 +1686,12 @@ class IntelligenceSystem {
   // SOPHISTICATED SCORING SYSTEM
   // ================================================================
 
-  async applySophisticatedScoring(memories, query, _semanticAnalysis, _routing) {
+  async applySophisticatedScoring(
+    memories,
+    query,
+    _semanticAnalysis,
+    _routing,
+  ) {
     if (!memories || memories.length === 0) return [];
 
     this.logger.log(

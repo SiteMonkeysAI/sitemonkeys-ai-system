@@ -259,7 +259,7 @@ Please request specific calculations with actual numbers, not descriptive busine
 ⚠️ CALCULATION QUALITY CHECK:
 - Quality Score: ${qualityCheck.percentage}% (${qualityCheck.quality_score}/${qualityCheck.max_score})
 - Missing Elements: ${Object.entries(qualityCheck.checks)
-  .filter(([key, value]) => !value)
+  .filter(([_key, value]) => !value)
   .map(([key]) => key.replace(/_/g, ' '))
   .join(', ')}
 

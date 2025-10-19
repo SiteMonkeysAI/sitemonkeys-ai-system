@@ -16,7 +16,9 @@ function generateId(prefix = "") {
     randomPart = crypto.randomBytes(16).toString("hex");
   }
   const timestamp = Date.now();
-  return prefix ? `${prefix}-${timestamp}-${randomPart}` : `${timestamp}-${randomPart}`;
+  return prefix
+    ? `${prefix}-${timestamp}-${randomPart}`
+    : `${timestamp}-${randomPart}`;
 }
 
 // ==================== INTERNAL STATE MANAGEMENT ====================

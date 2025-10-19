@@ -111,7 +111,7 @@ let conversationCount = 0;
 let systemDriftHistory = [];
 
 const intelligence = new EnhancedIntelligence();
-const intelligenceOrchestrator = new IntelligenceOrchestrator();
+const _intelligenceOrchestrator = new IntelligenceOrchestrator();
 
 async function initializeMemoryIntelligenceBridge() {
   try {
@@ -389,7 +389,8 @@ Would you like to proceed?`,
     console.log("[MEMORY-INTELLIGENCE] Starting integration");
 
     // Initialize the bridge
-    const _memoryIntelligenceBridge = await initializeMemoryIntelligenceBridge();
+    const _memoryIntelligenceBridge =
+      await initializeMemoryIntelligenceBridge();
 
     // *** UPDATED INTELLIGENCE SYSTEM INTEGRATION ***
     let intelligenceRouting = null;
@@ -645,7 +646,7 @@ Would you like to proceed?`,
         };
 
         // Create compatible API response for existing token tracking
-        var apiResponse = {
+        var _apiResponse = {
           response: bulletproofResult.response,
           usage: bulletproofResult.usage,
         };
@@ -673,7 +674,7 @@ Would you like to proceed?`,
     
     Based on the available context, I'll give you the most helpful guidance possible.`;
 
-        var apiResponse = {
+        var _apiResponse = {
           response: finalResponse,
           usage: {
             prompt_tokens: Math.ceil(message.length / 4),
@@ -1586,7 +1587,7 @@ function buildMasterPrompt(
   return masterPrompt;
 }
 
-function buildFullConversationPrompt(
+function _buildFullConversationPrompt(
   masterPrompt,
   message,
   conversationHistory,
@@ -1776,7 +1777,7 @@ async function makeEnhancedAPICall(
 }
 
 // *** UTILITY FUNCTIONS ***
-function generateCaringCostMessage(estimatedCost, expertDomain, _careNeeds) {
+function _generateCaringCostMessage(estimatedCost, expertDomain, _careNeeds) {
   return `As your dedicated family expert in ${expertDomain.domain.replace(/_/g, " ")}, I want to provide the most thorough analysis possible for this important decision.
 
 The estimated cost would be $${estimatedCost.toFixed(4)}, which exceeds our $0.50 limit. I care about managing resources responsibly while delivering the excellence you deserve.
@@ -1789,7 +1790,7 @@ Would you like me to:
 Family takes care of family - what would work best for your situation?`;
 }
 
-function generateCaringEmergencyResponse(error, _mode, vaultContent) {
+function generateCaringEmergencyResponse(error, _mode, _vaultContent) {
   return `I encountered a technical issue while providing the caring, expert analysis you deserve, and I want to be completely transparent about that.
 
 Even with this system challenge, my commitment to your success remains absolute. Based on the principles of truth-first caring guidance:
