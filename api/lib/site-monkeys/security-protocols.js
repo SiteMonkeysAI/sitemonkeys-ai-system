@@ -185,12 +185,16 @@ function addOutputFingerprint(content, contentType = 'general') {
 }
 
 function generateEntropy() {
-  // Use crypto.randomBytes() for entropy injection
-  if (typeof crypto !== 'undefined' && crypto.randomBytes) {
+  // Use crypto.randomUUID() if available, fallback to crypto.randomBytes()
+  if (crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  if (crypto.randomBytes) {
     return crypto.randomBytes(16).toString('hex');
   }
   
-  // Fallback for environments without crypto.randomBytes
+  // Fallback for environments without crypto support (should not happen in Node.js)
   return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 }
 

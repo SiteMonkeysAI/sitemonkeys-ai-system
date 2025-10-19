@@ -4,7 +4,20 @@
 // ==================== SELF-CONTAINED IMPORTS ====================
 // Only import from files that definitely exist
 import OpenAI from "openai";
+import crypto from "crypto";
 import { EnhancedIntelligence } from "./enhanced-intelligence.js";
+
+// Helper function to generate secure IDs with timestamp
+function generateId(prefix = "") {
+  let randomPart;
+  if (crypto.randomUUID) {
+    randomPart = crypto.randomUUID();
+  } else {
+    randomPart = crypto.randomBytes(16).toString("hex");
+  }
+  const timestamp = Date.now();
+  return prefix ? `${prefix}-${timestamp}-${randomPart}` : `${timestamp}-${randomPart}`;
+}
 
 // ==================== INTERNAL STATE MANAGEMENT ====================
 
@@ -1319,7 +1332,7 @@ function trackOverride(overrideType, originalValue, newValue, reason) {
     original: originalValue,
     new: newValue,
     reason: reason,
-    session_id: `override-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    session_id: generateId("override"),
   };
 
   systemOverrideLog.push(override);
