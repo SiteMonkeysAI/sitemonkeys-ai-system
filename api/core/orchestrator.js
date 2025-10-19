@@ -9,12 +9,12 @@ import { EliFramework } from "../core/personalities/eli_framework.js";
 import { RoxyFramework } from "../core/personalities/roxy_framework.js";
 import { PersonalitySelector } from "../core/personalities/personality_selector.js";
 import { trackApiCall } from "../lib/tokenTracker.js";
-import { _getVaultStatus, _generateVaultContext } from "../lib/vault.js";
+import { getVaultStatus, generateVaultContext } from "../lib/vault.js";
 import { extractedDocuments } from "../upload-for-analysis.js";
 import {
   MODES,
-  _validateModeCompliance,
-  _calculateConfidenceScore,
+  validateModeCompliance,
+  calculateConfidenceScore,
 } from "../config/modes.js";
 import { EMERGENCY_FALLBACKS } from "../lib/site-monkeys/emergency-fallbacks.js";
 import Anthropic from "@anthropic-ai/sdk";
