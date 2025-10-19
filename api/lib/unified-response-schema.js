@@ -251,7 +251,7 @@ export class UnifiedResponseSchema {
     return titles[domain] || 'Expert Consultant';
   }
 
-  static assessExpertQuality(response, domain) {
+  static assessExpertQuality(response, _domain) {
     // Simplified quality assessment
     let score = 75;
     if (response.length > 500) score += 10; // Comprehensive response

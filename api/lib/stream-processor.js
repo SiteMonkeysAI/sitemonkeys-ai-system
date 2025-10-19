@@ -838,7 +838,7 @@ class StreamProcessor {
   }
 
   cleanupExpiredCache() {
-    this.realTimeCache.forEach((cache, key) => {
+    this.realTimeCache.forEach((cache, _key) => {
       if (cache.last_updated) {
         const age = Date.now() - new Date(cache.last_updated).getTime();
         if (age > cache.ttl) {
@@ -860,7 +860,7 @@ class StreamProcessor {
       error_streams: 0
     };
 
-    this.realTimeCache.forEach((cache, key) => {
+    this.realTimeCache.forEach((cache, _key) => {
       if (cache.last_updated) {
         const age = Date.now() - new Date(cache.last_updated).getTime();
         if (age < cache.ttl) {

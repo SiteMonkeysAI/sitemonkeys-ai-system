@@ -161,7 +161,7 @@ async function executeWorkflow(workflowType, parameters, customerTier) {
 }
 
 // WORKFLOW STEP EXECUTION
-async function executeWorkflowStep(stepName, parameters, customerTier, execution) {
+async function executeWorkflowStep(stepName, parameters, customerTier, _execution) {
   const startTime = Date.now();
   
   try {
@@ -238,7 +238,7 @@ async function executeWorkflowStep(stepName, parameters, customerTier, execution
 }
 
 // RETRY MECHANISM WITH EXPONENTIAL BACKOFF
-async function executeWithRetry(operation, maxAttempts = 3, context = {}) {
+async function executeWithRetry(operation, maxAttempts = 3, _context = {}) {
   const retryConfig = SERVICE_AUTOMATION.automation_rules.retry_logic;
   let lastError;
   
