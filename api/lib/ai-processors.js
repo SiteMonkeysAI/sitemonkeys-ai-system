@@ -3,7 +3,7 @@
 
 // ==================== SELF-CONTAINED IMPORTS ====================
 // Only import from files that definitely exist
-import crypto from "crypto";
+import { randomUUID, randomBytes } from "crypto";
 import OpenAI from "openai";
 import { EnhancedIntelligence } from "./enhanced-intelligence.js";
 
