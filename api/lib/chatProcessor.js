@@ -1,3 +1,4 @@
+import crypto from "node:crypto";
 import { processWithEliAndRoxy } from "./ai-processors.js";
 import OpenAI from "openai";
 
@@ -92,7 +93,7 @@ class OverrideAuditor {
     userPressure = false,
   ) {
     const overrideRecord = {
-      id: `OVR-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: `OVR-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
       timestamp: Date.now(),
       type: type,
       originalRule: originalRule,
@@ -322,7 +323,7 @@ export async function processRequest(requestBody) {
       conversation_history = [],
       vault_loaded = false,
       user_preference = null,
-      session_id = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      session_id = `session_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`,
     } = requestBody;
 
     console.log(
