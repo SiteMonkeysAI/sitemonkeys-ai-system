@@ -8,7 +8,7 @@ name: Quality-Chain
 
 on:
   pull_request:
-    branches: [ main, staging ]
+    branches: [main, staging]
   workflow_dispatch:
 
 jobs:

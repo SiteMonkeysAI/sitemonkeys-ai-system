@@ -3,7 +3,7 @@
 // Consolidates database logic from 4+ sources into unified system
 // ================================================================
 
-import { Pool } from 'pg';
+import { Pool } from "pg";
 
 class CoreSystem {
   constructor() {
@@ -14,91 +14,100 @@ class CoreSystem {
       overall: false,
       database: { healthy: false },
       initialized: false,
-      lastCheck: null
+      lastCheck: null,
     };
 
     // Valid category names (underscore format)
     this.validCategories = [
-      'mental_emotional',
-      'health_wellness',
-      'relationships_social',
-      'work_career',
-      'money_income_debt',
-      'money_spending_goals',
-      'goals_active_current',
-      'goals_future_dreams',
-      'tools_tech_workflow',
-      'daily_routines_habits',
-      'personal_life_interests'
+      "mental_emotional",
+      "health_wellness",
+      "relationships_social",
+      "work_career",
+      "money_income_debt",
+      "money_spending_goals",
+      "goals_active_current",
+      "goals_future_dreams",
+      "tools_tech_workflow",
+      "daily_routines_habits",
+      "personal_life_interests",
     ];
 
     this.categoryLimits = {
       tokenLimit: 50000,
-      memoryLimit: 1000
+      memoryLimit: 1000,
     };
 
     this.logger = {
-      log: (message) => console.log(`[CORE] ${new Date().toISOString()} ${message}`),
-      error: (message, error) => console.error(`[CORE ERROR] ${new Date().toISOString()} ${message}`, error),
-      warn: (message) => console.warn(`[CORE WARN] ${new Date().toISOString()} ${message}`)
+      log: (message) =>
+        console.log(`[CORE] ${new Date().toISOString()} ${message}`),
+      error: (message, error) =>
+        console.error(
+          `[CORE ERROR] ${new Date().toISOString()} ${message}`,
+          error,
+        ),
+      warn: (message) =>
+        console.warn(`[CORE WARN] ${new Date().toISOString()} ${message}`),
     };
   }
 
   async initialize() {
-    this.logger.log('Initializing Core System...');
+    this.logger.log("Initializing Core System...");
 
     try {
       if (!process.env.DATABASE_URL) {
-        throw new Error('DATABASE_URL environment variable not found');
+        throw new Error("DATABASE_URL environment variable not found");
       }
 
       // Connection Pool Management with specified configuration
       this.pool = new Pool({
         connectionString: process.env.DATABASE_URL,
-        ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-        max: 30,                      // Increased from 20
-        idleTimeoutMillis: 60000,     // Doubled to 60s
+        ssl:
+          process.env.NODE_ENV === "production"
+            ? { rejectUnauthorized: false }
+            : false,
+        max: 30, // Increased from 20
+        idleTimeoutMillis: 60000, // Doubled to 60s
         connectionTimeoutMillis: 15000, // Increased from 2s
-        allowExitOnIdle: true          // Clean up idle connections
+        allowExitOnIdle: true, // Clean up idle connections
       });
 
       // --- Keep pool healthy between requests ---
-      this.pool.on('remove', () => {
-        this.logger.warn('[DB] Client removed from pool — reconnecting soon');
+      this.pool.on("remove", () => {
+        this.logger.warn("[DB] Client removed from pool — reconnecting soon");
       });
 
-      this.pool.on('error', (err) => {
-        this.logger.error('[DB] Pool error:', err);
+      this.pool.on("error", (err) => {
+        this.logger.error("[DB] Pool error:", err);
       });
 
       // Lightweight keep-alive every 30 s to prevent idle shutdown
       setInterval(async () => {
         try {
-          await this.pool.query('SELECT 1');
+          await this.pool.query("SELECT 1");
         } catch (e) {
-          this.logger.error('[DB] Keep-alive failed:', e);
-          this.logger.warn('[DB] Attempting to reconnect...');
+          this.logger.error("[DB] Keep-alive failed:", e);
+          this.logger.warn("[DB] Attempting to reconnect...");
           await this.pool.end();
           this.pool = new Pool({ connectionString: process.env.DATABASE_URL });
         }
       }, 30000);
 
       // Pool event handling with detailed logging
-      this.pool.on('connect', (client) => {
-        this.logger.log('Database client connected');
+      this.pool.on("connect", (client) => {
+        this.logger.log("Database client connected");
       });
 
-      this.pool.on('error', (err, client) => {
-        this.logger.error('Database pool error:', err);
+      this.pool.on("error", (err, client) => {
+        this.logger.error("Database pool error:", err);
       });
 
-      this.pool.on('remove', (client) => {
-        this.logger.log('Database client removed from pool');
+      this.pool.on("remove", (client) => {
+        this.logger.log("Database client removed from pool");
       });
 
       // Test connection - Level 1 Health Check
-      await this.executeQuery('SELECT NOW() as current_time');
-      this.logger.log('Database connection established');
+      await this.executeQuery("SELECT NOW() as current_time");
+      this.logger.log("Database connection established");
 
       // Schema Management & Migration
       await this.createDatabaseSchema();
@@ -107,11 +116,10 @@ class CoreSystem {
       await this.updateHealthStatus();
 
       this.isInitialized = true;
-      this.logger.log('Core System initialized successfully');
+      this.logger.log("Core System initialized successfully");
       return true;
-
     } catch (error) {
-      this.logger.error('Core System initialization failed:', error);
+      this.logger.error("Core System initialization failed:", error);
       this.isInitialized = false;
       return false;
     }
@@ -120,19 +128,19 @@ class CoreSystem {
   async executeQuery(query, params = []) {
     try {
       if (!this.pool) {
-        throw new Error('Database pool not initialized');
+        throw new Error("Database pool not initialized");
       }
       const result = await this.pool.query(query, params);
       return result;
     } catch (error) {
-      this.logger.error('Query execution failed:', error);
+      this.logger.error("Query execution failed:", error);
       throw error;
     }
   }
 
   async createDatabaseSchema() {
-    this.logger.log('Creating database schema...');
-    
+    this.logger.log("Creating database schema...");
+
     try {
       // Create persistent_memories table
       await this.executeQuery(`
@@ -172,15 +180,15 @@ class CoreSystem {
         CREATE INDEX IF NOT EXISTS idx_memories_user_category 
         ON persistent_memories(user_id, category_name)
       `);
-      
+
       await this.executeQuery(`
         CREATE INDEX IF NOT EXISTS idx_memories_relevance 
         ON persistent_memories(relevance_score DESC)
       `);
 
-      this.logger.log('Database schema created successfully');
+      this.logger.log("Database schema created successfully");
     } catch (error) {
-      this.logger.error('Schema creation failed:', error);
+      this.logger.error("Schema creation failed:", error);
       throw error;
     }
   }
@@ -194,18 +202,18 @@ class CoreSystem {
       }
 
       // Test database connectivity
-      await this.executeQuery('SELECT 1');
-      
+      await this.executeQuery("SELECT 1");
+
       this.healthStatus.database.healthy = true;
       this.healthStatus.overall = true;
       this.healthStatus.initialized = this.isInitialized;
       this.healthStatus.lastCheck = new Date().toISOString();
-      
-      this.logger.log('Health status updated: System healthy');
+
+      this.logger.log("Health status updated: System healthy");
     } catch (error) {
       this.healthStatus.database.healthy = false;
       this.healthStatus.overall = false;
-      this.logger.error('Health check failed:', error);
+      this.logger.error("Health check failed:", error);
     }
   }
 }

@@ -2,9 +2,9 @@ name: Quality Gates & Security
 
 on:
   push:
-    branches: [ main, develop, feature/** ]
+    branches: [main, develop, feature/**]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main, develop]
 
 permissions:
   contents: read
@@ -15,33 +15,33 @@ jobs:
   quality-check:
     name: Code Quality & Security
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          cache: 'npm'
-      
+          node-version: "20"
+          cache: "npm"
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Run ESLint
         run: npx eslint . --ext .js --max-warnings 10 || true
         continue-on-error: true
-      
+
       - name: Check code formatting
         run: npx prettier --check "**/*.{js,json,md}" || true
         continue-on-error: true
-      
+
       - name: License compliance check
         run: |
           npx license-checker --summary --onlyAllow "MIT;Apache-2.0;ISC;BSD-2-Clause;BSD-3-Clause;0BSD;Unlicense" || echo "⚠️ License check found potential issues"
         continue-on-error: true
-      
+
       - name: Dependency review
         uses: actions/dependency-review-action@v4
         if: github.event_name == 'pull_request'

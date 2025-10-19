@@ -10,9 +10,9 @@ jobs:
   claude-integration:
     uses: fractureinc/claude-code-github-action/.github/workflows/claude-full.yml@v0.5.6
     with:
-      issue-label: 'claude-fix'        # Label that triggers Claude responses
-      branch-prefix: 'fix'             # Optional: fix/ will prefix auto-branches
-      debug-mode: false                # Optional: toggle for verbose logs
-      strict-mode: true                # Optional: Claude sticks to the fix only
+      issue-label: "claude-fix" # Label that triggers Claude responses
+      branch-prefix: "fix" # Optional: fix/ will prefix auto-branches
+      debug-mode: false # Optional: toggle for verbose logs
+      strict-mode: true # Optional: Claude sticks to the fix only
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
