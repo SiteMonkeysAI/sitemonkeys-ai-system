@@ -936,4 +936,4 @@ class LearningEngine {
   }
 }
 
-module.exports = { LearningEngine };
+export { LearningEngine };

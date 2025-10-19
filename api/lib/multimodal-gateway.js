@@ -674,4 +674,4 @@ URL CONTEXT: ${analysis.type} providing ${analysis.relevance} for analysis consi
   }
 }
 
-module.exports = { MultimodalGateway };
+export { MultimodalGateway };

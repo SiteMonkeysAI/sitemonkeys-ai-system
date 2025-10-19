@@ -447,15 +447,7 @@ if (intelligenceMemories && intelligenceMemories.length > 0) {
     console.log('🛡️ [BULLETPROOF] Starting bulletproof intelligence processing...');
     
     try {
-      // Single bulletproof processing call that handles EVERYTHING
-        
-      } else {
-        // Normal orchestrator path for non-document queries
-        console.log('🛡️ [BULLETPROOF] Starting bulletproof intelligence processing...');
-        
-        try {
-          const bulletproofResult = await masterOrchestrator.processWithUnifiedIntelligence({
-            // ... existing orchestrator call ...
+      const bulletproofResult = await masterOrchestrator.processWithUnifiedIntelligence({
         message: enhancedMessage,
         enhancedMessage: enhancedMessage,  // ← ADDED THIS LINE
         conversation_history,
@@ -618,17 +610,17 @@ if (intelligenceResult && intelligenceResult.intelligenceEnhanced) {
       finalResponse, 
       mode, 
       {
-    fingerprint: generateModeFingerprint(mode, vaultHealthy),
-    vaultLoaded: vaultHealthy,
-    conversationHistory: conversation_history,
-    enforcementLevel: 'STANDARD'
-  }
-);
+        fingerprint: generateModeFingerprint(mode, vaultHealthy),
+        vaultLoaded: vaultHealthy,
+        conversationHistory: conversation_history,
+        enforcementLevel: 'STANDARD'
+      }
+    );
 
-// Use corrected content if needed
-if (complianceValidation.corrected_content) {
-  finalResponse = complianceValidation.corrected_content;
-}
+    // Use corrected content if needed
+    if (complianceValidation.corrected_content) {
+      finalResponse = complianceValidation.corrected_content;
+    }
     
     // *** SYSTEM QUALITY ASSESSMENT ***
     const responseQuality = validateExpertQuality(finalResponse, expertDomain.domain, message);
@@ -722,21 +714,21 @@ if (complianceValidation.corrected_content) {
       intelligence_status: intelligence,
       system_intelligence_active: intelligence.vaultIntelligenceActive,
       session_data: {
-  ...sessionData,
-  intelligence_capabilities: {
-    reasoning_engine: true,
-    cross_domain_synthesis: true,
-    scenario_modeling: mode === 'business_validation' || mode === 'site_monkeys',
-    quantitative_analysis: true,
-    enhanced_memory: memoryContext?.intelligenceEnhanced || false
-  },
-  memory_intelligence: memoryContext?.intelligenceEnhanced ? {
-    reasoning_support_memories: memoryContext.reasoningSupport?.length || 0,
-    cross_domain_connections: memoryContext.crossDomainConnections?.length || 0,
-    scenario_relevant_memories: Object.values(memoryContext.scenarioRelevantMemories || {}).reduce((sum, arr) => sum + arr.length, 0),
-    quantitative_context_memories: memoryContext.quantitativeContext?.length || 0
-  } : null
-}
+        ...sessionData,
+        intelligence_capabilities: {
+          reasoning_engine: true,
+          cross_domain_synthesis: true,
+          scenario_modeling: mode === 'business_validation' || mode === 'site_monkeys',
+          quantitative_analysis: true,
+          enhanced_memory: memoryContext?.intelligenceEnhanced || false
+        },
+        memory_intelligence: memoryContext?.intelligenceEnhanced ? {
+          reasoning_support_memories: memoryContext.reasoningSupport?.length || 0,
+          cross_domain_connections: memoryContext.crossDomainConnections?.length || 0,
+          scenario_relevant_memories: Object.values(memoryContext.scenarioRelevantMemories || {}).reduce((sum, arr) => sum + arr.length, 0),
+          quantitative_context_memories: memoryContext.quantitativeContext?.length || 0
+        } : null
+      }
     });
 
   } catch (error) {

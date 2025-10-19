@@ -1,6 +1,8 @@
 // SITE MONKEYS QUALITY ENFORCEMENT  
 // AI Output Quality Gates and Validation Pipeline
 
+import { callClaudeAPI, callGPT4API, callMistralAPI } from './ai-architecture.js';
+
 const QUALITY_ENFORCEMENT = {  
   // TIER-BASED QUALITY THRESHOLDS  
   thresholds: {  
