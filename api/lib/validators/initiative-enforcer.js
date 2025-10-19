@@ -3,46 +3,46 @@
 // Ensures AI takes ownership and provides actionable guidance
 
 const PASSIVE_PATTERNS = [
-  { 
-    pattern: /\bmight want to consider\b/gi, 
-    eli: 'should consider', 
-    roxy: 'I recommend considering' 
+  {
+    pattern: /\bmight want to consider\b/gi,
+    eli: "should consider",
+    roxy: "I recommend considering",
   },
-  { 
-    pattern: /\byou could try\b/gi, 
-    eli: 'try', 
-    roxy: 'I suggest trying' 
+  {
+    pattern: /\byou could try\b/gi,
+    eli: "try",
+    roxy: "I suggest trying",
   },
-  { 
-    pattern: /\bmaybe think about\b/gi, 
-    eli: 'consider', 
-    roxy: 'think about' 
+  {
+    pattern: /\bmaybe think about\b/gi,
+    eli: "consider",
+    roxy: "think about",
   },
-  { 
-    pattern: /\bit depends on many factors\b/gi, 
-    eli: 'the key factors are', 
-    roxy: 'what matters most is' 
+  {
+    pattern: /\bit depends on many factors\b/gi,
+    eli: "the key factors are",
+    roxy: "what matters most is",
   },
-  { 
-    pattern: /\bprobably should\b/gi, 
-    eli: 'should', 
-    roxy: 'I recommend' 
+  {
+    pattern: /\bprobably should\b/gi,
+    eli: "should",
+    roxy: "I recommend",
   },
-  { 
-    pattern: /\byou might want to\b/gi, 
-    eli: 'you should', 
-    roxy: 'I recommend you' 
+  {
+    pattern: /\byou might want to\b/gi,
+    eli: "you should",
+    roxy: "I recommend you",
   },
-  { 
-    pattern: /\bperhaps you could\b/gi, 
-    eli: 'you should', 
-    roxy: 'consider' 
+  {
+    pattern: /\bperhaps you could\b/gi,
+    eli: "you should",
+    roxy: "consider",
   },
-  { 
-    pattern: /\bI don't know, but\b/gi, 
-    eli: 'Based on available information,', 
-    roxy: 'What I can tell you is' 
-  }
+  {
+    pattern: /\bI don't know, but\b/gi,
+    eli: "Based on available information,",
+    roxy: "What I can tell you is",
+  },
 ];
 
 class InitiativeEnforcer {
@@ -50,28 +50,29 @@ class InitiativeEnforcer {
     this.enforcementHistory = [];
   }
 
-  async enforce({ response, personality = 'eli', context = {} }) {
+  async enforce({ response, personality = "eli", context = {} }) {
     try {
       let modified = false;
       let enforcedResponse = response;
-      let reason = '';
+      let reason = "";
       const modificationsApplied = [];
 
       for (const { pattern, eli, roxy } of PASSIVE_PATTERNS) {
         if (pattern.test(enforcedResponse)) {
           modified = true;
-          
-          const replacement = personality === 'roxy' ? roxy : eli;
-          const originalPhrase = enforcedResponse.match(pattern)?.[0] || 'passive language';
-          
+
+          const replacement = personality === "roxy" ? roxy : eli;
+          const originalPhrase =
+            enforcedResponse.match(pattern)?.[0] || "passive language";
+
           enforcedResponse = enforcedResponse.replace(pattern, replacement);
-          
+
           modificationsApplied.push({
             original: originalPhrase,
-            replacement: replacement
+            replacement: replacement,
           });
-          
-          reason = 'Removed passive language, enforced proactive tone';
+
+          reason = "Removed passive language, enforced proactive tone";
           break;
         }
       }
@@ -84,16 +85,15 @@ class InitiativeEnforcer {
         modified,
         response: enforcedResponse,
         reason: modified ? reason : undefined,
-        modificationsApplied: modified ? modificationsApplied : []
+        modificationsApplied: modified ? modificationsApplied : [],
       };
-
     } catch (error) {
-      console.error('[INITIATIVE-ENFORCER] Enforcement error:', error);
-      
+      console.error("[INITIATIVE-ENFORCER] Enforcement error:", error);
+
       return {
         modified: false,
         response: response,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -103,7 +103,7 @@ class InitiativeEnforcer {
       timestamp: new Date().toISOString(),
       personality,
       modifications,
-      mode: context.mode
+      mode: context.mode,
     };
 
     this.enforcementHistory.push(record);
@@ -117,10 +117,12 @@ class InitiativeEnforcer {
     return {
       totalEnforcements: this.enforcementHistory.length,
       byPersonality: {
-        eli: this.enforcementHistory.filter(e => e.personality === 'eli').length,
-        roxy: this.enforcementHistory.filter(e => e.personality === 'roxy').length
+        eli: this.enforcementHistory.filter((e) => e.personality === "eli")
+          .length,
+        roxy: this.enforcementHistory.filter((e) => e.personality === "roxy")
+          .length,
       },
-      recentEnforcements: this.enforcementHistory.slice(-10)
+      recentEnforcements: this.enforcementHistory.slice(-10),
     };
   }
 }

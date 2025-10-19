@@ -2,7 +2,7 @@ name: Maintain Readable Branch
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
 
 permissions:
   contents: write
@@ -19,7 +19,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: "20"
 
       - name: Install Prettier
         run: |
@@ -34,7 +34,6 @@ jobs:
           echo "**/*.yml" >> .prettierignore
           echo "**/*.yaml" >> .prettierignore
 
-
       - name: Format source (code only)
         run: |
           npx prettier --write \
@@ -42,7 +41,6 @@ jobs:
             "public/**/*.{js,ts,jsx,tsx,json}" \
             "memory_system/**/*.{js,ts,jsx,tsx,json}" \
             "utils/**/*.{js,ts,jsx,tsx,json}" || true
-
 
       - name: Commit formatted files
         run: |

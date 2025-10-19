@@ -5,37 +5,45 @@ Use this checklist after merging a PR to the main branch.
 ## ✅ Quick Deployment Steps
 
 ### Step 1: Pull Latest Code
+
 ```bash
 git checkout main
 git pull origin main
 ```
+
 **Verify:** Run `git log -1 --oneline` to confirm you have the latest commit
 
 ### Step 2: Update Dependencies
+
 ```bash
 npm install
 ```
+
 **Verify:** No errors during installation
 
 ### Step 3: Restart Node.js Server
 
 #### Option A: Using PM2 (Production - Recommended)
+
 ```bash
 pm2 restart sitemonkeys-ai-system
 ```
 
 #### Option B: Using systemd (Linux Server)
+
 ```bash
 sudo systemctl restart sitemonkeys-ai
 ```
 
 #### Option C: Manual Restart (Development)
+
 ```bash
 pkill -f "node server.js"
 node server.js
 ```
 
 #### Option D: Railway (Auto-Deploy)
+
 ```bash
 # No action needed - Railway automatically deploys on push to main
 railway logs  # Monitor deployment
@@ -44,6 +52,7 @@ railway logs  # Monitor deployment
 ### Step 4: Verify Deployment
 
 #### Quick Health Check
+
 ```bash
 # Check server is responding
 curl http://localhost:3000/health
@@ -52,6 +61,7 @@ curl http://localhost:3000/health
 ```
 
 #### Comprehensive System Validation (66 Features)
+
 ```bash
 # Run full system status check
 curl http://localhost:3000/api/system-status
@@ -63,6 +73,7 @@ curl http://localhost:3000/api/system-status
 ```
 
 #### Check Specific Features
+
 ```bash
 # Test chat endpoint
 curl -X POST http://localhost:3000/api/chat \
@@ -76,16 +87,19 @@ curl http://localhost:3000/api/inventory
 ### Step 5: Monitor Logs
 
 #### PM2 Logs
+
 ```bash
 pm2 logs sitemonkeys-ai-system --lines 50
 ```
 
 #### systemd Logs
+
 ```bash
 sudo journalctl -u sitemonkeys-ai -f
 ```
 
 #### Railway Logs
+
 ```bash
 railway logs
 ```
@@ -106,6 +120,7 @@ After restart, verify these items:
 ## ⚠️ Troubleshooting
 
 ### Server Won't Start
+
 ```bash
 # Check if port is already in use
 lsof -i :3000
@@ -118,6 +133,7 @@ NODE_ENV=development node server.js
 ```
 
 ### Database Connection Issues
+
 ```bash
 # Run database diagnostic
 npm run fix-database
@@ -127,13 +143,16 @@ echo $DATABASE_URL
 ```
 
 ### Memory System Not Initializing
+
 Check logs for:
+
 - `[SERVER] 🚀 Starting memory system initialization...`
 - `[SERVER] ✅ Memory system initialized successfully`
 
 If timeout occurs, verify DATABASE_URL is set correctly
 
 ### PM2 Process Issues
+
 ```bash
 # Kill all PM2 processes and restart
 pm2 kill
@@ -165,10 +184,7 @@ The `/api/system-status` endpoint tests these 17 categories (66 features total):
 16. **Deployment** (3 tests) - Railway config, package config, start script
 17. **Frontend Integration** (3 tests) - Public directory, static serving, CORS
 
-**Additional Categories:**
-18. **Business Logic** (1 test) - Vault system
-19. **Monitoring** (1 test) - System monitor
-20. **Developer Tools** (1 test) - Repo snapshot
+**Additional Categories:** 18. **Business Logic** (1 test) - Vault system 19. **Monitoring** (1 test) - System monitor 20. **Developer Tools** (1 test) - Repo snapshot
 
 ## 📚 Additional Resources
 
@@ -179,6 +195,7 @@ The `/api/system-status` endpoint tests these 17 categories (66 features total):
 ## 🎯 Success Criteria
 
 Deployment is successful when:
+
 - ✅ Server responds to health checks
 - ✅ System status shows 0 failed tests
 - ✅ Critical systems operational = true

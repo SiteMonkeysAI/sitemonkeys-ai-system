@@ -3,51 +3,54 @@
 // Ready for immediate Railway deployment
 //Redeploy2
 
-console.log('[SERVER] 🎬 Starting Site Monkeys AI System...');
-console.log('[SERVER] 📦 Loading dependencies...');
+console.log("[SERVER] 🎬 Starting Site Monkeys AI System...");
+console.log("[SERVER] 📦 Loading dependencies...");
 
-import express from 'express';
-import cors from 'cors';
-import session from 'express-session';
-import { persistentMemory } from './api/categories/memory/index.js';
-import { uploadMiddleware, handleFileUpload } from './api/upload-file.js';
-import { analysisMiddleware, handleAnalysisUpload } from './api/upload-for-analysis.js';
-import repoSnapshotRoute from './api/repo-snapshot.js';
-import { addInventoryEndpoint } from './system-inventory-endpoint.js';
-import Orchestrator from './api/core/orchestrator.js';
-import systemStatus from './api/system-status.js'; // <-- ADDED
+import express from "express";
+import cors from "cors";
+import session from "express-session";
+import { persistentMemory } from "./api/categories/memory/index.js";
+import { uploadMiddleware, handleFileUpload } from "./api/upload-file.js";
+import {
+  analysisMiddleware,
+  handleAnalysisUpload,
+} from "./api/upload-for-analysis.js";
+import repoSnapshotRoute from "./api/repo-snapshot.js";
+import { addInventoryEndpoint } from "./system-inventory-endpoint.js";
+import Orchestrator from "./api/core/orchestrator.js";
+import systemStatus from "./api/system-status.js"; // <-- ADDED
 
-console.log('[SERVER] ✅ Dependencies loaded');
-console.log('[SERVER] 🎯 Initializing Orchestrator...');
+console.log("[SERVER] ✅ Dependencies loaded");
+console.log("[SERVER] 🎯 Initializing Orchestrator...");
 
 const orchestrator = new Orchestrator();
 
-console.log('[SERVER] ✅ Orchestrator created');
+console.log("[SERVER] ✅ Orchestrator created");
 
 // ===== CRITICAL RAILWAY ERROR HANDLERS =====
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('❌ Unhandled Promise Rejection:', reason);
-  console.error('Promise:', promise);
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ Unhandled Promise Rejection:", reason);
+  console.error("Promise:", promise);
   // Don't exit - Railway will restart if we do
 });
 
-process.on('uncaughtException', (error) => {
-  console.error('❌ Uncaught Exception:', error);
-  console.error('Stack:', error.stack);
+process.on("uncaughtException", (error) => {
+  console.error("❌ Uncaught Exception:", error);
+  console.error("Stack:", error.stack);
   // Log but continue running
 });
 
 // ===== PROCESS LIFECYCLE DIAGNOSTICS =====
-process.on('exit', (code) => {
+process.on("exit", (code) => {
   console.log(`[SERVER] 🛑 Process exit event with code: ${code}`);
 });
 
-process.on('beforeExit', (code) => {
+process.on("beforeExit", (code) => {
   console.log(`[SERVER] ⚠️ Process beforeExit event with code: ${code}`);
 });
 
-process.on('SIGTERM', () => {
-  console.log('[SERVER] 🛑 SIGTERM signal received, shutting down gracefully');
+process.on("SIGTERM", () => {
+  console.log("[SERVER] 🛑 SIGTERM signal received, shutting down gracefully");
   process.exit(0);
 });
 
@@ -63,108 +66,115 @@ addInventoryEndpoint(app);
 // - 24-hour expiration limits session hijacking window
 // - resave: false prevents unnecessary session store writes
 // - saveUninitialized: true allows anonymous session tracking
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'sitemonkeys', // SECURITY: Set SESSION_SECRET env var in production
-  resave: false,
-  saveUninitialized: true,
-  cookie: {
-    maxAge: 1000 * 60 * 60 * 24, // 24 hours
-    sameSite: 'lax', // CSRF protection
-    // SECURITY: In production, also set: secure: true (requires HTTPS), httpOnly: true
-  }
-}));
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "sitemonkeys", // SECURITY: Set SESSION_SECRET env var in production
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+      maxAge: 1000 * 60 * 60 * 24, // 24 hours
+      sameSite: "lax", // CSRF protection
+      // SECURITY: In production, also set: secure: true (requires HTTPS), httpOnly: true
+    },
+  }),
+);
 
 // ===== APPLICATION STARTUP MEMORY INITIALIZATION =====
-console.log('[SERVER] ��� Initializing memory systems at application startup...');
+console.log(
+  "[SERVER] ��� Initializing memory systems at application startup...",
+);
 
 // CRITICAL FIX: Move async initialization inside an async function
 async function initializeMemorySystem() {
-    console.log('[SERVER] 🚀 Starting memory system initialization...');
-    
-    try {
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Memory init timeout')), 30000)
-        );
-        
-        // NOTE: After PR #39 reorganization, persistentMemory is a thin wrapper
-        // Access coreSystem.initialize() directly since persistentMemory doesn't expose initialize()
-        const initResult = await Promise.race([
-            persistentMemory.coreSystem.initialize(),
-            timeoutPromise
-        ]);
-        
-        console.log(`[SERVER] ✅ Memory system initialized successfully: ${initResult}`);
-        
-        // Verify memory system is working
-        console.log('[SERVER] 📊 Memory system verification:', {
-            available: !!global.memorySystem,
-            ready: persistentMemory.coreSystem?.isInitialized || false
-        });
-        
-    } catch (initError) {
-        console.error('[SERVER] ❌ Memory system initialization error:', {
-            message: initError.message,
-            stack: initError.stack?.substring(0, 500)
-        });
-        
-        console.log('[SERVER] 🔄 Server will continue with fallback memory only');
-    }
-    
-    console.log('[SERVER] 📊 Memory system initialization phase complete');
+  console.log("[SERVER] 🚀 Starting memory system initialization...");
+
+  try {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Memory init timeout")), 30000),
+    );
+
+    // NOTE: After PR #39 reorganization, persistentMemory is a thin wrapper
+    // Access coreSystem.initialize() directly since persistentMemory doesn't expose initialize()
+    const initResult = await Promise.race([
+      persistentMemory.coreSystem.initialize(),
+      timeoutPromise,
+    ]);
+
+    console.log(
+      `[SERVER] ✅ Memory system initialized successfully: ${initResult}`,
+    );
+
+    // Verify memory system is working
+    console.log("[SERVER] 📊 Memory system verification:", {
+      available: !!global.memorySystem,
+      ready: persistentMemory.coreSystem?.isInitialized || false,
+    });
+  } catch (initError) {
+    console.error("[SERVER] ❌ Memory system initialization error:", {
+      message: initError.message,
+      stack: initError.stack?.substring(0, 500),
+    });
+
+    console.log("[SERVER] 🔄 Server will continue with fallback memory only");
+  }
+
+  console.log("[SERVER] 📊 Memory system initialization phase complete");
 }
 
 // ===== MIDDLEWARE CONFIGURATION =====
-app.use(cors({
-  origin: true,
-  credentials: true
-}));
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
-app.use(express.static('public'));
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  }),
+);
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+app.use(express.static("public"));
 
-console.log('[SERVER] ✅ Middleware configured');
+console.log("[SERVER] ✅ Middleware configured");
 
 // ===== API ROUTES =====
 
 // Health check endpoint - Railway needs simple response
-app.get('/health', (req, res) => {
-  res.status(200).json({ status: 'healthy' });
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "healthy" });
 });
 
 // Detailed health check for monitoring
-app.get('/api/health', (req, res) => {
+app.get("/api/health", (req, res) => {
   res.json({
-    status: 'healthy',
+    status: "healthy",
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     memory: process.memoryUsage(),
     orchestrator: {
-      initialized: orchestrator.initialized
-    }
+      initialized: orchestrator.initialized,
+    },
   });
 });
 
 // System status endpoint
-app.get('/api/system-status', systemStatus); // <-- ADDED
+app.get("/api/system-status", systemStatus); // <-- ADDED
 
 // Chat endpoint - main AI processing
 // SECURITY: Input validation and sanitization
-app.post('/api/chat', async (req, res) => {
+app.post("/api/chat", async (req, res) => {
   try {
-    console.log('[CHAT] 📨 Received chat request');
-    
+    console.log("[CHAT] 📨 Received chat request");
+
     // SECURITY: Extract and validate request parameters
     // - Default values prevent undefined/null processing issues
     // - Type coercion handled by destructuring defaults
     const {
       message,
-      userId = 'anonymous',
-      mode = 'truth_general',
+      userId = "anonymous",
+      mode = "truth_general",
       sessionId,
       documentContext,
       vaultEnabled = false,
       vaultContext,
-      conversationHistory = []
+      conversationHistory = [],
     } = req.body;
 
     // SECURITY: Input validation - message is required
@@ -172,10 +182,10 @@ app.post('/api/chat', async (req, res) => {
     if (!message) {
       return res.status(400).json({
         success: false,
-        error: 'Message is required'
+        error: "Message is required",
       });
     }
-    
+
     // SECURITY: Additional validation could include:
     // - Message length limits (prevent DoS through large inputs)
     // - Rate limiting per userId/IP
@@ -190,61 +200,63 @@ app.post('/api/chat', async (req, res) => {
       documentContext,
       vaultEnabled,
       vaultContext,
-      conversationHistory
+      conversationHistory,
     });
 
     res.json(result);
-
   } catch (error) {
-    console.error('[CHAT] ❌ Error processing chat:', error);
+    console.error("[CHAT] ❌ Error processing chat:", error);
     res.status(500).json({
       success: false,
       error: error.message,
-      response: 'I encountered an error processing your request. Please try again.'
+      response:
+        "I encountered an error processing your request. Please try again.",
     });
   }
 });
 
 // Upload endpoints
-app.post('/api/upload', uploadMiddleware, handleFileUpload);
-app.post('/api/upload-for-analysis', analysisMiddleware, handleAnalysisUpload);
+app.post("/api/upload", uploadMiddleware, handleFileUpload);
+app.post("/api/upload-for-analysis", analysisMiddleware, handleAnalysisUpload);
 
 // Repo snapshot endpoint
-app.use('/api', repoSnapshotRoute);
+app.use("/api", repoSnapshotRoute);
 
-console.log('[SERVER] ✅ Routes configured');
+console.log("[SERVER] ✅ Routes configured");
 
 // ===== START HTTP SERVER =====
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, '0.0.0.0', () => {
+app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server listening on port ${PORT}`);
   console.log(`🔍 Health check available at /health`);
 });
 
 (async () => {
-  console.log('🚀 Background initialization starting...');
+  console.log("🚀 Background initialization starting...");
   try {
-    console.log('📊 Initializing memory system...');
+    console.log("📊 Initializing memory system...");
     await initializeMemorySystem();
-    console.log('✅ Memory system initialized');
+    console.log("✅ Memory system initialized");
   } catch (err) {
-    console.error('⚠️ Memory system initialization failed:', err.message);
-    console.log('📦 Running with in-memory fallback');
+    console.error("⚠️ Memory system initialization failed:", err.message);
+    console.log("📦 Running with in-memory fallback");
   }
   try {
-    console.log('🧠 Initializing orchestrator...');
+    console.log("🧠 Initializing orchestrator...");
     await orchestrator.initialize();
-    console.log('✅ Orchestrator initialized');
+    console.log("✅ Orchestrator initialized");
   } catch (err) {
-    console.error('⚠️ Orchestrator initialization failed:', err.message);
-    console.log('🔄 System running in degraded mode');
+    console.error("⚠️ Orchestrator initialization failed:", err.message);
+    console.log("🔄 System running in degraded mode");
   }
-  console.log('🎉 System fully initialized and ready');
-  
+  console.log("🎉 System fully initialized and ready");
+
   // Add keepalive timer to prevent event loop from going idle
-  console.log('⏰ Starting keepalive timer (60s interval) to prevent process exit');
+  console.log(
+    "⏰ Starting keepalive timer (60s interval) to prevent process exit",
+  );
   setInterval(() => {
-    console.log('💓 Keepalive ping - process active');
+    console.log("💓 Keepalive ping - process active");
   }, 60000);
-  console.log('✅ Keepalive timer active - process will remain running');
+  console.log("✅ Keepalive timer active - process will remain running");
 })();

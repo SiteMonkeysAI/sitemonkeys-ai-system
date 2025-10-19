@@ -3,8 +3,8 @@ jobs:
     uses: fractureinc/claude-code-github-action/.github/workflows/claude-label-fix.yml@v0.5.6
     with:
       # All parameters are optional with sensible defaults
-      issue-label: 'claude-fix'  # Must match the label you're using
-      branch-prefix: 'fix'       # Prefix for branches created by fixes
-      debug-mode: false          # Enable verbose logging
+      issue-label: "claude-fix" # Must match the label you're using
+      branch-prefix: "fix" # Prefix for branches created by fixes
+      debug-mode: false # Enable verbose logging
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

@@ -1,99 +1,120 @@
-// POLITICAL NEUTRALITY - Truth Foundation & Voting Protection  
+// POLITICAL NEUTRALITY - Truth Foundation & Voting Protection
 // Ensures political neutrality, protects voting rights, enforces evidence-based recommendations
 
 export const POLITICAL_KEYWORDS = [
-  'vote', 'voting', 'election', 'candidate', 'party', 'democrat', 'democratic',
-  'republican', 'liberal', 'conservative', 'politics', 'political', 'politician',
-  'campaign', 'ballot', 'primary', 'caucus', 'senate', 'congress', 'president',
-  'governor', 'mayor', 'legislation', 'policy', 'reform'
+  "vote",
+  "voting",
+  "election",
+  "candidate",
+  "party",
+  "democrat",
+  "democratic",
+  "republican",
+  "liberal",
+  "conservative",
+  "politics",
+  "political",
+  "politician",
+  "campaign",
+  "ballot",
+  "primary",
+  "caucus",
+  "senate",
+  "congress",
+  "president",
+  "governor",
+  "mayor",
+  "legislation",
+  "policy",
+  "reform",
 ];
 
 export const VOTING_TRIGGER_PHRASES = [
-  'who should i vote for',
-  'who to vote for',
-  'which candidate',
-  'recommend voting',
-  'best candidate',
-  'support which',
-  'vote which way',
-  'voting recommendation'
+  "who should i vote for",
+  "who to vote for",
+  "which candidate",
+  "recommend voting",
+  "best candidate",
+  "support which",
+  "vote which way",
+  "voting recommendation",
 ];
 
 export const POLITICAL_OPINION_TRIGGERS = [
-  'what do you think about',
-  'your opinion on',
-  'do you support',
-  'are you for or against',
-  'which side',
-  'better party',
-  'political view'
+  "what do you think about",
+  "your opinion on",
+  "do you support",
+  "are you for or against",
+  "which side",
+  "better party",
+  "political view",
 ];
 
 export function detectPoliticalContent(message) {
   const messageLower = message.toLowerCase();
-  
+
   const analysis = {
-    has_political_keywords: POLITICAL_KEYWORDS.some(keyword => 
-      messageLower.includes(keyword.toLowerCase())
+    has_political_keywords: POLITICAL_KEYWORDS.some((keyword) =>
+      messageLower.includes(keyword.toLowerCase()),
     ),
-    is_voting_request: VOTING_TRIGGER_PHRASES.some(phrase => 
-      messageLower.includes(phrase.toLowerCase())
+    is_voting_request: VOTING_TRIGGER_PHRASES.some((phrase) =>
+      messageLower.includes(phrase.toLowerCase()),
     ),
-    seeks_political_opinion: POLITICAL_OPINION_TRIGGERS.some(trigger => 
-      messageLower.includes(trigger.toLowerCase())
+    seeks_political_opinion: POLITICAL_OPINION_TRIGGERS.some((trigger) =>
+      messageLower.includes(trigger.toLowerCase()),
     ),
-    political_keyword_count: POLITICAL_KEYWORDS.filter(keyword => 
-      messageLower.includes(keyword.toLowerCase())
+    political_keyword_count: POLITICAL_KEYWORDS.filter((keyword) =>
+      messageLower.includes(keyword.toLowerCase()),
     ).length,
-    detected_keywords: POLITICAL_KEYWORDS.filter(keyword => 
-      messageLower.includes(keyword.toLowerCase())
-    )
+    detected_keywords: POLITICAL_KEYWORDS.filter((keyword) =>
+      messageLower.includes(keyword.toLowerCase()),
+    ),
   };
-  
-  analysis.requires_neutrality_response = 
-    analysis.is_voting_request || 
-    analysis.seeks_political_opinion || 
+
+  analysis.requires_neutrality_response =
+    analysis.is_voting_request ||
+    analysis.seeks_political_opinion ||
     analysis.political_keyword_count > 1;
-  
+
   analysis.content_type = determineContentType(analysis);
-  
+
   return analysis;
 }
 
 export function determineContentType(analysis) {
   if (analysis.is_voting_request) {
-    return 'voting_recommendation_request';
+    return "voting_recommendation_request";
   }
-  
+
   if (analysis.seeks_political_opinion) {
-    return 'political_opinion_request';
+    return "political_opinion_request";
   }
-  
+
   if (analysis.has_political_keywords && analysis.political_keyword_count > 1) {
-    return 'political_discussion';
+    return "political_discussion";
   }
-  
+
   if (analysis.has_political_keywords) {
-    return 'political_reference';
+    return "political_reference";
   }
-  
-  return 'non_political';
+
+  return "non_political";
 }
 
 export function generateNeutralityResponse(contentType, _originalMessage) {
   switch (contentType) {
-    case 'voting_recommendation_request':
+    case "voting_recommendation_request":
       return generateVotingResponse();
-      
-    case 'political_opinion_request':
+
+    case "political_opinion_request":
       return generatePoliticalOpinionResponse();
-      
-    case 'political_discussion':
+
+    case "political_discussion":
       return generatePoliticalDiscussionResponse();
-      
-    case 'political_reference':
+
+    case "political_reference":
       return null; // Allow normal response with political references
-      
+
     default:
       return null;
   }
@@ -173,35 +194,41 @@ Your political analysis and decisions should be your own, based on your values a
 
 export function applyPoliticalNeutrality(response, originalMessage) {
   const politicalAnalysis = detectPoliticalContent(originalMessage);
-  
+
   if (!politicalAnalysis.requires_neutrality_response) {
     // Check if response contains political bias
     return enforceResponseNeutrality(response, politicalAnalysis);
   }
-  
+
   // Generate appropriate neutrality response
-  const neutralityResponse = generateNeutralityResponse(politicalAnalysis.content_type, originalMessage);
-  
+  const neutralityResponse = generateNeutralityResponse(
+    politicalAnalysis.content_type,
+    originalMessage,
+  );
+
   if (neutralityResponse) {
     return neutralityResponse;
   }
-  
+
   return enforceResponseNeutrality(response, politicalAnalysis);
 }
 
 export function enforceResponseNeutrality(response, politicalAnalysis) {
   // Check if response maintains neutrality
   const responseAnalysis = analyzeResponseNeutrality(response);
-  
+
   if (responseAnalysis.violates_neutrality) {
     return correctNeutralityViolations(response, responseAnalysis);
   }
-  
+
   // Add neutrality disclaimer if political content is present
-  if (politicalAnalysis.has_political_keywords && responseAnalysis.discusses_politics) {
+  if (
+    politicalAnalysis.has_political_keywords &&
+    responseAnalysis.discusses_politics
+  ) {
     return addNeutralityDisclaimer(response);
   }
-  
+
   return response;
 }
 
@@ -210,86 +237,99 @@ export function analyzeResponseNeutrality(response) {
     violates_neutrality: false,
     discusses_politics: false,
     violations: [],
-    bias_indicators: []
+    bias_indicators: [],
   };
-  
+
   const responseLower = response.toLowerCase();
-  
+
   // Check for voting recommendations
   const votingViolations = [
-    'vote for', 'should vote', 'recommend voting', 'support candidate',
-    'best candidate', 'choose this', 'pick this option'
+    "vote for",
+    "should vote",
+    "recommend voting",
+    "support candidate",
+    "best candidate",
+    "choose this",
+    "pick this option",
   ];
-  
-  votingViolations.forEach(violation => {
+
+  votingViolations.forEach((violation) => {
     if (responseLower.includes(violation)) {
       analysis.violates_neutrality = true;
       analysis.violations.push({
-        type: 'voting_recommendation',
+        type: "voting_recommendation",
         text: violation,
-        severity: 'critical'
+        severity: "critical",
       });
     }
   });
-  
+
   // Check for political bias indicators
   const biasIndicators = [
-    'obviously better', 'clearly superior', 'anyone can see',
-    'common sense says', 'reasonable people know', 'smart choice is'
+    "obviously better",
+    "clearly superior",
+    "anyone can see",
+    "common sense says",
+    "reasonable people know",
+    "smart choice is",
   ];
-  
-  biasIndicators.forEach(indicator => {
-    if (responseLower.includes(indicator) && POLITICAL_KEYWORDS.some(keyword => 
-        responseLower.includes(keyword)
-    )) {
+
+  biasIndicators.forEach((indicator) => {
+    if (
+      responseLower.includes(indicator) &&
+      POLITICAL_KEYWORDS.some((keyword) => responseLower.includes(keyword))
+    ) {
       analysis.bias_indicators.push(indicator);
     }
   });
-  
+
   // Check if political topics are discussed
-  analysis.discusses_politics = POLITICAL_KEYWORDS.some(keyword => 
-    responseLower.includes(keyword)
+  analysis.discusses_politics = POLITICAL_KEYWORDS.some((keyword) =>
+    responseLower.includes(keyword),
   );
-  
+
   if (analysis.bias_indicators.length > 0) {
     analysis.violates_neutrality = true;
     analysis.violations.push({
-      type: 'political_bias',
+      type: "political_bias",
       indicators: analysis.bias_indicators,
-      severity: 'high'
+      severity: "high",
     });
   }
-  
+
   return analysis;
 }
 
 export function correctNeutralityViolations(response, responseAnalysis) {
   let correctedResponse = response;
-  
+
   // If critical violations exist, replace with neutrality response
-  const criticalViolations = responseAnalysis.violations.filter(v => v.severity === 'critical');
-  
+  const criticalViolations = responseAnalysis.violations.filter(
+    (v) => v.severity === "critical",
+  );
+
   if (criticalViolations.length > 0) {
     return `I cannot provide voting recommendations or political endorsements. That's inappropriate and undermines your personal responsibility as a citizen.
 
 ${generateVotingResponse()}`;
   }
-  
+
   // Correct bias language
-  responseAnalysis.violations.forEach(violation => {
-    if (violation.type === 'political_bias') {
-      violation.indicators.forEach(indicator => {
+  responseAnalysis.violations.forEach((violation) => {
+    if (violation.type === "political_bias") {
+      violation.indicators.forEach((indicator) => {
         correctedResponse = correctedResponse.replace(
-          new RegExp(indicator, 'gi'), 
-          'analysis suggests'
+          new RegExp(indicator, "gi"),
+          "analysis suggests",
         );
       });
     }
   });
-  
+
   // Add neutrality notice
-  correctedResponse += '\n\n**POLITICAL NEUTRALITY NOTE:** This analysis presents factual information and multiple perspectives. Political decisions should be based on your own values and independent research.';
-  
+  correctedResponse +=
+    "\n\n**POLITICAL NEUTRALITY NOTE:** This analysis presents factual information and multiple perspectives. Political decisions should be based on your own values and independent research.";
+
   return correctedResponse;
 }
 
@@ -305,22 +345,22 @@ export function validateEvidenceBasedRecommendations(response) {
     total_recommendations: recommendations.length,
     evidence_based: 0,
     unsupported: 0,
-    violations: []
+    violations: [],
   };
-  
-  recommendations.forEach(recommendation => {
+
+  recommendations.forEach((recommendation) => {
     if (hasEvidenceSupport(recommendation, response)) {
       validation.evidence_based++;
     } else {
       validation.unsupported++;
       validation.violations.push({
-        type: 'unsupported_recommendation',
+        type: "unsupported_recommendation",
         text: recommendation,
-        required_fix: 'Must include evidence basis or confidence level'
+        required_fix: "Must include evidence basis or confidence level",
       });
     }
   });
-  
+
   return validation;
 }
 
@@ -330,51 +370,57 @@ export function extractRecommendations(response) {
     /suggest\s+([^.!?]+)/gi,
     /should\s+([^.!?]+)/gi,
     /best\s+option\s+is\s+([^.!?]+)/gi,
-    /consider\s+([^.!?]+)/gi
+    /consider\s+([^.!?]+)/gi,
   ];
-  
+
   const recommendations = [];
-  
-  recommendationPatterns.forEach(pattern => {
+
+  recommendationPatterns.forEach((pattern) => {
     const matches = response.match(pattern);
     if (matches) {
       recommendations.push(...matches);
     }
   });
-  
+
   return recommendations;
 }
 
 export function hasEvidenceSupport(recommendation, response) {
   const evidenceIndicators = [
-    'based on', 'evidence shows', 'studies indicate', 'data suggests',
-    'research demonstrates', 'confidence:', 'according to'
+    "based on",
+    "evidence shows",
+    "studies indicate",
+    "data suggests",
+    "research demonstrates",
+    "confidence:",
+    "according to",
   ];
-  
+
   // Check if recommendation is near evidence indicators
-  return evidenceIndicators.some(indicator => 
-    response.toLowerCase().includes(indicator.toLowerCase())
+  return evidenceIndicators.some((indicator) =>
+    response.toLowerCase().includes(indicator.toLowerCase()),
   );
 }
 
 export function enforceEvidenceBasedStandards(response) {
   const validation = validateEvidenceBasedRecommendations(response);
-  
+
   if (validation.violations.length === 0) {
     return response;
   }
-  
+
   let enhancedResponse = response;
-  
+
   // Add evidence requirements notice
-  enhancedResponse += '\n\n**EVIDENCE-BASED STANDARD NOTICE:**\n';
+  enhancedResponse += "\n\n**EVIDENCE-BASED STANDARD NOTICE:**\n";
   enhancedResponse += `This response contains ${validation.unsupported} recommendation(s) that should include evidence basis or confidence levels for complete analysis.\n\n`;
-  
-  validation.violations.forEach(violation => {
+
+  validation.violations.forEach((violation) => {
     enhancedResponse += `- "${violation.text}" - ${violation.required_fix}\n`;
   });
-  
-  enhancedResponse += '\nFor important decisions, verify recommendations with additional sources and evidence.';
-  
+
+  enhancedResponse +=
+    "\nFor important decisions, verify recommendations with additional sources and evidence.";
+
   return enhancedResponse;
 }

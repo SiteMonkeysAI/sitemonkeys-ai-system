@@ -1,1435 +1,2121 @@
-<!DOCTYPE html>
+<!doctype html>
 
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Site Monkeys AI</title>
-<link href="https://fonts.cdnfonts.com/css/luckiest-guy" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css?family=Carlito:400,700&display=swap" rel="stylesheet">
-<style>
-* { box-sizing: border-box; overflow-wrap: break-word; }
-
-html, body {
-margin: 0; padding: 0;
-font-family: 'Carlito', Arial, sans-serif;
-background: #373534; color: white;
-min-height: 100vh; width: 100vw;
-overflow-x: hidden; display: flex; flex-direction: column;
--webkit-text-size-adjust: 100%;
--ms-text-size-adjust: 100%;
-}
-
-header {
-background: #1A1A1A; width: 100vw; min-height: 110px;
-box-shadow: 0 2px 8px #0008;
-display: flex; flex-direction: column; align-items: center; justify-content: center; flex-shrink: 0;
-}
-
-.header-row {
-width: 100%; max-width: 1200px;
-display: flex; align-items: center; justify-content: center;
-position: relative; margin: 0 auto; padding: 12px 0;
-}
-
-.logo { height: clamp(120px, 15vh, 150px); flex-shrink: 0; position: absolute; left: calc(50% - 450px); z-index: 1; }
-
-.header-center { display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; z-index: 2; }
-
-.site-title {
-font-family: 'Luckiest Guy', cursive; color: #FFD811;
-font-size: clamp(1.8rem, 4vw, 2.1em); margin: 0; letter-spacing: 2px; line-height: 1; text-align: center;
-white-space: nowrap; width: 100%; text-align: center;
-}
-
-.subtitle {
-font-family: 'Carlito', Arial, sans-serif; color: #fff; font-size: clamp(1rem, 2.5vw, 1.2em);
-margin-top: 8px; letter-spacing: 1px; text-align: center; font-weight: bold;
-}
-
-.ai-robot { height: clamp(60px, 8vh, 80px); flex-shrink: 0; position: absolute; right: calc(50% - 450px); z-index: 1; }
-
-.rocket-top { position: absolute; right: -80px; top: 40px; width: 150px; z-index: 3; pointer-events: none; transform: rotate(45deg); }
-
-.main-wrapper {
-flex: 1; display: flex; justify-content: center; align-items: flex-start;
-position: relative; width: 100%; min-height: 0; padding: 10px 0 50px 0;
-}
-
-.main-content {
-display: flex; justify-content: center; align-items: stretch;
-max-width: 900px; width: clamp(70vw, 75vw, 80vw); margin: 0 auto; position: relative;
-height: calc(100vh - 240px); min-height: 630px; max-height: 720px;
-background: #373534; border-radius: 24px; box-shadow: 0 8px 32px #0004;
-border: 3px solid #fff; z-index: 1; box-sizing: border-box;
-}
-
-.mascot { position: absolute; top: 50%; transform: translateY(-50%); z-index: 30; height: calc(100vh - 180px); min-height: 450px; max-height: 550px; width: auto; pointer-events: none; transition: all 0.3s ease; }
-
-.mascot-left { left: -120px; }
-
-.mascot-right { right: -120px; }
-
-.status-panel {
-width: 38%; min-width: 350px;
-background: rgba(17,17,17,0.97); border-radius: 24px 0 0 24px;
-box-shadow: 0 0 30px 10px #54545444 inset; padding: 25px 15px;
-display: flex; flex-direction: column; position: relative; z-index: 2; justify-content: flex-start;
-}
-
-.status-title {
-color: #FFD811; font-size: 0.95em; margin-top: 0; margin-bottom: 12px;
-font-weight: bold; text-align: center; width: 100%; white-space: normal;
-position: static; background: none; border: none; padding: 0;
-line-height: 1.2;
-}
-
-.status-list { list-style: none; padding: 0; margin: 0 0 20px 0; width: 100%; }
-
-.status-list li { font-size: 1.0em; margin-bottom: 6px; opacity: 0; transform: translateX(-20px); transition: all 0.6s ease-in-out; display: flex; align-items: center; color: #fff; justify-content: flex-start; text-align: left; line-height: 1.4; }
-
-.status-list li.loaded { opacity: 1; transform: translateX(0); color: #fff; }
-
-.status-list li .check { color: #00FF00; margin-right: 8px; font-size: 1.0em; display: none; flex-shrink: 0; animation: checkmarkPop 0.8s ease-out; }
-
-.status-list li.loaded .check { display: inline; }
-
-@keyframes checkmarkPop { 0%{opacity:0;transform:scale(0) rotate(-180deg);} 50%{opacity:1;transform:scale(1.3) rotate(0deg);} 100%{opacity:1;transform:scale(1) rotate(0deg);} }
-
-.system-ready {
-color: #fff; font-weight: bold; font-size: 1.05em; margin-top: 20px; margin-bottom: 20px;
-display: none; text-align: center; letter-spacing: 1px; background: #FF2222;
-border-radius: 20px; padding: 12px 10px; box-shadow: 0 4px 12px rgba(255,34,34,0.4);
-width: 100%; box-sizing: border-box; border: 2px solid rgba(255,255,255,0.2);
-transform: scale(0.8); transition: all 0.4s ease-in-out;
-}
-
-.system-ready .check { color: #fff; font-size: 1.2em; margin-right: 8px; display: inline; }
-
-.system-ready.active { display: block; transform: scale(1); animation: systemGlow 2s ease-in-out infinite alternate; }
-
-@keyframes systemGlow { from { box-shadow: 0 4px 12px rgba(255,34,34,0.4);} to { box-shadow: 0 4px 20px rgba(255,34,34,0.7);} }
-
-.vault-info {
-background: #545454; border-radius: 16px; padding: 14px 12px; margin-top: auto; margin-bottom: 0;
-width: 100%; font-size: 0.85em; color: #fff; text-align: left; min-height: 110px;
-display: flex; flex-direction: column; justify-content: center; border: 2px solid #fff;
-box-sizing: border-box; line-height: 1.4;
-overflow: hidden; word-wrap: break-word;
-}
-
-.vault-info span { color: #fff; font-weight: bold; }
-
-.chat-panel {
-width: 62%; min-width: 400px; background: #545454;
-border-radius: 0 24px 24px 0; border-left: 2px solid #FFD811;
-padding: 20px; display: flex; flex-direction: column; position: relative; z-index: 2;
-height: 100%; justify-content: space-between;
-}
-
-.chat-box { flex: 1; overflow-y: scroll; margin-bottom: 15px; padding: 15px; min-height: 400px; max-height: 500px; }
-
-/* Custom Scrollbar Styling */
-.chat-box::-webkit-scrollbar {
-width: 8px;
-}
-
-.chat-box::-webkit-scrollbar-track {
-background: rgba(255, 255, 255, 0.1);
-border-radius: 4px;
-}
-
-.chat-box::-webkit-scrollbar-thumb {
-background: #FFD811;
-border-radius: 4px;
-border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.chat-box::-webkit-scrollbar-thumb:hover {
-background: #FFED4E;
-}
-
-/* Firefox scrollbar */
-.chat-box {
-scrollbar-width: thin;
-scrollbar-color: #FFD811 rgba(255, 255, 255, 0.1);
-}
-
-.bubble { 
-display: flex; 
-align-items: flex-end; 
-margin: 12px 0; 
-width: 100%;
-max-width: none;
-}
-
-.bubble.user { 
-flex-direction: row-reverse; 
-justify-content: flex-start;
-margin-right: 60px;
-width: calc(100% - 60px);
-}
-
-.bubble.ai { 
-flex-direction: row; 
-justify-content: flex-start;
-}
-
-.bubble img.avatar { 
-width: 48px; height: 48px; border-radius: 50%; margin: 0 12px; 
-background: #545454; border: 2px solid #fff; object-fit: cover; 
-object-position: center 20%; flex-shrink: 0;
-}
-
-.bubble-content { padding: 18px 24px; font-size: 1.15em; line-height: 1.5; border-radius: 8px; font-family: 'Carlito', Arial, sans-serif; box-shadow: 0 2px 8px #0002; min-width: 120px; max-width: 100%; word-break: break-word; border: 1.5px solid #fff; white-space: pre-wrap; }
-
-.thinking-content {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-style: italic;
-  opacity: 0.8;
-}
-
-.thinking-brain {
-  font-size: 1.2em;
-  animation: brainPulse 1.5s ease-in-out infinite;
-}
-
-@keyframes brainPulse {
-  0%, 100% { transform: scale(1) rotateY(0deg); opacity: 1; }
-  50% { transform: scale(1.1) rotateY(180deg); opacity: 0.7; }
-}
-
-.bubble.user .bubble-content { background: #FFD811; color: #373534; border: 1.5px solid #fff; }
-
-.bubble.ai .bubble-content { background: #888; color: #fff; border: 1.5px solid #fff; }
-
-.input-area {
-display: flex; align-items: flex-end; background: #222; border-radius: 25px;
-padding: 8px 15px; margin-top: 0; border: 1.5px solid #fff;
-box-shadow: 0 2px 8px #0002; gap: 12px; min-height: 70px;
-flex-shrink: 0; position: relative;
-}
-
-.attachment-button {
-position: absolute; bottom: 8px; left: 8px;
-background: transparent; border: none;
-width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
-cursor: pointer; color: #888; font-size: 16px;
-transition: color 0.2s ease; z-index: 10;
-}
-
-.attachment-button:hover { color: #FFD811; }
-
-.chat-input {
-flex: 1; padding: 12px 16px 12px 40px; border-radius: 18px; border: none; font-size: 1em;
-background: transparent; color: white; outline: none; text-align: left; min-height: 80px; resize: vertical; font-family: 'Carlito', Arial, sans-serif;
-}
-
-.chat-input::placeholder {
-color: rgba(255,255,255,0.45); opacity: 1; font-size: 1em; font-family: 'Carlito', Arial, sans-serif; letter-spacing: 0.5px; text-align: left;
-}
-
-.send-button {
-background: #FFD811; border: 2px solid #fff; border-radius: 30px;
-width: 100px; height: 56px; display: flex; align-items: center; justify-content: center;
-transition: all 0.2s ease; outline: none; box-shadow: 0 2px 8px #0002; cursor: pointer; flex-shrink: 0;
-}
-
-.send-button:hover { background: #ffe96a; transform: scale(1.05); }
-
-.send-button:active { transform: scale(0.95); }
-
-.send-button img { width: 70px; height: 70px; display: block; transform: rotate(90deg); }
-
-.footer {
-width: 100vw; background: #1A1A1A; color: #FFD811; text-align: center;
-font-family: 'Carlito', Arial, sans-serif; padding: 8px 0; letter-spacing: 1px;
-box-shadow: 0 -2px 8px #0008; display: flex; justify-content: center; align-items: center; gap: 1rem; flex-shrink: 0; position: fixed; bottom: 0; left: 0; z-index: 100;
-}
-
-.footer .footer-mascot { width: 1.5rem; height: 1.5rem; object-fit: contain; }
-
-.footer-text { font-size: 0.95em; font-weight: bold; margin: 0; line-height: 1.2; }
-
-.mobile-footer {
-display: none; justify-content: center; align-items: center; gap: 1rem;
-padding: 0.5rem 0; background: #1A1A1A; width: 100%; z-index: 1000;
-}
-
-.footer-mascot { width: 1.5rem; height: 1.5rem; object-fit: contain; }
-
-.mobile-footer-text { font-size: 1rem; font-weight: bold; color: #FFD811; }
-
-.mobile-rocket {
-display: none; position: absolute; width: 180px; height: 180px;
-right: 16px; top: 31px; z-index: 10; transform: rotate(45deg); opacity: 1;
-}
-
-@media (max-width: 768px) and (orientation: portrait) {
-header { min-height: clamp(60px, 10vh, 80px); }
-.header-row { max-width: 100vw; padding: clamp(0.2rem, 1vh, 0.5rem) 0; flex-direction: row; justify-content: center; gap: clamp(15px, 4vw, 25px); align-items: center; }
-.logo { position: static; height: clamp(70px, 12vw, 100px); margin: 0; order: 1; }
-.ai-robot { position: static; height: clamp(35px, 8vw, 50px); margin: 0; order: 3; }
-.header-center { margin: 0; text-align: center; order: 2; flex: none; }
-.site-title { font-size: clamp(0.9rem, 4vw, 1.2rem); }
-.subtitle { font-size: clamp(0.6rem, 2vw, 0.8rem); }
-.mascot { display: none; }
-.rocket-top { display: none; }
-.mobile-rocket { display: block; }
-.main-wrapper { padding: 0.5rem 0; }
-.main-content {
-flex-direction: column; width: 95vw; height: calc(100vh - 100px); 
-position: relative; margin-bottom: 10px; border: 3px solid #fff; 
-box-shadow: 0 8px 32px #0004; border-radius: 24px; padding: 1rem;
-display: flex; overflow: visible;
-}
-.status-panel {
-width: 100%; min-width: 0; border-radius: 0; padding: 0.5rem;
-background: transparent; border: none; box-shadow: none; position: relative;
-}
-.status-title {
-color: #FFD811; font-size: 0.95em; margin-top: -10px; margin-bottom: 8px;
-font-weight: bold; text-align: center; width: 100%; white-space: normal;
-position: static; background: none; border: none; padding: 0;
-line-height: 1.1;
-}
-.status-list { display: none; }
-.system-ready { margin: 0.5rem 0; font-size: 0.9rem; padding: 10px; }
-.vault-info { margin: 0.5rem 0; padding: 0.75rem; font-size: 0.8rem; border: none; }
-.chat-panel {
-width: 100%; min-width: 0; border-radius: 0; border-left: none;
-padding: 0.5rem; flex: 1; min-height: 50vh; margin-top: 0; border: none; margin-bottom: 0;
-}
-.chat-box { min-height: 40vh; margin-bottom: 0.5rem; }
-.input-area { padding: 0.1rem; min-height: 2rem; margin-bottom: 0; border-radius: 20px; }
-.chat-input {
-font-size: 0.9em; padding: 0.3rem 1em 0.3rem 2.5em; height: 2rem; line-height: 1.4; text-align: left; display: flex; align-items: center;
-}
-
-.chat-input::placeholder { text-align: left; line-height: 1.1; font-size: 0.9em; }
-.send-button { width: 3.5rem; height: 2.5rem; border-radius: 20px; display: flex; align-items: center; justify-content: center; }
-.send-button img { width: 2rem; height: 2rem; }
-.footer { display: none; }
-.mobile-footer { display: flex; position: fixed; bottom: 0; width: 100%; }
-}
-
-/* Mobile Landscape - Fixed Logo/Robot Scaling */
-@media (max-width: 950px) and (orientation: landscape) {
-header {
-  min-height: clamp(90px, 14vh, 130px);
-  width: 100vw;
-  margin: 0;
-  padding: 0;
-  left: 0;
-  right: 0;
-  position: relative;
-  box-sizing: border-box;
-}
-  
-  .header-row { 
-    max-width: 100vw; 
-    padding: clamp(0.5rem, 2vh, 1rem) 0; 
-    flex-direction: row; 
-    justify-content: space-between; 
-    align-items: center; 
-    position: relative;
-  }
-  
-.logo { 
-    position: absolute; 
-    left: calc(50% - clamp(350px, 45vw, 450px)); 
-    height: clamp(120px, 18vh, 150px); 
-    z-index: 1; 
-  }
-  
- .ai-robot { 
-    position: absolute; 
-    right: calc(50% - clamp(350px, 45vw, 450px)); 
-    height: clamp(100px, 15vh, 120px); 
-    z-index: 1; 
-  }
-  
-  .header-center { 
-  position: relative; 
-  z-index: 2; 
-  text-align: center; 
-  flex: none; 
-  left: 0; 
-  right: 0; 
-  margin: 0 auto;
-}
-  
-  .site-title { font-size: clamp(1.4rem, 4.5vw, 2rem); }
-  .subtitle { font-size: clamp(0.9rem, 2.8vw, 1.3rem); }
-  
-  .mascot { 
-    display: block; 
-    position: absolute; 
-    top: 50%; 
-    transform: translateY(-50%); 
-    z-index: 30; 
-    height: calc(100vh - 140px); 
-    min-height: 220px; 
-    max-height: 280px; 
-    width: auto; 
-    pointer-events: none; 
-    transition: all 0.3s ease; 
-  }
-  
-  .mascot-left { left: -80px; }
-  .mascot-right { right: -80px; }
-
-  .rocket-top { 
-    display: block; 
-    position: absolute; 
-    right: 25px; 
-    top: 85px; 
-    width: 120px; 
-    z-index: 3; 
-    pointer-events: none; 
-    transform: rotate(45deg); 
-  }
-  .mobile-rocket { display: none; }
-  
-  .main-wrapper { 
-    padding: 0.8rem 0; 
-    flex: 1; 
-    display: flex; 
-    justify-content: center; 
-    align-items: flex-start; 
-    position: relative; 
-    width: 100%; 
-    min-height: 0; 
-  }
-  
-  .main-content {
-    display: flex; 
-    flex-direction: row; 
-    justify-content: center; 
-    align-items: stretch;
-    max-width: 70vw; 
-    width: 70vw; 
-    margin: 0 auto; 
-    position: relative;
-    height: calc(100vh - 160px); 
-    min-height: 380px; 
-    max-height: 480px;
-    background: #373534; 
-    border-radius: 22px; 
-    box-shadow: 0 6px 24px #0004;
-    border: 2px solid #fff; 
-    z-index: 1; 
-    box-sizing: border-box;
-    margin-bottom: 50px;
-  }
-  
-  .status-panel {
-    width: 32%; 
-    min-width: 220px;
-    background: rgba(17,17,17,0.97); 
-    border-radius: 22px 0 0 22px;
-    box-shadow: 0 0 25px 8px #54545444 inset; 
-    padding: 14px 10px;
-    display: flex; 
-    flex-direction: column; 
-    position: relative; 
-    z-index: 2; 
-    justify-content: flex-start;
-    border: none;
-  }
-  
-  .status-title {
-    position: static; 
-    margin-bottom: 4px; 
-    background: none !important; 
-    border: none !important; 
-    padding: 0 !important; 
-    font-size: 0.8em; 
-    text-align: center; 
-    width: 100%; 
-    white-space: normal;
-    color: #FFD811; 
-    font-weight: bold;
-    line-height: 1.1;
-  }
-  
-  .status-list { 
-    display: block; 
-    list-style: none; 
-    padding: 0; 
-    margin: 0 0 12px 0; 
-    width: 100%; 
-  }
-  
-  .status-list li { 
-    font-size: 0.7em; 
-    margin-bottom: 2px; 
-    line-height: 1.1; 
-  }
-  
-  .status-list li .check { 
-    color: #00FF00; 
-    margin-right: 5px; 
-    font-size: 0.9em; 
-    display: inline; 
-    flex-shrink: 0; 
-  }
-  
-  .system-ready { 
-    margin: 4px 0; 
-    font-size: 0.7rem; 
-    padding: 4px 6px;
-  }
-  
-  .vault-info { 
-    margin: 4px 0 0 0; 
-    padding: 6px; 
-    font-size: 0.65rem; 
-    min-height: 40px;
-    line-height: 1.1;
-  }
-  
-  .chat-panel {
-    width: 68%; 
-    min-width: 320px; 
-    background: #545454;
-    border-radius: 0 22px 22px 0; 
-    border-left: 2px solid #FFD811;
-    padding: 14px; 
-    display: flex; 
-    flex-direction: column; 
-    position: relative; 
-    z-index: 2; 
-    height: 100%; 
-    justify-content: space-between;
-    margin-top: 0;
-    margin-bottom: 0;
-  }
-  
-  .chat-box { 
-    min-height: 200px; 
-    max-height: 250px;
-    margin-bottom: 6px; 
-    flex: 1; 
-    overflow-y: scroll; 
-    padding: 6px;
-  }
-  
-  .input-area { 
-    padding: 6px 10px; 
-    min-height: 45px; 
-    margin-bottom: 0; 
-    border-radius: 18px;
-    display: flex; 
-    align-items: flex-end; 
-    background: #222; 
-    border: 1.5px solid #fff;
-    box-shadow: 0 2px 6px #0002; 
-    gap: 8px; 
-    flex-shrink: 0; 
-    position: relative;
-  }
-  
-  .attachment-button {
-    position: absolute; 
-    bottom: 5px; 
-    left: 5px;
-    background: transparent; 
-    border: none; 
-    width: 18px; 
-    height: 18px; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center;
-    cursor: pointer; 
-    color: #888; 
-    font-size: 12px;
-    transition: color 0.2s ease; 
-    z-index: 10;
-  }
-  
-  .chat-input {
-    flex: 1; 
-    padding: 6px 10px 6px 28px; 
-    border-radius: 14px; 
-    border: none; 
-    font-size: 0.85em;
-    background: transparent; 
-    color: white; 
-    outline: none; 
-    text-align: left; 
-    min-height: 35px; 
-    resize: vertical; 
-    font-family: 'Carlito', Arial, sans-serif;
-  }
-  
-  .chat-input::placeholder { 
-    text-align: left; 
-    font-size: 0.85em; 
-    color: rgba(255,255,255,0.45); 
-    opacity: 1; 
-    font-family: 'Carlito', Arial, sans-serif; 
-    letter-spacing: 0.3px;
-  }
-  
-  .send-button { 
-    width: 60px; 
-    height: 35px; 
-    border-radius: 18px; 
-    display: flex; 
-    align-items: center; 
-    justify-content: center;
-    background: #FFD811; 
-    border: 2px solid #fff; 
-    transition: all 0.2s ease; 
-    outline: none; 
-    box-shadow: 0 2px 6px #0002; 
-    cursor: pointer; 
-    flex-shrink: 0;
-  }
-  
-  .send-button img { 
-    width: 40px; 
-    height: 40px; 
-    transform: rotate(90deg);
-  }
-  
-  .footer { display: none; }
-  .mobile-footer { 
-  display: flex; 
-  position: fixed; 
-  bottom: 0; 
-  width: 100vw;
-  margin: 0;
-  padding: 0.3rem 0;
-  left: 0;
-  right: 0;
-  justify-content: center; 
-  align-items: center; 
-  gap: 0.8rem;
-  background: #1A1A1A; 
-  z-index: 1000;
-}
-  
-  .footer-mascot { width: 1.2rem; height: 1.2rem; object-fit: contain; }
-  .mobile-footer-text { font-size: 0.9rem; font-weight: bold; color: #FFD811; }
-  
-  .bubble { 
-    margin: 6px 0; 
-    max-width: 92%; 
-  }
-  
-  .bubble img.avatar { 
-    width: 30px; 
-    height: 30px; 
-    margin: 0 6px; 
-  }
-  
-  .bubble-content { 
-    padding: 10px 14px; 
-    font-size: 0.9em; 
-    line-height: 1.3; 
-    border-radius: 8px;
-  }
-}
-
-/* Mode Toggle Styles */
-.site-title { margin-bottom: 2px; }
-.subtitle { margin-top: 0; margin-bottom: 6px; }
-
-.mode-toggle-container {
-display: flex; justify-content: center; align-items: center; gap: 8px; margin-top: 8px;
-}
-
-.mode-btn {
-background: rgba(255, 255, 255, 0.1); border: 2px solid #fff;
-border-radius: 6px; padding: 6px 14px; font-family: 'Carlito', Arial, sans-serif;
-font-size: clamp(0.8rem,2.2vw, 1rem); font-weight: bold; color: white;
-cursor: pointer; transition: all 0.3s ease; white-space: nowrap; min-height: 32px;
-display: flex; align-items: center; justify-content: center;
-}
-
-/* Inactive button colors (Site Monkeys brand colors) */
-.mode-btn[data-mode="truth_general"] { background: #4A90E2; color: white; }
-.mode-btn[data-mode="business_validation"] { background: #FFD811; color: #373534; }
-.mode-btn[data-mode="site_monkeys"] { background: #fff; color: #373534; box-shadow: 0 0 12px rgba(255, 255, 255, 0.6); }
-
-/* Active button states (darker gray with white text) */
-.mode-btn[data-mode="truth_general"].active { background: #545454; color: white; box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4); }
-.mode-btn[data-mode="business_validation"].active { background: #545454; color: white; box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4); }
-.mode-btn[data-mode="site_monkeys"].active { background: #545454; color: white; box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4); }
-
-/* Hover effects */
-.mode-btn:hover:not(.active) { transform: translateY(-1px); opacity: 0.9; }
-
-/* Safari mascot fix */
-@supports (-webkit-appearance: none) {
-  @media (max-width: 950px) and (orientation: landscape) {
-    .mascot-right { 
-      opacity: 1 !important;
-      visibility: visible !important;
-      display: block !important;
-      -webkit-transform: translateY(-50%);
-      transform: translateY(-50%);
-    }
-  }
-}
-
-</style>
-
-</head>
-<body>
-<header>
-<div class="header-row">
-<img src="logo.png" alt="Site Monkeys Logo" class="logo">
-<div class="header-center">
-<div class="site-title">SITE MONKEYS AI</div>
-<div class="subtitle">BUSINESS VALIDATION ENGINE</div>
-<div class="mode-toggle-container">
-<button class="mode-btn" id="truth-mode" data-mode="truth_general">Truth</button>
-<button class="mode-btn active" id="business-mode" data-mode="business_validation">Business</button>
-<button class="mode-btn" id="sitemonkeys-mode" data-mode="site_monkeys">Site Monkeys</button>
-</div>
-</div>
-<img src="AI Robot.png" alt="AI Robot" class="ai-robot">
-<img src="rocket.png" alt="Rocket" class="rocket-top">
-</div>
-</header>
-
-<div class="main-wrapper">
-<img src="boy-mascot.png" alt="Eli Mascot" class="mascot mascot-left">
-<img src="girl-mascot.png" alt="Roxy Mascot" class="mascot mascot-right">
-<img src="rocket.png" alt="Mobile Rocket" class="mobile-rocket">
-<div class="main-content">
-<div class="status-panel">
-<div>
-<div class="status-title">Site Monkeys Business Validation System</div>
-<ul class="status-list" id="status-list">
-<li><span class="check">✅</span> Zero-Failure AI</li>
-<li><span class="check">✅</span> Complete Business Intelligence</li>
-<li><span class="check">✅</span> Real-World Validation Ready</li>
-<li><span class="check">✅</span> Site Monkeys memory vault loaded</li>
-<li><span class="check">✅</span> Zero Failure activated</li>
-<li><span class="check">✅</span> Legitimate data initiative activated</li>
-<li><span class="check">✅</span> Persistence driven activated</li>
-<li><span class="check">✅</span> helpful initiative activated</li>
-<li><span class="check">✅</span> Founder Protection activated</li>
-<li><span class="check">✅</span> Market leader Initiative</li>
-</ul>
-<div class="system-ready" id="system-ready"><span class="check">✅</span> SYSTEM READY</div>
-</div>
-<div class="vault-info" id="vault-info">
-<div><span style="color:#00FF00;">✅</span> VAULT READY</div>
-<div>🔢 <span id="token-count">Ready</span> TOKENS</div>
-<div>💰 EST. COST: <span id="cost-estimate">$0.00</span></div>
-<div>📁 <span id="vault-folders">Cached</span> FOLDERS LOADED</div>
-<button id="refresh-vault-btn" onclick="debouncedRefreshVault()" style="
-  background: #FFD811; 
-  color: #373534; 
-  border: 1px solid #fff; 
-  border-radius: 8px; 
-  padding: 7px 10px; 
-  font-size: 0.8em; 
-  font-weight: bold; 
-  cursor: pointer; 
-  margin-top: 8px;
-  width: 100%;
-  transition: all 0.2s ease;
-" onmouseover="this.style.background='#ffe96a'" onmouseout="this.style.background='#FFD811'">
-🔄 Refresh Vault
-</button>
-</div>
-</div>
-
-<div class="chat-panel">
-<div class="chat-box" id="chat-box"></div>
-<div class="input-area">
-<button class="attachment-button" id="smart-upload-btn" aria-label="Upload Files" title="Upload files">
-📎
-</button>
- <!-- Document Analysis Button -->
-<button class="attachment-button" id="analyze-btn" aria-label="Analyze Document" title="Analyze Document" style="position: absolute; top: 5px; right: 70px; z-index: 100;">
-  🔍
-</button>
-</form> 
-<textarea class="chat-input" id="user-input" placeholder="Ask Eli, Roxy, and AI about business validation..." rows="3"></textarea>
-<button class="send-button" id="send-btn" aria-label="Send">
-<img src="rocket.png" alt="Rocket Send" />
-</button>
-<input type="file" id="vault-file-input" accept=".docx,.doc,.pdf,.txt,.csv,.xlsx,.xls,.pptx,.ppt,.md,.rtf,.json,.xml,.html,.htm,.odt,.ods,.odp,.pages,.numbers,.key,.zip,.rar,.7z,.tar,.gz,.jpeg,.jpg,.png,.gif,.bmp,.svg,.tiff,.mp3,.mp4,.avi,.mov,.wmv,.flv,.webm,.wav,.m4a,.ogg,.aac" multiple style="display: none;">
-<input type="file" id="analysis-file-input" accept=".docx,.doc,.pdf,.txt,.csv,.xlsx,.xls,.pptx,.ppt,.md,.rtf,.json,.xml,.html,.htm,.odt,.ods,.odp,.pages,.numbers,.key,.zip,.rar,.7z,.tar,.gz,.jpeg,.jpg,.png,.gif,.bmp,.svg,.tiff,.mp3,.mp4,.avi,.mov,.wmv,.flv,.webm,.wav,.m4a,.ogg,.aac" multiple style="display: none;">
-</div>
-</div>
-</div>
-
-<div class="footer">
-<img src="boy-mascot.png" alt="Eli" class="footer-mascot">
-<div class="footer-text">AI YOU CAN TRUST!</div>
-<img src="girl-mascot.png" alt="Roxy" class="footer-mascot">
-</div>
-
-<div class="mobile-footer">
-<img src="boy-mascot.png" alt="Eli" class="footer-mascot">
-<div class="mobile-footer-text">AI YOU CAN TRUST!</div>
-<img src="girl-mascot.png" alt="Roxy" class="footer-mascot">
-</div>
-
-<script>
-// Global variables
-let conversationHistory = [];
-let systemActive = false;
-let aiToggle = false;
-let extractedDocuments = [];
-const MAX_CONVERSATION_HISTORY = 50;
-const MAX_EXTRACTED_DOCUMENTS = 10;
-let requestQueue = [];
-let isProcessingRequest = false;
-let refreshDebounceTimer = null;
-
-// Mode system
-let currentMode = 'business_validation';
-
-function switchMode(mode) {
-  currentMode = mode;
-  console.log(`🔄 Switched to mode: ${mode}`);
-  
-  // Update button states
-  document.querySelectorAll('.mode-btn').forEach(btn => {
-    btn.classList.remove('active');
-  });
-  
-  // Set active button
-  const activeBtn = document.querySelector(`[data-mode="${mode}"]`);
-  if (activeBtn) {
-    activeBtn.classList.add('active');
-  }
-}
-
-function getCurrentMode() {
-  return currentMode;
-}
-
-function isVaultMode() {
-  return currentMode === 'site_monkeys';
-}
-function handleApiError(error, context = 'API call') {
-  console.error(`❌ ${context} failed:`, error);
-  
-  const errorMessages = {
-    'NetworkError': 'Network connection failed. Please check your internet connection.',
-    'TypeError': 'Request format error. Please try again.',
-    'SyntaxError': 'Server response error. Please refresh and try again.',
-    'TimeoutError': 'Request timed out. Please try again.',
-    'AbortError': 'Request was cancelled. Please try again.'
-  };
-  
-  const message = errorMessages[error.name] || error.message || 'Unknown error occurred';
-  showErrorMessage(message);
-}
-
-function showErrorMessage(message) {
-  const box = document.getElementById('chat-box');
-  const errorBubble = document.createElement('div');
-  errorBubble.className = 'bubble ai error-bubble';
-  errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ ${message}</div>`;
-  box.appendChild(errorBubble);
-  box.scrollTop = box.scrollHeight;
-}
-
-function manageConversationHistory() {
-  if (conversationHistory.length > MAX_CONVERSATION_HISTORY) {
-    const removed = conversationHistory.splice(0, conversationHistory.length - MAX_CONVERSATION_HISTORY);
-    console.log(`🗑️ Cleared ${removed.length} old conversation messages`);
-  }
-}
-
-function manageExtractedDocuments() {
-  if (extractedDocuments.length > MAX_EXTRACTED_DOCUMENTS) {
-    const removed = extractedDocuments.splice(0, extractedDocuments.length - MAX_EXTRACTED_DOCUMENTS);
-    console.log(`🗑️ Cleared ${removed.length} old documents from memory`);
-  }
-}
-
-async function processRequestQueue() {
-  if (isProcessingRequest || requestQueue.length === 0) return;
-  
-  isProcessingRequest = true;
-  const request = requestQueue.shift();
-  
-  try {
-    await request();
-  } catch (error) {
-    handleApiError(error, 'Queued request');
-  } finally {
-    isProcessingRequest = false;
-    setTimeout(processRequestQueue, 100);
-  }
-}
-
-function queueRequest(requestFunction) {
-  requestQueue.push(requestFunction);
-  processRequestQueue();
-}
-
-async function fetchWithRetry(url, options = {}, maxRetries = 3, timeout = 10000) {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeout);
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch(url, {
-        ...options,
-        signal: controller.signal
-      });
-      
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Site Monkeys AI</title>
+    <link href="https://fonts.cdnfonts.com/css/luckiest-guy" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css?family=Carlito:400,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+        overflow-wrap: break-word;
       }
-      
-      return response;
-    } catch (error) {
-      console.warn(`Attempt ${attempt} failed:`, error.message);
-      
-      if (attempt === maxRetries || error.name === 'AbortError') {
-        clearTimeout(timeoutId);
-        throw error;
+
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Carlito", Arial, sans-serif;
+        background: #373534;
+        color: white;
+        min-height: 100vh;
+        width: 100vw;
+        overflow-x: hidden;
+        display: flex;
+        flex-direction: column;
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
       }
-      
-      await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
-    }
-  }
-}
 
-function startPeriodicCleanup() {
-  setInterval(() => {
-    manageConversationHistory();
-    manageExtractedDocuments();
-    console.log('🧹 Periodic cleanup completed');
-  }, 300000);
-}
+      header {
+        background: #1a1a1a;
+        width: 100vw;
+        min-height: 110px;
+        box-shadow: 0 2px 8px #0008;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
 
-function debouncedRefreshVault() {
-  if (refreshDebounceTimer) {
-    clearTimeout(refreshDebounceTimer);
-  }
-  
-  refreshDebounceTimer = setTimeout(() => {
-    refreshVault();
-    refreshDebounceTimer = null;
-  }, 1000);
-}
+      .header-row {
+        width: 100%;
+        max-width: 1200px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        margin: 0 auto;
+        padding: 12px 0;
+      }
 
-// File upload functionality
-async function handleFileUpload(files) {
-  if (files.length === 0) return;
-  const box = document.getElementById('chat-box');
+      .logo {
+        height: clamp(120px, 15vh, 150px);
+        flex-shrink: 0;
+        position: absolute;
+        left: calc(50% - 450px);
+        z-index: 1;
+      }
 
-  // Show upload message
-  const uploadBubble = document.createElement('div');
-  uploadBubble.className = 'bubble ai';
-  uploadBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> 📤 Uploading ${files.length} file(s) to vault...</div>`;
-  box.appendChild(uploadBubble);
-  box.scrollTop = box.scrollHeight;
+      .header-center {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+        z-index: 2;
+      }
 
-  try {
-    const formData = new FormData();
-    for (const file of files) { 
-      formData.append('files', file); 
-    }
+      .site-title {
+        font-family: "Luckiest Guy", cursive;
+        color: #ffd811;
+        font-size: clamp(1.8rem, 4vw, 2.1em);
+        margin: 0;
+        letter-spacing: 2px;
+        line-height: 1;
+        text-align: center;
+        white-space: nowrap;
+        width: 100%;
+        text-align: center;
+      }
 
-    const response = await fetch('/api/upload-file', { 
-      method: 'POST', 
-      body: formData 
-    });
-    const result = await response.json();
+      .subtitle {
+        font-family: "Carlito", Arial, sans-serif;
+        color: #fff;
+        font-size: clamp(1rem, 2.5vw, 1.2em);
+        margin-top: 8px;
+        letter-spacing: 1px;
+        text-align: center;
+        font-weight: bold;
+      }
 
-    if (result.status === 'success' && result.successful_uploads > 0) {
-      for (const fileInfo of result.files) {
-        if (fileInfo.success) {
-          const successBubble = document.createElement('div');
-          successBubble.className = 'bubble ai';
-          successBubble.innerHTML = `<img src="girl-mascot.png" class="avatar" alt="Roxy"><div class="bubble-content"><strong>Roxy:</strong> ✅ Uploaded "${fileInfo.filename}" to ${fileInfo.folder} folder. File is now available for chat!</div>`;
-          box.appendChild(successBubble);
-          box.scrollTop = box.scrollHeight;
-        } else {
-          const errorBubble = document.createElement('div');
-          errorBubble.className = 'bubble ai';
-          errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ Failed to upload "${fileInfo.filename}": ${fileInfo.message}</div>`;
+      .ai-robot {
+        height: clamp(60px, 8vh, 80px);
+        flex-shrink: 0;
+        position: absolute;
+        right: calc(50% - 450px);
+        z-index: 1;
+      }
+
+      .rocket-top {
+        position: absolute;
+        right: -80px;
+        top: 40px;
+        width: 150px;
+        z-index: 3;
+        pointer-events: none;
+        transform: rotate(45deg);
+      }
+
+      .main-wrapper {
+        flex: 1;
+        display: flex;
+        justify-content: center;
+        align-items: flex-start;
+        position: relative;
+        width: 100%;
+        min-height: 0;
+        padding: 10px 0 50px 0;
+      }
+
+      .main-content {
+        display: flex;
+        justify-content: center;
+        align-items: stretch;
+        max-width: 900px;
+        width: clamp(70vw, 75vw, 80vw);
+        margin: 0 auto;
+        position: relative;
+        height: calc(100vh - 240px);
+        min-height: 630px;
+        max-height: 720px;
+        background: #373534;
+        border-radius: 24px;
+        box-shadow: 0 8px 32px #0004;
+        border: 3px solid #fff;
+        z-index: 1;
+        box-sizing: border-box;
+      }
+
+      .mascot {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 30;
+        height: calc(100vh - 180px);
+        min-height: 450px;
+        max-height: 550px;
+        width: auto;
+        pointer-events: none;
+        transition: all 0.3s ease;
+      }
+
+      .mascot-left {
+        left: -120px;
+      }
+
+      .mascot-right {
+        right: -120px;
+      }
+
+      .status-panel {
+        width: 38%;
+        min-width: 350px;
+        background: rgba(17, 17, 17, 0.97);
+        border-radius: 24px 0 0 24px;
+        box-shadow: 0 0 30px 10px #54545444 inset;
+        padding: 25px 15px;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        z-index: 2;
+        justify-content: flex-start;
+      }
+
+      .status-title {
+        color: #ffd811;
+        font-size: 0.95em;
+        margin-top: 0;
+        margin-bottom: 12px;
+        font-weight: bold;
+        text-align: center;
+        width: 100%;
+        white-space: normal;
+        position: static;
+        background: none;
+        border: none;
+        padding: 0;
+        line-height: 1.2;
+      }
+
+      .status-list {
+        list-style: none;
+        padding: 0;
+        margin: 0 0 20px 0;
+        width: 100%;
+      }
+
+      .status-list li {
+        font-size: 1em;
+        margin-bottom: 6px;
+        opacity: 0;
+        transform: translateX(-20px);
+        transition: all 0.6s ease-in-out;
+        display: flex;
+        align-items: center;
+        color: #fff;
+        justify-content: flex-start;
+        text-align: left;
+        line-height: 1.4;
+      }
+
+      .status-list li.loaded {
+        opacity: 1;
+        transform: translateX(0);
+        color: #fff;
+      }
+
+      .status-list li .check {
+        color: #00ff00;
+        margin-right: 8px;
+        font-size: 1em;
+        display: none;
+        flex-shrink: 0;
+        animation: checkmarkPop 0.8s ease-out;
+      }
+
+      .status-list li.loaded .check {
+        display: inline;
+      }
+
+      @keyframes checkmarkPop {
+        0% {
+          opacity: 0;
+          transform: scale(0) rotate(-180deg);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.3) rotate(0deg);
+        }
+        100% {
+          opacity: 1;
+          transform: scale(1) rotate(0deg);
+        }
+      }
+
+      .system-ready {
+        color: #fff;
+        font-weight: bold;
+        font-size: 1.05em;
+        margin-top: 20px;
+        margin-bottom: 20px;
+        display: none;
+        text-align: center;
+        letter-spacing: 1px;
+        background: #ff2222;
+        border-radius: 20px;
+        padding: 12px 10px;
+        box-shadow: 0 4px 12px rgba(255, 34, 34, 0.4);
+        width: 100%;
+        box-sizing: border-box;
+        border: 2px solid rgba(255, 255, 255, 0.2);
+        transform: scale(0.8);
+        transition: all 0.4s ease-in-out;
+      }
+
+      .system-ready .check {
+        color: #fff;
+        font-size: 1.2em;
+        margin-right: 8px;
+        display: inline;
+      }
+
+      .system-ready.active {
+        display: block;
+        transform: scale(1);
+        animation: systemGlow 2s ease-in-out infinite alternate;
+      }
+
+      @keyframes systemGlow {
+        from {
+          box-shadow: 0 4px 12px rgba(255, 34, 34, 0.4);
+        }
+        to {
+          box-shadow: 0 4px 20px rgba(255, 34, 34, 0.7);
+        }
+      }
+
+      .vault-info {
+        background: #545454;
+        border-radius: 16px;
+        padding: 14px 12px;
+        margin-top: auto;
+        margin-bottom: 0;
+        width: 100%;
+        font-size: 0.85em;
+        color: #fff;
+        text-align: left;
+        min-height: 110px;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        border: 2px solid #fff;
+        box-sizing: border-box;
+        line-height: 1.4;
+        overflow: hidden;
+        word-wrap: break-word;
+      }
+
+      .vault-info span {
+        color: #fff;
+        font-weight: bold;
+      }
+
+      .chat-panel {
+        width: 62%;
+        min-width: 400px;
+        background: #545454;
+        border-radius: 0 24px 24px 0;
+        border-left: 2px solid #ffd811;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        z-index: 2;
+        height: 100%;
+        justify-content: space-between;
+      }
+
+      .chat-box {
+        flex: 1;
+        overflow-y: scroll;
+        margin-bottom: 15px;
+        padding: 15px;
+        min-height: 400px;
+        max-height: 500px;
+      }
+
+      /* Custom Scrollbar Styling */
+      .chat-box::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .chat-box::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 4px;
+      }
+
+      .chat-box::-webkit-scrollbar-thumb {
+        background: #ffd811;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 255, 255, 0.2);
+      }
+
+      .chat-box::-webkit-scrollbar-thumb:hover {
+        background: #ffed4e;
+      }
+
+      /* Firefox scrollbar */
+      .chat-box {
+        scrollbar-width: thin;
+        scrollbar-color: #ffd811 rgba(255, 255, 255, 0.1);
+      }
+
+      .bubble {
+        display: flex;
+        align-items: flex-end;
+        margin: 12px 0;
+        width: 100%;
+        max-width: none;
+      }
+
+      .bubble.user {
+        flex-direction: row-reverse;
+        justify-content: flex-start;
+        margin-right: 60px;
+        width: calc(100% - 60px);
+      }
+
+      .bubble.ai {
+        flex-direction: row;
+        justify-content: flex-start;
+      }
+
+      .bubble img.avatar {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        margin: 0 12px;
+        background: #545454;
+        border: 2px solid #fff;
+        object-fit: cover;
+        object-position: center 20%;
+        flex-shrink: 0;
+      }
+
+      .bubble-content {
+        padding: 18px 24px;
+        font-size: 1.15em;
+        line-height: 1.5;
+        border-radius: 8px;
+        font-family: "Carlito", Arial, sans-serif;
+        box-shadow: 0 2px 8px #0002;
+        min-width: 120px;
+        max-width: 100%;
+        word-break: break-word;
+        border: 1.5px solid #fff;
+        white-space: pre-wrap;
+      }
+
+      .thinking-content {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-style: italic;
+        opacity: 0.8;
+      }
+
+      .thinking-brain {
+        font-size: 1.2em;
+        animation: brainPulse 1.5s ease-in-out infinite;
+      }
+
+      @keyframes brainPulse {
+        0%,
+        100% {
+          transform: scale(1) rotateY(0deg);
+          opacity: 1;
+        }
+        50% {
+          transform: scale(1.1) rotateY(180deg);
+          opacity: 0.7;
+        }
+      }
+
+      .bubble.user .bubble-content {
+        background: #ffd811;
+        color: #373534;
+        border: 1.5px solid #fff;
+      }
+
+      .bubble.ai .bubble-content {
+        background: #888;
+        color: #fff;
+        border: 1.5px solid #fff;
+      }
+
+      .input-area {
+        display: flex;
+        align-items: flex-end;
+        background: #222;
+        border-radius: 25px;
+        padding: 8px 15px;
+        margin-top: 0;
+        border: 1.5px solid #fff;
+        box-shadow: 0 2px 8px #0002;
+        gap: 12px;
+        min-height: 70px;
+        flex-shrink: 0;
+        position: relative;
+      }
+
+      .attachment-button {
+        position: absolute;
+        bottom: 8px;
+        left: 8px;
+        background: transparent;
+        border: none;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        color: #888;
+        font-size: 16px;
+        transition: color 0.2s ease;
+        z-index: 10;
+      }
+
+      .attachment-button:hover {
+        color: #ffd811;
+      }
+
+      .chat-input {
+        flex: 1;
+        padding: 12px 16px 12px 40px;
+        border-radius: 18px;
+        border: none;
+        font-size: 1em;
+        background: transparent;
+        color: white;
+        outline: none;
+        text-align: left;
+        min-height: 80px;
+        resize: vertical;
+        font-family: "Carlito", Arial, sans-serif;
+      }
+
+      .chat-input::placeholder {
+        color: rgba(255, 255, 255, 0.45);
+        opacity: 1;
+        font-size: 1em;
+        font-family: "Carlito", Arial, sans-serif;
+        letter-spacing: 0.5px;
+        text-align: left;
+      }
+
+      .send-button {
+        background: #ffd811;
+        border: 2px solid #fff;
+        border-radius: 30px;
+        width: 100px;
+        height: 56px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+        outline: none;
+        box-shadow: 0 2px 8px #0002;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+
+      .send-button:hover {
+        background: #ffe96a;
+        transform: scale(1.05);
+      }
+
+      .send-button:active {
+        transform: scale(0.95);
+      }
+
+      .send-button img {
+        width: 70px;
+        height: 70px;
+        display: block;
+        transform: rotate(90deg);
+      }
+
+      .footer {
+        width: 100vw;
+        background: #1a1a1a;
+        color: #ffd811;
+        text-align: center;
+        font-family: "Carlito", Arial, sans-serif;
+        padding: 8px 0;
+        letter-spacing: 1px;
+        box-shadow: 0 -2px 8px #0008;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;
+        flex-shrink: 0;
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        z-index: 100;
+      }
+
+      .footer .footer-mascot {
+        width: 1.5rem;
+        height: 1.5rem;
+        object-fit: contain;
+      }
+
+      .footer-text {
+        font-size: 0.95em;
+        font-weight: bold;
+        margin: 0;
+        line-height: 1.2;
+      }
+
+      .mobile-footer {
+        display: none;
+        justify-content: center;
+        align-items: center;
+        gap: 1rem;
+        padding: 0.5rem 0;
+        background: #1a1a1a;
+        width: 100%;
+        z-index: 1000;
+      }
+
+      .footer-mascot {
+        width: 1.5rem;
+        height: 1.5rem;
+        object-fit: contain;
+      }
+
+      .mobile-footer-text {
+        font-size: 1rem;
+        font-weight: bold;
+        color: #ffd811;
+      }
+
+      .mobile-rocket {
+        display: none;
+        position: absolute;
+        width: 180px;
+        height: 180px;
+        right: 16px;
+        top: 31px;
+        z-index: 10;
+        transform: rotate(45deg);
+        opacity: 1;
+      }
+
+      @media (max-width: 768px) and (orientation: portrait) {
+        header {
+          min-height: clamp(60px, 10vh, 80px);
+        }
+        .header-row {
+          max-width: 100vw;
+          padding: clamp(0.2rem, 1vh, 0.5rem) 0;
+          flex-direction: row;
+          justify-content: center;
+          gap: clamp(15px, 4vw, 25px);
+          align-items: center;
+        }
+        .logo {
+          position: static;
+          height: clamp(70px, 12vw, 100px);
+          margin: 0;
+          order: 1;
+        }
+        .ai-robot {
+          position: static;
+          height: clamp(35px, 8vw, 50px);
+          margin: 0;
+          order: 3;
+        }
+        .header-center {
+          margin: 0;
+          text-align: center;
+          order: 2;
+          flex: none;
+        }
+        .site-title {
+          font-size: clamp(0.9rem, 4vw, 1.2rem);
+        }
+        .subtitle {
+          font-size: clamp(0.6rem, 2vw, 0.8rem);
+        }
+        .mascot {
+          display: none;
+        }
+        .rocket-top {
+          display: none;
+        }
+        .mobile-rocket {
+          display: block;
+        }
+        .main-wrapper {
+          padding: 0.5rem 0;
+        }
+        .main-content {
+          flex-direction: column;
+          width: 95vw;
+          height: calc(100vh - 100px);
+          position: relative;
+          margin-bottom: 10px;
+          border: 3px solid #fff;
+          box-shadow: 0 8px 32px #0004;
+          border-radius: 24px;
+          padding: 1rem;
+          display: flex;
+          overflow: visible;
+        }
+        .status-panel {
+          width: 100%;
+          min-width: 0;
+          border-radius: 0;
+          padding: 0.5rem;
+          background: transparent;
+          border: none;
+          box-shadow: none;
+          position: relative;
+        }
+        .status-title {
+          color: #ffd811;
+          font-size: 0.95em;
+          margin-top: -10px;
+          margin-bottom: 8px;
+          font-weight: bold;
+          text-align: center;
+          width: 100%;
+          white-space: normal;
+          position: static;
+          background: none;
+          border: none;
+          padding: 0;
+          line-height: 1.1;
+        }
+        .status-list {
+          display: none;
+        }
+        .system-ready {
+          margin: 0.5rem 0;
+          font-size: 0.9rem;
+          padding: 10px;
+        }
+        .vault-info {
+          margin: 0.5rem 0;
+          padding: 0.75rem;
+          font-size: 0.8rem;
+          border: none;
+        }
+        .chat-panel {
+          width: 100%;
+          min-width: 0;
+          border-radius: 0;
+          border-left: none;
+          padding: 0.5rem;
+          flex: 1;
+          min-height: 50vh;
+          margin-top: 0;
+          border: none;
+          margin-bottom: 0;
+        }
+        .chat-box {
+          min-height: 40vh;
+          margin-bottom: 0.5rem;
+        }
+        .input-area {
+          padding: 0.1rem;
+          min-height: 2rem;
+          margin-bottom: 0;
+          border-radius: 20px;
+        }
+        .chat-input {
+          font-size: 0.9em;
+          padding: 0.3rem 1em 0.3rem 2.5em;
+          height: 2rem;
+          line-height: 1.4;
+          text-align: left;
+          display: flex;
+          align-items: center;
+        }
+
+        .chat-input::placeholder {
+          text-align: left;
+          line-height: 1.1;
+          font-size: 0.9em;
+        }
+        .send-button {
+          width: 3.5rem;
+          height: 2.5rem;
+          border-radius: 20px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+        .send-button img {
+          width: 2rem;
+          height: 2rem;
+        }
+        .footer {
+          display: none;
+        }
+        .mobile-footer {
+          display: flex;
+          position: fixed;
+          bottom: 0;
+          width: 100%;
+        }
+      }
+
+      /* Mobile Landscape - Fixed Logo/Robot Scaling */
+      @media (max-width: 950px) and (orientation: landscape) {
+        header {
+          min-height: clamp(90px, 14vh, 130px);
+          width: 100vw;
+          margin: 0;
+          padding: 0;
+          left: 0;
+          right: 0;
+          position: relative;
+          box-sizing: border-box;
+        }
+
+        .header-row {
+          max-width: 100vw;
+          padding: clamp(0.5rem, 2vh, 1rem) 0;
+          flex-direction: row;
+          justify-content: space-between;
+          align-items: center;
+          position: relative;
+        }
+
+        .logo {
+          position: absolute;
+          left: calc(50% - clamp(350px, 45vw, 450px));
+          height: clamp(120px, 18vh, 150px);
+          z-index: 1;
+        }
+
+        .ai-robot {
+          position: absolute;
+          right: calc(50% - clamp(350px, 45vw, 450px));
+          height: clamp(100px, 15vh, 120px);
+          z-index: 1;
+        }
+
+        .header-center {
+          position: relative;
+          z-index: 2;
+          text-align: center;
+          flex: none;
+          left: 0;
+          right: 0;
+          margin: 0 auto;
+        }
+
+        .site-title {
+          font-size: clamp(1.4rem, 4.5vw, 2rem);
+        }
+        .subtitle {
+          font-size: clamp(0.9rem, 2.8vw, 1.3rem);
+        }
+
+        .mascot {
+          display: block;
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          z-index: 30;
+          height: calc(100vh - 140px);
+          min-height: 220px;
+          max-height: 280px;
+          width: auto;
+          pointer-events: none;
+          transition: all 0.3s ease;
+        }
+
+        .mascot-left {
+          left: -80px;
+        }
+        .mascot-right {
+          right: -80px;
+        }
+
+        .rocket-top {
+          display: block;
+          position: absolute;
+          right: 25px;
+          top: 85px;
+          width: 120px;
+          z-index: 3;
+          pointer-events: none;
+          transform: rotate(45deg);
+        }
+        .mobile-rocket {
+          display: none;
+        }
+
+        .main-wrapper {
+          padding: 0.8rem 0;
+          flex: 1;
+          display: flex;
+          justify-content: center;
+          align-items: flex-start;
+          position: relative;
+          width: 100%;
+          min-height: 0;
+        }
+
+        .main-content {
+          display: flex;
+          flex-direction: row;
+          justify-content: center;
+          align-items: stretch;
+          max-width: 70vw;
+          width: 70vw;
+          margin: 0 auto;
+          position: relative;
+          height: calc(100vh - 160px);
+          min-height: 380px;
+          max-height: 480px;
+          background: #373534;
+          border-radius: 22px;
+          box-shadow: 0 6px 24px #0004;
+          border: 2px solid #fff;
+          z-index: 1;
+          box-sizing: border-box;
+          margin-bottom: 50px;
+        }
+
+        .status-panel {
+          width: 32%;
+          min-width: 220px;
+          background: rgba(17, 17, 17, 0.97);
+          border-radius: 22px 0 0 22px;
+          box-shadow: 0 0 25px 8px #54545444 inset;
+          padding: 14px 10px;
+          display: flex;
+          flex-direction: column;
+          position: relative;
+          z-index: 2;
+          justify-content: flex-start;
+          border: none;
+        }
+
+        .status-title {
+          position: static;
+          margin-bottom: 4px;
+          background: none !important;
+          border: none !important;
+          padding: 0 !important;
+          font-size: 0.8em;
+          text-align: center;
+          width: 100%;
+          white-space: normal;
+          color: #ffd811;
+          font-weight: bold;
+          line-height: 1.1;
+        }
+
+        .status-list {
+          display: block;
+          list-style: none;
+          padding: 0;
+          margin: 0 0 12px 0;
+          width: 100%;
+        }
+
+        .status-list li {
+          font-size: 0.7em;
+          margin-bottom: 2px;
+          line-height: 1.1;
+        }
+
+        .status-list li .check {
+          color: #00ff00;
+          margin-right: 5px;
+          font-size: 0.9em;
+          display: inline;
+          flex-shrink: 0;
+        }
+
+        .system-ready {
+          margin: 4px 0;
+          font-size: 0.7rem;
+          padding: 4px 6px;
+        }
+
+        .vault-info {
+          margin: 4px 0 0 0;
+          padding: 6px;
+          font-size: 0.65rem;
+          min-height: 40px;
+          line-height: 1.1;
+        }
+
+        .chat-panel {
+          width: 68%;
+          min-width: 320px;
+          background: #545454;
+          border-radius: 0 22px 22px 0;
+          border-left: 2px solid #ffd811;
+          padding: 14px;
+          display: flex;
+          flex-direction: column;
+          position: relative;
+          z-index: 2;
+          height: 100%;
+          justify-content: space-between;
+          margin-top: 0;
+          margin-bottom: 0;
+        }
+
+        .chat-box {
+          min-height: 200px;
+          max-height: 250px;
+          margin-bottom: 6px;
+          flex: 1;
+          overflow-y: scroll;
+          padding: 6px;
+        }
+
+        .input-area {
+          padding: 6px 10px;
+          min-height: 45px;
+          margin-bottom: 0;
+          border-radius: 18px;
+          display: flex;
+          align-items: flex-end;
+          background: #222;
+          border: 1.5px solid #fff;
+          box-shadow: 0 2px 6px #0002;
+          gap: 8px;
+          flex-shrink: 0;
+          position: relative;
+        }
+
+        .attachment-button {
+          position: absolute;
+          bottom: 5px;
+          left: 5px;
+          background: transparent;
+          border: none;
+          width: 18px;
+          height: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          cursor: pointer;
+          color: #888;
+          font-size: 12px;
+          transition: color 0.2s ease;
+          z-index: 10;
+        }
+
+        .chat-input {
+          flex: 1;
+          padding: 6px 10px 6px 28px;
+          border-radius: 14px;
+          border: none;
+          font-size: 0.85em;
+          background: transparent;
+          color: white;
+          outline: none;
+          text-align: left;
+          min-height: 35px;
+          resize: vertical;
+          font-family: "Carlito", Arial, sans-serif;
+        }
+
+        .chat-input::placeholder {
+          text-align: left;
+          font-size: 0.85em;
+          color: rgba(255, 255, 255, 0.45);
+          opacity: 1;
+          font-family: "Carlito", Arial, sans-serif;
+          letter-spacing: 0.3px;
+        }
+
+        .send-button {
+          width: 60px;
+          height: 35px;
+          border-radius: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: #ffd811;
+          border: 2px solid #fff;
+          transition: all 0.2s ease;
+          outline: none;
+          box-shadow: 0 2px 6px #0002;
+          cursor: pointer;
+          flex-shrink: 0;
+        }
+
+        .send-button img {
+          width: 40px;
+          height: 40px;
+          transform: rotate(90deg);
+        }
+
+        .footer {
+          display: none;
+        }
+        .mobile-footer {
+          display: flex;
+          position: fixed;
+          bottom: 0;
+          width: 100vw;
+          margin: 0;
+          padding: 0.3rem 0;
+          left: 0;
+          right: 0;
+          justify-content: center;
+          align-items: center;
+          gap: 0.8rem;
+          background: #1a1a1a;
+          z-index: 1000;
+        }
+
+        .footer-mascot {
+          width: 1.2rem;
+          height: 1.2rem;
+          object-fit: contain;
+        }
+        .mobile-footer-text {
+          font-size: 0.9rem;
+          font-weight: bold;
+          color: #ffd811;
+        }
+
+        .bubble {
+          margin: 6px 0;
+          max-width: 92%;
+        }
+
+        .bubble img.avatar {
+          width: 30px;
+          height: 30px;
+          margin: 0 6px;
+        }
+
+        .bubble-content {
+          padding: 10px 14px;
+          font-size: 0.9em;
+          line-height: 1.3;
+          border-radius: 8px;
+        }
+      }
+
+      /* Mode Toggle Styles */
+      .site-title {
+        margin-bottom: 2px;
+      }
+      .subtitle {
+        margin-top: 0;
+        margin-bottom: 6px;
+      }
+
+      .mode-toggle-container {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        gap: 8px;
+        margin-top: 8px;
+      }
+
+      .mode-btn {
+        background: rgba(255, 255, 255, 0.1);
+        border: 2px solid #fff;
+        border-radius: 6px;
+        padding: 6px 14px;
+        font-family: "Carlito", Arial, sans-serif;
+        font-size: clamp(0.8rem, 2.2vw, 1rem);
+        font-weight: bold;
+        color: white;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        white-space: nowrap;
+        min-height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* Inactive button colors (Site Monkeys brand colors) */
+      .mode-btn[data-mode="truth_general"] {
+        background: #4a90e2;
+        color: white;
+      }
+      .mode-btn[data-mode="business_validation"] {
+        background: #ffd811;
+        color: #373534;
+      }
+      .mode-btn[data-mode="site_monkeys"] {
+        background: #fff;
+        color: #373534;
+        box-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
+      }
+
+      /* Active button states (darker gray with white text) */
+      .mode-btn[data-mode="truth_general"].active {
+        background: #545454;
+        color: white;
+        box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4);
+      }
+      .mode-btn[data-mode="business_validation"].active {
+        background: #545454;
+        color: white;
+        box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4);
+      }
+      .mode-btn[data-mode="site_monkeys"].active {
+        background: #545454;
+        color: white;
+        box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4);
+      }
+
+      /* Hover effects */
+      .mode-btn:hover:not(.active) {
+        transform: translateY(-1px);
+        opacity: 0.9;
+      }
+
+      /* Safari mascot fix */
+      @supports (-webkit-appearance: none) {
+        @media (max-width: 950px) and (orientation: landscape) {
+          .mascot-right {
+            opacity: 1 !important;
+            visibility: visible !important;
+            display: block !important;
+            -webkit-transform: translateY(-50%);
+            transform: translateY(-50%);
+          }
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="header-row">
+        <img src="logo.png" alt="Site Monkeys Logo" class="logo" />
+        <div class="header-center">
+          <div class="site-title">SITE MONKEYS AI</div>
+          <div class="subtitle">BUSINESS VALIDATION ENGINE</div>
+          <div class="mode-toggle-container">
+            <button class="mode-btn" id="truth-mode" data-mode="truth_general">
+              Truth
+            </button>
+            <button
+              class="mode-btn active"
+              id="business-mode"
+              data-mode="business_validation"
+            >
+              Business
+            </button>
+            <button
+              class="mode-btn"
+              id="sitemonkeys-mode"
+              data-mode="site_monkeys"
+            >
+              Site Monkeys
+            </button>
+          </div>
+        </div>
+        <img src="AI Robot.png" alt="AI Robot" class="ai-robot" />
+        <img src="rocket.png" alt="Rocket" class="rocket-top" />
+      </div>
+    </header>
+
+    <div class="main-wrapper">
+      <img src="boy-mascot.png" alt="Eli Mascot" class="mascot mascot-left" />
+      <img
+        src="girl-mascot.png"
+        alt="Roxy Mascot"
+        class="mascot mascot-right"
+      />
+      <img src="rocket.png" alt="Mobile Rocket" class="mobile-rocket" />
+      <div class="main-content">
+        <div class="status-panel">
+          <div>
+            <div class="status-title">
+              Site Monkeys Business Validation System
+            </div>
+            <ul class="status-list" id="status-list">
+              <li><span class="check">✅</span> Zero-Failure AI</li>
+              <li>
+                <span class="check">✅</span> Complete Business Intelligence
+              </li>
+              <li><span class="check">✅</span> Real-World Validation Ready</li>
+              <li>
+                <span class="check">✅</span> Site Monkeys memory vault loaded
+              </li>
+              <li><span class="check">✅</span> Zero Failure activated</li>
+              <li>
+                <span class="check">✅</span> Legitimate data initiative
+                activated
+              </li>
+              <li>
+                <span class="check">✅</span> Persistence driven activated
+              </li>
+              <li>
+                <span class="check">✅</span> helpful initiative activated
+              </li>
+              <li>
+                <span class="check">✅</span> Founder Protection activated
+              </li>
+              <li><span class="check">✅</span> Market leader Initiative</li>
+            </ul>
+            <div class="system-ready" id="system-ready">
+              <span class="check">✅</span> SYSTEM READY
+            </div>
+          </div>
+          <div class="vault-info" id="vault-info">
+            <div><span style="color: #00ff00">✅</span> VAULT READY</div>
+            <div>🔢 <span id="token-count">Ready</span> TOKENS</div>
+            <div>💰 EST. COST: <span id="cost-estimate">$0.00</span></div>
+            <div>📁 <span id="vault-folders">Cached</span> FOLDERS LOADED</div>
+            <button
+              id="refresh-vault-btn"
+              onclick="debouncedRefreshVault()"
+              style="
+                background: #ffd811;
+                color: #373534;
+                border: 1px solid #fff;
+                border-radius: 8px;
+                padding: 7px 10px;
+                font-size: 0.8em;
+                font-weight: bold;
+                cursor: pointer;
+                margin-top: 8px;
+                width: 100%;
+                transition: all 0.2s ease;
+              "
+              onmouseover="this.style.background='#ffe96a'"
+              onmouseout="this.style.background='#FFD811'"
+            >
+              🔄 Refresh Vault
+            </button>
+          </div>
+        </div>
+
+        <div class="chat-panel">
+          <div class="chat-box" id="chat-box"></div>
+          <div class="input-area">
+            <button
+              class="attachment-button"
+              id="smart-upload-btn"
+              aria-label="Upload Files"
+              title="Upload files"
+            >
+              📎
+            </button>
+            <!-- Document Analysis Button -->
+            <button
+              class="attachment-button"
+              id="analyze-btn"
+              aria-label="Analyze Document"
+              title="Analyze Document"
+              style="position: absolute; top: 5px; right: 70px; z-index: 100"
+            >
+              🔍
+            </button>
+            <textarea
+              class="chat-input"
+              id="user-input"
+              placeholder="Ask Eli, Roxy, and AI about business validation..."
+              rows="3"
+            ></textarea>
+            <button class="send-button" id="send-btn" aria-label="Send">
+              <img src="rocket.png" alt="Rocket Send" />
+            </button>
+            <input
+              type="file"
+              id="vault-file-input"
+              accept=".docx,.doc,.pdf,.txt,.csv,.xlsx,.xls,.pptx,.ppt,.md,.rtf,.json,.xml,.html,.htm,.odt,.ods,.odp,.pages,.numbers,.key,.zip,.rar,.7z,.tar,.gz,.jpeg,.jpg,.png,.gif,.bmp,.svg,.tiff,.mp3,.mp4,.avi,.mov,.wmv,.flv,.webm,.wav,.m4a,.ogg,.aac"
+              multiple
+              style="display: none"
+            />
+            <input
+              type="file"
+              id="analysis-file-input"
+              accept=".docx,.doc,.pdf,.txt,.csv,.xlsx,.xls,.pptx,.ppt,.md,.rtf,.json,.xml,.html,.htm,.odt,.ods,.odp,.pages,.numbers,.key,.zip,.rar,.7z,.tar,.gz,.jpeg,.jpg,.png,.gif,.bmp,.svg,.tiff,.mp3,.mp4,.avi,.mov,.wmv,.flv,.webm,.wav,.m4a,.ogg,.aac"
+              multiple
+              style="display: none"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <img src="boy-mascot.png" alt="Eli" class="footer-mascot" />
+        <div class="footer-text">AI YOU CAN TRUST!</div>
+        <img src="girl-mascot.png" alt="Roxy" class="footer-mascot" />
+      </div>
+
+      <div class="mobile-footer">
+        <img src="boy-mascot.png" alt="Eli" class="footer-mascot" />
+        <div class="mobile-footer-text">AI YOU CAN TRUST!</div>
+        <img src="girl-mascot.png" alt="Roxy" class="footer-mascot" />
+      </div>
+    </div>
+
+    <script>
+      // Global variables
+      let conversationHistory = [];
+      let systemActive = false;
+      let aiToggle = false;
+      let extractedDocuments = [];
+      const MAX_CONVERSATION_HISTORY = 50;
+      const MAX_EXTRACTED_DOCUMENTS = 10;
+      let requestQueue = [];
+      let isProcessingRequest = false;
+      let refreshDebounceTimer = null;
+
+      // Mode system
+      let currentMode = "business_validation";
+
+      function switchMode(mode) {
+        currentMode = mode;
+        console.log(`🔄 Switched to mode: ${mode}`);
+
+        // Update button states
+        document.querySelectorAll(".mode-btn").forEach((btn) => {
+          btn.classList.remove("active");
+        });
+
+        // Set active button
+        const activeBtn = document.querySelector(`[data-mode="${mode}"]`);
+        if (activeBtn) {
+          activeBtn.classList.add("active");
+        }
+      }
+
+      function getCurrentMode() {
+        return currentMode;
+      }
+
+      function isVaultMode() {
+        return currentMode === "site_monkeys";
+      }
+      function handleApiError(error, context = "API call") {
+        console.error(`❌ ${context} failed:`, error);
+
+        const errorMessages = {
+          NetworkError:
+            "Network connection failed. Please check your internet connection.",
+          TypeError: "Request format error. Please try again.",
+          SyntaxError: "Server response error. Please refresh and try again.",
+          TimeoutError: "Request timed out. Please try again.",
+          AbortError: "Request was cancelled. Please try again.",
+        };
+
+        const message =
+          errorMessages[error.name] ||
+          error.message ||
+          "Unknown error occurred";
+        showErrorMessage(message);
+      }
+
+      function showErrorMessage(message) {
+        const box = document.getElementById("chat-box");
+        const errorBubble = document.createElement("div");
+        errorBubble.className = "bubble ai error-bubble";
+        errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ ${message}</div>`;
+        box.appendChild(errorBubble);
+        box.scrollTop = box.scrollHeight;
+      }
+
+      function manageConversationHistory() {
+        if (conversationHistory.length > MAX_CONVERSATION_HISTORY) {
+          const removed = conversationHistory.splice(
+            0,
+            conversationHistory.length - MAX_CONVERSATION_HISTORY,
+          );
+          console.log(`🗑️ Cleared ${removed.length} old conversation messages`);
+        }
+      }
+
+      function manageExtractedDocuments() {
+        if (extractedDocuments.length > MAX_EXTRACTED_DOCUMENTS) {
+          const removed = extractedDocuments.splice(
+            0,
+            extractedDocuments.length - MAX_EXTRACTED_DOCUMENTS,
+          );
+          console.log(`🗑️ Cleared ${removed.length} old documents from memory`);
+        }
+      }
+
+      async function processRequestQueue() {
+        if (isProcessingRequest || requestQueue.length === 0) return;
+
+        isProcessingRequest = true;
+        const request = requestQueue.shift();
+
+        try {
+          await request();
+        } catch (error) {
+          handleApiError(error, "Queued request");
+        } finally {
+          isProcessingRequest = false;
+          setTimeout(processRequestQueue, 100);
+        }
+      }
+
+      function queueRequest(requestFunction) {
+        requestQueue.push(requestFunction);
+        processRequestQueue();
+      }
+
+      async function fetchWithRetry(
+        url,
+        options = {},
+        maxRetries = 3,
+        timeout = 10000,
+      ) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const response = await fetch(url, {
+              ...options,
+              signal: controller.signal,
+            });
+
+            clearTimeout(timeoutId);
+
+            if (!response.ok) {
+              throw new Error(
+                `HTTP ${response.status}: ${response.statusText}`,
+              );
+            }
+
+            return response;
+          } catch (error) {
+            console.warn(`Attempt ${attempt} failed:`, error.message);
+
+            if (attempt === maxRetries || error.name === "AbortError") {
+              clearTimeout(timeoutId);
+              throw error;
+            }
+
+            await new Promise((resolve) =>
+              setTimeout(resolve, Math.pow(2, attempt) * 1000),
+            );
+          }
+        }
+      }
+
+      function startPeriodicCleanup() {
+        setInterval(() => {
+          manageConversationHistory();
+          manageExtractedDocuments();
+          console.log("🧹 Periodic cleanup completed");
+        }, 300000);
+      }
+
+      function debouncedRefreshVault() {
+        if (refreshDebounceTimer) {
+          clearTimeout(refreshDebounceTimer);
+        }
+
+        refreshDebounceTimer = setTimeout(() => {
+          refreshVault();
+          refreshDebounceTimer = null;
+        }, 1000);
+      }
+
+      // File upload functionality
+      async function handleFileUpload(files) {
+        if (files.length === 0) return;
+        const box = document.getElementById("chat-box");
+
+        // Show upload message
+        const uploadBubble = document.createElement("div");
+        uploadBubble.className = "bubble ai";
+        uploadBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> 📤 Uploading ${files.length} file(s) to vault...</div>`;
+        box.appendChild(uploadBubble);
+        box.scrollTop = box.scrollHeight;
+
+        try {
+          const formData = new FormData();
+          for (const file of files) {
+            formData.append("files", file);
+          }
+
+          const response = await fetch("/api/upload-file", {
+            method: "POST",
+            body: formData,
+          });
+          const result = await response.json();
+
+          if (result.status === "success" && result.successful_uploads > 0) {
+            for (const fileInfo of result.files) {
+              if (fileInfo.success) {
+                const successBubble = document.createElement("div");
+                successBubble.className = "bubble ai";
+                successBubble.innerHTML = `<img src="girl-mascot.png" class="avatar" alt="Roxy"><div class="bubble-content"><strong>Roxy:</strong> ✅ Uploaded "${fileInfo.filename}" to ${fileInfo.folder} folder. File is now available for chat!</div>`;
+                box.appendChild(successBubble);
+                box.scrollTop = box.scrollHeight;
+              } else {
+                const errorBubble = document.createElement("div");
+                errorBubble.className = "bubble ai";
+                errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ Failed to upload "${fileInfo.filename}": ${fileInfo.message}</div>`;
+                box.appendChild(errorBubble);
+                box.scrollTop = box.scrollHeight;
+              }
+            }
+          } else {
+            const errorBubble = document.createElement("div");
+            errorBubble.className = "bubble ai";
+            errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ Upload failed: ${result.message}</div>`;
+            box.appendChild(errorBubble);
+            box.scrollTop = box.scrollHeight;
+          }
+        } catch (error) {
+          const errorBubble = document.createElement("div");
+          errorBubble.className = "bubble ai";
+          errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ Upload failed: ${error.message}</div>`;
           box.appendChild(errorBubble);
           box.scrollTop = box.scrollHeight;
         }
       }
-    } else {
-      const errorBubble = document.createElement('div');
-      errorBubble.className = 'bubble ai';
-      errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ Upload failed: ${result.message}</div>`;
-      box.appendChild(errorBubble);
-      box.scrollTop = box.scrollHeight;
-    }
-  } catch (error) {
-    const errorBubble = document.createElement('div');
-    errorBubble.className = 'bubble ai';
-    errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ Upload failed: ${error.message}</div>`;
-    box.appendChild(errorBubble);
-    box.scrollTop = box.scrollHeight;
-  }
-}
- 
-  async function handleAnalysisUpload(files) {
-  if (files.length === 0) return;
-  
-  const box = document.getElementById('chat-box');
-  const uploadBubble = document.createElement('div');
-  uploadBubble.className = 'bubble ai';
-  uploadBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> 📤 Uploading ${files.length} file(s) for analysis...</div>`;
-  box.appendChild(uploadBubble);
-  box.scrollTop = box.scrollHeight;
-  
-  const formData = new FormData();
-  for (let i = 0; i < files.length; i++) {
-    formData.append('files', files[i]);
-  }
-  
-  try {
-    const response = await fetch('/api/upload-for-analysis', {
-      method: 'POST',
-      body: formData
-    });
-    
-    const result = await response.json();
-    
-    if (result.success) {
-      const filesToProcess = result.analysis_results || result.files || [];
-      
-      filesToProcess.forEach(file => {
-        if (file.contentExtracted && file.docxAnalysis) {
-          const analysis = file.docxAnalysis;
-          const docToStore = {
-            filename: file.filename,
-            content: analysis.preview,
-            fullContent: analysis.fullText,
-            contentType: analysis.contentType,
-            wordCount: analysis.wordCount,
-            keyPhrases: analysis.keyPhrases || [],
-            timestamp: Date.now()
-          };
-          extractedDocuments.push(docToStore);
-          manageExtractedDocuments();
-          console.log('📄 Stored document for chat:', file.filename);
-          
-          const analysisBubble = document.createElement('div');
-          analysisBubble.className = 'bubble ai';
-          analysisBubble.innerHTML = `<img src="girl-mascot.png" class="avatar" alt="Roxy"><div class="bubble-content"><strong>Roxy:</strong> 📄 ${file.filename}<br>📊 Words: ${analysis.wordCount}<br>📝 Preview: ${analysis.preview.substring(0, 200)}...<br><br>💬 <strong>Now ask me to analyze this document!</strong></div>`;
-          box.appendChild(analysisBubble);
+
+      async function handleAnalysisUpload(files) {
+        if (files.length === 0) return;
+
+        const box = document.getElementById("chat-box");
+        const uploadBubble = document.createElement("div");
+        uploadBubble.className = "bubble ai";
+        uploadBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> 📤 Uploading ${files.length} file(s) for analysis...</div>`;
+        box.appendChild(uploadBubble);
+        box.scrollTop = box.scrollHeight;
+
+        const formData = new FormData();
+        for (let i = 0; i < files.length; i++) {
+          formData.append("files", files[i]);
         }
-      });
-    }
-  } catch (error) {
-    console.error('❌ Analysis upload failed:', error);
-    const errorBubble = document.createElement('div');
-    errorBubble.className = 'bubble ai';
-    errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ Upload failed: ${error.message}</div>`;
-    box.appendChild(errorBubble);
-    box.scrollTop = box.scrollHeight;
-  }
-}
 
-// Animation code
-const statusItems = document.querySelectorAll('#status-list li');
-const systemReady = document.getElementById('system-ready');
-let statusIndex = 0;
+        try {
+          const response = await fetch("/api/upload-for-analysis", {
+            method: "POST",
+            body: formData,
+          });
 
-function loadStatus() {
-  console.log('🎯 loadStatus function called');
-  if (statusIndex < statusItems.length) {
-    statusItems[statusIndex].classList.add('loaded');
-    statusIndex++;
-    setTimeout(loadStatus, 400);
-  } else {
-    setTimeout(() => {
-      console.log('✅ Status animation complete, system ready immediately');
-      systemReady.classList.add('active');
-      systemActive = true;
-      console.log('✅ System active - using KV cache');
-      checkVaultStatus();
-    }, 500);
-  }
-}
+          const result = await response.json();
 
-// Check vault status and update display
-async function checkVaultStatus() {
-const currentTokens = document.getElementById('token-count')?.textContent || 'Ready';
-const currentCost = document.getElementById('cost-estimate')?.textContent || '$0.00';
-  try {
-    console.log('📖 Checking vault status...');
-    const response = await fetch('/api/load-vault', {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    });
+          if (result.success) {
+            const filesToProcess =
+              result.analysis_results || result.files || [];
 
-    const data = await response.json();
-    console.log('📊 Vault status:', data);
+            filesToProcess.forEach((file) => {
+              if (file.contentExtracted && file.docxAnalysis) {
+                const analysis = file.docxAnalysis;
+                const docToStore = {
+                  filename: file.filename,
+                  content: analysis.preview,
+                  fullContent: analysis.fullText,
+                  contentType: analysis.contentType,
+                  wordCount: analysis.wordCount,
+                  keyPhrases: analysis.keyPhrases || [],
+                  timestamp: Date.now(),
+                };
+                extractedDocuments.push(docToStore);
+                manageExtractedDocuments();
+                console.log("📄 Stored document for chat:", file.filename);
 
-    if (data.status === 'success' && !data.needs_refresh) {
-      document.getElementById('vault-info').innerHTML = `
+                const analysisBubble = document.createElement("div");
+                analysisBubble.className = "bubble ai";
+                analysisBubble.innerHTML = `<img src="girl-mascot.png" class="avatar" alt="Roxy"><div class="bubble-content"><strong>Roxy:</strong> 📄 ${file.filename}<br>📊 Words: ${analysis.wordCount}<br>📝 Preview: ${analysis.preview.substring(0, 200)}...<br><br>💬 <strong>Now ask me to analyze this document!</strong></div>`;
+                box.appendChild(analysisBubble);
+              }
+            });
+          }
+        } catch (error) {
+          console.error("❌ Analysis upload failed:", error);
+          const errorBubble = document.createElement("div");
+          errorBubble.className = "bubble ai";
+          errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ Upload failed: ${error.message}</div>`;
+          box.appendChild(errorBubble);
+          box.scrollTop = box.scrollHeight;
+        }
+      }
+
+      // Animation code
+      const statusItems = document.querySelectorAll("#status-list li");
+      const systemReady = document.getElementById("system-ready");
+      let statusIndex = 0;
+
+      function loadStatus() {
+        console.log("🎯 loadStatus function called");
+        if (statusIndex < statusItems.length) {
+          statusItems[statusIndex].classList.add("loaded");
+          statusIndex++;
+          setTimeout(loadStatus, 400);
+        } else {
+          setTimeout(() => {
+            console.log(
+              "✅ Status animation complete, system ready immediately",
+            );
+            systemReady.classList.add("active");
+            systemActive = true;
+            console.log("✅ System active - using KV cache");
+            checkVaultStatus();
+          }, 500);
+        }
+      }
+
+      // Check vault status and update display
+      async function checkVaultStatus() {
+        const currentTokens =
+          document.getElementById("token-count")?.textContent || "Ready";
+        const currentCost =
+          document.getElementById("cost-estimate")?.textContent || "$0.00";
+        try {
+          console.log("📖 Checking vault status...");
+          const response = await fetch("/api/load-vault", {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          });
+
+          const data = await response.json();
+          console.log("📊 Vault status:", data);
+
+          if (data.status === "success" && !data.needs_refresh) {
+            document.getElementById("vault-info").innerHTML = `
         <div><span style="color:#00FF00;">✅</span> VAULT READY (CACHED)</div>
         <div>🔢 <span id="token-count">${currentTokens}</span> TOKENS</div>
         <div>💰 EST. COST: <span id="cost-estimate">${currentCost}</span></div>
-        <div>📁 <span id="vault-folders">${data.folders_loaded?.length || 'Cached'}</span> FOLDERS LOADED</div>
+        <div>📁 <span id="vault-folders">${data.folders_loaded?.length || "Cached"}</span> FOLDERS LOADED</div>
         <button id="refresh-vault-btn" onclick="debouncedRefreshVault()" style="background: #FFD811; color: #373534; border: 1px solid #fff; border-radius: 8px; padding: 8px 12px; font-size: 0.8em; font-weight: bold; cursor: pointer; margin-top: 8px; width: 100%; transition: all 0.2s ease;" onmouseover="this.style.background='#ffe96a'" onmouseout="this.style.background='#FFD811'">🔄 Refresh Vault</button>`;
-    } else {
-      document.getElementById('vault-info').innerHTML = `
+          } else {
+            document.getElementById("vault-info").innerHTML = `
         <div><span style="color:#FFA500;">⚠️</span> VAULT NEEDS REFRESH</div>
         <div>🔢 <span id="token-count">No Data</span> TOKENS</div>
         <div>💰 EST. COST: <span id="cost-estimate">$0.00</span></div>
         <div>📁 <span id="vault-folders">0</span> FOLDERS LOADED</div>
         <button id="refresh-vault-btn" onclick="debouncedRefreshVault()" style="background: #FF6B6B; color: white; border: 1px solid #fff; border-radius: 8px; padding: 8px 12px; font-size: 0.8em; font-weight: bold; cursor: pointer; margin-top: 8px; width: 100%; transition: all 0.2s ease;" onmouseover="this.style.background='#ff8a8a'" onmouseout="this.style.background='#FF6B6B'">🔄 REFRESH VAULT NOW</button>`;
-    }
-  } catch (error) {
-    console.error('❌ Vault status check failed:', error);
-  }
-}
+          }
+        } catch (error) {
+          console.error("❌ Vault status check failed:", error);
+        }
+      }
 
-async function refreshVault() {
-  try {
-    const currentTokens = document.getElementById('token-count')?.textContent || 'Ready';
-    const currentCost = document.getElementById('cost-estimate')?.textContent || '$0.00';
-    console.log('🔄 Refreshing vault...');
-    const button = document.getElementById('refresh-vault-btn');
-    const originalText = button.innerHTML;
-    button.innerHTML = '⏳ Refreshing...';
-    button.disabled = true;
+      async function refreshVault() {
+        try {
+          const currentTokens =
+            document.getElementById("token-count")?.textContent || "Ready";
+          const currentCost =
+            document.getElementById("cost-estimate")?.textContent || "$0.00";
+          console.log("🔄 Refreshing vault...");
+          const button = document.getElementById("refresh-vault-btn");
+          const originalText = button.innerHTML;
+          button.innerHTML = "⏳ Refreshing...";
+          button.disabled = true;
 
-    const response = await fetch('/api/load-vault?refresh=true&manual=true', {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    });
+          const response = await fetch(
+            "/api/load-vault?refresh=true&manual=true",
+            {
+              method: "GET",
+              headers: { "Content-Type": "application/json" },
+            },
+          );
 
-    const data = await response.json();
-    console.log('📊 Vault refresh result:', data);
-    console.log('📁 Folders loaded:', data.folders_loaded);
-    console.log('🔢 Token count:', data.tokens);
-    console.log('📄 Vault content preview:', data.vault_content?.substring(0, 500));
+          const data = await response.json();
+          console.log("📊 Vault refresh result:", data);
+          console.log("📁 Folders loaded:", data.folders_loaded);
+          console.log("🔢 Token count:", data.tokens);
+          console.log(
+            "📄 Vault content preview:",
+            data.vault_content?.substring(0, 500),
+          );
 
-    // Store vault in window for sendMessage to use
-    window.currentVaultContent = data.vault_content || '';
-    window.vaultStatus = {
-      loaded: true,
-      healthy: data.vault_status === 'operational',
-      tokens: data.tokens || 0
-    };
-    console.log('✅ Vault stored in window:', window.currentVaultContent.length, 'characters');
+          // Store vault in window for sendMessage to use
+          window.currentVaultContent = data.vault_content || "";
+          window.vaultStatus = {
+            loaded: true,
+            healthy: data.vault_status === "operational",
+            tokens: data.tokens || 0,
+          };
+          console.log(
+            "✅ Vault stored in window:",
+            window.currentVaultContent.length,
+            "characters",
+          );
 
-    if (data.status === 'refreshed') {
-      document.getElementById('vault-info').innerHTML = `
+          if (data.status === "refreshed") {
+            document.getElementById("vault-info").innerHTML = `
         <div><span style="color:#00FF00;">✅</span> VAULT REFRESHED</div>
         <div>🔢 <span id="token-count">${currentTokens}</span> TOKENS</div>
         <div>💰 EST. COST: <span id="cost-estimate">${currentCost}</span></div>
         <div>📁 <span id="vault-folders">${data.folders_loaded?.length || 0}</span> FOLDERS LOADED</div>
         <button id="refresh-vault-btn" onclick="debouncedRefreshVault()" style="background: #FFD811; color: #373534; border: 1px solid #fff; border-radius: 8px; padding: 8px 12px; font-size: 0.8em; font-weight: bold; cursor: pointer; margin-top: 8px; width: 100%; transition: all 0.2s ease;" onmouseover="this.style.background='#ffe96a'" onmouseout="this.style.background='#FFD811'">🔄 Refresh Vault</button>`;
-    } else {
-      button.innerHTML = '❌ Refresh Failed';
-      button.disabled = false;
-      setTimeout(() => { 
-        button.innerHTML = originalText; 
-      }, 3000);
-    }
-  } catch (error) {
-    console.error('❌ Vault refresh failed:', error);
-    const button = document.getElementById('refresh-vault-btn');
-    button.innerHTML = '❌ Refresh Failed';
-    button.disabled = false;
-    setTimeout(() => { 
-      button.innerHTML = '🔄 Refresh Vault'; 
-    }, 3000);
-  }
-}
-
-function traceDocumentFlow() {
-  console.log('=== DOCUMENT FLOW TRACE ===');
-  console.log('1. extractedDocuments array:', extractedDocuments);
-  console.log('2. Array length:', extractedDocuments.length);
-  if (extractedDocuments.length > 0) {
-    const doc = extractedDocuments[0];
-    console.log('3. First document object:', doc);
-    console.log('4. Has content property?', 'content' in doc, '- Length:', doc.content?.length);
-    console.log('5. Has fullContent property?', 'fullContent' in doc, '- Length:', doc.fullContent?.length);
-    console.log('6. Content value:', doc.content?.substring(0, 100));
-    console.log('7. FullContent value:', doc.fullContent?.substring(0, 100));
-  }
-  console.log('=== END TRACE ===');
-}
-
-// Main chat function
-async function sendMessage() {
-  const input = document.getElementById('user-input');
-  const text = input.value.trim();
-  if (!text || !systemActive) return;
-
-  const box = document.getElementById('chat-box');
-
-  // Add user message
-  const userBubble = document.createElement('div');
-  userBubble.className = 'bubble user';
-  userBubble.innerHTML = `<div class="bubble-content"><strong>You:</strong> ${text}</div>`;
-  box.appendChild(userBubble);
-  box.scrollTop = box.scrollHeight;
-  input.value = '';
-
-  // Add thinking indicator
-  const thinkingBubble = document.createElement('div');
-  thinkingBubble.className = 'bubble ai thinking-bubble';
-  thinkingBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="Thinking"><div class="bubble-content thinking-content"><span class="thinking-brain">🧠</span> Thinking...</div>`;
-  box.appendChild(thinkingBubble);
-  box.scrollTop = box.scrollHeight;
-
-  try {
-  // USE ALREADY-LOADED VAULT FROM WINDOW
-  let vaultContent = window.currentVaultContent || '';
-  console.log('🎯 Using cached vault for chat:', vaultContent ? 'SUCCESS (' + Math.ceil(vaultContent.length/4) + ' tokens)' : 'FAILED');
-
-    // Prepare enhanced message with document context
-    // Simple document context injection
-    let messageToSend = text;
-
-    console.log('ACTUAL MESSAGE BEING SENT TO API:', messageToSend);
-
-    // Send message with vault content injection AND document context
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: extractedDocuments.length > 0 && (text.toLowerCase().includes('analyze') || text.toLowerCase().includes('document') || text.toLowerCase().includes('file')) 
-          ? `${text}\n\n[DOCUMENT CONTEXT]\nFile: ${extractedDocuments[extractedDocuments.length - 1].filename}\nContent: ${extractedDocuments[extractedDocuments.length - 1].fullContent}\nType: ${extractedDocuments[extractedDocuments.length - 1].contentType}` 
-          : text,
-        conversation_history: conversationHistory,
-        mode: getCurrentMode(),
-        vault_loaded: isVaultMode(),
-        vault_content: vaultContent,
-        document_context: extractedDocuments.length > 0 && (text.toLowerCase().includes('analyze') || text.toLowerCase().includes('document')) 
-          ? {
-              filename: extractedDocuments[extractedDocuments.length - 1].filename,
-              content: extractedDocuments[extractedDocuments.length - 1].fullContent || extractedDocuments[extractedDocuments.length - 1].content,
-              contentType: extractedDocuments[extractedDocuments.length - 1].contentType,
-              wordCount: extractedDocuments[extractedDocuments.length - 1].wordCount
-            }
-          : null
-      })
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      if (errorData.needs_refresh) {
-        throw new Error('Vault needs refreshing. Click the Refresh Vault button first.');
-      } else {
-        throw new Error(`Chat API error: ${response.status}`);
+          } else {
+            button.innerHTML = "❌ Refresh Failed";
+            button.disabled = false;
+            setTimeout(() => {
+              button.innerHTML = originalText;
+            }, 3000);
+          }
+        } catch (error) {
+          console.error("❌ Vault refresh failed:", error);
+          const button = document.getElementById("refresh-vault-btn");
+          button.innerHTML = "❌ Refresh Failed";
+          button.disabled = false;
+          setTimeout(() => {
+            button.innerHTML = "🔄 Refresh Vault";
+          }, 3000);
+        }
       }
-    }
 
-    const data = await response.json();
-    
-    const reply = data.response || 'No response received';
-    // Update token counter
-    if (data.token_usage) {
-      const tokenEl = document.getElementById('token-count');
-      const costEl = document.getElementById('cost-estimate');
-      if (tokenEl) tokenEl.textContent = data.token_usage.session_total_tokens || 0;
-      if (costEl) costEl.textContent = '$' + (data.token_usage.session_total_cost || 0).toFixed(4);
-    }
-    // Clean the AI response - remove ALL system fingerprints
-    let cleanReply = reply
-      .replace(/^\*?\*?(Eli|Roxy):\*?\*?\s*/i, '') 
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') 
-      .replace(/\*\[MODE:.*?\]/g, '') 
-      .replace(/\[MODE:.*?\]/g, '') 
-      .replace(/\|\s*\[VAULT:.*?\]\s*\|\s*\[TRIGGERED:.*?\]\s*\|\s*\[FLOW:.*?\]\s*\|\s*\[ASSUMPTIONS:.*?\]\*/g, '') 
-      .replace(/\[VAULT:.*?\]/g, '') 
-      .replace(/\[TRIGGERED:.*?\]/g, '') 
-      .replace(/\[FLOW:.*?\]/g, '') 
-      .replace(/\[ASSUMPTIONS:.*?\]/g, '') 
-      .trim();
+      function traceDocumentFlow() {
+        console.log("=== DOCUMENT FLOW TRACE ===");
+        console.log("1. extractedDocuments array:", extractedDocuments);
+        console.log("2. Array length:", extractedDocuments.length);
+        if (extractedDocuments.length > 0) {
+          const doc = extractedDocuments[0];
+          console.log("3. First document object:", doc);
+          console.log(
+            "4. Has content property?",
+            "content" in doc,
+            "- Length:",
+            doc.content?.length,
+          );
+          console.log(
+            "5. Has fullContent property?",
+            "fullContent" in doc,
+            "- Length:",
+            doc.fullContent?.length,
+          );
+          console.log("6. Content value:", doc.content?.substring(0, 100));
+          console.log(
+            "7. FullContent value:",
+            doc.fullContent?.substring(0, 100),
+          );
+        }
+        console.log("=== END TRACE ===");
+      }
 
-    // Determine who speaks
-    const isEli = aiToggle;
-    const who = isEli ? 'Eli' : 'Roxy';
-    const avatar = isEli ? "boy-mascot.png" : "girl-mascot.png";
+      // Main chat function
+      async function sendMessage() {
+        const input = document.getElementById("user-input");
+        const text = input.value.trim();
+        if (!text || !systemActive) return;
 
-    // Remove thinking indicator
-    const thinkingElement = document.querySelector('.thinking-bubble');
-    if (thinkingElement) {
-      thinkingElement.remove();
-    }
+        const box = document.getElementById("chat-box");
 
-    // Add clean assistant response
-    const responseBubble = document.createElement('div');
-    responseBubble.className = 'bubble ai';
-    responseBubble.innerHTML = `<img src="${avatar}" class="avatar" alt="${who}"><div class="bubble-content"><strong>${who}:</strong> ${cleanReply}</div>`;
-    box.appendChild(responseBubble);
-    box.scrollTop = box.scrollHeight;
+        // Add user message
+        const userBubble = document.createElement("div");
+        userBubble.className = "bubble user";
+        userBubble.innerHTML = `<div class="bubble-content"><strong>You:</strong> ${text}</div>`;
+        box.appendChild(userBubble);
+        box.scrollTop = box.scrollHeight;
+        input.value = "";
 
-    // Update conversation history
-    conversationHistory.push({ role: 'user', content: text });
-    conversationHistory.push({ role: 'assistant', content: reply });
-    manageConversationHistory();
+        // Add thinking indicator
+        const thinkingBubble = document.createElement("div");
+        thinkingBubble.className = "bubble ai thinking-bubble";
+        thinkingBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="Thinking"><div class="bubble-content thinking-content"><span class="thinking-brain">🧠</span> Thinking...</div>`;
+        box.appendChild(thinkingBubble);
+        box.scrollTop = box.scrollHeight;
 
-    // Toggle for next message
-    aiToggle = !aiToggle;
+        try {
+          // USE ALREADY-LOADED VAULT FROM WINDOW
+          let vaultContent = window.currentVaultContent || "";
+          console.log(
+            "🎯 Using cached vault for chat:",
+            vaultContent
+              ? "SUCCESS (" + Math.ceil(vaultContent.length / 4) + " tokens)"
+              : "FAILED",
+          );
 
-    // Enhanced: Log vault status for debugging
-    if (data.vault_status) {
-      console.log('📊 Vault Status:', data.vault_status);
-      console.log('🔧 Enforcement Applied:', data.enforcement_applied);
-    }
+          // Prepare enhanced message with document context
+          // Simple document context injection
+          let messageToSend = text;
 
-  } catch (error) {
-    // Remove thinking indicator on error
-    const thinkingElement = document.querySelector('.thinking-bubble');
-    if (thinkingElement) {
-      thinkingElement.remove();
-    }
-    
-    handleApiError(error, 'Chat request');
-  }
-}
+          console.log("ACTUAL MESSAGE BEING SENT TO API:", messageToSend);
 
-// Document utility functions
-function clearOldDocuments() {
-  const maxDocuments = 5;
-  if (extractedDocuments.length > maxDocuments) {
-    const removed = extractedDocuments.splice(0, extractedDocuments.length - maxDocuments);
-    console.log(`🗑️ Cleared ${removed.length} old documents from memory`);
-  }
-}
+          // Send message with vault content injection AND document context
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message:
+                extractedDocuments.length > 0 &&
+                (text.toLowerCase().includes("analyze") ||
+                  text.toLowerCase().includes("document") ||
+                  text.toLowerCase().includes("file"))
+                  ? `${text}\n\n[DOCUMENT CONTEXT]\nFile: ${extractedDocuments[extractedDocuments.length - 1].filename}\nContent: ${extractedDocuments[extractedDocuments.length - 1].fullContent}\nType: ${extractedDocuments[extractedDocuments.length - 1].contentType}`
+                  : text,
+              conversation_history: conversationHistory,
+              mode: getCurrentMode(),
+              vault_loaded: isVaultMode(),
+              vault_content: vaultContent,
+              document_context:
+                extractedDocuments.length > 0 &&
+                (text.toLowerCase().includes("analyze") ||
+                  text.toLowerCase().includes("document"))
+                  ? {
+                      filename:
+                        extractedDocuments[extractedDocuments.length - 1]
+                          .filename,
+                      content:
+                        extractedDocuments[extractedDocuments.length - 1]
+                          .fullContent ||
+                        extractedDocuments[extractedDocuments.length - 1]
+                          .content,
+                      contentType:
+                        extractedDocuments[extractedDocuments.length - 1]
+                          .contentType,
+                      wordCount:
+                        extractedDocuments[extractedDocuments.length - 1]
+                          .wordCount,
+                    }
+                  : null,
+            }),
+          });
 
-function showStoredDocuments() {
-  if (extractedDocuments.length === 0) {
-    console.log('📄 No documents currently stored');
-    return;
-  }
-  
-  console.log(`📄 Currently stored documents (${extractedDocuments.length}):`);
-  extractedDocuments.forEach((doc, index) => {
-    console.log(`${index + 1}. ${doc.filename} (${doc.wordCount} words, ${doc.contentType})`);
-  });
-}
+          if (!response.ok) {
+            const errorData = await response.json();
+            if (errorData.needs_refresh) {
+              throw new Error(
+                "Vault needs refreshing. Click the Refresh Vault button first.",
+              );
+            } else {
+              throw new Error(`Chat API error: ${response.status}`);
+            }
+          }
 
-// DOM initialization
-document.addEventListener('DOMContentLoaded', function() {
-  console.log('🚀 DOM LOADED - JavaScript is working!');
-  startPeriodicCleanup();
-  const input = document.getElementById('user-input');
-  const sendBtn = document.getElementById('send-btn');
+          const data = await response.json();
 
-  // Mode toggle listeners
-  const modeButtons = document.querySelectorAll('.mode-btn');
-  modeButtons.forEach(button => {
-    button.addEventListener('click', function() {
-      const selectedMode = this.getAttribute('data-mode');
-      switchMode(selectedMode);
-    });
-  });
+          const reply = data.response || "No response received";
+          // Update token counter
+          if (data.token_usage) {
+            const tokenEl = document.getElementById("token-count");
+            const costEl = document.getElementById("cost-estimate");
+            if (tokenEl)
+              tokenEl.textContent = data.token_usage.session_total_tokens || 0;
+            if (costEl)
+              costEl.textContent =
+                "$" + (data.token_usage.session_total_cost || 0).toFixed(4);
+          }
+          // Clean the AI response - remove ALL system fingerprints
+          let cleanReply = reply
+            .replace(/^\*?\*?(Eli|Roxy):\*?\*?\s*/i, "")
+            .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+            .replace(/\*\[MODE:.*?\]/g, "")
+            .replace(/\[MODE:.*?\]/g, "")
+            .replace(
+              /\|\s*\[VAULT:.*?\]\s*\|\s*\[TRIGGERED:.*?\]\s*\|\s*\[FLOW:.*?\]\s*\|\s*\[ASSUMPTIONS:.*?\]\*/g,
+              "",
+            )
+            .replace(/\[VAULT:.*?\]/g, "")
+            .replace(/\[TRIGGERED:.*?\]/g, "")
+            .replace(/\[FLOW:.*?\]/g, "")
+            .replace(/\[ASSUMPTIONS:.*?\]/g, "")
+            .trim();
 
-  // Input event listeners
-  input.addEventListener('keydown', function(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      queueRequest(() => sendMessage());
-    }
-  });
+          // Determine who speaks
+          const isEli = aiToggle;
+          const who = isEli ? "Eli" : "Roxy";
+          const avatar = isEli ? "boy-mascot.png" : "girl-mascot.png";
 
-  sendBtn.addEventListener('click', function(e) {
-    e.preventDefault();
-    queueRequest(() => sendMessage());
-  });
+          // Remove thinking indicator
+          const thinkingElement = document.querySelector(".thinking-bubble");
+          if (thinkingElement) {
+            thinkingElement.remove();
+          }
 
-  // Smart upload button functionality
-  const smartUploadBtn = document.getElementById('smart-upload-btn');
-  const vaultFileInput = document.getElementById('vault-file-input');
-  const analysisFileInput = document.getElementById('analysis-file-input');
+          // Add clean assistant response
+          const responseBubble = document.createElement("div");
+          responseBubble.className = "bubble ai";
+          responseBubble.innerHTML = `<img src="${avatar}" class="avatar" alt="${who}"><div class="bubble-content"><strong>${who}:</strong> ${cleanReply}</div>`;
+          box.appendChild(responseBubble);
+          box.scrollTop = box.scrollHeight;
 
-  smartUploadBtn.addEventListener('click', () => {
-    const choice = confirm('Choose upload type:\nOK = Upload to Vault\nCancel = AI Analysis');
-    if (choice) {
-      vaultFileInput.click();
-    } else {
-      analysisFileInput.click();
-    }
-  });
+          // Update conversation history
+          conversationHistory.push({ role: "user", content: text });
+          conversationHistory.push({ role: "assistant", content: reply });
+          manageConversationHistory();
 
-  vaultFileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-      handleFileUpload(Array.from(e.target.files));
-    }
-  });
+          // Toggle for next message
+          aiToggle = !aiToggle;
 
-  analysisFileInput.addEventListener('change', (e) => {
-    if (e.target.files.length > 0) {
-      handleAnalysisUpload(Array.from(e.target.files));
-    }
-  });
+          // Enhanced: Log vault status for debugging
+          if (data.vault_status) {
+            console.log("📊 Vault Status:", data.vault_status);
+            console.log("🔧 Enforcement Applied:", data.enforcement_applied);
+          }
+        } catch (error) {
+          // Remove thinking indicator on error
+          const thinkingElement = document.querySelector(".thinking-bubble");
+          if (thinkingElement) {
+            thinkingElement.remove();
+          }
 
-  const analyzeBtn = document.getElementById('analyze-btn');
-  if (analyzeBtn) {
-    analyzeBtn.addEventListener('click', () => {
-      console.log('🔍 Analyze button clicked');
-      analysisFileInput.click();
-    });
-    console.log('✅ Analyze button connected');
-  }
+          handleApiError(error, "Chat request");
+        }
+      }
 
-  // Analysis button - Initialize after DOM fully loads
+      // Document utility functions
+      function clearOldDocuments() {
+        const maxDocuments = 5;
+        if (extractedDocuments.length > maxDocuments) {
+          const removed = extractedDocuments.splice(
+            0,
+            extractedDocuments.length - maxDocuments,
+          );
+          console.log(`🗑️ Cleared ${removed.length} old documents from memory`);
+        }
+      }
 
-  console.log('🎯 Event listeners added');
-  setTimeout(() => {
-    console.log('⏰ Starting status animation...');
-    loadStatus();
-  }, 800);
-});
+      function showStoredDocuments() {
+        if (extractedDocuments.length === 0) {
+          console.log("📄 No documents currently stored");
+          return;
+        }
 
-// Error handling for missing images
-document.addEventListener('DOMContentLoaded', function() {
-  const images = document.querySelectorAll('img');
-  images.forEach(img => {
-    img.onerror = function() {
-      console.warn(`Image failed to load: ${this.src}`);
-      this.style.display = 'none';
-    };
-  });
-});
+        console.log(
+          `📄 Currently stored documents (${extractedDocuments.length}):`,
+        );
+        extractedDocuments.forEach((doc, index) => {
+          console.log(
+            `${index + 1}. ${doc.filename} (${doc.wordCount} words, ${doc.contentType})`,
+          );
+        });
+      }
 
-// Auto-clear old documents when needed
-window.addEventListener('beforeunload', clearOldDocuments);
+      // DOM initialization
+      document.addEventListener("DOMContentLoaded", function () {
+        console.log("🚀 DOM LOADED - JavaScript is working!");
+        startPeriodicCleanup();
+        const input = document.getElementById("user-input");
+        const sendBtn = document.getElementById("send-btn");
 
-function getDocumentContextForMessage(message) {
-  // Check if message is asking for document analysis
-  const analysisKeywords = ['analyze', 'analysis', 'review', 'examine', 'document', 'content', 'explain', 'summary'];
-  const isAnalysisRequest = analysisKeywords.some(keyword => 
-    message.toLowerCase().includes(keyword)
-  );
-  
-  if (isAnalysisRequest && extractedDocuments.length > 0) {
-    // Get the most recent document
-    const latestDoc = extractedDocuments[extractedDocuments.length - 1];
-    
-    console.log(`📄 [FRONTEND] Sending document context: ${latestDoc.filename}`);
-    
-    return {
-      filename: latestDoc.filename,
-      contentType: latestDoc.contentType,
-      wordCount: latestDoc.wordCount,
-      keyPhrases: latestDoc.keyPhrases,
-      content: latestDoc.content,
-      fullContent: latestDoc.fullContent
-    };
-  }
-  
-  return null;
-}
+        // Mode toggle listeners
+        const modeButtons = document.querySelectorAll(".mode-btn");
+        modeButtons.forEach((button) => {
+          button.addEventListener("click", function () {
+            const selectedMode = this.getAttribute("data-mode");
+            switchMode(selectedMode);
+          });
+        });
 
-</script>
-</body>
+        // Input event listeners
+        input.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            queueRequest(() => sendMessage());
+          }
+        });
+
+        sendBtn.addEventListener("click", function (e) {
+          e.preventDefault();
+          queueRequest(() => sendMessage());
+        });
+
+        // Smart upload button functionality
+        const smartUploadBtn = document.getElementById("smart-upload-btn");
+        const vaultFileInput = document.getElementById("vault-file-input");
+        const analysisFileInput = document.getElementById(
+          "analysis-file-input",
+        );
+
+        smartUploadBtn.addEventListener("click", () => {
+          const choice = confirm(
+            "Choose upload type:\nOK = Upload to Vault\nCancel = AI Analysis",
+          );
+          if (choice) {
+            vaultFileInput.click();
+          } else {
+            analysisFileInput.click();
+          }
+        });
+
+        vaultFileInput.addEventListener("change", (e) => {
+          if (e.target.files.length > 0) {
+            handleFileUpload(Array.from(e.target.files));
+          }
+        });
+
+        analysisFileInput.addEventListener("change", (e) => {
+          if (e.target.files.length > 0) {
+            handleAnalysisUpload(Array.from(e.target.files));
+          }
+        });
+
+        const analyzeBtn = document.getElementById("analyze-btn");
+        if (analyzeBtn) {
+          analyzeBtn.addEventListener("click", () => {
+            console.log("🔍 Analyze button clicked");
+            analysisFileInput.click();
+          });
+          console.log("✅ Analyze button connected");
+        }
+
+        // Analysis button - Initialize after DOM fully loads
+
+        console.log("🎯 Event listeners added");
+        setTimeout(() => {
+          console.log("⏰ Starting status animation...");
+          loadStatus();
+        }, 800);
+      });
+
+      // Error handling for missing images
+      document.addEventListener("DOMContentLoaded", function () {
+        const images = document.querySelectorAll("img");
+        images.forEach((img) => {
+          img.onerror = function () {
+            console.warn(`Image failed to load: ${this.src}`);
+            this.style.display = "none";
+          };
+        });
+      });
+
+      // Auto-clear old documents when needed
+      window.addEventListener("beforeunload", clearOldDocuments);
+
+      function getDocumentContextForMessage(message) {
+        // Check if message is asking for document analysis
+        const analysisKeywords = [
+          "analyze",
+          "analysis",
+          "review",
+          "examine",
+          "document",
+          "content",
+          "explain",
+          "summary",
+        ];
+        const isAnalysisRequest = analysisKeywords.some((keyword) =>
+          message.toLowerCase().includes(keyword),
+        );
+
+        if (isAnalysisRequest && extractedDocuments.length > 0) {
+          // Get the most recent document
+          const latestDoc = extractedDocuments[extractedDocuments.length - 1];
+
+          console.log(
+            `📄 [FRONTEND] Sending document context: ${latestDoc.filename}`,
+          );
+
+          return {
+            filename: latestDoc.filename,
+            contentType: latestDoc.contentType,
+            wordCount: latestDoc.wordCount,
+            keyPhrases: latestDoc.keyPhrases,
+            content: latestDoc.content,
+            fullContent: latestDoc.fullContent,
+          };
+        }
+
+        return null;
+      }
+    </script>
+  </body>
 </html>
