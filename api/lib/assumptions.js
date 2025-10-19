@@ -376,7 +376,10 @@ function extractContext(text, position, radius) {
 }
 
 function generateSessionId() {
-  return `assumption-${crypto.randomUUID()}`;
+  const gen = typeof crypto.randomUUID === "function"
+    ? crypto.randomUUID()
+    : crypto.randomBytes(16).toString("hex");
+  return `assumption-${gen}`;
 }
 
 // TIER 3: REPORTING AND ANALYTICS
