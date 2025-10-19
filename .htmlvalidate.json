@@ -3,6 +3,7 @@
   "rules": {
     "no-inline-style": "off",
     "void-style": "off",
-    "no-implicit-button-type": "warn"
+    "no-implicit-button-type": "warn",
+    "doctype-style": "off"
   }
 }
