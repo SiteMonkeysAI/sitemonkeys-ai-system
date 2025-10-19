@@ -1320,7 +1320,7 @@ function trackOverride(overrideType, originalValue, newValue, reason) {
     original: originalValue,
     new: newValue,
     reason: reason,
-    session_id: `override-${crypto.randomUUID()}`,
+    session_id: `override-${crypto.randomUUID ? crypto.randomUUID() : crypto.randomBytes(16).toString("hex")}`,
   };
 
   systemOverrideLog.push(override);
