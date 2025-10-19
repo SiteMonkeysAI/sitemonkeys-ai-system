@@ -1,9 +1,22 @@
 import { processWithEliAndRoxy } from "./ai-processors.js";
 import OpenAI from "openai";
+import crypto from "crypto";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Helper function to generate secure IDs with timestamp
+function generateId(prefix = "") {
+  let randomPart;
+  if (typeof crypto.randomUUID === "function") {
+    randomPart = crypto.randomUUID();
+  } else {
+    randomPart = crypto.randomBytes(16).toString("hex");
+  }
+  const timestamp = Date.now();
+  return prefix ? `${prefix}-${timestamp}-${randomPart}` : `${timestamp}-${randomPart}`;
+}
 
 // PERSISTENT SESSION STORE - SURVIVES RESTARTS
 class PersistentSessionStore {
@@ -92,7 +105,7 @@ class OverrideAuditor {
     userPressure = false,
   ) {
     const overrideRecord = {
-      id: `OVR-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+      id: generateId("OVR"),
       timestamp: Date.now(),
       type: type,
       originalRule: originalRule,
@@ -322,7 +335,7 @@ export async function processRequest(requestBody) {
       conversation_history = [],
       vault_loaded = false,
       user_preference = null,
-      session_id = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      session_id = generateId("session"),
     } = requestBody;
 
     console.log(
