@@ -7,11 +7,10 @@
 // Import removed - tracer will be accessed via global
 
 export function addTracerDashboardEndpoint(app) {
-  
   // Cache for recent traces
   const recentTraces = [];
   const MAX_TRACES = 50;
-  
+
   // Store completed traces
   global.storeCompletedTrace = (traceData) => {
     recentTraces.unshift(traceData);
@@ -19,107 +18,111 @@ export function addTracerDashboardEndpoint(app) {
       recentTraces.pop();
     }
   };
-  
+
   // ================================================================
   // MAIN DASHBOARD ENDPOINT
   // ================================================================
-  
-  app.get('/api/tracer/dashboard', (req, res) => {
+
+  app.get("/api/tracer/dashboard", (req, res) => {
     try {
       // SECURITY CHECK - same pattern as inventory
-      const secretKey = 'inventory2024secure';
-      
+      const secretKey = "inventory2024secure";
+
       if (req.query.key !== secretKey) {
-        return res.status(401).json({ 
-          error: 'Unauthorized',
-          message: 'Missing or invalid key parameter' 
+        return res.status(401).json({
+          error: "Unauthorized",
+          message: "Missing or invalid key parameter",
         });
       }
-      
-      const format = req.query.format || 'html';
-      const filter = req.query.filter || 'all'; // all, warnings, errors
-      
+
+      const format = req.query.format || "html";
+      const filter = req.query.filter || "all"; // all, warnings, errors
+
       // Get current statistics
-      const stats = global.tracer ? global.tracer.getStatistics() : getEmptyStats();
-      
+      const stats = global.tracer
+        ? global.tracer.getStatistics()
+        : getEmptyStats();
+
       // Filter traces
       let filteredTraces = recentTraces;
-      if (filter === 'warnings') {
-        filteredTraces = recentTraces.filter(t => t.warnings > 0);
-      } else if (filter === 'errors') {
-        filteredTraces = recentTraces.filter(t => t.errors > 0);
+      if (filter === "warnings") {
+        filteredTraces = recentTraces.filter((t) => t.warnings > 0);
+      } else if (filter === "errors") {
+        filteredTraces = recentTraces.filter((t) => t.errors > 0);
       }
-      
+
       // Generate response
-      sendResponse(res, {
-        stats,
-        traces: filteredTraces,
-        enabled: process.env.TRACE_ENABLED === 'true',
-        timestamp: new Date().toISOString()
-      }, format);
-      
+      sendResponse(
+        res,
+        {
+          stats,
+          traces: filteredTraces,
+          enabled: process.env.TRACE_ENABLED === "true",
+          timestamp: new Date().toISOString(),
+        },
+        format,
+      );
     } catch (error) {
-      console.error('[TRACER DASHBOARD] Error:', error);
+      console.error("[TRACER DASHBOARD] Error:", error);
       res.status(500).json({
-        error: 'Dashboard failed',
-        message: error.message
+        error: "Dashboard failed",
+        message: error.message,
       });
     }
   });
-  
+
   // ================================================================
   // TRACE DETAILS ENDPOINT
   // ================================================================
-  
-  app.get('/api/tracer/trace/:traceId', (req, res) => {
+
+  app.get("/api/tracer/trace/:traceId", (req, res) => {
     try {
-      const secretKey = 'inventory2024secure';
-      
+      const secretKey = "inventory2024secure";
+
       if (req.query.key !== secretKey) {
-        return res.status(401).json({ 
-          error: 'Unauthorized',
-          message: 'Missing or invalid key parameter' 
+        return res.status(401).json({
+          error: "Unauthorized",
+          message: "Missing or invalid key parameter",
         });
       }
-      
+
       const traceId = req.params.traceId;
-      const trace = recentTraces.find(t => t.traceId === traceId);
-      
+      const trace = recentTraces.find((t) => t.traceId === traceId);
+
       if (!trace) {
         return res.status(404).json({
-          error: 'Trace not found',
-          message: `No trace found with ID: ${traceId}`
+          error: "Trace not found",
+          message: `No trace found with ID: ${traceId}`,
         });
       }
-      
+
       res.json(trace);
-      
     } catch (error) {
       res.status(500).json({
-        error: 'Failed to retrieve trace',
-        message: error.message
+        error: "Failed to retrieve trace",
+        message: error.message,
       });
     }
   });
-  
+
   // ================================================================
   // HELPER FUNCTIONS
   // ================================================================
-  
+
   function sendResponse(res, data, format) {
     switch (format) {
-      case 'json':
+      case "json":
         res.json(data);
         break;
-      
-      case 'html':
+
+      case "html":
       default:
-        res.type('text/html');
+        res.type("text/html");
         res.send(generateDashboardHTML(data));
         break;
     }
   }
-  
+
   function getEmptyStats() {
     return {
       totalRequests: 0,
@@ -128,17 +131,17 @@ export function addTracerDashboardEndpoint(app) {
       dataLossDetected: 0,
       avgExecutionTime: 0,
       activeTraces: 0,
-      moduleExecutions: {}
+      moduleExecutions: {},
     };
   }
-  
+
   // ================================================================
   // HTML GENERATION
   // ================================================================
-  
+
   function generateDashboardHTML(data) {
     const { stats, traces, enabled, timestamp } = data;
-    
+
     return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -495,8 +498,8 @@ export function addTracerDashboardEndpoint(app) {
       <p style="margin-top: 10px; font-size: 12px;">Last Updated: ${new Date(timestamp).toLocaleString()}</p>
     </div>
     
-    <div class="status-banner ${enabled ? 'status-enabled' : 'status-disabled'}">
-      ${enabled ? '✅ TRACING ENABLED - Monitoring all requests' : '⚠️ TRACING DISABLED - Set TRACE_ENABLED=true to enable'}
+    <div class="status-banner ${enabled ? "status-enabled" : "status-disabled"}">
+      ${enabled ? "✅ TRACING ENABLED - Monitoring all requests" : "⚠️ TRACING DISABLED - Set TRACE_ENABLED=true to enable"}
     </div>
     
     <div class="controls">
@@ -517,12 +520,12 @@ export function addTracerDashboardEndpoint(app) {
         <div class="stat-label">Successful Traces</div>
       </div>
       
-      <div class="stat-card ${stats.failedTraces > 0 ? 'error' : ''}">
+      <div class="stat-card ${stats.failedTraces > 0 ? "error" : ""}">
         <div class="stat-value">${stats.failedTraces}</div>
         <div class="stat-label">Failed Traces</div>
       </div>
       
-      <div class="stat-card ${stats.dataLossDetected > 0 ? 'warning' : ''}">
+      <div class="stat-card ${stats.dataLossDetected > 0 ? "warning" : ""}">
         <div class="stat-value">${stats.dataLossDetected}</div>
         <div class="stat-label">Data Loss Events</div>
       </div>
@@ -552,16 +555,16 @@ export function addTracerDashboardEndpoint(app) {
 </body>
 </html>`;
   }
-  
+
   function generateModuleExecutionsSection(moduleExecutions) {
     const modules = Object.entries(moduleExecutions || {});
-    
+
     if (modules.length === 0) {
-      return '';
+      return "";
     }
-    
+
     const sortedModules = modules.sort((a, b) => b[1] - a[1]);
-    
+
     return `
     <div class="section">
       <h2>🔧 Module Executions</h2>
@@ -574,22 +577,24 @@ export function addTracerDashboardEndpoint(app) {
           </tr>
         </thead>
         <tbody>
-          ${sortedModules.map(([module, count]) => {
-            const total = modules.reduce((sum, [, c]) => sum + c, 0);
-            const percentage = ((count / total) * 100).toFixed(1);
-            return `
+          ${sortedModules
+            .map(([module, count]) => {
+              const total = modules.reduce((sum, [, c]) => sum + c, 0);
+              const percentage = ((count / total) * 100).toFixed(1);
+              return `
               <tr>
                 <td><span class="module-name">${module}</span></td>
                 <td>${count}</td>
                 <td>${percentage}%</td>
               </tr>
             `;
-          }).join('')}
+            })
+            .join("")}
         </tbody>
       </table>
     </div>`;
   }
-  
+
   function generateRecentTracesSection(traces) {
     if (traces.length === 0) {
       return `
@@ -599,26 +604,31 @@ export function addTracerDashboardEndpoint(app) {
           <div class="empty-state-icon">📭</div>
           <div class="empty-state-text">No traces recorded yet</div>
           <div class="empty-state-hint">
-            ${process.env.TRACE_ENABLED === 'true' 
-              ? 'Send some chat requests to see traces appear here' 
-              : 'Enable tracing by setting TRACE_ENABLED=true'}
+            ${
+              process.env.TRACE_ENABLED === "true"
+                ? "Send some chat requests to see traces appear here"
+                : "Enable tracing by setting TRACE_ENABLED=true"
+            }
           </div>
         </div>
       </div>`;
     }
-    
+
     return `
     <div class="section">
       <h2>📊 Recent Traces (${traces.length})</h2>
-      ${traces.slice(0, 20).map(trace => generateTraceCard(trace)).join('')}
+      ${traces
+        .slice(0, 20)
+        .map((trace) => generateTraceCard(trace))
+        .join("")}
     </div>`;
   }
-  
+
   function generateTraceCard(trace) {
     const hasWarnings = trace.warnings > 0;
     const hasErrors = trace.errors > 0;
     const dataLost = trace.lostFields && trace.lostFields.length > 0;
-    
+
     return `
     <div class="trace-card">
       <div class="trace-header">
@@ -627,18 +637,26 @@ export function addTracerDashboardEndpoint(app) {
           <div class="trace-time">${new Date(trace.timestamp).toLocaleString()}</div>
         </div>
         <div>
-          ${trace.dataIntegrity === 'PASS' 
-            ? '<span class="badge badge-success">✓ Data Intact</span>' 
-            : '<span class="badge badge-error">✗ Data Loss</span>'}
-          ${trace.fallbackDetected 
-            ? '<span class="badge badge-warning">⚠ Fallback</span>' 
-            : ''}
-          ${hasWarnings 
-            ? `<span class="badge badge-warning">${trace.warnings} Warning${trace.warnings > 1 ? 's' : ''}</span>` 
-            : ''}
-          ${hasErrors 
-            ? `<span class="badge badge-error">${trace.errors} Error${trace.errors > 1 ? 's' : ''}</span>` 
-            : ''}
+          ${
+            trace.dataIntegrity === "PASS"
+              ? '<span class="badge badge-success">✓ Data Intact</span>'
+              : '<span class="badge badge-error">✗ Data Loss</span>'
+          }
+          ${
+            trace.fallbackDetected
+              ? '<span class="badge badge-warning">⚠ Fallback</span>'
+              : ""
+          }
+          ${
+            hasWarnings
+              ? `<span class="badge badge-warning">${trace.warnings} Warning${trace.warnings > 1 ? "s" : ""}</span>`
+              : ""
+          }
+          ${
+            hasErrors
+              ? `<span class="badge badge-error">${trace.errors} Error${trace.errors > 1 ? "s" : ""}</span>`
+              : ""
+          }
         </div>
       </div>
       
@@ -665,27 +683,43 @@ export function addTracerDashboardEndpoint(app) {
         
         <div class="trace-stat">
           <div class="trace-stat-label">Output</div>
-          <div class="trace-stat-value">${trace.outputVerified ? '✓ Verified' : '✗ Not Verified'}</div>
+          <div class="trace-stat-value">${trace.outputVerified ? "✓ Verified" : "✗ Not Verified"}</div>
         </div>
       </div>
       
-      ${dataLost ? `
+      ${
+        dataLost
+          ? `
         <div class="warning-list">
           <strong>⚠️ Data Loss Detected:</strong>
-          ${trace.lostFields.map(field => `
+          ${trace.lostFields
+            .map(
+              (field) => `
             <div class="warning-item">• Lost field: <code>${field}</code></div>
-          `).join('')}
+          `,
+            )
+            .join("")}
         </div>
-      ` : ''}
+      `
+          : ""
+      }
       
-      ${trace.warningMessages && trace.warningMessages.length > 0 ? `
+      ${
+        trace.warningMessages && trace.warningMessages.length > 0
+          ? `
         <div class="warning-list">
           <strong>⚠️ Warnings:</strong>
-          ${trace.warningMessages.map(msg => `
+          ${trace.warningMessages
+            .map(
+              (msg) => `
             <div class="warning-item">• ${msg}</div>
-          `).join('')}
+          `,
+            )
+            .join("")}
         </div>
-      ` : ''}
+      `
+          : ""
+      }
       
       <div style="margin-top: 15px;">
         <a href="/api/tracer/trace/${trace.traceId}?key=inventory2024secure" 

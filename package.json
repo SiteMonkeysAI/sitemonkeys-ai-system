@@ -25,7 +25,14 @@
     "fix-database": "node fix_database.js",
     "start": "node server.js",
     "test-intelligence": "node test-intelligence-system.js",
-    "validate-deployment": "node deploy-intelligence-upgrade.js"
+    "validate-deployment": "node deploy-intelligence-upgrade.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"**/*.{js,json,md,html,css}\"",
+    "format:check": "prettier --check \"**/*.{js,json,md,html,css}\"",
+    "validate:html": "html-validate public/index.html locked-ui/index.html",
+    "validate:css": "stylelint \"**/*.css\"",
+    "quality-check": "npm run lint && npm run format:check && npm run validate:html && npm run validate:css"
   },
   "engines": {
     "node": ">=14.0.0"

@@ -231,6 +231,7 @@ top -p $(pgrep -f "node server.js")
 The system includes a comprehensive 66-feature validation endpoint at `/api/system-status` that tests:
 
 ### Test Categories (66 Features)
+
 1. **Core Infrastructure** (6 tests)
    - Server running, Node.js version, environment, port, memory, uptime
 
@@ -321,10 +322,12 @@ psql $DATABASE_URL -c "SELECT 1;"
 ### Memory System Not Initializing
 
 Check server logs for memory initialization messages:
+
 - `[SERVER] 🚀 Starting memory system initialization...`
 - `[SERVER] ✅ Memory system initialized successfully`
 
 If timeout occurs, verify:
+
 - Database is accessible
 - DATABASE_URL is correct
 - PostgreSQL service is running
@@ -397,6 +400,7 @@ curl http://localhost:3000/api/system-status
 ## Support
 
 For deployment issues:
+
 - Review server logs for error messages
 - Check [RAILWAY_DEPLOY.md](./RAILWAY_DEPLOY.md) for Railway-specific issues
 - Verify all environment variables are set correctly
@@ -419,23 +423,23 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v3
         with:
-          node-version: '18'
-      
+          node-version: "18"
+
       - name: Install dependencies
         run: npm ci
-      
+
       - name: Run tests (if available)
         run: npm test || echo "No tests configured"
-      
+
       - name: Deploy to Railway
         run: |
           # Railway auto-deploys on push to main
           echo "Deployment triggered automatically by Railway"
-      
+
       - name: Verify Deployment
         run: |
           sleep 30

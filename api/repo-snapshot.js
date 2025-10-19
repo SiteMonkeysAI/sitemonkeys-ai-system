@@ -9,8 +9,27 @@ import path from "path";
 export default async function handler(req, res) {
   try {
     const repoRoot = process.cwd(); // Root of your Railway project
-    const includedExts = [".js", ".json", ".py", ".yml", ".yaml", ".html", ".css", ".md"];
-    const excludedExts = [".png", ".jpg", ".jpeg", ".gif", ".mp4", ".pdf", ".zip", ".rar", ".7z"];
+    const includedExts = [
+      ".js",
+      ".json",
+      ".py",
+      ".yml",
+      ".yaml",
+      ".html",
+      ".css",
+      ".md",
+    ];
+    const excludedExts = [
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".gif",
+      ".mp4",
+      ".pdf",
+      ".zip",
+      ".rar",
+      ".7z",
+    ];
     const maxCharsPerFile = 5000; // Adjustable cap per file
 
     function readFiles(dir) {
@@ -30,7 +49,8 @@ export default async function handler(req, res) {
             let truncated = false;
 
             if (content.length > maxCharsPerFile) {
-              content = content.substring(0, maxCharsPerFile) + "\n\n[TRUNCATED]";
+              content =
+                content.substring(0, maxCharsPerFile) + "\n\n[TRUNCATED]";
               truncated = true;
             }
 

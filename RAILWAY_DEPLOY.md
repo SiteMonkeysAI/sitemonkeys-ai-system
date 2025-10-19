@@ -33,12 +33,14 @@ The `railway.json` file in the root directory configures Railway's deployment be
 The following environment variables must be configured in your Railway project settings:
 
 ### Critical Variables (Required)
+
 - **DATABASE_URL**: PostgreSQL database connection string (automatically set when you add a PostgreSQL service)
 - **OPENAI_API_KEY**: Your OpenAI API key for GPT-4 integration
 - **ANTHROPIC_API_KEY**: Your Anthropic API key for Claude integration
 - **SESSION_SECRET**: Secret key for session management (any random string, e.g., generated with `openssl rand -base64 32`)
 
 ### Optional Variables
+
 - **NODE_ENV**: Set to `production` for production deployments
 - **PORT**: Railway automatically provides this (application uses `process.env.PORT || 3000`)
 
@@ -47,13 +49,14 @@ The following environment variables must be configured in your Railway project s
 ### Initial Setup (One-Time)
 
 1. **Create Railway Project**
+
    ```bash
    # Install Railway CLI (optional)
    npm i -g @railway/cli
-   
+
    # Login to Railway
    railway login
-   
+
    # Link your repository to Railway
    railway link
    ```
@@ -120,11 +123,13 @@ The application includes comprehensive health monitoring:
 You can monitor deployments in several ways:
 
 ### Railway Dashboard
+
 - View build logs in real-time
 - Monitor application logs
 - Check deployment status and history
 
 ### Railway CLI
+
 ```bash
 # View recent logs
 railway logs
@@ -139,17 +144,20 @@ railway open
 ## Troubleshooting
 
 ### Deployment Fails
+
 1. Check Railway build logs for errors
 2. Verify all environment variables are set correctly
 3. Ensure PostgreSQL service is running and connected
 
 ### Database Connection Issues
+
 ```bash
 # Run database diagnostic script
 npm run fix-database
 ```
 
 ### Memory Initialization Timeout
+
 - Check DATABASE_URL is valid
 - Verify PostgreSQL service is accessible
 - Review server logs for initialization errors
@@ -175,11 +183,13 @@ railway up
 ## Support
 
 For issues with Railway deployment:
+
 - Check Railway status: https://railway.app/status
 - Railway documentation: https://docs.railway.app
 - Project logs in Railway dashboard
 
 For application-specific issues:
+
 - Review server logs in Railway dashboard
 - Check memory system initialization logs
 - Verify all environment variables are correctly set

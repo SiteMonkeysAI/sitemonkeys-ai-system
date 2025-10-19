@@ -22,12 +22,14 @@ npm start
 ## System Status
 
 Access comprehensive 66-feature system validation:
+
 - Endpoint: `http://localhost:3000/api/system-status`
 - Tests: Core infrastructure, AI processing, memory systems, security, and more
 
 ## Environment Variables
 
 Required:
+
 - `OPENAI_API_KEY` - OpenAI API key for GPT-4
 - `ANTHROPIC_API_KEY` - Anthropic API key for Claude
 - `DATABASE_URL` - PostgreSQL connection string

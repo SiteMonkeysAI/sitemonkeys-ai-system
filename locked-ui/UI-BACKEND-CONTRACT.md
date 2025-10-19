@@ -1,4 +1,5 @@
 # UI-BACKEND API CONTRACT
+
 **Version:** 1.0.0  
 **Last Updated:** 2025-10-03  
 **Status:** 🔒 LOCKED - Changes require approval
@@ -16,6 +17,7 @@ This document defines the sacred contract between the Site Monkeys AI frontend a
 **Purpose:** Main chat interaction endpoint
 
 ### REQUEST FORMAT
+
 ```json
 {
   "message": "string",
@@ -39,3 +41,4 @@ This document defines the sacred contract between the Site Monkeys AI frontend a
     "keyPhrases": ["array of strings"]
   } | null
 }
+```

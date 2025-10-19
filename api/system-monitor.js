@@ -1,124 +1,136 @@
 // SYSTEM MONITOR DASHBOARD HANDLER
 // Import into server.js as: app.get('/api/system-monitor', monitorHandler)
 
-const MONITOR_KEY = process.env.MONITOR_KEY || 'changeme';
+const MONITOR_KEY = process.env.MONITOR_KEY || "changeme";
 
 const MAX_LOG_LINES = 200;
 const MAX_REQUESTS = 20;
 
 // --- LOG BUFFER IMPLEMENTATION ---
 class CircularLogBuffer {
-    constructor(size) {
-        this.size = size;
-        this.buffer = Array(size);
-        this.idx = 0;
-        this.filled = false;
-    }
-    push(entry) {
-        this.buffer[this.idx] = entry;
-        this.idx = (this.idx + 1) % this.size;
-        if (this.idx === 0) this.filled = true;
-    }
-    get() {
-        if (!this.filled) return this.buffer.slice(0, this.idx);
-        return this.buffer.slice(this.idx).concat(this.buffer.slice(0, this.idx));
-    }
+  constructor(size) {
+    this.size = size;
+    this.buffer = Array(size);
+    this.idx = 0;
+    this.filled = false;
+  }
+  push(entry) {
+    this.buffer[this.idx] = entry;
+    this.idx = (this.idx + 1) % this.size;
+    if (this.idx === 0) this.filled = true;
+  }
+  get() {
+    if (!this.filled) return this.buffer.slice(0, this.idx);
+    return this.buffer.slice(this.idx).concat(this.buffer.slice(0, this.idx));
+  }
 }
 
 const logBuffer = new CircularLogBuffer(MAX_LOG_LINES);
 
 // --- INTERCEPT CONSOLE LOGS ---
 (function interceptConsole() {
-    if (console._monkeyPatched) return; // Prevent double patch
+  if (console._monkeyPatched) return; // Prevent double patch
 
-    ['log', 'error', 'warn'].forEach((type) => {
-        const original = console[type];
-        console[type] = function (...args) {
-            const timestamp = new Date().toISOString();
-            logBuffer.push({
-                type,
-                timestamp,
-                message: args.map(a => {
-                    try { return typeof a === 'object' ? JSON.stringify(a) : String(a); }
-                    catch { return '[Unserializable Object]'; }
-                }).join(' ')
-            });
-            original.apply(console, args);
-        };
-    });
-    console._monkeyPatched = true;
+  ["log", "error", "warn"].forEach((type) => {
+    const original = console[type];
+    console[type] = function (...args) {
+      const timestamp = new Date().toISOString();
+      logBuffer.push({
+        type,
+        timestamp,
+        message: args
+          .map((a) => {
+            try {
+              return typeof a === "object" ? JSON.stringify(a) : String(a);
+            } catch {
+              return "[Unserializable Object]";
+            }
+          })
+          .join(" "),
+      });
+      original.apply(console, args);
+    };
+  });
+  console._monkeyPatched = true;
 })();
 
 // --- RECENT REQUEST TRACKING ---
 const recentRequests = new CircularLogBuffer(MAX_REQUESTS);
 function trackChatRequest({ timestamp, userMessage, status, tokensUsed }) {
-    recentRequests.push({
-        timestamp,
-        userMessage,
-        status,
-        tokensUsed
-    });
+  recentRequests.push({
+    timestamp,
+    userMessage,
+    status,
+    tokensUsed,
+  });
 }
 
 // --- LAST ERROR TRACKING ---
 let lastError = null;
 function trackError(err) {
-    lastError = {
-        timestamp: new Date().toISOString(),
-        message: err?.stack || (typeof err === 'string' ? err : JSON.stringify(err))
-    };
+  lastError = {
+    timestamp: new Date().toISOString(),
+    message:
+      err?.stack || (typeof err === "string" ? err : JSON.stringify(err)),
+  };
 }
 
 // Attach to global for integration into server.js, chat handler, and error handler:
 global.__systemMonitor = {
-    trackChatRequest,
-    trackError
+  trackChatRequest,
+  trackError,
 };
 
 // --- SESSION STATS INTEGRATION ---
 // sessionStats must exist globally or be imported here.
 // Expects: { totalTokens, totalCost, requests }
 function getSessionStats() {
-    // You may need to adjust this depending on your codebase
-    return (global.sessionStats || {
-        totalTokens: 0,
-        totalCost: 0,
-        requests: 0
-    });
+  // You may need to adjust this depending on your codebase
+  return (
+    global.sessionStats || {
+      totalTokens: 0,
+      totalCost: 0,
+      requests: 0,
+    }
+  );
 }
 
 // --- SYSTEM STATUS ---
 function getSystemStatus() {
-    const mem = process.memoryUsage();
-    return {
-        healthy: true, // If you have more advanced health checks, add here!
-        memory: {
-            rss: mem.rss,
-            heapTotal: mem.heapTotal,
-            heapUsed: mem.heapUsed,
-            external: mem.external,
-        },
-        uptime: process.uptime(),
-        lastError,
-        timestamp: new Date().toISOString()
-    };
+  const mem = process.memoryUsage();
+  return {
+    healthy: true, // If you have more advanced health checks, add here!
+    memory: {
+      rss: mem.rss,
+      heapTotal: mem.heapTotal,
+      heapUsed: mem.heapUsed,
+      external: mem.external,
+    },
+    uptime: process.uptime(),
+    lastError,
+    timestamp: new Date().toISOString(),
+  };
 }
 
 // --- DASHBOARD HTML ---
 function renderDashboard({ logs, status, sessionStats, recentRequests }) {
-    // Helper for formatting
-    function fmtBytes(b) {
-        if (b < 1024) return b + " B";
-        if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
-        return (b / (1024 * 1024)).toFixed(1) + " MB";
-    }
-    function fmtTime(s) {
-        let m = Math.floor(s / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
-        h %= 24; m %= 60; s = Math.floor(s % 60);
-        return `${d ? d + 'd ' : ''}${h ? h + 'h ' : ''}${m ? m + 'm ' : ''}${s}s`;
-    }
-    const healthy = status.healthy && !status.lastError;
-    return `
+  // Helper for formatting
+  function fmtBytes(b) {
+    if (b < 1024) return b + " B";
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
+    return (b / (1024 * 1024)).toFixed(1) + " MB";
+  }
+  function fmtTime(s) {
+    let m = Math.floor(s / 60),
+      h = Math.floor(m / 60),
+      d = Math.floor(h / 24);
+    h %= 24;
+    m %= 60;
+    s = Math.floor(s % 60);
+    return `${d ? d + "d " : ""}${h ? h + "h " : ""}${m ? m + "m " : ""}${s}s`;
+  }
+  const healthy = status.healthy && !status.lastError;
+  return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -134,7 +146,7 @@ h1 {
 }
 .health {
     text-align: center; font-size: 2.5em; margin: 0.5em 0;
-    color: ${healthy ? '#55dd88' : '#ff4444'};
+    color: ${healthy ? "#55dd88" : "#ff4444"};
     font-weight: bold;
 }
 .section {
@@ -175,7 +187,7 @@ tr:last-child td { border-bottom: none; }
 <div class="section">
     <h2>System Status</h2>
     <table>
-        <tr><th>Server Running</th><td>${healthy ? '✅' : '❌'}</td></tr>
+        <tr><th>Server Running</th><td>${healthy ? "✅" : "❌"}</td></tr>
         <tr><th>Uptime</th><td>${fmtTime(status.uptime)}</td></tr>
         <tr><th>Memory Usage</th>
             <td>
@@ -209,13 +221,17 @@ tr:last-child td { border-bottom: none; }
             <th>Status</th>
             <th>Tokens Used</th>
         </tr>
-        ${recentRequests.map(r => `
+        ${recentRequests
+          .map(
+            (r) => `
         <tr>
             <td>${r.timestamp}</td>
-            <td><code>${(r.userMessage || '').slice(0, 50)}</code></td>
+            <td><code>${(r.userMessage || "").slice(0, 50)}</code></td>
             <td>${r.status}</td>
-            <td>${r.tokensUsed != null ? r.tokensUsed : ''}</td>
-        </tr>`).join('')}
+            <td>${r.tokensUsed != null ? r.tokensUsed : ""}</td>
+        </tr>`,
+          )
+          .join("")}
     </table>
 </div>
 
@@ -227,12 +243,16 @@ tr:last-child td { border-bottom: none; }
             <th>Type</th>
             <th>Message</th>
         </tr>
-        ${logs.map(log => `
+        ${logs
+          .map(
+            (log) => `
         <tr>
             <td style="font-size:0.95em">${log.timestamp}</td>
-            <td>${log.type === 'log' ? '🟢' : log.type === 'warn' ? '🟡' : '🔴'} <code>${log.type}</code></td>
+            <td>${log.type === "log" ? "🟢" : log.type === "warn" ? "🟡" : "🔴"} <code>${log.type}</code></td>
             <td style="font-family:monospace;font-size:0.98em;">${log.message.slice(0, 1000)}</td>
-        </tr>`).join('')}
+        </tr>`,
+          )
+          .join("")}
     </table>
 </div>
 <footer style="text-align:center; color:#555; font-size:0.95em; margin:2em 0">Auto-refreshes every 10 seconds.</footer>
@@ -243,28 +263,31 @@ tr:last-child td { border-bottom: none; }
 
 // --- MAIN HANDLER ---
 async function monitorHandler(req, res) {
-    // --- SECURITY ---
-    const key = req.query.key || req.headers['x-monitor-key'];
-    if (!MONITOR_KEY || key !== MONITOR_KEY) {
-        res.status(403).send('Forbidden: Invalid monitor key');
-        return;
-    }
+  // --- SECURITY ---
+  const key = req.query.key || req.headers["x-monitor-key"];
+  if (!MONITOR_KEY || key !== MONITOR_KEY) {
+    res.status(403).send("Forbidden: Invalid monitor key");
+    return;
+  }
 
-    // --- GATHER DATA ---
-    const logs = logBuffer.get();
-    const status = getSystemStatus();
-    const sessionStats = getSessionStats();
-    const requests = recentRequests.get();
+  // --- GATHER DATA ---
+  const logs = logBuffer.get();
+  const status = getSystemStatus();
+  const sessionStats = getSessionStats();
+  const requests = recentRequests.get();
 
-    // --- HTML RESPONSE ---
-    res.set('Content-Type', 'text/html; charset=utf-8')
-       .status(200)
-       .send(renderDashboard({
-           logs: logs.reverse(),
-           status,
-           sessionStats,
-           recentRequests: requests.reverse()
-       }));
+  // --- HTML RESPONSE ---
+  res
+    .set("Content-Type", "text/html; charset=utf-8")
+    .status(200)
+    .send(
+      renderDashboard({
+        logs: logs.reverse(),
+        status,
+        sessionStats,
+        recentRequests: requests.reverse(),
+      }),
+    );
 }
 
 // --- EXPORT HANDLER ---

@@ -1,122 +1,200 @@
-<!DOCTYPE html>
+<!doctype html>
 
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Site Monkeys AI</title>
-<link href="https://fonts.cdnfonts.com/css/luckiest-guy" rel="stylesheet">
-<link href="https://fonts.googleapis.com/css?family=Carlito:400,700&display=swap" rel="stylesheet">
-<style>
-* { box-sizing: border-box; overflow-wrap: break-word; }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Site Monkeys AI</title>
+    <link href="https://fonts.cdnfonts.com/css/luckiest-guy" rel="stylesheet" />
+    <link
+      href="https://fonts.googleapis.com/css?family=Carlito:400,700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        box-sizing: border-box;
+        overflow-wrap: break-word;
+      }
 
-html, body {
-margin: 0; padding: 0;
-font-family: 'Carlito', Arial, sans-serif;
-background: #373534; color: white;
-min-height: 100vh; width: 100vw;
-overflow-x: hidden; display: flex; flex-direction: column;
--webkit-text-size-adjust: 100%;
--ms-text-size-adjust: 100%;
-}
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: "Carlito", Arial, sans-serif;
+        background: #373534;
+        color: white;
+        min-height: 100vh;
+        width: 100vw;
+        overflow-x: hidden;
+        display: flex;
+        flex-direction: column;
+        -webkit-text-size-adjust: 100%;
+        -ms-text-size-adjust: 100%;
+      }
 
-/* Additional styles omitted for brevity */
+      /* Additional styles omitted for brevity */
+    </style>
+  </head>
+  <body>
+    <header>
+      <div class="header-row">
+        <img src="logo.png" alt="Site Monkeys Logo" class="logo" />
+        <div class="header-center">
+          <div class="site-title">SITE MONKEYS AI</div>
+          <div class="subtitle">BUSINESS VALIDATION ENGINE</div>
+          <div class="mode-toggle-container">
+            <button class="mode-btn" id="truth-mode" data-mode="truth_general">
+              Truth
+            </button>
+            <button
+              class="mode-btn active"
+              id="business-mode"
+              data-mode="business_validation"
+            >
+              Business
+            </button>
+            <button
+              class="mode-btn"
+              id="sitemonkeys-mode"
+              data-mode="site_monkeys"
+            >
+              Site Monkeys
+            </button>
+          </div>
+        </div>
+        <img src="AI Robot.png" alt="AI Robot" class="ai-robot" />
+        <img src="rocket.png" alt="Rocket" class="rocket-top" />
+      </div>
+    </header>
 
-</style>
-</head>
-<body>
-<header>
-<div class="header-row">
-<img src="logo.png" alt="Site Monkeys Logo" class="logo">
-<div class="header-center">
-<div class="site-title">SITE MONKEYS AI</div>
-<div class="subtitle">BUSINESS VALIDATION ENGINE</div>
-<div class="mode-toggle-container">
-<button class="mode-btn" id="truth-mode" data-mode="truth_general">Truth</button>
-<button class="mode-btn active" id="business-mode" data-mode="business_validation">Business</button>
-<button class="mode-btn" id="sitemonkeys-mode" data-mode="site_monkeys">Site Monkeys</button>
-</div>
-</div>
-<img src="AI Robot.png" alt="AI Robot" class="ai-robot">
-<img src="rocket.png" alt="Rocket" class="rocket-top">
-</div>
-</header>
-
-<div class="main-wrapper">
-<img src="boy-mascot.png" alt="Eli Mascot" class="mascot mascot-left">
-<img src="girl-mascot.png" alt="Roxy Mascot" class="mascot mascot-right">
-<img src="rocket.png" alt="Mobile Rocket" class="mobile-rocket">
-<div class="main-content">
-<div class="status-panel">
-<div>
-<div class="status-title">Site Monkeys Business Validation System</div>
-<ul class="status-list" id="status-list">
-<li><span class="check">✅</span> Zero-Failure AI</li>
-<li><span class="check">✅</span> Complete Business Intelligence</li>
-<li><span class="check">✅</span> Real-World Validation Ready</li>
-<li><span class="check">✅</span> Site Monkeys memory vault loaded</li>
-<li><span class="check">✅</span> Zero Failure activated</li>
-<li><span class="check">✅</span> Legitimate data initiative activated</li>
-<li><span class="check">✅</span> Persistence driven activated</li>
-<li><span class="check">✅</span> helpful initiative activated</li>
-<li><span class="check">✅</span> Founder Protection activated</li>
-<li><span class="check">✅</span> Market leader Initiative</li>
-</ul>
-<div class="system-ready" id="system-ready"><span class="check">✅</span> SYSTEM READY</div>
-</div>
-<div class="vault-info" id="vault-info">
-<div><span style="color:#00FF00;">✅</span> VAULT READY</div>
-<div>🔢 <span id="token-count">Ready</span> TOKENS</div>
-<div>💰 EST. COST: <span id="cost-estimate">$0.00</span></div>
-<div>📁 <span id="vault-folders">Cached</span> FOLDERS LOADED</div>
-<button id="refresh-vault-btn" onclick="debouncedRefreshVault()" style="
-background: #FFD811;
-color: #373534;
-border: 1px solid #fff;
-border-radius: 8px;
-padding: 7px 10px;
-font-size: 0.8em;
-font-weight: bold;
-cursor: pointer;
-margin-top: 8px;
-width: 100%;
-transition: all 0.2s ease;
-" onmouseover="this.style.background='#ffe96a'" onmouseout="this.style.background='#FFD811'">
-🔄 Refresh Vault
-</button>
-</div>
-</div>
-<div class="chat-panel">
-<div class="chat-box" id="chat-box"></div>
-<div class="input-area">
-<button class="attachment-button" id="smart-upload-btn" aria-label="Upload Files" title="Upload files">
-📎
-</button>
-<button class="attachment-button" id="analyze-btn" aria-label="Analyze Document" title="Analyze Document" style="position: absolute; top: 5px; right: 70px; z-index: 100;">
-🔍
-</button>
-<textarea class="chat-input" id="user-input" placeholder="Ask Eli, Roxy, and AI about business validation..." rows="3"></textarea>
-<button class="send-button" id="send-btn" aria-label="Send">
-<img src="rocket.png" alt="Rocket Send" />
-</button>
-<input type="file" id="vault-file-input" accept=".docx,.doc,.pdf,.txt,.csv,.xlsx,.xls,.pptx,.ppt,.md,.rtf,.json,.xml,.html,.htm,.odt,.ods,.odp,.pages,.numbers,.key,.zip,.rar,.7z,.tar,.gz,.jpeg,.jpg,.png,.gif" multiple>
-<input type="file" id="analysis-file-input" accept=".docx,.doc,.pdf,.txt,.csv,.xlsx,.xls,.pptx,.ppt,.md,.rtf,.json,.xml,.html,.htm,.odt,.ods,.odp,.pages,.numbers,.key,.zip,.rar,.7z,.tar,.gz,.jpeg,.jpg,.png,.gif" multiple>
-</div>
-</div>
-</div>
-<footer>
-<img src="boy-mascot.png" alt="Eli" class="footer-mascot">
-<div class="footer-text">AI YOU CAN TRUST!</div>
-<img src="girl-mascot.png" alt="Roxy" class="footer-mascot">
-</footer>
-<div class="mobile-footer">
-<img src="boy-mascot.png" alt="Eli" class="footer-mascot">
-<div class="mobile-footer-text">AI YOU CAN TRUST!</div>
-<img src="girl-mascot.png" alt="Roxy" class="footer-mascot">
-</div>
-</div>
-<script>
-// JavaScript code omitted for brevity
-</script>
-</body>
+    <div class="main-wrapper">
+      <img src="boy-mascot.png" alt="Eli Mascot" class="mascot mascot-left" />
+      <img
+        src="girl-mascot.png"
+        alt="Roxy Mascot"
+        class="mascot mascot-right"
+      />
+      <img src="rocket.png" alt="Mobile Rocket" class="mobile-rocket" />
+      <div class="main-content">
+        <div class="status-panel">
+          <div>
+            <div class="status-title">
+              Site Monkeys Business Validation System
+            </div>
+            <ul class="status-list" id="status-list">
+              <li><span class="check">✅</span> Zero-Failure AI</li>
+              <li>
+                <span class="check">✅</span> Complete Business Intelligence
+              </li>
+              <li><span class="check">✅</span> Real-World Validation Ready</li>
+              <li>
+                <span class="check">✅</span> Site Monkeys memory vault loaded
+              </li>
+              <li><span class="check">✅</span> Zero Failure activated</li>
+              <li>
+                <span class="check">✅</span> Legitimate data initiative
+                activated
+              </li>
+              <li>
+                <span class="check">✅</span> Persistence driven activated
+              </li>
+              <li>
+                <span class="check">✅</span> helpful initiative activated
+              </li>
+              <li>
+                <span class="check">✅</span> Founder Protection activated
+              </li>
+              <li><span class="check">✅</span> Market leader Initiative</li>
+            </ul>
+            <div class="system-ready" id="system-ready">
+              <span class="check">✅</span> SYSTEM READY
+            </div>
+          </div>
+          <div class="vault-info" id="vault-info">
+            <div><span style="color: #00ff00">✅</span> VAULT READY</div>
+            <div>🔢 <span id="token-count">Ready</span> TOKENS</div>
+            <div>💰 EST. COST: <span id="cost-estimate">$0.00</span></div>
+            <div>📁 <span id="vault-folders">Cached</span> FOLDERS LOADED</div>
+            <button
+              id="refresh-vault-btn"
+              onclick="debouncedRefreshVault()"
+              style="
+                background: #ffd811;
+                color: #373534;
+                border: 1px solid #fff;
+                border-radius: 8px;
+                padding: 7px 10px;
+                font-size: 0.8em;
+                font-weight: bold;
+                cursor: pointer;
+                margin-top: 8px;
+                width: 100%;
+                transition: all 0.2s ease;
+              "
+              onmouseover="this.style.background='#ffe96a'"
+              onmouseout="this.style.background='#FFD811'"
+            >
+              🔄 Refresh Vault
+            </button>
+          </div>
+        </div>
+        <div class="chat-panel">
+          <div class="chat-box" id="chat-box"></div>
+          <div class="input-area">
+            <button
+              class="attachment-button"
+              id="smart-upload-btn"
+              aria-label="Upload Files"
+              title="Upload files"
+            >
+              📎
+            </button>
+            <button
+              class="attachment-button"
+              id="analyze-btn"
+              aria-label="Analyze Document"
+              title="Analyze Document"
+              style="position: absolute; top: 5px; right: 70px; z-index: 100"
+            >
+              🔍
+            </button>
+            <textarea
+              class="chat-input"
+              id="user-input"
+              placeholder="Ask Eli, Roxy, and AI about business validation..."
+              rows="3"
+            ></textarea>
+            <button class="send-button" id="send-btn" aria-label="Send">
+              <img src="rocket.png" alt="Rocket Send" />
+            </button>
+            <input
+              type="file"
+              id="vault-file-input"
+              accept=".docx,.doc,.pdf,.txt,.csv,.xlsx,.xls,.pptx,.ppt,.md,.rtf,.json,.xml,.html,.htm,.odt,.ods,.odp,.pages,.numbers,.key,.zip,.rar,.7z,.tar,.gz,.jpeg,.jpg,.png,.gif"
+              multiple
+            />
+            <input
+              type="file"
+              id="analysis-file-input"
+              accept=".docx,.doc,.pdf,.txt,.csv,.xlsx,.xls,.pptx,.ppt,.md,.rtf,.json,.xml,.html,.htm,.odt,.ods,.odp,.pages,.numbers,.key,.zip,.rar,.7z,.tar,.gz,.jpeg,.jpg,.png,.gif"
+              multiple
+            />
+          </div>
+        </div>
+      </div>
+      <footer>
+        <img src="boy-mascot.png" alt="Eli" class="footer-mascot" />
+        <div class="footer-text">AI YOU CAN TRUST!</div>
+        <img src="girl-mascot.png" alt="Roxy" class="footer-mascot" />
+      </footer>
+      <div class="mobile-footer">
+        <img src="boy-mascot.png" alt="Eli" class="footer-mascot" />
+        <div class="mobile-footer-text">AI YOU CAN TRUST!</div>
+        <img src="girl-mascot.png" alt="Roxy" class="footer-mascot" />
+      </div>
+    </div>
+    <script>
+      // JavaScript code omitted for brevity
+    </script>
+  </body>
 </html>
