@@ -186,7 +186,7 @@ function addOutputFingerprint(content, contentType = 'general') {
 
 function generateEntropy() {
   // Use crypto.randomUUID() if available, fallback to crypto.randomBytes()
-  if (crypto.randomUUID) {
+  if (typeof crypto.randomUUID === "function") {
     return crypto.randomUUID();
   }
   

@@ -11,7 +11,7 @@ import crypto from 'crypto';
 // Helper function to generate secure IDs with timestamp
 function generateId(prefix = "") {
   let randomPart;
-  if (crypto.randomUUID) {
+  if (typeof crypto.randomUUID === "function") {
     randomPart = crypto.randomUUID();
   } else {
     randomPart = crypto.randomBytes(16).toString("hex");
