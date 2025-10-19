@@ -4,7 +4,7 @@
 
 import multer from 'multer';
 import path from 'path';
-import fs from 'fs';
+import _fs from 'fs';
 
 // Configure multer for file uploads (in-memory storage)
 const storage = multer.memoryStorage();
@@ -22,7 +22,7 @@ const upload = multer({
 
 // File type detection
 function detectFileType(filename, mimetype) {
-  const ext = path.extname(filename).toLowerCase();
+  const _ext = path.extname(filename).toLowerCase();
   
   // Images
   if (/\.(jpg|jpeg|png|gif|bmp|svg|tiff|webp)$/i.test(filename) || mimetype.startsWith('image/')) {
