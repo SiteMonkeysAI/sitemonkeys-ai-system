@@ -3,6 +3,8 @@
 // TIER 2: HEALTH ASSESSMENT AND CONFLICT DETECTION
 // TIER 3: OVERRIDE TRACKING AND PATTERN ANALYSIS
 
+import crypto from "crypto";
+
 // Helper functions for logging and drift status
 function logOverride(type, details, _context) {
   console.log(`[ASSUMPTION OVERRIDE] ${type}:`, details);
@@ -374,7 +376,7 @@ function extractContext(text, position, radius) {
 }
 
 function generateSessionId() {
-  return `assumption-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+  return `assumption-${crypto.randomUUID()}`;
 }
 
 // TIER 3: REPORTING AND ANALYTICS

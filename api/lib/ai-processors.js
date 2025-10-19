@@ -3,6 +3,7 @@
 
 // ==================== SELF-CONTAINED IMPORTS ====================
 // Only import from files that definitely exist
+import crypto from "crypto";
 import OpenAI from "openai";
 import { EnhancedIntelligence } from "./enhanced-intelligence.js";
 
@@ -1319,7 +1320,7 @@ function trackOverride(overrideType, originalValue, newValue, reason) {
     original: originalValue,
     new: newValue,
     reason: reason,
-    session_id: `override-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    session_id: `override-${crypto.randomUUID()}`,
   };
 
   systemOverrideLog.push(override);

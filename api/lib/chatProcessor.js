@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { processWithEliAndRoxy } from "./ai-processors.js";
 import OpenAI from "openai";
 
@@ -322,7 +323,7 @@ export async function processRequest(requestBody) {
       conversation_history = [],
       vault_loaded = false,
       user_preference = null,
-      session_id = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      session_id = `session_${crypto.randomUUID()}`,
     } = requestBody;
 
     console.log(
