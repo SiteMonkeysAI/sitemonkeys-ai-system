@@ -21,6 +21,7 @@ import { addInventoryEndpoint } from "./system-inventory-endpoint.js";
 import Orchestrator from "./api/core/orchestrator.js";
 import systemStatus from "./api/system-status.js"; // <-- ADDED
 import { runAllTests } from "./api/test-suite.js";
+import loadVaultHandler from "./api/load-vault.js";
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -192,6 +193,9 @@ app.get("/api/health", (req, res) => {
 
 // System status endpoint
 app.get("/api/system-status", systemStatus); // <-- ADDED
+
+// Vault loading endpoint - connects frontend to existing vault-loader.js
+app.post("/api/load-vault", loadVaultHandler);
 
 // Test suite endpoint - comprehensive feature validation
 app.get("/api/run-tests", async (req, res) => {
