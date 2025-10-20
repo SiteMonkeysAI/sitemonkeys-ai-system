@@ -104,10 +104,21 @@ async function initializeMemorySystem() {
       `[SERVER] ✅ Memory system initialized successfully: ${initResult}`,
     );
 
+    // CRITICAL FIX: Expose persistentMemory as global.memorySystem
+    global.memorySystem = persistentMemory;
+    console.log("[SERVER] ✅ Memory system exposed as global.memorySystem");
+
+    // Initialize intelligence system
+    await persistentMemory.intelligenceSystem.initialize();
+    console.log("[SERVER] ✅ Intelligence system initialized");
+
     // Verify memory system is working
     console.log("[SERVER] 📊 Memory system verification:", {
       available: !!global.memorySystem,
-      ready: persistentMemory.coreSystem?.isInitialized || false,
+      ready: persistentMemory.isReady(),
+      coreInitialized: persistentMemory.coreSystem?.isInitialized || false,
+      intelligenceInitialized:
+        persistentMemory.intelligenceSystem?.isInitialized || false,
     });
   } catch (initError) {
     console.error("[SERVER] ❌ Memory system initialization error:", {
@@ -202,6 +213,28 @@ app.post("/api/chat", async (req, res) => {
       vaultContext,
       conversationHistory,
     });
+
+    // CRITICAL FIX: Store conversation in memory after successful processing
+    if (result.success && global.memorySystem && global.memorySystem.storeMemory) {
+      try {
+        await global.memorySystem.storeMemory(
+          userId,
+          message,
+          result.response,
+          {
+            mode: mode,
+            sessionId: sessionId,
+            confidence: result.metadata?.confidence,
+            timestamp: new Date().toISOString(),
+          }
+        );
+        console.log("[CHAT] 💾 Conversation stored in memory system");
+      } catch (_storageError) {
+        // Sanitize error message - don't expose database details
+        console.error("[CHAT] ⚠️ Failed to store conversation: Memory system unavailable");
+        // Don't fail the request if storage fails
+      }
+    }
 
     res.json(result);
   } catch (error) {

@@ -216,6 +216,44 @@ class CoreSystem {
       this.logger.error("Health check failed:", error);
     }
   }
+
+  async updateMemoryAccess(memoryId) {
+    try {
+      await this.executeQuery(
+        `
+        UPDATE persistent_memories 
+        SET last_accessed = CURRENT_TIMESTAMP,
+            usage_frequency = usage_frequency + 1
+        WHERE id = $1
+      `,
+        [memoryId],
+      );
+    } catch (error) {
+      this.logger.error("Failed to update memory access:", error);
+    }
+  }
+
+  async withDbClient(callback) {
+    const client = await this.pool.connect();
+    try {
+      return await callback(client);
+    } finally {
+      client.release();
+    }
+  }
+
+  async getRelatedCategories(primaryCategory) {
+    // Define category relationships
+    const relationships = {
+      personal_life_interests: ["relationships_social"],
+      relationships_social: ["personal_life_interests", "mental_emotional"],
+      work_career: ["goals_active_current"],
+      mental_emotional: ["relationships_social", "health_wellness"],
+      health_wellness: ["mental_emotional"],
+    };
+
+    return relationships[primaryCategory] || [];
+  }
 }
 
 const coreSystem = new CoreSystem();
