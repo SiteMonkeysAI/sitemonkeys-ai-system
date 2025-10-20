@@ -445,6 +445,21 @@ export class Orchestrator {
           totalCostIncludingAnalysis:
             (aiResponse.cost?.totalCost || 0) + (analysis.cost || 0),
 
+          // FIX #5: Add token_usage to API response for frontend display
+          token_usage: {
+            prompt_tokens: aiResponse.cost?.inputTokens || 0,
+            completion_tokens: aiResponse.cost?.outputTokens || 0,
+            total_tokens: (aiResponse.cost?.inputTokens || 0) + (aiResponse.cost?.outputTokens || 0),
+            context_tokens: {
+              memory: memoryContext.tokens || 0,
+              documents: documentData?.tokens || 0,
+              vault: vaultData?.tokens || 0,
+              total_context: context.totalTokens || 0,
+            },
+            cost_usd: aiResponse.cost?.totalCost || 0,
+            cost_display: `$${(aiResponse.cost?.totalCost || 0).toFixed(4)}`,
+          },
+
           // NEW: Compliance metadata
           compliance_metadata: enforcedResult.compliance_metadata,
 
@@ -579,20 +594,21 @@ export class Orchestrator {
 
   async #loadDocumentContext(documentContext, sessionId) {
     try {
-      if (
-        !extractedDocuments[sessionId] ||
-        extractedDocuments[sessionId].length === 0
-      ) {
+      // FIX #1: Properly access extractedDocuments Map (stored with .set("latest", {...}))
+      // Previously tried to access as array: extractedDocuments[sessionId]
+      const latestDoc = extractedDocuments.get("latest");
+      
+      if (!latestDoc) {
+        this.log("[DOCUMENTS] No document found in storage");
         return null;
       }
 
-      const docs = extractedDocuments[sessionId];
-      const latestDoc = docs[docs.length - 1];
-
-      const tokens = Math.ceil(latestDoc.content.length / 4);
+      // Use fullContent if available, otherwise fall back to preview content
+      const documentContent = latestDoc.fullContent || latestDoc.content;
+      const tokens = Math.ceil(documentContent.length / 4);
 
       if (tokens > 10000) {
-        const truncated = latestDoc.content.substring(0, 40000);
+        const truncated = documentContent.substring(0, 40000);
         this.log(`[DOCUMENTS] Truncated from ${tokens} to ~10000 tokens`);
 
         return {
@@ -604,8 +620,9 @@ export class Orchestrator {
         };
       }
 
+      this.log(`[DOCUMENTS] Loaded: ${latestDoc.filename} (${tokens} tokens)`);
       return {
-        content: latestDoc.content,
+        content: documentContent,
         tokens: tokens,
         filename: latestDoc.filename,
         processed: true,
@@ -646,11 +663,18 @@ export class Orchestrator {
         };
       }
 
-      // 3️⃣ No vault found
-      this.log("[VAULT] Not available in any source");
+      // FIX #2: Better error handling - provide more context
+      // 3️⃣ No vault found - provide helpful diagnostic info
+      this.log("[VAULT] Not available - vault requires site_monkeys mode and vault content to be loaded");
+      this.log(`[VAULT] Diagnostic: global.vaultContent exists: ${!!global.vaultContent}, length: ${global.vaultContent?.length || 0}`);
       return null;
     } catch (error) {
-      this.error("[VAULT] Loading failed, continuing without vault", error);
+      // FIX #2: Improved error logging with more context
+      this.error("[VAULT] Loading failed - Error details:", {
+        message: error.message,
+        hasGlobalVault: !!global.vaultContent,
+        hasVaultCandidate: !!vaultCandidate,
+      });
       return null;
     }
   }
@@ -1166,8 +1190,9 @@ export class Orchestrator {
       const adjustments = [];
       let adjustedResponse = response;
 
+      // FIX #3: Less strict confidence validation - only flag very low confidence
       if (
-        confidence < 0.7 &&
+        confidence < 0.5 &&
         !response.includes("uncertain") &&
         !response.includes("don't know")
       ) {
@@ -1177,24 +1202,26 @@ export class Orchestrator {
         adjustments.push("Added uncertainty acknowledgment");
       }
 
+      // FIX #3: Less strict business validation - accept more flexible language
       if (mode === "business_validation") {
-        const hasRiskAnalysis = /risk|downside|worst case|if this fails/i.test(
+        // Accept broader range of risk-related keywords
+        const hasRiskAnalysis = /risk|downside|worst case|if this fails|concern|challenge|issue|problem|difficulty|obstacle/i.test(
           response,
         );
-        const hasSurvivalImpact = /survival|runway|cash flow|burn rate/i.test(
+        // Accept broader range of business impact keywords
+        const hasSurvivalImpact = /survival|runway|cash flow|burn rate|revenue|cost|budget|timeline|deadline|financial/i.test(
           response,
         );
 
-        if (!hasRiskAnalysis) {
-          issues.push("Missing risk analysis in business validation mode");
-        }
-        if (!hasSurvivalImpact) {
-          issues.push("Missing survival impact in business validation mode");
+        // Only flag if BOTH are missing (not each individually)
+        if (!hasRiskAnalysis && !hasSurvivalImpact) {
+          issues.push("Business validation response could be more specific about risks and business impact");
         }
       }
 
+      // FIX #3: More lenient engagement bait detection - only flag obvious cases
       const hasEngagementBait =
-        /would you like me to|should i|want me to|let me know if/i.test(
+        /would you like me to specifically|should i create|want me to build|let me know if you need me to/i.test(
           response,
         );
       if (hasEngagementBait) {
@@ -1202,10 +1229,11 @@ export class Orchestrator {
         adjustments.push("Flagged engagement phrases for review");
       }
 
+      // FIX #3: More lenient completeness check
       const isComplete =
-        response.length > 100 &&
-        !response.endsWith("?") &&
-        !response.includes("to be continued");
+        response.length > 50 &&
+        !response.includes("to be continued") &&
+        !response.includes("[incomplete]");
 
       if (!isComplete) {
         issues.push("Response may be incomplete");
@@ -1326,11 +1354,13 @@ export class Orchestrator {
       );
 
       // STOP HERE - Do not add document context when vault is present
+      // FIX #4: Enhanced memory acknowledgment in vault mode
       if (context.sources?.hasMemory && context.memory) {
         const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
-        contextStr += `\n\n**📝 MEMORY CONTEXT AVAILABLE (${memoryCount} previous interactions):**\n`;
-        contextStr += `You have access to relevant information from past conversations with this user. Use this information to provide personalized responses.\n`;
+        contextStr += `\n\n**📝 MEMORY CONTEXT (${memoryCount} relevant interactions retrieved):**\n`;
+        contextStr += `I have access to previous conversations with you. I will use this context to provide personalized, contextually-aware responses.\n`;
         contextStr += `${context.memory}\n`;
+        contextStr += `\n**Note:** I am actively using the above memory to inform my response.\n`;
       }
 
       return contextStr;
@@ -1341,17 +1371,21 @@ export class Orchestrator {
       "[ORCHESTRATOR] No vault available - using standard context priority",
     );
 
+    // FIX #4: Enhanced memory acknowledgment in standard mode
     if (context.sources?.hasMemory && context.memory) {
       const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
-      contextStr += `\n\n**📝 MEMORY CONTEXT AVAILABLE (${memoryCount} previous interactions):**\n`;
-      contextStr += `You have access to relevant information from past conversations with this user. Use this information to provide informed, personalized responses.\n\n`;
+      contextStr += `\n\n**📝 MEMORY CONTEXT (${memoryCount} relevant interactions retrieved):**\n`;
+      contextStr += `I have access to previous conversations with you and will use this information to provide informed, contextually-aware responses.\n\n`;
       contextStr += `**Relevant Information from Past Conversations:**\n${context.memory}\n`;
+      contextStr += `\n**Note:** I am actively using the above memory context to inform my response.\n`;
     } else {
-      contextStr += `\n\n**📝 MEMORY STATUS:** No previous conversation history available for this query.\n`;
+      contextStr += `\n\n**📝 MEMORY STATUS:** This appears to be our first conversation, or no relevant previous context was found. I'll provide the best response based on your current query.\n`;
     }
 
     if (context.sources?.hasDocuments && context.documents) {
-      contextStr += `\n\n**Uploaded Document Context:**\n${context.documents}\n`;
+      contextStr += `\n\n**📄 UPLOADED DOCUMENT CONTEXT:**\n`;
+      contextStr += `I have access to the uploaded document and will reference it in my response.\n\n`;
+      contextStr += `${context.documents}\n`;
     }
 
     return contextStr;
