@@ -1,4 +1,4 @@
-# Quick Reference: Three Critical Fixes
+# Quick Reference: Four Critical Fixes
 
 ## 🎯 What Was Fixed
 
@@ -19,6 +19,12 @@
 **Root Cause:** Frontend only showed session totals  
 **Fix Location:** `public/js/app.js` lines 117-162  
 **Result:** Per-request display showing tokens, cost, and context sources
+
+### 4. Session Memory Leak ✅
+**Problem:** MemoryStore warning in production logs, memory leaks over time  
+**Root Cause:** Using in-memory session storage instead of PostgreSQL  
+**Fix Location:** `server.js` lines 12, 33, 66-105  
+**Result:** PostgreSQL-backed sessions prevent memory leaks and enable horizontal scaling
 
 ---
 
@@ -46,6 +52,14 @@
    - Send any chat message
    - Look above chat area for token display
    - Should show: "💰 Tokens: X + Y = Z | Cost: $..."
+   ```
+
+4. **Test Session Storage:**
+   ```
+   - Check Railway logs for: "[SERVER] 🔐 Session storage: PostgreSQL (production-ready)"
+   - Verify NO warning about MemoryStore
+   - Check PostgreSQL for user_sessions table
+   - Send requests and verify sessions persist
    ```
 
 ---
@@ -95,6 +109,23 @@ if (data.metadata) {
 }
 ```
 
+### server.js (Session Storage)
+```javascript
+import connectPgSimple from "connect-pg-simple";
+const PgSession = connectPgSimple(session);
+
+// Use PostgreSQL session store in production
+if (process.env.DATABASE_URL) {
+  sessionConfig.store = new PgSession({
+    conString: process.env.DATABASE_URL,
+    tableName: "user_sessions",
+    pruneSessionInterval: 60 * 15,
+    createTableIfMissing: true,
+  });
+  console.log("[SERVER] 🔐 Session storage: PostgreSQL (production-ready)");
+}
+```
+
 ---
 
 ## 🚨 Troubleshooting
@@ -113,6 +144,12 @@ if (data.metadata) {
 1. Check browser console for errors
 2. Verify `data.metadata.token_usage` exists in response
 3. Check if `#token-display` element is created
+
+### If session warning still appears:
+1. Check Railway logs for session storage message
+2. Verify `DATABASE_URL` environment variable is set
+3. Check PostgreSQL for `user_sessions` table creation
+4. Verify connect-pg-simple package is installed
 
 ---
 
@@ -136,6 +173,17 @@ if (data.metadata) {
 [COST] Updated cost estimate
 ```
 
+### Session Storage (Production):
+```
+[SERVER] 🔐 Session storage: PostgreSQL (production-ready)
+```
+
+### Session Storage (Development):
+```
+[SERVER] ⚠️ Session storage: MemoryStore (development only - will leak memory in production)
+[SERVER] ⚠️ Set DATABASE_URL to use PostgreSQL session storage
+```
+
 ---
 
 ## ✅ Test Results
@@ -145,6 +193,7 @@ if (data.metadata) {
 - ✅ Linting: 0 errors
 - ✅ Security scan: 0 vulnerabilities
 - ✅ Documentation: Complete
+- ✅ Session storage: PostgreSQL in production, graceful fallback in development
 
 ---
 
@@ -158,10 +207,11 @@ if (data.metadata) {
 
 ## 🎉 Summary
 
-All three critical issues are now fixed with minimal, surgical code changes. The fixes are:
+All four critical issues are now fixed with minimal, surgical code changes. The fixes are:
 - **Tested** - Automated tests validate logic
 - **Secure** - CodeQL scan passed
 - **Documented** - Complete technical docs
 - **Visual** - Screenshots demonstrate features
+- **Production-Ready** - PostgreSQL sessions prevent memory leaks
 
 Ready for deployment! 🚀
