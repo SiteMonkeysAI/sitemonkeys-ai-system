@@ -8,12 +8,14 @@ name: Quality-Chain
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     branches: [main, staging]
   workflow_dispatch:
 
 jobs:
   maintenance:
     name: 🔧 Maintenance (lint / format)
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
