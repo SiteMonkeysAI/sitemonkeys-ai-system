@@ -299,9 +299,9 @@ export class Orchestrator {
 
       // STEP 3: Load vault (if Site Monkeys mode and enabled)
       const vaultData = vaultContext
-        ? await this.#loadVaultContext(vaultContext, mode)
+        ? await this.#loadVaultContext(vaultContext)
         : mode === "site_monkeys" && vaultEnabled
-          ? await this.#loadVaultContext(null, mode)
+          ? await this.#loadVaultContext(userId, sessionId)
           : null;
       if (vaultData) {
         this.log(`[VAULT] Loaded ${vaultData.tokens} tokens`);
@@ -414,13 +414,6 @@ export class Orchestrator {
       return {
         success: true,
         response: enforcedResult.response,
-        token_usage: {
-          session_total_tokens: aiResponse.cost?.tokens_used || 0,
-          session_total_cost: aiResponse.cost?.session_total || 0,
-          prompt_tokens: aiResponse.cost?.prompt_tokens || 0,
-          completion_tokens: aiResponse.cost?.completion_tokens || 0,
-          call_cost: aiResponse.cost?.call_cost || 0,
-        },
         metadata: {
           // Context tracking
           memoryUsed: memoryContext.hasMemory,
@@ -586,106 +579,78 @@ export class Orchestrator {
 
   async #loadDocumentContext(documentContext, sessionId) {
     try {
-      if (!documentContext) {
-        console.log('[ORCHESTRATOR] [DOCUMENT] No document context provided');
+      if (
+        !extractedDocuments[sessionId] ||
+        extractedDocuments[sessionId].length === 0
+      ) {
         return null;
       }
 
-      // FIX: extractedDocuments is a Map using "latest" key, not array with sessionId
-      
-      // Try sessionId first (for future compatibility)
-      let latestDoc = extractedDocuments.get(sessionId);
-      
-      // Fallback to "latest" key (current implementation)
-      if (!latestDoc) {
-        latestDoc = extractedDocuments.get("latest");
-      }
+      const docs = extractedDocuments[sessionId];
+      const latestDoc = docs[docs.length - 1];
 
-      if (!latestDoc) {
-        console.log('[ORCHESTRATOR] [DOCUMENT] No documents found in storage');
-        return null;
-      }
+      const tokens = Math.ceil(latestDoc.content.length / 4);
 
-      console.log(`[ORCHESTRATOR] [DOCUMENT] Loaded: ${latestDoc.filename}`);
-
-      const content = latestDoc.fullContent || latestDoc.content;
-      const tokens = Math.ceil(content.length / 4);
-
-      // Enforce 10K token limit
       if (tokens > 10000) {
-        const truncatedContent = content.substring(0, 40000);
-        console.log(`[ORCHESTRATOR] [DOCUMENT] Truncated from ${tokens} to ~10000 tokens`);
+        const truncated = latestDoc.content.substring(0, 40000);
+        this.log(`[DOCUMENTS] Truncated from ${tokens} to ~10000 tokens`);
+
         return {
-          content: truncatedContent,
+          content: truncated,
           tokens: 10000,
           filename: latestDoc.filename,
           processed: true,
-          truncated: true
+          truncated: true,
         };
       }
 
       return {
-        content: content,
+        content: latestDoc.content,
         tokens: tokens,
         filename: latestDoc.filename,
-        wordCount: latestDoc.wordCount,
-        processed: true
+        processed: true,
+        truncated: false,
       };
     } catch (error) {
-      console.error('[ORCHESTRATOR] [DOCUMENT] Error loading:', error);
+      this.error(
+        "[DOCUMENTS] Loading failed, continuing without documents",
+        error,
+      );
       return null;
     }
   }
 
   // ==================== STEP 3: LOAD VAULT CONTEXT ====================
 
-  async #loadVaultContext(vaultCandidate, mode) {
+  async #loadVaultContext(vaultCandidate, _maybeSession) {
     try {
-      console.log(`[ORCHESTRATOR] [VAULT] Loading vault for mode: ${mode}`);
-      
-      if (mode !== 'site_monkeys') {
-        console.log('[ORCHESTRATOR] [VAULT] Skipped - not in site_monkeys mode');
-        return null;
+      // 1️⃣ If vault object was passed directly from the server
+      if (vaultCandidate && vaultCandidate.content && vaultCandidate.loaded) {
+        const tokens = Math.ceil(vaultCandidate.content.length / 4);
+        this.log(`[VAULT] Loaded from request: ${tokens} tokens`);
+        return {
+          content: vaultCandidate.content,
+          tokens,
+          loaded: true,
+        };
       }
 
-      // Check all vault sources with detailed logging
-      let vaultContent = null;
-      
-      // Source 1: Request context
-      if (vaultCandidate?.content && vaultCandidate.content.length > 1000) {
-        vaultContent = vaultCandidate.content;
-        console.log('[ORCHESTRATOR] [VAULT] ✅ Loaded from request context');
-      }
-      
-      // Source 2: Global cache
-      if (!vaultContent && global.vaultContent && global.vaultContent.length > 1000) {
-        vaultContent = global.vaultContent;
-        console.log('[ORCHESTRATOR] [VAULT] ✅ Loaded from global cache');
-      }
-      
-      // Source 3: Vault library
-      if (!vaultContent) {
-        vaultContent = generateVaultContext();
-        if (vaultContent && vaultContent.length > 1000) {
-          console.log('[ORCHESTRATOR] [VAULT] ✅ Loaded from vault library');
-        }
+      // 2️⃣ Otherwise try the global cache
+      if (global.vaultContent && global.vaultContent.length > 1000) {
+        const tokens = Math.ceil(global.vaultContent.length / 4);
+        this.log(`[VAULT] Loaded from global: ${tokens} tokens`);
+        return {
+          content: global.vaultContent,
+          tokens,
+          loaded: true,
+        };
       }
 
-      if (!vaultContent || vaultContent.length < 1000) {
-        console.log('[ORCHESTRATOR] [VAULT] ❌ Not available in any source');
-        return null;
-      }
-
-      const tokens = Math.ceil(vaultContent.length / 4);
-      console.log(`[ORCHESTRATOR] [VAULT] ✅ Available: ${tokens} tokens`);
-
-      return {
-        content: vaultContent,
-        tokens: tokens,
-        loaded: true
-      };
+      // 3️⃣ No vault found
+      this.log("[VAULT] Not available in any source");
+      return null;
     } catch (error) {
-      console.error('[ORCHESTRATOR] [VAULT] Error:', error);
+      this.error("[VAULT] Loading failed, continuing without vault", error);
       return null;
     }
   }
@@ -1212,22 +1177,20 @@ export class Orchestrator {
         adjustments.push("Added uncertainty acknowledgment");
       }
 
-      // Relaxed validation - only flag if response is VERY generic
       if (mode === "business_validation") {
-        const hasBusinessContext = /risk|cost|revenue|profit|loss|budget|timeline|resource|decision|impact/i.test(
+        const hasRiskAnalysis = /risk|downside|worst case|if this fails/i.test(
           response,
         );
         const hasSurvivalImpact = /survival|runway|cash flow|burn rate/i.test(
           response,
         );
-        
-        // Only flag if response has NO business context at all
-        if (!hasBusinessContext && !hasSurvivalImpact) {
-          issues.push("Response lacks business context in business validation mode");
+
+        if (!hasRiskAnalysis) {
+          issues.push("Missing risk analysis in business validation mode");
         }
-        
-        // Don't require survival keywords on every response
-        // (Original strict check removed)
+        if (!hasSurvivalImpact) {
+          issues.push("Missing survival impact in business validation mode");
+        }
       }
 
       const hasEngagementBait =
@@ -1366,9 +1329,8 @@ export class Orchestrator {
       if (context.sources?.hasMemory && context.memory) {
         const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
         contextStr += `\n\n**📝 MEMORY CONTEXT AVAILABLE (${memoryCount} previous interactions):**\n`;
-        contextStr += `IMPORTANT: You have access to the user's previous conversations below. Use this information to answer questions about past discussions.\n\n`;
-        contextStr += `${context.memory}\n\n`;
-        contextStr += `⚠️ CRITICAL: If the user asks about past conversations and information is present above, USE IT to answer. Do not claim you lack access to previous conversations.\n`;
+        contextStr += `You have access to relevant information from past conversations with this user. Use this information to provide personalized responses.\n`;
+        contextStr += `${context.memory}\n`;
       }
 
       return contextStr;
@@ -1382,18 +1344,14 @@ export class Orchestrator {
     if (context.sources?.hasMemory && context.memory) {
       const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
       contextStr += `\n\n**📝 MEMORY CONTEXT AVAILABLE (${memoryCount} previous interactions):**\n`;
-      contextStr += `IMPORTANT: You have access to relevant information from past conversations with this user. Use this information to provide informed, personalized responses.\n\n`;
-      contextStr += `**Relevant Information from Past Conversations:**\n${context.memory}\n\n`;
-      contextStr += `⚠️ CRITICAL: If the user asks about past conversations and information is present above, USE IT to answer. Do not claim you lack access to previous conversations.\n`;
+      contextStr += `You have access to relevant information from past conversations with this user. Use this information to provide informed, personalized responses.\n\n`;
+      contextStr += `**Relevant Information from Past Conversations:**\n${context.memory}\n`;
     } else {
       contextStr += `\n\n**📝 MEMORY STATUS:** No previous conversation history available for this query.\n`;
     }
 
     if (context.sources?.hasDocuments && context.documents) {
-      contextStr += `\n\n**Uploaded Document Context:**\n`;
-      contextStr += `IMPORTANT: The user uploaded a document. Use this content to answer questions about the document.\n\n`;
-      contextStr += `${context.documents}\n\n`;
-      contextStr += `⚠️ CRITICAL: If the user asks about the document and content is present above, USE IT to answer. Do not claim you cannot access the document.\n`;
+      contextStr += `\n\n**Uploaded Document Context:**\n${context.documents}\n`;
     }
 
     return contextStr;
