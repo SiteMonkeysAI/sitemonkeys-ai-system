@@ -394,6 +394,16 @@ export class Orchestrator {
       this.log(
         `[VALIDATION] Compliant: ${validatedResponse.compliant ? "PASS" : "FAIL"}`,
       );
+      if (!validatedResponse.compliant && validatedResponse.issues.length > 0) {
+        this.log(
+          `[VALIDATION] Issues: ${validatedResponse.issues.join(", ")}`,
+        );
+      }
+      if (validatedResponse.adjustments.length > 0) {
+        this.log(
+          `[VALIDATION] Adjustments: ${validatedResponse.adjustments.join(", ")}`,
+        );
+      }
 
       // STEP 10: Track performance
       const processingTime = Date.now() - startTime;
@@ -1011,13 +1021,19 @@ export class Orchestrator {
         });
       }
 
-      trackApiCall({
-        sessionId: "orchestrator",
-        personality:
-          typeof context?.mode === "string" ? context.mode : "unknown",
-        promptTokens: inputTokens,
-        completionTokens: outputTokens,
-      });
+      // Map model to personality for token tracking
+      let personality = "claude"; // Default for claude model
+      if (model === "gpt-4") {
+        // For GPT-4, use mode or default to eli
+        personality = mode === "business_validation" ? "eli" : "roxy";
+      }
+      
+      trackApiCall(
+        personality,
+        inputTokens,
+        outputTokens,
+        context.sources?.hasVault ? (context.vault?.length || 0) / 4 : 0
+      );
 
       return {
         response: response,
@@ -1311,7 +1327,10 @@ export class Orchestrator {
 
       // STOP HERE - Do not add document context when vault is present
       if (context.sources?.hasMemory && context.memory) {
-        contextStr += `\n\n**Relevant Information from Past Conversations:**\n${context.memory}\n`;
+        const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
+        contextStr += `\n\n**📝 MEMORY CONTEXT AVAILABLE (${memoryCount} previous interactions):**\n`;
+        contextStr += `You have access to relevant information from past conversations with this user. Use this information to provide personalized responses.\n`;
+        contextStr += `${context.memory}\n`;
       }
 
       return contextStr;
@@ -1323,7 +1342,12 @@ export class Orchestrator {
     );
 
     if (context.sources?.hasMemory && context.memory) {
-      contextStr += `\n\n**Relevant Information from Past Conversations:**\n${context.memory}\n`;
+      const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
+      contextStr += `\n\n**📝 MEMORY CONTEXT AVAILABLE (${memoryCount} previous interactions):**\n`;
+      contextStr += `You have access to relevant information from past conversations with this user. Use this information to provide informed, personalized responses.\n\n`;
+      contextStr += `**Relevant Information from Past Conversations:**\n${context.memory}\n`;
+    } else {
+      contextStr += `\n\n**📝 MEMORY STATUS:** No previous conversation history available for this query.\n`;
     }
 
     if (context.sources?.hasDocuments && context.documents) {
