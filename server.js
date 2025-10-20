@@ -211,55 +211,6 @@ app.get("/api/run-tests", async (req, res) => {
   }
 });
 
-// Vault loading endpoint - loads vault content for site_monkeys mode
-app.get("/api/load-vault", async (req, res) => {
-  try {
-    console.log("[VAULT] 📦 Vault load request received");
-
-    // Option 1: Load from environment variable (primary source)
-    let vaultContent = process.env.VAULT_CONTENT;
-
-    // Option 2: Load from global if environment not set
-    if (!vaultContent && global.vaultContent) {
-      vaultContent = global.vaultContent;
-      console.log("[VAULT] 📦 Loaded from global.vaultContent");
-    }
-
-    if (!vaultContent) {
-      console.log("[VAULT] ⚠️ No vault content available");
-      return res.json({
-        status: "error",
-        message: "Vault content not available",
-        needs_refresh: true,
-        vault_content: "",
-        tokens: 0,
-        vault_status: "unavailable",
-      });
-    }
-
-    // Store in global for orchestrator access
-    global.vaultContent = vaultContent;
-    console.log(`[VAULT] ✅ Vault loaded: ${vaultContent.length} characters`);
-
-    res.json({
-      status: "success",
-      vault_content: vaultContent,
-      tokens: Math.ceil(vaultContent.length / 4),
-      folders_loaded: ["founder_directives", "pricing", "policies"],
-      vault_status: "operational",
-    });
-  } catch (error) {
-    console.error("[VAULT] ❌ Error loading vault:", error);
-    res.status(500).json({
-      status: "error",
-      message: error.message,
-      vault_content: "",
-      tokens: 0,
-      vault_status: "error",
-    });
-  }
-});
-
 // Chat endpoint - main AI processing
 // SECURITY: Input validation and sanitization
 app.post("/api/chat", async (req, res) => {
