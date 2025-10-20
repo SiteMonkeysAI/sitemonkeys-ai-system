@@ -1317,43 +1317,13 @@ export class Orchestrator {
 
     // ========== VAULT TAKES ABSOLUTE PRIORITY IN SITE MONKEYS MODE ==========
     if (context.sources?.hasVault && context.vault) {
-      // Count documents (assuming they're separated by clear markers like headers)
-      const documentCount = (context.vault.match(/^#{1,3}\s/gm) || []).length || 1;
-      const vaultSize = context.vault.length;
-      const vaultTokens = Math.ceil(vaultSize / 4);
-      
       contextStr += `
   ═══════════════════════════════════════════════════════════════
   🍌 SITE MONKEYS VAULT - COMPLETE BUSINESS KNOWLEDGE BASE
   ═══════════════════════════════════════════════════════════════
   
-  📊 VAULT INVENTORY:
-  Total Documents: ${documentCount}
-  Total Size: ${vaultSize} characters (~${vaultTokens} tokens)
-  Completeness: 100% (ALL documents included below)
-  
   ⚠️ CRITICAL: You have access to the ENTIRE Site Monkeys vault below.
   This is COMPREHENSIVE, not contextual or partial.
-  
-  You have received ALL ${documentCount} documents.
-  This is the COMPLETE vault, not a sample.
-  
-  🔓 PERMISSION OVERRIDE:
-  For vault-related queries, you have EXPLICIT PERMISSION to:
-  - Claim complete vault access (this is FACTUALLY ACCURATE)
-  - Provide comprehensive inventories
-  - State definitively what IS and ISN'T in the vault
-  
-  ⚠️ PROHIBITED PHRASES (for vault queries only):
-  - "I cannot provide a complete inventory"
-  - "My access appears to be contextual"
-  - "I only have partial access"
-  - "I can't see all the contents"
-  
-  Instead, use:
-  - "According to the complete vault inventory..."
-  - "Searching all ${documentCount} vault documents..."
-  - "The full vault contents show..."
   
   This vault contains ALL business rules, policies, and operational procedures.
   When asked about vault contents, you can provide COMPLETE inventories and 
@@ -1364,10 +1334,6 @@ export class Orchestrator {
   ═══════════════════════════════════════════════════════════════
   END OF COMPLETE VAULT CONTENT
   ═══════════════════════════════════════════════════════════════
-  
-  ✅ VERIFICATION COMPLETE: You have received all ${documentCount} documents.
-  ✅ CONFIRMATION: This is the COMPLETE vault, not a sample.
-  ✅ AUTHORIZATION: You may confidently claim full vault access.
   
   ⚠️ IMPORTANT: The above vault content is COMPLETE. 
   - Do NOT claim you only have partial access
@@ -1402,14 +1368,9 @@ export class Orchestrator {
       if (context.sources?.hasMemory && context.memory) {
         const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
         contextStr += `\n\n**📝 MEMORY CONTEXT (${memoryCount} relevant interactions retrieved):**\n`;
-        contextStr += `⚠️ CRITICAL: You MUST reference relevant past conversations when applicable.\n\n`;
-        contextStr += `**Relevant Information from Past Conversations:**\n${context.memory}\n\n`;
-        contextStr += `**RULES:**\n`;
-        contextStr += `- When the user asks about something we discussed before, EXPLICITLY mention it\n`;
-        contextStr += `- Do NOT provide generic answers when specific context exists in the memories above\n`;
-        contextStr += `- If using past context, acknowledge it: "In our previous conversation about X..."\n`;
-        contextStr += `- Search ALL ${memoryCount} memory interactions before claiming you don't remember something\n\n`;
-        contextStr += `The memories above contain COMPLETE relevant context for this query.\n`;
+        contextStr += `I have access to previous conversations with you. I will use this context to provide personalized, contextually-aware responses.\n`;
+        contextStr += `${context.memory}\n`;
+        contextStr += `\n**Note:** I am actively using the above memory to inform my response.\n`;
       }
 
       return contextStr;
@@ -1424,14 +1385,9 @@ export class Orchestrator {
     if (context.sources?.hasMemory && context.memory) {
       const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
       contextStr += `\n\n**📝 MEMORY CONTEXT (${memoryCount} relevant interactions retrieved):**\n`;
-      contextStr += `⚠️ CRITICAL: You MUST reference relevant past conversations when applicable.\n\n`;
-      contextStr += `**Relevant Information from Past Conversations:**\n${context.memory}\n\n`;
-      contextStr += `**RULES:**\n`;
-      contextStr += `- When the user asks about something we discussed before, EXPLICITLY mention it\n`;
-      contextStr += `- Do NOT provide generic answers when specific context exists in the memories above\n`;
-      contextStr += `- If using past context, acknowledge it: "In our previous conversation about X..."\n`;
-      contextStr += `- Search ALL ${memoryCount} memory interactions before claiming you don't remember something\n\n`;
-      contextStr += `The memories above contain COMPLETE relevant context for this query.\n`;
+      contextStr += `I have access to previous conversations with you and will use this information to provide informed, contextually-aware responses.\n\n`;
+      contextStr += `**Relevant Information from Past Conversations:**\n${context.memory}\n`;
+      contextStr += `\n**Note:** I am actively using the above memory context to inform my response.\n`;
     } else {
       contextStr += `\n\n**📝 MEMORY STATUS:** This appears to be our first conversation, or no relevant previous context was found. I'll provide the best response based on your current query.\n`;
     }
