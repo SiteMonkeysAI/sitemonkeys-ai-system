@@ -229,8 +229,9 @@ app.post("/api/chat", async (req, res) => {
           }
         );
         console.log("[CHAT] 💾 Conversation stored in memory system");
-      } catch (storageError) {
-        console.error("[CHAT] ⚠️ Failed to store conversation:", storageError.message);
+      } catch (_storageError) {
+        // Sanitize error message - don't expose database details
+        console.error("[CHAT] ⚠️ Failed to store conversation: Memory system unavailable");
         // Don't fail the request if storage fails
       }
     }

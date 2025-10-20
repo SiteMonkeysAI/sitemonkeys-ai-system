@@ -59,8 +59,12 @@ class PersistentMemoryOrchestrator {
    */
   async retrieveMemory(userId, query) {
     try {
+      // Sanitize user ID for logging (show only first 8 chars)
+      const sanitizedUserId = userId ? `${userId.substring(0, 8)}...` : 'unknown';
+      // Sanitize query for logging (truncate and no sensitive patterns)
+      const sanitizedQuery = query ? query.substring(0, 50).replace(/\b\d{3,}\b/g, '***') : '';
       this.logger.log(
-        `Retrieving memories for user: ${userId}, query: "${query.substring(0, 50)}..."`,
+        `Retrieving memories for user: ${sanitizedUserId}, query: "${sanitizedQuery}..."`,
       );
 
       // Use intelligenceSystem to route and extract memories
@@ -124,8 +128,10 @@ class PersistentMemoryOrchestrator {
    */
   async storeMemory(userId, userMessage, aiResponse, metadata = {}) {
     try {
+      // Sanitize user ID for logging (show only first 8 chars)
+      const sanitizedUserId = userId ? `${userId.substring(0, 8)}...` : 'unknown';
       this.logger.log(
-        `Storing conversation for user: ${userId}, message length: ${userMessage?.length || 0}, response length: ${aiResponse?.length || 0}`,
+        `Storing conversation for user: ${sanitizedUserId}, message length: ${userMessage?.length || 0}, response length: ${aiResponse?.length || 0}`,
       );
 
       // Combine user message and AI response
@@ -144,8 +150,10 @@ class PersistentMemoryOrchestrator {
           metadata,
         );
 
-      // Calculate token count
-      const tokenCount = Math.ceil(conversationContent.length / 4);
+      // Calculate token count (approximate: 1 token ≈ 4 characters)
+      // This is a rough estimate based on OpenAI's tokenization
+      const CHARS_PER_TOKEN = 4;
+      const tokenCount = Math.ceil(conversationContent.length / CHARS_PER_TOKEN);
 
       // Store in database
       const result = await this.coreSystem.executeQuery(
