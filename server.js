@@ -19,6 +19,7 @@ import repoSnapshotRoute from "./api/repo-snapshot.js";
 import { addInventoryEndpoint } from "./system-inventory-endpoint.js";
 import Orchestrator from "./api/core/orchestrator.js";
 import systemStatus from "./api/system-status.js"; // <-- ADDED
+import { runAllTests } from "./api/test-suite.js";
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -167,6 +168,24 @@ app.get("/api/health", (req, res) => {
 
 // System status endpoint
 app.get("/api/system-status", systemStatus); // <-- ADDED
+
+// Test suite endpoint - comprehensive feature validation
+app.get("/api/run-tests", async (req, res) => {
+  try {
+    console.log("[TEST-ENDPOINT] Running comprehensive test suite...");
+    const testResults = await runAllTests();
+    res.json(testResults);
+  } catch (error) {
+    console.error("[TEST-ENDPOINT] Error running tests:", error);
+    res.status(500).json({
+      status: "error",
+      error: error.message,
+      tests_run: 0,
+      tests_passed: 0,
+      tests_failed: 0,
+    });
+  }
+});
 
 // Chat endpoint - main AI processing
 // SECURITY: Input validation and sanitization
