@@ -27,7 +27,7 @@ export function addInventoryEndpoint(app) {
       }
 
       const format = req.query.format || "html";
-      const noCache = req.query.nocache === "true";
+      const _noCache = req.query.nocache === "true";
 
       console.log("Generating new inventory scan...");
 
@@ -209,7 +209,7 @@ export function addInventoryEndpoint(app) {
   }
 
   // Analyze JavaScript file content
-  function analyzeJavaScriptFile(content, filePath) {
+  function analyzeJavaScriptFile(content, _filePath) {
     const analysis = {
       functions: 0,
       classes: 0,

@@ -1,4 +1,4 @@
-// import ledger from './masterLedger.json' with { type: 'json' };
+import ledger from "./masterLedger.json" with { type: "json" };
 import * as Memory from "../../categories/memory/verify.js";
 import * as Injection from "../../categories/injection/verify.js";
 import * as Truth from "../../categories/truth/verify.js";
@@ -9,9 +9,6 @@ import * as Security from "../../categories/security/verify.js";
 import * as Infra from "../../categories/infra/verify.js";
 import * as Platform from "../../categories/platform/verify.js";
 import * as Future from "../../categories/future/verify.js";
-
-// Temporary ledger placeholder until masterLedger.json is available
-const ledger = { items: [] };
 
 const categoryMap = {
   Memory,

@@ -266,7 +266,7 @@ class MultimodalGateway {
     // For now, return intelligent placeholder analysis
 
     const fileName = attachment.name || "image";
-    const fileSize = attachment.size || "unknown";
+    const _fileSize = attachment.size || "unknown";
 
     // Simulate different types of image analysis
     if (/chart|graph|plot/i.test(fileName)) {
@@ -309,7 +309,7 @@ class MultimodalGateway {
     };
   }
 
-  generateImageInsight(analysis, query, context) {
+  generateImageInsight(analysis, query, _context) {
     const baseInsight = `IMAGE ANALYSIS: ${analysis.content}`;
 
     // Add contextual intelligence based on query
@@ -371,7 +371,7 @@ CONTEXT: ${analysis.elements.join(", ")} detected. Business relevance: ${analysi
     // Return intelligent placeholder analysis
 
     const fileName = attachment.name || "audio";
-    const duration = attachment.duration || "unknown";
+    const _duration = attachment.duration || "unknown";
 
     if (/meeting|call|conference/i.test(fileName)) {
       return {
@@ -409,7 +409,7 @@ CONTEXT: ${analysis.elements.join(", ")} detected. Business relevance: ${analysi
     };
   }
 
-  generateAudioInsight(analysis, query, context) {
+  generateAudioInsight(analysis, query, _context) {
     const baseInsight = `AUDIO TRANSCRIPT: ${analysis.transcript}`;
 
     if (
@@ -505,7 +505,7 @@ AUDIO CONTEXT: ${analysis.type} with key topics: ${analysis.key_topics.join(", "
     };
   }
 
-  generateVideoInsight(analysis, query, context) {
+  generateVideoInsight(analysis, query, _context) {
     const baseInsight = `VIDEO ANALYSIS: ${analysis.summary}`;
 
     if (
@@ -610,7 +610,7 @@ VIDEO CONTEXT: ${analysis.key_scenes.join(", ")} with visual elements: ${analysi
     };
   }
 
-  generateDocumentInsight(analysis, query, context) {
+  generateDocumentInsight(analysis, query, _context) {
     const baseInsight = `DOCUMENT ANALYSIS: ${analysis.content}`;
 
     if (
@@ -691,7 +691,7 @@ DOCUMENT STRUCTURE: ${analysis.key_sections.join(", ")} containing ${analysis.da
     };
   }
 
-  generateURLInsight(analysis, query, context) {
+  generateURLInsight(analysis, _query, _context) {
     return `EXTERNAL REFERENCE: ${analysis.content}
 
 URL CONTEXT: ${analysis.type} providing ${analysis.relevance} for analysis consideration.`;

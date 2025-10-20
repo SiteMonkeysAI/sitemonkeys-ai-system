@@ -77,7 +77,7 @@ window.debouncedRefreshVault = function () {
 };
 
 // SEND MESSAGE FUNCTION
-async function sendMessage() {
+async function _sendMessage() {
   const input = document.getElementById("user-input");
   const text = input.value.trim();
   if (!text || !systemActive) return;
@@ -325,7 +325,7 @@ function updateTokenDisplay(tokenData) {
 }
 
 // STATUS ANIMATION
-function loadStatus() {
+function _loadStatus() {
   const items = document.querySelectorAll("#status-list li");
   items.forEach((item, i) => {
     setTimeout(

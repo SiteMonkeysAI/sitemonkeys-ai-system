@@ -467,7 +467,7 @@ export {
   containsGuessing,
 };
 
-export async function checkFounderProtection({ response, mode, context }) {
+export async function checkFounderProtection({ response, mode, _context }) {
   try {
     const violations = [];
 
@@ -555,8 +555,8 @@ export async function checkFounderProtection({ response, mode, context }) {
 }
 
 export async function handleCostCeiling({
-  query,
-  context,
+  _query,
+  _context,
   reason,
   currentCost,
 }) {

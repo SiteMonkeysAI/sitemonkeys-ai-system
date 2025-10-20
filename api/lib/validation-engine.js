@@ -68,7 +68,7 @@ class ValidationEngine {
 
   validateTruthAlignment(aiInsight, businessWisdom) {
     // Validate against truth-first principles
-    const truthPrinciples =
+    const _truthPrinciples =
       businessWisdom.applicable_principles?.filter(
         (p) => p.domain === "epistemology" || p.principle.includes("truth"),
       ) || [];
@@ -85,9 +85,9 @@ class ValidationEngine {
     };
   }
 
-  validateBusinessAlignment(aiInsight, businessWisdom, mode) {
+  validateBusinessAlignment(aiInsight, businessWisdom, _mode) {
     // Validate against business survival principles
-    const businessPrinciples =
+    const _businessPrinciples =
       businessWisdom.applicable_principles?.filter(
         (p) =>
           p.domain === "business_strategy" || p.domain === "financial_strategy",
@@ -106,7 +106,7 @@ class ValidationEngine {
     };
   }
 
-  validateUserBenefit(aiInsight, context) {
+  validateUserBenefit(aiInsight, _context) {
     // Validate genuine user benefit
     return {
       actionable_guidance: aiInsight.next_steps?.length > 0,
@@ -197,7 +197,7 @@ class ValidationEngine {
     }
   }
 
-  generateTrustedFallback(aiInsight, businessWisdom, validation, context) {
+  generateTrustedFallback(aiInsight, businessWisdom, validation, _context) {
     return {
       content:
         "I'm analyzing this situation with careful attention to precision and reliability. Based on established business principles, let me provide a structured approach...",
@@ -236,7 +236,7 @@ class MultimodalGateway {
     return true;
   }
 
-  async analyzeInputs({ query, attachments = [], context }) {
+  async analyzeInputs({ query, attachments = [], context: _context }) {
     console.log("🖼️ Processing multimodal inputs...");
 
     const multimodalInsights = [];
@@ -281,17 +281,17 @@ class MultimodalGateway {
     };
   }
 
-  async analyzeImage(attachment) {
+  async analyzeImage(_attachment) {
     // Placeholder for image analysis
     return `Image Analysis: Business chart or diagram detected. Key visual elements suggest financial or strategic content requiring analysis.`;
   }
 
-  async analyzeAudio(attachment) {
+  async analyzeAudio(_attachment) {
     // Placeholder for audio transcription
     return `Audio Transcript: [Transcribed content would appear here - meeting discussion about business strategy and decision-making.]`;
   }
 
-  async analyzeVideo(attachment) {
+  async analyzeVideo(_attachment) {
     // Placeholder for video analysis
     return `Video Summary: Presentation or meeting recording. Key topics include business performance, strategic planning, and operational considerations.`;
   }
@@ -474,22 +474,22 @@ class AdaptationEngine {
     return pattern;
   }
 
-  inferDetailPreference(history) {
+  inferDetailPreference(_history) {
     // Analyze if user prefers detailed or concise responses
-    return history.length > 5 ? "detailed" : "concise";
+    return _history.length > 5 ? "detailed" : "concise";
   }
 
-  inferConfidenceSensitivity(history) {
+  inferConfidenceSensitivity(_history) {
     // Analyze user's sensitivity to confidence levels
     return "high"; // Default to high sensitivity
   }
 
-  inferDomainFocus(history) {
+  inferDomainFocus(_history) {
     // Analyze which domains user focuses on most
     return ["business_strategy", "truth_assessment"];
   }
 
-  inferCommunicationStyle(history) {
+  inferCommunicationStyle(_history) {
     // Analyze preferred communication style
     return "direct"; // Default to direct communication
   }
@@ -541,7 +541,11 @@ class StreamProcessor {
     return true;
   }
 
-  async enrichWithRealTimeData({ query, context, businessWisdom }) {
+  async enrichWithRealTimeData({
+    query,
+    context,
+    businessWisdom: _businessWisdom,
+  }) {
     console.log("📊 Enriching with real-time data...");
 
     // Check for relevant real-time data streams
@@ -559,7 +563,7 @@ class StreamProcessor {
     return context;
   }
 
-  identifyRelevantStreams(query, context) {
+  identifyRelevantStreams(query, _context) {
     // Identify relevant real-time data for the query
     const relevantData = [];
 
@@ -608,7 +612,7 @@ class StreamProcessor {
     return streamEntry;
   }
 
-  extractInsights(data) {
+  extractInsights(_data) {
     // Extract actionable insights from stream data
     return {
       key_metrics: ["performance indicator extracted"],

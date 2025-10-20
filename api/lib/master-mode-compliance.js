@@ -7,7 +7,7 @@ export class MasterModeCompliance {
     const {
       fingerprint = null,
       vaultLoaded = false,
-      conversationHistory = [],
+      _conversationHistory = [],
       enforcementLevel = "STANDARD",
     } = options;
 
@@ -210,7 +210,7 @@ export class MasterModeCompliance {
   static detectModeDrift(
     responseContent,
     expectedMode,
-    conversationHistory = [],
+    _conversationHistory = [],
   ) {
     const driftIndicators = {
       truth_general: ["definitely", "absolutely certain", "without question"],

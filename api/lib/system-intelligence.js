@@ -92,7 +92,7 @@ export function integrateSystemIntelligence(
 export function enhancePromptWithIntelligence(
   basePrompt,
   intelligence,
-  message,
+  _message,
 ) {
   let enhancedPrompt = basePrompt;
 

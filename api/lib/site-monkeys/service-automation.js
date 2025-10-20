@@ -173,7 +173,7 @@ async function executeWorkflowStep(
   stepName,
   parameters,
   customerTier,
-  execution,
+  _execution,
 ) {
   const startTime = Date.now();
 
@@ -253,7 +253,7 @@ async function executeWorkflowStep(
 }
 
 // RETRY MECHANISM WITH EXPONENTIAL BACKOFF
-async function executeWithRetry(operation, maxAttempts = 3, context = {}) {
+async function executeWithRetry(operation, maxAttempts = 3, _context = {}) {
   const retryConfig = SERVICE_AUTOMATION.automation_rules.retry_logic;
   let lastError;
 
@@ -404,40 +404,40 @@ function calculateAutomationMetrics(operationalData) {
 }
 
 // PLACEHOLDER FUNCTIONS FOR WORKFLOW STEPS
-async function processStripeWebhook(params) {
+async function processStripeWebhook(_params) {
   return { processed: true };
 }
-async function createAirtableRecord(params) {
+async function createAirtableRecord(_params) {
   return { recordId: "rec123" };
 }
 async function assignCustomerTier(params, tier) {
   return { tier: tier };
 }
-async function sendWelcomeEmail(params, tier) {
+async function sendWelcomeEmail(_params, _tier) {
   return { emailSent: true };
 }
-async function createDashboardAccess(params, tier) {
+async function createDashboardAccess(_params, _tier) {
   return { accessCreated: true };
 }
-async function activateInitialServices(params, tier) {
+async function activateInitialServices(_params, _tier) {
   return { servicesActive: true };
 }
-async function initiateWebsiteScan(params) {
+async function initiateWebsiteScan(_params) {
   return { scanInitiated: true };
 }
-async function performTechnicalAnalysis(params) {
+async function performTechnicalAnalysis(_params) {
   return { analysisComplete: true };
 }
-async function generateOptimizationRecommendations(params, tier) {
+async function generateOptimizationRecommendations(_params, _tier) {
   return { recommendationsGenerated: true };
 }
-async function performTopicResearch(params) {
+async function performTopicResearch(_params) {
   return { researchComplete: true };
 }
-async function generateAIContent(params, tier) {
+async function generateAIContent(_params, _tier) {
   return { contentGenerated: true };
 }
-async function validateContentQuality(params, tier) {
+async function validateContentQuality(_params, _tier) {
   return { qualityValidated: true };
 }
 

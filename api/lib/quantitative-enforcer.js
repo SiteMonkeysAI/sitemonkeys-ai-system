@@ -125,7 +125,7 @@ export function generateRequiredCalculations(
   return generateDefaultQuantitativeFramework(message);
 }
 
-export function generateSiteMonkeysProjections(message) {
+export function generateSiteMonkeysProjections(_message) {
   return `SITE MONKEYS FINANCIAL PROJECTIONS (Using Actual Pricing):
 
 PRICING STRUCTURE (Enforced):
@@ -154,7 +154,7 @@ ASSUMPTIONS: Customer acquisition rates, 10% monthly churn, operational cost est
 MISSING DATA: Market validation, actual customer acquisition costs, competitive analysis`;
 }
 
-export function generateBusinessFinancialAnalysis(message) {
+export function generateBusinessFinancialAnalysis(_message) {
   return `BUSINESS FINANCIAL FRAMEWORK:
 
 REVENUE COMPONENTS:
@@ -178,7 +178,7 @@ CONFIDENCE: Low (40%) - Requires specific business data for accurate calculation
 REQUIRED DATA: Actual pricing, cost structure, market size, customer acquisition metrics`;
 }
 
-export function generateCostAnalysis(message) {
+export function generateCostAnalysis(_message) {
   return `COST ANALYSIS FRAMEWORK:
 
 COST CATEGORIES:
@@ -200,7 +200,7 @@ CONFIDENCE: Medium (60%) - Framework provided, requires specific cost data
 MISSING: Actual cost figures, time horizons, volume projections`;
 }
 
-export function generateDefaultQuantitativeFramework(message) {
+export function generateDefaultQuantitativeFramework(_message) {
   return `QUANTITATIVE ANALYSIS FRAMEWORK:
 
 CALCULATION METHODOLOGY:
@@ -289,7 +289,7 @@ export function rejectGenericBusinessSpeak(response) {
 export function enforceCalculationStandards(
   response,
   originalMessage,
-  expertDomain,
+  _expertDomain,
 ) {
   if (!requiresQuantitativeReasoning(originalMessage)) {
     return response;
@@ -319,7 +319,7 @@ Please request specific calculations with actual numbers, not descriptive busine
 ⚠️ CALCULATION QUALITY CHECK:
 - Quality Score: ${qualityCheck.percentage}% (${qualityCheck.quality_score}/${qualityCheck.max_score})
 - Missing Elements: ${Object.entries(qualityCheck.checks)
-      .filter(([key, value]) => !value)
+      .filter(([_key, value]) => !value)
       .map(([key]) => key.replace(/_/g, " "))
       .join(", ")}
 

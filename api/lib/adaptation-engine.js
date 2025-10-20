@@ -405,7 +405,7 @@ class AdaptationEngine {
     return null;
   }
 
-  determineReasoningAdaptation(query, userProfile, contextAnalysis) {
+  determineReasoningAdaptation(query, userProfile, _contextAnalysis) {
     const baseApproach = ["truth_assessment"]; // Default approach
     const adaptedApproach = [...baseApproach];
 
@@ -481,7 +481,7 @@ class AdaptationEngine {
 
     // Prioritize domains based on user expertise and query patterns
     const userExpertise = userProfile.expertise_indicators;
-    const queryType = this.classifyQuery(query);
+    const _queryType = this.classifyQuery(query);
 
     // Add high-expertise domains
     Object.entries(userExpertise).forEach(([domain, level]) => {
@@ -521,7 +521,7 @@ class AdaptationEngine {
     return null;
   }
 
-  determineFormatAdaptation(userProfile, contextAnalysis) {
+  determineFormatAdaptation(userProfile, _contextAnalysis) {
     const baseFormat = "structured_comprehensive";
     let adaptedFormat = baseFormat;
 
@@ -616,7 +616,7 @@ class AdaptationEngine {
     this.updatePreferences(profile, adaptations);
   }
 
-  updateExpertiseIndicators(profile, query, context) {
+  updateExpertiseIndicators(profile, query, _context) {
     const queryType = this.classifyQuery(query);
     const complexityBonus = this.assessQueryComplexity(query) * 0.1;
 
@@ -888,7 +888,7 @@ class AdaptationEngine {
     return "medium";
   }
 
-  inferConsistencyPreference(userHistory) {
+  inferConsistencyPreference(_userHistory) {
     // Analyze if user prefers consistent responses
     return "medium"; // Default for now
   }

@@ -7,7 +7,7 @@ html,
 body {
   margin: 0;
   padding: 0;
-  font-family: Carlito, Arial, sans-serif;
+  font-family: "Carlito", Arial, sans-serif;
   background: #373534;
   color: white;
   min-height: 100vh;
@@ -15,7 +15,8 @@ body {
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
-  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+  -ms-text-size-adjust: 100%;
 }
 
 header {
@@ -65,13 +66,14 @@ header {
   margin: 0;
   letter-spacing: 2px;
   line-height: 1;
+  text-align: center;
   white-space: nowrap;
   width: 100%;
   text-align: center;
 }
 
 .subtitle {
-  font-family: Carlito, Arial, sans-serif;
+  font-family: "Carlito", Arial, sans-serif;
   color: #fff;
   font-size: clamp(1rem, 2.5vw, 1.2em);
   margin-top: 8px;
@@ -106,7 +108,7 @@ header {
   position: relative;
   width: 100%;
   min-height: 0;
-  padding: 10px 0 50px;
+  padding: 10px 0 50px 0;
 }
 
 .main-content {
@@ -152,7 +154,7 @@ header {
 .status-panel {
   width: 38%;
   min-width: 350px;
-  background: rgb(17 17 17 / 97%);
+  background: rgba(17, 17, 17, 0.97);
   border-radius: 24px 0 0 24px;
   box-shadow: 0 0 30px 10px #54545444 inset;
   padding: 25px 15px;
@@ -182,7 +184,7 @@ header {
 .status-list {
   list-style: none;
   padding: 0;
-  margin: 0 0 20px;
+  margin: 0 0 20px 0;
   width: 100%;
 }
 
@@ -207,7 +209,7 @@ header {
 }
 
 .status-list li .check {
-  color: #0f0;
+  color: #00ff00;
   margin-right: 8px;
   font-size: 1em;
   display: none;
@@ -243,13 +245,13 @@ header {
   display: none;
   text-align: center;
   letter-spacing: 1px;
-  background: #f22;
+  background: #ff2222;
   border-radius: 20px;
   padding: 12px 10px;
-  box-shadow: 0 4px 12px rgb(255 34 34 / 40%);
+  box-shadow: 0 4px 12px rgba(255, 34, 34, 0.4);
   width: 100%;
   box-sizing: border-box;
-  border: 2px solid rgb(255 255 255 / 20%);
+  border: 2px solid rgba(255, 255, 255, 0.2);
   transform: scale(0.8);
   transition: all 0.4s ease-in-out;
 }
@@ -269,10 +271,10 @@ header {
 
 @keyframes systemGlow {
   from {
-    box-shadow: 0 4px 12px rgb(255 34 34 / 40%);
+    box-shadow: 0 4px 12px rgba(255, 34, 34, 0.4);
   }
   to {
-    box-shadow: 0 4px 20px rgb(255 34 34 / 70%);
+    box-shadow: 0 4px 20px rgba(255, 34, 34, 0.7);
   }
 }
 
@@ -294,7 +296,7 @@ header {
   box-sizing: border-box;
   line-height: 1.4;
   overflow: hidden;
-  overflow-wrap: break-word;
+  word-wrap: break-word;
 }
 
 .vault-info span {
@@ -373,24 +375,24 @@ header {
 }
 
 .bubble-content {
-  background: rgb(0 0 0 / 30%);
+  background: rgba(0, 0, 0, 0.3);
   padding: 12px 16px;
   border-radius: 12px;
   color: white;
   font-size: 1em;
   line-height: 1.5;
   box-shadow: 0 2px 4px #0002;
-  overflow-wrap: break-word;
+  word-wrap: break-word;
   max-width: 100%;
 }
 
 .bubble.user .bubble-content {
-  background: rgb(255 216 17 / 20%);
+  background: rgba(255, 216, 17, 0.2);
   border: 1px solid #ffd811;
 }
 
 .bubble.ai .bubble-content {
-  background: rgb(84 84 84 / 30%);
+  background: rgba(84, 84, 84, 0.3);
   border: 1px solid #888;
 }
 
@@ -476,14 +478,14 @@ header {
   text-align: left;
   min-height: 80px;
   resize: vertical;
-  font-family: Carlito, Arial, sans-serif;
+  font-family: "Carlito", Arial, sans-serif;
 }
 
 .chat-input::placeholder {
-  color: rgb(255 255 255 / 45%);
+  color: rgba(255, 255, 255, 0.45);
   opacity: 1;
   font-size: 1em;
-  font-family: Carlito, Arial, sans-serif;
+  font-family: "Carlito", Arial, sans-serif;
   letter-spacing: 0.5px;
   text-align: left;
 }
@@ -525,7 +527,7 @@ header {
   background: #1a1a1a;
   color: #ffd811;
   text-align: center;
-  font-family: Carlito, Arial, sans-serif;
+  font-family: "Carlito", Arial, sans-serif;
   padding: 8px 0;
   letter-spacing: 1px;
   box-shadow: 0 -2px 8px #0008;
@@ -606,11 +608,11 @@ header {
 }
 
 .mode-btn {
-  background: rgb(255 255 255 / 10%);
+  background: rgba(255, 255, 255, 0.1);
   border: 2px solid #fff;
   border-radius: 6px;
   padding: 6px 14px;
-  font-family: Carlito, Arial, sans-serif;
+  font-family: "Carlito", Arial, sans-serif;
   font-size: clamp(0.8rem, 2.2vw, 1rem);
   font-weight: bold;
   color: white;
@@ -634,23 +636,23 @@ header {
 .mode-btn[data-mode="site_monkeys"] {
   background: #fff;
   color: #373534;
-  box-shadow: 0 0 12px rgb(255 255 255 / 60%);
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.6);
 }
 
 .mode-btn[data-mode="truth_general"].active {
   background: #545454;
   color: white;
-  box-shadow: 0 4px 12px rgb(84 84 84 / 40%);
+  box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4);
 }
 .mode-btn[data-mode="business_validation"].active {
   background: #545454;
   color: white;
-  box-shadow: 0 4px 12px rgb(84 84 84 / 40%);
+  box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4);
 }
 .mode-btn[data-mode="site_monkeys"].active {
   background: #545454;
   color: white;
-  box-shadow: 0 4px 12px rgb(84 84 84 / 40%);
+  box-shadow: 0 4px 12px rgba(84, 84, 84, 0.4);
 }
 
 .mode-btn:hover:not(.active) {
@@ -658,7 +660,7 @@ header {
   opacity: 0.9;
 }
 
-@media (width <= 768px) and (orientation: portrait) {
+@media (max-width: 768px) and (orientation: portrait) {
   header {
     min-height: clamp(60px, 10vh, 80px);
   }
@@ -706,7 +708,6 @@ header {
   .main-wrapper {
     padding: 0.5rem 0;
   }
-
   .main-content {
     flex-direction: column;
     width: 95vw;
@@ -720,7 +721,6 @@ header {
     display: flex;
     overflow: visible;
   }
-
   .status-panel {
     width: 100%;
     min-width: 0;
@@ -731,7 +731,6 @@ header {
     box-shadow: none;
     position: relative;
   }
-
   .status-title {
     color: #ffd811;
     font-size: 0.95em;
@@ -761,7 +760,6 @@ header {
     font-size: 0.8rem;
     border: none;
   }
-
   .chat-panel {
     width: 100%;
     min-width: 0;
@@ -784,7 +782,6 @@ header {
     margin-bottom: 0;
     border-radius: 20px;
   }
-
   .chat-input {
     font-size: 0.9em;
     padding: 0.3rem 1em 0.3rem 2.5em;
@@ -831,7 +828,7 @@ header {
   }
 }
 
-@media (width <= 950px) and (orientation: landscape) {
+@media (max-width: 950px) and (orientation: landscape) {
   header {
     min-height: clamp(90px, 14vh, 130px);
     width: 100vw;
@@ -953,7 +950,7 @@ header {
   .status-panel {
     width: 32%;
     min-width: 220px;
-    background: rgb(17 17 17 / 97%);
+    background: rgba(17, 17, 17, 0.97);
     border-radius: 22px 0 0 22px;
     box-shadow: 0 0 25px 8px #54545444 inset;
     padding: 14px 10px;
@@ -984,7 +981,7 @@ header {
     display: block;
     list-style: none;
     padding: 0;
-    margin: 0 0 12px;
+    margin: 0 0 12px 0;
     width: 100%;
   }
 
@@ -995,7 +992,7 @@ header {
   }
 
   .status-list li .check {
-    color: #0f0;
+    color: #00ff00;
     margin-right: 5px;
     font-size: 0.9em;
     display: inline;
@@ -1009,7 +1006,7 @@ header {
   }
 
   .vault-info {
-    margin: 4px 0 0;
+    margin: 4px 0 0 0;
     padding: 6px;
     font-size: 0.65rem;
     min-height: 40px;
@@ -1087,15 +1084,15 @@ header {
     text-align: left;
     min-height: 35px;
     resize: vertical;
-    font-family: Carlito, Arial, sans-serif;
+    font-family: "Carlito", Arial, sans-serif;
   }
 
   .chat-input::placeholder {
     text-align: left;
     font-size: 0.85em;
-    color: rgb(255 255 255 / 45%);
+    color: rgba(255, 255, 255, 0.45);
     opacity: 1;
-    font-family: Carlito, Arial, sans-serif;
+    font-family: "Carlito", Arial, sans-serif;
     letter-spacing: 0.3px;
   }
 
@@ -1124,7 +1121,6 @@ header {
   .footer {
     display: none;
   }
-
   .mobile-footer {
     display: flex;
     position: fixed;

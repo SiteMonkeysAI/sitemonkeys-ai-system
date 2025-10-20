@@ -3,16 +3,16 @@
 export function runOptimizationEnhancer({
   mode,
   baseResponse,
-  message,
+  _message,
   triggeredFrameworks = [],
   vaultLoaded = false,
 }) {
   try {
     // STEP 1: Truth Validation
-    const truthScore = validateTruthContent(baseResponse);
+    const _truthScore = validateTruthContent(baseResponse);
 
     // STEP 2: Mode Compliance Check
-    const modeCompliance = checkModeCompliance(baseResponse, mode);
+    const _modeCompliance = checkModeCompliance(baseResponse, mode);
 
     // STEP 3: Enhancement Based on Context
     let enhancedResponse = baseResponse;

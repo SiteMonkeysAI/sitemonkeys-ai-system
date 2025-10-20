@@ -1,3 +1,5 @@
+/* global fetch, AbortSignal */
+
 // SITE MONKEYS AI ARCHITECTURE
 // Triple-AI Failover System with Quality Gates
 
@@ -142,7 +144,7 @@ async function processAIRequest(prompt, customerTier, contentType = "general") {
 }
 
 // CLAUDE API INTERFACE
-async function callClaudeAPI(prompt, customerTier) {
+async function callClaudeAPI(prompt, _customerTier) {
   const config = AI_ARCHITECTURE.primary;
 
   try {
@@ -186,7 +188,7 @@ async function callClaudeAPI(prompt, customerTier) {
 }
 
 // GPT-4 API INTERFACE
-async function callGPT4API(prompt, customerTier) {
+async function callGPT4API(prompt, _customerTier) {
   const config = AI_ARCHITECTURE.secondary;
 
   try {
@@ -229,7 +231,7 @@ async function callGPT4API(prompt, customerTier) {
 }
 
 // MISTRAL API INTERFACE
-async function callMistralAPI(prompt, customerTier) {
+async function callMistralAPI(prompt, _customerTier) {
   const config = AI_ARCHITECTURE.tertiary;
 
   try {

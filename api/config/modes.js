@@ -105,7 +105,7 @@ export const MODES = {
 };
 
 // Mode validation function
-export function validateModeCompliance(response, mode, analysis) {
+export function validateModeCompliance(response, mode, _analysis) {
   // Minimal implementation - validates that response adheres to mode requirements
   return {
     compliant: true,

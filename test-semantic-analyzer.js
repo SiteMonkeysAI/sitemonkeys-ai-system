@@ -400,7 +400,7 @@ await runTest("Logging and Messages Verification", async () => {
     logMessages.push(msg);
   };
 
-  analyzer.logger.error = (msg, err) => {
+  analyzer.logger.error = (msg, _err) => {
     errorMessages.push(msg);
   };
 

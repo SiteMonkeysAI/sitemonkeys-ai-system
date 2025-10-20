@@ -52,7 +52,7 @@ export function detectSiteMonkeysViolations(response, mode) {
   }
 
   const violations = [];
-  const responseLower = response.toLowerCase();
+  const _responseLower = response.toLowerCase();
 
   // Check for pricing violations
   const pricingViolations = detectPricingViolations(response);
@@ -412,7 +412,7 @@ export function integrateVaultLogic(
   return response;
 }
 
-export function assessVaultUtilization(response, vaultContent) {
+export function assessVaultUtilization(response, _vaultContent) {
   const utilization = {
     score: 0,
     pricing_integration: false,

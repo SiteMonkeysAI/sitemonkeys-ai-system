@@ -195,7 +195,7 @@ export function trackApiCall(
 export function formatSessionDataForUI() {
   try {
     const sessionDuration = Date.now() - sessionData.sessionStart;
-    const sessionHours = sessionDuration / (1000 * 60 * 60);
+    const _sessionHours = sessionDuration / (1000 * 60 * 60);
 
     return {
       // NEW numeric totals (added; do not remove existing display fields)

@@ -1,6 +1,6 @@
 // FORCE VAULT LOADING ON PAGE LOAD
 // VAULT LOADING ONLY ON DEMAND - NO AUTO-LOADING
-let vaultLoaded = false;
+let _vaultLoaded = false;
 
 async function loadVaultOnDemand() {
   // Step 1: Check if vault already loaded in window
@@ -113,7 +113,7 @@ async function improvedRefreshVault() {
 // Override the global function
 window.refreshVault = improvedRefreshVault;
 // ==================== FIXED SENDMESSAGE FUNCTION ====================
-async function sendMessage() {
+async function _sendMessage() {
   const input = document.getElementById("user-input");
   const text = input.value.trim();
   if (!text || !systemActive) return;

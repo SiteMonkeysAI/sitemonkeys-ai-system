@@ -408,7 +408,7 @@ export class MemoryIntelligenceBridge {
     mode,
     memoryContext,
     vaultContext,
-    activation,
+    _activation,
   ) {
     try {
       // Call existing enhanced-intelligence.js with properly formatted memory
@@ -440,8 +440,8 @@ export class MemoryIntelligenceBridge {
     query,
     mode,
     memoryContext,
-    vaultContext,
-    activation,
+    _vaultContext,
+    _activation,
   ) {
     try {
       // Call existing ai-reasoning-engine.js with properly formatted context
@@ -471,7 +471,7 @@ export class MemoryIntelligenceBridge {
     mode,
     memoryContext,
     vaultContext,
-    activation,
+    _activation,
   ) {
     try {
       // Call existing intelligence-orchestrator.js with memory context
@@ -511,7 +511,7 @@ export class MemoryIntelligenceBridge {
     enhancedResponse,
     reasoningResponse,
     orchestratorResponse,
-    personality,
+    _personality,
   ) {
     const responses = [
       enhancedResponse,
@@ -543,7 +543,7 @@ export class MemoryIntelligenceBridge {
     };
   }
 
-  createFallbackResponse(query, mode, personality) {
+  createFallbackResponse(_query, _mode, _personality) {
     return {
       intelligenceEnhanced: false,
       memoryIntegrated: false,

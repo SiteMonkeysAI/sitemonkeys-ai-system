@@ -307,7 +307,7 @@ class RequestFlowTracer {
         traceId,
         promptLength: promptInspection.totalLength,
         contentPresent: Object.entries(promptInspection.contentVerification)
-          .filter(([k, v]) => v)
+          .filter(([_k, v]) => v)
           .map(([k]) => k),
         sections: promptInspection.sections.length,
         warnings: trace.warnings.length,
@@ -348,7 +348,7 @@ class RequestFlowTracer {
         this.log("warning", `⚠️ FALLBACK DETECTED`, {
           traceId,
           indicators: Object.entries(fallbackIndicators)
-            .filter(([k, v]) => v)
+            .filter(([_k, v]) => v)
             .map(([k]) => k),
         });
       }
@@ -506,7 +506,7 @@ class RequestFlowTracer {
 
   performFinalIntegrityCheck(trace) {
     const initial = trace.dataFlow.initial;
-    const final = trace.outputVerification;
+    const _final = trace.outputVerification;
 
     const integrityReport = {
       dataPreserved: true,
@@ -722,7 +722,7 @@ class RequestFlowTracer {
   log(level, message, data) {
     if (!this.enabled) return;
 
-    const logEntry = {
+    const _logEntry = {
       timestamp: new Date().toISOString(),
       level,
       message,

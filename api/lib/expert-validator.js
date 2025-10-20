@@ -83,7 +83,7 @@ export function checkExpertIndicators(response, expertDomain) {
     anticipates_problems: false,
   };
 
-  const responseLower = response.toLowerCase();
+  const _responseLower = response.toLowerCase();
 
   // Domain-specific expert indicators
   if (expertDomain === "financial_analysis") {
@@ -121,7 +121,7 @@ export function checkExpertIndicators(response, expertDomain) {
   return indicators;
 }
 
-export function performQualityChecks(response, originalMessage) {
+export function performQualityChecks(response, _originalMessage) {
   const checks = {
     has_confidence_scoring: /confidence:|confidence\s+(high|medium|low)/i.test(
       response,

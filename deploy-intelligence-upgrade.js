@@ -5,7 +5,7 @@
 // ================================================================
 
 import fs from "fs";
-import path from "path";
+import _path from "path";
 
 console.log("🧠 DEPLOYING ENHANCED INTELLIGENCE SYSTEM...\n");
 

@@ -41,7 +41,7 @@ const __dirname = dirname(__filename);
 function fileExists(filePath) {
   try {
     return fs.existsSync(filePath);
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }
@@ -49,11 +49,11 @@ function fileExists(filePath) {
 /**
  * Check if a module can be imported (reserved for future dynamic module testing)
  */
-async function canImportModule(modulePath) {
+async function _canImportModule(modulePath) {
   try {
     await import(modulePath);
     return true;
-  } catch (error) {
+  } catch (_error) {
     return false;
   }
 }

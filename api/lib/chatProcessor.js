@@ -1,10 +1,24 @@
-import crypto from "node:crypto";
 import { processWithEliAndRoxy } from "./ai-processors.js";
 import OpenAI from "openai";
+import crypto from "crypto";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Helper function to generate secure IDs with timestamp
+function generateId(prefix = "") {
+  let randomPart;
+  if (typeof crypto.randomUUID === "function") {
+    randomPart = crypto.randomUUID();
+  } else {
+    randomPart = crypto.randomBytes(16).toString("hex");
+  }
+  const timestamp = Date.now();
+  return prefix
+    ? `${prefix}-${timestamp}-${randomPart}`
+    : `${timestamp}-${randomPart}`;
+}
 
 // PERSISTENT SESSION STORE - SURVIVES RESTARTS
 class PersistentSessionStore {
@@ -93,7 +107,7 @@ class OverrideAuditor {
     userPressure = false,
   ) {
     const overrideRecord = {
-      id: `OVR-${Date.now()}-${crypto.randomBytes(4).toString("hex")}`,
+      id: generateId("OVR"),
       timestamp: Date.now(),
       type: type,
       originalRule: originalRule,
@@ -131,7 +145,7 @@ class OverrideAuditor {
     return Math.min(impact, 0.3);
   }
 
-  static generateJustification(type, context) {
+  static generateJustification(type, _context) {
     const justifications = {
       TRUTH_ACCOMMODATION: "Response modified to meet truth-first standards",
       BUSINESS_RISK_MINIMIZATION:
@@ -323,7 +337,7 @@ export async function processRequest(requestBody) {
       conversation_history = [],
       vault_loaded = false,
       user_preference = null,
-      session_id = `session_${Date.now()}_${crypto.randomBytes(6).toString("hex")}`,
+      session_id = generateId("session"),
     } = requestBody;
 
     console.log(
@@ -337,7 +351,7 @@ export async function processRequest(requestBody) {
     );
 
     // VAULT SYSTEM - ONLY FOR SITE MONKEYS
-    let vaultResults = [];
+    let _vaultResults = [];
     let vaultStatus = { loaded: false, required: mode === "site_monkeys" };
 
     if (mode === "site_monkeys") {
@@ -357,7 +371,7 @@ export async function processRequest(requestBody) {
 
         session.vaultCache = embeddedVault;
         vaultStatus = { loaded: true, source: "EMBEDDED", required: true };
-        vaultResults = analyzeForVault(message);
+        _vaultResults = analyzeForVault(message);
       } else {
         return {
           response: `🔐 SITE MONKEYS MODE REQUIRES VAULT ACTIVATION\n\nSite Monkeys mode cannot operate without company-specific business logic loaded.\n\nRequired Actions:\n1. Click "Load Vault" to activate Site Monkeys business rules\n2. Or switch to Business Validation mode for general business analysis\n\nSite Monkeys vault contains:\n• Pricing enforcement ($697 minimum)\n• Expense analysis thresholds\n• Company-specific risk factors\n• Compliance requirements\n\nVault activation required for cognitive firewall protection.`,

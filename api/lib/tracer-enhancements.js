@@ -6,6 +6,21 @@
 
 import fs from "fs";
 import path from "path";
+import crypto from "crypto";
+
+// Helper function to generate secure IDs with timestamp
+function generateId(prefix = "") {
+  let randomPart;
+  if (typeof crypto.randomUUID === "function") {
+    randomPart = crypto.randomUUID();
+  } else {
+    randomPart = crypto.randomBytes(16).toString("hex");
+  }
+  const timestamp = Date.now();
+  return prefix
+    ? `${prefix}-${timestamp}-${randomPart}`
+    : `${timestamp}-${randomPart}`;
+}
 
 // ================================================================
 // ENHANCEMENT 1: FILE LOGGING IMPLEMENTATION
@@ -102,7 +117,7 @@ class FileLogger {
               continue;
 
             traces.push(trace);
-          } catch (e) {
+          } catch (_e) {
             // Skip malformed lines
           }
         }
@@ -221,9 +236,7 @@ class SessionTracker {
       "anonymous";
 
     // Create conversation ID (ties multiple requests together)
-    const conversationId =
-      req.body?.conversation_id ||
-      `conv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const conversationId = req.body?.conversation_id || generateId("conv");
 
     // Track session
     if (!this.sessions.has(sessionId)) {

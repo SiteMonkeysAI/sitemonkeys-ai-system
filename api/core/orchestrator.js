@@ -612,7 +612,7 @@ export class Orchestrator {
 
   // ==================== STEP 3: LOAD VAULT CONTEXT ====================
 
-  async #loadVaultContext(vaultCandidate, maybeSession) {
+  async #loadVaultContext(vaultCandidate, _maybeSession) {
     try {
       // 1️⃣ If vault object was passed directly from the server
       if (vaultCandidate && vaultCandidate.content && vaultCandidate.loaded) {
@@ -804,7 +804,7 @@ export class Orchestrator {
     };
   }
 
-  #determineDomain(message, context) {
+  #determineDomain(message, _context) {
     const msg = message.toLowerCase();
 
     if (/business|revenue|profit|customer|market|strategy|company/i.test(msg)) {
@@ -1268,7 +1268,7 @@ export class Orchestrator {
 
   // ==================== UTILITY METHODS ====================
 
-  #buildContextString(context, mode) {
+  #buildContextString(context, _mode) {
     let contextStr = "";
 
     // ========== VAULT TAKES ABSOLUTE PRIORITY IN SITE MONKEYS MODE ==========
@@ -1333,7 +1333,7 @@ export class Orchestrator {
     return contextStr;
   }
 
-  #buildSystemPrompt(mode, analysis) {
+  #buildSystemPrompt(mode, _analysis) {
     const modeConfig = MODES[mode];
 
     let prompt = `You are a truth-first AI assistant. Your priorities are: Truth > Helpfulness > Engagement.

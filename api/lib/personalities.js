@@ -358,10 +358,10 @@ Your response should demonstrate extraordinary emotional intelligence combined w
 
 // CLAUDE INTEGRATION FOR COMPLEX ANALYSIS
 export async function generateClaudeResponse(
-  message,
-  mode,
-  vaultContext,
-  conversationHistory,
+  _message,
+  _mode,
+  _vaultContext,
+  _conversationHistory,
 ) {
   try {
     console.log("🍌 Claude Integration: Complex analysis requested");
@@ -401,7 +401,7 @@ Your request is being processed with full Site Monkeys operational standards and
 }
 
 // ELI RESPONSE VALIDATION
-function validateEliResponse(response) {
+function _validateEliResponse(response) {
   let validated = response;
   let modifications = 0;
   let compliance_score = 100;
@@ -459,7 +459,7 @@ function validateEliResponse(response) {
 }
 
 // ROXY RESPONSE VALIDATION
-function validateRoxyResponse(response) {
+function _validateRoxyResponse(response) {
   let validated = response;
   let modifications = 0;
   let speculation_blocks = 0;
@@ -771,7 +771,7 @@ export function validateResponseQuality(response, personality, mode) {
 export function analyzePromptForCognitiveFirewall(
   message,
   mode,
-  conversationHistory,
+  _conversationHistory,
 ) {
   const analysis = {
     political_pressure: false,
@@ -1088,7 +1088,7 @@ function analyzeQueryComplexity(message, mode) {
   return Math.min(complexity, 1.0);
 }
 
-function analyzeEmotionalContext(message, conversationHistory) {
+function analyzeEmotionalContext(message, _conversationHistory) {
   const emotionalWords = {
     stressed: 0.8,
     worried: 0.7,
@@ -1254,7 +1254,7 @@ I'll provide more comprehensive analysis once my enhanced reasoning systems are 
   };
 }
 
-function generateRoxyEnhancedFallback(error, message, mode) {
+function generateRoxyEnhancedFallback(error, _message, _mode) {
   return {
     response: `🍌 **Roxy:** I'm having some technical challenges with my analysis systems, but I still want to support you:
 

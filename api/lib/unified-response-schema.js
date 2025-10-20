@@ -5,7 +5,7 @@ export class UnifiedResponseSchema {
   // MASTER SCHEMA BUILDER - Single authority for all response formatting
   static buildUnifiedResponse(processedResponse, systemData, enforcementData) {
     const {
-      content,
+      _content,
       mode,
       personality,
       expertDomain = "general",
@@ -295,7 +295,7 @@ export class UnifiedResponseSchema {
     return titles[domain] || "Expert Consultant";
   }
 
-  static assessExpertQuality(response, domain) {
+  static assessExpertQuality(response, _domain) {
     // Simplified quality assessment
     let score = 75;
     if (response.length > 500) score += 10; // Comprehensive response

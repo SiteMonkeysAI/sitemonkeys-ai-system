@@ -12,7 +12,7 @@ export class PersonalitySelector {
     };
   }
 
-  selectPersonality(analysis, mode, context) {
+  selectPersonality(analysis, mode, _context) {
     try {
       this.logger.log("Selecting personality based on analysis...");
 
@@ -124,7 +124,7 @@ export class PersonalitySelector {
     }
   }
 
-  #explainSelection(selected, analysis, mode, score) {
+  #explainSelection(selected, analysis, mode, _score) {
     const reasons = [];
 
     if (analysis.domain === "business" && selected === "eli") {

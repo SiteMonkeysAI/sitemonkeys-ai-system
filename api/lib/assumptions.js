@@ -3,7 +3,21 @@
 // TIER 2: HEALTH ASSESSMENT AND CONFLICT DETECTION
 // TIER 3: OVERRIDE TRACKING AND PATTERN ANALYSIS
 
-import crypto from "node:crypto";
+import crypto from "crypto";
+
+// Helper function to generate secure IDs with timestamp
+function generateId(prefix = "") {
+  let randomPart;
+  if (typeof crypto.randomUUID === "function") {
+    randomPart = crypto.randomUUID();
+  } else {
+    randomPart = crypto.randomBytes(16).toString("hex");
+  }
+  const timestamp = Date.now();
+  return prefix
+    ? `${prefix}-${timestamp}-${randomPart}`
+    : `${timestamp}-${randomPart}`;
+}
 
 // Helper functions for logging and drift status
 function logOverride(type, details, _context) {
@@ -376,7 +390,7 @@ function extractContext(text, position, radius) {
 }
 
 function generateSessionId() {
-  return `assumption-${Date.now()}-${crypto.randomBytes(6).toString("hex")}`;
+  return generateId("assumption");
 }
 
 // TIER 3: REPORTING AND ANALYTICS

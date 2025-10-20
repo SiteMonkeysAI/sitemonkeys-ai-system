@@ -179,7 +179,7 @@ I can share relevant studies, statistics, and expert analysis from various sourc
 Would you like me to provide factual information about this topic from multiple perspectives instead?`;
   }
 
-  static getMultiplePerspectivesTemplate(response) {
+  static getMultiplePerspectivesTemplate(_response) {
     return `This topic involves disputed claims with different perspectives. Rather than endorsing one view, here are the main positions:
 
 🔍 PERSPECTIVE A: [Generally held view with sources]
@@ -197,7 +197,7 @@ I recommend researching multiple credible sources, including academic institutio
 Would you like me to help you find specific research sources on this topic?`;
   }
 
-  static getNeutralRedirectTemplate(response) {
+  static getNeutralRedirectTemplate(_response) {
     return `I focus on providing factual information rather than political opinions or endorsements.
 
 Instead, I can help you:

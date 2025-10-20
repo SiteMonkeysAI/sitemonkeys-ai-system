@@ -540,7 +540,7 @@ class EnforcementTestSuite {
     console.log(`  ${testResult.status}: ${test.name}`);
   }
 
-  generateUniversalEnforcementResponse(enforcementType, test) {
+  generateUniversalEnforcementResponse(enforcementType, _test) {
     let mockResponse = {
       response: "",
       mode_active: "business_validation",
