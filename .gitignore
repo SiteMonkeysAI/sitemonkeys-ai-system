@@ -9,3 +9,4 @@ __pycache__/
 *.pyo
 *.pyd
 test-vault-fixes.js
+test-vault-endpoint.js
