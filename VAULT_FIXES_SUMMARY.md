@@ -108,86 +108,61 @@ detailed explanations of everything stored here.
 ## Issue 3: Per-Request Token Display (MEDIUM) ✅
 
 ### Root Cause
-Backend tracked tokens perfectly but frontend only showed session totals in header elements. Users couldn't see:
-- Per-request token breakdown
-- Context source breakdown (memory/docs/vault)
-- Individual request costs
+Backend tracked tokens perfectly but frontend only showed placeholder values in the existing status panel UI elements. The UI already had:
+- `#token-count` element showing "Ready"
+- `#cost-estimate` element showing "$0.00"
+
+These needed to be populated with real per-request data.
 
 ### Solution Implemented
-**File: `public/js/app.js`** (Lines 117-162)
+**File: `public/js/app.js`**
 
-#### Added Two New Functions:
+#### Updated Existing Function:
 
-**1. displayTokenInfo(metadata)** - Displays per-request token info
+**updateTokenDisplay(tokenData)** - Updates existing UI elements
 ```javascript
-function displayTokenInfo(metadata) {
-  if (!metadata || !metadata.token_usage) return;
+function updateTokenDisplay(tokenData) {
+  try {
+    // Target the existing elements by their IDs from the HTML
+    const tokenCountElement = document.getElementById("token-count");
+    const costEstimateElement = document.getElementById("cost-estimate");
 
-  const tokenDisplay = document.getElementById("token-display") || createTokenDisplay();
-  const tokens = metadata.token_usage;
-
-  let html = `
-    <div class="token-info" style="...">
-      💰 <strong>Tokens:</strong> ${tokens.prompt_tokens} + ${tokens.completion_tokens} = ${tokens.total_tokens}
-      | <strong>Cost:</strong> ${tokens.cost_display}
-  `;
-
-  if (tokens.context_tokens && tokens.context_tokens.total_context > 0) {
-    html += `<br>📊 <strong>Context:</strong> `;
-    const contexts = [];
-    if (tokens.context_tokens.memory > 0) contexts.push(`Memory: ${tokens.context_tokens.memory}`);
-    if (tokens.context_tokens.documents > 0) contexts.push(`Docs: ${tokens.context_tokens.documents}`);
-    if (tokens.context_tokens.vault > 0) contexts.push(`Vault: ${tokens.context_tokens.vault}`);
-    html += contexts.join(" | ");
-  }
-
-  html += `</div>`;
-  tokenDisplay.innerHTML = html;
-  tokenDisplay.style.display = "block";
-}
-```
-
-**2. createTokenDisplay()** - Creates display container
-```javascript
-function createTokenDisplay() {
-  const display = document.createElement("div");
-  display.id = "token-display";
-  const chatContainer = document.querySelector(".chat-container");
-  if (chatContainer) {
-    chatContainer.prepend(display);
-  } else {
-    // Fallback to insert before chat-box
-    const chatBox = document.getElementById("chat-box");
-    if (chatBox && chatBox.parentElement) {
-      chatBox.parentElement.insertBefore(display, chatBox);
+    if (tokenCountElement && tokenData.total_tokens !== undefined) {
+      tokenCountElement.textContent = tokenData.total_tokens;
+      tokenCountElement.style.color = "#00ff41";
     }
+
+    if (costEstimateElement && tokenData.cost_display) {
+      costEstimateElement.textContent = tokenData.cost_display;
+      costEstimateElement.style.color = "#00ff41";
+    }
+  } catch (error) {
+    console.warn("Token display update failed:", error);
   }
-  return display;
 }
 ```
 
 #### Integrated with Chat Handler
-**Line 280:**
 ```javascript
 const data = await response.json();
 
-// Display per-request token information
-if (data.metadata) {
-  displayTokenInfo(data.metadata);
+// Update existing UI elements with per-request token data
+if (data.metadata && data.metadata.token_usage) {
+  updateTokenDisplay(data.metadata.token_usage);
 }
 ```
 
 ### Expected Behavior After Fix
-✅ Token display appears above chat area after each request  
-✅ Shows prompt + completion = total tokens  
-✅ Shows cost for the request  
-✅ Shows context breakdown when available  
+✅ Existing status panel shows real token counts  
+✅ Existing cost display shows real per-request cost  
 ✅ Updates after each chat response  
+✅ No new UI elements created  
+✅ Maintains existing visual design  
 
-### Display Format Example:
+### Display Format in Status Panel:
 ```
-💰 Tokens: 1237 + 399 = 1636 | Cost: $0.0097
-📊 Context: Memory: 150 | Vault: 1087
+🔢 1636 TOKENS
+💰 EST. COST: $0.0097
 ```
 
 ---

@@ -16,9 +16,9 @@
 
 ### 3. Token Display ✅
 **Problem:** Users couldn't see per-request token breakdown  
-**Root Cause:** Frontend only showed session totals  
-**Fix Location:** `public/js/app.js` lines 117-162  
-**Result:** Per-request display showing tokens, cost, and context sources
+**Root Cause:** Frontend showed placeholder values in existing UI elements  
+**Fix Location:** `public/js/app.js` updateTokenDisplay function  
+**Result:** Existing status panel now shows real per-request tokens and cost
 
 ### 4. Session Memory Leak ✅
 **Problem:** MemoryStore warning in production logs, memory leaks over time  
@@ -50,8 +50,9 @@
 3. **Test Token Display:**
    ```
    - Send any chat message
-   - Look above chat area for token display
-   - Should show: "💰 Tokens: X + Y = Z | Cost: $..."
+   - Look at the status panel (vault info section)
+   - Should show real values instead of "Ready" and "$0.00"
+   - Example: "🔢 1636 TOKENS" and "💰 EST. COST: $0.0097"
    ```
 
 4. **Test Session Storage:**
@@ -96,16 +97,24 @@ This is COMPREHENSIVE, not contextual or partial.
 
 ### app.js (Token Display)
 ```javascript
-function displayTokenInfo(metadata) {
-  // Creates token display showing:
-  // - Prompt + Completion = Total
-  // - Cost per request
-  // - Context breakdown (Memory/Docs/Vault)
+function updateTokenDisplay(tokenData) {
+  // Updates existing UI elements:
+  // - #token-count shows total tokens
+  // - #cost-estimate shows cost per request
+  const tokenCountElement = document.getElementById("token-count");
+  const costEstimateElement = document.getElementById("cost-estimate");
+  
+  if (tokenCountElement) {
+    tokenCountElement.textContent = tokenData.total_tokens;
+  }
+  if (costEstimateElement) {
+    costEstimateElement.textContent = tokenData.cost_display;
+  }
 }
 
 // Integrated in chat handler
-if (data.metadata) {
-  displayTokenInfo(data.metadata);
+if (data.metadata && data.metadata.token_usage) {
+  updateTokenDisplay(data.metadata.token_usage);
 }
 ```
 
