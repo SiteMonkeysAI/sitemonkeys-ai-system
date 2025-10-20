@@ -9,6 +9,7 @@ console.log("[SERVER] 📦 Loading dependencies...");
 import express from "express";
 import cors from "cors";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { persistentMemory } from "./api/categories/memory/index.js";
 import { uploadMiddleware, handleFileUpload } from "./api/upload-file.js";
 import {
@@ -27,6 +28,9 @@ console.log("[SERVER] 🎯 Initializing Orchestrator...");
 const orchestrator = new Orchestrator();
 
 console.log("[SERVER] ✅ Orchestrator created");
+
+// Initialize PostgreSQL session store
+const PgSession = connectPgSimple(session);
 
 // ===== CRITICAL RAILWAY ERROR HANDLERS =====
 process.on("unhandledRejection", (reason, promise) => {
@@ -60,25 +64,45 @@ const app = express();
 addInventoryEndpoint(app);
 
 // 🔐 SESSION CONFIGURATION
-// SECURITY: Session management with best practices
+// SECURITY: Session management with PostgreSQL-backed storage
 // - Uses environment variable for secret (SESSION_SECRET should be set in production)
-// - Default fallback secret should be replaced in production deployments
+// - PostgreSQL store prevents memory leaks and scales horizontally
+// - Sessions persist across server restarts
+// - Automatic cleanup of expired sessions every 15 minutes
 // - sameSite: 'lax' provides CSRF protection while allowing reasonable navigation
-// - 24-hour expiration limits session hijacking window
-// - resave: false prevents unnecessary session store writes
-// - saveUninitialized: true allows anonymous session tracking
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "sitemonkeys", // SECURITY: Set SESSION_SECRET env var in production
-    resave: false,
-    saveUninitialized: true,
-    cookie: {
-      maxAge: 1000 * 60 * 60 * 24, // 24 hours
-      sameSite: "lax", // CSRF protection
-      // SECURITY: In production, also set: secure: true (requires HTTPS), httpOnly: true
-    },
-  }),
-);
+// - 30-day expiration for better user experience
+// - httpOnly: true prevents JavaScript access to cookies
+// - secure: true in production requires HTTPS
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || "sitemonkeys-fallback-secret",
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    sameSite: "lax", // CSRF protection
+    httpOnly: true, // Prevent JavaScript access
+    secure: process.env.NODE_ENV === "production", // HTTPS only in production
+  },
+};
+
+// Use PostgreSQL session store if DATABASE_URL is available
+// Falls back to MemoryStore in development without DATABASE_URL
+if (process.env.DATABASE_URL) {
+  sessionConfig.store = new PgSession({
+    conString: process.env.DATABASE_URL,
+    tableName: "user_sessions",
+    pruneSessionInterval: 60 * 15, // Clean up expired sessions every 15 minutes
+    createTableIfMissing: true, // Automatically create sessions table
+  });
+  console.log("[SERVER] 🔐 Session storage: PostgreSQL (production-ready)");
+} else {
+  console.warn(
+    "[SERVER] ⚠️ Session storage: MemoryStore (development only - will leak memory in production)",
+  );
+  console.warn("[SERVER] ⚠️ Set DATABASE_URL to use PostgreSQL session storage");
+}
+
+app.use(session(sessionConfig));
 
 // ===== APPLICATION STARTUP MEMORY INITIALIZATION =====
 console.log(
@@ -204,6 +228,7 @@ app.post("/api/chat", async (req, res) => {
       documentContext,
       vaultEnabled = false,
       vaultContext,
+      vault_content,
       conversationHistory = [],
     } = req.body;
 
@@ -221,6 +246,24 @@ app.post("/api/chat", async (req, res) => {
     // - Rate limiting per userId/IP
     // - Content filtering for malicious patterns
 
+    // FIX: Transform vault_content to vaultContext structure for orchestrator
+    let finalVaultContext = vaultContext;
+    if (!finalVaultContext && vault_content && vault_content.length > 500) {
+      finalVaultContext = {
+        content: vault_content,
+        loaded: true,
+      };
+      console.log(`[CHAT] 🍌 Vault content transformed: ${vault_content.length} chars`);
+    }
+
+    // Diagnostic logging for vault flow
+    if (mode === "site_monkeys") {
+      console.log("[CHAT] 🍌 Site Monkeys mode detected:");
+      console.log(`  - vaultEnabled: ${vaultEnabled}`);
+      console.log(`  - vault_content length: ${vault_content?.length || 0}`);
+      console.log(`  - finalVaultContext: ${finalVaultContext ? 'present' : 'null'}`);
+    }
+
     // Process request through orchestrator
     const result = await orchestrator.processRequest({
       message,
@@ -229,7 +272,7 @@ app.post("/api/chat", async (req, res) => {
       sessionId,
       documentContext,
       vaultEnabled,
-      vaultContext,
+      vaultContext: finalVaultContext,
       conversationHistory,
     });
 

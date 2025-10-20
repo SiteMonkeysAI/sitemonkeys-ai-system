@@ -112,6 +112,7 @@ async function improvedRefreshVault() {
 
 // Override the global function
 window.refreshVault = improvedRefreshVault;
+
 // ==================== FIXED SENDMESSAGE FUNCTION ====================
 async function _sendMessage() {
   const input = document.getElementById("user-input");
@@ -210,19 +211,11 @@ async function _sendMessage() {
 
     const data = await response.json();
 
-    // ADD THIS DEBUG LINE:
-    console.log("🔍 TOKEN DEBUG:", data.token_usage);
-
-    // EXTRACT AND DISPLAY TOKEN/COST DATA
-    console.log(
-      "🔍 Checking token_usage:",
-      !!data.token_usage,
-      typeof data.token_usage,
-    );
-    if (data.token_usage && typeof data.token_usage === "object") {
-      updateTokenDisplay(data.token_usage);
+    // EXTRACT AND DISPLAY TOKEN/COST DATA IN EXISTING UI ELEMENTS
+    if (data.metadata && data.metadata.token_usage) {
+      updateTokenDisplay(data.metadata.token_usage);
     } else {
-      console.log("❌ Token data missing or invalid:", data.token_usage);
+      console.log("❌ Token data missing or invalid");
     }
 
     let reply = data.response || "No response received";
@@ -338,24 +331,23 @@ async function _sendMessage() {
 }
 
 // TOKEN AND COST DISPLAY FUNCTIONS
+// Updates the existing UI elements with per-request token and cost data
 function updateTokenDisplay(tokenData) {
-  console.log("💰 DISPLAY DEBUG:", tokenData);
   try {
-    // Target the exact elements by their IDs from the HTML
+    // Target the existing elements by their IDs from the HTML
     const tokenCountElement = document.getElementById("token-count");
     const costEstimateElement = document.getElementById("cost-estimate");
 
-    if (tokenCountElement) {
-      tokenCountElement.textContent = tokenData.session_total_tokens || 0;
+    if (tokenCountElement && tokenData.total_tokens !== undefined) {
+      tokenCountElement.textContent = tokenData.total_tokens;
       tokenCountElement.style.color = "#00ff41";
-      console.log("[COST] Updated token count");
+      console.log("[TOKEN] Updated token count:", tokenData.total_tokens);
     }
 
-    if (costEstimateElement) {
-      const sessionCost = (tokenData.session_total_cost || 0).toFixed(4);
-      costEstimateElement.textContent = `$${sessionCost}`;
+    if (costEstimateElement && tokenData.cost_display) {
+      costEstimateElement.textContent = tokenData.cost_display;
       costEstimateElement.style.color = "#00ff41";
-      console.log("[COST] Updated cost estimate");
+      console.log("[COST] Updated cost estimate:", tokenData.cost_display);
     }
   } catch (error) {
     console.warn("Token display update failed:", error);
