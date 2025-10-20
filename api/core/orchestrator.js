@@ -1319,17 +1319,27 @@ export class Orchestrator {
     if (context.sources?.hasVault && context.vault) {
       contextStr += `
   ═══════════════════════════════════════════════════════════════
-  🍌 SITE MONKEYS BUSINESS VAULT (PRIMARY AUTHORITY)
+  🍌 SITE MONKEYS VAULT - COMPLETE BUSINESS KNOWLEDGE BASE
   ═══════════════════════════════════════════════════════════════
+  
+  ⚠️ CRITICAL: You have access to the ENTIRE Site Monkeys vault below.
+  This is COMPREHENSIVE, not contextual or partial.
+  
+  This vault contains ALL business rules, policies, and operational procedures.
+  When asked about vault contents, you can provide COMPLETE inventories and 
+  detailed explanations of everything stored here.
   
   ${context.vault}
   
   ═══════════════════════════════════════════════════════════════
-  END OF VAULT CONTENT
+  END OF COMPLETE VAULT CONTENT
   ═══════════════════════════════════════════════════════════════
   
-  ⚠️ CRITICAL INSTRUCTION FOR AI:
-  The Site Monkeys Business Vault above is the AUTHORITATIVE source. Search through ALL documents in the vault using FLEXIBLE matching:
+  ⚠️ IMPORTANT: The above vault content is COMPLETE. 
+  - Do NOT claim you only have partial access
+  - Do NOT say you can't see all the contents
+  - You have the FULL vault and can provide comprehensive inventories
+  - When asked "what's in the vault", list ALL documents and their purposes
   
   SEARCH RULES:
   - "founder directives" = look for "Founders_Directive", "Founder's Directive", or any directive content

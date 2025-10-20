@@ -112,6 +112,54 @@ async function improvedRefreshVault() {
 
 // Override the global function
 window.refreshVault = improvedRefreshVault;
+
+// ==================== TOKEN DISPLAY FUNCTIONS ====================
+function displayTokenInfo(metadata) {
+  if (!metadata || !metadata.token_usage) return;
+
+  const tokenDisplay =
+    document.getElementById("token-display") || createTokenDisplay();
+  const tokens = metadata.token_usage;
+
+  let html = `
+        <div class="token-info" style="padding: 8px; margin: 10px 0; background: #f8f9fa; border-radius: 4px; font-size: 13px; color: #495057;">
+            💰 <strong>Tokens:</strong> ${tokens.prompt_tokens || 0} + ${tokens.completion_tokens || 0} = ${tokens.total_tokens || 0}
+            | <strong>Cost:</strong> ${tokens.cost_display || "$0.00"}
+    `;
+
+  if (tokens.context_tokens && tokens.context_tokens.total_context > 0) {
+    html += `<br>📊 <strong>Context:</strong> `;
+    const contexts = [];
+    if (tokens.context_tokens.memory > 0)
+      contexts.push(`Memory: ${tokens.context_tokens.memory}`);
+    if (tokens.context_tokens.documents > 0)
+      contexts.push(`Docs: ${tokens.context_tokens.documents}`);
+    if (tokens.context_tokens.vault > 0)
+      contexts.push(`Vault: ${tokens.context_tokens.vault}`);
+    html += contexts.join(" | ");
+  }
+
+  html += `</div>`;
+  tokenDisplay.innerHTML = html;
+  tokenDisplay.style.display = "block";
+}
+
+function createTokenDisplay() {
+  const display = document.createElement("div");
+  display.id = "token-display";
+  const chatContainer = document.querySelector(".chat-container");
+  if (chatContainer) {
+    chatContainer.prepend(display);
+  } else {
+    // Fallback: insert before chat-box
+    const chatBox = document.getElementById("chat-box");
+    if (chatBox && chatBox.parentElement) {
+      chatBox.parentElement.insertBefore(display, chatBox);
+    }
+  }
+  return display;
+}
+
 // ==================== FIXED SENDMESSAGE FUNCTION ====================
 async function _sendMessage() {
   const input = document.getElementById("user-input");
@@ -223,6 +271,11 @@ async function _sendMessage() {
       updateTokenDisplay(data.token_usage);
     } else {
       console.log("❌ Token data missing or invalid:", data.token_usage);
+    }
+
+    // Display per-request token information
+    if (data.metadata) {
+      displayTokenInfo(data.metadata);
     }
 
     let reply = data.response || "No response received";

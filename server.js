@@ -204,6 +204,7 @@ app.post("/api/chat", async (req, res) => {
       documentContext,
       vaultEnabled = false,
       vaultContext,
+      vault_content,
       conversationHistory = [],
     } = req.body;
 
@@ -221,6 +222,24 @@ app.post("/api/chat", async (req, res) => {
     // - Rate limiting per userId/IP
     // - Content filtering for malicious patterns
 
+    // FIX: Transform vault_content to vaultContext structure for orchestrator
+    let finalVaultContext = vaultContext;
+    if (!finalVaultContext && vault_content && vault_content.length > 500) {
+      finalVaultContext = {
+        content: vault_content,
+        loaded: true,
+      };
+      console.log(`[CHAT] 🍌 Vault content transformed: ${vault_content.length} chars`);
+    }
+
+    // Diagnostic logging for vault flow
+    if (mode === "site_monkeys") {
+      console.log("[CHAT] 🍌 Site Monkeys mode detected:");
+      console.log(`  - vaultEnabled: ${vaultEnabled}`);
+      console.log(`  - vault_content length: ${vault_content?.length || 0}`);
+      console.log(`  - finalVaultContext: ${finalVaultContext ? 'present' : 'null'}`);
+    }
+
     // Process request through orchestrator
     const result = await orchestrator.processRequest({
       message,
@@ -229,7 +248,7 @@ app.post("/api/chat", async (req, res) => {
       sessionId,
       documentContext,
       vaultEnabled,
-      vaultContext,
+      vaultContext: finalVaultContext,
       conversationHistory,
     });
 
