@@ -10,3 +10,4 @@ __pycache__/
 *.pyd
 test-vault-fixes.js
 test-vault-endpoint.js
+verify-fixes.js
