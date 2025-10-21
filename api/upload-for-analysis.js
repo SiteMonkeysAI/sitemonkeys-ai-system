@@ -361,11 +361,13 @@ async function processFile(file) {
 
 // Main upload handler - EXACT COPY with analysis-specific logging
 async function handleAnalysisUpload(req, res) {
-  console.log("📤 [Analysis] File upload request received");
+  const timestamp = new Date().toISOString();
+  console.log(`[${timestamp}] [ANALYSIS] File upload request received`);
 
   try {
-    // Check if files were uploaded
-    if (!req.files || req.files.length === 0) {
+    // Check if files were uploaded - ensure req.files is an array
+    if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
+      console.log(`[${timestamp}] [ANALYSIS] No files in request`);
       return res.status(400).json({
         status: "error",
         message: "No files uploaded",
@@ -378,12 +380,13 @@ async function handleAnalysisUpload(req, res) {
     // Enforce document limit before processing new upload
     if (extractedDocuments.size >= MAX_DOCUMENTS) {
       console.warn(
-        `[DOCUMENT-CLEANUP] Document limit reached (${MAX_DOCUMENTS}), forcing immediate cleanup`,
+        `[${timestamp}] [ANALYSIS] Document limit reached (${MAX_DOCUMENTS}), forcing immediate cleanup`,
       );
       autoCleanupDocuments();
 
       // If still at limit after cleanup, reject new upload
       if (extractedDocuments.size >= MAX_DOCUMENTS) {
+        console.error(`[${timestamp}] [ANALYSIS] Still at limit after cleanup - rejecting upload`);
         return res.status(429).json({
           status: "error",
           message:
@@ -398,7 +401,19 @@ async function handleAnalysisUpload(req, res) {
       }
     }
 
-    console.log(`📁 [Analysis] Processing ${req.files.length} file(s)`);
+    // Ensure req.files is a valid array to prevent type confusion
+    if (!Array.isArray(req.files)) {
+      console.log(`[${timestamp}] [ANALYSIS] Unexpected type for req.files: ${typeof req.files}`);
+      return res.status(400).json({
+        status: "error",
+        message: "Malformed upload: files must be an array",
+        successful_uploads: 0,
+        failed_uploads: 0,
+        files: [],
+      });
+    }
+
+    console.log(`[${timestamp}] [ANALYSIS] Processing ${req.files.length} file(s)`);
 
     const results = [];
     let successCount = 0;
@@ -489,11 +504,13 @@ async function handleAnalysisUpload(req, res) {
     results.forEach((file) => {
       if (file.contentExtracted) {
         const documentId = `${Date.now()}_${file.filename}`;
+        const timestamp = new Date().toISOString();
+        
         extractedDocuments.set("latest", {
           id: documentId,
           filename: file.filename,
           content: file.docxAnalysis.preview,
-          fullContent: file.docxAnalysis.fullText, // ← ADD THIS LINE
+          fullContent: file.docxAnalysis.fullText,
           wordCount: file.docxAnalysis.wordCount,
           contentType: file.docxAnalysis.contentType,
           keyPhrases: file.docxAnalysis.keyPhrases,
@@ -501,7 +518,7 @@ async function handleAnalysisUpload(req, res) {
         });
 
         console.log(
-          `📄 [STORAGE] Stored document for chat access: ${file.filename}`,
+          `[${timestamp}] [STORAGE] Stored document for chat: ${file.filename} (${file.docxAnalysis.wordCount} words, ${file.docxAnalysis.fullText.length} chars)`,
         );
       }
     });
