@@ -1893,15 +1893,21 @@
           const data = await response.json();
 
           const reply = data.response || "No response received";
-          // Update token counter
-          if (data.token_usage) {
+          // Update token counter - FIX: Access from data.metadata.token_usage
+          const tokenUsage = data.metadata?.token_usage || data.token_usage;
+          if (tokenUsage) {
             const tokenEl = document.getElementById("token-count");
             const costEl = document.getElementById("cost-estimate");
-            if (tokenEl)
-              tokenEl.textContent = data.token_usage.session_total_tokens || 0;
-            if (costEl)
-              costEl.textContent =
-                "$" + (data.token_usage.session_total_cost || 0).toFixed(4);
+            if (tokenEl) {
+              tokenEl.textContent = tokenUsage.total_tokens || 0;
+              tokenEl.style.color = "#00ff41"; // Highlight when updated
+              console.log("[TOKEN] Updated display:", tokenUsage.total_tokens);
+            }
+            if (costEl) {
+              costEl.textContent = tokenUsage.cost_display || `$${(tokenUsage.cost_usd || 0).toFixed(4)}`;
+              costEl.style.color = "#00ff41"; // Highlight when updated
+              console.log("[COST] Updated display:", costEl.textContent);
+            }
           }
           // Clean the AI response - remove ALL system fingerprints
           let cleanReply = reply

@@ -67,10 +67,23 @@ export class Orchestrator {
       personalityEnhancements: 0,
     };
 
-    // Logging
-    this.log = (message) => console.log(`[ORCHESTRATOR] ${message}`);
-    this.error = (message, error) =>
-      console.error(`[ORCHESTRATOR ERROR] ${message}`, error);
+    // Logging with timestamp for Railway visibility
+    this.log = (message) => {
+      const timestamp = new Date().toISOString();
+      console.log(`[${timestamp}] [ORCHESTRATOR] ${message}`);
+      // Force flush for Railway
+      if (process.stdout && process.stdout.write) {
+        process.stdout.write("");
+      }
+    };
+    this.error = (message, error) => {
+      const timestamp = new Date().toISOString();
+      console.error(`[${timestamp}] [ORCHESTRATOR ERROR] ${message}`, error || "");
+      // Force flush for Railway
+      if (process.stderr && process.stderr.write) {
+        process.stderr.write("");
+      }
+    };
   }
 
   async initialize() {
@@ -528,27 +541,52 @@ export class Orchestrator {
             message,
           );
 
-          // Check what we actually got back
-          this.log(
-            `[MEMORY-DEBUG] Result type: ${typeof result}, has memories: ${!!result?.memories}`,
-          );
+          // Enhanced memory result handling - support multiple return formats
+          if (result) {
+            let memoryText = "";
+            let memoryCount = 0;
 
-          if (result && result.memories) {
-            // The result.memories might be an object or string - handle both
-            const memoryText =
-              typeof result.memories === "string"
-                ? result.memories
-                : JSON.stringify(result.memories);
+            // Format 1: result.memories is a string
+            if (typeof result.memories === "string" && result.memories.length > 0) {
+              memoryText = result.memories;
+              memoryCount = result.count || 1;
+            }
+            // Format 2: result.memories is an array of memory objects
+            else if (Array.isArray(result.memories) && result.memories.length > 0) {
+              memoryText = result.memories
+                .map((m) => {
+                  if (typeof m === "string") return m;
+                  if (m.content) return m.content;
+                  if (m.text) return m.text;
+                  return JSON.stringify(m);
+                })
+                .join("\n\n");
+              memoryCount = result.memories.length;
+            }
+            // Format 3: result.memories is an object
+            else if (typeof result.memories === "object" && result.memories !== null) {
+              memoryText = JSON.stringify(result.memories, null, 2);
+              memoryCount = result.count || 1;
+            }
+            // Format 4: result itself is the memory string
+            else if (typeof result === "string" && result.length > 0) {
+              memoryText = result;
+              memoryCount = 1;
+            }
 
-            memories = {
-              success: true,
-              memories: memoryText,
-              count: result.count || 1,
-            };
+            if (memoryText.length > 0) {
+              memories = {
+                success: true,
+                memories: memoryText,
+                count: memoryCount,
+              };
 
-            this.log(
-              `[MEMORY-FIX] Successfully loaded ${memories.count} memories, ${memoryText.length} chars`,
-            );
+              this.log(
+                `[MEMORY] Successfully loaded ${memoryCount} memories, ${memoryText.length} chars`,
+              );
+            } else {
+              this.log("[MEMORY] Result received but no usable memory content found");
+            }
           }
         } catch (error) {
           this.error("[MEMORY] Retrieval error:", error);
@@ -594,8 +632,7 @@ export class Orchestrator {
 
   async #loadDocumentContext(documentContext, sessionId) {
     try {
-      // FIX #1: Properly access extractedDocuments Map (stored with .set("latest", {...}))
-      // Previously tried to access as array: extractedDocuments[sessionId]
+      // Access extractedDocuments Map correctly (stored with .set("latest", {...}))
       const latestDoc = extractedDocuments.get("latest");
       
       if (!latestDoc) {
@@ -605,6 +642,12 @@ export class Orchestrator {
 
       // Use fullContent if available, otherwise fall back to preview content
       const documentContent = latestDoc.fullContent || latestDoc.content;
+      
+      if (!documentContent || documentContent.length === 0) {
+        this.log("[DOCUMENTS] Document has no content");
+        return null;
+      }
+      
       const tokens = Math.ceil(documentContent.length / 4);
 
       if (tokens > 10000) {
@@ -688,6 +731,10 @@ export class Orchestrator {
     const memoryText = memory?.memories || "";
     const documentText = documents?.content || "";
     const vaultText = vault?.content || "";
+
+    // Log context assembly for Railway visibility
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [ORCHESTRATOR] [CONTEXT] Assembling context - Memory: ${memoryText.length} chars, Documents: ${documentText.length} chars, Vault: ${vaultText.length} chars`);
 
     return {
       memory: memoryText,

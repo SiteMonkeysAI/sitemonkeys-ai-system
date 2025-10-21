@@ -3,6 +3,45 @@
 // Ready for immediate Railway deployment
 //Redeploy2
 
+// Enhanced logging for Railway visibility
+const logWithTimestamp = (level, category, message, data = null) => {
+  const timestamp = new Date().toISOString();
+  const logMessage = `[${timestamp}] [${level}] [${category}] ${message}`;
+  
+  if (level === "ERROR") {
+    console.error(logMessage, data || "");
+  } else if (level === "WARN") {
+    console.warn(logMessage, data || "");
+  } else {
+    console.log(logMessage, data || "");
+  }
+  
+  // Ensure logs are flushed immediately (important for Railway)
+  if (process.stdout && process.stdout.write) {
+    process.stdout.write("");
+  }
+};
+
+console.log = ((oldLog) => {
+  return (...args) => {
+    oldLog.apply(console, args);
+    // Force flush for Railway
+    if (process.stdout && process.stdout.write) {
+      process.stdout.write("");
+    }
+  };
+})(console.log);
+
+console.error = ((oldError) => {
+  return (...args) => {
+    oldError.apply(console, args);
+    // Force flush for Railway
+    if (process.stderr && process.stderr.write) {
+      process.stderr.write("");
+    }
+  };
+})(console.error);
+
 console.log("[SERVER] 🎬 Starting Site Monkeys AI System...");
 console.log("[SERVER] 📦 Loading dependencies...");
 
