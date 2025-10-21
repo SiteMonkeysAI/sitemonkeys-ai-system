@@ -365,8 +365,8 @@ async function handleAnalysisUpload(req, res) {
   console.log(`[${timestamp}] [ANALYSIS] File upload request received`);
 
   try {
-    // Check if files were uploaded
-    if (!req.files || req.files.length === 0) {
+    // Check if files were uploaded - ensure req.files is an array
+    if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
       console.log(`[${timestamp}] [ANALYSIS] No files in request`);
       return res.status(400).json({
         status: "error",
