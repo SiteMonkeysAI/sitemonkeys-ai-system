@@ -401,6 +401,18 @@ async function handleAnalysisUpload(req, res) {
       }
     }
 
+    // Ensure req.files is a valid array to prevent type confusion
+    if (!Array.isArray(req.files)) {
+      console.log(`[${timestamp}] [ANALYSIS] Unexpected type for req.files: ${typeof req.files}`);
+      return res.status(400).json({
+        status: "error",
+        message: "Malformed upload: files must be an array",
+        successful_uploads: 0,
+        failed_uploads: 0,
+        files: [],
+      });
+    }
+
     console.log(`[${timestamp}] [ANALYSIS] Processing ${req.files.length} file(s)`);
 
     const results = [];
