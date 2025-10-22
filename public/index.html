@@ -1685,13 +1685,24 @@
           const data = await response.json();
           console.log("📊 Vault status:", data);
 
-          if (data.status === "success" && !data.needs_refresh) {
+          // Check if vault is loaded (data.success && has content && has folders)
+          if (data.success && data.vault_content && data.vault_content.length > 1000 && data.folders_loaded && data.folders_loaded.length > 0) {
+            // Calculate token count from vault content
+            const vaultTokens = Math.ceil(data.vault_content.length / 4);
             document.getElementById("vault-info").innerHTML = `
         <div><span style="color:#00FF00;">✅</span> VAULT READY (CACHED)</div>
-        <div>🔢 <span id="token-count">${currentTokens}</span> TOKENS</div>
-        <div>💰 EST. COST: <span id="cost-estimate">${currentCost}</span></div>
-        <div>📁 <span id="vault-folders">${data.folders_loaded?.length || "Cached"}</span> FOLDERS LOADED</div>
+        <div>🔢 <span id="token-count">${vaultTokens}</span> TOKENS</div>
+        <div>💰 EST. COST: <span id="cost-estimate">$${(vaultTokens * 0.003 / 1000).toFixed(4)}</span></div>
+        <div>📁 <span id="vault-folders">${data.folders_loaded.length}</span> FOLDERS LOADED</div>
         <button id="refresh-vault-btn" onclick="debouncedRefreshVault()" style="background: #FFD811; color: #373534; border: 1px solid #fff; border-radius: 8px; padding: 8px 12px; font-size: 0.8em; font-weight: bold; cursor: pointer; margin-top: 8px; width: 100%; transition: all 0.2s ease;" onmouseover="this.style.background='#ffe96a'" onmouseout="this.style.background='#FFD811'">🔄 Refresh Vault</button>`;
+            
+            // Store vault for later use
+            window.currentVaultContent = data.vault_content || "";
+            window.vaultStatus = {
+              loaded: true,
+              healthy: true,
+              tokens: vaultTokens,
+            };
           } else {
             document.getElementById("vault-info").innerHTML = `
         <div><span style="color:#FFA500;">⚠️</span> VAULT NEEDS REFRESH</div>
@@ -1747,11 +1758,13 @@
             "characters",
           );
 
-          if (data.status === "refreshed") {
+          if (data.success && data.vault_content && data.vault_content.length > 1000) {
+            // Calculate token count from vault content (rough estimate: 1 token ≈ 4 chars)
+            const vaultTokens = Math.ceil(data.vault_content.length / 4);
             document.getElementById("vault-info").innerHTML = `
         <div><span style="color:#00FF00;">✅</span> VAULT REFRESHED</div>
-        <div>🔢 <span id="token-count">${currentTokens}</span> TOKENS</div>
-        <div>💰 EST. COST: <span id="cost-estimate">${currentCost}</span></div>
+        <div>🔢 <span id="token-count">${vaultTokens}</span> TOKENS</div>
+        <div>💰 EST. COST: <span id="cost-estimate">$${(vaultTokens * 0.003 / 1000).toFixed(4)}</span></div>
         <div>📁 <span id="vault-folders">${data.folders_loaded?.length || 0}</span> FOLDERS LOADED</div>
         <button id="refresh-vault-btn" onclick="debouncedRefreshVault()" style="background: #FFD811; color: #373534; border: 1px solid #fff; border-radius: 8px; padding: 8px 12px; font-size: 0.8em; font-weight: bold; cursor: pointer; margin-top: 8px; width: 100%; transition: all 0.2s ease;" onmouseover="this.style.background='#ffe96a'" onmouseout="this.style.background='#FFD811'">🔄 Refresh Vault</button>`;
           } else {
