@@ -1460,10 +1460,23 @@ class IntelligenceSystem {
         semanticAnalysis,
       );
 
-      // STEP 2: Score primary memories for similarity
+      // STEP 2: Apply multi-dimensional relevance scoring
       const scoredPrimary = primaryMemories.map((memory) => ({
         ...memory,
-        similarityScore: this.calculateContentSimilarity(query, memory.content),
+        // Multi-dimensional scoring as specified in the requirements
+        semanticScore: this.calculateSemanticSimilarity(query, memory.content),
+        keywordScore: this.calculateKeywordMatch(query, memory.content),
+        recencyScore: this.calculateRecencyBoost(memory.created_at, memory.last_accessed),
+        importanceScore: memory.relevance_score || 0,
+        usageScore: Math.min((memory.usage_frequency || 0) / 20, 1.0), // Normalize to 0-1
+        // Combined relevance score with weights from spec
+        relevanceScore: this.calculateMultiDimensionalRelevance(
+          this.calculateSemanticSimilarity(query, memory.content),
+          this.calculateKeywordMatch(query, memory.content),
+          this.calculateRecencyBoost(memory.created_at, memory.last_accessed),
+          memory.relevance_score || 0,
+          Math.min((memory.usage_frequency || 0) / 20, 1.0)
+        ),
         source: "primary_category",
       }));
 
@@ -1471,7 +1484,7 @@ class IntelligenceSystem {
       let allMemories = scoredPrimary;
 
       const goodPrimaryResults = scoredPrimary.filter(
-        (m) => m.similarityScore > 0.3,
+        (m) => m.relevanceScore > 0.3,
       ).length;
       if (goodPrimaryResults < 2) {
         this.logger.log(
@@ -1486,12 +1499,17 @@ class IntelligenceSystem {
         allMemories = [...scoredPrimary, ...relatedMemories];
       }
 
-      // STEP 4: Re-rank by similarity score
-      const rankedMemories = this.rerankBySimilarity(allMemories, query);
+      // STEP 4: Re-rank by multi-dimensional relevance score
+      const rankedMemories = allMemories.sort((a, b) => {
+        return (b.relevanceScore || 0) - (a.relevanceScore || 0);
+      });
 
-      // STEP 5: Apply token management (existing logic)
+      // STEP 5: Apply temporal diversity selection (from spec)
+      const diverseMemories = this.selectDiverseMemories(rankedMemories, 2400);
+
+      // STEP 6: Apply token management with diversity
       const finalMemories = await this.applyIntelligentTokenManagement(
-        rankedMemories,
+        diverseMemories,
         2400,
       );
 
@@ -2746,6 +2764,187 @@ class IntelligenceSystem {
       (word) => queryWords.includes(word) && word.length > 3,
     );
     return sharedWords.length >= 2;
+  }
+
+  // ================================================================
+  // MULTI-DIMENSIONAL RELEVANCE SCORING (From Spec)
+  // ================================================================
+
+  /**
+   * Calculate multi-dimensional relevance score as specified in requirements
+   * Weights: semantic (0.4) + keyword (0.3) + recency (0.1) + importance (0.1) + usage (0.1)
+   */
+  calculateMultiDimensionalRelevance(semanticScore, keywordScore, recencyScore, importanceScore, usageScore) {
+    return (
+      (semanticScore * 0.4) +
+      (keywordScore * 0.3) +
+      (recencyScore * 0.1) +
+      (importanceScore * 0.1) +
+      (usageScore * 0.1)
+    );
+  }
+
+  /**
+   * Calculate semantic similarity between query and memory content
+   */
+  calculateSemanticSimilarity(query, content) {
+    if (!query || !content) return 0;
+
+    const queryLower = query.toLowerCase();
+    const contentLower = content.toLowerCase();
+
+    // Exact phrase match gets highest score
+    if (contentLower.includes(queryLower)) {
+      return 1.0;
+    }
+
+    // Extract meaningful words and calculate overlap
+    const queryWords = this.extractMeaningfulWords(queryLower);
+    const contentWords = this.extractMeaningfulWords(contentLower);
+
+    if (queryWords.length === 0 || contentWords.length === 0) return 0;
+
+    // Calculate word overlap
+    let matchCount = 0;
+    for (const queryWord of queryWords) {
+      if (contentWords.includes(queryWord)) {
+        matchCount++;
+      } else {
+        // Check for partial matches (e.g., "superhero" matches "superheroes")
+        const partialMatch = contentWords.some(cw => 
+          cw.includes(queryWord) || queryWord.includes(cw)
+        );
+        if (partialMatch) {
+          matchCount += 0.5;
+        }
+      }
+    }
+
+    // Normalize by query length
+    const semanticSimilarity = matchCount / queryWords.length;
+
+    // Boost if content contains key query nouns
+    const queryNouns = this.extractImportantNouns(queryLower);
+    const contentNouns = this.extractImportantNouns(contentLower);
+    const nounOverlap = queryNouns.filter(qn => contentNouns.includes(qn)).length;
+    const nounBoost = queryNouns.length > 0 ? (nounOverlap / queryNouns.length) * 0.3 : 0;
+
+    return Math.min(semanticSimilarity + nounBoost, 1.0);
+  }
+
+  /**
+   * Calculate keyword match score
+   */
+  calculateKeywordMatch(query, content) {
+    const queryKeywords = this.extractImportantNouns(query.toLowerCase());
+    const contentLower = content.toLowerCase();
+
+    if (queryKeywords.length === 0) return 0.5;
+
+    let matchScore = 0;
+    for (const keyword of queryKeywords) {
+      if (contentLower.includes(keyword)) {
+        matchScore += 1.0;
+      } else {
+        // Check for word variations
+        const variations = [
+          keyword + 's',
+          keyword + 'es',
+          keyword.slice(0, -1), // remove last char
+          keyword.slice(0, -2), // remove last 2 chars
+        ];
+        if (variations.some(v => contentLower.includes(v))) {
+          matchScore += 0.7;
+        }
+      }
+    }
+
+    return Math.min(matchScore / queryKeywords.length, 1.0);
+  }
+
+  /**
+   * Calculate recency boost score
+   */
+  calculateRecencyBoost(createdAt, lastAccessed) {
+    try {
+      const now = Date.now();
+      const created = new Date(createdAt).getTime();
+      const accessed = new Date(lastAccessed || createdAt).getTime();
+
+      const ageInDays = (now - created) / (1000 * 60 * 60 * 24);
+      const accessedDaysAgo = (now - accessed) / (1000 * 60 * 60 * 24);
+
+      // Recency score based on creation and last access
+      let recencyScore = 0;
+
+      // Recent creation bonus
+      if (ageInDays < 7) recencyScore += 0.5;
+      else if (ageInDays < 30) recencyScore += 0.3;
+      else if (ageInDays < 90) recencyScore += 0.2;
+      else recencyScore += 0.1;
+
+      // Recent access bonus
+      if (accessedDaysAgo < 7) recencyScore += 0.3;
+      else if (accessedDaysAgo < 30) recencyScore += 0.2;
+
+      return Math.min(recencyScore, 1.0);
+    } catch (error) {
+      return 0.5; // Default middle value
+    }
+  }
+
+  /**
+   * Select diverse memories with temporal diversity (from spec)
+   * Mix: 70% from relevant+recent, 30% from relevant+older
+   */
+  selectDiverseMemories(memories, tokenBudget) {
+    if (!memories || memories.length === 0) return [];
+
+    // Sort by relevance score (already sorted from previous step)
+    const sorted = memories.sort((a, b) => {
+      return (b.relevanceScore || 0) - (a.relevanceScore || 0);
+    });
+
+    // Take top 50% by relevance
+    const topRelevant = sorted.slice(0, Math.ceil(sorted.length / 2));
+
+    if (topRelevant.length === 0) return [];
+
+    // Split by temporal categories
+    const recentCutoff = Date.now() - (30 * 24 * 60 * 60 * 1000); // 30 days ago
+    const older = [];
+    const newer = [];
+
+    for (const memory of topRelevant) {
+      try {
+        const created = new Date(memory.created_at).getTime();
+        if (created < recentCutoff) {
+          older.push(memory);
+        } else {
+          newer.push(memory);
+        }
+      } catch {
+        newer.push(memory); // Default to newer if date parsing fails
+      }
+    }
+
+    // Calculate token budget allocation
+    const estimatedTokensPerMemory = 120; // Rough estimate
+    const maxMemories = Math.floor(tokenBudget / estimatedTokensPerMemory);
+    const newerCount = Math.ceil(maxMemories * 0.7);
+    const olderCount = Math.floor(maxMemories * 0.3);
+
+    // Mix: 70% newer, 30% older
+    const selected = [
+      ...newer.slice(0, newerCount),
+      ...older.slice(0, olderCount)
+    ];
+
+    this.logger.log(
+      `Temporal diversity: ${newer.slice(0, newerCount).length} recent + ${older.slice(0, olderCount).length} older = ${selected.length} total`
+    );
+
+    return selected;
   }
 
   // ================================================================
