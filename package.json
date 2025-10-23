@@ -26,6 +26,7 @@
     "fix-database": "node fix_database.js",
     "start": "node server.js",
     "test-intelligence": "node test-intelligence-system.js",
+    "test-token-budgets": "node test-token-budgets.js",
     "validate-deployment": "node deploy-intelligence-upgrade.js"
   },
   "engines": {
