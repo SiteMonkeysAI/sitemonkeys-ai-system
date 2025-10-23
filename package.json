@@ -16,7 +16,8 @@
     "openai": "^4.0.0",
     "pdf-parse": "^1.1.1",
     "pg": "^8.11.3",
-    "xml2js": "^0.6.2"
+    "xml2js": "^0.6.2",
+    "lodash": "^4.17.21"
   },
   "imports": {
     "#config/*": "./config/*",
@@ -26,6 +27,8 @@
     "fix-database": "node fix_database.js",
     "start": "node server.js",
     "test-intelligence": "node test-intelligence-system.js",
+    "test-token-budgets": "node test-token-budgets.js",
+    "test-token-budgets-unit": "node test-token-budgets-unit.js",
     "validate-deployment": "node deploy-intelligence-upgrade.js"
   },
   "engines": {

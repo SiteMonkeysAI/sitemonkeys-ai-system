@@ -19,7 +19,7 @@ import {
 import { EMERGENCY_FALLBACKS } from "../lib/site-monkeys/emergency-fallbacks.js";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-
+import _ from "lodash";
 // ========== ENFORCEMENT MODULE IMPORTS ==========
 import { driftWatcher } from "../lib/validators/drift-watcher.js";
 import { initiativeEnforcer } from "../lib/validators/initiative-enforcer.js";
@@ -312,13 +312,26 @@ export class Orchestrator {
       }
 
       // STEP 3: Load vault (if Site Monkeys mode and enabled)
-      const vaultData = vaultContext
+      let vaultData = vaultContext
         ? await this.#loadVaultContext(vaultContext)
         : mode === "site_monkeys" && vaultEnabled
           ? await this.#loadVaultContext(userId, sessionId)
           : null;
-      if (vaultData) {
-        this.log(`[VAULT] Loaded ${vaultData.tokens} tokens`);
+      
+      // Apply intelligent section selection to vault content
+      if (vaultData && vaultData.fullContent) {
+        const selection = this.#selectRelevantVaultSections(vaultData.fullContent, message);
+        vaultData = {
+          content: selection.content,
+          tokens: selection.tokens,
+          loaded: true,
+          sectionsSelected: selection.sectionsSelected,
+          totalSections: selection.totalSections,
+          selectionReason: selection.selectionReason,
+        };
+        this.log(`[VAULT] Selected ${selection.sectionsSelected}${selection.totalSections ? `/${selection.totalSections}` : ''} sections: ${selection.tokens} tokens (${selection.selectionReason})`);
+      } else if (vaultData) {
+        this.log(`[VAULT] Loaded ${vaultData.tokens} tokens (no selection applied)`);
       }
 
       // STEP 4: Assemble complete context
@@ -431,10 +444,15 @@ export class Orchestrator {
         metadata: {
           // Context tracking
           memoryUsed: memoryContext.hasMemory,
-          memoryTokens: memoryContext.tokens,
-          documentTokens: documentData?.tokens || 0,
-          vaultTokens: vaultData?.tokens || 0,
+          memoryTokens: context.tokenBreakdown?.memory || memoryContext.tokens,
+          documentTokens: context.tokenBreakdown?.documents || (documentData?.tokens || 0),
+          vaultTokens: context.tokenBreakdown?.vault || (vaultData?.tokens || 0),
           totalContextTokens: context.totalTokens,
+          
+          // Token budget compliance
+          budgetCompliance: context.budgetCompliance || {},
+          vaultSectionsSelected: vaultData?.sectionsSelected,
+          vaultSelectionReason: vaultData?.selectionReason,
 
           // AI model tracking
           model: aiResponse.model,
@@ -465,9 +483,9 @@ export class Orchestrator {
             completion_tokens: aiResponse.cost?.outputTokens || 0,
             total_tokens: (aiResponse.cost?.inputTokens || 0) + (aiResponse.cost?.outputTokens || 0),
             context_tokens: {
-              memory: memoryContext.tokens || 0,
-              documents: documentData?.tokens || 0,
-              vault: vaultData?.tokens || 0,
+              memory: context.tokenBreakdown?.memory || 0,
+              documents: context.tokenBreakdown?.documents || 0,
+              vault: context.tokenBreakdown?.vault || 0,
               total_context: context.totalTokens || 0,
             },
             cost_usd: aiResponse.cost?.totalCost || 0,
@@ -688,9 +706,10 @@ export class Orchestrator {
       // 1️⃣ If vault object was passed directly from the server
       if (vaultCandidate && vaultCandidate.content && vaultCandidate.loaded) {
         const tokens = Math.ceil(vaultCandidate.content.length / 4);
-        this.log(`[VAULT] Loaded from request: ${tokens} tokens`);
+        this.log(`[VAULT] Loaded from request: ${tokens} tokens (full vault)`);
         return {
           content: vaultCandidate.content,
+          fullContent: vaultCandidate.content, // Store full vault for selection
           tokens,
           loaded: true,
         };
@@ -699,9 +718,10 @@ export class Orchestrator {
       // 2️⃣ Otherwise try the global cache
       if (global.vaultContent && global.vaultContent.length > 1000) {
         const tokens = Math.ceil(global.vaultContent.length / 4);
-        this.log(`[VAULT] Loaded from global: ${tokens} tokens`);
+        this.log(`[VAULT] Loaded from global: ${tokens} tokens (full vault)`);
         return {
           content: global.vaultContent,
+          fullContent: global.vaultContent, // Store full vault for selection
           tokens,
           loaded: true,
         };
@@ -723,26 +743,335 @@ export class Orchestrator {
     }
   }
 
+  // ==================== INTELLIGENT VAULT SECTION SELECTION ====================
+  
+  /**
+   * Selects relevant vault sections based on query analysis
+   * Enforces 9,000 token maximum for vault content
+   * @param {string} vaultContent - Full vault content
+   * @param {string} query - User query
+   * @returns {object} Selected vault sections with metadata
+   */
+  #selectRelevantVaultSections(vaultContent, query) {
+    const MAX_VAULT_TOKENS = 9000;
+    
+    try {
+      if (!vaultContent || vaultContent.length === 0) {
+        return { content: "", tokens: 0, sectionsSelected: 0 };
+      }
+
+      // Keywords to look for in query
+      const queryLower = query.toLowerCase();
+      const keywords = this.#extractKeywords(queryLower);
+      
+      // Special handling for "what's in the vault" type queries - return full inventory
+      const isInventoryQuery = /what'?s?\s+(in|inside|stored|contained|within)\s+(the\s+)?vault/i.test(query) ||
+                              /list\s+(all|everything|vault|contents)/i.test(query) ||
+                              /show\s+(me\s+)?(all|everything|vault|contents)/i.test(query);
+      
+      if (isInventoryQuery) {
+        this.log("[VAULT SELECTION] Inventory query detected - allowing full vault access");
+        const targetTokens = Math.min(MAX_VAULT_TOKENS, Math.ceil(vaultContent.length / 4));
+        const targetChars = targetTokens * 4;
+        
+        if (vaultContent.length <= targetChars) {
+          return {
+            content: vaultContent,
+            tokens: Math.ceil(vaultContent.length / 4),
+            sectionsSelected: 1,
+            selectionReason: "Full vault for inventory query"
+          };
+        }
+        
+        // Truncate intelligently for inventory
+        const truncated = this.#truncateVaultIntelligently(vaultContent, targetChars);
+        return {
+          content: truncated,
+          tokens: Math.ceil(truncated.length / 4),
+          sectionsSelected: 1,
+          selectionReason: "Truncated vault for inventory query"
+        };
+      }
+
+      // Split vault into sections (by document markers or paragraphs)
+      const sections = this.#splitVaultIntoSections(vaultContent);
+      
+      if (sections.length === 0) {
+        // Fallback: treat entire vault as one section
+        const targetTokens = Math.min(MAX_VAULT_TOKENS, Math.ceil(vaultContent.length / 4));
+        const targetChars = targetTokens * 4;
+        const content = vaultContent.substring(0, targetChars);
+        return {
+          content,
+          tokens: Math.ceil(content.length / 4),
+          sectionsSelected: 1,
+          selectionReason: "Full vault (no sections found)"
+        };
+      }
+
+      // Score each section by relevance
+      const scoredSections = sections.map(section => ({
+        content: section,
+        score: this.#scoreVaultSection(section, keywords, queryLower),
+        tokens: Math.ceil(section.length / 4)
+      }));
+
+      // Sort by relevance score (descending)
+      scoredSections.sort((a, b) => b.score - a.score);
+
+      // Select sections until we hit the token budget
+      let selectedContent = [];
+      let totalTokens = 0;
+      let sectionsUsed = 0;
+
+      for (const section of scoredSections) {
+        if (totalTokens + section.tokens <= MAX_VAULT_TOKENS) {
+          selectedContent.push(section.content);
+          totalTokens += section.tokens;
+          sectionsUsed++;
+        } else {
+          // Try to fit partial section if we have room
+          const remainingTokens = MAX_VAULT_TOKENS - totalTokens;
+          if (remainingTokens > 500) { // Only if we have meaningful space
+            const partialChars = remainingTokens * 4;
+            const partial = section.content.substring(0, partialChars);
+            selectedContent.push(partial);
+            totalTokens += Math.ceil(partial.length / 4);
+            sectionsUsed++;
+          }
+          break;
+        }
+      }
+
+      const finalContent = selectedContent.join("\n\n");
+      
+      this.log(`[VAULT SELECTION] Selected ${sectionsUsed}/${sections.length} sections, ${totalTokens} tokens`);
+      
+      return {
+        content: finalContent,
+        tokens: totalTokens,
+        sectionsSelected: sectionsUsed,
+        totalSections: sections.length,
+        selectionReason: `Keyword-matched ${sectionsUsed} relevant sections`
+      };
+
+    } catch (error) {
+      this.error("[VAULT SELECTION] Selection failed, using truncated vault", error);
+      
+      // Fallback: truncate to MAX_VAULT_TOKENS
+      const maxChars = MAX_VAULT_TOKENS * 4;
+      const truncated = vaultContent.substring(0, maxChars);
+      
+      return {
+        content: truncated,
+        tokens: Math.ceil(truncated.length / 4),
+        sectionsSelected: 1,
+        selectionReason: "Fallback truncation"
+      };
+    }
+  }
+
+  /**
+   * Extract relevant keywords from query
+   */
+  #extractKeywords(queryLower) {
+    // Remove common words
+    const stopWords = new Set(['what', 'is', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then', 'once']);
+    
+    const words = queryLower.match(/\b\w+\b/g) || [];
+    return words.filter(word => word.length > 2 && !stopWords.has(word));
+  }
+
+  /**
+   * Split vault content into logical sections
+   */
+  #splitVaultIntoSections(vaultContent) {
+    // Look for document boundaries or major section markers
+    const patterns = [
+      /={3,}/g,  // === separators
+      /\n\n[A-Z][^\n]+\n={2,}/g, // Markdown headers
+      /\[DOCUMENT:\s*[^\]]+\]/gi, // Document markers
+      /FILE:\s*[^\n]+/gi, // File markers
+    ];
+
+    let sections = [];
+    let lastIndex = 0;
+    
+    // Try to find natural section boundaries
+    const allMatches = [];
+    patterns.forEach(pattern => {
+      const matches = [...vaultContent.matchAll(pattern)];
+      matches.forEach(match => {
+        allMatches.push({ index: match.index, text: match[0] });
+      });
+    });
+
+    // Sort by position
+    allMatches.sort((a, b) => a.index - b.index);
+
+    // Split at boundaries
+    if (allMatches.length > 0) {
+      allMatches.forEach(match => {
+        if (match.index > lastIndex) {
+          const section = vaultContent.substring(lastIndex, match.index).trim();
+          if (section.length > 100) { // Minimum section size
+            sections.push(section);
+          }
+        }
+        lastIndex = match.index;
+      });
+      
+      // Add final section
+      const finalSection = vaultContent.substring(lastIndex).trim();
+      if (finalSection.length > 100) {
+        sections.push(finalSection);
+      }
+    }
+
+    // Fallback: split by large paragraphs if no sections found
+    if (sections.length === 0) {
+      sections = vaultContent.split(/\n\n+/).filter(s => s.length > 200);
+    }
+
+    // If still no sections, split by size
+    if (sections.length === 0) {
+      const chunkSize = 4000; // ~1000 tokens per chunk
+      for (let i = 0; i < vaultContent.length; i += chunkSize) {
+        sections.push(vaultContent.substring(i, i + chunkSize));
+      }
+    }
+
+    return sections.filter(s => s.length > 0);
+  }
+
+  /**
+   * Score a vault section by relevance to query
+   */
+  #scoreVaultSection(section, keywords, queryLower) {
+    let score = 0;
+    const sectionLower = section.toLowerCase();
+
+    // Keyword matching
+    keywords.forEach(keyword => {
+      const count = (sectionLower.match(new RegExp(_.escapeRegExp(keyword), 'g')) || []).length;
+      score += count * 10;
+    });
+
+    // Boost for exact phrase matches
+    if (sectionLower.includes(queryLower)) {
+      score += 100;
+    }
+
+    // Boost for document/section headers
+    if (/^\s*[A-Z][^\n]+\n={2,}/m.test(section)) {
+      score += 20;
+    }
+
+    // Boost for founder-related content (high priority)
+    if (/founder|directive|rule|policy|must|required/i.test(section)) {
+      score += 30;
+    }
+
+    // Boost for pricing/business content
+    if (/pricing|price|cost|\$\d+|revenue|business/i.test(section)) {
+      score += 25;
+    }
+
+    return score;
+  }
+
+  /**
+   * Truncate vault intelligently, preserving complete sections
+   */
+  #truncateVaultIntelligently(vaultContent, maxChars) {
+    if (vaultContent.length <= maxChars) {
+      return vaultContent;
+    }
+
+    // Try to truncate at a section boundary
+    const truncated = vaultContent.substring(0, maxChars);
+    
+    // Find the last complete section (look for double newline)
+    const lastSectionBreak = truncated.lastIndexOf('\n\n');
+    
+    if (lastSectionBreak > maxChars * 0.8) { // If we're not losing too much
+      return truncated.substring(0, lastSectionBreak) + "\n\n[Vault content truncated - more available on request]";
+    }
+    
+    return truncated + "\n\n[Vault content truncated - more available on request]";
+  }
+
   // ==================== STEP 4: ASSEMBLE CONTEXT ====================
 
   #assembleContext(memory, documents, vault) {
-    // STEP 1: Validate context priority - vault wins over documents
+    // TOKEN BUDGET ENFORCEMENT
+    const BUDGET = {
+      MEMORY: 2500,
+      DOCUMENTS: 3000,
+      VAULT: 9000,
+      TOTAL: 15000,
+    };
 
-    // STEP 3: Build context strings
-    const memoryText = memory?.memories || "";
-    const documentText = documents?.content || "";
+    // STEP 1: Enforce memory budget (≤2,500 tokens)
+    let memoryText = memory?.memories || "";
+    let memoryTokens = memory?.tokens || 0;
+    
+    if (memoryTokens > BUDGET.MEMORY) {
+      this.log(`[BUDGET] Memory exceeds limit: ${memoryTokens} > ${BUDGET.MEMORY}, truncating...`);
+      const targetChars = BUDGET.MEMORY * 4;
+      memoryText = memoryText.substring(0, targetChars);
+      memoryTokens = BUDGET.MEMORY;
+    }
+
+    // STEP 2: Enforce document budget (≤3,000 tokens)
+    let documentText = documents?.content || "";
+    let documentTokens = documents?.tokens || 0;
+    
+    if (documentTokens > BUDGET.DOCUMENTS) {
+      this.log(`[BUDGET] Documents exceed limit: ${documentTokens} > ${BUDGET.DOCUMENTS}, truncating...`);
+      const targetChars = BUDGET.DOCUMENTS * 4;
+      documentText = documentText.substring(0, targetChars);
+      documentTokens = BUDGET.DOCUMENTS;
+    }
+
+    // STEP 3: Enforce vault budget (≤9,000 tokens) - already enforced in selection
     const vaultText = vault?.content || "";
+    const vaultTokens = vault?.tokens || 0;
+    
+    if (vaultTokens > BUDGET.VAULT) {
+      this.log(`[BUDGET] WARNING: Vault exceeds limit: ${vaultTokens} > ${BUDGET.VAULT}`);
+      // This shouldn't happen due to selection, but log it
+    }
 
-    // Log context assembly for Railway visibility
+    // STEP 4: Calculate total and verify budget compliance
+    const totalTokens = memoryTokens + documentTokens + vaultTokens;
+    
+    if (totalTokens > BUDGET.TOTAL) {
+      this.log(`[BUDGET] WARNING: Total context exceeds limit: ${totalTokens} > ${BUDGET.TOTAL}`);
+    } else {
+      this.log(`[BUDGET] ✅ Context within budget: ${totalTokens}/${BUDGET.TOTAL} tokens`);
+    }
+
+    // STEP 5: Build context strings
     const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] [ORCHESTRATOR] [CONTEXT] Assembling context - Memory: ${memoryText.length} chars, Documents: ${documentText.length} chars, Vault: ${vaultText.length} chars`);
+    console.log(`[${timestamp}] [ORCHESTRATOR] [CONTEXT] Assembling context - Memory: ${memoryText.length} chars (${memoryTokens}t), Documents: ${documentText.length} chars (${documentTokens}t), Vault: ${vaultText.length} chars (${vaultTokens}t)`);
 
     return {
       memory: memoryText,
       documents: documentText,
       vault: vaultText,
-      totalTokens:
-        (memory?.tokens || 0) + (documents?.tokens || 0) + (vault?.tokens || 0),
+      totalTokens: totalTokens,
+      tokenBreakdown: {
+        memory: memoryTokens,
+        documents: documentTokens,
+        vault: vaultTokens,
+      },
+      budgetCompliance: {
+        memory: memoryTokens <= BUDGET.MEMORY,
+        documents: documentTokens <= BUDGET.DOCUMENTS,
+        vault: vaultTokens <= BUDGET.VAULT,
+        total: totalTokens <= BUDGET.TOTAL,
+      },
       sources: {
         hasMemory: memory?.hasMemory || false,
         hasDocuments: !!documents,
