@@ -50,7 +50,7 @@ class SessionManager {
   initializeSession(sessionId, userId) {
     try {
       if (this.activeSessions.has(sessionId)) {
-        this.log(`Session ${sessionId} already initialized`);
+        this.log("Session %s already initialized", sessionId);
         return this.activeSessions.get(sessionId);
       }
       
@@ -77,7 +77,7 @@ class SessionManager {
       });
       this.sessionCaches.set(sessionId, new Map());
       
-      this.log(`Session ${sessionId} initialized for user ${userId}`);
+      this.log("Session %s initialized for user %s", sessionId, userId);
       return session;
       
     } catch (error) {
@@ -184,7 +184,7 @@ class SessionManager {
       if (cache) {
         const cacheSize = cache.size;
         cache.clear();
-        this.log(`Cache flushed for session ${sessionId}: ${cacheSize} entries cleared`);
+        this.log("Cache flushed for session %s: %d entries cleared", sessionId, cacheSize);
       }
       
       // Clear session context
@@ -193,13 +193,13 @@ class SessionManager {
         context.conversationHistory = [];
         context.documentContext = null;
         context.vaultContext = null;
-        this.log(`Context cleared for session ${sessionId}`);
+        this.log("Context cleared for session %s", sessionId);
       }
       
       return true;
       
     } catch (error) {
-      this.error(`Failed to flush cache for session ${sessionId}`, error);
+      this.error("Failed to flush cache for session %s", sessionId, error);
       return false;
     }
   }
@@ -211,18 +211,18 @@ class SessionManager {
     try {
       const session = this.activeSessions.get(sessionId);
       if (!session) {
-        this.log(`Session ${sessionId} not found for cleanup`);
+        this.log("Session %s not found for cleanup", sessionId);
         return false;
       }
       
-      this.log(`Ending session ${sessionId} (reason: ${reason})`);
+      this.log("Ending session %s (reason: %s)", sessionId, reason);
       
       // Flush cache
       this.flushCache(sessionId);
       
       // Clear document references
       if (session.resources.documents.size > 0) {
-        this.log(`Clearing ${session.resources.documents.size} document references`);
+        this.log("Clearing %d document references", session.resources.documents.size);
         session.resources.documents.clear();
       }
       
@@ -231,11 +231,11 @@ class SessionManager {
       this.sessionContexts.delete(sessionId);
       this.sessionCaches.delete(sessionId);
       
-      this.log(`Session ${sessionId} cleanup complete`);
+      this.log("Session %s cleanup complete", sessionId);
       return true;
       
     } catch (error) {
-      this.error(`Failed to end session ${sessionId}`, error);
+      this.error("Failed to end session %s", sessionId, error);
       return false;
     }
   }
