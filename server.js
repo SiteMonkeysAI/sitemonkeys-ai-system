@@ -61,6 +61,8 @@ import Orchestrator from "./api/core/orchestrator.js";
 import systemStatus from "./api/system-status.js"; // <-- ADDED
 import { runAllTests } from "./api/test-suite.js";
 import loadVaultHandler from "./api/load-vault.js";
+import { vaultLoader } from "./api/utilities/vault-loader.js";
+import { sessionManager } from "./api/lib/session-manager.js";
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -177,6 +179,17 @@ async function initializeMemorySystem() {
     await persistentMemory.intelligenceSystem.initialize();
     console.log("[SERVER] ✅ Intelligence system initialized");
 
+    // Initialize vault loader
+    console.log("[SERVER] 🍌 Initializing vault loader...");
+    try {
+      await vaultLoader.initialize();
+      const vaultStats = vaultLoader.getStats();
+      console.log(`[SERVER] ✅ Vault loader initialized: ${vaultStats.coreTokens} core tokens, ${vaultStats.indexedFiles} files indexed`);
+    } catch (vaultError) {
+      console.error("[SERVER] ⚠️ Vault loader initialization failed:", vaultError.message);
+      console.log("[SERVER] System will continue without vault preload");
+    }
+
     // Verify memory system is working
     console.log("[SERVER] 📊 Memory system verification:", {
       available: !!global.memorySystem,
@@ -289,6 +302,12 @@ app.post("/api/chat", async (req, res) => {
     // - Rate limiting per userId/IP
     // - Content filtering for malicious patterns
 
+    // Initialize session if needed
+    if (sessionId) {
+      sessionManager.initializeSession(sessionId, userId);
+      sessionManager.updateActivity(sessionId);
+    }
+
     // FIX: Transform vault_content to vaultContext structure for orchestrator
     let finalVaultContext = vaultContext;
     if (!finalVaultContext && vault_content && vault_content.length > 500) {
@@ -349,6 +368,104 @@ app.post("/api/chat", async (req, res) => {
       error: error.message,
       response:
         "I encountered an error processing your request. Please try again.",
+    });
+  }
+});
+
+// ===== SESSION MANAGEMENT ENDPOINTS =====
+// Endpoint to end a session and flush cache
+app.post("/api/session/end", async (req, res) => {
+  try {
+    const { sessionId, userId } = req.body;
+    
+    if (!sessionId) {
+      return res.status(400).json({
+        success: false,
+        error: "Session ID is required"
+      });
+    }
+    
+    const ended = sessionManager.endSession(sessionId, "user_logout");
+    
+    if (ended) {
+      console.log(`[SESSION] Session ${sessionId} ended and cache flushed`);
+      return res.json({
+        success: true,
+        message: "Session ended and cache flushed"
+      });
+    } else {
+      return res.json({
+        success: false,
+        message: "Session not found or already ended"
+      });
+    }
+  } catch (error) {
+    console.error("[SESSION] Error ending session:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to end session"
+    });
+  }
+});
+
+// Endpoint to clear user context (all sessions for a user)
+app.post("/api/session/clear-context", async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({
+        success: false,
+        error: "User ID is required"
+      });
+    }
+    
+    const cleared = sessionManager.clearUserContext(userId);
+    
+    console.log(`[SESSION] Cleared context for user ${userId}: ${cleared} sessions`);
+    return res.json({
+      success: true,
+      sessionsCleared: cleared,
+      message: `Context cleared for ${cleared} sessions`
+    });
+  } catch (error) {
+    console.error("[SESSION] Error clearing user context:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to clear user context"
+    });
+  }
+});
+
+// Endpoint to get session stats
+app.get("/api/session/stats", (req, res) => {
+  try {
+    const { sessionId } = req.query;
+    
+    if (sessionId) {
+      const stats = sessionManager.getSessionStats(sessionId);
+      if (stats) {
+        return res.json({ success: true, stats });
+      } else {
+        return res.status(404).json({
+          success: false,
+          error: "Session not found"
+        });
+      }
+    } else {
+      const globalStats = sessionManager.getGlobalStats();
+      const activeSessions = sessionManager.getActiveSessions();
+      return res.json({
+        success: true,
+        global: globalStats,
+        sessions: activeSessions
+      });
+    }
+  } catch (error) {
+    console.error("[SESSION] Error getting session stats:", error);
+    return res.status(500).json({
+      success: false,
+      error: "Failed to get session stats"
     });
   }
 });
