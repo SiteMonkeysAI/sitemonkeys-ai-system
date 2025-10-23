@@ -61,6 +61,7 @@ import Orchestrator from "./api/core/orchestrator.js";
 import systemStatus from "./api/system-status.js"; // <-- ADDED
 import { runAllTests } from "./api/test-suite.js";
 import loadVaultHandler from "./api/load-vault.js";
+import vaultStatusHandler from "./api/vault-status.js";
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -235,6 +236,9 @@ app.get("/api/system-status", systemStatus); // <-- ADDED
 
 // Vault loading endpoint - connects frontend to existing vault-loader.js
 app.get("/api/load-vault", loadVaultHandler);
+
+// Vault status endpoint - real-time monitoring
+app.get("/api/vault-status", vaultStatusHandler);
 
 // Test suite endpoint - comprehensive feature validation
 app.get("/api/run-tests", async (req, res) => {

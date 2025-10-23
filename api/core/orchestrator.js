@@ -965,10 +965,30 @@ export class Orchestrator {
     conversationHistory,
   ) {
     try {
-      const useClaude =
+      // ========== TOKEN-BASED ROUTING (CRITICAL FIX) ==========
+      // Calculate total context tokens to prevent rate limit errors
+      const contextTokens = this.#calculateContextTokens(context, message, conversationHistory);
+      
+      this.log(`[AI ROUTING] Context size: ${contextTokens} tokens`);
+      
+      // CRITICAL: Route large contexts to Claude to avoid GPT-4 rate limits
+      // GPT-4 has 10K tokens/min limit, Claude handles large contexts better
+      let useClaude =
         confidence < 0.85 ||
         analysis.requiresExpertise ||
         (mode === "business_validation" && analysis.complexity > 0.7);
+      
+      // OVERRIDE: Force Claude for large contexts (>9K tokens)
+      if (contextTokens > 9000) {
+        useClaude = true;
+        this.log(`[AI ROUTING] Large context detected (${contextTokens} tokens) - routing to Claude`);
+      }
+      
+      // OVERRIDE: Site Monkeys mode with vault always uses Claude
+      if (mode === "site_monkeys" && context.sources?.hasVault) {
+        useClaude = true;
+        this.log(`[AI ROUTING] Site Monkeys vault mode - routing to Claude`);
+      }
 
       // ========== COST CEILING CHECK ==========
       if (useClaude && context.sessionId) {
@@ -1359,6 +1379,34 @@ export class Orchestrator {
   }
 
   // ==================== UTILITY METHODS ====================
+
+  /**
+   * Calculate total tokens that will be sent to AI
+   * CRITICAL: Used for intelligent routing to prevent rate limit errors
+   */
+  #calculateContextTokens(context, message, conversationHistory) {
+    let totalTokens = 0;
+    
+    // Message tokens (rough estimate: 1 token per 4 characters)
+    totalTokens += Math.ceil(message.length / 4);
+    
+    // Context tokens (already calculated during assembly)
+    totalTokens += context.totalTokens || 0;
+    
+    // Conversation history tokens
+    if (conversationHistory && conversationHistory.length > 0) {
+      const historyText = conversationHistory
+        .slice(-5)
+        .map(msg => msg.content || "")
+        .join(" ");
+      totalTokens += Math.ceil(historyText.length / 4);
+    }
+    
+    // System prompt overhead (roughly 200-300 tokens)
+    totalTokens += 250;
+    
+    return totalTokens;
+  }
 
   #buildContextString(context, _mode) {
     let contextStr = "";
