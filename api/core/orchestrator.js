@@ -1025,10 +1025,10 @@ export class Orchestrator {
     // PRIORITY 1: Folder name matching (from spec)
     // Check if section contains folder indicators and match against query
     const folderPatterns = [
-      /folder[:\s]+([^\n]+)/i,
-      /directory[:\s]+([^\n]+)/i,
-      /path[:\s]+([^\n\/]+)/i,
-      /\/([^\/\n]+)\//g, // Extract folder names from paths
+      /folder[:\s]+([^\n]{1,200})/i,
+      /directory[:\s]+([^\n]{1,200})/i,
+      /path[:\s]+([^\n\/]{1,200})/i,
+      /\/([^\/\n]{1,100})\//g, // Extract folder names from paths, limit to 100 chars
     ];
 
     for (const pattern of folderPatterns) {
@@ -1050,10 +1050,10 @@ export class Orchestrator {
     // PRIORITY 2: File name matching (from spec)
     // Look for file name indicators in section
     const filePatterns = [
-      /file:\s*([^\n]+)/i,
-      /document:\s*([^\n]+)/i,
-      /\[DOCUMENT:\s{0,5}([^\]]+)\]/i, // Fixed: limited whitespace to prevent ReDoS
-      /FILE:\s*([^\n]+)/i,
+      /file:\s*([^\n]{1,200})/i,
+      /document:\s*([^\n]{1,200})/i,
+      /\[DOCUMENT:\s{0,5}([^\]]{1,200})\]/i, // Fixed: limited whitespace and length to prevent ReDoS
+      /FILE:\s*([^\n]{1,200})/i,
     ];
 
     for (const pattern of filePatterns) {
