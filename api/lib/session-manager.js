@@ -1,4 +1,5 @@
 // api/lib/session-manager.js
+import util from 'util';
 // SESSION LIFECYCLE MANAGER
 // Handles cache flush, context cleanup, and session state management
 
@@ -16,14 +17,23 @@ class SessionManager {
     this.sessionContexts = new Map(); // User context buffers
     this.sessionCaches = new Map(); // Per-session caches
     
-    this.log = (message) => {
+    // Standard logging: supports format strings
+    this.log = (message, ...args) => {
       const timestamp = new Date().toISOString();
-      console.log(`[${timestamp}] [SESSION-MANAGER] ${message}`);
+      const formatted = args.length ? util.format(message, ...args) : message;
+      console.log(`[${timestamp}] [SESSION-MANAGER] ${formatted}`);
     };
     
-    this.error = (message, error) => {
+    // Error logging: supports format strings, tainted input as argument!
+    this.error = (message, ...args) => {
       const timestamp = new Date().toISOString();
-      console.error(`[${timestamp}] [SESSION-MANAGER ERROR] ${message}`, error || '');
+      const formatted = args.length ? util.format(message, ...args) : message;
+      // Show additional error argument (if present & not in format string)
+      if (args.length > 0 && args[args.length - 1] instanceof Error) {
+        console.error(`[${timestamp}] [SESSION-MANAGER ERROR] ${formatted}`, args[args.length - 1]);
+      } else {
+        console.error(`[${timestamp}] [SESSION-MANAGER ERROR] ${formatted}`);
+      }
     };
     
     // Auto-cleanup inactive sessions every 10 minutes
@@ -71,7 +81,7 @@ class SessionManager {
       return session;
       
     } catch (error) {
-      this.error(`Failed to initialize session ${sessionId}`, error);
+      this.error("Failed to initialize session %s", sessionId, error);
       return null;
     }
   }
