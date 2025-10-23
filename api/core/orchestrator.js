@@ -376,10 +376,32 @@ export class Orchestrator {
         `[AI] Model: ${aiResponse.model}, Cost: $${aiResponse.cost.totalCost.toFixed(4)}`,
       );
 
-      // STEP 8: Apply personality reasoning framework
+      // ========== RUN ENFORCEMENT CHAIN (BEFORE PERSONALITY) ==========
+      // CRITICAL FIX: Enforcement must run BEFORE personality to ensure
+      // business rules and security policies are applied to raw AI output
+      this.log("[ENFORCEMENT] Running enforcement chain on AI response...");
+      const enforcedResult = await this.#runEnforcementChain(
+        aiResponse.response,
+        analysis,
+        context,
+        mode,
+        null, // No personality yet
+      );
+
+      this.log(
+        `[ENFORCEMENT] Applied ${enforcedResult.compliance_metadata.enforcement_applied.length} modules`,
+      );
+      if (enforcedResult.compliance_metadata.overrides.length > 0) {
+        this.log(
+          `[ENFORCEMENT] ${enforcedResult.compliance_metadata.overrides.length} overrides applied`,
+        );
+      }
+
+      // STEP 8: Apply personality reasoning framework (AFTER ENFORCEMENT)
+      // Personality enhances the already-compliant response
       const personalityStartTime = Date.now();
       const personalityResponse = await this.#applyPersonality(
-        aiResponse.response,
+        enforcedResult.response,
         analysis,
         mode,
         context,
@@ -392,28 +414,9 @@ export class Orchestrator {
         this.requestStats.personalityEnhancements++;
       }
 
-      // ========== RUN ENFORCEMENT CHAIN ==========
-      this.log("[ENFORCEMENT] Running enforcement chain...");
-      const enforcedResult = await this.#runEnforcementChain(
-        personalityResponse.response,
-        analysis,
-        context,
-        mode,
-        personalityResponse.personality,
-      );
-
-      this.log(
-        `[ENFORCEMENT] Applied ${enforcedResult.compliance_metadata.enforcement_applied.length} modules`,
-      );
-      if (enforcedResult.compliance_metadata.overrides.length > 0) {
-        this.log(
-          `[ENFORCEMENT] ${enforcedResult.compliance_metadata.overrides.length} overrides applied`,
-        );
-      }
-
       // STEP 9: Validate compliance (truth-first, mode enforcement)
       const validatedResponse = await this.#validateCompliance(
-        enforcedResult.response,
+        personalityResponse.response,
         mode,
         analysis,
         confidence,
@@ -440,7 +443,7 @@ export class Orchestrator {
       // STEP 11: Return complete response
       return {
         success: true,
-        response: enforcedResult.response,
+        response: personalityResponse.response,
         metadata: {
           // Context tracking
           memoryUsed: memoryContext.hasMemory,
@@ -1003,8 +1006,11 @@ export class Orchestrator {
 
   // ==================== STEP 4: ASSEMBLE CONTEXT ====================
 
-  #assembleContext(memory, documents, vault) {
-    // TOKEN BUDGET ENFORCEMENT
+  /**
+   * Enforce token budgets across all context sources
+   * CRITICAL: Must be called before AI routing to prevent token overflow
+   */
+  #enforceTokenBudget(memory, documents, vault) {
     const BUDGET = {
       MEMORY: 2500,
       DOCUMENTS: 3000,
@@ -1012,47 +1018,78 @@ export class Orchestrator {
       TOTAL: 15000,
     };
 
-    // STEP 1: Enforce memory budget (≤2,500 tokens)
+    // Enforce memory budget (≤2,500 tokens)
     let memoryText = memory?.memories || "";
     let memoryTokens = memory?.tokens || 0;
     
     if (memoryTokens > BUDGET.MEMORY) {
-      this.log(`[BUDGET] Memory exceeds limit: ${memoryTokens} > ${BUDGET.MEMORY}, truncating...`);
+      this.log(`[TOKEN-BUDGET] Memory exceeds limit: ${memoryTokens} > ${BUDGET.MEMORY}, truncating...`);
       const targetChars = BUDGET.MEMORY * 4;
       memoryText = memoryText.substring(0, targetChars);
       memoryTokens = BUDGET.MEMORY;
     }
 
-    // STEP 2: Enforce document budget (≤3,000 tokens)
+    // Enforce document budget (≤3,000 tokens)
     let documentText = documents?.content || "";
     let documentTokens = documents?.tokens || 0;
     
     if (documentTokens > BUDGET.DOCUMENTS) {
-      this.log(`[BUDGET] Documents exceed limit: ${documentTokens} > ${BUDGET.DOCUMENTS}, truncating...`);
+      this.log(`[TOKEN-BUDGET] Documents exceed limit: ${documentTokens} > ${BUDGET.DOCUMENTS}, truncating...`);
       const targetChars = BUDGET.DOCUMENTS * 4;
       documentText = documentText.substring(0, targetChars);
       documentTokens = BUDGET.DOCUMENTS;
     }
 
-    // STEP 3: Enforce vault budget (≤9,000 tokens) - already enforced in selection
+    // Enforce vault budget (≤9,000 tokens) - should already be enforced by selection
     const vaultText = vault?.content || "";
     const vaultTokens = vault?.tokens || 0;
     
     if (vaultTokens > BUDGET.VAULT) {
-      this.log(`[BUDGET] WARNING: Vault exceeds limit: ${vaultTokens} > ${BUDGET.VAULT}`);
+      this.log(`[TOKEN-BUDGET] WARNING: Vault exceeds limit: ${vaultTokens} > ${BUDGET.VAULT}`);
       // This shouldn't happen due to selection, but log it
     }
 
-    // STEP 4: Calculate total and verify budget compliance
+    // Calculate total and verify budget compliance
     const totalTokens = memoryTokens + documentTokens + vaultTokens;
     
     if (totalTokens > BUDGET.TOTAL) {
-      this.log(`[BUDGET] WARNING: Total context exceeds limit: ${totalTokens} > ${BUDGET.TOTAL}`);
+      this.log(`[TOKEN-BUDGET] WARNING: Total context exceeds limit: ${totalTokens} > ${BUDGET.TOTAL}`);
     } else {
-      this.log(`[BUDGET] ✅ Context within budget: ${totalTokens}/${BUDGET.TOTAL} tokens`);
+      this.log(`[TOKEN-BUDGET] ✅ Context within budget: ${totalTokens}/${BUDGET.TOTAL} tokens`);
     }
 
-    // STEP 5: Build context strings
+    return {
+      memoryText,
+      memoryTokens,
+      documentText,
+      documentTokens,
+      vaultText,
+      vaultTokens,
+      totalTokens,
+      budget: BUDGET,
+      compliant: {
+        memory: memoryTokens <= BUDGET.MEMORY,
+        documents: documentTokens <= BUDGET.DOCUMENTS,
+        vault: vaultTokens <= BUDGET.VAULT,
+        total: totalTokens <= BUDGET.TOTAL,
+      }
+    };
+  }
+
+  #assembleContext(memory, documents, vault) {
+    // Call explicit token budget enforcement method
+    const enforcement = this.#enforceTokenBudget(memory, documents, vault);
+    
+    // Use enforced values
+    const memoryText = enforcement.memoryText;
+    const memoryTokens = enforcement.memoryTokens;
+    const documentText = enforcement.documentText;
+    const documentTokens = enforcement.documentTokens;
+    const vaultText = enforcement.vaultText;
+    const vaultTokens = enforcement.vaultTokens;
+    const totalTokens = enforcement.totalTokens;
+
+    // Build context strings
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] [ORCHESTRATOR] [CONTEXT] Assembling context - Memory: ${memoryText.length} chars (${memoryTokens}t), Documents: ${documentText.length} chars (${documentTokens}t), Vault: ${vaultText.length} chars (${vaultTokens}t)`);
 
@@ -1066,12 +1103,7 @@ export class Orchestrator {
         documents: documentTokens,
         vault: vaultTokens,
       },
-      budgetCompliance: {
-        memory: memoryTokens <= BUDGET.MEMORY,
-        documents: documentTokens <= BUDGET.DOCUMENTS,
-        vault: vaultTokens <= BUDGET.VAULT,
-        total: totalTokens <= BUDGET.TOTAL,
-      },
+      budgetCompliance: enforcement.compliant,
       sources: {
         hasMemory: memory?.hasMemory || false,
         hasDocuments: !!documents,
@@ -1294,10 +1326,43 @@ export class Orchestrator {
     conversationHistory,
   ) {
     try {
-      const useClaude =
-        confidence < 0.85 ||
-        analysis.requiresExpertise ||
-        (mode === "business_validation" && analysis.complexity > 0.7);
+      // ========== CRITICAL FIX: Check vault/tokens BEFORE confidence ==========
+      // Priority order: Vault presence → Token budget → Then confidence
+      
+      let useClaude = false;
+      let routingReason = [];
+
+      // PRIORITY 1: Vault presence (Site Monkeys mode always uses Claude)
+      if (context.sources?.hasVault && mode === "site_monkeys") {
+        useClaude = true;
+        routingReason.push("vault_access");
+      }
+
+      // PRIORITY 2: Token budget check (high token count prefers Claude)
+      if (context.totalTokens > 10000) {
+        useClaude = true;
+        routingReason.push(`high_token_count:${context.totalTokens}`);
+      }
+
+      // PRIORITY 3: Confidence and complexity (original logic)
+      if (!useClaude) {
+        if (confidence < 0.85 || 
+            analysis.requiresExpertise ||
+            (mode === "business_validation" && analysis.complexity > 0.7)) {
+          useClaude = true;
+          routingReason.push(`confidence:${confidence.toFixed(2)}`);
+          if (analysis.requiresExpertise) routingReason.push("requires_expertise");
+          if (mode === "business_validation" && analysis.complexity > 0.7) {
+            routingReason.push(`high_complexity:${analysis.complexity.toFixed(2)}`);
+          }
+        }
+      }
+
+      const model = useClaude ? "claude-sonnet-4.5" : "gpt-4";
+      
+      this.log(
+        `[AI ROUTING] Using ${model} (reasons: ${routingReason.join(", ") || "default"})`,
+      );
 
       // ========== COST CEILING CHECK ==========
       if (useClaude && context.sessionId) {
@@ -1336,12 +1401,6 @@ export class Orchestrator {
 
         this.log(`[COST] Remaining budget: $${costCheck.remaining.toFixed(4)}`);
       }
-
-      const model = useClaude ? "claude-sonnet-4.5" : "gpt-4";
-
-      this.log(
-        `[AI ROUTING] Using ${model} (confidence: ${confidence.toFixed(3)})`,
-      );
 
       const contextString = this.#buildContextString(context, mode);
 
