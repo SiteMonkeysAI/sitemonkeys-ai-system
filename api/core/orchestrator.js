@@ -1050,9 +1050,9 @@ export class Orchestrator {
     // PRIORITY 2: File name matching (from spec)
     // Look for file name indicators in section
     const filePatterns = [
-      /file[:\s]+([^\n]+)/i,
-      /document[:\s]+([^\n]+)/i,
-      /\[DOCUMENT:\s*([^\]]+)\]/i,
+      /file:\s*([^\n]+)/i,
+      /document:\s*([^\n]+)/i,
+      /\[DOCUMENT:\s{0,5}([^\]]+)\]/i, // Fixed: limited whitespace to prevent ReDoS
       /FILE:\s*([^\n]+)/i,
     ];
 
