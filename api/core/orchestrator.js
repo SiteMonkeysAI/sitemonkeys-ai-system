@@ -300,14 +300,15 @@ export class Orchestrator {
         `[MEMORY] Retrieved ${memoryContext.tokens} tokens from ${memoryContext.count} memories`,
       );
 
-      // STEP 2: Load document context (if provided)
-      const documentData = documentContext
-        ? await this.#loadDocumentContext(documentContext, sessionId)
-        : null;
+      // STEP 2: Load document context (always check if document available)
+      // Check extractedDocuments Map first, then use documentContext if provided
+      const documentData = await this.#loadDocumentContext(documentContext, sessionId);
       if (documentData) {
         this.log(
           `[DOCUMENTS] Loaded ${documentData.tokens} tokens from ${documentData.filename}`,
         );
+      } else {
+        this.log("[DOCUMENTS] No document available");
       }
 
       // STEP 3: Load vault (if Site Monkeys mode and enabled)

@@ -36,6 +36,14 @@ export default async function loadVaultHandler(req, res) {
         console.log(
           "[LOAD-VAULT] ✅ Vault loaded from KV cache",
         );
+        
+        // CRITICAL FIX: Store vault content in global for orchestrator access
+        const vaultContent = vaultData.vault_content || vaultData.content || "";
+        if (vaultContent.length > 1000) {
+          global.vaultContent = vaultContent;
+          console.log(`[LOAD-VAULT] ✅ Vault stored in global.vaultContent from cache: ${vaultContent.length} chars`);
+        }
+        
         return res.json({
           success: true,
           vault_content: vaultData.vault_content || vaultData.content || "",
@@ -82,6 +90,10 @@ export default async function loadVaultHandler(req, res) {
     } else {
       console.log("[LOAD-VAULT] ⚠️ KV caching failed (vault still loaded)");
     }
+
+    // CRITICAL FIX: Store vault content in global for orchestrator access
+    global.vaultContent = result.vaultContent;
+    console.log(`[LOAD-VAULT] ✅ Vault stored in global.vaultContent: ${result.vaultContent.length} chars`);
 
     // Return vault data to frontend
     return res.json({
