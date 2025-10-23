@@ -796,6 +796,51 @@ export class Orchestrator {
         };
       }
 
+      // ENHANCEMENT: Detect folder/file queries (from spec - Priority 1)
+      const isFolderQuery = /(?:folder|directory|files?|documents?)\s+(?:named|called|labeled|in|called)\s+(\w+)/i.test(query);
+      const folderMatch = query.match(/(?:folder|directory|files?|documents?)\s+(?:named|called|labeled|in|called)\s+(\w+)/i);
+      
+      if (isFolderQuery && folderMatch) {
+        const folderName = folderMatch[1].toLowerCase();
+        this.log(`[VAULT SELECTION] Folder query detected: "${folderName}"`);
+        
+        // Find sections that reference this folder
+        const sections = this.#splitVaultIntoSections(vaultContent);
+        const folderSections = sections.filter(section => {
+          const sectionLower = section.toLowerCase();
+          return sectionLower.includes(folderName) || 
+                 sectionLower.includes(`/${folderName}/`) ||
+                 sectionLower.includes(`folder: ${folderName}`) ||
+                 sectionLower.includes(`directory: ${folderName}`);
+        });
+        
+        if (folderSections.length > 0) {
+          this.log(`[VAULT SELECTION] Found ${folderSections.length} sections matching folder "${folderName}"`);
+          
+          // Return folder sections within token budget
+          let selectedContent = [];
+          let totalTokens = 0;
+          let sectionsUsed = 0;
+          
+          for (const section of folderSections) {
+            const sectionTokens = Math.ceil(section.length / 4);
+            if (totalTokens + sectionTokens <= MAX_VAULT_TOKENS) {
+              selectedContent.push(section);
+              totalTokens += sectionTokens;
+              sectionsUsed++;
+            }
+          }
+          
+          return {
+            content: selectedContent.join("\n\n"),
+            tokens: totalTokens,
+            sectionsSelected: sectionsUsed,
+            totalSections: folderSections.length,
+            selectionReason: `Folder "${folderName}" sections`
+          };
+        }
+      }
+
       // Split vault into sections (by document markers or paragraphs)
       const sections = this.#splitVaultIntoSections(vaultContent);
       
@@ -812,7 +857,7 @@ export class Orchestrator {
         };
       }
 
-      // Score each section by relevance
+      // Score each section by relevance (with enhanced folder/file name matching)
       const scoredSections = sections.map(section => ({
         content: section,
         score: this.#scoreVaultSection(section, keywords, queryLower),
@@ -822,12 +867,19 @@ export class Orchestrator {
       // Sort by relevance score (descending)
       scoredSections.sort((a, b) => b.score - a.score);
 
-      // Select sections until we hit the token budget
+      // ENHANCEMENT: Multi-section retrieval (from spec)
+      // Instead of just taking top sections, ensure we get variety if multiple sections score well
       let selectedContent = [];
       let totalTokens = 0;
       let sectionsUsed = 0;
+      const MIN_SECTION_SCORE = 10; // Only include sections with meaningful relevance
 
       for (const section of scoredSections) {
+        // Skip sections with very low scores unless we have nothing
+        if (section.score < MIN_SECTION_SCORE && sectionsUsed > 0) {
+          break;
+        }
+
         if (totalTokens + section.tokens <= MAX_VAULT_TOKENS) {
           selectedContent.push(section.content);
           totalTokens += section.tokens;
@@ -835,7 +887,7 @@ export class Orchestrator {
         } else {
           // Try to fit partial section if we have room
           const remainingTokens = MAX_VAULT_TOKENS - totalTokens;
-          if (remainingTokens > 500) { // Only if we have meaningful space
+          if (remainingTokens > 500 && section.score >= 50) { // Only high-scoring sections
             const partialChars = remainingTokens * 4;
             const partial = section.content.substring(0, partialChars);
             selectedContent.push(partial);
@@ -850,12 +902,20 @@ export class Orchestrator {
       
       this.log(`[VAULT SELECTION] Selected ${sectionsUsed}/${sections.length} sections, ${totalTokens} tokens`);
       
+      // Calculate better selection reason
+      let selectionReason = `Selected ${sectionsUsed} relevant sections`;
+      if (scoredSections[0]?.score >= 50) {
+        selectionReason = `High relevance match (${sectionsUsed} sections)`;
+      } else if (sectionsUsed === sections.length) {
+        selectionReason = `All sections relevant (${sectionsUsed} sections)`;
+      }
+      
       return {
         content: finalContent,
         tokens: totalTokens,
         sectionsSelected: sectionsUsed,
         totalSections: sections.length,
-        selectionReason: `Keyword-matched ${sectionsUsed} relevant sections`
+        selectionReason: selectionReason
       };
 
     } catch (error) {
@@ -876,13 +936,20 @@ export class Orchestrator {
 
   /**
    * Extract relevant keywords from query
+   * Enhanced to better identify folder names, file names, and important nouns
    */
   #extractKeywords(queryLower) {
     // Remove common words
-    const stopWords = new Set(['what', 'is', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then', 'once']);
+    const stopWords = new Set(['what', 'is', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then', 'once', 'show', 'me', 'list', 'all']);
     
     const words = queryLower.match(/\b\w+\b/g) || [];
-    return words.filter(word => word.length > 2 && !stopWords.has(word));
+    const keywords = words.filter(word => word.length > 2 && !stopWords.has(word));
+    
+    // Identify potential folder/file names (capitalized words or quoted terms in original query)
+    // Note: We're working with lowercased query, but we can still identify longer meaningful terms
+    const importantTerms = keywords.filter(word => word.length > 4);
+    
+    return [...new Set([...keywords, ...importantTerms])]; // Remove duplicates
   }
 
   /**
@@ -949,12 +1016,61 @@ export class Orchestrator {
 
   /**
    * Score a vault section by relevance to query
+   * Enhanced with folder and file name matching (Priority 1 & 2 from spec)
    */
   #scoreVaultSection(section, keywords, queryLower) {
     let score = 0;
     const sectionLower = section.toLowerCase();
 
-    // Keyword matching
+    // PRIORITY 1: Folder name matching (from spec)
+    // Check if section contains folder indicators and match against query
+    const folderPatterns = [
+      /folder[:\s]+([^\n]+)/i,
+      /directory[:\s]+([^\n]+)/i,
+      /path[:\s]+([^\n\/]+)/i,
+      /\/([^\/\n]+)\//g, // Extract folder names from paths
+    ];
+
+    for (const pattern of folderPatterns) {
+      const matches = section.match(pattern);
+      if (matches) {
+        for (const match of Array.isArray(matches) ? matches : [matches]) {
+          const folderName = (match[1] || match).toLowerCase();
+          // Check if any keyword matches the folder name
+          for (const keyword of keywords) {
+            if (folderName.includes(keyword) || keyword.includes(folderName)) {
+              score += 50; // High priority boost for folder match
+              this.log(`[VAULT] Folder match: "${folderName}" matches keyword "${keyword}"`);
+            }
+          }
+        }
+      }
+    }
+
+    // PRIORITY 2: File name matching (from spec)
+    // Look for file name indicators in section
+    const filePatterns = [
+      /file[:\s]+([^\n]+)/i,
+      /document[:\s]+([^\n]+)/i,
+      /\[DOCUMENT:\s*([^\]]+)\]/i,
+      /FILE:\s*([^\n]+)/i,
+    ];
+
+    for (const pattern of filePatterns) {
+      const match = section.match(pattern);
+      if (match && match[1]) {
+        const fileName = match[1].toLowerCase();
+        // Check if any keyword matches the file name
+        for (const keyword of keywords) {
+          if (fileName.includes(keyword) || keyword.includes(fileName)) {
+            score += 30; // Medium-high priority boost for file match
+            this.log(`[VAULT] File match: "${fileName}" matches keyword "${keyword}"`);
+          }
+        }
+      }
+    }
+
+    // PRIORITY 3: Content keyword matching (existing logic)
     keywords.forEach(keyword => {
       const count = (sectionLower.match(new RegExp(_.escapeRegExp(keyword), 'g')) || []).length;
       score += count * 10;
@@ -978,6 +1094,13 @@ export class Orchestrator {
     // Boost for pricing/business content
     if (/pricing|price|cost|\$\d+|revenue|business/i.test(section)) {
       score += 25;
+    }
+
+    // Boost for legal content (if query mentions legal terms)
+    if (/legal|contract|agreement|terms|privacy|policy/i.test(queryLower)) {
+      if (/legal|contract|agreement|terms|privacy|policy/i.test(sectionLower)) {
+        score += 40;
+      }
     }
 
     return score;
