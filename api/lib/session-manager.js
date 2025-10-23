@@ -142,7 +142,7 @@ class SessionManager {
       }
       
     } catch (error) {
-      this.error(`Failed to update context for session ${sessionId}`, error);
+      this.error("Failed to update context for session %s", sessionId, error);
     }
   }
 
@@ -255,11 +255,11 @@ class SessionManager {
         }
       }
       
-      this.log(`Cleared context for ${cleared} sessions belonging to user ${userId}`);
+      this.log("Cleared context for %d sessions belonging to user %s", cleared, userId);
       return cleared;
       
     } catch (error) {
-      this.error(`Failed to clear context for user ${userId}`, error);
+      this.error("Failed to clear context for user %s", userId, error);
       return 0;
     }
   }
@@ -338,7 +338,7 @@ class SessionManager {
       }
       
       if (cleaned > 0) {
-        this.log(`Cleanup: ${cleaned} inactive sessions removed`);
+        this.log("Cleanup: %d inactive sessions removed", cleaned);
       }
       
     } catch (error) {
