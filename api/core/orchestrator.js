@@ -19,7 +19,7 @@ import {
 import { EMERGENCY_FALLBACKS } from "../lib/site-monkeys/emergency-fallbacks.js";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
-
+import _ from "lodash";
 // ========== ENFORCEMENT MODULE IMPORTS ==========
 import { driftWatcher } from "../lib/validators/drift-watcher.js";
 import { initiativeEnforcer } from "../lib/validators/initiative-enforcer.js";
@@ -953,7 +953,7 @@ export class Orchestrator {
 
     // Keyword matching
     keywords.forEach(keyword => {
-      const count = (sectionLower.match(new RegExp(keyword, 'g')) || []).length;
+      const count = (sectionLower.match(new RegExp(_.escapeRegExp(keyword), 'g')) || []).length;
       score += count * 10;
     });
 
