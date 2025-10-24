@@ -1539,7 +1539,7 @@ class IntelligenceSystem {
     try {
       const primaryCategory =
         routing.primaryCategory || "personal_life_interests";
-      this.logger.log(`Extracting from primary category: ${primaryCategory}`);
+      this.logger.log(`Extracting from primary category: ${primaryCategory} for user: ${userId}`);
 
       return await this.coreSystem.withDbClient(async (client) => {
         // SIMPLIFIED INTELLIGENT QUERY - MAIN TABLE ONLY
@@ -1573,11 +1573,11 @@ class IntelligenceSystem {
                  ELSE relevance_score
                END as content_intelligence_score
         FROM persistent_memories 
-        WHERE user_id IN ('user', 'anonymous') AND category_name = $1 AND relevance_score > 0
+        WHERE user_id = $1 AND category_name = $2 AND relevance_score > 0
       `;
 
-        let queryParams = [primaryCategory];
-        let paramIndex = 2;
+        let queryParams = [userId, primaryCategory];
+        let paramIndex = 3;
 
         // TOPIC-AWARE FILTERING - Fixed parameter index synchronization
         const queryNouns = this.extractImportantNouns(query.toLowerCase());
@@ -1671,7 +1671,7 @@ class IntelligenceSystem {
             SELECT id, user_id, category_name, subcategory_name, content, token_count, 
                    relevance_score, usage_frequency, created_at, last_accessed, metadata
             FROM persistent_memories 
-            WHERE user_id IN ('user', 'anonymous') AND category_name = $1
+            WHERE user_id = $1 AND category_name = $2
             AND NOT (
               content::text ~* '\\b(remember anything|do you remember|what did i tell|can you recall)\\b' 
               AND NOT content::text ~* '\\b(i have|i own|my \\w+\\s+(is|are|was)|name is|work at|live in)\\b'
@@ -1681,6 +1681,7 @@ class IntelligenceSystem {
           `;
 
           const result = await client.query(query_text, [
+            userId,
             relatedCategory,
           ]);
           return result.rows;
@@ -3188,7 +3189,7 @@ class IntelligenceSystem {
             SELECT id, user_id, category_name, subcategory_name, content, token_count, 
                    relevance_score, usage_frequency, created_at, last_accessed, metadata
             FROM persistent_memories 
-            WHERE user_id IN ('user', 'anonymous') AND category_name = $1 AND relevance_score > 0.3
+            WHERE user_id = $1 AND category_name = $2 AND relevance_score > 0.3
             AND NOT (
               content::text ~* '\\b(remember anything|do you remember|what did i tell|can you recall)\\b' 
               AND NOT content::text ~* '\\b(i have|i own|my \\w+\\s+(is|are|was)|name is|work at|live in)\\b'
@@ -3196,7 +3197,7 @@ class IntelligenceSystem {
             ORDER BY relevance_score DESC, created_at DESC
             LIMIT 5
           `,
-              [category],
+              [userId, category],
             );
 
             return result.rows;
