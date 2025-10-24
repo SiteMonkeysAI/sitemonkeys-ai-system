@@ -93,7 +93,7 @@ ENABLE_INTELLIGENT_STORAGE=true
 ENABLE_INTELLIGENT_STORAGE=false
 ```
 
-Changes take effect immediately - no server restart required (though restart is recommended).
+Changes require server restart to take effect.
 
 ## Usage
 
