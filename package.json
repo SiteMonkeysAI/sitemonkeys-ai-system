@@ -11,13 +11,14 @@
     "express-session": "^1.17.3",
     "googleapis": "^126.0.1",
     "jszip": "^3.10.1",
+    "lodash": "^4.17.21",
     "mammoth": "^1.6.0",
     "multer": "^2.0.2",
     "openai": "^4.0.0",
     "pdf-parse": "^1.1.1",
     "pg": "^8.11.3",
-    "xml2js": "^0.6.2",
-    "lodash": "^4.17.21"
+    "tiktoken": "^1.0.22",
+    "xml2js": "^0.6.2"
   },
   "imports": {
     "#config/*": "./config/*",
