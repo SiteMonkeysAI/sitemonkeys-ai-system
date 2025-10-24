@@ -341,21 +341,44 @@ app.post("/api/chat", async (req, res) => {
     // CRITICAL FIX: Store conversation in memory after successful processing
     if (result.success && global.memorySystem && global.memorySystem.storeMemory) {
       try {
-        await global.memorySystem.storeMemory(
-          userId,
-          message,
-          result.response,
-          {
-            mode: mode,
-            sessionId: sessionId,
-            confidence: result.metadata?.confidence,
-            timestamp: new Date().toISOString(),
-          }
-        );
-        console.log("[CHAT] 💾 Conversation stored in memory system");
+        // Intelligent memory storage with compression and deduplication
+        if (process.env.ENABLE_INTELLIGENT_STORAGE === 'true') {
+          const { IntelligentMemoryStorage } = await import('./api/memory/intelligent-storage.js');
+          const intelligentStorage = new IntelligentMemoryStorage(
+            global.memorySystem.coreSystem.db,
+            process.env.OPENAI_API_KEY
+          );
+          
+          // Determine category from mode or use default
+          const category = mode === 'site_monkeys' ? 'business' : 'general';
+          
+          const storageResult = await intelligentStorage.storeWithIntelligence(
+            userId,
+            message,
+            result.response,
+            category
+          );
+          
+          intelligentStorage.cleanup();
+          console.log(`[CHAT] 💾 Intelligent storage complete: ${storageResult.action} (ID: ${storageResult.memoryId})`);
+        } else {
+          // Legacy storage path (for rollback)
+          await global.memorySystem.storeMemory(
+            userId,
+            message,
+            result.response,
+            {
+              mode: mode,
+              sessionId: sessionId,
+              confidence: result.metadata?.confidence,
+              timestamp: new Date().toISOString(),
+            }
+          );
+          console.log("[CHAT] 💾 Conversation stored in memory system (legacy)");
+        }
       } catch (_storageError) {
         // Sanitize error message - don't expose database details
-        console.error("[CHAT] ⚠️ Failed to store conversation: Memory system unavailable");
+        console.error("[CHAT] ⚠️ Failed to store conversation:", _storageError.message);
         // Don't fail the request if storage fails
       }
     }
