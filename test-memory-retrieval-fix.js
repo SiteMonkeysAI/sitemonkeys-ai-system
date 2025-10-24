@@ -47,8 +47,8 @@ async function testMemoryRetrievalFix() {
     }
     console.log("");
 
-    // Test 2: Verify SQL queries include both user_id values
-    console.log("🔍 Test 2: Verify SQL uses IN ('user', 'anonymous')");
+    // Test 2: Verify SQL queries use actual userId parameter
+    console.log("🔍 Test 2: Verify SQL uses actual userId parameter (user_id = $1 or $2)");
     
     // Read the intelligence.js file to verify the fix
     const fs = await import('fs');
@@ -57,27 +57,51 @@ async function testMemoryRetrievalFix() {
       'utf8'
     );
 
-    // Check all three locations for the fix
-    const whereUserIdPattern = /WHERE user_id IN \('user', 'anonymous'\)/g;
-    const matches = intelligenceCode.match(whereUserIdPattern);
+    // Check that hardcoded pattern is GONE
+    const hardcodedPattern = /WHERE user_id IN \('user', 'anonymous'\)/g;
+    const hardcodedMatches = intelligenceCode.match(hardcodedPattern);
 
-    if (matches && matches.length >= 3) {
-      console.log(`   ✅ Found ${matches.length} instances of correct WHERE clause`);
-      console.log(`   ✅ All queries search both 'user' and 'anonymous' user_id values`);
+    if (!hardcodedMatches || hardcodedMatches.length === 0) {
+      console.log(`   ✅ No hardcoded user_id IN ('user', 'anonymous') found`);
     } else {
-      console.log(`   ❌ Expected at least 3 instances, found ${matches ? matches.length : 0}`);
+      console.log(`   ❌ Found ${hardcodedMatches.length} instances of hardcoded pattern - still needs fixing!`);
+    }
+
+    // Check that parameterized pattern EXISTS in at least 3 places
+    const parameterizedPattern = /WHERE user_id = \$\d+/g;
+    const paramMatches = intelligenceCode.match(parameterizedPattern);
+
+    if (paramMatches && paramMatches.length >= 3) {
+      console.log(`   ✅ Found ${paramMatches.length} instances of parameterized WHERE user_id = $N`);
+      console.log(`   ✅ All queries use actual userId parameter`);
+    } else {
+      console.log(`   ❌ Expected at least 3 parameterized instances, found ${paramMatches ? paramMatches.length : 0}`);
     }
     console.log("");
 
-    // Test 3: Check for old pattern (should not exist)
-    console.log("🔍 Test 3: Verify old pattern is not present");
-    const oldPattern = /WHERE user_id = \$1(?!\d)/g;
-    const oldMatches = intelligenceCode.match(oldPattern);
+    // Test 3: Verify no old single-parameter pattern remains
+    console.log("🔍 Test 3: Verify queries correctly parameterize userId");
+    
+    // The queries should have userId as first or second parameter
+    // Looking for patterns like: WHERE user_id = $1 AND category_name = $2
+    //                        or: WHERE user_id = $2 (in related categories)
+    const correctPatterns = [
+      /WHERE user_id = \$1 AND category_name = \$2/g,  // Primary category
+      /WHERE user_id = \$1 AND category_name = \$2 AND relevance_score/g,  // Related categories
+    ];
 
-    if (!oldMatches || oldMatches.length === 0) {
-      console.log(`   ✅ No instances of old 'WHERE user_id = $1' pattern found`);
+    let correctUsageCount = 0;
+    correctPatterns.forEach(pattern => {
+      const matches = intelligenceCode.match(pattern);
+      if (matches) {
+        correctUsageCount += matches.length;
+      }
+    });
+
+    if (correctUsageCount >= 2) {
+      console.log(`   ✅ Found ${correctUsageCount} correctly parameterized queries`);
     } else {
-      console.log(`   ❌ Found ${oldMatches.length} instances of old pattern - needs fixing`);
+      console.log(`   ⚠️  Found ${correctUsageCount} correctly parameterized queries (expected at least 2)`);
     }
     console.log("");
 
@@ -86,17 +110,19 @@ async function testMemoryRetrievalFix() {
     console.log("================");
     
     const allTestsPassed = 
-      (!oldMatches || oldMatches.length === 0) &&
-      matches && matches.length >= 3;
+      (!hardcodedMatches || hardcodedMatches.length === 0) &&
+      paramMatches && paramMatches.length >= 3 &&
+      correctUsageCount >= 2;
 
     if (allTestsPassed) {
       console.log("✅ ALL TESTS PASSED!");
       console.log("✅ Memory retrieval fix is correctly implemented");
-      console.log("✅ Queries search for both 'user' and 'anonymous' user_id values");
+      console.log("✅ Queries use actual userId parameter instead of hardcoded values");
       console.log("\n🎯 ACCEPTANCE CRITERIA MET:");
       console.log("   - All 3 WHERE clauses updated ✓");
-      console.log("   - Searches 'user' AND 'anonymous' ✓");
-      console.log("   - Old memories can be retrieved ✓");
+      console.log("   - Uses parameterized userId ($1 or $2) ✓");
+      console.log("   - Cross-session memories can now be retrieved ✓");
+      console.log("   - No hardcoded 'user'/'anonymous' values ✓");
     } else {
       console.log("❌ SOME TESTS FAILED - Review implementation");
     }
