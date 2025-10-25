@@ -1499,6 +1499,44 @@ class IntelligenceSystem {
         allMemories = [...scoredPrimary, ...relatedMemories];
       }
 
+      // FEATURE FLAG: INTELLIGENT ROUTING WITH TOPIC FALLBACK
+      // Addresses routing mismatch issue where storage category != retrieval category
+      if (process.env.ENABLE_INTELLIGENT_ROUTING === 'true') {
+        // If primary routing confidence is low OR we have few results, try topic-based retrieval
+        const shouldUseFallback = routing.confidence < 0.80 || allMemories.length < 3;
+        
+        if (shouldUseFallback) {
+          this.logger.log(
+            `[INTELLIGENT-ROUTING] Low confidence (${routing.confidence?.toFixed(3)}) or few results (${allMemories.length}), trying topic-based retrieval...`,
+          );
+          
+          // Extract topic keywords from original query
+          const topics = this.extractImportantNouns(query.toLowerCase());
+          
+          if (topics.length > 0) {
+            this.logger.log(
+              `[INTELLIGENT-ROUTING] Searching for topics: ${topics.join(', ')}`,
+            );
+            
+            // Search across ALL categories for these topics
+            const topicMemories = await this.searchByTopics(
+              userId,
+              topics,
+              routing.primaryCategory,
+            );
+            
+            // Merge with existing results, remove duplicates by ID
+            const existingIds = new Set(allMemories.map(m => m.id));
+            const newTopicMemories = topicMemories.filter(m => !existingIds.has(m.id));
+            
+            allMemories = [...allMemories, ...newTopicMemories];
+            this.logger.log(
+              `[INTELLIGENT-ROUTING] Found ${newTopicMemories.length} additional unique memories via topic search`,
+            );
+          }
+        }
+      }
+
       // STEP 4: Re-rank by multi-dimensional relevance score
       const rankedMemories = allMemories.sort((a, b) => {
         return (b.relevanceScore || 0) - (a.relevanceScore || 0);
@@ -1696,6 +1734,85 @@ class IntelligenceSystem {
       return relatedMemories;
     } catch (error) {
       this.logger.error("Error extracting from related categories:", error);
+      return [];
+    }
+  }
+
+  /**
+   * INTELLIGENT ROUTING FIX: Search memories across all categories by topic keywords
+   * Used when primary routing confidence is low (< 0.80) to solve the "needle in haystack" problem
+   * 
+   * Problem: System stores "My kids are Sarah" in personal_life_interests but retrieves 
+   * "What did I tell you about My" in tools_tech_workflow (different category)
+   * 
+   * Solution: Extract topic keywords and search ALL categories, not just routed category
+   * 
+   * @param {string} userId - User identifier
+   * @param {Array<string>} topics - Topic keywords to search for
+   * @param {string} excludeCategory - Primary category (already searched)
+   * @returns {Promise<Array>} - Memories matching topics across all categories
+   */
+  async searchByTopics(userId, topics, excludeCategory) {
+    try {
+      this.logger.log(
+        `[TOPIC-SEARCH] Searching ${topics.length} topics across all categories (excluding ${excludeCategory})`,
+      );
+
+      return await this.coreSystem.withDbClient(async (client) => {
+        // Build topic search query - search for ANY topic keyword
+        const topicFilters = topics
+          .map((_, i) => `content::text ILIKE $${i + 3}::text`)
+          .join(' OR ');
+        
+        const query = `
+          SELECT id, user_id, category_name, subcategory_name, content, 
+                 token_count, relevance_score, usage_frequency, 
+                 created_at, last_accessed, metadata,
+                 -- Count how many topics match (more matches = higher score)
+                 (${topics.map((_, i) => `CASE WHEN content::text ILIKE $${i + 3}::text THEN 1 ELSE 0 END`).join(' + ')}) as topic_matches
+          FROM persistent_memories 
+          WHERE user_id = $1 
+            AND category_name != $2
+            AND relevance_score > 0.3
+            AND (${topicFilters})
+            -- Filter out pure question memories
+            AND NOT (
+              content::text ~* '\\b(remember anything|do you remember|what did i tell|can you recall)\\b' 
+              AND NOT content::text ~* '\\b(i have|i own|my \\w+\\s+(is|are|was)|name is|work at|live in)\\b'
+            )
+          ORDER BY 
+            topic_matches DESC,  -- Prioritize memories matching multiple topics
+            relevance_score DESC, 
+            created_at DESC
+          LIMIT 10
+        `;
+        
+        const params = [
+          userId, 
+          excludeCategory || 'none',
+          ...topics.map(t => `%${t}%`)
+        ];
+        
+        this.logger.log(
+          `[TOPIC-SEARCH] Query has ${topics.length} topic parameters`,
+        );
+        
+        const result = await client.query(query, params);
+        
+        this.logger.log(
+          `[TOPIC-SEARCH] Found ${result.rows.length} memories matching topics`,
+        );
+        
+        // Add metadata to indicate this came from topic fallback
+        return result.rows.map(memory => ({
+          ...memory,
+          source: 'topic_fallback',
+          // Slight relevance boost for multi-topic matches
+          relevanceScore: (memory.relevance_score || 0) * (0.7 + (memory.topic_matches * 0.1))
+        }));
+      });
+    } catch (error) {
+      this.logger.error('[TOPIC-SEARCH] Topic-based search failed:', error);
       return [];
     }
   }
