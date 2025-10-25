@@ -70,6 +70,9 @@ class CoreSystem {
         connectionTimeoutMillis: 15000, // Increased from 2s
         allowExitOnIdle: true, // Clean up idle connections
       });
+      // Alias for external modules expecting `db` instead of `pool`
+      // Added for intelligent-storage compatibility
+      this.db = this.pool;
 
       // --- Keep pool healthy between requests ---
       this.pool.on("remove", () => {
@@ -89,6 +92,7 @@ class CoreSystem {
           this.logger.warn("[DB] Attempting to reconnect...");
           await this.pool.end();
           this.pool = new Pool({ connectionString: process.env.DATABASE_URL });
+          this.db = this.pool; // Re-assign alias after reconnect
         }
       }, 30000);
 
