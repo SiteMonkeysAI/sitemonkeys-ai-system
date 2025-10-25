@@ -9,35 +9,33 @@ export const SURVIVAL_REQUIREMENTS = {
 };
 
 export const BUSINESS_SURVIVAL_TRIGGERS = [
-  "margin",
-  "profit",
-  "survival",
-  "cash flow",
-  "runway",
-  "break-even",
-  "bankruptcy",
-  "closure",
-  "risk",
-  "financial",
-  "business model",
+  'margin',
+  'profit',
+  'survival',
+  'cash flow',
+  'runway',
+  'break-even',
+  'bankruptcy',
+  'closure',
+  'risk',
+  'financial',
+  'business model',
 ];
 
 export function requiresSurvivalAnalysis(message, expertDomain) {
   const messageLower = message.toLowerCase();
 
   // Always required for financial analysis domain
-  if (expertDomain === "financial_analysis") {
+  if (expertDomain === 'financial_analysis') {
     return true;
   }
 
   // Required if survival triggers detected
-  return BUSINESS_SURVIVAL_TRIGGERS.some((trigger) =>
-    messageLower.includes(trigger),
-  );
+  return BUSINESS_SURVIVAL_TRIGGERS.some((trigger) => messageLower.includes(trigger));
 }
 
 export function enforceMarginRequirements(response, mode) {
-  if (mode !== "site_monkeys") {
+  if (mode !== 'site_monkeys') {
     return response; // Only enforce for Site Monkeys mode
   }
 
@@ -51,7 +49,7 @@ export function enforceMarginRequirements(response, mode) {
 Site Monkeys requires minimum ${SURVIVAL_REQUIREMENTS.minimum_margin}% margins for business survival.
 
 VIOLATIONS DETECTED:
-${marginViolations.map((violation) => `- ${violation.description}: ${violation.suggested_margin}% (BELOW ${SURVIVAL_REQUIREMENTS.minimum_margin}% MINIMUM)`).join("\n")}
+${marginViolations.map((violation) => `- ${violation.description}: ${violation.suggested_margin}% (BELOW ${SURVIVAL_REQUIREMENTS.minimum_margin}% MINIMUM)`).join('\n')}
 
 CORRECTIVE ACTION REQUIRED:
 - Increase pricing to meet margin requirements
@@ -77,8 +75,7 @@ export function detectMarginViolations(response) {
           found_margin: percentage,
           suggested_margin: percentage,
           description: `${percentage}% margin detected`,
-          severity:
-            percentage < 50 ? "critical" : percentage < 70 ? "high" : "medium",
+          severity: percentage < 50 ? 'critical' : percentage < 70 ? 'high' : 'medium',
         });
       }
     });
@@ -136,17 +133,16 @@ export function validateBusinessSurvival(projections, mode) {
   };
 
   // Check margin compliance
-  if (mode === "site_monkeys") {
+  if (mode === 'site_monkeys') {
     const margins = extractMargins(projections);
     margins.forEach((margin) => {
       if (margin < SURVIVAL_REQUIREMENTS.minimum_margin) {
         validation.margin_compliance = false;
         validation.alerts.push({
-          type: "margin_violation",
-          severity: "critical",
+          type: 'margin_violation',
+          severity: 'critical',
           message: `${margin}% margin below required ${SURVIVAL_REQUIREMENTS.minimum_margin}%`,
-          action:
-            "Increase pricing or reduce costs to meet survival requirements",
+          action: 'Increase pricing or reduce costs to meet survival requirements',
         });
       }
     });
@@ -181,15 +177,15 @@ export function detectCashFlowIssues(projections) {
 
   // Look for negative cash flow indicators
   if (
-    projections.includes("-$") ||
-    projections.includes("loss") ||
-    projections.includes("deficit")
+    projections.includes('-$') ||
+    projections.includes('loss') ||
+    projections.includes('deficit')
   ) {
     issues.push({
-      type: "negative_cash_flow",
-      severity: "high",
-      message: "Negative cash flow detected in projections",
-      action: "Accelerate revenue generation or reduce costs",
+      type: 'negative_cash_flow',
+      severity: 'high',
+      message: 'Negative cash flow detected in projections',
+      action: 'Accelerate revenue generation or reduce costs',
     });
   }
 
@@ -200,10 +196,10 @@ export function detectCashFlowIssues(projections) {
     const maxMonth = Math.max(...months);
     if (maxMonth > SURVIVAL_REQUIREMENTS.break_even_maximum) {
       issues.push({
-        type: "extended_break_even",
-        severity: "medium",
+        type: 'extended_break_even',
+        severity: 'medium',
         message: `Break-even timeline extends beyond ${SURVIVAL_REQUIREMENTS.break_even_maximum} months`,
-        action: "Accelerate customer acquisition or increase pricing",
+        action: 'Accelerate customer acquisition or increase pricing',
       });
     }
   }
@@ -216,16 +212,16 @@ export function calculateSurvivalScore(validation) {
 
   validation.alerts.forEach((alert) => {
     switch (alert.severity) {
-      case "critical":
+      case 'critical':
         score -= 30;
         break;
-      case "high":
+      case 'high':
         score -= 20;
         break;
-      case "medium":
+      case 'medium':
         score -= 10;
         break;
-      case "low":
+      case 'low':
         score -= 5;
         break;
     }
@@ -235,7 +231,7 @@ export function calculateSurvivalScore(validation) {
 }
 
 export function generateWorstCaseScenario(baseProjections, mode) {
-  if (mode !== "site_monkeys") {
+  if (mode !== 'site_monkeys') {
     return null; // Only for Site Monkeys business protection
   }
 
@@ -268,12 +264,7 @@ SURVIVAL CONFIDENCE: This scenario requires immediate action to prevent business
 MARGIN PROTECTION: Never accept margins below ${SURVIVAL_REQUIREMENTS.minimum_margin}% even in crisis`;
 }
 
-export function enforceBusinessSurvival(
-  response,
-  originalMessage,
-  expertDomain,
-  mode,
-) {
+export function enforceBusinessSurvival(response, originalMessage, expertDomain, mode) {
   if (!requiresSurvivalAnalysis(originalMessage, expertDomain)) {
     return response;
   }
@@ -283,13 +274,9 @@ export function enforceBusinessSurvival(
 
   // Add survival analysis if not present
   if (!containsSurvivalAnalysis(enhancedResponse)) {
-    const survivalAnalysis = generateSurvivalAnalysis(
-      originalMessage,
-      expertDomain,
-      mode,
-    );
+    const survivalAnalysis = generateSurvivalAnalysis(originalMessage, expertDomain, mode);
     if (survivalAnalysis) {
-      enhancedResponse += "\n\n" + survivalAnalysis;
+      enhancedResponse += '\n\n' + survivalAnalysis;
     }
   }
 
@@ -297,7 +284,7 @@ export function enforceBusinessSurvival(
   const survivalValidation = validateBusinessSurvival(enhancedResponse, mode);
 
   if (survivalValidation.alerts.length > 0) {
-    enhancedResponse += "\n\n🚨 SURVIVAL VALIDATION ALERTS:\n";
+    enhancedResponse += '\n\n🚨 SURVIVAL VALIDATION ALERTS:\n';
     survivalValidation.alerts.forEach((alert) => {
       enhancedResponse += `- ${alert.type.toUpperCase()}: ${alert.message}\n  ACTION: ${alert.action}\n`;
     });
@@ -305,15 +292,15 @@ export function enforceBusinessSurvival(
     enhancedResponse += `\nSURVIVAL SCORE: ${survivalValidation.survival_score}/100`;
 
     if (survivalValidation.survival_score < 70) {
-      enhancedResponse += " ⚠️ BUSINESS SURVIVAL AT RISK";
+      enhancedResponse += ' ⚠️ BUSINESS SURVIVAL AT RISK';
     }
   }
 
   // Add worst-case scenario for critical situations
-  if (mode === "site_monkeys" && survivalValidation.survival_score < 70) {
+  if (mode === 'site_monkeys' && survivalValidation.survival_score < 70) {
     const worstCase = generateWorstCaseScenario(enhancedResponse, mode);
     if (worstCase) {
-      enhancedResponse += "\n\n" + worstCase;
+      enhancedResponse += '\n\n' + worstCase;
     }
   }
 
@@ -322,14 +309,14 @@ export function enforceBusinessSurvival(
 
 export function containsSurvivalAnalysis(response) {
   const survivalIndicators = [
-    "survival",
-    "cash flow",
-    "runway",
-    "break-even",
-    "worst-case",
-    "margin",
-    "business survival",
-    "survival score",
+    'survival',
+    'cash flow',
+    'runway',
+    'break-even',
+    'worst-case',
+    'margin',
+    'business survival',
+    'survival score',
   ];
 
   return survivalIndicators.some((indicator) =>
@@ -338,7 +325,7 @@ export function containsSurvivalAnalysis(response) {
 }
 
 export function applySurvivalProtection(response, mode, _vaultContent) {
-  if (mode !== "site_monkeys") {
+  if (mode !== 'site_monkeys') {
     return response;
   }
 

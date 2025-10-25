@@ -3,8 +3,8 @@
 // Primary entry point and orchestration hub for Site Monkeys Memory System
 // ================================================================
 
-import coreSystem from "./core.js";
-import intelligenceSystem from "./intelligence.js";
+import coreSystem from './core.js';
+import intelligenceSystem from './intelligence.js';
 
 class PersistentMemoryOrchestrator {
   constructor() {
@@ -32,19 +32,11 @@ class PersistentMemoryOrchestrator {
     };
 
     this.logger = {
-      log: (message) =>
-        console.log(
-          `[PERSISTENT_MEMORY] ${new Date().toISOString()} ${message}`,
-        ),
+      log: (message) => console.log(`[PERSISTENT_MEMORY] ${new Date().toISOString()} ${message}`),
       error: (message, error) =>
-        console.error(
-          `[PERSISTENT_MEMORY ERROR] ${new Date().toISOString()} ${message}`,
-          error,
-        ),
+        console.error(`[PERSISTENT_MEMORY ERROR] ${new Date().toISOString()} ${message}`, error),
       warn: (message) =>
-        console.warn(
-          `[PERSISTENT_MEMORY WARN] ${new Date().toISOString()} ${message}`,
-        ),
+        console.warn(`[PERSISTENT_MEMORY WARN] ${new Date().toISOString()} ${message}`),
     };
 
     // Set up global interface immediately for compatibility
@@ -68,10 +60,7 @@ class PersistentMemoryOrchestrator {
       );
 
       // Use intelligenceSystem to route and extract memories
-      const routing = await this.intelligenceSystem.analyzeAndRoute(
-        query,
-        userId,
-      );
+      const routing = await this.intelligenceSystem.analyzeAndRoute(query, userId);
       const memories = await this.intelligenceSystem.extractRelevantMemories(
         userId,
         query,
@@ -79,10 +68,10 @@ class PersistentMemoryOrchestrator {
       );
 
       if (!memories || memories.length === 0) {
-        this.logger.log("No relevant memories found");
+        this.logger.log('No relevant memories found');
         return {
           success: false,
-          memories: "",
+          memories: '',
           count: 0,
         };
       }
@@ -90,12 +79,12 @@ class PersistentMemoryOrchestrator {
       // Format memories as a readable string
       const memoryText = memories
         .map((m, idx) => {
-          const category = m.category_name || "general";
-          const subcategory = m.subcategory_name || "";
-          const content = m.content || "";
-          return `[Memory ${idx + 1}] (${category}${subcategory ? "/" + subcategory : ""}): ${content}`;
+          const category = m.category_name || 'general';
+          const subcategory = m.subcategory_name || '';
+          const content = m.content || '';
+          return `[Memory ${idx + 1}] (${category}${subcategory ? '/' + subcategory : ''}): ${content}`;
         })
-        .join("\n\n");
+        .join('\n\n');
 
       this.logger.log(
         `Successfully retrieved ${memories.length} memories, ${memoryText.length} characters`,
@@ -108,10 +97,10 @@ class PersistentMemoryOrchestrator {
         routing: routing,
       };
     } catch (error) {
-      this.logger.error("Memory retrieval failed:", error);
+      this.logger.error('Memory retrieval failed:', error);
       return {
         success: false,
-        memories: "",
+        memories: '',
         count: 0,
         error: error.message,
       };
@@ -138,17 +127,13 @@ class PersistentMemoryOrchestrator {
       const conversationContent = `User: ${userMessage}\nAssistant: ${aiResponse}`;
 
       // Route to determine category
-      const routing = await this.intelligenceSystem.analyzeAndRoute(
-        userMessage,
-        userId,
-      );
+      const routing = await this.intelligenceSystem.analyzeAndRoute(userMessage, userId);
 
       // Calculate relevance score
-      const relevanceScore =
-        await this.intelligenceSystem.calculateRelevanceScore(
-          conversationContent,
-          metadata,
-        );
+      const relevanceScore = await this.intelligenceSystem.calculateRelevanceScore(
+        conversationContent,
+        metadata,
+      );
 
       // Calculate token count (approximate: 1 token ≈ 4 characters)
       // This is a rough estimate based on OpenAI's tokenization
@@ -192,7 +177,7 @@ class PersistentMemoryOrchestrator {
         relevanceScore: relevanceScore,
       };
     } catch (error) {
-      this.logger.error("Memory storage failed:", error);
+      this.logger.error('Memory storage failed:', error);
       return {
         success: false,
         error: error.message,
@@ -205,9 +190,7 @@ class PersistentMemoryOrchestrator {
    * @returns {boolean} - True if system is ready
    */
   isReady() {
-    return (
-      this.coreSystem?.isInitialized && this.intelligenceSystem?.isInitialized
-    );
+    return this.coreSystem?.isInitialized && this.intelligenceSystem?.isInitialized;
   }
 }
 

@@ -3,7 +3,7 @@
 // Consolidates routing_intelligence.js + extraction_engine.js + intelligence from deleted files
 // ================================================================
 
-import coreSystem from "./core.js";
+import coreSystem from './core.js';
 
 class IntelligenceSystem {
   constructor() {
@@ -66,38 +66,38 @@ class IntelligenceSystem {
 
     this.categoryMappings = new Map([
       [
-        "mental_emotional",
+        'mental_emotional',
         {
           keywords: new Set([
-            "stress",
-            "stressed",
-            "anxious",
-            "anxiety",
-            "worried",
-            "worry",
-            "feel",
-            "feeling",
-            "felt",
-            "emotion",
-            "emotional",
-            "mood",
-            "mental",
-            "psychology",
-            "therapy",
-            "counseling",
-            "identity",
-            "self-talk",
-            "mindset",
-            "attitude",
-            "perspective",
-            "overwhelmed",
-            "depressed",
-            "depression",
-            "bipolar",
-            "panic",
-            "fear",
-            "confidence",
-            "self-esteem",
+            'stress',
+            'stressed',
+            'anxious',
+            'anxiety',
+            'worried',
+            'worry',
+            'feel',
+            'feeling',
+            'felt',
+            'emotion',
+            'emotional',
+            'mood',
+            'mental',
+            'psychology',
+            'therapy',
+            'counseling',
+            'identity',
+            'self-talk',
+            'mindset',
+            'attitude',
+            'perspective',
+            'overwhelmed',
+            'depressed',
+            'depression',
+            'bipolar',
+            'panic',
+            'fear',
+            'confidence',
+            'self-esteem',
           ]),
           patterns: [
             /\b(i feel|feeling|stressed|worried|anxious|emotional|mood|mental health|self-talk|overwhelmed)\b/i,
@@ -105,44 +105,44 @@ class IntelligenceSystem {
             /\b(depressed|depression|panic|fear|confidence|self-esteem|self-worth)\b/i,
           ],
           weight: 1.0,
-          priority: "high",
+          priority: 'high',
         },
       ],
 
       [
-        "health_wellness",
+        'health_wellness',
         {
           keywords: new Set([
-            "health",
-            "healthy",
-            "medical",
-            "doctor",
-            "physician",
-            "symptom",
-            "symptoms",
-            "pain",
-            "illness",
-            "sick",
-            "disease",
-            "medication",
-            "medicine",
-            "treatment",
-            "diagnosis",
-            "fitness",
-            "exercise",
-            "workout",
-            "gym",
-            "diet",
-            "nutrition",
-            "food",
-            "eating",
-            "sleep",
-            "sleeping",
-            "tired",
-            "fatigue",
-            "energy",
-            "hospital",
-            "clinic",
+            'health',
+            'healthy',
+            'medical',
+            'doctor',
+            'physician',
+            'symptom',
+            'symptoms',
+            'pain',
+            'illness',
+            'sick',
+            'disease',
+            'medication',
+            'medicine',
+            'treatment',
+            'diagnosis',
+            'fitness',
+            'exercise',
+            'workout',
+            'gym',
+            'diet',
+            'nutrition',
+            'food',
+            'eating',
+            'sleep',
+            'sleeping',
+            'tired',
+            'fatigue',
+            'energy',
+            'hospital',
+            'clinic',
           ]),
           patterns: [
             /\b(health|medical|doctor|symptom|pain|illness|medication|fitness|exercise)\b/i,
@@ -150,52 +150,52 @@ class IntelligenceSystem {
             /\b(workout|gym|physical|body|weight|wellness)\b/i,
           ],
           weight: 1.0,
-          priority: "high",
+          priority: 'high',
         },
       ],
 
       [
-        "relationships_social",
+        'relationships_social',
         {
           keywords: new Set([
-            "family",
-            "spouse",
-            "husband",
-            "wife",
-            "partner",
-            "relationship",
-            "marriage",
-            "married",
-            "boyfriend",
-            "girlfriend",
-            "children",
-            "child",
-            "kids",
-            "son",
-            "daughter",
-            "parents",
-            "mother",
-            "father",
-            "mom",
-            "dad",
-            "friend",
-            "friends",
-            "social",
-            "friendship",
-            "colleague",
-            "coworker",
-            "conflict",
-            "argument",
-            "communication",
-            "love",
-            "dating",
-            "divorce",
-            "breakup",
-            "reunion",
-            "pets",
-            "pet",
-            "dog",
-            "cat",
+            'family',
+            'spouse',
+            'husband',
+            'wife',
+            'partner',
+            'relationship',
+            'marriage',
+            'married',
+            'boyfriend',
+            'girlfriend',
+            'children',
+            'child',
+            'kids',
+            'son',
+            'daughter',
+            'parents',
+            'mother',
+            'father',
+            'mom',
+            'dad',
+            'friend',
+            'friends',
+            'social',
+            'friendship',
+            'colleague',
+            'coworker',
+            'conflict',
+            'argument',
+            'communication',
+            'love',
+            'dating',
+            'divorce',
+            'breakup',
+            'reunion',
+            'pets',
+            'pet',
+            'dog',
+            'cat',
           ]),
           patterns: [
             /\b(family|spouse|husband|wife|partner|relationship|marriage|children|kids)\b/i,
@@ -203,43 +203,43 @@ class IntelligenceSystem {
             /\b(conflict|argument|communication|divorce|breakup|pets|pet)\b/i,
           ],
           weight: 1.0,
-          priority: "high",
+          priority: 'high',
         },
       ],
 
       [
-        "work_career",
+        'work_career',
         {
           keywords: new Set([
-            "work",
-            "working",
-            "job",
-            "career",
-            "profession",
-            "business",
-            "company",
-            "corporation",
-            "office",
-            "workplace",
-            "project",
-            "meeting",
-            "boss",
-            "manager",
-            "supervisor",
-            "employee",
-            "colleague",
-            "coworker",
-            "team",
-            "department",
-            "salary",
-            "wage",
-            "pay",
-            "promotion",
-            "performance",
-            "deadline",
-            "client",
-            "customer",
-            "interview",
+            'work',
+            'working',
+            'job',
+            'career',
+            'profession',
+            'business',
+            'company',
+            'corporation',
+            'office',
+            'workplace',
+            'project',
+            'meeting',
+            'boss',
+            'manager',
+            'supervisor',
+            'employee',
+            'colleague',
+            'coworker',
+            'team',
+            'department',
+            'salary',
+            'wage',
+            'pay',
+            'promotion',
+            'performance',
+            'deadline',
+            'client',
+            'customer',
+            'interview',
           ]),
           patterns: [
             /\b(work|job|career|business|company|office|project|meeting|boss)\b/i,
@@ -247,36 +247,36 @@ class IntelligenceSystem {
             /\b(interview|workplace|profession|manager|supervisor)\b/i,
           ],
           weight: 1.0,
-          priority: "medium",
+          priority: 'medium',
         },
       ],
 
       [
-        "money_income_debt",
+        'money_income_debt',
         {
           keywords: new Set([
-            "income",
-            "salary",
-            "wage",
-            "pay",
-            "paycheck",
-            "earnings",
-            "debt",
-            "loan",
-            "loans",
-            "credit",
-            "mortgage",
-            "payment",
-            "payments",
-            "bill",
-            "bills",
-            "owe",
-            "owing",
-            "financial crisis",
-            "money problems",
-            "broke",
-            "bankruptcy",
-            "foreclosure",
+            'income',
+            'salary',
+            'wage',
+            'pay',
+            'paycheck',
+            'earnings',
+            'debt',
+            'loan',
+            'loans',
+            'credit',
+            'mortgage',
+            'payment',
+            'payments',
+            'bill',
+            'bills',
+            'owe',
+            'owing',
+            'financial crisis',
+            'money problems',
+            'broke',
+            'bankruptcy',
+            'foreclosure',
           ]),
           patterns: [
             /\b(income|salary|wage|pay|paycheck|earnings|debt|loan|credit)\b/i,
@@ -284,34 +284,34 @@ class IntelligenceSystem {
             /\b(bankruptcy|foreclosure|financial trouble)\b/i,
           ],
           weight: 1.0,
-          priority: "high",
+          priority: 'high',
         },
       ],
 
       [
-        "money_spending_goals",
+        'money_spending_goals',
         {
           keywords: new Set([
-            "budget",
-            "budgeting",
-            "spending",
-            "spend",
-            "purchase",
-            "buy",
-            "buying",
-            "savings",
-            "save",
-            "saving",
-            "financial goals",
-            "investment",
-            "investing",
-            "stocks",
-            "portfolio",
-            "retirement",
-            "wealth",
-            "money management",
-            "financial planning",
-            "emergency fund",
+            'budget',
+            'budgeting',
+            'spending',
+            'spend',
+            'purchase',
+            'buy',
+            'buying',
+            'savings',
+            'save',
+            'saving',
+            'financial goals',
+            'investment',
+            'investing',
+            'stocks',
+            'portfolio',
+            'retirement',
+            'wealth',
+            'money management',
+            'financial planning',
+            'emergency fund',
           ]),
           patterns: [
             /\b(budget|spending|purchase|buy|savings|save|financial goals|investment)\b/i,
@@ -319,33 +319,33 @@ class IntelligenceSystem {
             /\b(financial planning|emergency fund|budgeting)\b/i,
           ],
           weight: 1.0,
-          priority: "medium",
+          priority: 'medium',
         },
       ],
 
       [
-        "goals_active_current",
+        'goals_active_current',
         {
           keywords: new Set([
-            "goal",
-            "goals",
-            "current goal",
-            "objective",
-            "target",
-            "aim",
-            "working on",
-            "trying to",
-            "project",
-            "task",
-            "deadline",
-            "this week",
-            "this month",
-            "priority",
-            "focus",
-            "achievement",
-            "accomplish",
-            "complete",
-            "finish",
+            'goal',
+            'goals',
+            'current goal',
+            'objective',
+            'target',
+            'aim',
+            'working on',
+            'trying to',
+            'project',
+            'task',
+            'deadline',
+            'this week',
+            'this month',
+            'priority',
+            'focus',
+            'achievement',
+            'accomplish',
+            'complete',
+            'finish',
           ]),
           patterns: [
             /\b(goal|goals|current goal|objective|target|working on|trying to)\b/i,
@@ -353,32 +353,32 @@ class IntelligenceSystem {
             /\b(complete|finish|deadline|task|project)\b/i,
           ],
           weight: 1.0,
-          priority: "medium",
+          priority: 'medium',
         },
       ],
 
       [
-        "goals_future_dreams",
+        'goals_future_dreams',
         {
           keywords: new Set([
-            "dream",
-            "dreams",
-            "someday",
-            "future",
-            "long-term",
-            "vision",
-            "aspiration",
-            "aspirations",
-            "bucket list",
-            "hope",
-            "wish",
-            "want to",
-            "plan to",
-            "eventually",
-            "retirement",
-            "legacy",
-            "life goals",
-            "ambition",
+            'dream',
+            'dreams',
+            'someday',
+            'future',
+            'long-term',
+            'vision',
+            'aspiration',
+            'aspirations',
+            'bucket list',
+            'hope',
+            'wish',
+            'want to',
+            'plan to',
+            'eventually',
+            'retirement',
+            'legacy',
+            'life goals',
+            'ambition',
           ]),
           patterns: [
             /\b(dream|someday|future|long-term|vision|aspiration|bucket list)\b/i,
@@ -386,35 +386,35 @@ class IntelligenceSystem {
             /\b(life goals|ambition|life dream|future plan)\b/i,
           ],
           weight: 1.0,
-          priority: "low",
+          priority: 'low',
         },
       ],
 
       [
-        "tools_tech_workflow",
+        'tools_tech_workflow',
         {
           keywords: new Set([
-            "software",
-            "app",
-            "application",
-            "tool",
-            "tools",
-            "technology",
-            "tech",
-            "system",
-            "platform",
-            "website",
-            "digital",
-            "online",
-            "computer",
-            "laptop",
-            "phone",
-            "workflow",
-            "process",
-            "automation",
-            "productivity",
-            "efficiency",
-            "program",
+            'software',
+            'app',
+            'application',
+            'tool',
+            'tools',
+            'technology',
+            'tech',
+            'system',
+            'platform',
+            'website',
+            'digital',
+            'online',
+            'computer',
+            'laptop',
+            'phone',
+            'workflow',
+            'process',
+            'automation',
+            'productivity',
+            'efficiency',
+            'program',
           ]),
           patterns: [
             /\b(software|app|tool|technology|system|platform|website|digital)\b/i,
@@ -422,33 +422,33 @@ class IntelligenceSystem {
             /\b(program|application|online|process)\b/i,
           ],
           weight: 1.0,
-          priority: "low",
+          priority: 'low',
         },
       ],
 
       [
-        "daily_routines_habits",
+        'daily_routines_habits',
         {
           keywords: new Set([
-            "routine",
-            "routines",
-            "habit",
-            "habits",
-            "daily",
-            "morning",
-            "evening",
-            "night",
-            "schedule",
-            "consistency",
-            "regular",
-            "every day",
-            "weekly",
-            "pattern",
-            "ritual",
-            "practice",
-            "discipline",
-            "structure",
-            "organization",
+            'routine',
+            'routines',
+            'habit',
+            'habits',
+            'daily',
+            'morning',
+            'evening',
+            'night',
+            'schedule',
+            'consistency',
+            'regular',
+            'every day',
+            'weekly',
+            'pattern',
+            'ritual',
+            'practice',
+            'discipline',
+            'structure',
+            'organization',
           ]),
           patterns: [
             /\b(routine|habit|daily|morning|evening|schedule|consistency)\b/i,
@@ -456,43 +456,43 @@ class IntelligenceSystem {
             /\b(structure|organization|time management)\b/i,
           ],
           weight: 1.0,
-          priority: "medium",
+          priority: 'medium',
         },
       ],
 
       [
-        "personal_life_interests",
+        'personal_life_interests',
         {
           keywords: new Set([
-            "home",
-            "house",
-            "apartment",
-            "living",
-            "lifestyle",
-            "personal",
-            "hobby",
-            "hobbies",
-            "interest",
-            "interests",
-            "entertainment",
-            "fun",
-            "leisure",
-            "gaming",
-            "games",
-            "creative",
-            "art",
-            "music",
-            "reading",
-            "books",
-            "movies",
-            "tv",
-            "travel",
-            "vacation",
-            "sports",
-            "cooking",
-            "food",
-            "garden",
-            "gardening",
+            'home',
+            'house',
+            'apartment',
+            'living',
+            'lifestyle',
+            'personal',
+            'hobby',
+            'hobbies',
+            'interest',
+            'interests',
+            'entertainment',
+            'fun',
+            'leisure',
+            'gaming',
+            'games',
+            'creative',
+            'art',
+            'music',
+            'reading',
+            'books',
+            'movies',
+            'tv',
+            'travel',
+            'vacation',
+            'sports',
+            'cooking',
+            'food',
+            'garden',
+            'gardening',
           ]),
           patterns: [
             /\b(home|house|apartment|lifestyle|hobby|interest|entertainment|fun)\b/i,
@@ -500,7 +500,7 @@ class IntelligenceSystem {
             /\b(cooking|garden|personal|leisure|activity)\b/i,
           ],
           weight: 1.0,
-          priority: "low",
+          priority: 'low',
         },
       ],
     ]);
@@ -551,21 +551,21 @@ class IntelligenceSystem {
     // ================================================================
 
     this.emotionalWeights = new Map([
-      ["stressed", 0.9],
-      ["anxious", 0.85],
-      ["worried", 0.8],
-      ["frustrated", 0.75],
-      ["angry", 0.8],
-      ["sad", 0.75],
-      ["depressed", 0.9],
-      ["overwhelmed", 0.85],
-      ["happy", 0.6],
-      ["excited", 0.6],
-      ["proud", 0.5],
-      ["confident", 0.4],
-      ["confused", 0.5],
-      ["uncertain", 0.6],
-      ["determined", 0.4],
+      ['stressed', 0.9],
+      ['anxious', 0.85],
+      ['worried', 0.8],
+      ['frustrated', 0.75],
+      ['angry', 0.8],
+      ['sad', 0.75],
+      ['depressed', 0.9],
+      ['overwhelmed', 0.85],
+      ['happy', 0.6],
+      ['excited', 0.6],
+      ['proud', 0.5],
+      ['confident', 0.4],
+      ['confused', 0.5],
+      ['uncertain', 0.6],
+      ['determined', 0.4],
     ]);
 
     // ================================================================
@@ -573,97 +573,90 @@ class IntelligenceSystem {
     // ================================================================
 
     this.stopWords = new Set([
-      "the",
-      "a",
-      "an",
-      "and",
-      "or",
-      "but",
-      "in",
-      "on",
-      "at",
-      "to",
-      "for",
-      "of",
-      "with",
-      "by",
-      "from",
-      "up",
-      "about",
-      "into",
-      "through",
-      "during",
-      "before",
-      "after",
-      "above",
-      "below",
-      "between",
-      "among",
-      "is",
-      "are",
-      "was",
-      "were",
-      "be",
-      "been",
-      "being",
-      "have",
-      "has",
-      "had",
-      "do",
-      "does",
-      "did",
-      "will",
-      "would",
-      "could",
-      "should",
-      "may",
-      "might",
-      "must",
-      "can",
-      "i",
-      "you",
-      "he",
-      "she",
-      "it",
-      "we",
-      "they",
-      "me",
-      "him",
-      "her",
-      "us",
-      "them",
-      "my",
-      "your",
-      "his",
-      "her",
-      "its",
-      "our",
-      "their",
-      "this",
-      "that",
-      "these",
-      "those",
+      'the',
+      'a',
+      'an',
+      'and',
+      'or',
+      'but',
+      'in',
+      'on',
+      'at',
+      'to',
+      'for',
+      'of',
+      'with',
+      'by',
+      'from',
+      'up',
+      'about',
+      'into',
+      'through',
+      'during',
+      'before',
+      'after',
+      'above',
+      'below',
+      'between',
+      'among',
+      'is',
+      'are',
+      'was',
+      'were',
+      'be',
+      'been',
+      'being',
+      'have',
+      'has',
+      'had',
+      'do',
+      'does',
+      'did',
+      'will',
+      'would',
+      'could',
+      'should',
+      'may',
+      'might',
+      'must',
+      'can',
+      'i',
+      'you',
+      'he',
+      'she',
+      'it',
+      'we',
+      'they',
+      'me',
+      'him',
+      'her',
+      'us',
+      'them',
+      'my',
+      'your',
+      'his',
+      'her',
+      'its',
+      'our',
+      'their',
+      'this',
+      'that',
+      'these',
+      'those',
     ]);
 
     this.logger = {
-      log: (message) =>
-        console.log(`[INTELLIGENCE] ${new Date().toISOString()} ${message}`),
+      log: (message) => console.log(`[INTELLIGENCE] ${new Date().toISOString()} ${message}`),
       error: (message, error) =>
-        console.error(
-          `[INTELLIGENCE ERROR] ${new Date().toISOString()} ${message}`,
-          error,
-        ),
-      warn: (message) =>
-        console.warn(
-          `[INTELLIGENCE WARN] ${new Date().toISOString()} ${message}`,
-        ),
+        console.error(`[INTELLIGENCE ERROR] ${new Date().toISOString()} ${message}`, error),
+      warn: (message) => console.warn(`[INTELLIGENCE WARN] ${new Date().toISOString()} ${message}`),
     };
   }
 
   async initialize() {
-    this.logger.log("Initializing Intelligence System...");
+    this.logger.log('Initializing Intelligence System...');
     this.isInitialized = true;
-    this.logger.log("Intelligence System initialized successfully");
+    this.logger.log('Intelligence System initialized successfully');
     return true;
   }
 
@@ -672,8 +665,8 @@ class IntelligenceSystem {
   // ================================================================
 
   async analyzeAndRoute(query, userId) {
-    if (!query || typeof query !== "string") {
-      return this.createFallbackRoutingResult("Invalid query input");
+    if (!query || typeof query !== 'string') {
+      return this.createFallbackRoutingResult('Invalid query input');
     }
 
     const startTime = Date.now();
@@ -694,8 +687,7 @@ class IntelligenceSystem {
       this.routingStats.cacheMisses++;
 
       // Advanced semantic analysis
-      const semanticAnalysis =
-        await this.performAdvancedSemanticAnalysis(normalizedQuery);
+      const semanticAnalysis = await this.performAdvancedSemanticAnalysis(normalizedQuery);
 
       // Calculate category scores
       const categoryScores = await this.calculateAdvancedCategoryScores(
@@ -740,8 +732,7 @@ class IntelligenceSystem {
         semanticOverride: finalResult.semanticOverride || false,
       };
 
-      this.logger
-        .log(`SEMANTIC ROUTING: ${finalResult.primaryCategory}/${finalResult.subcategory} 
+      this.logger.log(`SEMANTIC ROUTING: ${finalResult.primaryCategory}/${finalResult.subcategory} 
         | Confidence: ${finalResult.confidence.toFixed(3)}
         | Intent: ${semanticInfo.intent}
         | Personal: ${semanticInfo.personalContext}
@@ -760,8 +751,8 @@ class IntelligenceSystem {
 
       return finalResult;
     } catch (error) {
-      this.logger.error("Critical error in routing:", error);
-      return this.createFallbackRoutingResult("Routing error occurred");
+      this.logger.error('Critical error in routing:', error);
+      return this.createFallbackRoutingResult('Routing error occurred');
     }
   }
 
@@ -776,14 +767,14 @@ class IntelligenceSystem {
     }
 
     const analysis = {
-      intent: "general",
+      intent: 'general',
       confidence: 0.5,
       emotionalWeight: 0,
-      emotionalTone: "neutral",
+      emotionalTone: 'neutral',
       personalContext: false,
       memoryReference: false,
       urgencyLevel: 0,
-      timeContext: "general",
+      timeContext: 'general',
       topicEntities: new Set(),
       keywordDensity: 0,
       complexityScore: 0,
@@ -816,55 +807,34 @@ class IntelligenceSystem {
       }
       analysis.emotionalWeight = maxEmotionalWeight;
       analysis.emotionalTone =
-        maxEmotionalWeight > 0.6
-          ? "high"
-          : maxEmotionalWeight > 0.3
-            ? "moderate"
-            : "low";
+        maxEmotionalWeight > 0.6 ? 'high' : maxEmotionalWeight > 0.3 ? 'moderate' : 'low';
 
       // Context detection
       analysis.personalContext =
-        /\b(my|our|personal|private|family|i am|i have|we are|we have)\b/i.test(
-          query,
-        );
+        /\b(my|our|personal|private|family|i am|i have|we are|we have)\b/i.test(query);
       analysis.memoryReference =
-        /\b(remember|recall|told you|mentioned|discussed|said before|talked about)\b/i.test(
-          query,
-        );
+        /\b(remember|recall|told you|mentioned|discussed|said before|talked about)\b/i.test(query);
       analysis.urgencyLevel =
-        /\b(urgent|emergency|asap|immediately|critical|important|now|today)\b/i.test(
-          query,
-        )
+        /\b(urgent|emergency|asap|immediately|critical|important|now|today)\b/i.test(query)
           ? 0.8
           : 0.0;
 
       // Time context analysis
       if (/\b(now|today|currently|right now|at the moment)\b/i.test(query)) {
-        analysis.timeContext = "immediate";
+        analysis.timeContext = 'immediate';
       } else if (/\b(this week|soon|upcoming|lately|recently)\b/i.test(query)) {
-        analysis.timeContext = "recent";
-      } else if (
-        /\b(future|someday|eventually|long-term|planning)\b/i.test(query)
-      ) {
-        analysis.timeContext = "future";
+        analysis.timeContext = 'recent';
+      } else if (/\b(future|someday|eventually|long-term|planning)\b/i.test(query)) {
+        analysis.timeContext = 'future';
       }
 
       // Topic entity extraction
       const topicPatterns = [
-        [
-          "health",
-          /\b(health|medical|doctor|symptom|pain|fitness|exercise|diet)\b/gi,
-        ],
-        ["work", /\b(work|job|career|business|office|meeting|project)\b/gi],
-        [
-          "family",
-          /\b(family|spouse|children|parents|relationship|marriage)\b/gi,
-        ],
-        [
-          "money",
-          /\b(money|financial|budget|income|debt|investment|savings)\b/gi,
-        ],
-        ["home", /\b(home|house|apartment|living|lifestyle)\b/gi],
+        ['health', /\b(health|medical|doctor|symptom|pain|fitness|exercise|diet)\b/gi],
+        ['work', /\b(work|job|career|business|office|meeting|project)\b/gi],
+        ['family', /\b(family|spouse|children|parents|relationship|marriage)\b/gi],
+        ['money', /\b(money|financial|budget|income|debt|investment|savings)\b/gi],
+        ['home', /\b(home|house|apartment|living|lifestyle)\b/gi],
       ];
 
       for (const [topic, pattern] of topicPatterns) {
@@ -876,11 +846,8 @@ class IntelligenceSystem {
 
       // Keyword density and complexity analysis
       const words = query.split(/\s+/).filter((word) => word.length > 2);
-      const meaningfulWords = words.filter(
-        (word) => !this.stopWords.has(word.toLowerCase()),
-      );
-      analysis.keywordDensity =
-        meaningfulWords.length / Math.max(words.length, 1);
+      const meaningfulWords = words.filter((word) => !this.stopWords.has(word.toLowerCase()));
+      analysis.keywordDensity = meaningfulWords.length / Math.max(words.length, 1);
       analysis.complexityScore = Math.min(meaningfulWords.length / 10, 1);
 
       // Cache the analysis
@@ -888,7 +855,7 @@ class IntelligenceSystem {
 
       return analysis;
     } catch (error) {
-      this.logger.error("Error in semantic analysis:", error);
+      this.logger.error('Error in semantic analysis:', error);
       return analysis;
     }
   }
@@ -904,10 +871,7 @@ class IntelligenceSystem {
       let score = 0;
 
       // SEMANTIC-FIRST: Calculate primary semantic score
-      const semanticScore = this.calculateSemanticBoost(
-        categoryName,
-        semanticAnalysis,
-      );
+      const semanticScore = this.calculateSemanticBoost(categoryName, semanticAnalysis);
       score += semanticScore * 8.0; // PRIMARY DRIVER: 8x amplification
 
       // REDUCED: Keyword hints (reduced from 2.0x to 0.3x)
@@ -927,13 +891,10 @@ class IntelligenceSystem {
       }
 
       // Entity alignment boost (unchanged)
-      score += this.calculateEntityAlignmentBoost(
-        categoryName,
-        semanticAnalysis,
-      );
+      score += this.calculateEntityAlignmentBoost(categoryName, semanticAnalysis);
 
       // Priority-based weighting (unchanged)
-      if (config.priority === "high" && semanticAnalysis.urgencyLevel > 0.5) {
+      if (config.priority === 'high' && semanticAnalysis.urgencyLevel > 0.5) {
         score += 1.0;
       }
 
@@ -943,27 +904,22 @@ class IntelligenceSystem {
       }
 
       // SEMANTIC OVERRIDE: Apply intelligent overrides
-      const semanticOverride = this.applySemanticOverride(
-        categoryName,
-        semanticAnalysis,
-        score,
-      );
+      const semanticOverride = this.applySemanticOverride(categoryName, semanticAnalysis, score);
       if (semanticOverride.override) {
         score = semanticOverride.newScore;
         // Track override for analytics
-        this.routingStats.semanticOverrides =
-          (this.routingStats.semanticOverrides || 0) + 1;
+        this.routingStats.semanticOverrides = (this.routingStats.semanticOverrides || 0) + 1;
       }
 
       // Conditional boosting for personal memory queries
       if (
         semanticAnalysis.personalContext === true &&
-        semanticAnalysis.intent === "memory_recall"
+        semanticAnalysis.intent === 'memory_recall'
       ) {
-        if (categoryName === "relationships_social") {
+        if (categoryName === 'relationships_social') {
           score *= 1.5; // 50% boost when personal + memory_recall
         }
-        if (categoryName === "mental_emotional") {
+        if (categoryName === 'mental_emotional') {
           score *= 0.85; // 15% reduction to prevent false routing
         }
       }
@@ -983,13 +939,13 @@ class IntelligenceSystem {
     if (
       semanticAnalysis.personalContext &&
       semanticAnalysis.emotionalWeight > 0.6 &&
-      (semanticAnalysis.intent === "personal_sharing" ||
-        semanticAnalysis.intent === "memory_recall")
+      (semanticAnalysis.intent === 'personal_sharing' ||
+        semanticAnalysis.intent === 'memory_recall')
     ) {
       const personalCategories = [
-        "personal_life_interests",
-        "relationships_social",
-        "mental_emotional",
+        'personal_life_interests',
+        'relationships_social',
+        'mental_emotional',
       ];
 
       if (personalCategories.includes(categoryName)) {
@@ -997,49 +953,45 @@ class IntelligenceSystem {
         return {
           override: true,
           newScore: 10.0 + semanticAnalysis.emotionalWeight * 5.0,
-          reason: "High-confidence personal context boost applied",
+          reason: 'High-confidence personal context boost applied',
         };
       } else {
         // SUPPRESS non-personal categories when personal context is strong
         return {
           override: true,
           newScore: Math.min(currentScore * 0.2, 1.0),
-          reason:
-            "Personal context suppression applied to non-personal category",
+          reason: 'Personal context suppression applied to non-personal category',
         };
       }
     }
 
     // EMOTIONAL EXPRESSION OVERRIDE
     if (
-      semanticAnalysis.intent === "emotional_expression" &&
+      semanticAnalysis.intent === 'emotional_expression' &&
       semanticAnalysis.emotionalWeight > 0.7
     ) {
-      if (categoryName === "mental_emotional") {
+      if (categoryName === 'mental_emotional') {
         return {
           override: true,
           newScore: 12.0 + semanticAnalysis.emotionalWeight * 3.0,
-          reason: "High emotional expression routed to mental_emotional",
+          reason: 'High emotional expression routed to mental_emotional',
         };
       }
     }
 
     // MEMORY RECALL OVERRIDE
-    if (
-      semanticAnalysis.intent === "memory_recall" &&
-      semanticAnalysis.memoryReference
-    ) {
+    if (semanticAnalysis.intent === 'memory_recall' && semanticAnalysis.memoryReference) {
       const memoryCategories = [
-        "mental_emotional",
-        "relationships_social",
-        "personal_life_interests",
+        'mental_emotional',
+        'relationships_social',
+        'personal_life_interests',
       ];
 
       if (memoryCategories.includes(categoryName)) {
         return {
           override: true,
           newScore: currentScore + 5.0,
-          reason: "Memory recall boost applied to relevant category",
+          reason: 'Memory recall boost applied to relevant category',
         };
       }
     }
@@ -1089,8 +1041,7 @@ class IntelligenceSystem {
       },
     };
 
-    const categoryBoost =
-      intentBoosts[semanticAnalysis.intent]?.[categoryName] || 0;
+    const categoryBoost = intentBoosts[semanticAnalysis.intent]?.[categoryName] || 0;
     boost += categoryBoost;
 
     // AMPLIFIED: Emotional weight boosting (4x increase)
@@ -1101,8 +1052,7 @@ class IntelligenceSystem {
         health_wellness: 1.8, // was 0.4
         work_career: 1.5, // was 0.3
       };
-      boost +=
-        (emotionalBoosts[categoryName] || 0) * semanticAnalysis.emotionalWeight;
+      boost += (emotionalBoosts[categoryName] || 0) * semanticAnalysis.emotionalWeight;
     }
 
     // ENHANCED: Personal context amplification
@@ -1155,26 +1105,20 @@ class IntelligenceSystem {
   // CATEGORY DETERMINATION & CONFIDENCE
   // ================================================================
 
-  determineBestCategoryWithConfidence(
-    categoryScores,
-    semanticAnalysis,
-    _query,
-  ) {
-    const sortedCategories = Array.from(categoryScores.entries()).sort(
-      ([, a], [, b]) => b - a,
-    );
+  determineBestCategoryWithConfidence(categoryScores, semanticAnalysis, _query) {
+    const sortedCategories = Array.from(categoryScores.entries()).sort(([, a], [, b]) => b - a);
 
     if (sortedCategories.length === 0) {
       return {
-        primaryCategory: "personal_life_interests",
+        primaryCategory: 'personal_life_interests',
         confidence: 0.3,
         alternativeCategory: null,
-        reasoning: "No category scores calculated",
+        reasoning: 'No category scores calculated',
       };
     }
 
     const [bestCategory, bestScore] = sortedCategories[0];
-    const [secondCategory, secondScore] = sortedCategories[1] || ["", 0];
+    const [secondCategory, secondScore] = sortedCategories[1] || ['', 0];
 
     // Advanced confidence calculation
     let confidence = Math.min(bestScore / 12.0, 0.6);
@@ -1212,12 +1156,7 @@ class IntelligenceSystem {
   // SOPHISTICATED OVERRIDES
   // ================================================================
 
-  async applySophisticatedOverrides(
-    routingResult,
-    query,
-    semanticAnalysis,
-    _userId,
-  ) {
+  async applySophisticatedOverrides(routingResult, query, semanticAnalysis, _userId) {
     let { primaryCategory, confidence } = routingResult;
     let reasoning = routingResult.reasoning;
     let overrideApplied = false;
@@ -1225,14 +1164,12 @@ class IntelligenceSystem {
     // High-urgency health override
     if (
       semanticAnalysis.urgencyLevel > 0.7 &&
-      (query.includes("pain") ||
-        query.includes("emergency") ||
-        query.includes("hospital"))
+      (query.includes('pain') || query.includes('emergency') || query.includes('hospital'))
     ) {
-      if (primaryCategory !== "health_wellness") {
-        primaryCategory = "health_wellness";
+      if (primaryCategory !== 'health_wellness') {
+        primaryCategory = 'health_wellness';
         confidence = Math.max(confidence, 0.9);
-        reasoning += "; Health emergency override applied";
+        reasoning += '; Health emergency override applied';
         overrideApplied = true;
       }
     }
@@ -1240,40 +1177,33 @@ class IntelligenceSystem {
     // Mental health crisis override
     if (
       semanticAnalysis.emotionalWeight > 0.8 &&
-      (query.includes("crisis") ||
-        query.includes("suicide") ||
-        query.includes("can't take it"))
+      (query.includes('crisis') || query.includes('suicide') || query.includes("can't take it"))
     ) {
-      if (primaryCategory !== "mental_emotional") {
-        primaryCategory = "mental_emotional";
+      if (primaryCategory !== 'mental_emotional') {
+        primaryCategory = 'mental_emotional';
         confidence = Math.max(confidence, 0.95);
-        reasoning += "; Mental health crisis override applied";
+        reasoning += '; Mental health crisis override applied';
         overrideApplied = true;
       }
     }
 
     // Financial crisis override
     if (
-      (query.includes("broke") ||
-        query.includes("bankruptcy") ||
-        query.includes("can't pay")) &&
-      !primaryCategory.startsWith("money_")
+      (query.includes('broke') || query.includes('bankruptcy') || query.includes("can't pay")) &&
+      !primaryCategory.startsWith('money_')
     ) {
-      primaryCategory = "money_income_debt";
+      primaryCategory = 'money_income_debt';
       confidence = Math.max(confidence, 0.85);
-      reasoning += "; Financial crisis override applied";
+      reasoning += '; Financial crisis override applied';
       overrideApplied = true;
     }
 
     // Low confidence fallback enhancement
     if (confidence < 0.4 && !overrideApplied) {
-      if (
-        semanticAnalysis.personalContext &&
-        semanticAnalysis.emotionalWeight > 0.3
-      ) {
-        primaryCategory = "mental_emotional";
+      if (semanticAnalysis.personalContext && semanticAnalysis.emotionalWeight > 0.3) {
+        primaryCategory = 'mental_emotional';
         confidence = 0.5;
-        reasoning += "; Low confidence personal-emotional fallback applied";
+        reasoning += '; Low confidence personal-emotional fallback applied';
         overrideApplied = true;
       }
     }
@@ -1281,17 +1211,17 @@ class IntelligenceSystem {
     // Personal relationship memory recall override
     if (
       semanticAnalysis.personalContext === true &&
-      semanticAnalysis.intent === "memory_recall" &&
-      (query.includes("wife") ||
-        query.includes("family") ||
-        query.includes("husband") ||
-        query.includes("pet") ||
-        query.includes("friend") ||
-        query.includes("monkey"))
+      semanticAnalysis.intent === 'memory_recall' &&
+      (query.includes('wife') ||
+        query.includes('family') ||
+        query.includes('husband') ||
+        query.includes('pet') ||
+        query.includes('friend') ||
+        query.includes('monkey'))
     ) {
-      primaryCategory = "relationships_social";
+      primaryCategory = 'relationships_social';
       confidence = Math.max(confidence, 0.8);
-      reasoning += "; Personal memory recall override applied";
+      reasoning += '; Personal memory recall override applied';
       overrideApplied = true;
     }
 
@@ -1321,118 +1251,84 @@ class IntelligenceSystem {
   selectSubcategory(primaryCategory, query, semanticAnalysis) {
     const categorySubcategoryLogic = {
       mental_emotional: () => {
-        if (semanticAnalysis.emotionalWeight > 0.7) return "High Emotional";
-        if (query.includes("therapy") || query.includes("counseling"))
-          return "Professional Support";
-        if (query.includes("stress") || query.includes("overwhelmed"))
-          return "Stress Management";
-        if (query.includes("confidence") || query.includes("self-esteem"))
-          return "Self-Worth";
-        return "General Emotional";
+        if (semanticAnalysis.emotionalWeight > 0.7) return 'High Emotional';
+        if (query.includes('therapy') || query.includes('counseling'))
+          return 'Professional Support';
+        if (query.includes('stress') || query.includes('overwhelmed')) return 'Stress Management';
+        if (query.includes('confidence') || query.includes('self-esteem')) return 'Self-Worth';
+        return 'General Emotional';
       },
       health_wellness: () => {
-        if (query.includes("doctor") || query.includes("medical"))
-          return "Medical Care";
-        if (query.includes("exercise") || query.includes("fitness"))
-          return "Physical Activity";
-        if (query.includes("diet") || query.includes("nutrition"))
-          return "Nutrition";
-        if (query.includes("sleep") || query.includes("tired"))
-          return "Sleep Health";
-        return "General Health";
+        if (query.includes('doctor') || query.includes('medical')) return 'Medical Care';
+        if (query.includes('exercise') || query.includes('fitness')) return 'Physical Activity';
+        if (query.includes('diet') || query.includes('nutrition')) return 'Nutrition';
+        if (query.includes('sleep') || query.includes('tired')) return 'Sleep Health';
+        return 'General Health';
       },
       relationships_social: () => {
-        if (query.includes("family") || query.includes("parents"))
-          return "Family Relations";
-        if (query.includes("partner") || query.includes("spouse"))
-          return "Romantic Relations";
-        if (query.includes("friend") || query.includes("social"))
-          return "Social Circle";
-        if (query.includes("work") && query.includes("colleague"))
-          return "Professional Relations";
-        return "General Social";
+        if (query.includes('family') || query.includes('parents')) return 'Family Relations';
+        if (query.includes('partner') || query.includes('spouse')) return 'Romantic Relations';
+        if (query.includes('friend') || query.includes('social')) return 'Social Circle';
+        if (query.includes('work') && query.includes('colleague')) return 'Professional Relations';
+        return 'General Social';
       },
       work_career: () => {
-        if (query.includes("project") || query.includes("task"))
-          return "Current Projects";
-        if (query.includes("promotion") || query.includes("career"))
-          return "Career Development";
-        if (query.includes("team") || query.includes("colleague"))
-          return "Team Dynamics";
-        if (query.includes("interview") || query.includes("job search"))
-          return "Job Search";
-        return "General Work";
+        if (query.includes('project') || query.includes('task')) return 'Current Projects';
+        if (query.includes('promotion') || query.includes('career')) return 'Career Development';
+        if (query.includes('team') || query.includes('colleague')) return 'Team Dynamics';
+        if (query.includes('interview') || query.includes('job search')) return 'Job Search';
+        return 'General Work';
       },
       money_income_debt: () => {
-        if (query.includes("debt") || query.includes("loan"))
-          return "Debt Management";
-        if (query.includes("salary") || query.includes("income"))
-          return "Income Issues";
-        if (query.includes("bill") || query.includes("payment"))
-          return "Payment Obligations";
-        return "Financial Pressure";
+        if (query.includes('debt') || query.includes('loan')) return 'Debt Management';
+        if (query.includes('salary') || query.includes('income')) return 'Income Issues';
+        if (query.includes('bill') || query.includes('payment')) return 'Payment Obligations';
+        return 'Financial Pressure';
       },
       money_spending_goals: () => {
-        if (query.includes("budget") || query.includes("spending"))
-          return "Budget Planning";
-        if (query.includes("investment") || query.includes("stocks"))
-          return "Investment Strategy";
-        if (query.includes("save") || query.includes("savings"))
-          return "Savings Goals";
-        if (query.includes("retirement")) return "Retirement Planning";
-        return "Financial Goals";
+        if (query.includes('budget') || query.includes('spending')) return 'Budget Planning';
+        if (query.includes('investment') || query.includes('stocks')) return 'Investment Strategy';
+        if (query.includes('save') || query.includes('savings')) return 'Savings Goals';
+        if (query.includes('retirement')) return 'Retirement Planning';
+        return 'Financial Goals';
       },
       goals_active_current: () => {
-        if (semanticAnalysis.timeContext === "immediate")
-          return "Immediate Goals";
-        if (query.includes("this week") || query.includes("this month"))
-          return "Short-term Goals";
-        if (query.includes("project") || query.includes("task"))
-          return "Project Goals";
-        return "Current Focus";
+        if (semanticAnalysis.timeContext === 'immediate') return 'Immediate Goals';
+        if (query.includes('this week') || query.includes('this month')) return 'Short-term Goals';
+        if (query.includes('project') || query.includes('task')) return 'Project Goals';
+        return 'Current Focus';
       },
       goals_future_dreams: () => {
-        if (query.includes("dream") || query.includes("vision"))
-          return "Life Dreams";
-        if (query.includes("retirement") || query.includes("legacy"))
-          return "Long-term Vision";
-        if (query.includes("travel") || query.includes("bucket list"))
-          return "Experience Goals";
-        return "Future Aspirations";
+        if (query.includes('dream') || query.includes('vision')) return 'Life Dreams';
+        if (query.includes('retirement') || query.includes('legacy')) return 'Long-term Vision';
+        if (query.includes('travel') || query.includes('bucket list')) return 'Experience Goals';
+        return 'Future Aspirations';
       },
       tools_tech_workflow: () => {
-        if (query.includes("software") || query.includes("app"))
-          return "Software Tools";
-        if (query.includes("workflow") || query.includes("productivity"))
-          return "Productivity Systems";
-        if (query.includes("problem") || query.includes("not working"))
-          return "Tech Issues";
-        return "Digital Tools";
+        if (query.includes('software') || query.includes('app')) return 'Software Tools';
+        if (query.includes('workflow') || query.includes('productivity'))
+          return 'Productivity Systems';
+        if (query.includes('problem') || query.includes('not working')) return 'Tech Issues';
+        return 'Digital Tools';
       },
       daily_routines_habits: () => {
-        if (query.includes("morning") || query.includes("evening"))
-          return "Daily Schedule";
-        if (query.includes("habit") || query.includes("routine"))
-          return "Habit Formation";
-        if (query.includes("consistency") || query.includes("discipline"))
-          return "Consistency Building";
-        return "Routine Management";
+        if (query.includes('morning') || query.includes('evening')) return 'Daily Schedule';
+        if (query.includes('habit') || query.includes('routine')) return 'Habit Formation';
+        if (query.includes('consistency') || query.includes('discipline'))
+          return 'Consistency Building';
+        return 'Routine Management';
       },
       personal_life_interests: () => {
-        if (query.includes("hobby") || query.includes("interest"))
-          return "Personal Interests";
-        if (query.includes("home") || query.includes("house"))
-          return "Home Life";
-        if (query.includes("entertainment") || query.includes("fun"))
-          return "Entertainment";
-        if (query.includes("travel") || query.includes("vacation"))
-          return "Travel Experiences";
-        return "Lifestyle";
+        if (query.includes('hobby') || query.includes('interest')) return 'Personal Interests';
+        if (query.includes('home') || query.includes('house')) return 'Home Life';
+        if (query.includes('entertainment') || query.includes('fun')) return 'Entertainment';
+        if (query.includes('travel') || query.includes('vacation')) return 'Travel Experiences';
+        return 'Lifestyle';
       },
     };
 
     const subcategoryFunction = categorySubcategoryLogic[primaryCategory];
-    return subcategoryFunction ? subcategoryFunction() : "General";
+    return subcategoryFunction ? subcategoryFunction() : 'General';
   }
 
   // ================================================================
@@ -1475,20 +1371,18 @@ class IntelligenceSystem {
           this.calculateKeywordMatch(query, memory.content),
           this.calculateRecencyBoost(memory.created_at, memory.last_accessed),
           memory.relevance_score || 0,
-          Math.min((memory.usage_frequency || 0) / 20, 1.0)
+          Math.min((memory.usage_frequency || 0) / 20, 1.0),
         ),
-        source: "primary_category",
+        source: 'primary_category',
       }));
 
       // STEP 3: If primary results are poor, try related categories
       let allMemories = scoredPrimary;
 
-      const goodPrimaryResults = scoredPrimary.filter(
-        (m) => m.relevanceScore > 0.3,
-      ).length;
+      const goodPrimaryResults = scoredPrimary.filter((m) => m.relevanceScore > 0.3).length;
       if (goodPrimaryResults < 2) {
         this.logger.log(
-          "Primary category yielded few relevant results, trying related categories...",
+          'Primary category yielded few relevant results, trying related categories...',
         );
         const relatedMemories = await this.tryRelatedCategories(
           userId,
@@ -1503,32 +1397,30 @@ class IntelligenceSystem {
       // Addresses routing mismatch issue where storage category != retrieval category
       if (process.env.ENABLE_INTELLIGENT_ROUTING === 'true') {
         // If primary routing confidence is low OR we have few results, try topic-based retrieval
-        const shouldUseFallback = routing.confidence < 0.80 || allMemories.length < 3;
-        
+        const shouldUseFallback = routing.confidence < 0.8 || allMemories.length < 3;
+
         if (shouldUseFallback) {
           this.logger.log(
             `[INTELLIGENT-ROUTING] Low confidence (${routing.confidence?.toFixed(3)}) or few results (${allMemories.length}), trying topic-based retrieval...`,
           );
-          
+
           // Extract topic keywords from original query
           const topics = this.extractImportantNouns(query.toLowerCase());
-          
+
           if (topics.length > 0) {
-            this.logger.log(
-              `[INTELLIGENT-ROUTING] Searching for topics: ${topics.join(', ')}`,
-            );
-            
+            this.logger.log(`[INTELLIGENT-ROUTING] Searching for topics: ${topics.join(', ')}`);
+
             // Search across ALL categories for these topics
             const topicMemories = await this.searchByTopics(
               userId,
               topics,
               routing.primaryCategory,
             );
-            
+
             // Merge with existing results, remove duplicates by ID
-            const existingIds = new Set(allMemories.map(m => m.id));
-            const newTopicMemories = topicMemories.filter(m => !existingIds.has(m.id));
-            
+            const existingIds = new Set(allMemories.map((m) => m.id));
+            const newTopicMemories = topicMemories.filter((m) => !existingIds.has(m.id));
+
             allMemories = [...allMemories, ...newTopicMemories];
             this.logger.log(
               `[INTELLIGENT-ROUTING] Found ${newTopicMemories.length} additional unique memories via topic search`,
@@ -1546,17 +1438,10 @@ class IntelligenceSystem {
       const diverseMemories = this.selectDiverseMemories(rankedMemories, 2400);
 
       // STEP 6: Apply token management with diversity
-      const finalMemories = await this.applyIntelligentTokenManagement(
-        diverseMemories,
-        2400,
-      );
+      const finalMemories = await this.applyIntelligentTokenManagement(diverseMemories, 2400);
 
       // Update analytics
-      this.updateExtractionAnalytics(
-        finalMemories,
-        routing,
-        Date.now() - startTime,
-      );
+      this.updateExtractionAnalytics(finalMemories, routing, Date.now() - startTime);
 
       this.logger.log(
         `Enhanced extraction: ${finalMemories.length} memories, ${this.calculateTotalTokens(finalMemories)} tokens, ${Date.now() - startTime}ms`,
@@ -1564,7 +1449,7 @@ class IntelligenceSystem {
 
       return finalMemories;
     } catch (error) {
-      this.logger.error("Critical error in enhanced extraction:", error);
+      this.logger.error('Critical error in enhanced extraction:', error);
       await this.coreSystem.logExtractionError(error, {
         userId,
         query: query.substring(0, 100),
@@ -1575,8 +1460,7 @@ class IntelligenceSystem {
 
   async extractFromPrimaryCategory(userId, query, routing, semanticAnalysis) {
     try {
-      const primaryCategory =
-        routing.primaryCategory || "personal_life_interests";
+      const primaryCategory = routing.primaryCategory || 'personal_life_interests';
       this.logger.log(`Extracting from primary category: ${primaryCategory} for user: ${userId}`);
 
       return await this.coreSystem.withDbClient(async (client) => {
@@ -1624,7 +1508,7 @@ class IntelligenceSystem {
           const startIndex = paramIndex;
           const topicFilters = queryNouns
             .map((noun, i) => `content::text ILIKE $${startIndex + i}::text`)
-            .join(" OR ");
+            .join(' OR ');
           baseQuery += ` AND (${topicFilters})`;
           queryParams.push(...queryNouns.map((noun) => `%${noun}%`));
           paramIndex += queryNouns.length; // Increment AFTER adding parameters
@@ -1639,7 +1523,7 @@ class IntelligenceSystem {
 
         if (semanticAnalysis.personalContext) {
           baseQuery += ` AND (content::text ILIKE $${paramIndex}::text OR content::text ILIKE $${paramIndex + 1}::text)`;
-          queryParams.push("%my %", "%personal%");
+          queryParams.push('%my %', '%personal%');
           paramIndex += 2; // Increment after adding 2 parameters
         }
 
@@ -1679,26 +1563,18 @@ class IntelligenceSystem {
         return result.rows;
       });
     } catch (error) {
-      this.logger.error("Error extracting from primary category:", error);
+      this.logger.error('Error extracting from primary category:', error);
       return [];
     }
   }
 
-  async extractFromRelatedCategories(
-    userId,
-    query,
-    routing,
-    semanticAnalysis,
-    primaryCount,
-  ) {
+  async extractFromRelatedCategories(userId, query, routing, semanticAnalysis, primaryCount) {
     if (primaryCount >= 10) {
       return []; // Skip if we have enough from primary
     }
 
     try {
-      const relatedCategories = await this.coreSystem.getRelatedCategories(
-        routing.primaryCategory,
-      );
+      const relatedCategories = await this.coreSystem.getRelatedCategories(routing.primaryCategory);
       const relatedMemories = [];
 
       for (const relatedCategory of relatedCategories.slice(0, 2)) {
@@ -1718,22 +1594,17 @@ class IntelligenceSystem {
             LIMIT 5
           `;
 
-          const result = await client.query(query_text, [
-            userId,
-            relatedCategory,
-          ]);
+          const result = await client.query(query_text, [userId, relatedCategory]);
           return result.rows;
         });
 
         relatedMemories.push(...memories);
       }
 
-      this.logger.log(
-        `Retrieved ${relatedMemories.length} memories from related categories`,
-      );
+      this.logger.log(`Retrieved ${relatedMemories.length} memories from related categories`);
       return relatedMemories;
     } catch (error) {
-      this.logger.error("Error extracting from related categories:", error);
+      this.logger.error('Error extracting from related categories:', error);
       return [];
     }
   }
@@ -1741,12 +1612,12 @@ class IntelligenceSystem {
   /**
    * INTELLIGENT ROUTING FIX: Search memories across all categories by topic keywords
    * Used when primary routing confidence is low (< 0.80) to solve the "needle in haystack" problem
-   * 
-   * Problem: System stores "My kids are Sarah" in personal_life_interests but retrieves 
+   *
+   * Problem: System stores "My kids are Sarah" in personal_life_interests but retrieves
    * "What did I tell you about My" in tools_tech_workflow (different category)
-   * 
+   *
    * Solution: Extract topic keywords and search ALL categories, not just routed category
-   * 
+   *
    * @param {string} userId - User identifier
    * @param {Array<string>} topics - Topic keywords to search for
    * @param {string} excludeCategory - Primary category (already searched)
@@ -1763,7 +1634,7 @@ class IntelligenceSystem {
         const topicFilters = topics
           .map((_, i) => `content::text ILIKE $${i + 3}::text`)
           .join(' OR ');
-        
+
         const query = `
           SELECT id, user_id, category_name, subcategory_name, content, 
                  token_count, relevance_score, usage_frequency, 
@@ -1786,29 +1657,21 @@ class IntelligenceSystem {
             created_at DESC
           LIMIT 10
         `;
-        
-        const params = [
-          userId, 
-          excludeCategory || 'none',
-          ...topics.map(t => `%${t}%`)
-        ];
-        
-        this.logger.log(
-          `[TOPIC-SEARCH] Query has ${topics.length} topic parameters`,
-        );
-        
+
+        const params = [userId, excludeCategory || 'none', ...topics.map((t) => `%${t}%`)];
+
+        this.logger.log(`[TOPIC-SEARCH] Query has ${topics.length} topic parameters`);
+
         const result = await client.query(query, params);
-        
-        this.logger.log(
-          `[TOPIC-SEARCH] Found ${result.rows.length} memories matching topics`,
-        );
-        
+
+        this.logger.log(`[TOPIC-SEARCH] Found ${result.rows.length} memories matching topics`);
+
         // Add metadata to indicate this came from topic fallback
-        return result.rows.map(memory => ({
+        return result.rows.map((memory) => ({
           ...memory,
           source: 'topic_fallback',
           // Slight relevance boost for multi-topic matches
-          relevanceScore: (memory.relevance_score || 0) * (0.7 + (memory.topic_matches * 0.1))
+          relevanceScore: (memory.relevance_score || 0) * (0.7 + memory.topic_matches * 0.1),
         }));
       });
     } catch (error) {
@@ -1821,32 +1684,22 @@ class IntelligenceSystem {
   // SOPHISTICATED SCORING SYSTEM
   // ================================================================
 
-  async applySophisticatedScoring(
-    memories,
-    query,
-    _semanticAnalysis,
-    _routing,
-  ) {
+  async applySophisticatedScoring(memories, query, _semanticAnalysis, _routing) {
     if (!memories || memories.length === 0) return [];
 
-    this.logger.log(
-      `Applying intelligent semantic scoring to ${memories.length} memories`,
-    );
+    this.logger.log(`Applying intelligent semantic scoring to ${memories.length} memories`);
 
     return memories.map((memory) => {
       const contentType = this.classifyContentType(memory.content);
 
       // Immediate exclusion of AI failures
-      if (contentType === "ai_failure") {
+      if (contentType === 'ai_failure') {
         memory.sophisticatedScore = 0;
         return memory;
       }
 
       // CORE SEMANTIC INTELLIGENCE - Does this memory actually address what the user is asking about?
-      const topicRelevance = this.calculateTopicRelevance(
-        memory.content,
-        query,
-      );
+      const topicRelevance = this.calculateTopicRelevance(memory.content, query);
 
       // If topic relevance is very low, don't include this memory regardless of other factors
       if (topicRelevance < 0.15) {
@@ -1858,9 +1711,7 @@ class IntelligenceSystem {
       let score = topicRelevance * 0.8; // Topic relevance is primary factor
 
       // Information density boost
-      const informationDensity = this.calculateInformationDensity(
-        memory.content,
-      );
+      const informationDensity = this.calculateInformationDensity(memory.content);
       score += informationDensity * 0.2;
 
       // Recency and usage
@@ -1900,8 +1751,7 @@ class IntelligenceSystem {
       }
     }
 
-    const topicScore =
-      queryNouns.length > 0 ? conceptOverlap / queryNouns.length : 0.5;
+    const topicScore = queryNouns.length > 0 ? conceptOverlap / queryNouns.length : 0.5;
 
     // Boost for exact phrase matches
     if (memoryLower.includes(queryLower)) {
@@ -1912,55 +1762,43 @@ class IntelligenceSystem {
   }
 
   extractCoreTopic(text) {
+    if (text.includes('video game') || text.includes('gaming') || text.includes('franchise'))
+      return 'videogames';
+    if (text.includes('monkey') || text.includes('pet') || text.includes('animal')) return 'pets';
     if (
-      text.includes("video game") ||
-      text.includes("gaming") ||
-      text.includes("franchise")
+      text.includes('vehicle') ||
+      text.includes('car') ||
+      text.includes('drive') ||
+      text.includes('truck')
     )
-      return "videogames";
+      return 'vehicles';
     if (
-      text.includes("monkey") ||
-      text.includes("pet") ||
-      text.includes("animal")
+      text.includes('superhero') ||
+      text.includes('comic') ||
+      text.includes('marvel') ||
+      text.includes('hero')
     )
-      return "pets";
-    if (
-      text.includes("vehicle") ||
-      text.includes("car") ||
-      text.includes("drive") ||
-      text.includes("truck")
-    )
-      return "vehicles";
-    if (
-      text.includes("superhero") ||
-      text.includes("comic") ||
-      text.includes("marvel") ||
-      text.includes("hero")
-    )
-      return "superheroes";
+      return 'superheroes';
     return null;
   }
 
   extractImportantNouns(text) {
     const words = text.split(/\s+/);
     return words.filter(
-      (word) =>
-        word.length > 3 &&
-        !this.stopWords.has(word) &&
-        /^[a-zA-Z]+$/.test(word),
+      (word) => word.length > 3 && !this.stopWords.has(word) && /^[a-zA-Z]+$/.test(word),
     );
   }
 
   areConceptsRelated(concept1, concept2) {
     // Simple conceptual relationships
     const relationships = [
-      ["vehicle", "truck"],
-      ["vehicle", "car"],
-      ["car", "drive"],
-      ["monkey", "pet"],
-      ["pet", "animal"],
-      ["game", "gaming"],
-      ["franchise", "series"],
+      ['vehicle', 'truck'],
+      ['vehicle', 'car'],
+      ['car', 'drive'],
+      ['monkey', 'pet'],
+      ['pet', 'animal'],
+      ['game', 'gaming'],
+      ['franchise', 'series'],
     ];
 
     return relationships.some(
@@ -2002,14 +1840,7 @@ class IntelligenceSystem {
 
       // Contextual relationship - if query word appears near matched concepts
       for (const memoryWord of memoryWords) {
-        if (
-          this.areWordsContextuallyRelated(
-            queryWord,
-            memoryWord,
-            memoryLower,
-            queryLower,
-          )
-        ) {
+        if (this.areWordsContextuallyRelated(queryWord, memoryWord, memoryLower, queryLower)) {
           semanticMatches += 0.5;
           break;
         }
@@ -2070,16 +1901,13 @@ class IntelligenceSystem {
 
     let baseScore = alignmentScores[semanticAnalysis.intent] || 0.4;
 
-    if (
-      semanticAnalysis.intent === "memory_recall" &&
-      content.includes("remember")
-    ) {
+    if (semanticAnalysis.intent === 'memory_recall' && content.includes('remember')) {
       baseScore += 0.2;
     }
 
     if (
       semanticAnalysis.personalContext &&
-      (content.includes("my ") || content.includes("personal"))
+      (content.includes('my ') || content.includes('personal'))
     ) {
       baseScore += 0.15;
     }
@@ -2099,20 +1927,15 @@ class IntelligenceSystem {
       }
     }
 
-    if (memory.metadata?.emotional_content === "true") {
+    if (memory.metadata?.emotional_content === 'true') {
       memoryEmotionalWeight = Math.max(memoryEmotionalWeight, 0.6);
     }
 
     if (semanticAnalysis.emotionalWeight > 0.5 && memoryEmotionalWeight > 0.5) {
       return 0.9;
-    } else if (
-      semanticAnalysis.emotionalWeight > 0.3 &&
-      memoryEmotionalWeight > 0.3
-    ) {
+    } else if (semanticAnalysis.emotionalWeight > 0.3 && memoryEmotionalWeight > 0.3) {
       return 0.7;
-    } else if (
-      Math.abs(semanticAnalysis.emotionalWeight - memoryEmotionalWeight) < 0.2
-    ) {
+    } else if (Math.abs(semanticAnalysis.emotionalWeight - memoryEmotionalWeight) < 0.2) {
       return 0.6;
     }
 
@@ -2139,23 +1962,16 @@ class IntelligenceSystem {
       /i live in/i,
     ];
 
-    const isQuestion = questionPatterns.some((pattern) =>
-      pattern.test(content),
-    );
-    const isInformation = informationPatterns.some((pattern) =>
-      pattern.test(content),
-    );
+    const isQuestion = questionPatterns.some((pattern) => pattern.test(content));
+    const isInformation = informationPatterns.some((pattern) => pattern.test(content));
 
-    if (
-      content.includes("Assistant:") &&
-      content.includes("no specific mention")
-    ) {
-      return "ai_failure";
+    if (content.includes('Assistant:') && content.includes('no specific mention')) {
+      return 'ai_failure';
     }
 
-    if (isQuestion && !isInformation) return "interrogative";
-    if (isInformation && !isQuestion) return "informational";
-    return "mixed";
+    if (isQuestion && !isInformation) return 'interrogative';
+    if (isInformation && !isQuestion) return 'informational';
+    return 'mixed';
   }
 
   calculateRecencyUsageScore(memory) {
@@ -2164,9 +1980,7 @@ class IntelligenceSystem {
     try {
       const now = new Date();
       const createdDate = new Date(memory.created_at);
-      const lastAccessedDate = new Date(
-        memory.last_accessed || memory.created_at,
-      );
+      const lastAccessedDate = new Date(memory.last_accessed || memory.created_at);
 
       const ageInDays = (now - createdDate) / (1000 * 60 * 60 * 24);
       const lastAccessDays = (now - lastAccessedDate) / (1000 * 60 * 60 * 24);
@@ -2198,21 +2012,20 @@ class IntelligenceSystem {
     const properNouns = (content.match(/[A-Z][a-z]+/g) || []).length;
     const numbers = (content.match(/\d+/g) || []).length;
     const specificWords = [
-      "named",
-      "called",
-      "drive",
-      "own",
-      "have",
-      "work",
-      "live",
-      "married",
-      "daughter",
-      "son",
+      'named',
+      'called',
+      'drive',
+      'own',
+      'have',
+      'work',
+      'live',
+      'married',
+      'daughter',
+      'son',
     ].filter((word) => content.toLowerCase().includes(word)).length;
 
     const totalWords = content.split(/\s+/).length;
-    const density =
-      (properNouns + numbers + specificWords) / Math.max(totalWords, 1);
+    const density = (properNouns + numbers + specificWords) / Math.max(totalWords, 1);
 
     return Math.min(density * 2, 1.0); // Scale to 0-1 range
   }
@@ -2221,13 +2034,10 @@ class IntelligenceSystem {
     if (!text) return [];
 
     return text
-      .replace(/[^\w\s]/g, " ")
+      .replace(/[^\w\s]/g, ' ')
       .split(/\s+/)
       .filter(
-        (word) =>
-          word.length > 2 &&
-          !this.stopWords.has(word.toLowerCase()) &&
-          !/^\d+$/.test(word),
+        (word) => word.length > 2 && !this.stopWords.has(word.toLowerCase()) && !/^\d+$/.test(word),
       )
       .map((word) => word.toLowerCase());
   }
@@ -2236,8 +2046,7 @@ class IntelligenceSystem {
     return memories.sort((a, b) => {
       // PRIORITY 1: Content intelligence score (if available from SQL)
       if (a.content_intelligence_score && b.content_intelligence_score) {
-        const intelligenceDiff =
-          b.content_intelligence_score - a.content_intelligence_score;
+        const intelligenceDiff = b.content_intelligence_score - a.content_intelligence_score;
         if (Math.abs(intelligenceDiff) > 0.1) {
           return intelligenceDiff;
         }
@@ -2288,8 +2097,7 @@ class IntelligenceSystem {
     // First pass: Add memories within main budget
     const mainBudget = tokenLimit - highValueReserve;
     for (const memory of memories) {
-      const tokenCount =
-        memory.token_count || Math.ceil(memory.content.length / 4);
+      const tokenCount = memory.token_count || Math.ceil(memory.content.length / 4);
 
       if (totalTokens + tokenCount <= mainBudget) {
         result.push(memory);
@@ -2304,13 +2112,10 @@ class IntelligenceSystem {
 
     // Second pass: Use reserve for high-value content
     const remainingMemories = memories.slice(result.length);
-    const highValueMemories = remainingMemories.filter(
-      (m) => m.sophisticatedScore > 0.8,
-    );
+    const highValueMemories = remainingMemories.filter((m) => m.sophisticatedScore > 0.8);
 
     for (const memory of highValueMemories) {
-      const tokenCount =
-        memory.token_count || Math.ceil(memory.content.length / 4);
+      const tokenCount = memory.token_count || Math.ceil(memory.content.length / 4);
       const availableReserve = tokenLimit - totalTokens;
 
       if (tokenCount <= availableReserve) {
@@ -2363,16 +2168,12 @@ class IntelligenceSystem {
       }
 
       // Question detection
-      if (content.includes("?")) {
+      if (content.includes('?')) {
         relevance += 0.1;
       }
 
       // Personal context detection
-      if (
-        /\b(my|our|personal|private|family|i am|i have|we are|we have)\b/i.test(
-          content,
-        )
-      ) {
+      if (/\b(my|our|personal|private|family|i am|i have|we are|we have)\b/i.test(content)) {
         relevance += 0.1;
       }
 
@@ -2381,11 +2182,11 @@ class IntelligenceSystem {
         relevance += 0.2;
       }
 
-      if (metadata.urgency === "high") {
+      if (metadata.urgency === 'high') {
         relevance += 0.15;
       }
 
-      if (metadata.emotional_content === "true") {
+      if (metadata.emotional_content === 'true') {
         relevance += 0.1;
       }
 
@@ -2397,7 +2198,7 @@ class IntelligenceSystem {
 
       return Math.max(0.1, Math.min(relevance, 1.0));
     } catch (error) {
-      this.logger.error("Error calculating relevance score:", error);
+      this.logger.error('Error calculating relevance score:', error);
       return 0.5; // Default fallback
     }
   }
@@ -2407,14 +2208,12 @@ class IntelligenceSystem {
   // ================================================================
 
   async extractIntelligentMemory(query, userId, intelligenceContext = null) {
-    console.log(
-      "🧠 INTELLIGENT MEMORY: Enhanced extraction with reasoning context",
-    );
+    console.log('🧠 INTELLIGENT MEMORY: Enhanced extraction with reasoning context');
 
     try {
       // Standard memory extraction first
       const baseExtraction = await this.extractRelevantMemories(userId, query, {
-        primaryCategory: "personal_life_interests",
+        primaryCategory: 'personal_life_interests',
       });
 
       // Enhance with intelligence context if available
@@ -2429,19 +2228,22 @@ class IntelligenceSystem {
 
       if (baseExtraction && baseExtraction.length > 0) {
         // Add reasoning support analysis
-        enhancedExtraction.reasoningSupport =
-          this.identifyReasoningSupportMemories(baseExtraction, query);
+        enhancedExtraction.reasoningSupport = this.identifyReasoningSupportMemories(
+          baseExtraction,
+          query,
+        );
 
         // Find cross-domain memory connections
-        enhancedExtraction.crossDomainConnections =
-          await this.findCrossDomainMemoryConnections(
-            baseExtraction,
-            "personal_life_interests",
-          );
+        enhancedExtraction.crossDomainConnections = await this.findCrossDomainMemoryConnections(
+          baseExtraction,
+          'personal_life_interests',
+        );
 
         // Extract scenario-relevant historical context
-        enhancedExtraction.scenarioRelevantMemories =
-          this.extractScenarioRelevantMemories(baseExtraction, query);
+        enhancedExtraction.scenarioRelevantMemories = this.extractScenarioRelevantMemories(
+          baseExtraction,
+          query,
+        );
 
         // Identify quantitative/numerical context from memory
         enhancedExtraction.quantitativeContext =
@@ -2460,18 +2262,16 @@ class IntelligenceSystem {
         `🎯 Intelligent memory extraction complete. Enhanced features: ${Object.keys(
           enhancedExtraction,
         )
-          .filter(
-            (k) => enhancedExtraction[k] && enhancedExtraction[k].length > 0,
-          )
-          .join(", ")}`,
+          .filter((k) => enhancedExtraction[k] && enhancedExtraction[k].length > 0)
+          .join(', ')}`,
       );
 
       return enhancedExtraction;
     } catch (error) {
-      this.logger.error("Intelligent memory extraction error:", error);
+      this.logger.error('Intelligent memory extraction error:', error);
       // Fallback to standard extraction
       return await this.extractRelevantMemories(userId, query, {
-        primaryCategory: "personal_life_interests",
+        primaryCategory: 'personal_life_interests',
       });
     }
   }
@@ -2487,28 +2287,28 @@ class IntelligenceSystem {
       const support = {
         memory_id: memory.id,
         content: memory.content,
-        supportType: "general",
+        supportType: 'general',
         relevanceToReasoning: 0.5,
       };
 
       // Identify premise support
       if (this.supportsPremise(memory.content, query)) {
-        support.supportType = "premise";
+        support.supportType = 'premise';
         support.relevanceToReasoning = 0.8;
       }
       // Identify evidence support
       else if (this.providesEvidence(memory.content, query)) {
-        support.supportType = "evidence";
+        support.supportType = 'evidence';
         support.relevanceToReasoning = 0.9;
       }
       // Identify counterexample support
       else if (this.providesCounterexample(memory.content, query)) {
-        support.supportType = "counterexample";
+        support.supportType = 'counterexample';
         support.relevanceToReasoning = 0.7;
       }
       // Identify pattern support
       else if (this.establishesPattern(memory.content, query)) {
-        support.supportType = "pattern";
+        support.supportType = 'pattern';
         support.relevanceToReasoning = 0.6;
       }
 
@@ -2517,9 +2317,7 @@ class IntelligenceSystem {
       }
     }
 
-    return reasoningSupport.sort(
-      (a, b) => b.relevanceToReasoning - a.relevanceToReasoning,
-    );
+    return reasoningSupport.sort((a, b) => b.relevanceToReasoning - a.relevanceToReasoning);
   }
 
   // ================================================================
@@ -2560,28 +2358,25 @@ class IntelligenceSystem {
 
   analyzeCategoryConnection(category1, category2, memories1, memories2) {
     const connectionPatterns = {
-      "work_career-money_income_debt": {
+      'work_career-money_income_debt': {
         strength: 0.9,
-        relationship: "Career decisions directly impact financial stability",
+        relationship: 'Career decisions directly impact financial stability',
       },
-      "health_wellness-work_career": {
+      'health_wellness-work_career': {
         strength: 0.8,
-        relationship: "Health affects work performance and career decisions",
+        relationship: 'Health affects work performance and career decisions',
       },
-      "relationships_social-mental_emotional": {
+      'relationships_social-mental_emotional': {
         strength: 0.9,
-        relationship:
-          "Social relationships strongly influence emotional wellbeing",
+        relationship: 'Social relationships strongly influence emotional wellbeing',
       },
-      "business-legal": {
+      'business-legal': {
         strength: 0.8,
-        relationship:
-          "Business decisions require legal compliance consideration",
+        relationship: 'Business decisions require legal compliance consideration',
       },
-      "personal_life_interests-goals_active_current": {
+      'personal_life_interests-goals_active_current': {
         strength: 0.7,
-        relationship:
-          "Personal interests influence goal setting and priorities",
+        relationship: 'Personal interests influence goal setting and priorities',
       },
     };
 
@@ -2607,7 +2402,7 @@ class IntelligenceSystem {
       from: category1,
       to: category2,
       strength: 0.4,
-      relationship: "Potential indirect relationship exists",
+      relationship: 'Potential indirect relationship exists',
       supportingMemories: {},
     };
   }
@@ -2629,9 +2424,9 @@ class IntelligenceSystem {
 
       // Success patterns
       if (
-        content.includes("success") ||
-        content.includes("worked") ||
-        content.includes("achieved")
+        content.includes('success') ||
+        content.includes('worked') ||
+        content.includes('achieved')
       ) {
         scenarioMemories.successPatterns.push({
           memory_id: memory.id,
@@ -2641,11 +2436,7 @@ class IntelligenceSystem {
       }
 
       // Failure patterns
-      if (
-        content.includes("failed") ||
-        content.includes("mistake") ||
-        content.includes("wrong")
-      ) {
+      if (content.includes('failed') || content.includes('mistake') || content.includes('wrong')) {
         scenarioMemories.failurePatterns.push({
           memory_id: memory.id,
           content: memory.content,
@@ -2654,11 +2445,7 @@ class IntelligenceSystem {
       }
 
       // Risk factors
-      if (
-        content.includes("risk") ||
-        content.includes("problem") ||
-        content.includes("issue")
-      ) {
+      if (content.includes('risk') || content.includes('problem') || content.includes('issue')) {
         scenarioMemories.riskFactors.push({
           memory_id: memory.id,
           content: memory.content,
@@ -2668,9 +2455,9 @@ class IntelligenceSystem {
 
       // Decision outcomes
       if (
-        content.includes("decided") ||
-        content.includes("chose") ||
-        content.includes("resulted")
+        content.includes('decided') ||
+        content.includes('chose') ||
+        content.includes('resulted')
       ) {
         scenarioMemories.decisionOutcomes.push({
           memory_id: memory.id,
@@ -2711,41 +2498,40 @@ class IntelligenceSystem {
     const matches = text.match(numberPattern) || [];
     return matches.map((match) => ({
       raw: match,
-      value: parseFloat(match.replace(/[$,%]/g, "")),
+      value: parseFloat(match.replace(/[$,%]/g, '')),
       type: this.classifyNumber(match),
     }));
   }
 
   classifyNumber(numberString) {
-    if (numberString.includes("$")) return "currency";
-    if (numberString.includes("%")) return "percentage";
-    if (parseFloat(numberString) > 1900 && parseFloat(numberString) < 2100)
-      return "year";
-    return "general";
+    if (numberString.includes('$')) return 'currency';
+    if (numberString.includes('%')) return 'percentage';
+    if (parseFloat(numberString) > 1900 && parseFloat(numberString) < 2100) return 'year';
+    return 'general';
   }
 
   categorizeNumbers(numbers, context) {
     const contextLower = context.toLowerCase();
 
     if (
-      contextLower.includes("revenue") ||
-      contextLower.includes("income") ||
-      contextLower.includes("profit")
+      contextLower.includes('revenue') ||
+      contextLower.includes('income') ||
+      contextLower.includes('profit')
     ) {
-      return "financial";
+      return 'financial';
     }
     if (
-      contextLower.includes("time") ||
-      contextLower.includes("hour") ||
-      contextLower.includes("day")
+      contextLower.includes('time') ||
+      contextLower.includes('hour') ||
+      contextLower.includes('day')
     ) {
-      return "temporal";
+      return 'temporal';
     }
-    if (contextLower.includes("goal") || contextLower.includes("target")) {
-      return "target";
+    if (contextLower.includes('goal') || contextLower.includes('target')) {
+      return 'target';
     }
 
-    return "general";
+    return 'general';
   }
 
   // ================================================================
@@ -2759,34 +2545,22 @@ class IntelligenceSystem {
       let enhancedScore = memory.relevance_score || 0.5;
 
       // Boost for reasoning support
-      if (
-        intelligenceContext.requiresReasoning &&
-        this.supportsReasoning(memory.content)
-      ) {
+      if (intelligenceContext.requiresReasoning && this.supportsReasoning(memory.content)) {
         enhancedScore += 0.2;
       }
 
       // Boost for cross-domain relevance
-      if (
-        intelligenceContext.crossDomainAnalysis &&
-        this.supportsCrossDomain(memory.content)
-      ) {
+      if (intelligenceContext.crossDomainAnalysis && this.supportsCrossDomain(memory.content)) {
         enhancedScore += 0.15;
       }
 
       // Boost for scenario planning
-      if (
-        intelligenceContext.scenarioAnalysis &&
-        this.supportsScenarios(memory.content)
-      ) {
+      if (intelligenceContext.scenarioAnalysis && this.supportsScenarios(memory.content)) {
         enhancedScore += 0.1;
       }
 
       // Boost for quantitative context
-      if (
-        intelligenceContext.quantitativeAnalysis &&
-        this.containsNumbers(memory.content)
-      ) {
+      if (intelligenceContext.quantitativeAnalysis && this.containsNumbers(memory.content)) {
         enhancedScore += 0.1;
       }
 
@@ -2805,56 +2579,49 @@ class IntelligenceSystem {
   supportsPremise(content, query) {
     // Simple heuristic - looks for supporting statements
     return (
-      content.toLowerCase().includes("because") ||
-      content.toLowerCase().includes("since") ||
+      content.toLowerCase().includes('because') ||
+      content.toLowerCase().includes('since') ||
       this.hasSharedKeywords(content, query)
     );
   }
 
   providesEvidence(content, _query) {
     return (
-      content.toLowerCase().includes("data") ||
-      content.toLowerCase().includes("evidence") ||
-      content.toLowerCase().includes("example") ||
+      content.toLowerCase().includes('data') ||
+      content.toLowerCase().includes('evidence') ||
+      content.toLowerCase().includes('example') ||
       this.containsNumbers(content)
     );
   }
 
   providesCounterexample(content, _query) {
     return (
-      content.toLowerCase().includes("however") ||
-      content.toLowerCase().includes("but") ||
-      content.toLowerCase().includes("except")
+      content.toLowerCase().includes('however') ||
+      content.toLowerCase().includes('but') ||
+      content.toLowerCase().includes('except')
     );
   }
 
   establishesPattern(content, _query) {
     return (
-      content.toLowerCase().includes("always") ||
-      content.toLowerCase().includes("usually") ||
-      content.toLowerCase().includes("pattern") ||
-      content.toLowerCase().includes("tend")
+      content.toLowerCase().includes('always') ||
+      content.toLowerCase().includes('usually') ||
+      content.toLowerCase().includes('pattern') ||
+      content.toLowerCase().includes('tend')
     );
   }
 
   supportsReasoning(content) {
     return (
-      content.includes("because") ||
-      content.includes("therefore") ||
-      content.includes("logic") ||
-      content.includes("reason")
+      content.includes('because') ||
+      content.includes('therefore') ||
+      content.includes('logic') ||
+      content.includes('reason')
     );
   }
 
   supportsCrossDomain(content) {
-    const domains = [
-      "business",
-      "personal",
-      "health",
-      "financial",
-      "legal",
-      "technical",
-    ];
+    const domains = ['business', 'personal', 'health', 'financial', 'legal', 'technical'];
     let domainCount = 0;
     for (const domain of domains) {
       if (content.toLowerCase().includes(domain)) domainCount++;
@@ -2864,10 +2631,10 @@ class IntelligenceSystem {
 
   supportsScenarios(content) {
     return (
-      content.includes("outcome") ||
-      content.includes("result") ||
-      content.includes("consequence") ||
-      content.includes("impact")
+      content.includes('outcome') ||
+      content.includes('result') ||
+      content.includes('consequence') ||
+      content.includes('impact')
     );
   }
 
@@ -2878,9 +2645,7 @@ class IntelligenceSystem {
   hasSharedKeywords(content, query) {
     const contentWords = content.toLowerCase().split(/\s+/);
     const queryWords = query.toLowerCase().split(/\s+/);
-    const sharedWords = contentWords.filter(
-      (word) => queryWords.includes(word) && word.length > 3,
-    );
+    const sharedWords = contentWords.filter((word) => queryWords.includes(word) && word.length > 3);
     return sharedWords.length >= 2;
   }
 
@@ -2892,13 +2657,19 @@ class IntelligenceSystem {
    * Calculate multi-dimensional relevance score as specified in requirements
    * Weights: semantic (0.4) + keyword (0.3) + recency (0.1) + importance (0.1) + usage (0.1)
    */
-  calculateMultiDimensionalRelevance(semanticScore, keywordScore, recencyScore, importanceScore, usageScore) {
+  calculateMultiDimensionalRelevance(
+    semanticScore,
+    keywordScore,
+    recencyScore,
+    importanceScore,
+    usageScore,
+  ) {
     return (
-      (semanticScore * 0.4) +
-      (keywordScore * 0.3) +
-      (recencyScore * 0.1) +
-      (importanceScore * 0.1) +
-      (usageScore * 0.1)
+      semanticScore * 0.4 +
+      keywordScore * 0.3 +
+      recencyScore * 0.1 +
+      importanceScore * 0.1 +
+      usageScore * 0.1
     );
   }
 
@@ -2929,8 +2700,8 @@ class IntelligenceSystem {
         matchCount++;
       } else {
         // Check for partial matches (e.g., "superhero" matches "superheroes")
-        const partialMatch = contentWords.some(cw => 
-          cw.includes(queryWord) || queryWord.includes(cw)
+        const partialMatch = contentWords.some(
+          (cw) => cw.includes(queryWord) || queryWord.includes(cw),
         );
         if (partialMatch) {
           matchCount += 0.5;
@@ -2944,7 +2715,7 @@ class IntelligenceSystem {
     // Boost if content contains key query nouns
     const queryNouns = this.extractImportantNouns(queryLower);
     const contentNouns = this.extractImportantNouns(contentLower);
-    const nounOverlap = queryNouns.filter(qn => contentNouns.includes(qn)).length;
+    const nounOverlap = queryNouns.filter((qn) => contentNouns.includes(qn)).length;
     const nounBoost = queryNouns.length > 0 ? (nounOverlap / queryNouns.length) * 0.3 : 0;
 
     return Math.min(semanticSimilarity + nounBoost, 1.0);
@@ -2971,7 +2742,7 @@ class IntelligenceSystem {
           keyword.slice(0, -1), // remove last char
           keyword.slice(0, -2), // remove last 2 chars
         ];
-        if (variations.some(v => contentLower.includes(v))) {
+        if (variations.some((v) => contentLower.includes(v))) {
           matchScore += 0.7;
         }
       }
@@ -3029,7 +2800,7 @@ class IntelligenceSystem {
     if (topRelevant.length === 0) return [];
 
     // Split by temporal categories
-    const recentCutoff = Date.now() - (30 * 24 * 60 * 60 * 1000); // 30 days ago
+    const recentCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000; // 30 days ago
     const older = [];
     const newer = [];
 
@@ -3053,13 +2824,10 @@ class IntelligenceSystem {
     const olderCount = Math.floor(maxMemories * 0.3);
 
     // Mix: 70% newer, 30% older
-    const selected = [
-      ...newer.slice(0, newerCount),
-      ...older.slice(0, olderCount)
-    ];
+    const selected = [...newer.slice(0, newerCount), ...older.slice(0, olderCount)];
 
     this.logger.log(
-      `Temporal diversity: ${newer.slice(0, newerCount).length} recent + ${older.slice(0, olderCount).length} older = ${selected.length} total`
+      `Temporal diversity: ${newer.slice(0, newerCount).length} recent + ${older.slice(0, olderCount).length} older = ${selected.length} total`,
     );
 
     return selected;
@@ -3074,7 +2842,7 @@ class IntelligenceSystem {
   }
 
   generateCacheKey(query, userId) {
-    return `${query.substring(0, 100)}_${userId || "anon"}`;
+    return `${query.substring(0, 100)}_${userId || 'anon'}`;
   }
 
   cacheResult(key, result) {
@@ -3095,8 +2863,8 @@ class IntelligenceSystem {
 
   createFallbackRoutingResult(reason) {
     return {
-      primaryCategory: "personal_life_interests",
-      subcategory: "General",
+      primaryCategory: 'personal_life_interests',
+      subcategory: 'General',
       confidence: 0.3,
       alternativeCategory: null,
       reasoning: `Fallback: ${reason}`,
@@ -3121,13 +2889,11 @@ class IntelligenceSystem {
       // Update confidence statistics
       const count = this.routingStats.totalRoutes;
       const currentAvg = this.routingStats.avgConfidence;
-      this.routingStats.avgConfidence =
-        (currentAvg * (count - 1) + result.confidence) / count;
+      this.routingStats.avgConfidence = (currentAvg * (count - 1) + result.confidence) / count;
 
       // Update processing time
       const currentAvgTime = this.routingStats.avgProcessingTime;
-      this.routingStats.avgProcessingTime =
-        (currentAvgTime * (count - 1) + processingTime) / count;
+      this.routingStats.avgProcessingTime = (currentAvgTime * (count - 1) + processingTime) / count;
 
       // Track confidence levels
       if (result.confidence > 0.8) {
@@ -3137,12 +2903,11 @@ class IntelligenceSystem {
       }
 
       // Update cache hit rate
-      const totalRequests =
-        this.routingStats.cacheHits + this.routingStats.cacheMisses;
+      const totalRequests = this.routingStats.cacheHits + this.routingStats.cacheMisses;
       this.routingStats.cacheHitRate =
         totalRequests > 0 ? this.routingStats.cacheHits / totalRequests : 0;
     } catch (error) {
-      this.logger.warn("Error updating routing analytics:", error);
+      this.logger.warn('Error updating routing analytics:', error);
     }
   }
 
@@ -3165,21 +2930,18 @@ class IntelligenceSystem {
       // Update category distribution
       if (routing?.primaryCategory) {
         const category = routing.primaryCategory;
-        const current =
-          this.extractionStats.categoryDistribution.get(category) || 0;
+        const current = this.extractionStats.categoryDistribution.get(category) || 0;
         this.extractionStats.categoryDistribution.set(category, current + 1);
       }
     } catch (error) {
-      this.logger.warn("Error updating extraction analytics:", error);
+      this.logger.warn('Error updating extraction analytics:', error);
     }
   }
 
   getRoutingStats() {
     return {
       totalRoutes: this.routingStats.totalRoutes,
-      categoryDistribution: Object.fromEntries(
-        this.routingStats.categoryDistribution,
-      ),
+      categoryDistribution: Object.fromEntries(this.routingStats.categoryDistribution),
       avgConfidence: Number(this.routingStats.avgConfidence.toFixed(3)),
       avgProcessingTime: Math.round(this.routingStats.avgProcessingTime),
       highConfidenceRoutes: this.routingStats.highConfidenceRoutes,
@@ -3194,9 +2956,7 @@ class IntelligenceSystem {
   getExtractionStats() {
     return {
       ...this.extractionStats,
-      categoryDistribution: Object.fromEntries(
-        this.extractionStats.categoryDistribution,
-      ),
+      categoryDistribution: Object.fromEntries(this.extractionStats.categoryDistribution),
       uptime: Date.now() - this.extractionStats.lastReset,
       cacheSize: this.extractionCache.size,
     };
@@ -3206,7 +2966,7 @@ class IntelligenceSystem {
     this.routingCache.clear();
     this.semanticCache.clear();
     this.extractionCache.clear();
-    this.logger.log("Intelligence System caches cleared");
+    this.logger.log('Intelligence System caches cleared');
   }
 
   // ================================================================
@@ -3242,7 +3002,7 @@ class IntelligenceSystem {
 
   extractQueryWords(text) {
     return text
-      .replace(/[^\w\s]/g, " ")
+      .replace(/[^\w\s]/g, ' ')
       .split(/\s+/)
       .filter((word) => word.length > 2)
       .filter((word) => !this.isCommonWord(word));
@@ -3250,26 +3010,26 @@ class IntelligenceSystem {
 
   isCommonWord(word) {
     const common = [
-      "the",
-      "and",
-      "you",
-      "that",
-      "was",
-      "for",
-      "are",
-      "with",
-      "his",
-      "they",
-      "have",
-      "this",
-      "will",
-      "can",
-      "had",
-      "her",
-      "what",
-      "said",
-      "each",
-      "which",
+      'the',
+      'and',
+      'you',
+      'that',
+      'was',
+      'for',
+      'are',
+      'with',
+      'his',
+      'they',
+      'have',
+      'this',
+      'will',
+      'can',
+      'had',
+      'her',
+      'what',
+      'said',
+      'each',
+      'which',
     ];
     return common.includes(word);
   }
@@ -3281,28 +3041,27 @@ class IntelligenceSystem {
   async tryRelatedCategories(userId, query, routing, _semanticAnalysis) {
     // Define category relationships
     const categoryRelations = {
-      personal_life_interests: ["relationships_social", "home_lifestyle"],
-      relationships_social: ["personal_life_interests", "mental_emotional"],
-      business_career: ["financial_management", "personal_development"],
-      mental_emotional: ["relationships_social", "health_wellness"],
-      home_lifestyle: ["personal_life_interests", "financial_management"],
+      personal_life_interests: ['relationships_social', 'home_lifestyle'],
+      relationships_social: ['personal_life_interests', 'mental_emotional'],
+      business_career: ['financial_management', 'personal_development'],
+      mental_emotional: ['relationships_social', 'health_wellness'],
+      home_lifestyle: ['personal_life_interests', 'financial_management'],
     };
 
     const primaryCategory = routing.primaryCategory;
     const relatedCategories = categoryRelations[primaryCategory] || [];
 
     this.logger.log(
-      `Trying related categories for ${primaryCategory}: ${relatedCategories.join(", ")}`,
+      `Trying related categories for ${primaryCategory}: ${relatedCategories.join(', ')}`,
     );
 
     const fallbackMemories = [];
 
     for (const category of relatedCategories) {
       try {
-        const categoryMemories = await this.coreSystem.withDbClient(
-          async (client) => {
-            const result = await client.query(
-              `
+        const categoryMemories = await this.coreSystem.withDbClient(async (client) => {
+          const result = await client.query(
+            `
             SELECT id, user_id, category_name, subcategory_name, content, token_count, 
                    relevance_score, usage_frequency, created_at, last_accessed, metadata
             FROM persistent_memories 
@@ -3314,36 +3073,28 @@ class IntelligenceSystem {
             ORDER BY relevance_score DESC, created_at DESC
             LIMIT 5
           `,
-              [userId, category],
-            );
+            [userId, category],
+          );
 
-            return result.rows;
-          },
-        );
+          return result.rows;
+        });
 
         // Score each memory for relevance to the query
         const scoredMemories = categoryMemories.map((memory) => ({
           ...memory,
-          similarityScore: this.calculateContentSimilarity(
-            query,
-            memory.content,
-          ),
-          source: "related_category",
+          similarityScore: this.calculateContentSimilarity(query, memory.content),
+          source: 'related_category',
         }));
 
         // Only include memories with reasonable similarity
-        const relevantMemories = scoredMemories.filter(
-          (m) => m.similarityScore > 0.2,
-        );
+        const relevantMemories = scoredMemories.filter((m) => m.similarityScore > 0.2);
         fallbackMemories.push(...relevantMemories);
       } catch (error) {
         this.logger.error(`Error searching category ${category}:`, error);
       }
     }
 
-    this.logger.log(
-      `Found ${fallbackMemories.length} memories from related categories`,
-    );
+    this.logger.log(`Found ${fallbackMemories.length} memories from related categories`);
     return fallbackMemories;
   }
 
@@ -3367,7 +3118,7 @@ class IntelligenceSystem {
 
       // TERTIARY: Prefer primary category over related
       if (a.source !== b.source) {
-        return a.source === "primary_category" ? -1 : 1;
+        return a.source === 'primary_category' ? -1 : 1;
       }
 
       // FINAL: Usage frequency
