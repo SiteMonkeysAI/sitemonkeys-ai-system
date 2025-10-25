@@ -12,6 +12,11 @@ import { encoding_for_model } from 'tiktoken';
  */
 export class IntelligentMemoryStorage {
   constructor(db, openaiKey) {
+    // VALIDATION ADDED: ensure a usable database handle is provided
+    if (!db || typeof db.query !== 'function') {
+      throw new Error('Invalid database handle passed to IntelligentMemoryStorage');
+    }
+
     this.db = db;
     this.openai = new OpenAI({ apiKey: openaiKey });
     this.encoder = null;
@@ -89,16 +94,8 @@ export class IntelligentMemoryStorage {
    * @returns {Promise<string>} - Extracted facts as bullet points
    */
   async extractKeyFacts(userMsg, aiResponse) {
-    const prompt = `Extract ATOMIC FACTS from this conversation.
-Format: One fact per line, 3-8 words max, bullet points.
-Focus on: User preferences, statements, questions, entities, names, numbers.
-Exclude: Explanations, reasoning, examples, politeness.
-
-User: ${userMsg}
-Assistant: ${aiResponse}
-
-Extracted Facts:`;
-
+    const prompt = `Extract ATOMIC FACTS from this conversation.\nFormat: One fact per line, 3-8 words max, bullet points.\nFocus on: User preferences, statements, questions, entities, names, numbers.\nExclude: Explanations, reasoning, examples, politeness.\n\nUser: ${userMsg}\nAssistant: ${aiResponse}\n\nExtracted Facts:`;
+    
     try {
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
