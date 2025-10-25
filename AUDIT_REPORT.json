@@ -1,0 +1,63 @@
+{
+  "routing": {
+    "My kids are named Sarah and Jake": {
+      "storageCategory": "personal_life_interests",
+      "retrievalCategory": "tools_tech_workflow",
+      "match": false,
+      "confidence": 0.8800000000000001
+    },
+    "I own a Honda Civic and a Toyota Camry": {
+      "storageCategory": "personal_life_interests",
+      "retrievalCategory": "tools_tech_workflow",
+      "match": false,
+      "confidence": 0.8800000000000001
+    },
+    "My favorite superhero is Spider-Man": {
+      "storageCategory": "personal_life_interests",
+      "retrievalCategory": "tools_tech_workflow",
+      "match": false,
+      "confidence": 0.8800000000000001
+    },
+    "I love programming in Python": {
+      "storageCategory": "personal_life_interests",
+      "retrievalCategory": "tools_tech_workflow",
+      "match": false,
+      "confidence": 0.85
+    },
+    "My wife is stressed at work": {
+      "storageCategory": "mental_emotional",
+      "retrievalCategory": "tools_tech_workflow",
+      "match": false,
+      "confidence": 0.73
+    }
+  },
+  "memory": {},
+  "documents": {
+    "status": "working",
+    "destination": "extractedDocuments Map (in-memory)",
+    "tokenBudget": 10000,
+    "autoCleanup": true
+  },
+  "vault": {
+    "tokens": 0,
+    "files": 0,
+    "withinBudget": true
+  },
+  "cache": {
+    "isolated": true,
+    "flushLogic": true,
+    "autoCleanup": true
+  },
+  "personality": {
+    "timing": "correct",
+    "contextAvailable": true,
+    "order": "context → enforcement → personality → validation"
+  },
+  "tokenEfficiency": {
+    "memoryBudget": 2400,
+    "documentBudget": 10000,
+    "vaultBudget": 9000,
+    "intelligentStorage": false,
+    "compressionRatio": "10-20:1"
+  }
+}
