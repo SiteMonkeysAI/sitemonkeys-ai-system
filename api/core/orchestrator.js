@@ -672,13 +672,19 @@ export class Orchestrator {
       
       const tokens = Math.ceil(documentContent.length / 4);
 
-      if (tokens > 10000) {
-        const truncated = documentContent.substring(0, 40000);
-        this.log(`[DOCUMENTS] Truncated from ${tokens} to ~10000 tokens`);
+      // FEATURE FLAG: ENABLE_STRICT_DOC_BUDGET
+      // Spec calls for ≤1,000 tokens, current is 10,000
+      // Default to 10K for backward compatibility
+      const docBudget = process.env.ENABLE_STRICT_DOC_BUDGET === 'true' ? 1000 : 10000;
+
+      if (tokens > docBudget) {
+        // 1 token ≈ 4 chars, so multiply by 4
+        const truncated = documentContent.substring(0, docBudget * 4);
+        this.log(`[DOCUMENTS] Truncated from ${tokens} to ~${docBudget} tokens`);
 
         return {
           content: truncated,
-          tokens: 10000,
+          tokens: docBudget,
           filename: latestDoc.filename,
           processed: true,
           truncated: true,
