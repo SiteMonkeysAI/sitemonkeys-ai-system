@@ -7,14 +7,53 @@ This document provides a comprehensive trace of the memory storage and retrieval
 
 ## 1. MEMORY STORAGE PATH
 
-### Primary Storage Function
+### TWO STORAGE PATHS EXIST (Feature Flag Controlled)
+
+#### Path A: Intelligent Storage (ENABLED when `ENABLE_INTELLIGENT_STORAGE=true`)
+**File**: `api/memory/intelligent-storage.js`
+**Function**: `storeWithIntelligence` (LINE 49)
+**Called from**: `server.js` (LINE 346-366)
+
+**INSERT Statement** (LINE 194-221):
+```sql
+INSERT INTO persistent_memories (
+  user_id,
+  category_name,
+  subcategory_name,
+  content,
+  token_count,
+  relevance_score,
+  metadata,
+  created_at,
+  usage_frequency,
+  last_accessed
+) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP)
+RETURNING id
+```
+
+**Parameters**:
+- `$1` = userId
+- `$2` = **category** ← CRITICAL: Passed directly from server.js, NOT from routing!
+- `$3` = 'general' (hardcoded subcategory)
+- `$4` = facts (compressed content)
+- `$5` = tokenCount
+- `$6` = 0.70 (base relevance)
+- `$7` = metadata JSON
+
+**Category Determination** (server.js LINE 356):
+```javascript
+const category = mode === 'site_monkeys' ? 'business' : 'general';
+```
+
+**⚠️ CRITICAL ISSUE**: Category determined by MODE, NOT by content analysis!
+
+---
+
+#### Path B: Legacy Storage (DEFAULT when `ENABLE_INTELLIGENT_STORAGE` not set)
 **File**: `api/categories/memory/internal/persistent_memory.js`
 **Function**: `storeMemory` (LINE 129)
 
-### EXACT INSERT Statement
-**File**: `api/categories/memory/internal/persistent_memory.js`
-**Lines**: 159-178
-
+**INSERT Statement** (LINE 159-178):
 ```sql
 INSERT INTO persistent_memories (
   user_id, category_name, subcategory_name, content, 
@@ -26,7 +65,7 @@ RETURNING id
 
 **Parameters**:
 - `$1` = userId
-- `$2` = **routing.primaryCategory** ← CRITICAL: Category determined here
+- `$2` = **routing.primaryCategory** ← CRITICAL: Category determined by semantic analysis
 - `$3` = routing.subcategory
 - `$4` = conversationContent
 - `$5` = tokenCount
@@ -34,9 +73,19 @@ RETURNING id
 - `$7` = 0 (initial usage frequency)
 - `$8` = JSON.stringify(metadata)
 
+**Category Determination** (LINE 141-144):
+```javascript
+const routing = await this.intelligenceSystem.analyzeAndRoute(
+  userMessage,  // ← Uses semantic analysis of user message
+  userId,
+);
+```
+
 ### Column Storing Category Name
-**Column**: `category_name` (LINE 162)
-**Value Source**: `routing.primaryCategory` (LINE 170)
+**Column**: `category_name` (both paths)
+**Value Sources**:
+- **Path A (Intelligent)**: Simple mode-based selection (server.js:356)
+- **Path B (Legacy)**: Semantic routing analysis (persistent_memory.js:170)
 
 ---
 
@@ -258,9 +307,12 @@ if (process.env.ENABLE_INTELLIGENT_ROUTING === 'true') {
 ## 6. KEY FINDINGS
 
 ### Storage Issues:
-1. **Category determined once at storage** (LINE 141-144, persistent_memory.js)
-2. **No verification that category makes sense for content**
-3. **Uses semantic analysis of user message only**
+1. **TWO DIFFERENT STORAGE PATHS** exist with DIFFERENT category logic:
+   - **Path A (Intelligent)**: Category = mode-based ('business' or 'general') - server.js:356
+   - **Path B (Legacy)**: Category = semantic routing - persistent_memory.js:170
+2. **Intelligent Storage has BROKEN category logic** - uses mode instead of content
+3. **Category determined once at storage** - no verification of appropriateness
+4. **No consistency between storage paths**
 
 ### Retrieval Issues:
 1. **Category determined again at retrieval** (LINE 71-74, persistent_memory.js)
@@ -271,15 +323,58 @@ if (process.env.ENABLE_INTELLIGENT_ROUTING === 'true') {
 ### The Disconnect:
 ```
 STORAGE CATEGORY ≠ RETRIEVAL CATEGORY
-   ↓                     ↓
-Based on CONTENT    Based on QUERY
-   ↓                     ↓
-Original message    Recall question
+
+TWO STORAGE PATHS:
+Path A (Intelligent): Based on MODE       ← BROKEN!
+     ↓                       
+'business' or 'general' only
+
+Path B (Legacy):      Based on CONTENT
+     ↓                      
+Original message semantic analysis
+
+RETRIEVAL PATH:       Based on QUERY
+     ↓
+Recall question semantic analysis
+
+Result: Multiple sources of category mismatch!
 ```
+
+**CRITICAL FLAW**: If `ENABLE_INTELLIGENT_STORAGE=true`, memories are stored as:
+- `category_name = 'business'` (site_monkeys mode)
+- `category_name = 'general'` (all other modes)
+
+But retrieval searches in semantically-determined categories like:
+- `personal_life_interests`
+- `relationships_social`  
+- `work_career`
+- etc.
+
+**Result**: Intelligent storage memories are NEVER FOUND by retrieval!
 
 ---
 
 ## 7. RECOMMENDATIONS
+
+### 🚨 URGENT: Fix Intelligent Storage (If Enabled)
+**File**: `server.js` LINE 356
+
+**Current Code**:
+```javascript
+const category = mode === 'site_monkeys' ? 'business' : 'general';
+```
+
+**Problem**: These categories ('business', 'general') don't match the categories used by retrieval system.
+
+**Fix**: Use semantic routing like legacy path:
+```javascript
+// Determine category using semantic analysis (matching retrieval logic)
+const routing = await global.memorySystem.intelligenceSystem.analyzeAndRoute(
+  message,
+  userId
+);
+const category = routing.primaryCategory;
+```
 
 ### Immediate Fixes:
 1. **Enable Intelligent Routing** (LINE 1504, intelligence.js):
@@ -304,10 +399,20 @@ Original message    Recall question
 
 ## 8. DETAILED FILE REFERENCES
 
-### Memory Storage:
+### Memory Storage (TWO PATHS):
+
+#### Path A: Intelligent Storage (when ENABLE_INTELLIGENT_STORAGE=true)
+- **Entry Point**: `server.js:346` (chat endpoint)
+- **Storage Function**: `api/memory/intelligent-storage.js:49` (storeWithIntelligence)
+- **INSERT Statement**: `intelligent-storage.js:194-221`
+- **Category Field**: `intelligent-storage.js:197` (category_name)
+- **Category Value**: `server.js:356` (mode-based: 'business' or 'general')
+- **⚠️ BUG**: Categories don't match retrieval system!
+
+#### Path B: Legacy Storage (default)
 - **Entry Point**: `api/categories/memory/internal/persistent_memory.js:129` (storeMemory)
 - **Category Routing**: `api/categories/memory/internal/intelligence.js:674` (analyzeAndRoute)
-- **INSERT Statement**: `api/categories/memory/internal/persistent_memory.js:161-166`
+- **INSERT Statement**: `persistent_memory.js:161-166`
 - **Category Field**: `persistent_memory.js:162` (category_name)
 - **Category Value**: `persistent_memory.js:170` (routing.primaryCategory)
 
@@ -327,12 +432,27 @@ Original message    Recall question
 
 ## 9. CONCLUSION
 
-The memory storage and retrieval pipeline has a **fundamental architectural issue**:
+The memory storage and retrieval pipeline has **MULTIPLE fundamental architectural issues**:
 
+### Issue #1: Dual Storage Paths with Incompatible Categories
+1. **Intelligent Storage** (server.js:356): Uses 'business' or 'general' categories
+2. **Legacy Storage** (persistent_memory.js:170): Uses semantic categories
+3. **Retrieval** searches semantic categories only
+4. **Result**: Intelligent storage memories are NEVER retrievable!
+
+### Issue #2: Storage vs Retrieval Category Mismatch (Legacy Path)
 1. **Storage routes based on CONTENT** (user's original message)
 2. **Retrieval routes based on QUERY** (user's recall question)  
 3. These often produce **different categories**
 4. Strict category filtering prevents cross-category matches
 5. A solution exists (Intelligent Routing) but is **DISABLED BY DEFAULT**
 
-**Next Step**: Enable `ENABLE_INTELLIGENT_ROUTING=true` to activate cross-category topic search and immediately improve recall success rate.
+### Issue #3: No Category Validation
+1. No verification that stored category makes sense
+2. No feedback loop to improve routing
+3. No cross-category search by default
+
+### Priority Actions:
+1. **🚨 CRITICAL**: Fix intelligent storage category logic (server.js:356)
+2. **HIGH**: Enable `ENABLE_INTELLIGENT_ROUTING=true` for cross-category search
+3. **MEDIUM**: Consider consolidating to single storage path with proper routing
