@@ -116,6 +116,9 @@ class CoreSystem {
       // Schema Management & Migration
       await this.createDatabaseSchema();
 
+      // Ensure category tracking is initialized (Diagnostic #139 fix)
+      await this.ensureCategoryTracking('anonymous');
+
       // Initialize health monitoring
       await this.updateHealthStatus();
 
@@ -243,6 +246,161 @@ class CoreSystem {
       return await callback(client);
     } finally {
       client.release();
+    }
+  }
+
+  async ensureCategoryTracking(userId) {
+    try {
+      // Check if memory_categories is populated for this user
+      const result = await this.executeQuery(
+        'SELECT COUNT(*) FROM memory_categories WHERE user_id = $1',
+        [userId]
+      );
+      
+      const count = parseInt(result.rows[0].count) || 0;
+      
+      if (count === 0) {
+        this.logger.log(`[MEMORY] Initializing category tracking for user: ${userId}`);
+        await this.rebuildMemoryCategories(userId);
+        await this.rebuildUserProfile(userId);
+        this.logger.log(`[MEMORY] Category tracking initialized successfully`);
+      } else {
+        this.logger.log(`[MEMORY] Category tracking already initialized (${count} categories)`);
+      }
+      
+      return true;
+    } catch (error) {
+      this.logger.error('Failed to ensure category tracking:', error);
+      return false;
+    }
+  }
+
+  async rebuildMemoryCategories(userId) {
+    try {
+      // Category definitions from validCategories
+      const categories = this.validCategories.map(name => ({
+        name,
+        subcategories: 5
+      }));
+
+      // Add 5 dynamic slots
+      for (let i = 1; i <= 5; i++) {
+        categories.push({ 
+          name: `ai_dynamic_${i}`, 
+          subcategories: 1,
+          isDynamic: true 
+        });
+      }
+
+      let totalInserted = 0;
+
+      for (const category of categories) {
+        for (let subIdx = 1; subIdx <= category.subcategories; subIdx++) {
+          const subcategoryName = `subcategory_${subIdx}`;
+          
+          // Calculate current tokens from persistent_memories
+          const tokenResult = await this.executeQuery(`
+            SELECT COALESCE(SUM(token_count), 0) as current_tokens
+            FROM persistent_memories 
+            WHERE user_id = $1 
+              AND category_name = $2 
+              AND subcategory_name = $3
+          `, [userId, category.name, subcategoryName]);
+
+          const currentTokens = parseInt(tokenResult.rows[0].current_tokens) || 0;
+          const isDynamic = category.isDynamic || false;
+
+          // Insert or update
+          await this.executeQuery(`
+            INSERT INTO memory_categories (
+              user_id, 
+              category_name, 
+              subcategory_name, 
+              max_tokens, 
+              current_tokens, 
+              is_dynamic,
+              created_at,
+              updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id, category_name, subcategory_name) 
+            DO UPDATE SET 
+              current_tokens = EXCLUDED.current_tokens,
+              updated_at = CURRENT_TIMESTAMP
+          `, [
+            userId,
+            category.name,
+            subcategoryName,
+            this.categoryLimits.tokenLimit,
+            currentTokens,
+            isDynamic
+          ]);
+
+          totalInserted++;
+        }
+      }
+
+      this.logger.log(`[MEMORY] Populated ${totalInserted} category slots for user ${userId}`);
+      return true;
+    } catch (error) {
+      this.logger.error('Failed to rebuild memory categories:', error);
+      throw error;
+    }
+  }
+
+  async rebuildUserProfile(userId) {
+    try {
+      // Create user_memory_profiles table if it doesn't exist
+      await this.executeQuery(`
+        CREATE TABLE IF NOT EXISTS user_memory_profiles (
+          user_id TEXT PRIMARY KEY,
+          total_memories INTEGER DEFAULT 0,
+          total_tokens INTEGER DEFAULT 0,
+          active_categories TEXT[] DEFAULT '{}',
+          memory_patterns JSONB DEFAULT '{}'::jsonb,
+          last_optimization TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+      `);
+
+      // Populate profile data from persistent_memories
+      const profileData = await this.executeQuery(`
+        SELECT 
+          COUNT(*) as total_memories,
+          COALESCE(SUM(token_count), 0) as total_tokens,
+          ARRAY_AGG(DISTINCT category_name) as active_categories
+        FROM persistent_memories
+        WHERE user_id = $1
+      `, [userId]);
+
+      await this.executeQuery(`
+        INSERT INTO user_memory_profiles (
+          user_id, 
+          total_memories, 
+          total_tokens, 
+          active_categories,
+          last_optimization,
+          created_at
+        )
+        VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ON CONFLICT (user_id) 
+        DO UPDATE SET 
+          total_memories = EXCLUDED.total_memories,
+          total_tokens = EXCLUDED.total_tokens,
+          active_categories = EXCLUDED.active_categories,
+          last_optimization = CURRENT_TIMESTAMP
+      `, [
+        userId,
+        parseInt(profileData.rows[0].total_memories) || 0,
+        parseInt(profileData.rows[0].total_tokens) || 0,
+        profileData.rows[0].active_categories || []
+      ]);
+
+      this.logger.log(`[MEMORY] User profile created/updated for ${userId}`);
+      return true;
+    } catch (error) {
+      this.logger.error('Failed to rebuild user profile:', error);
+      throw error;
     }
   }
 
