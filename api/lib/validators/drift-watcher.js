@@ -4,23 +4,23 @@
 
 // VERIFIED BASELINES - Matched to your actual semantic_analyzer.js
 const BASELINE_DOMAINS = [
-  "business",
-  "technical",
-  "personal",
-  "health",
-  "financial",
-  "creative",
-  "general",
+  'business',
+  'technical',
+  'personal',
+  'health',
+  'financial',
+  'creative',
+  'general',
 ];
 
 const BASELINE_INTENTS = [
-  "question",
-  "command",
-  "discussion",
-  "problem_solving",
-  "decision_making",
-  "emotional_expression",
-  "information_sharing",
+  'question',
+  'command',
+  'discussion',
+  'problem_solving',
+  'decision_making',
+  'emotional_expression',
+  'information_sharing',
 ];
 
 class DriftWatcher {
@@ -59,7 +59,7 @@ class DriftWatcher {
 
         result.warning = `Semantic analyzer classified domain as "${domain}" which is not in baseline. Reduced confidence from ${confidence.toFixed(2)} to ${newConfidence.toFixed(2)}.`;
 
-        this.#recordDrift("domain", domain, context);
+        this.#recordDrift('domain', domain, context);
       }
 
       // Check intent drift
@@ -77,12 +77,12 @@ class DriftWatcher {
 
         result.warning = `Semantic analyzer classified intent as "${intent}" which is not in baseline. Reduced confidence from ${confidence.toFixed(2)} to ${newConfidence.toFixed(2)}.`;
 
-        this.#recordDrift("intent", intent, context);
+        this.#recordDrift('intent', intent, context);
       }
 
       return result;
     } catch (error) {
-      console.error("[DRIFT-WATCHER] Validation error:", error);
+      console.error('[DRIFT-WATCHER] Validation error:', error);
 
       return {
         driftDetected: false,
@@ -116,8 +116,8 @@ class DriftWatcher {
   getDriftStats() {
     return {
       totalDrifts: this.driftHistory.length,
-      domainDrifts: this.driftHistory.filter((d) => d.type === "domain").length,
-      intentDrifts: this.driftHistory.filter((d) => d.type === "intent").length,
+      domainDrifts: this.driftHistory.filter((d) => d.type === 'domain').length,
+      intentDrifts: this.driftHistory.filter((d) => d.type === 'intent').length,
       recentDrifts: this.driftHistory.slice(-10),
     };
   }
