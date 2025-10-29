@@ -849,7 +849,7 @@ class IntelligenceSystem {
         analysis.timeContext = "future";
       }
 
-      // Topic entity extraction
+      // Topic entity extraction - ENHANCED for content-based routing
       const topicPatterns = [
         [
           "health",
@@ -858,13 +858,16 @@ class IntelligenceSystem {
         ["work", /\b(work|job|career|business|office|meeting|project)\b/gi],
         [
           "family",
-          /\b(family|spouse|children|parents|relationship|marriage)\b/gi,
+          /\b(family|spouse|children|parents|relationship|marriage|wife|husband|partner)\b/gi,
         ],
         [
           "money",
           /\b(money|financial|budget|income|debt|investment|savings)\b/gi,
         ],
-        ["home", /\b(home|house|apartment|living|lifestyle)\b/gi],
+        [
+          "home",
+          /\b(home|house|apartment|living|lifestyle|vehicle|car|truck|pet|dog|cat|hobby|interest)\b/gi,
+        ],
       ];
 
       for (const [topic, pattern] of topicPatterns) {
@@ -903,46 +906,46 @@ class IntelligenceSystem {
     for (const [categoryName, config] of this.categoryMappings) {
       let score = 0;
 
-      // SEMANTIC-FIRST: Calculate primary semantic score
+      // SEMANTIC-FIRST: Calculate primary semantic score based on CONTENT
       const semanticScore = this.calculateSemanticBoost(
         categoryName,
         semanticAnalysis,
       );
       score += semanticScore * 8.0; // PRIMARY DRIVER: 8x amplification
 
-      // REDUCED: Keyword hints (reduced from 2.0x to 0.3x)
+      // CONTENT KEYWORDS: Direct keyword matches from query
       let keywordMatches = 0;
       for (const keyword of config.keywords) {
         if (query.includes(keyword)) {
           keywordMatches++;
-          score += 0.3 * config.weight; // REDUCED from 2.0
+          score += 2.0 * config.weight; // Keyword match is important for content-based routing
         }
       }
 
-      // REDUCED: Pattern hints (reduced from 3.5x to 0.5x)
+      // CONTENT PATTERNS: Pattern matches from query
       for (const pattern of config.patterns) {
         if (pattern.test(query)) {
-          score += 0.5 * config.weight; // REDUCED from 3.5
+          score += 3.0 * config.weight; // Pattern match is important for content-based routing
         }
       }
 
-      // Entity alignment boost (unchanged)
+      // Entity alignment boost (content-based)
       score += this.calculateEntityAlignmentBoost(
         categoryName,
         semanticAnalysis,
       );
 
-      // Priority-based weighting (unchanged)
+      // Priority-based weighting (for urgent content)
       if (config.priority === "high" && semanticAnalysis.urgencyLevel > 0.5) {
         score += 1.0;
       }
 
-      // Keyword density bonus (reduced)
+      // Keyword density bonus (for content richness)
       if (keywordMatches > 1) {
-        score += Math.min(keywordMatches * 0.2, 1.0); // REDUCED from 0.5, 2.0
+        score += Math.min(keywordMatches * 0.5, 2.0);
       }
 
-      // SEMANTIC OVERRIDE: Apply intelligent overrides
+      // SEMANTIC OVERRIDE: Apply content-based overrides
       const semanticOverride = this.applySemanticOverride(
         categoryName,
         semanticAnalysis,
@@ -955,18 +958,8 @@ class IntelligenceSystem {
           (this.routingStats.semanticOverrides || 0) + 1;
       }
 
-      // Conditional boosting for personal memory queries
-      if (
-        semanticAnalysis.personalContext === true &&
-        semanticAnalysis.intent === "memory_recall"
-      ) {
-        if (categoryName === "relationships_social") {
-          score *= 1.5; // 50% boost when personal + memory_recall
-        }
-        if (categoryName === "mental_emotional") {
-          score *= 0.85; // 15% reduction to prevent false routing
-        }
-      }
+      // REMOVED: Intent-based conditional boosting (memory_recall → relationships_social)
+      // This was causing incorrect routing based on intent instead of content
 
       scores.set(categoryName, Math.max(score, 0));
     }
@@ -979,67 +972,37 @@ class IntelligenceSystem {
   // ================================================================
 
   applySemanticOverride(categoryName, semanticAnalysis, currentScore) {
-    // HIGH-CONFIDENCE PERSONAL CONTEXT OVERRIDE
-    if (
-      semanticAnalysis.personalContext &&
-      semanticAnalysis.emotionalWeight > 0.6 &&
-      (semanticAnalysis.intent === "personal_sharing" ||
-        semanticAnalysis.intent === "memory_recall")
-    ) {
-      const personalCategories = [
-        "personal_life_interests",
-        "relationships_social",
-        "mental_emotional",
-      ];
-
-      if (personalCategories.includes(categoryName)) {
-        // BOOST personal categories dramatically
-        return {
-          override: true,
-          newScore: 10.0 + semanticAnalysis.emotionalWeight * 5.0,
-          reason: "High-confidence personal context boost applied",
-        };
-      } else {
-        // SUPPRESS non-personal categories when personal context is strong
-        return {
-          override: true,
-          newScore: Math.min(currentScore * 0.2, 1.0),
-          reason:
-            "Personal context suppression applied to non-personal category",
-        };
-      }
-    }
-
-    // EMOTIONAL EXPRESSION OVERRIDE
-    if (
-      semanticAnalysis.intent === "emotional_expression" &&
-      semanticAnalysis.emotionalWeight > 0.7
-    ) {
+    // CONTENT-BASED OVERRIDE: Only boost based on topic/content alignment, not intent
+    // This fixes the issue where "memory_recall" intent incorrectly routes to relationships_social
+    
+    // HIGH-CONFIDENCE EMOTIONAL CONTENT OVERRIDE (content-based, not intent-based)
+    if (semanticAnalysis.emotionalWeight > 0.7) {
       if (categoryName === "mental_emotional") {
         return {
           override: true,
           newScore: 12.0 + semanticAnalysis.emotionalWeight * 3.0,
-          reason: "High emotional expression routed to mental_emotional",
+          reason: "High emotional content routed to mental_emotional",
         };
       }
     }
 
-    // MEMORY RECALL OVERRIDE
+    // HIGH-CONFIDENCE PERSONAL CONTEXT OVERRIDE (content-based)
+    // Only apply if we have strong personal context + topic alignment
     if (
-      semanticAnalysis.intent === "memory_recall" &&
-      semanticAnalysis.memoryReference
+      semanticAnalysis.personalContext &&
+      semanticAnalysis.topicEntities.size > 0
     ) {
-      const memoryCategories = [
-        "mental_emotional",
-        "relationships_social",
-        "personal_life_interests",
-      ];
-
-      if (memoryCategories.includes(categoryName)) {
+      // Check if topic entities suggest this category
+      const hasRelevantTopics = this.categoryHasRelevantTopics(
+        categoryName,
+        semanticAnalysis.topicEntities
+      );
+      
+      if (hasRelevantTopics) {
         return {
           override: true,
-          newScore: currentScore + 5.0,
-          reason: "Memory recall boost applied to relevant category",
+          newScore: currentScore + 3.0,
+          reason: "Content-based personal context boost applied",
         };
       }
     }
@@ -1047,65 +1010,68 @@ class IntelligenceSystem {
     return { override: false };
   }
 
+  /**
+   * Check if category is relevant to the query's topic entities
+   * Used for content-based routing instead of intent-based routing
+   */
+  categoryHasRelevantTopics(categoryName, topicEntities) {
+    const categoryTopicMap = {
+      personal_life_interests: ['home', 'family'],
+      relationships_social: ['family'],
+      work_career: ['work'],
+      health_wellness: ['health'],
+      mental_emotional: ['health'],
+      money_income_debt: ['money'],
+      money_spending_goals: ['money'],
+    };
+    
+    const categoryTopics = categoryTopicMap[categoryName] || [];
+    for (const topic of topicEntities) {
+      if (categoryTopics.includes(topic)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   calculateSemanticBoost(categoryName, semanticAnalysis) {
     let boost = 0;
 
-    // AMPLIFIED: Intent-based boosting (5-7x increase)
-    const intentBoosts = {
-      memory_recall: {
-        relationships_social: 3.5,
-        personal_life_interests: 2.8,
-        mental_emotional: 2.0,
-      },
-      personal_sharing: {
-        personal_life_interests: 4.0,
-        relationships_social: 3.0,
-        mental_emotional: 2.5,
-      },
-      problem_solving: {
-        work_career: 3.0,
-        health_wellness: 2.5,
-        mental_emotional: 2.5,
-        tools_tech_workflow: 2.0,
-      },
-      emotional_expression: {
-        mental_emotional: 5.0,
-        relationships_social: 2.5,
-        health_wellness: 2.0,
-      },
-      decision_making: {
-        goals_active_current: 3.0,
-        work_career: 2.0,
-        money_spending_goals: 2.0,
-      },
-      information_request: {
-        tools_tech_workflow: 2.0,
-        health_wellness: 1.5,
-        work_career: 1.5,
-      },
-      general: {
-        personal_life_interests: 1.0,
-        daily_routines_habits: 0.8,
-      },
-    };
+    // CONTENT-BASED SEMANTIC ROUTING: Match query content against category topic entities
+    // This replaces intent-based routing with true semantic content matching
+    // Example: "vehicles" → personal_life_interests (not relationships_social)
+    const categoryConfig = this.categoryMappings.get(categoryName);
+    if (categoryConfig && semanticAnalysis.topicEntities.size > 0) {
+      // Check if query topics align with category topics
+      for (const topicEntity of semanticAnalysis.topicEntities) {
+        // Direct topic match to category
+        const topicToCategoryMap = {
+          health: ['health_wellness', 'mental_emotional'],
+          work: ['work_career', 'goals_active_current'],
+          family: ['relationships_social', 'personal_life_interests'],
+          money: ['money_income_debt', 'money_spending_goals', 'work_career'],
+          home: ['personal_life_interests', 'daily_routines_habits'],
+        };
+        
+        if (topicToCategoryMap[topicEntity]?.includes(categoryName)) {
+          boost += 5.0; // Strong boost for content-topic alignment
+        }
+      }
+    }
 
-    const categoryBoost =
-      intentBoosts[semanticAnalysis.intent]?.[categoryName] || 0;
-    boost += categoryBoost;
-
-    // AMPLIFIED: Emotional weight boosting (4x increase)
+    // SECONDARY: Emotional weight boosting (only for emotion-related categories)
     if (semanticAnalysis.emotionalWeight > 0.6) {
       const emotionalBoosts = {
-        mental_emotional: 4.0, // was 1.0
-        relationships_social: 2.0, // was 0.5
-        health_wellness: 1.8, // was 0.4
-        work_career: 1.5, // was 0.3
+        mental_emotional: 4.0,
+        relationships_social: 2.0,
+        health_wellness: 1.8,
+        work_career: 1.5,
       };
       boost +=
         (emotionalBoosts[categoryName] || 0) * semanticAnalysis.emotionalWeight;
     }
 
-    // ENHANCED: Personal context amplification
+    // TERTIARY: Personal context amplification (for personal categories)
     if (semanticAnalysis.personalContext) {
       const personalBoosts = {
         personal_life_interests: 2.0,
@@ -1278,22 +1244,9 @@ class IntelligenceSystem {
       }
     }
 
-    // Personal relationship memory recall override
-    if (
-      semanticAnalysis.personalContext === true &&
-      semanticAnalysis.intent === "memory_recall" &&
-      (query.includes("wife") ||
-        query.includes("family") ||
-        query.includes("husband") ||
-        query.includes("pet") ||
-        query.includes("friend") ||
-        query.includes("monkey"))
-    ) {
-      primaryCategory = "relationships_social";
-      confidence = Math.max(confidence, 0.8);
-      reasoning += "; Personal memory recall override applied";
-      overrideApplied = true;
-    }
+    // REMOVED: Intent-based memory_recall → relationships_social override
+    // This was causing incorrect routing (e.g., "vehicles" → relationships_social)
+    // Now using content-based routing only
 
     if (overrideApplied) {
       this.routingStats.overrideApplications++;
@@ -1499,26 +1452,28 @@ class IntelligenceSystem {
         allMemories = [...scoredPrimary, ...relatedMemories];
       }
 
-      // FEATURE FLAG: INTELLIGENT ROUTING WITH TOPIC FALLBACK
-      // Addresses routing mismatch issue where storage category != retrieval category
+      // CROSS-CATEGORY FALLBACK: Only when confidence < 0.80 OR no results (per requirements)
+      // ENABLE_INTELLIGENT_ROUTING feature flag controls topic-based cross-category search
       if (process.env.ENABLE_INTELLIGENT_ROUTING === 'true') {
-        // If primary routing confidence is low OR we have few results, try topic-based retrieval
-        const shouldUseFallback = routing.confidence < 0.80 || allMemories.length < 3;
+        // Trigger fallback when:
+        // 1. Primary routing confidence < 0.80 (uncertain routing) OR
+        // 2. Primary category returns 0 results
+        const shouldUseFallback = routing.confidence < 0.80 || allMemories.length === 0;
         
         if (shouldUseFallback) {
           this.logger.log(
-            `[INTELLIGENT-ROUTING] Low confidence (${routing.confidence?.toFixed(3)}) or few results (${allMemories.length}), trying topic-based retrieval...`,
+            `[CROSS-CATEGORY-FALLBACK] Triggered: confidence=${routing.confidence?.toFixed(3)}, results=${allMemories.length}`,
           );
           
-          // Extract topic keywords from original query
+          // Extract content-based topic keywords from query
           const topics = this.extractImportantNouns(query.toLowerCase());
           
           if (topics.length > 0) {
             this.logger.log(
-              `[INTELLIGENT-ROUTING] Searching for topics: ${topics.join(', ')}`,
+              `[CROSS-CATEGORY-FALLBACK] Searching across all categories for topics: ${topics.join(', ')}`,
             );
             
-            // Search across ALL categories for these topics
+            // Search across ALL categories for these content topics
             const topicMemories = await this.searchByTopics(
               userId,
               topics,
@@ -1531,9 +1486,13 @@ class IntelligenceSystem {
             
             allMemories = [...allMemories, ...newTopicMemories];
             this.logger.log(
-              `[INTELLIGENT-ROUTING] Found ${newTopicMemories.length} additional unique memories via topic search`,
+              `[CROSS-CATEGORY-FALLBACK] Found ${newTopicMemories.length} additional memories from other categories`,
             );
           }
+        } else {
+          this.logger.log(
+            `[CROSS-CATEGORY-FALLBACK] Skipped: confidence=${routing.confidence?.toFixed(3)} >= 0.80 AND results=${allMemories.length} > 0`,
+          );
         }
       }
 
