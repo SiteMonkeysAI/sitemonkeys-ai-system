@@ -349,8 +349,13 @@ app.post("/api/chat", async (req, res) => {
             process.env.OPENAI_API_KEY
           );
           
-          // Determine category from mode or use default
-          const category = mode === 'site_monkeys' ? 'business' : 'general';
+          // FIX #1: Use semantic routing to determine category (matches retrieval logic)
+          // This ensures storage and retrieval use the same 11 semantic categories
+          const routing = await global.memorySystem.intelligenceSystem.analyzeAndRoute(
+            message,
+            userId
+          );
+          const category = routing.primaryCategory;
           
           const storageResult = await intelligentStorage.storeWithIntelligence(
             userId,
