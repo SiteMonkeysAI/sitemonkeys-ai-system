@@ -1071,13 +1071,14 @@ class IntelligenceSystem {
         (emotionalBoosts[categoryName] || 0) * semanticAnalysis.emotionalWeight;
     }
 
-    // TERTIARY: Personal context amplification (for personal categories)
+    // TERTIARY: Personal context amplification (only for truly personal categories)
+    // Reduced boost for mental_emotional to prevent false routing of health queries
     if (semanticAnalysis.personalContext) {
       const personalBoosts = {
         personal_life_interests: 2.0,
         relationships_social: 1.5,
-        mental_emotional: 1.2,
         daily_routines_habits: 1.0,
+        mental_emotional: 0.5, // REDUCED from 1.2 to prevent competing with health_wellness
       };
       boost += personalBoosts[categoryName] || 0;
     }
