@@ -1072,13 +1072,15 @@ class IntelligenceSystem {
     }
 
     // TERTIARY: Personal context amplification (only for truly personal categories)
-    // Reduced boost for mental_emotional to prevent false routing of health queries
+    // mental_emotional boost reduced from 1.2 to 0.5 to prevent false routing:
+    // - Ensures health queries (e.g., "exercise") route to health_wellness, not mental_emotional
+    // - Maintains boost for truly emotional content via emotionalWeight > 0.6 check above
     if (semanticAnalysis.personalContext) {
       const personalBoosts = {
         personal_life_interests: 2.0,
         relationships_social: 1.5,
         daily_routines_habits: 1.0,
-        mental_emotional: 0.5, // REDUCED from 1.2 to prevent competing with health_wellness
+        mental_emotional: 0.5, // Reduced to prevent competing with content-specific categories
       };
       boost += personalBoosts[categoryName] || 0;
     }
