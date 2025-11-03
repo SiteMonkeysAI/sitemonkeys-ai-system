@@ -2,6 +2,35 @@
 // VAULT LOADING ONLY ON DEMAND - NO AUTO-LOADING
 let _vaultLoaded = false;
 
+// USER ID PERSISTENCE - Generate or retrieve persistent user ID
+function getUserId() {
+  const storageKey = 'sitemonkeys_user_id';
+  let userId = localStorage.getItem(storageKey);
+  
+  if (!userId) {
+    // Generate a unique user ID: timestamp + random string
+    // Use crypto.randomUUID() if available, otherwise fallback to timestamp + crypto random
+    try {
+      // Modern browsers support crypto.randomUUID()
+      const uuid = crypto.randomUUID();
+      userId = 'user_' + uuid.replace(/-/g, '').substring(0, 16);
+    } catch {
+      // Fallback for older browsers: timestamp + secure random
+      const timestamp = Date.now();
+      const randomBytes = new Uint8Array(8);
+      crypto.getRandomValues(randomBytes);
+      const randomStr = Array.from(randomBytes, byte => byte.toString(36)).join('').substring(0, 9);
+      userId = 'user_' + timestamp + '_' + randomStr;
+    }
+    localStorage.setItem(storageKey, userId);
+    console.log('[USER-ID] Generated new user ID:', userId);
+  } else {
+    console.log('[USER-ID] Retrieved existing user ID:', userId);
+  }
+  
+  return userId;
+}
+
 async function loadVaultOnDemand() {
   // Step 1: Check if vault already loaded in window
   if (window.currentVaultContent && window.currentVaultContent.length > 500) {
@@ -161,6 +190,7 @@ async function _sendMessage() {
 
     const requestPayload = {
       message: text, // user’s question
+      userId: getUserId(), // persistent user ID for cross-session memory
       conversation_history: conversationHistory, // keep chat context
       mode: getCurrentMode(),
       vault_loaded: isVaultMode(),
