@@ -9,7 +9,19 @@ function getUserId() {
   
   if (!userId) {
     // Generate a unique user ID: timestamp + random string
-    userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    // Use crypto.randomUUID() if available, otherwise fallback to timestamp + crypto random
+    try {
+      // Modern browsers support crypto.randomUUID()
+      const uuid = crypto.randomUUID();
+      userId = 'user_' + uuid.replace(/-/g, '').substring(0, 16);
+    } catch {
+      // Fallback for older browsers: timestamp + secure random
+      const timestamp = Date.now();
+      const randomBytes = new Uint8Array(8);
+      crypto.getRandomValues(randomBytes);
+      const randomStr = Array.from(randomBytes, byte => byte.toString(36)).join('').substring(0, 9);
+      userId = 'user_' + timestamp + '_' + randomStr;
+    }
     localStorage.setItem(storageKey, userId);
     console.log('[USER-ID] Generated new user ID:', userId);
   } else {
