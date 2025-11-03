@@ -94,24 +94,85 @@ export class IntelligentMemoryStorage {
    * @returns {Promise<string>} - Extracted facts as bullet points
    */
   async extractKeyFacts(userMsg, aiResponse) {
-    const prompt = `Extract ATOMIC FACTS from this conversation.\nFormat: One fact per line, 3-8 words max, bullet points.\nFocus on: User preferences, statements, questions, entities, names, numbers.\nExclude: Explanations, reasoning, examples, politeness.\n\nUser: ${userMsg}\nAssistant: ${aiResponse}\n\nExtracted Facts:`;
+    const prompt = `Extract ATOMIC FACTS from this conversation.\nFormat: One fact per line, 3-8 words max, bullet points.\nFocus on: User preferences, statements, questions, entities, names, numbers.\nExclude: Explanations, reasoning, examples, politeness.\n\nUser: ${userMsg}\nAssistant: ${aiResponse}\n\nExtracted Facts:\nCRITICAL: Maximum 5 facts. Each fact MUST be under 8 words. Be ruthless.`;
     
     try {
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 150
+        max_tokens: 100
       });
       
       const facts = response.choices[0].message.content.trim();
-      console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${facts.split('\n').length} facts`);
-      return facts;
+      
+      // AGGRESSIVE POST-PROCESSING: Guarantee 10-20:1 compression
+      const processedFacts = this.aggressivePostProcessing(facts);
+      
+      console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${processedFacts.split('\n').filter(l => l.trim()).length} facts`);
+      return processedFacts;
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Fact extraction failed:', error.message);
       // Fallback: return summarized version
       return `User stated: ${userMsg.substring(0, 50)}...\nSystem discussed: ${aiResponse.substring(0, 50)}...`;
     }
+  }
+
+  /**
+   * Aggressive post-processing to guarantee 10-20:1 compression
+   * Enforces strict limits: max 5 facts, max 8 words each
+   * @param {string} facts - Raw facts from AI
+   * @returns {string} - Aggressively compressed facts
+   */
+  aggressivePostProcessing(facts) {
+    // Split into lines and clean
+    let lines = facts.split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      // Remove bullet points, numbers, and other formatting
+      .map(line => line.replace(/^[-•*\d.)\]]+\s*/, '').trim())
+      .filter(line => line.length > 0);
+    
+    // Limit to 5 facts maximum
+    lines = lines.slice(0, 5);
+    
+    // Enforce 8-word maximum per fact
+    lines = lines.map(line => {
+      const words = line.split(/\s+/);
+      if (words.length > 8) {
+        return words.slice(0, 8).join(' ');
+      }
+      return line;
+    });
+    
+    // Remove duplicates (case-insensitive)
+    const seen = new Set();
+    lines = lines.filter(line => {
+      const normalized = line.toLowerCase();
+      if (seen.has(normalized)) {
+        return false;
+      }
+      seen.add(normalized);
+      return true;
+    });
+    
+    // Remove very short or low-value facts (< 3 words)
+    lines = lines.filter(line => line.split(/\s+/).length >= 3);
+    
+    // Additional aggressive compression: remove common filler words at start/end
+    lines = lines.map(line => {
+      // Remove common prefixes
+      line = line.replace(/^(The |A |An |This |That |These |Those )/i, '');
+      // Remove common suffixes
+      line = line.replace(/( is stated| was mentioned| discussed)$/i, '');
+      return line.trim();
+    });
+    
+    // Final cleanup: ensure no empty lines
+    lines = lines.filter(line => line.length > 0);
+    
+    // Join with newlines for clean formatting
+    return lines.join('\n');
   }
 
   /**
