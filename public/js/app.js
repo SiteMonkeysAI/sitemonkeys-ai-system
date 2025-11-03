@@ -2,6 +2,23 @@
 // VAULT LOADING ONLY ON DEMAND - NO AUTO-LOADING
 let _vaultLoaded = false;
 
+// USER ID PERSISTENCE - Generate or retrieve persistent user ID
+function getUserId() {
+  const storageKey = 'sitemonkeys_user_id';
+  let userId = localStorage.getItem(storageKey);
+  
+  if (!userId) {
+    // Generate a unique user ID: timestamp + random string
+    userId = 'user_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem(storageKey, userId);
+    console.log('[USER-ID] Generated new user ID:', userId);
+  } else {
+    console.log('[USER-ID] Retrieved existing user ID:', userId);
+  }
+  
+  return userId;
+}
+
 async function loadVaultOnDemand() {
   // Step 1: Check if vault already loaded in window
   if (window.currentVaultContent && window.currentVaultContent.length > 500) {
@@ -161,6 +178,7 @@ async function _sendMessage() {
 
     const requestPayload = {
       message: text, // user’s question
+      userId: getUserId(), // persistent user ID for cross-session memory
       conversation_history: conversationHistory, // keep chat context
       mode: getCurrentMode(),
       vault_loaded: isVaultMode(),
