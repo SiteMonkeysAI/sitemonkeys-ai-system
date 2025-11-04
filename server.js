@@ -407,8 +407,7 @@ app.post("/api/chat", async (req, res) => {
 // Endpoint to end a session and flush cache
 app.post("/api/session/end", async (req, res) => {
   try {
-    const { sessionId, user_id } = req.body;
-    const userId = user_id; // Map for internal use
+    const { sessionId } = req.body;
     
     if (!sessionId) {
       return res.status(400).json({
