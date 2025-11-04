@@ -278,7 +278,7 @@ app.post("/api/chat", async (req, res) => {
     // - Type coercion handled by destructuring defaults
     const {
       message,
-      userId = "anonymous",
+      user_id,
       mode = "truth_general",
       sessionId,
       documentContext,
@@ -287,6 +287,9 @@ app.post("/api/chat", async (req, res) => {
       vault_content,
       conversationHistory = [],
     } = req.body;
+    
+    // Map user_id to userId for internal use
+    const userId = user_id || "anonymous";
 
     // SECURITY: Input validation - message is required
     // Prevents processing empty/invalid requests
@@ -404,7 +407,7 @@ app.post("/api/chat", async (req, res) => {
 // Endpoint to end a session and flush cache
 app.post("/api/session/end", async (req, res) => {
   try {
-    const { sessionId, userId } = req.body;
+    const { sessionId } = req.body;
     
     if (!sessionId) {
       return res.status(400).json({
@@ -439,7 +442,8 @@ app.post("/api/session/end", async (req, res) => {
 // Endpoint to clear user context (all sessions for a user)
 app.post("/api/session/clear-context", async (req, res) => {
   try {
-    const { userId } = req.body;
+    const { user_id } = req.body;
+    const userId = user_id; // Map for internal use
     
     if (!userId) {
       return res.status(400).json({
