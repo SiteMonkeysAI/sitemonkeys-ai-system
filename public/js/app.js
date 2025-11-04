@@ -190,7 +190,7 @@ async function _sendMessage() {
 
     const requestPayload = {
       message: text, // user’s question
-      userId: getUserId(), // persistent user ID for cross-session memory
+      user_id: getUserId(), // persistent user ID for cross-session memory
       conversation_history: conversationHistory, // keep chat context
       mode: getCurrentMode(),
       vault_loaded: isVaultMode(),
