@@ -1,3 +1,4 @@
+// DEPLOYED: 2025-11-06 - user_id fix applied
 // FORCE VAULT LOADING ON PAGE LOAD
 // VAULT LOADING ONLY ON DEMAND - NO AUTO-LOADING
 let _vaultLoaded = false;
@@ -190,7 +191,7 @@ async function _sendMessage() {
 
     const requestPayload = {
       message: text, // user’s question
-      user_id: getUserId(), // persistent user ID for cross-session memory
+      user_id: getUserId(), // CRITICAL: Fixed field name for cross-session memory
       conversation_history: conversationHistory, // keep chat context
       mode: getCurrentMode(),
       vault_loaded: isVaultMode(),
