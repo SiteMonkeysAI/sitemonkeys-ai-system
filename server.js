@@ -290,6 +290,9 @@ app.post("/api/chat", async (req, res) => {
     
     // Map user_id to userId for internal use
     const userId = user_id || "anonymous";
+    
+    // DEBUG: Log received user_id and mapped userId
+    console.log('[DEBUG] Received user_id:', user_id, 'Mapped to:', userId);
 
     // SECURITY: Input validation - message is required
     // Prevents processing empty/invalid requests
