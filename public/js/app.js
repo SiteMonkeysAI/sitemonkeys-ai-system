@@ -216,6 +216,9 @@ async function _sendMessage() {
       vault_content_length: vaultContent.length,
       message_preview: text.substring(0, 50) + "...",
     });
+    
+    // DEBUG: Log user_id before sending request
+    console.log('[DEBUG] Sending user_id:', getUserId());
     console.log(
       "[REQUEST] document_context:",
       requestPayload.document_context
