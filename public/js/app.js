@@ -1,11 +1,16 @@
 // DEPLOYED: 2025-11-06 - user_id fix applied
+// NOTE: This file is currently not loaded by index.html (JS is embedded in HTML)
+// But kept in sync in case it's needed in the future
 // FORCE VAULT LOADING ON PAGE LOAD
 // VAULT LOADING ONLY ON DEMAND - NO AUTO-LOADING
 let _vaultLoaded = false;
 
 // USER ID PERSISTENCE - Generate or retrieve persistent user ID
+// NOTE: This implementation is duplicated in index.html (embedded JavaScript)
 function getUserId() {
-  const storageKey = 'sitemonkeys_user_id';
+  console.log('[getUserId] Checking localStorage for user_id');
+  
+  const storageKey = 'user_id';
   let userId = localStorage.getItem(storageKey);
   
   if (!userId) {
@@ -24,11 +29,12 @@ function getUserId() {
       userId = 'user_' + timestamp + '_' + randomStr;
     }
     localStorage.setItem(storageKey, userId);
-    console.log('[USER-ID] Generated new user ID:', userId);
+    console.log('[getUserId] Generated new user ID:', userId);
   } else {
-    console.log('[USER-ID] Retrieved existing user ID:', userId);
+    console.log('[getUserId] Retrieved existing user ID:', userId);
   }
   
+  console.log('[getUserId] Returning:', userId);
   return userId;
 }
 
