@@ -5,7 +5,9 @@ let _vaultLoaded = false;
 
 // USER ID PERSISTENCE - Generate or retrieve persistent user ID
 function getUserId() {
-  const storageKey = 'sitemonkeys_user_id';
+  console.log('[getUserId] Checking localStorage for user_id');
+  
+  const storageKey = 'user_id';
   let userId = localStorage.getItem(storageKey);
   
   if (!userId) {
@@ -24,11 +26,12 @@ function getUserId() {
       userId = 'user_' + timestamp + '_' + randomStr;
     }
     localStorage.setItem(storageKey, userId);
-    console.log('[USER-ID] Generated new user ID:', userId);
+    console.log('[getUserId] Generated new user ID:', userId);
   } else {
-    console.log('[USER-ID] Retrieved existing user ID:', userId);
+    console.log('[getUserId] Retrieved existing user ID:', userId);
   }
   
+  console.log('[getUserId] Returning:', userId);
   return userId;
 }
 
