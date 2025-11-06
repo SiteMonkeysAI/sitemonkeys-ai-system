@@ -1375,6 +1375,38 @@
       let isProcessingRequest = false;
       let refreshDebounceTimer = null;
 
+      // USER ID PERSISTENCE - Generate or retrieve persistent user ID
+      function getUserId() {
+        console.log('[getUserId] Checking localStorage for user_id');
+        
+        const storageKey = 'user_id';
+        let userId = localStorage.getItem(storageKey);
+        
+        if (!userId) {
+          // Generate a unique user ID: timestamp + random string
+          // Use crypto.randomUUID() if available, otherwise fallback to timestamp + crypto random
+          try {
+            // Modern browsers support crypto.randomUUID()
+            const uuid = crypto.randomUUID();
+            userId = 'user_' + uuid.replace(/-/g, '').substring(0, 16);
+          } catch {
+            // Fallback for older browsers: timestamp + secure random
+            const timestamp = Date.now();
+            const randomBytes = new Uint8Array(8);
+            crypto.getRandomValues(randomBytes);
+            const randomStr = Array.from(randomBytes, byte => byte.toString(36)).join('').substring(0, 9);
+            userId = 'user_' + timestamp + '_' + randomStr;
+          }
+          localStorage.setItem(storageKey, userId);
+          console.log('[getUserId] Generated new user ID:', userId);
+        } else {
+          console.log('[getUserId] Retrieved existing user ID:', userId);
+        }
+        
+        console.log('[getUserId] Returning:', userId);
+        return userId;
+      }
+
       // Mode system
       let currentMode = "business_validation";
 
@@ -1864,6 +1896,7 @@
                   text.toLowerCase().includes("file"))
                   ? `${text}\n\n[DOCUMENT CONTEXT]\nFile: ${extractedDocuments[extractedDocuments.length - 1].filename}\nContent: ${extractedDocuments[extractedDocuments.length - 1].fullContent}\nType: ${extractedDocuments[extractedDocuments.length - 1].contentType}`
                   : text,
+              user_id: getUserId(),
               conversation_history: conversationHistory,
               mode: getCurrentMode(),
               vault_loaded: isVaultMode(),
