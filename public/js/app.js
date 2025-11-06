@@ -1,9 +1,12 @@
 // DEPLOYED: 2025-11-06 - user_id fix applied
+// NOTE: This file is currently not loaded by index.html (JS is embedded in HTML)
+// But kept in sync in case it's needed in the future
 // FORCE VAULT LOADING ON PAGE LOAD
 // VAULT LOADING ONLY ON DEMAND - NO AUTO-LOADING
 let _vaultLoaded = false;
 
 // USER ID PERSISTENCE - Generate or retrieve persistent user ID
+// NOTE: This implementation is duplicated in index.html (embedded JavaScript)
 function getUserId() {
   console.log('[getUserId] Checking localStorage for user_id');
   
