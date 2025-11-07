@@ -1540,6 +1540,14 @@ class IntelligenceSystem {
       const primaryCategory =
         routing.primaryCategory || "personal_life_interests";
       this.logger.log(`Extracting from primary category: ${primaryCategory} for user: ${userId}`);
+      
+      // DIAGNOSTIC LOGGING: Track exact retrieval parameters
+      console.log('[RETRIEVAL-DEBUG] Searching for memories:', {
+        user_id: userId,
+        query: query.substring(0, 100),
+        category: primaryCategory,
+        table: 'persistent_memories'
+      });
 
       return await this.coreSystem.withDbClient(async (client) => {
         // SIMPLIFIED INTELLIGENT QUERY - MAIN TABLE ONLY
@@ -1581,6 +1589,14 @@ class IntelligenceSystem {
 
         // TOPIC-AWARE FILTERING - Fixed parameter index synchronization
         const queryNouns = this.extractImportantNouns(query.toLowerCase());
+        
+        // DIAGNOSTIC LOGGING: Show extracted topics
+        console.log('[RETRIEVAL-DEBUG] Extracted topics from query:', {
+          query: query,
+          extracted_nouns: queryNouns,
+          noun_count: queryNouns.length
+        });
+        
         if (queryNouns.length > 0) {
           // Build topic filter with correct parameter indexing
           const startIndex = paramIndex;
@@ -1632,7 +1648,26 @@ class IntelligenceSystem {
         this.logger.log(
           `SQL Debug: Query has ${(baseQuery.match(/\$/g) || []).length} placeholders, ${queryParams.length} parameters`,
         );
+        
+        // DIAGNOSTIC LOGGING: Show exact SQL query parameters
+        console.log('[RETRIEVAL-DEBUG] SQL Query Parameters:', {
+          param_count: queryParams.length,
+          user_id: queryParams[0],
+          category: queryParams[1],
+          topic_filters: queryParams.slice(2).slice(0, queryNouns.length),
+          all_params: queryParams
+        });
+        
         const result = await client.query(baseQuery, queryParams);
+        
+        // DIAGNOSTIC LOGGING: Track exact database results
+        console.log('[RETRIEVAL-DEBUG] Raw DB results:', {
+          count: result.rows.length,
+          user_ids: result.rows.map(r => r.user_id).slice(0, 5),
+          memory_ids: result.rows.map(r => r.id).slice(0, 5),
+          categories: result.rows.map(r => r.category_name).slice(0, 5),
+          content_preview: result.rows.map(r => r.content?.substring(0, 50)).slice(0, 3)
+        });
 
         this.logger.log(
           `Retrieved ${result.rows.length} memories with intelligent content ordering`,
@@ -1904,12 +1939,16 @@ class IntelligenceSystem {
   }
 
   extractImportantNouns(text) {
-    const words = text.split(/\s+/);
+    // Split on non-letters (removes punctuation), convert to lowercase, and filter out empty strings
+    // Example: "What's my favorite color?" → ["what", "s", "my", "favorite", "color"]
+    // After filtering: ["what", "favorite", "color"] 
+    //   - "s" removed (length 1, not > 3)
+    //   - "my" removed (stopword)
+    const words = text.split(/[^a-zA-Z]+/).map(word => word.toLowerCase()).filter(word => word.length > 0);
     return words.filter(
       (word) =>
-        word.length > 3 &&
-        !this.stopWords.has(word) &&
-        /^[a-zA-Z]+$/.test(word),
+        word.length > 3 &&  // Keep words with 4+ characters
+        !this.stopWords.has(word)
     );
   }
 
