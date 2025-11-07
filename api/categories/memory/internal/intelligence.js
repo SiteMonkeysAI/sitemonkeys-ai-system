@@ -1941,11 +1941,13 @@ class IntelligenceSystem {
   extractImportantNouns(text) {
     // Split on non-letters (removes punctuation), convert to lowercase, and filter out empty strings
     // Example: "What's my favorite color?" → ["what", "s", "my", "favorite", "color"]
-    // After filtering: ["what", "favorite", "color"] (removes "s" for length < 4, "my" for stopword)
+    // After filtering: ["what", "favorite", "color"] 
+    //   - "s" removed (length 1, not > 3)
+    //   - "my" removed (stopword)
     const words = text.split(/[^a-zA-Z]+/).map(word => word.toLowerCase()).filter(word => word.length > 0);
     return words.filter(
       (word) =>
-        word.length > 3 &&
+        word.length > 3 &&  // Keep words with 4+ characters
         !this.stopWords.has(word)
     );
   }
