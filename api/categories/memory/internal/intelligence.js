@@ -1939,14 +1939,14 @@ class IntelligenceSystem {
   }
 
   extractImportantNouns(text) {
-    // Split on non-letters (removes punctuation) and filter out short/stop words in one pass
-    // Example: "What's my favorite color?" → ["What", "s", "my", "favorite", "color"]
+    // Split on non-letters (removes punctuation), convert to lowercase, and filter out empty strings
+    // Example: "What's my favorite color?" → ["what", "s", "my", "favorite", "color"]
     // After filtering: ["what", "favorite", "color"] (removes "s" for length < 4, "my" for stopword)
-    const words = text.split(/[^a-zA-Z]+/).filter(word => word.length > 0);
+    const words = text.split(/[^a-zA-Z]+/).map(word => word.toLowerCase()).filter(word => word.length > 0);
     return words.filter(
       (word) =>
         word.length > 3 &&
-        !this.stopWords.has(word.toLowerCase())
+        !this.stopWords.has(word)
     );
   }
 
