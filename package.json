@@ -38,5 +38,13 @@
   "devDependencies": {
     "eslint": "^9.38.0",
     "prettier": "^3.6.2"
-  }
+  },
+  "description": "Site Monkeys memory and enforcement shell with comprehensive 66-feature system validation.",
+  "main": "comprehensive-audit.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }

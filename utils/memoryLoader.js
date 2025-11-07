@@ -1,29 +1,29 @@
 // ✅ SITE MONKEYS -- ZERO-FAILURE AI SHELL (OPTIMIZED FOR SPEED)
 // 🧠 GOOGLE DRIVE-BASED VAULT LOADER - ESSENTIAL FILES ONLY
-import { google } from "googleapis";
+import { google } from 'googleapis';
 
-const VAULT_FOLDER_ID = "1LAkbqjN7g-HJV9BRWV-AsmMpY1JzJiIM";
+const VAULT_FOLDER_ID = '1LAkbqjN7g-HJV9BRWV-AsmMpY1JzJiIM';
 
 // ⚡ ESSENTIAL FILES ONLY - for speed and reliability
 const ESSENTIAL_FILES = [
-  "00_EnforcementShell.txt",
-  "00_BEHAVIOR_ENFORCEMENT_DEEP_LAYER.txt",
-  "Founders_Directive.txt",
-  "Pricing_Billing_Monetization_Strategy_vFinal.txt",
+  '00_EnforcementShell.txt',
+  '00_BEHAVIOR_ENFORCEMENT_DEEP_LAYER.txt',
+  'Founders_Directive.txt',
+  'Pricing_Billing_Monetization_Strategy_vFinal.txt',
 ];
 
 function authorizeGoogleDrive() {
   const creds = JSON.parse(process.env.GOOGLE_CREDENTIALS_JSON);
   const auth = new google.auth.GoogleAuth({
     credentials: creds,
-    scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+    scopes: ['https://www.googleapis.com/auth/drive.readonly'],
   });
-  return google.drive({ version: "v3", auth });
+  return google.drive({ version: 'v3', auth });
 }
 
 async function loadVaultMemory() {
   const drive = authorizeGoogleDrive();
-  let memory = "=== SITEMONKEYS CORE BUSINESS INTELLIGENCE ===\n\n";
+  let memory = '=== SITEMONKEYS CORE BUSINESS INTELLIGENCE ===\n\n';
 
   // Add essential business constraints directly (for speed)
   memory += `FINANCIAL CONSTRAINTS:
@@ -70,11 +70,11 @@ VAULT STATUS: OPERATIONAL WITH COMPLETE BUSINESS INTELLIGENCE
     // Get all subfolders first
     const foldersRes = await drive.files.list({
       q: `'${VAULT_FOLDER_ID}' in parents and mimeType='application/vnd.google-apps.folder'`,
-      fields: "files(id, name)",
+      fields: 'files(id, name)',
       pageSize: 20,
     });
 
-    memory += "\n=== LOADED ENFORCEMENT FILES ===\n";
+    memory += '\n=== LOADED ENFORCEMENT FILES ===\n';
 
     for (const folder of foldersRes.data.files) {
       memory += `\n--- ${folder.name} ---\n`;
@@ -82,29 +82,25 @@ VAULT STATUS: OPERATIONAL WITH COMPLETE BUSINESS INTELLIGENCE
       // Get files in this folder
       const filesRes = await drive.files.list({
         q: `'${folder.id}' in parents and (name contains '.txt' or name contains '.docx')`,
-        fields: "files(id, name, mimeType)",
+        fields: 'files(id, name, mimeType)',
         pageSize: 10,
       });
 
       for (const file of filesRes.data.files) {
         // Only load essential files for speed
-        if (
-          ESSENTIAL_FILES.some((essential) =>
-            file.name.includes(essential.split(".")[0]),
-          )
-        ) {
+        if (ESSENTIAL_FILES.some((essential) => file.name.includes(essential.split('.')[0]))) {
           try {
             let content;
-            if (file.mimeType === "application/vnd.google-apps.document") {
+            if (file.mimeType === 'application/vnd.google-apps.document') {
               const exportRes = await drive.files.export({
                 fileId: file.id,
-                mimeType: "text/plain",
+                mimeType: 'text/plain',
               });
               content = exportRes.data;
             } else {
               const res = await drive.files.get({
                 fileId: file.id,
-                alt: "media",
+                alt: 'media',
               });
               content = res.data;
             }

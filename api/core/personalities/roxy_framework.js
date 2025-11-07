@@ -6,8 +6,8 @@ const MIN_CONFIDENCE_FOR_SIMPLIFICATION = 0.6;
 
 export class RoxyFramework {
   constructor() {
-    this.personality = "roxy";
-    this.cognitiveStyle = "empathetic";
+    this.personality = 'roxy';
+    this.cognitiveStyle = 'empathetic';
 
     this.logger = {
       log: (msg) => console.log(`[ROXY] ${msg}`),
@@ -19,8 +19,7 @@ export class RoxyFramework {
 
   async analyzeAndEnhance(response, analysis, mode, context) {
     try {
-      const confidence =
-        analysis?.intentConfidence || analysis?.domainConfidence || 0.5;
+      const confidence = analysis?.intentConfidence || analysis?.domainConfidence || 0.5;
       let enhancedResponse = response;
 
       // ========== TRUTH-FIRST FALLBACK (NEW) ==========
@@ -35,15 +34,15 @@ export class RoxyFramework {
 
         return {
           enhancedResponse: enhancedResponse,
-          personality: "roxy",
+          personality: 'roxy',
           analysisApplied: {},
           modificationsCount: 1,
           reasoningApplied: true,
           truthPrioritized: true,
-          reason: "Prioritized truth over empathy due to low confidence",
+          reason: 'Prioritized truth over empathy due to low confidence',
         };
       }
-      this.logger.log("Applying Roxy empathetic framework...");
+      this.logger.log('Applying Roxy empathetic framework...');
 
       const analysisApplied = {
         emotionalContext: null,
@@ -60,26 +59,16 @@ export class RoxyFramework {
       analysisApplied.emotionalContext = emotional;
 
       if (emotional.needsSupport) {
-        enhancedResponse = this.#enhanceWithEmotionalSupport(
-          enhancedResponse,
-          emotional,
-        );
+        enhancedResponse = this.#enhanceWithEmotionalSupport(enhancedResponse, emotional);
         modificationsCount++;
-        this.logger.log("Added emotional support");
+        this.logger.log('Added emotional support');
       }
 
       // STEP 2: Identify opportunities (what's possible)
-      const opportunities = this.#identifyOpportunities(
-        response,
-        analysis,
-        context,
-      );
+      const opportunities = this.#identifyOpportunities(response, analysis, context);
       if (opportunities.length > 0) {
         analysisApplied.opportunitiesIdentified = opportunities;
-        enhancedResponse = this.#enhanceWithOpportunities(
-          enhancedResponse,
-          opportunities,
-        );
+        enhancedResponse = this.#enhanceWithOpportunities(enhancedResponse, opportunities);
         modificationsCount++;
         this.logger.log(`Identified ${opportunities.length} opportunities`);
       }
@@ -88,10 +77,7 @@ export class RoxyFramework {
       const simplifications = this.#findSimplifications(response, analysis);
       if (simplifications.length > 0) {
         analysisApplied.simplificationsFound = simplifications;
-        enhancedResponse = this.#enhanceWithSimplifications(
-          enhancedResponse,
-          simplifications,
-        );
+        enhancedResponse = this.#enhanceWithSimplifications(enhancedResponse, simplifications);
         modificationsCount++;
         this.logger.log(`Found ${simplifications.length} simpler approaches`);
       }
@@ -100,33 +86,27 @@ export class RoxyFramework {
       const motivations = this.#extractMotivations(analysis, context);
       if (motivations.length > 0) {
         analysisApplied.motivationsUnderstood = motivations;
-        this.logger.log("Understood underlying motivations");
+        this.logger.log('Understood underlying motivations');
       }
 
       // STEP 5: Make it actionable with practical steps
-      if (analysis.intent === "problem_solving" || analysis.complexity > 0.6) {
-        const practical = this.#enhanceWithPracticalSteps(
-          enhancedResponse,
-          analysis,
-        );
+      if (analysis.intent === 'problem_solving' || analysis.complexity > 0.6) {
+        const practical = this.#enhanceWithPracticalSteps(enhancedResponse, analysis);
         if (practical.added) {
           analysisApplied.practicalSteps = practical.steps;
           enhancedResponse = practical.enhanced;
           modificationsCount++;
-          this.logger.log("Added practical next steps");
+          this.logger.log('Added practical next steps');
         }
       }
 
       // STEP 6: Resource optimization (do more with less)
-      const optimizations = this.#enhanceWithResourceOptimization(
-        enhancedResponse,
-        analysis,
-      );
+      const optimizations = this.#enhanceWithResourceOptimization(enhancedResponse, analysis);
       if (optimizations.added) {
         analysisApplied.resourceOptimizations = optimizations.optimizations;
         enhancedResponse = optimizations.enhanced;
         modificationsCount++;
-        this.logger.log("Added resource optimizations");
+        this.logger.log('Added resource optimizations');
       }
 
       // STEP 7: Validate empowerment (never controlling)
@@ -134,53 +114,48 @@ export class RoxyFramework {
       if (!empowermentCheck.empowering) {
         enhancedResponse = empowermentCheck.corrected;
         modificationsCount++;
-        this.logger.log("Corrected to ensure empowerment");
+        this.logger.log('Corrected to ensure empowerment');
       }
 
       // STEP 8: Apply Roxy's empathetic signature
-      enhancedResponse = this.#applyRoxySignature(
-        enhancedResponse,
-        modificationsCount,
-      );
+      enhancedResponse = this.#applyRoxySignature(enhancedResponse, modificationsCount);
 
-      this.logger.log(
-        `Roxy analysis complete: ${modificationsCount} enhancements applied`,
-      );
+      this.logger.log(`Roxy analysis complete: ${modificationsCount} enhancements applied`);
 
       const mvpSuggestions = [
-        "start simple",
-        "mvp",
-        "minimum viable",
-        "bare bones",
-        "just get started",
-        "simplest version",
+        'start simple',
+        'mvp',
+        'minimum viable',
+        'bare bones',
+        'just get started',
+        'simplest version',
       ];
 
       const hasMVPSuggestion = mvpSuggestions.some((phrase) =>
         enhancedResponse.toLowerCase().includes(phrase),
       );
 
-      if (hasMVPSuggestion && mode === "site_monkeys") {
+      if (hasMVPSuggestion && mode === 'site_monkeys') {
         const vaultMinimum = context.vaultContext?.minimumServicePrice || 697;
 
         if (vaultMinimum >= 697) {
-          enhancedResponse += `\n\n**(Important clarification):** When I say "start simple," I mean focus on core value delivery—not reducing your price. Your ${vaultMinimum >= 697 ? `$${vaultMinimum} minimum` : "premium pricing"} reflects your expertise and ensures you can deliver quality sustainably.`;
+          enhancedResponse += `\n\n**(Important clarification):** When I say "start simple," I mean focus on core value delivery—not reducing your price. Your ${vaultMinimum >= 697 ? `$${vaultMinimum} minimum` : 'premium pricing'} reflects your expertise and ensures you can deliver quality sustainably.`;
         }
       }
 
       return {
         enhancedResponse: enhancedResponse,
-        personality: "roxy",
+        personality: 'roxy',
         analysisApplied: analysisApplied,
         modificationsCount: modificationsCount,
         reasoningApplied: true,
       };
     } catch (error) {
-      this.logger.error("Roxy framework failed", error);
+      this.logger.error('Roxy framework failed', error);
 
       return {
         enhancedResponse: `🍌 **Roxy:** ${response}`,
-        personality: "roxy",
+        personality: 'roxy',
         analysisApplied: {},
         modificationsCount: 0,
         reasoningApplied: false,
@@ -199,39 +174,36 @@ export class RoxyFramework {
         needsSupport: false,
         needsEncouragement: false,
         needsReassurance: false,
-        approachRecommended: "direct",
+        approachRecommended: 'direct',
       };
 
-      if (
-        analysis.emotionalTone === "anxious" ||
-        analysis.emotionalWeight > 0.7
-      ) {
+      if (analysis.emotionalTone === 'anxious' || analysis.emotionalWeight > 0.7) {
         emotional.needsSupport = true;
         emotional.needsReassurance = true;
-        emotional.approachRecommended = "gentle";
+        emotional.approachRecommended = 'gentle';
       }
 
-      if (analysis.emotionalTone === "negative" && analysis.complexity > 0.6) {
+      if (analysis.emotionalTone === 'negative' && analysis.complexity > 0.6) {
         emotional.needsSupport = true;
         emotional.needsEncouragement = true;
-        emotional.approachRecommended = "supportive";
+        emotional.approachRecommended = 'supportive';
       }
 
-      if (analysis.intent === "problem_solving" && analysis.complexity > 0.7) {
+      if (analysis.intent === 'problem_solving' && analysis.complexity > 0.7) {
         emotional.needsEncouragement = true;
-        emotional.approachRecommended = "solution-focused";
+        emotional.approachRecommended = 'solution-focused';
       }
 
       return emotional;
     } catch (error) {
-      this.logger.error("Emotional context assessment failed", error);
+      this.logger.error('Emotional context assessment failed', error);
       return {
-        tone: "neutral",
+        tone: 'neutral',
         weight: 0,
         needsSupport: false,
         needsEncouragement: false,
         needsReassurance: false,
-        approachRecommended: "direct",
+        approachRecommended: 'direct',
       };
     }
   }
@@ -244,65 +216,64 @@ export class RoxyFramework {
 
       if (
         context.sources?.hasMemory &&
-        !responseLower.includes("previous") &&
-        !responseLower.includes("before")
+        !responseLower.includes('previous') &&
+        !responseLower.includes('before')
       ) {
         opportunities.push({
-          type: "leverage_history",
-          opportunity: "Build on what you already know",
-          description: "You have relevant experience from past situations",
-          action: "Apply lessons learned to this new challenge",
+          type: 'leverage_history',
+          opportunity: 'Build on what you already know',
+          description: 'You have relevant experience from past situations',
+          action: 'Apply lessons learned to this new challenge',
         });
       }
 
       if (
         analysis.complexity > 0.7 &&
-        !responseLower.includes("minimum") &&
-        !responseLower.includes("small")
+        !responseLower.includes('minimum') &&
+        !responseLower.includes('small')
       ) {
         opportunities.push({
-          type: "mvp_approach",
-          opportunity: "Test the concept before full commitment",
-          description: "Start with smallest version that proves the idea",
+          type: 'mvp_approach',
+          opportunity: 'Test the concept before full commitment',
+          description: 'Start with smallest version that proves the idea',
           action: 'Define what "version 0.1" looks like',
         });
       }
 
-      if (analysis.domain === "creative" || analysis.requiresCreativity) {
+      if (analysis.domain === 'creative' || analysis.requiresCreativity) {
         opportunities.push({
-          type: "creative_synthesis",
-          opportunity: "Combine approaches in novel ways",
-          description:
-            "The best solutions often merge existing ideas differently",
-          action: "Consider how different methods could work together",
+          type: 'creative_synthesis',
+          opportunity: 'Combine approaches in novel ways',
+          description: 'The best solutions often merge existing ideas differently',
+          action: 'Consider how different methods could work together',
         });
       }
 
-      if (analysis.intent === "problem_solving") {
+      if (analysis.intent === 'problem_solving') {
         opportunities.push({
-          type: "iterative_learning",
-          opportunity: "Gain insights through experimentation",
-          description: "Each attempt teaches you something valuable",
-          action: "Design experiments that maximize learning",
+          type: 'iterative_learning',
+          opportunity: 'Gain insights through experimentation',
+          description: 'Each attempt teaches you something valuable',
+          action: 'Design experiments that maximize learning',
         });
       }
 
       if (
-        !responseLower.includes("community") &&
-        !responseLower.includes("help") &&
+        !responseLower.includes('community') &&
+        !responseLower.includes('help') &&
         analysis.complexity > 0.6
       ) {
         opportunities.push({
-          type: "collaborative_approach",
-          opportunity: "Tap into collective knowledge",
-          description: "Others have likely solved similar challenges",
-          action: "Identify who might have relevant insights",
+          type: 'collaborative_approach',
+          opportunity: 'Tap into collective knowledge',
+          description: 'Others have likely solved similar challenges',
+          action: 'Identify who might have relevant insights',
         });
       }
 
       return opportunities;
     } catch (error) {
-      this.logger.error("Opportunity identification failed", error);
+      this.logger.error('Opportunity identification failed', error);
       return [];
     }
   }
@@ -315,51 +286,51 @@ export class RoxyFramework {
 
       if (analysis.complexity > 0.6) {
         simplifications.push({
-          type: "reduce_steps",
-          simplification: "Focus on the critical path",
-          before: "Multiple parallel workstreams",
-          after: "Single sequential focus that delivers core value",
-          benefit: "Faster progress, clearer priorities, less overwhelm",
+          type: 'reduce_steps',
+          simplification: 'Focus on the critical path',
+          before: 'Multiple parallel workstreams',
+          after: 'Single sequential focus that delivers core value',
+          benefit: 'Faster progress, clearer priorities, less overwhelm',
         });
       }
 
       if (
-        analysis.domain === "technical" &&
-        !responseLower.includes("existing") &&
-        !responseLower.includes("available")
+        analysis.domain === 'technical' &&
+        !responseLower.includes('existing') &&
+        !responseLower.includes('available')
       ) {
         simplifications.push({
-          type: "leverage_existing",
-          simplification: "Use tools that already exist",
-          before: "Build custom solution from scratch",
-          after: "Adapt existing tools to your needs",
-          benefit: "80% faster, battle-tested, maintained by others",
+          type: 'leverage_existing',
+          simplification: 'Use tools that already exist',
+          before: 'Build custom solution from scratch',
+          after: 'Adapt existing tools to your needs',
+          benefit: '80% faster, battle-tested, maintained by others',
         });
       }
 
-      if (analysis.requiresCalculation && !responseLower.includes("manual")) {
+      if (analysis.requiresCalculation && !responseLower.includes('manual')) {
         simplifications.push({
-          type: "manual_first",
-          simplification: "Start manual before automating",
-          before: "Build automated system immediately",
-          after: "Do it manually first to understand the real requirements",
-          benefit: "Learn what actually matters before investing in automation",
+          type: 'manual_first',
+          simplification: 'Start manual before automating',
+          before: 'Build automated system immediately',
+          after: 'Do it manually first to understand the real requirements',
+          benefit: 'Learn what actually matters before investing in automation',
         });
       }
 
-      if (analysis.complexity > 0.7 && !responseLower.includes("scope")) {
+      if (analysis.complexity > 0.7 && !responseLower.includes('scope')) {
         simplifications.push({
-          type: "scope_reduction",
-          simplification: "Solve for one specific case first",
-          before: "Handle every possible scenario",
-          after: "Perfect the most common use case",
-          benefit: "Ship faster, learn from real usage, iterate based on data",
+          type: 'scope_reduction',
+          simplification: 'Solve for one specific case first',
+          before: 'Handle every possible scenario',
+          after: 'Perfect the most common use case',
+          benefit: 'Ship faster, learn from real usage, iterate based on data',
         });
       }
 
       return simplifications;
     } catch (error) {
-      this.logger.error("Simplification finding failed", error);
+      this.logger.error('Simplification finding failed', error);
       return [];
     }
   }
@@ -368,37 +339,33 @@ export class RoxyFramework {
     const motivations = [];
 
     try {
-      if (analysis.intent === "decision_making") {
+      if (analysis.intent === 'decision_making') {
         motivations.push({
-          surface: "Making a choice",
-          deeper: "Seeking confidence in an uncertain situation",
-          support: "What would help you feel confident moving forward?",
+          surface: 'Making a choice',
+          deeper: 'Seeking confidence in an uncertain situation',
+          support: 'What would help you feel confident moving forward?',
         });
       }
 
-      if (
-        analysis.intent === "problem_solving" &&
-        analysis.emotionalWeight > 0.5
-      ) {
+      if (analysis.intent === 'problem_solving' && analysis.emotionalWeight > 0.5) {
         motivations.push({
-          surface: "Solving a problem",
-          deeper: "Relieving stress or frustration",
+          surface: 'Solving a problem',
+          deeper: 'Relieving stress or frustration',
           support: "Let's find a path that reduces the burden",
         });
       }
 
-      if (analysis.domain === "business" && analysis.complexity > 0.6) {
+      if (analysis.domain === 'business' && analysis.complexity > 0.6) {
         motivations.push({
-          surface: "Business decision",
-          deeper:
-            "Building something sustainable that doesn't consume your life",
-          support: "How can we achieve this without burning out?",
+          surface: 'Business decision',
+          deeper: "Building something sustainable that doesn't consume your life",
+          support: 'How can we achieve this without burning out?',
         });
       }
 
       if (context.sources?.hasMemory && analysis.personalContext) {
         motivations.push({
-          surface: "Current situation",
+          surface: 'Current situation',
           deeper: "Part of a longer journey you're on",
           support: "This connects to what you've been working toward",
         });
@@ -406,7 +373,7 @@ export class RoxyFramework {
 
       return motivations;
     } catch (error) {
-      this.logger.error("Motivation extraction failed", error);
+      this.logger.error('Motivation extraction failed', error);
       return [];
     }
   }
@@ -416,7 +383,7 @@ export class RoxyFramework {
   #enhanceWithEmotionalSupport(response, emotional) {
     if (!emotional.needsSupport) return response;
 
-    let support = "\n\n";
+    let support = '\n\n';
 
     if (emotional.needsReassurance) {
       support +=
@@ -434,7 +401,7 @@ export class RoxyFramework {
   #enhanceWithOpportunities(response, opportunities) {
     if (opportunities.length === 0) return response;
 
-    let enhancement = "\n\n**Opportunities I See:**\n";
+    let enhancement = '\n\n**Opportunities I See:**\n';
 
     for (const opp of opportunities.slice(0, 3)) {
       enhancement += `\n**${opp.opportunity}:** ${opp.description}\n`;
@@ -447,7 +414,7 @@ export class RoxyFramework {
   #enhanceWithSimplifications(response, simplifications) {
     if (simplifications.length === 0) return response;
 
-    let enhancement = "\n\n**Simpler Paths Forward:**\n";
+    let enhancement = '\n\n**Simpler Paths Forward:**\n';
 
     for (const simp of simplifications.slice(0, 2)) {
       enhancement += `\n**${simp.simplification}**\n`;
@@ -462,27 +429,25 @@ export class RoxyFramework {
   #enhanceWithPracticalSteps(response, analysis) {
     const steps = [];
 
-    if (analysis.domain === "business") {
+    if (analysis.domain === 'business') {
       steps.push('Define success: What does "working" look like in 30 days?');
-      steps.push("Identify the first small test you can run this week");
-      steps.push(
-        "List what resources you already have vs what you need to acquire",
-      );
-    } else if (analysis.domain === "technical") {
-      steps.push("Sketch the simplest version that proves the concept");
-      steps.push("Identify the riskiest assumption to test first");
+      steps.push('Identify the first small test you can run this week');
+      steps.push('List what resources you already have vs what you need to acquire');
+    } else if (analysis.domain === 'technical') {
+      steps.push('Sketch the simplest version that proves the concept');
+      steps.push('Identify the riskiest assumption to test first');
       steps.push('Define what "good enough for v1" means');
     } else {
-      steps.push("Clarify what outcome you want from this");
-      steps.push("Identify the smallest first step");
-      steps.push("Decide what success looks like");
+      steps.push('Clarify what outcome you want from this');
+      steps.push('Identify the smallest first step');
+      steps.push('Decide what success looks like');
     }
 
     if (steps.length === 0) {
       return { added: false, enhanced: response, steps: [] };
     }
 
-    let enhancement = "\n\n**Practical Next Steps:**\n";
+    let enhancement = '\n\n**Practical Next Steps:**\n';
     for (let i = 0; i < steps.length && i < 3; i++) {
       enhancement += `${i + 1}. ${steps[i]}\n`;
     }
@@ -499,25 +464,25 @@ export class RoxyFramework {
 
     if (analysis.complexity > 0.6) {
       optimizations.push({
-        resource: "Time",
-        optimization: "Focus on the 20% that delivers 80% of value",
-        how: "Identify core deliverable, cut everything else for v1",
+        resource: 'Time',
+        optimization: 'Focus on the 20% that delivers 80% of value',
+        how: 'Identify core deliverable, cut everything else for v1',
       });
     }
 
-    if (analysis.domain === "business") {
+    if (analysis.domain === 'business') {
       optimizations.push({
-        resource: "Money",
-        optimization: "Test cheaply before investing heavily",
-        how: "Manual process, small pilot, or prototype before scaling",
+        resource: 'Money',
+        optimization: 'Test cheaply before investing heavily',
+        how: 'Manual process, small pilot, or prototype before scaling',
       });
     }
 
     if (analysis.requiresCreativity) {
       optimizations.push({
-        resource: "Energy",
-        optimization: "Work with your natural rhythms",
-        how: "Schedule creative work when you have peak energy",
+        resource: 'Energy',
+        optimization: 'Work with your natural rhythms',
+        how: 'Schedule creative work when you have peak energy',
       });
     }
 
@@ -525,7 +490,7 @@ export class RoxyFramework {
       return { added: false, enhanced: response, optimizations: [] };
     }
 
-    let enhancement = "\n\n**Do More With Less:**\n";
+    let enhancement = '\n\n**Do More With Less:**\n';
     for (const opt of optimizations.slice(0, 2)) {
       enhancement += `\n**${opt.resource}:** ${opt.optimization}\n`;
       enhancement += `- How: ${opt.how}\n`;
@@ -555,15 +520,15 @@ export class RoxyFramework {
     let empowering = true;
 
     const controllingPhrases = [
-      { phrase: "you should", replacement: "you could consider" },
-      { phrase: "you must", replacement: "it would be important to" },
-      { phrase: "you need to", replacement: "it might help to" },
-      { phrase: "do this", replacement: "consider doing this" },
+      { phrase: 'you should', replacement: 'you could consider' },
+      { phrase: 'you must', replacement: 'it would be important to' },
+      { phrase: 'you need to', replacement: 'it might help to' },
+      { phrase: 'do this', replacement: 'consider doing this' },
     ];
 
     for (const { phrase, replacement } of controllingPhrases) {
       if (responseLower.includes(phrase)) {
-        const regex = new RegExp(phrase, "gi");
+        const regex = new RegExp(phrase, 'gi');
         corrected = corrected.replace(regex, replacement);
         empowering = false;
       }
@@ -578,27 +543,25 @@ export class RoxyFramework {
   #validateEncouragement(response, emotional) {
     const responseLower = response.toLowerCase();
 
-    const patronizingPhrases = ["good job", "well done", "proud of you"];
-    const hasPatronizing = patronizingPhrases.some((p) =>
-      responseLower.includes(p),
-    );
+    const patronizingPhrases = ['good job', 'well done', 'proud of you'];
+    const hasPatronizing = patronizingPhrases.some((p) => responseLower.includes(p));
 
     if (hasPatronizing) {
       return {
         appropriate: false,
-        issue: "Potentially patronizing language detected",
+        issue: 'Potentially patronizing language detected',
       };
     }
 
     if (
       emotional.needsEncouragement &&
-      !responseLower.includes("see") &&
-      !responseLower.includes("believe") &&
-      !responseLower.includes("confident")
+      !responseLower.includes('see') &&
+      !responseLower.includes('believe') &&
+      !responseLower.includes('confident')
     ) {
       return {
         appropriate: false,
-        issue: "Encouragement needed but not provided authentically",
+        issue: 'Encouragement needed but not provided authentically',
       };
     }
 
