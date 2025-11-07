@@ -1939,14 +1939,14 @@ class IntelligenceSystem {
   }
 
   extractImportantNouns(text) {
-    // Clean text of punctuation first, then split
-    const cleanedText = text.replace(/[^\w\s]/g, ' '); // Replace punctuation with spaces
-    const words = cleanedText.split(/\s+/);
+    // Clean text of punctuation first, maintaining only letters and spaces
+    const cleanedText = text.replace(/[^a-zA-Z\s]/g, ' '); // Replace non-letters with spaces
+    const words = cleanedText.split(/\s+/).filter(word => word.length > 0); // Split and remove empty strings
     return words.filter(
       (word) =>
         word.length > 3 &&
         !this.stopWords.has(word.toLowerCase()) &&
-        /^[a-zA-Z]+$/.test(word),
+        /^[a-zA-Z]+$/.test(word), // This regex is now redundant but kept for clarity
     );
   }
 
