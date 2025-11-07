@@ -284,6 +284,16 @@ export class IntelligentMemoryStorage {
       const memoryId = result.rows[0].id;
       console.log(`[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=${memoryId}, tokens=${tokenCount}`);
       
+      // DIAGNOSTIC LOGGING: Track exact storage details
+      console.log('[STORAGE-DEBUG] Memory stored:', {
+        id: memoryId,
+        user_id: userId,
+        category: category,
+        content: facts.substring(0, 100),
+        table: 'persistent_memories',
+        timestamp: new Date().toISOString()
+      });
+      
       return { action: 'created', memoryId };
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Compressed storage failed:', error.message);
@@ -334,6 +344,16 @@ export class IntelligentMemoryStorage {
       
       const memoryId = result.rows[0].id;
       console.log(`[INTELLIGENT-STORAGE] ⚠️ Stored uncompressed fallback: ID=${memoryId}, tokens=${tokenCount}`);
+      
+      // DIAGNOSTIC LOGGING: Track exact storage details
+      console.log('[STORAGE-DEBUG] Memory stored (fallback):', {
+        id: memoryId,
+        user_id: userId,
+        category: category,
+        content: content.substring(0, 100),
+        table: 'persistent_memories',
+        timestamp: new Date().toISOString()
+      });
       
       return { action: 'fallback', memoryId };
     } catch (error) {
