@@ -126,7 +126,8 @@ export class IntelligentMemoryStorage {
    */
   aggressivePostProcessing(facts) {
     // Split into lines and clean
-    let lines = facts.split('\n')
+    // BUGFIX: Also split by periods to handle concatenated facts without newlines
+    let lines = facts.split(/[\n.]+/)
       .map(line => line.trim())
       .filter(line => line.length > 0)
       // Remove bullet points, numbers, and other formatting
