@@ -126,8 +126,10 @@ export class IntelligentMemoryStorage {
    */
   aggressivePostProcessing(facts) {
     // Split into lines and clean
-    // BUGFIX: Also split by periods (followed by space/end) to handle concatenated facts without newlines
-    let lines = facts.split(/\n|\.(?=\s|$)/)
+    // CRITICAL FIX: Split on newlines OR periods followed by whitespace/capital/end
+    // Then restore periods to maintain proper sentence structure
+    // This fixes: "monkeys.Assistant" → "monkeys.\nAssistant" 
+    let lines = facts.split(/\n|\.(?=\s|[A-Z]|$)/)
       .map(line => line.trim())
       .filter(line => line.length > 0)
       // Remove bullet points, numbers, and other formatting
@@ -172,7 +174,18 @@ export class IntelligentMemoryStorage {
     // Final cleanup: ensure no empty lines
     lines = lines.filter(line => line.length > 0);
     
-    // Join with newlines for clean formatting
+    // CRITICAL FIX: Ensure each fact ends with a period for proper grammar
+    // This preserves sentence structure while maintaining searchability
+    lines = lines.map(line => {
+      // Only add period if line doesn't already end with punctuation
+      if (!/[.!?]$/.test(line)) {
+        return line + '.';
+      }
+      return line;
+    });
+    
+    // Join with newlines for clean formatting and database searchability
+    // Result: "User has pet monkeys.\nAssistant is unaware.\nUser likes games."
     return lines.join('\n');
   }
 
