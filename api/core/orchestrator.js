@@ -3,33 +3,29 @@
 // Executes all chat requests in correct priority order
 // Truth > Memory > Analysis > AI > Personality > Validation > Fallback (last resort)
 
-import { coreSystem, intelligenceSystem } from "../categories/memory/index.js";
-import { SemanticAnalyzer } from "../core/intelligence/semantic_analyzer.js";
-import { EliFramework } from "../core/personalities/eli_framework.js";
-import { RoxyFramework } from "../core/personalities/roxy_framework.js";
-import { PersonalitySelector } from "../core/personalities/personality_selector.js";
-import { trackApiCall } from "../lib/tokenTracker.js";
-import { getVaultStatus, generateVaultContext } from "../lib/vault.js";
-import { extractedDocuments } from "../upload-for-analysis.js";
-import {
-  MODES,
-  validateModeCompliance,
-  calculateConfidenceScore,
-} from "../config/modes.js";
-import { EMERGENCY_FALLBACKS } from "../lib/site-monkeys/emergency-fallbacks.js";
-import Anthropic from "@anthropic-ai/sdk";
-import OpenAI from "openai";
-import _ from "lodash";
+import { coreSystem, intelligenceSystem } from '../categories/memory/index.js';
+import { SemanticAnalyzer } from '../core/intelligence/semantic_analyzer.js';
+import { EliFramework } from '../core/personalities/eli_framework.js';
+import { RoxyFramework } from '../core/personalities/roxy_framework.js';
+import { PersonalitySelector } from '../core/personalities/personality_selector.js';
+import { trackApiCall } from '../lib/tokenTracker.js';
+import { getVaultStatus, generateVaultContext } from '../lib/vault.js';
+import { extractedDocuments } from '../upload-for-analysis.js';
+import { MODES, validateModeCompliance, calculateConfidenceScore } from '../config/modes.js';
+import { EMERGENCY_FALLBACKS } from '../lib/site-monkeys/emergency-fallbacks.js';
+import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import _ from 'lodash';
 // ========== ENFORCEMENT MODULE IMPORTS ==========
-import { driftWatcher } from "../lib/validators/drift-watcher.js";
-import { initiativeEnforcer } from "../lib/validators/initiative-enforcer.js";
-import { costTracker } from "../utils/cost-tracker.js";
-import { PoliticalGuardrails } from "../lib/politicalGuardrails.js";
-import { ProductValidator } from "../lib/productValidation.js";
+import { driftWatcher } from '../lib/validators/drift-watcher.js';
+import { initiativeEnforcer } from '../lib/validators/initiative-enforcer.js';
+import { costTracker } from '../utils/cost-tracker.js';
+import { PoliticalGuardrails } from '../lib/politicalGuardrails.js';
+import { ProductValidator } from '../lib/productValidation.js';
 import {
   checkFounderProtection,
   handleCostCeiling,
-} from "../lib/site-monkeys/emergency-fallbacks.js";
+} from '../lib/site-monkeys/emergency-fallbacks.js';
 //import { validateCompliance as validateVaultCompliance } from '../lib/vault.js';
 // ================================================
 
@@ -45,10 +41,10 @@ export class Orchestrator {
     this.roxyFramework = new RoxyFramework();
     this.personalitySelector = new PersonalitySelector();
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || "sk-dummy-key-for-testing",
+      apiKey: process.env.OPENAI_API_KEY || 'sk-dummy-key-for-testing',
     });
     this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY || "sk-ant-dummy-key-for-testing",
+      apiKey: process.env.ANTHROPIC_API_KEY || 'sk-ant-dummy-key-for-testing',
     });
 
     // Initialization flag
@@ -73,29 +69,29 @@ export class Orchestrator {
       console.log(`[${timestamp}] [ORCHESTRATOR] ${message}`);
       // Force flush for Railway
       if (process.stdout && process.stdout.write) {
-        process.stdout.write("");
+        process.stdout.write('');
       }
     };
     this.error = (message, error) => {
       const timestamp = new Date().toISOString();
-      console.error(`[${timestamp}] [ORCHESTRATOR ERROR] ${message}`, error || "");
+      console.error(`[${timestamp}] [ORCHESTRATOR ERROR] ${message}`, error || '');
       // Force flush for Railway
       if (process.stderr && process.stderr.write) {
-        process.stderr.write("");
+        process.stderr.write('');
       }
     };
   }
 
   async initialize() {
     try {
-      this.log("[INIT] Initializing SemanticAnalyzer...");
+      this.log('[INIT] Initializing SemanticAnalyzer...');
       await this.semanticAnalyzer.initialize();
       this.initialized = true;
-      this.log("[INIT] SemanticAnalyzer initialization complete");
+      this.log('[INIT] SemanticAnalyzer initialization complete');
       return true;
     } catch (error) {
       this.error(
-        "[INIT] SemanticAnalyzer initialization failed - system will use fallback analysis",
+        '[INIT] SemanticAnalyzer initialization failed - system will use fallback analysis',
         error,
       );
       this.initialized = false;
@@ -130,9 +126,7 @@ export class Orchestrator {
           enforcedResponse = driftResult.adjustedResponse || enforcedResponse;
 
           if (driftResult.confidenceAdjustment) {
-            complianceMetadata.confidence_adjustments.push(
-              driftResult.confidenceAdjustment,
-            );
+            complianceMetadata.confidence_adjustments.push(driftResult.confidenceAdjustment);
           }
 
           if (driftResult.warning) {
@@ -140,36 +134,32 @@ export class Orchestrator {
           }
         }
 
-        complianceMetadata.enforcement_applied.push("drift_watcher");
+        complianceMetadata.enforcement_applied.push('drift_watcher');
       } catch (error) {
-        this.error("Drift watcher failed:", error);
-        complianceMetadata.warnings.push(
-          "drift_watcher_error: " + error.message,
-        );
+        this.error('Drift watcher failed:', error);
+        complianceMetadata.warnings.push('drift_watcher_error: ' + error.message);
       }
 
       // ========== STEP 2: INITIATIVE ENFORCER ==========
       try {
         const initiativeResult = await initiativeEnforcer.enforce({
           response: enforcedResponse,
-          personality: personality || "eli",
+          personality: personality || 'eli',
           context: context,
         });
 
         if (initiativeResult.modified) {
           enforcedResponse = initiativeResult.response;
           complianceMetadata.overrides.push({
-            module: "initiative_enforcer",
+            module: 'initiative_enforcer',
             reason: initiativeResult.reason,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("initiative_enforcer");
+        complianceMetadata.enforcement_applied.push('initiative_enforcer');
       } catch (error) {
-        this.error("Initiative enforcer failed:", error);
-        complianceMetadata.warnings.push(
-          "initiative_enforcer_error: " + error.message,
-        );
+        this.error('Initiative enforcer failed:', error);
+        complianceMetadata.warnings.push('initiative_enforcer_error: ' + error.message);
       }
 
       // ========== STEP 3: POLITICAL GUARDRAILS ==========
@@ -182,17 +172,15 @@ export class Orchestrator {
         if (politicalResult.politicalContentDetected) {
           enforcedResponse = politicalResult.neutralizedResponse;
           complianceMetadata.overrides.push({
-            module: "political_guardrails",
+            module: 'political_guardrails',
             reason: politicalResult.reason,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("political_guardrails");
+        complianceMetadata.enforcement_applied.push('political_guardrails');
       } catch (error) {
-        this.error("Political guardrails failed:", error);
-        complianceMetadata.warnings.push(
-          "political_guardrails_error: " + error.message,
-        );
+        this.error('Political guardrails failed:', error);
+        complianceMetadata.warnings.push('political_guardrails_error: ' + error.message);
       }
 
       // ========== STEP 4: PRODUCT VALIDATION ==========
@@ -205,67 +193,57 @@ export class Orchestrator {
         if (productResult.needsDisclosure) {
           enforcedResponse = productResult.responseWithDisclosure;
           complianceMetadata.overrides.push({
-            module: "product_validation",
+            module: 'product_validation',
             reason: productResult.reason,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("product_validation");
+        complianceMetadata.enforcement_applied.push('product_validation');
       } catch (error) {
-        this.error("Product validation failed:", error);
-        complianceMetadata.warnings.push(
-          "product_validation_error: " + error.message,
-        );
+        this.error('Product validation failed:', error);
+        complianceMetadata.warnings.push('product_validation_error: ' + error.message);
       }
 
       // ========== STEP 5: FOUNDER PROTECTION ==========
       try {
         const founderResult = await checkFounderProtection({
           response: enforcedResponse,
-          mode: mode || "truth_general",
+          mode: mode || 'truth_general',
           context: context,
         });
 
         if (founderResult.violationDetected) {
           enforcedResponse = founderResult.correctedResponse;
           complianceMetadata.overrides.push({
-            module: "founder_protection",
+            module: 'founder_protection',
             reason: founderResult.reason,
             violations: founderResult.violations,
           });
           complianceMetadata.security_pass = false;
         }
 
-        complianceMetadata.enforcement_applied.push("founder_protection");
+        complianceMetadata.enforcement_applied.push('founder_protection');
       } catch (error) {
-        this.error("Founder protection failed:", error);
-        complianceMetadata.warnings.push(
-          "founder_protection_error: " + error.message,
-        );
+        this.error('Founder protection failed:', error);
+        complianceMetadata.warnings.push('founder_protection_error: ' + error.message);
       }
 
       // ========== STEP 6: VAULT COMPLIANCE (Site Monkeys only) ==========
-      if (mode === "site_monkeys" && context.sources?.hasVault) {
+      if (mode === 'site_monkeys' && context.sources?.hasVault) {
         try {
           // NOTE: validateVaultCompliance function not implemented yet
           // Using basic vault enforcement instead
           // TODO: Implement proper vault compliance validation
 
-          complianceMetadata.enforcement_applied.push(
-            "vault_compliance_pending",
-          );
+          complianceMetadata.enforcement_applied.push('vault_compliance_pending');
         } catch (error) {
-          this.error("Vault compliance failed:", error);
-          complianceMetadata.warnings.push(
-            "vault_compliance_error: " + error.message,
-          );
+          this.error('Vault compliance failed:', error);
+          complianceMetadata.warnings.push('vault_compliance_error: ' + error.message);
         }
       }
     } catch (error) {
-      this.error("Enforcement chain critical failure:", error);
-      complianceMetadata.warnings.push(
-        "enforcement_chain_failure: " + error.message,
-      );
+      this.error('Enforcement chain critical failure:', error);
+      complianceMetadata.warnings.push('enforcement_chain_failure: ' + error.message);
       complianceMetadata.security_pass = false;
     }
 
@@ -282,7 +260,7 @@ export class Orchestrator {
     const {
       message,
       userId,
-      mode = "truth_general",
+      mode = 'truth_general',
       sessionId,
       documentContext = null,
       vaultEnabled = false,
@@ -304,20 +282,18 @@ export class Orchestrator {
       // Check extractedDocuments Map first, then use documentContext if provided
       const documentData = await this.#loadDocumentContext(documentContext, sessionId);
       if (documentData) {
-        this.log(
-          `[DOCUMENTS] Loaded ${documentData.tokens} tokens from ${documentData.filename}`,
-        );
+        this.log(`[DOCUMENTS] Loaded ${documentData.tokens} tokens from ${documentData.filename}`);
       } else {
-        this.log("[DOCUMENTS] No document available");
+        this.log('[DOCUMENTS] No document available');
       }
 
       // STEP 3: Load vault (if Site Monkeys mode and enabled)
       let vaultData = vaultContext
         ? await this.#loadVaultContext(vaultContext)
-        : mode === "site_monkeys" && vaultEnabled
+        : mode === 'site_monkeys' && vaultEnabled
           ? await this.#loadVaultContext(userId, sessionId)
           : null;
-      
+
       // Apply intelligent section selection to vault content
       if (vaultData && vaultData.fullContent) {
         const selection = this.#selectRelevantVaultSections(vaultData.fullContent, message);
@@ -329,17 +305,15 @@ export class Orchestrator {
           totalSections: selection.totalSections,
           selectionReason: selection.selectionReason,
         };
-        this.log(`[VAULT] Selected ${selection.sectionsSelected}${selection.totalSections ? `/${selection.totalSections}` : ''} sections: ${selection.tokens} tokens (${selection.selectionReason})`);
+        this.log(
+          `[VAULT] Selected ${selection.sectionsSelected}${selection.totalSections ? `/${selection.totalSections}` : ''} sections: ${selection.tokens} tokens (${selection.selectionReason})`,
+        );
       } else if (vaultData) {
         this.log(`[VAULT] Loaded ${vaultData.tokens} tokens (no selection applied)`);
       }
 
       // STEP 4: Assemble complete context
-      const context = this.#assembleContext(
-        memoryContext,
-        documentData,
-        vaultData,
-      );
+      const context = this.#assembleContext(memoryContext, documentData, vaultData);
       context.userId = userId;
       context.mode = mode;
       context.sessionId = sessionId;
@@ -348,15 +322,11 @@ export class Orchestrator {
 
       // STEP 5: Perform semantic analysis
       const analysisStartTime = Date.now();
-      const analysis = await this.#performSemanticAnalysis(
-        message,
-        context,
-        conversationHistory,
-      );
+      const analysis = await this.#performSemanticAnalysis(message, context, conversationHistory);
       const analysisTime = Date.now() - analysisStartTime;
       this.requestStats.semanticAnalysisTime += analysisTime;
       this.log(
-        `[ANALYSIS] Intent: ${analysis.intent} (${analysis.intentConfidence?.toFixed(2) || "N/A"}), Domain: ${analysis.domain} (${analysis.domainConfidence?.toFixed(2) || "N/A"}), Complexity: ${analysis.complexity.toFixed(2)}, Time: ${analysisTime}ms`,
+        `[ANALYSIS] Intent: ${analysis.intent} (${analysis.intentConfidence?.toFixed(2) || 'N/A'}), Domain: ${analysis.domain} (${analysis.domainConfidence?.toFixed(2) || 'N/A'}), Complexity: ${analysis.complexity.toFixed(2)}, Time: ${analysisTime}ms`,
       );
 
       // STEP 6: Calculate confidence
@@ -372,14 +342,12 @@ export class Orchestrator {
         mode,
         conversationHistory,
       );
-      this.log(
-        `[AI] Model: ${aiResponse.model}, Cost: $${aiResponse.cost.totalCost.toFixed(4)}`,
-      );
+      this.log(`[AI] Model: ${aiResponse.model}, Cost: $${aiResponse.cost.totalCost.toFixed(4)}`);
 
       // ========== RUN ENFORCEMENT CHAIN (BEFORE PERSONALITY) ==========
       // CRITICAL FIX: Enforcement must run BEFORE personality to ensure
       // business rules and security policies are applied to raw AI output
-      this.log("[ENFORCEMENT] Running enforcement chain on AI response...");
+      this.log('[ENFORCEMENT] Running enforcement chain on AI response...');
       const enforcedResult = await this.#runEnforcementChain(
         aiResponse.response,
         analysis,
@@ -421,18 +389,12 @@ export class Orchestrator {
         analysis,
         confidence,
       );
-      this.log(
-        `[VALIDATION] Compliant: ${validatedResponse.compliant ? "PASS" : "FAIL"}`,
-      );
+      this.log(`[VALIDATION] Compliant: ${validatedResponse.compliant ? 'PASS' : 'FAIL'}`);
       if (!validatedResponse.compliant && validatedResponse.issues.length > 0) {
-        this.log(
-          `[VALIDATION] Issues: ${validatedResponse.issues.join(", ")}`,
-        );
+        this.log(`[VALIDATION] Issues: ${validatedResponse.issues.join(', ')}`);
       }
       if (validatedResponse.adjustments.length > 0) {
-        this.log(
-          `[VALIDATION] Adjustments: ${validatedResponse.adjustments.join(", ")}`,
-        );
+        this.log(`[VALIDATION] Adjustments: ${validatedResponse.adjustments.join(', ')}`);
       }
 
       // STEP 10: Track performance
@@ -448,10 +410,10 @@ export class Orchestrator {
           // Context tracking
           memoryUsed: memoryContext.hasMemory,
           memoryTokens: context.tokenBreakdown?.memory || memoryContext.tokens,
-          documentTokens: context.tokenBreakdown?.documents || (documentData?.tokens || 0),
-          vaultTokens: context.tokenBreakdown?.vault || (vaultData?.tokens || 0),
+          documentTokens: context.tokenBreakdown?.documents || documentData?.tokens || 0,
+          vaultTokens: context.tokenBreakdown?.vault || vaultData?.tokens || 0,
           totalContextTokens: context.totalTokens,
-          
+
           // Token budget compliance
           budgetCompliance: context.budgetCompliance || {},
           vaultSectionsSelected: vaultData?.sectionsSelected,
@@ -464,8 +426,7 @@ export class Orchestrator {
           // Personality tracking
           personalityApplied: personalityResponse.personality,
           personalityEnhancements: personalityResponse.modificationsCount || 0,
-          personalityReasoningApplied:
-            personalityResponse.reasoningApplied || false,
+          personalityReasoningApplied: personalityResponse.reasoningApplied || false,
 
           // Mode enforcement
           modeEnforced: mode,
@@ -477,14 +438,14 @@ export class Orchestrator {
           // Cost tracking
           cost: aiResponse.cost,
           semanticAnalysisCost: analysis.cost || 0,
-          totalCostIncludingAnalysis:
-            (aiResponse.cost?.totalCost || 0) + (analysis.cost || 0),
+          totalCostIncludingAnalysis: (aiResponse.cost?.totalCost || 0) + (analysis.cost || 0),
 
           // FIX #5: Add token_usage to API response for frontend display
           token_usage: {
             prompt_tokens: aiResponse.cost?.inputTokens || 0,
             completion_tokens: aiResponse.cost?.outputTokens || 0,
-            total_tokens: (aiResponse.cost?.inputTokens || 0) + (aiResponse.cost?.outputTokens || 0),
+            total_tokens:
+              (aiResponse.cost?.inputTokens || 0) + (aiResponse.cost?.outputTokens || 0),
             context_tokens: {
               memory: context.tokenBreakdown?.memory || 0,
               documents: context.tokenBreakdown?.documents || 0,
@@ -502,9 +463,7 @@ export class Orchestrator {
           cost_tracking: {
             session_cost: costTracker.getSessionCost(sessionId),
             ceiling: costTracker.getCostCeiling(mode),
-            remaining:
-              costTracker.getCostCeiling(mode) -
-              costTracker.getSessionCost(sessionId),
+            remaining: costTracker.getCostCeiling(mode) - costTracker.getSessionCost(sessionId),
           },
 
           // Fallback tracking
@@ -548,28 +507,22 @@ export class Orchestrator {
 
   async #retrieveMemoryContext(userId, message) {
     try {
-      const routingResult = { primaryCategory: "general" };
+      const routingResult = { primaryCategory: 'general' };
 
       // Use global.memorySystem which is already initialized
-      let memories = { success: false, memories: "", count: 0 };
+      let memories = { success: false, memories: '', count: 0 };
 
-      if (
-        global.memorySystem &&
-        typeof global.memorySystem.retrieveMemory === "function"
-      ) {
+      if (global.memorySystem && typeof global.memorySystem.retrieveMemory === 'function') {
         try {
-          const result = await global.memorySystem.retrieveMemory(
-            userId,
-            message,
-          );
+          const result = await global.memorySystem.retrieveMemory(userId, message);
 
           // Enhanced memory result handling - support multiple return formats
           if (result) {
-            let memoryText = "";
+            let memoryText = '';
             let memoryCount = 0;
 
             // Format 1: result.memories is a string
-            if (typeof result.memories === "string" && result.memories.length > 0) {
+            if (typeof result.memories === 'string' && result.memories.length > 0) {
               memoryText = result.memories;
               memoryCount = result.count || 1;
             }
@@ -577,21 +530,21 @@ export class Orchestrator {
             else if (Array.isArray(result.memories) && result.memories.length > 0) {
               memoryText = result.memories
                 .map((m) => {
-                  if (typeof m === "string") return m;
+                  if (typeof m === 'string') return m;
                   if (m.content) return m.content;
                   if (m.text) return m.text;
                   return JSON.stringify(m);
                 })
-                .join("\n\n");
+                .join('\n\n');
               memoryCount = result.memories.length;
             }
             // Format 3: result.memories is an object
-            else if (typeof result.memories === "object" && result.memories !== null) {
+            else if (typeof result.memories === 'object' && result.memories !== null) {
               memoryText = JSON.stringify(result.memories, null, 2);
               memoryCount = result.count || 1;
             }
             // Format 4: result itself is the memory string
-            else if (typeof result === "string" && result.length > 0) {
+            else if (typeof result === 'string' && result.length > 0) {
               memoryText = result;
               memoryCount = 1;
             }
@@ -607,18 +560,18 @@ export class Orchestrator {
                 `[MEMORY] Successfully loaded ${memoryCount} memories, ${memoryText.length} chars`,
               );
             } else {
-              this.log("[MEMORY] Result received but no usable memory content found");
+              this.log('[MEMORY] Result received but no usable memory content found');
             }
           }
         } catch (error) {
-          this.error("[MEMORY] Retrieval error:", error);
+          this.error('[MEMORY] Retrieval error:', error);
         }
       }
 
       if (!memories || !memories.success) {
-        this.log("[MEMORY] No memories found or retrieval failed");
+        this.log('[MEMORY] No memories found or retrieval failed');
         return {
-          memories: "",
+          memories: '',
           tokens: 0,
           count: 0,
           categories: [],
@@ -626,22 +579,20 @@ export class Orchestrator {
         };
       }
 
-      const memoryContent = memories.memories || "";
+      const memoryContent = memories.memories || '';
       const tokenCount = Math.ceil(memoryContent.length / 4);
 
       return {
         memories: memoryContent,
         tokens: tokenCount,
         count: memories.count || 0,
-        categories: routingResult.primaryCategory
-          ? [routingResult.primaryCategory]
-          : [],
+        categories: routingResult.primaryCategory ? [routingResult.primaryCategory] : [],
         hasMemory: tokenCount > 0,
       };
     } catch (error) {
-      this.error("[MEMORY] Retrieval failed, continuing without memory", error);
+      this.error('[MEMORY] Retrieval failed, continuing without memory', error);
       return {
-        memories: "",
+        memories: '',
         tokens: 0,
         count: 0,
         categories: [],
@@ -655,21 +606,21 @@ export class Orchestrator {
   async #loadDocumentContext(documentContext, sessionId) {
     try {
       // Access extractedDocuments Map correctly (stored with .set("latest", {...}))
-      const latestDoc = extractedDocuments.get("latest");
-      
+      const latestDoc = extractedDocuments.get('latest');
+
       if (!latestDoc) {
-        this.log("[DOCUMENTS] No document found in storage");
+        this.log('[DOCUMENTS] No document found in storage');
         return null;
       }
 
       // Use fullContent if available, otherwise fall back to preview content
       const documentContent = latestDoc.fullContent || latestDoc.content;
-      
+
       if (!documentContent || documentContent.length === 0) {
-        this.log("[DOCUMENTS] Document has no content");
+        this.log('[DOCUMENTS] Document has no content');
         return null;
       }
-      
+
       const tokens = Math.ceil(documentContent.length / 4);
 
       // FEATURE FLAG: ENABLE_STRICT_DOC_BUDGET
@@ -700,10 +651,7 @@ export class Orchestrator {
         truncated: false,
       };
     } catch (error) {
-      this.error(
-        "[DOCUMENTS] Loading failed, continuing without documents",
-        error,
-      );
+      this.error('[DOCUMENTS] Loading failed, continuing without documents', error);
       return null;
     }
   }
@@ -738,12 +686,16 @@ export class Orchestrator {
 
       // FIX #2: Better error handling - provide more context
       // 3️⃣ No vault found - provide helpful diagnostic info
-      this.log("[VAULT] Not available - vault requires site_monkeys mode and vault content to be loaded");
-      this.log(`[VAULT] Diagnostic: global.vaultContent exists: ${!!global.vaultContent}, length: ${global.vaultContent?.length || 0}`);
+      this.log(
+        '[VAULT] Not available - vault requires site_monkeys mode and vault content to be loaded',
+      );
+      this.log(
+        `[VAULT] Diagnostic: global.vaultContent exists: ${!!global.vaultContent}, length: ${global.vaultContent?.length || 0}`,
+      );
       return null;
     } catch (error) {
       // FIX #2: Improved error logging with more context
-      this.error("[VAULT] Loading failed - Error details:", {
+      this.error('[VAULT] Loading failed - Error details:', {
         message: error.message,
         hasGlobalVault: !!global.vaultContent,
         hasVaultCandidate: !!vaultCandidate,
@@ -753,7 +705,7 @@ export class Orchestrator {
   }
 
   // ==================== INTELLIGENT VAULT SECTION SELECTION ====================
-  
+
   /**
    * Selects relevant vault sections based on query analysis
    * Enforces 9,000 token maximum for vault content
@@ -763,71 +715,81 @@ export class Orchestrator {
    */
   #selectRelevantVaultSections(vaultContent, query) {
     const MAX_VAULT_TOKENS = 9000;
-    
+
     try {
       if (!vaultContent || vaultContent.length === 0) {
-        return { content: "", tokens: 0, sectionsSelected: 0 };
+        return { content: '', tokens: 0, sectionsSelected: 0 };
       }
 
       // Keywords to look for in query
       const queryLower = query.toLowerCase();
       const keywords = this.#extractKeywords(queryLower);
-      
+
       // Special handling for "what's in the vault" type queries - return full inventory
-      const isInventoryQuery = /what'?s?\s+(in|inside|stored|contained|within)\s+(the\s+)?vault/i.test(query) ||
-                              /list\s+(all|everything|vault|contents)/i.test(query) ||
-                              /show\s+(me\s+)?(all|everything|vault|contents)/i.test(query);
-      
+      const isInventoryQuery =
+        /what'?s?\s+(in|inside|stored|contained|within)\s+(the\s+)?vault/i.test(query) ||
+        /list\s+(all|everything|vault|contents)/i.test(query) ||
+        /show\s+(me\s+)?(all|everything|vault|contents)/i.test(query);
+
       if (isInventoryQuery) {
-        this.log("[VAULT SELECTION] Inventory query detected - allowing full vault access");
+        this.log('[VAULT SELECTION] Inventory query detected - allowing full vault access');
         const targetTokens = Math.min(MAX_VAULT_TOKENS, Math.ceil(vaultContent.length / 4));
         const targetChars = targetTokens * 4;
-        
+
         if (vaultContent.length <= targetChars) {
           return {
             content: vaultContent,
             tokens: Math.ceil(vaultContent.length / 4),
             sectionsSelected: 1,
-            selectionReason: "Full vault for inventory query"
+            selectionReason: 'Full vault for inventory query',
           };
         }
-        
+
         // Truncate intelligently for inventory
         const truncated = this.#truncateVaultIntelligently(vaultContent, targetChars);
         return {
           content: truncated,
           tokens: Math.ceil(truncated.length / 4),
           sectionsSelected: 1,
-          selectionReason: "Truncated vault for inventory query"
+          selectionReason: 'Truncated vault for inventory query',
         };
       }
 
       // ENHANCEMENT: Detect folder/file queries (from spec - Priority 1)
-      const isFolderQuery = /(?:folder|directory|files?|documents?)\s+(?:named|called|labeled|in|called)\s+(\w+)/i.test(query);
-      const folderMatch = query.match(/(?:folder|directory|files?|documents?)\s+(?:named|called|labeled|in|called)\s+(\w+)/i);
-      
+      const isFolderQuery =
+        /(?:folder|directory|files?|documents?)\s+(?:named|called|labeled|in|called)\s+(\w+)/i.test(
+          query,
+        );
+      const folderMatch = query.match(
+        /(?:folder|directory|files?|documents?)\s+(?:named|called|labeled|in|called)\s+(\w+)/i,
+      );
+
       if (isFolderQuery && folderMatch) {
         const folderName = folderMatch[1].toLowerCase();
         this.log(`[VAULT SELECTION] Folder query detected: "${folderName}"`);
-        
+
         // Find sections that reference this folder
         const sections = this.#splitVaultIntoSections(vaultContent);
-        const folderSections = sections.filter(section => {
+        const folderSections = sections.filter((section) => {
           const sectionLower = section.toLowerCase();
-          return sectionLower.includes(folderName) || 
-                 sectionLower.includes(`/${folderName}/`) ||
-                 sectionLower.includes(`folder: ${folderName}`) ||
-                 sectionLower.includes(`directory: ${folderName}`);
+          return (
+            sectionLower.includes(folderName) ||
+            sectionLower.includes(`/${folderName}/`) ||
+            sectionLower.includes(`folder: ${folderName}`) ||
+            sectionLower.includes(`directory: ${folderName}`)
+          );
         });
-        
+
         if (folderSections.length > 0) {
-          this.log(`[VAULT SELECTION] Found ${folderSections.length} sections matching folder "${folderName}"`);
-          
+          this.log(
+            `[VAULT SELECTION] Found ${folderSections.length} sections matching folder "${folderName}"`,
+          );
+
           // Return folder sections within token budget
           let selectedContent = [];
           let totalTokens = 0;
           let sectionsUsed = 0;
-          
+
           for (const section of folderSections) {
             const sectionTokens = Math.ceil(section.length / 4);
             if (totalTokens + sectionTokens <= MAX_VAULT_TOKENS) {
@@ -836,20 +798,20 @@ export class Orchestrator {
               sectionsUsed++;
             }
           }
-          
+
           return {
-            content: selectedContent.join("\n\n"),
+            content: selectedContent.join('\n\n'),
             tokens: totalTokens,
             sectionsSelected: sectionsUsed,
             totalSections: folderSections.length,
-            selectionReason: `Folder "${folderName}" sections`
+            selectionReason: `Folder "${folderName}" sections`,
           };
         }
       }
 
       // Split vault into sections (by document markers or paragraphs)
       const sections = this.#splitVaultIntoSections(vaultContent);
-      
+
       if (sections.length === 0) {
         // Fallback: treat entire vault as one section
         const targetTokens = Math.min(MAX_VAULT_TOKENS, Math.ceil(vaultContent.length / 4));
@@ -859,15 +821,15 @@ export class Orchestrator {
           content,
           tokens: Math.ceil(content.length / 4),
           sectionsSelected: 1,
-          selectionReason: "Full vault (no sections found)"
+          selectionReason: 'Full vault (no sections found)',
         };
       }
 
       // Score each section by relevance (with enhanced folder/file name matching)
-      const scoredSections = sections.map(section => ({
+      const scoredSections = sections.map((section) => ({
         content: section,
         score: this.#scoreVaultSection(section, keywords, queryLower),
-        tokens: Math.ceil(section.length / 4)
+        tokens: Math.ceil(section.length / 4),
       }));
 
       // Sort by relevance score (descending)
@@ -893,7 +855,8 @@ export class Orchestrator {
         } else {
           // Try to fit partial section if we have room
           const remainingTokens = MAX_VAULT_TOKENS - totalTokens;
-          if (remainingTokens > 500 && section.score >= 50) { // Only high-scoring sections
+          if (remainingTokens > 500 && section.score >= 50) {
+            // Only high-scoring sections
             const partialChars = remainingTokens * 4;
             const partial = section.content.substring(0, partialChars);
             selectedContent.push(partial);
@@ -904,10 +867,12 @@ export class Orchestrator {
         }
       }
 
-      const finalContent = selectedContent.join("\n\n");
-      
-      this.log(`[VAULT SELECTION] Selected ${sectionsUsed}/${sections.length} sections, ${totalTokens} tokens`);
-      
+      const finalContent = selectedContent.join('\n\n');
+
+      this.log(
+        `[VAULT SELECTION] Selected ${sectionsUsed}/${sections.length} sections, ${totalTokens} tokens`,
+      );
+
       // Calculate better selection reason
       let selectionReason = `Selected ${sectionsUsed} relevant sections`;
       if (scoredSections[0]?.score >= 50) {
@@ -915,27 +880,26 @@ export class Orchestrator {
       } else if (sectionsUsed === sections.length) {
         selectionReason = `All sections relevant (${sectionsUsed} sections)`;
       }
-      
+
       return {
         content: finalContent,
         tokens: totalTokens,
         sectionsSelected: sectionsUsed,
         totalSections: sections.length,
-        selectionReason: selectionReason
+        selectionReason: selectionReason,
       };
-
     } catch (error) {
-      this.error("[VAULT SELECTION] Selection failed, using truncated vault", error);
-      
+      this.error('[VAULT SELECTION] Selection failed, using truncated vault', error);
+
       // Fallback: truncate to MAX_VAULT_TOKENS
       const maxChars = MAX_VAULT_TOKENS * 4;
       const truncated = vaultContent.substring(0, maxChars);
-      
+
       return {
         content: truncated,
         tokens: Math.ceil(truncated.length / 4),
         sectionsSelected: 1,
-        selectionReason: "Fallback truncation"
+        selectionReason: 'Fallback truncation',
       };
     }
   }
@@ -946,15 +910,66 @@ export class Orchestrator {
    */
   #extractKeywords(queryLower) {
     // Remove common words
-    const stopWords = new Set(['what', 'is', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then', 'once', 'show', 'me', 'list', 'all']);
-    
+    const stopWords = new Set([
+      'what',
+      'is',
+      'the',
+      'a',
+      'an',
+      'in',
+      'on',
+      'at',
+      'to',
+      'for',
+      'of',
+      'with',
+      'by',
+      'from',
+      'are',
+      'was',
+      'were',
+      'been',
+      'be',
+      'have',
+      'has',
+      'had',
+      'do',
+      'does',
+      'did',
+      'will',
+      'would',
+      'could',
+      'should',
+      'may',
+      'might',
+      'can',
+      'about',
+      'into',
+      'through',
+      'during',
+      'before',
+      'after',
+      'above',
+      'below',
+      'between',
+      'under',
+      'again',
+      'further',
+      'then',
+      'once',
+      'show',
+      'me',
+      'list',
+      'all',
+    ]);
+
     const words = queryLower.match(/\b\w+\b/g) || [];
-    const keywords = words.filter(word => word.length > 2 && !stopWords.has(word));
-    
+    const keywords = words.filter((word) => word.length > 2 && !stopWords.has(word));
+
     // Identify potential folder/file names (capitalized words or quoted terms in original query)
     // Note: We're working with lowercased query, but we can still identify longer meaningful terms
-    const importantTerms = keywords.filter(word => word.length > 4);
-    
+    const importantTerms = keywords.filter((word) => word.length > 4);
+
     return [...new Set([...keywords, ...importantTerms])]; // Remove duplicates
   }
 
@@ -964,7 +979,7 @@ export class Orchestrator {
   #splitVaultIntoSections(vaultContent) {
     // Look for document boundaries or major section markers
     const patterns = [
-      /={3,}/g,  // === separators
+      /={3,}/g, // === separators
       /\n\n[A-Z][^\n]+\n={2,}/g, // Markdown headers
       /\[DOCUMENT:\s*[^\]]+\]/gi, // Document markers
       /FILE:\s*[^\n]+/gi, // File markers
@@ -972,12 +987,12 @@ export class Orchestrator {
 
     let sections = [];
     let lastIndex = 0;
-    
+
     // Try to find natural section boundaries
     const allMatches = [];
-    patterns.forEach(pattern => {
+    patterns.forEach((pattern) => {
       const matches = [...vaultContent.matchAll(pattern)];
-      matches.forEach(match => {
+      matches.forEach((match) => {
         allMatches.push({ index: match.index, text: match[0] });
       });
     });
@@ -987,16 +1002,17 @@ export class Orchestrator {
 
     // Split at boundaries
     if (allMatches.length > 0) {
-      allMatches.forEach(match => {
+      allMatches.forEach((match) => {
         if (match.index > lastIndex) {
           const section = vaultContent.substring(lastIndex, match.index).trim();
-          if (section.length > 100) { // Minimum section size
+          if (section.length > 100) {
+            // Minimum section size
             sections.push(section);
           }
         }
         lastIndex = match.index;
       });
-      
+
       // Add final section
       const finalSection = vaultContent.substring(lastIndex).trim();
       if (finalSection.length > 100) {
@@ -1006,7 +1022,7 @@ export class Orchestrator {
 
     // Fallback: split by large paragraphs if no sections found
     if (sections.length === 0) {
-      sections = vaultContent.split(/\n\n+/).filter(s => s.length > 200);
+      sections = vaultContent.split(/\n\n+/).filter((s) => s.length > 200);
     }
 
     // If still no sections, split by size
@@ -1017,7 +1033,7 @@ export class Orchestrator {
       }
     }
 
-    return sections.filter(s => s.length > 0);
+    return sections.filter((s) => s.length > 0);
   }
 
   /**
@@ -1077,7 +1093,7 @@ export class Orchestrator {
     }
 
     // PRIORITY 3: Content keyword matching (existing logic)
-    keywords.forEach(keyword => {
+    keywords.forEach((keyword) => {
       const count = (sectionLower.match(new RegExp(_.escapeRegExp(keyword), 'g')) || []).length;
       score += count * 10;
     });
@@ -1122,15 +1138,19 @@ export class Orchestrator {
 
     // Try to truncate at a section boundary
     const truncated = vaultContent.substring(0, maxChars);
-    
+
     // Find the last complete section (look for double newline)
     const lastSectionBreak = truncated.lastIndexOf('\n\n');
-    
-    if (lastSectionBreak > maxChars * 0.8) { // If we're not losing too much
-      return truncated.substring(0, lastSectionBreak) + "\n\n[Vault content truncated - more available on request]";
+
+    if (lastSectionBreak > maxChars * 0.8) {
+      // If we're not losing too much
+      return (
+        truncated.substring(0, lastSectionBreak) +
+        '\n\n[Vault content truncated - more available on request]'
+      );
     }
-    
-    return truncated + "\n\n[Vault content truncated - more available on request]";
+
+    return truncated + '\n\n[Vault content truncated - more available on request]';
   }
 
   // ==================== STEP 4: ASSEMBLE CONTEXT ====================
@@ -1148,31 +1168,35 @@ export class Orchestrator {
     };
 
     // Enforce memory budget (≤2,500 tokens)
-    let memoryText = memory?.memories || "";
+    let memoryText = memory?.memories || '';
     let memoryTokens = memory?.tokens || 0;
-    
+
     if (memoryTokens > BUDGET.MEMORY) {
-      this.log(`[TOKEN-BUDGET] Memory exceeds limit: ${memoryTokens} > ${BUDGET.MEMORY}, truncating...`);
+      this.log(
+        `[TOKEN-BUDGET] Memory exceeds limit: ${memoryTokens} > ${BUDGET.MEMORY}, truncating...`,
+      );
       const targetChars = BUDGET.MEMORY * 4;
       memoryText = memoryText.substring(0, targetChars);
       memoryTokens = BUDGET.MEMORY;
     }
 
     // Enforce document budget (≤3,000 tokens)
-    let documentText = documents?.content || "";
+    let documentText = documents?.content || '';
     let documentTokens = documents?.tokens || 0;
-    
+
     if (documentTokens > BUDGET.DOCUMENTS) {
-      this.log(`[TOKEN-BUDGET] Documents exceed limit: ${documentTokens} > ${BUDGET.DOCUMENTS}, truncating...`);
+      this.log(
+        `[TOKEN-BUDGET] Documents exceed limit: ${documentTokens} > ${BUDGET.DOCUMENTS}, truncating...`,
+      );
       const targetChars = BUDGET.DOCUMENTS * 4;
       documentText = documentText.substring(0, targetChars);
       documentTokens = BUDGET.DOCUMENTS;
     }
 
     // Enforce vault budget (≤9,000 tokens) - should already be enforced by selection
-    const vaultText = vault?.content || "";
+    const vaultText = vault?.content || '';
     const vaultTokens = vault?.tokens || 0;
-    
+
     if (vaultTokens > BUDGET.VAULT) {
       this.log(`[TOKEN-BUDGET] WARNING: Vault exceeds limit: ${vaultTokens} > ${BUDGET.VAULT}`);
       // This shouldn't happen due to selection, but log it
@@ -1180,9 +1204,11 @@ export class Orchestrator {
 
     // Calculate total and verify budget compliance
     const totalTokens = memoryTokens + documentTokens + vaultTokens;
-    
+
     if (totalTokens > BUDGET.TOTAL) {
-      this.log(`[TOKEN-BUDGET] WARNING: Total context exceeds limit: ${totalTokens} > ${BUDGET.TOTAL}`);
+      this.log(
+        `[TOKEN-BUDGET] WARNING: Total context exceeds limit: ${totalTokens} > ${BUDGET.TOTAL}`,
+      );
     } else {
       this.log(`[TOKEN-BUDGET] ✅ Context within budget: ${totalTokens}/${BUDGET.TOTAL} tokens`);
     }
@@ -1201,14 +1227,14 @@ export class Orchestrator {
         documents: documentTokens <= BUDGET.DOCUMENTS,
         vault: vaultTokens <= BUDGET.VAULT,
         total: totalTokens <= BUDGET.TOTAL,
-      }
+      },
     };
   }
 
   #assembleContext(memory, documents, vault) {
     // Call explicit token budget enforcement method
     const enforcement = this.#enforceTokenBudget(memory, documents, vault);
-    
+
     // Use enforced values
     const memoryText = enforcement.memoryText;
     const memoryTokens = enforcement.memoryTokens;
@@ -1220,7 +1246,9 @@ export class Orchestrator {
 
     // Build context strings
     const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] [ORCHESTRATOR] [CONTEXT] Assembling context - Memory: ${memoryText.length} chars (${memoryTokens}t), Documents: ${documentText.length} chars (${documentTokens}t), Vault: ${vaultText.length} chars (${vaultTokens}t)`);
+    console.log(
+      `[${timestamp}] [ORCHESTRATOR] [CONTEXT] Assembling context - Memory: ${memoryText.length} chars (${memoryTokens}t), Documents: ${documentText.length} chars (${documentTokens}t), Vault: ${vaultText.length} chars (${vaultTokens}t)`,
+    );
 
     return {
       memory: memoryText,
@@ -1246,24 +1274,19 @@ export class Orchestrator {
   async #performSemanticAnalysis(message, context, conversationHistory) {
     try {
       if (!this.initialized) {
-        this.error(
-          "[ANALYSIS] SemanticAnalyzer not initialized, using fallback",
-        );
+        this.error('[ANALYSIS] SemanticAnalyzer not initialized, using fallback');
         return this.#generateFallbackAnalysis(message, context);
       }
 
-      const semanticResult = await this.semanticAnalyzer.analyzeSemantics(
-        message,
-        {
-          userId: context.userId || "unknown",
-          conversationHistory: conversationHistory,
-          availableMemory: context.sources?.hasMemory || false,
-          documentContext: context.sources?.hasDocuments || false,
-          vaultContext: context.sources?.hasVault || false,
-          mode: context.mode,
-          sessionId: context.sessionId,
-        },
-      );
+      const semanticResult = await this.semanticAnalyzer.analyzeSemantics(message, {
+        userId: context.userId || 'unknown',
+        conversationHistory: conversationHistory,
+        availableMemory: context.sources?.hasMemory || false,
+        documentContext: context.sources?.hasDocuments || false,
+        vaultContext: context.sources?.hasVault || false,
+        mode: context.mode,
+        sessionId: context.sessionId,
+      });
 
       if (semanticResult.cost) {
         this.requestStats.semanticAnalysisCost += semanticResult.cost;
@@ -1284,12 +1307,8 @@ export class Orchestrator {
         requiresCalculation: semanticResult.requiresCalculation,
         requiresComparison: semanticResult.requiresComparison,
         requiresCreativity: semanticResult.requiresCreativity,
-        requiresExpertise:
-          semanticResult.complexityFactors?.expertiseRequired || false,
-        contextDependency: this.#calculateContextDependency(
-          context,
-          semanticResult,
-        ),
+        requiresExpertise: semanticResult.complexityFactors?.expertiseRequired || false,
+        contextDependency: this.#calculateContextDependency(context, semanticResult),
         reasoning: `Semantic analysis via embeddings: Intent=${semanticResult.intent} (${semanticResult.intentConfidence?.toFixed(2)}), Domain=${semanticResult.domain} (${semanticResult.domainConfidence?.toFixed(2)})`,
         semanticDetails: semanticResult,
         cacheHit: semanticResult.cacheHit,
@@ -1298,7 +1317,7 @@ export class Orchestrator {
         fallbackUsed: false,
       };
     } catch (error) {
-      this.error("[ANALYSIS] Semantic analysis failed, using fallback", error);
+      this.error('[ANALYSIS] Semantic analysis failed, using fallback', error);
       return this.#generateFallbackAnalysis(message, context);
     }
   }
@@ -1316,27 +1335,21 @@ export class Orchestrator {
   }
 
   #generateFallbackAnalysis(message, context) {
-    this.log("[ANALYSIS] Using fallback heuristic analysis");
+    this.log('[ANALYSIS] Using fallback heuristic analysis');
 
     const messageLower = message.toLowerCase();
 
-    let intent = "question";
+    let intent = 'question';
     if (
-      messageLower.includes("create") ||
-      messageLower.includes("build") ||
-      messageLower.includes("make")
+      messageLower.includes('create') ||
+      messageLower.includes('build') ||
+      messageLower.includes('make')
     ) {
-      intent = "command";
-    } else if (
-      messageLower.includes("should i") ||
-      messageLower.includes("which option")
-    ) {
-      intent = "decision_making";
-    } else if (
-      messageLower.includes("how do i") ||
-      messageLower.includes("solve")
-    ) {
-      intent = "problem_solving";
+      intent = 'command';
+    } else if (messageLower.includes('should i') || messageLower.includes('which option')) {
+      intent = 'decision_making';
+    } else if (messageLower.includes('how do i') || messageLower.includes('solve')) {
+      intent = 'problem_solving';
     }
 
     const domain = this.#determineDomain(message, context);
@@ -1357,17 +1370,17 @@ export class Orchestrator {
         ambiguity: 0,
         expertiseRequired: false,
       },
-      emotionalTone: "neutral",
+      emotionalTone: 'neutral',
       emotionalWeight: 0,
       personalContext: /\b(my|I|me)\b/i.test(message),
-      temporalContext: "general",
+      temporalContext: 'general',
       requiresMemory: false,
       requiresCalculation: /\d/.test(message),
       requiresComparison: /\b(vs|versus|compare)\b/i.test(message),
       requiresCreativity: false,
       requiresExpertise: false,
       contextDependency: 0.5,
-      reasoning: "Fallback heuristic analysis (semantic analyzer unavailable)",
+      reasoning: 'Fallback heuristic analysis (semantic analyzer unavailable)',
       semanticDetails: null,
       cacheHit: false,
       processingTime: 0,
@@ -1380,19 +1393,19 @@ export class Orchestrator {
     const msg = message.toLowerCase();
 
     if (/business|revenue|profit|customer|market|strategy|company/i.test(msg)) {
-      return "business";
+      return 'business';
     }
     if (/code|software|programming|technical|system|api|database/i.test(msg)) {
-      return "technical";
+      return 'technical';
     }
     if (/feel|emotion|relationship|family|friend|personal/i.test(msg)) {
-      return "personal";
+      return 'personal';
     }
     if (/health|medical|doctor|wellness|fitness/i.test(msg)) {
-      return "health";
+      return 'health';
     }
 
-    return "general";
+    return 'general';
   }
 
   // ==================== STEP 6: CALCULATE CONFIDENCE ====================
@@ -1419,52 +1432,42 @@ export class Orchestrator {
       if (context.sources?.hasDocuments) confidence += 0.03;
       if (context.sources?.hasVault) confidence += 0.07;
 
-      if (analysis.domain === "business" || analysis.domain === "technical") {
+      if (analysis.domain === 'business' || analysis.domain === 'technical') {
         confidence -= 0.1;
       }
 
-      if (
-        analysis.intent === "problem_solving" ||
-        analysis.intent === "decision_making"
-      ) {
+      if (analysis.intent === 'problem_solving' || analysis.intent === 'decision_making') {
         confidence -= 0.08;
       }
 
       if (analysis.fallbackUsed) {
         confidence -= 0.2;
-        this.log("[CONFIDENCE] Reduced due to fallback analysis");
+        this.log('[CONFIDENCE] Reduced due to fallback analysis');
       }
 
       confidence = Math.max(0.0, Math.min(1.0, confidence));
 
       return confidence;
     } catch (error) {
-      this.error("[CONFIDENCE] Calculation failed, using default", error);
+      this.error('[CONFIDENCE] Calculation failed, using default', error);
       return 0.75;
     }
   }
 
   // ==================== STEP 7: ROUTE TO AI ====================
 
-  async #routeToAI(
-    message,
-    context,
-    analysis,
-    confidence,
-    mode,
-    conversationHistory,
-  ) {
+  async #routeToAI(message, context, analysis, confidence, mode, conversationHistory) {
     try {
       // ========== CRITICAL FIX: Check vault/tokens BEFORE confidence ==========
       // Priority order: Vault presence → Token budget → Then confidence
-      
+
       let useClaude = false;
       let routingReason = [];
 
       // PRIORITY 1: Vault presence (Site Monkeys mode always uses Claude)
-      if (context.sources?.hasVault && mode === "site_monkeys") {
+      if (context.sources?.hasVault && mode === 'site_monkeys') {
         useClaude = true;
-        routingReason.push("vault_access");
+        routingReason.push('vault_access');
       }
 
       // PRIORITY 2: Token budget check (high token count prefers Claude)
@@ -1475,32 +1478,28 @@ export class Orchestrator {
 
       // PRIORITY 3: Confidence and complexity (original logic)
       if (!useClaude) {
-        if (confidence < 0.85 || 
-            analysis.requiresExpertise ||
-            (mode === "business_validation" && analysis.complexity > 0.7)) {
+        if (
+          confidence < 0.85 ||
+          analysis.requiresExpertise ||
+          (mode === 'business_validation' && analysis.complexity > 0.7)
+        ) {
           useClaude = true;
           routingReason.push(`confidence:${confidence.toFixed(2)}`);
-          if (analysis.requiresExpertise) routingReason.push("requires_expertise");
-          if (mode === "business_validation" && analysis.complexity > 0.7) {
+          if (analysis.requiresExpertise) routingReason.push('requires_expertise');
+          if (mode === 'business_validation' && analysis.complexity > 0.7) {
             routingReason.push(`high_complexity:${analysis.complexity.toFixed(2)}`);
           }
         }
       }
 
-      const model = useClaude ? "claude-sonnet-4.5" : "gpt-4";
-      
-      this.log(
-        `[AI ROUTING] Using ${model} (reasons: ${routingReason.join(", ") || "default"})`,
-      );
+      const model = useClaude ? 'claude-sonnet-4.5' : 'gpt-4';
+
+      this.log(`[AI ROUTING] Using ${model} (reasons: ${routingReason.join(', ') || 'default'})`);
 
       // ========== COST CEILING CHECK ==========
       if (useClaude && context.sessionId) {
         const estimatedCost = costTracker.estimateClaudeCost(message, context);
-        const costCheck = costTracker.wouldExceedCeiling(
-          context.sessionId,
-          estimatedCost,
-          mode,
-        );
+        const costCheck = costTracker.wouldExceedCeiling(context.sessionId, estimatedCost, mode);
 
         if (costCheck.wouldExceed) {
           this.log(
@@ -1510,13 +1509,13 @@ export class Orchestrator {
           const fallbackResult = await handleCostCeiling({
             query: message,
             context: context,
-            reason: "cost_ceiling_exceeded",
+            reason: 'cost_ceiling_exceeded',
             currentCost: costCheck.totalCost,
           });
 
           return {
             response: fallbackResult.response,
-            model: "cost_fallback",
+            model: 'cost_fallback',
             cost: {
               inputTokens: 0,
               outputTokens: 0,
@@ -1535,26 +1534,26 @@ export class Orchestrator {
 
       const historyString =
         conversationHistory.length > 0
-          ? "\n\nRecent conversation:\n" +
+          ? '\n\nRecent conversation:\n' +
             conversationHistory
               .slice(-5)
               .map((msg) => `${msg.role}: ${msg.content}`)
-              .join("\n")
-          : "";
+              .join('\n')
+          : '';
 
       const systemPrompt = this.#buildSystemPrompt(mode, analysis);
 
       // VAULT-ONLY MODE: Pure vault queries bypass contamination
       const isVaultQuery =
         context.sources?.hasVault &&
-        (message.toLowerCase().includes("vault") ||
-          message.toLowerCase().includes("founder") ||
-          message.toLowerCase().includes("directive") ||
-          mode === "site_monkeys");
+        (message.toLowerCase().includes('vault') ||
+          message.toLowerCase().includes('founder') ||
+          message.toLowerCase().includes('directive') ||
+          mode === 'site_monkeys');
 
       let fullPrompt;
       if (isVaultQuery) {
-        console.log("[AI] 🔒 PURE VAULT MODE - Zero contamination");
+        console.log('[AI] 🔒 PURE VAULT MODE - Zero contamination');
         fullPrompt = `You are a vault content specialist. Search through the ENTIRE vault systematically.
       
       VAULT CONTENT:
@@ -1572,9 +1571,9 @@ export class Orchestrator {
 
       if (useClaude) {
         const claudeResponse = await this.anthropic.messages.create({
-          model: "claude-sonnet-4-20250514",
+          model: 'claude-sonnet-4-20250514',
           max_tokens: 2000,
-          messages: [{ role: "user", content: fullPrompt }],
+          messages: [{ role: 'user', content: fullPrompt }],
         });
 
         response = claudeResponse.content[0].text;
@@ -1582,13 +1581,13 @@ export class Orchestrator {
         outputTokens = claudeResponse.usage.output_tokens;
       } else {
         const gptResponse = await this.openai.chat.completions.create({
-          model: "gpt-4",
+          model: 'gpt-4',
           messages: isVaultQuery
-            ? [{ role: "user", content: fullPrompt }]
+            ? [{ role: 'user', content: fullPrompt }]
             : [
-                { role: "system", content: systemPrompt },
+                { role: 'system', content: systemPrompt },
                 {
-                  role: "user",
+                  role: 'user',
                   content: `${contextString}${historyString}\n\n${message}`,
                 },
               ],
@@ -1611,17 +1610,17 @@ export class Orchestrator {
       }
 
       // Map model to personality for token tracking
-      let personality = "claude"; // Default for claude model
-      if (model === "gpt-4") {
+      let personality = 'claude'; // Default for claude model
+      if (model === 'gpt-4') {
         // For GPT-4, use mode or default to eli
-        personality = mode === "business_validation" ? "eli" : "roxy";
+        personality = mode === 'business_validation' ? 'eli' : 'roxy';
       }
-      
+
       trackApiCall(
         personality,
         inputTokens,
         outputTokens,
-        context.sources?.hasVault ? (context.vault?.length || 0) / 4 : 0
+        context.sources?.hasVault ? (context.vault?.length || 0) / 4 : 0,
       );
 
       return {
@@ -1630,7 +1629,7 @@ export class Orchestrator {
         cost: cost,
       };
     } catch (error) {
-      this.error("[AI] Routing failed", error);
+      this.error('[AI] Routing failed', error);
       throw new Error(`AI routing failed: ${error.message}`);
     }
   }
@@ -1639,11 +1638,7 @@ export class Orchestrator {
 
   async #applyPersonality(response, analysis, mode, context) {
     try {
-      const selection = this.personalitySelector.selectPersonality(
-        analysis,
-        mode,
-        context,
-      );
+      const selection = this.personalitySelector.selectPersonality(analysis, mode, context);
 
       this.log(
         `[PERSONALITY] Selected ${selection.personality} (confidence: ${selection.confidence.toFixed(2)}) - ${selection.reasoning}`,
@@ -1651,7 +1646,7 @@ export class Orchestrator {
 
       let personalityResult;
 
-      if (selection.personality === "eli") {
+      if (selection.personality === 'eli') {
         personalityResult = await this.eliFramework.analyzeAndEnhance(
           response,
           analysis,
@@ -1668,56 +1663,34 @@ export class Orchestrator {
       }
 
       if (personalityResult.reasoningApplied) {
-        this.log(
-          `[PERSONALITY] ${selection.personality.toUpperCase()} analysis applied:`,
-        );
+        this.log(`[PERSONALITY] ${selection.personality.toUpperCase()} analysis applied:`);
 
-        if (
-          selection.personality === "eli" &&
-          personalityResult.analysisApplied
-        ) {
+        if (selection.personality === 'eli' && personalityResult.analysisApplied) {
           const applied = personalityResult.analysisApplied;
           if (applied.risksIdentified?.length > 0) {
-            this.log(
-              `  - Identified ${applied.risksIdentified.length} unmentioned risks`,
-            );
+            this.log(`  - Identified ${applied.risksIdentified.length} unmentioned risks`);
           }
           if (applied.assumptionsChallenged?.length > 0) {
-            this.log(
-              `  - Challenged ${applied.assumptionsChallenged.length} assumptions`,
-            );
+            this.log(`  - Challenged ${applied.assumptionsChallenged.length} assumptions`);
           }
           if (applied.downsideScenarios?.length > 0) {
-            this.log(
-              `  - Modeled ${applied.downsideScenarios.length} downside scenarios`,
-            );
+            this.log(`  - Modeled ${applied.downsideScenarios.length} downside scenarios`);
           }
           if (applied.blindSpotsFound?.length > 0) {
-            this.log(
-              `  - Found ${applied.blindSpotsFound.length} potential blind spots`,
-            );
+            this.log(`  - Found ${applied.blindSpotsFound.length} potential blind spots`);
           }
         }
 
-        if (
-          selection.personality === "roxy" &&
-          personalityResult.analysisApplied
-        ) {
+        if (selection.personality === 'roxy' && personalityResult.analysisApplied) {
           const applied = personalityResult.analysisApplied;
           if (applied.opportunitiesIdentified?.length > 0) {
-            this.log(
-              `  - Identified ${applied.opportunitiesIdentified.length} opportunities`,
-            );
+            this.log(`  - Identified ${applied.opportunitiesIdentified.length} opportunities`);
           }
           if (applied.simplificationsFound?.length > 0) {
-            this.log(
-              `  - Found ${applied.simplificationsFound.length} simpler approaches`,
-            );
+            this.log(`  - Found ${applied.simplificationsFound.length} simpler approaches`);
           }
           if (applied.practicalSteps?.length > 0) {
-            this.log(
-              `  - Added ${applied.practicalSteps.length} practical next steps`,
-            );
+            this.log(`  - Added ${applied.practicalSteps.length} practical next steps`);
           }
         }
       }
@@ -1731,14 +1704,11 @@ export class Orchestrator {
         selectionReasoning: selection.reasoning,
       };
     } catch (error) {
-      this.error(
-        "[PERSONALITY] Personality framework failed, using original response",
-        error,
-      );
+      this.error('[PERSONALITY] Personality framework failed, using original response', error);
 
       return {
         response: response,
-        personality: "none",
+        personality: 'none',
         modificationsCount: 0,
         analysisApplied: {},
         reasoningApplied: false,
@@ -1756,31 +1726,31 @@ export class Orchestrator {
       let adjustedResponse = response;
 
       // FIX #3: Less strict confidence validation - only flag very low confidence
-      if (
-        confidence < 0.5 &&
-        !response.includes("uncertain") &&
-        !response.includes("don't know")
-      ) {
-        issues.push("Low confidence without uncertainty acknowledgment");
+      if (confidence < 0.5 && !response.includes('uncertain') && !response.includes("don't know")) {
+        issues.push('Low confidence without uncertainty acknowledgment');
         adjustedResponse +=
-          "\n\n⚠️ **Confidence Note:** This analysis has moderate certainty based on available information.";
-        adjustments.push("Added uncertainty acknowledgment");
+          '\n\n⚠️ **Confidence Note:** This analysis has moderate certainty based on available information.';
+        adjustments.push('Added uncertainty acknowledgment');
       }
 
       // FIX #3: Less strict business validation - accept more flexible language
-      if (mode === "business_validation") {
+      if (mode === 'business_validation') {
         // Accept broader range of risk-related keywords
-        const hasRiskAnalysis = /risk|downside|worst case|if this fails|concern|challenge|issue|problem|difficulty|obstacle/i.test(
-          response,
-        );
+        const hasRiskAnalysis =
+          /risk|downside|worst case|if this fails|concern|challenge|issue|problem|difficulty|obstacle/i.test(
+            response,
+          );
         // Accept broader range of business impact keywords
-        const hasSurvivalImpact = /survival|runway|cash flow|burn rate|revenue|cost|budget|timeline|deadline|financial/i.test(
-          response,
-        );
+        const hasSurvivalImpact =
+          /survival|runway|cash flow|burn rate|revenue|cost|budget|timeline|deadline|financial/i.test(
+            response,
+          );
 
         // Only flag if BOTH are missing (not each individually)
         if (!hasRiskAnalysis && !hasSurvivalImpact) {
-          issues.push("Business validation response could be more specific about risks and business impact");
+          issues.push(
+            'Business validation response could be more specific about risks and business impact',
+          );
         }
       }
 
@@ -1790,18 +1760,18 @@ export class Orchestrator {
           response,
         );
       if (hasEngagementBait) {
-        issues.push("Contains engagement bait phrases");
-        adjustments.push("Flagged engagement phrases for review");
+        issues.push('Contains engagement bait phrases');
+        adjustments.push('Flagged engagement phrases for review');
       }
 
       // FIX #3: More lenient completeness check
       const isComplete =
         response.length > 50 &&
-        !response.includes("to be continued") &&
-        !response.includes("[incomplete]");
+        !response.includes('to be continued') &&
+        !response.includes('[incomplete]');
 
       if (!isComplete) {
-        issues.push("Response may be incomplete");
+        issues.push('Response may be incomplete');
       }
 
       const compliant = issues.length === 0;
@@ -1813,10 +1783,7 @@ export class Orchestrator {
         adjustments: adjustments,
       };
     } catch (error) {
-      this.error(
-        "[VALIDATION] Compliance check failed, using original response",
-        error,
-      );
+      this.error('[VALIDATION] Compliance check failed, using original response', error);
       return {
         response: response,
         compliant: true,
@@ -1830,11 +1797,11 @@ export class Orchestrator {
 
   async #handleEmergencyFallback(error, requestData) {
     try {
-      this.log("[FALLBACK] Emergency fallback triggered");
+      this.log('[FALLBACK] Emergency fallback triggered');
 
       const fallbackResponse =
         EMERGENCY_FALLBACKS.system_failure ||
-        "I encountered a technical issue processing your request. I want to be honest: rather than provide potentially incorrect information, I need to acknowledge this limitation. Could you try rephrasing your question or breaking it into smaller parts?";
+        'I encountered a technical issue processing your request. I want to be honest: rather than provide potentially incorrect information, I need to acknowledge this limitation. Could you try rephrasing your question or breaking it into smaller parts?';
 
       return {
         success: false,
@@ -1845,10 +1812,10 @@ export class Orchestrator {
           documentTokens: 0,
           vaultTokens: 0,
           totalContextTokens: 0,
-          model: "none",
+          model: 'none',
           confidence: 0.0,
-          personalityApplied: "none",
-          modeEnforced: requestData.mode || "unknown",
+          personalityApplied: 'none',
+          modeEnforced: requestData.mode || 'unknown',
           processingTime: 0,
           cost: {
             inputTokens: 0,
@@ -1860,7 +1827,7 @@ export class Orchestrator {
         error: error.message,
       };
     } catch (fallbackError) {
-      this.error("[FALLBACK] Emergency fallback also failed", fallbackError);
+      this.error('[FALLBACK] Emergency fallback also failed', fallbackError);
 
       return {
         success: false,
@@ -1878,7 +1845,7 @@ export class Orchestrator {
   // ==================== UTILITY METHODS ====================
 
   #buildContextString(context, _mode) {
-    let contextStr = "";
+    let contextStr = '';
 
     // ========== VAULT TAKES ABSOLUTE PRIORITY IN SITE MONKEYS MODE ==========
     if (context.sources?.hasVault && context.vault) {
@@ -1925,7 +1892,7 @@ export class Orchestrator {
   `;
 
       console.log(
-        "[ORCHESTRATOR] ✅ Vault injected as PRIMARY context - documents will be ignored for vault queries",
+        '[ORCHESTRATOR] ✅ Vault injected as PRIMARY context - documents will be ignored for vault queries',
       );
 
       // STOP HERE - Do not add document context when vault is present
@@ -1942,9 +1909,7 @@ export class Orchestrator {
     }
 
     // ========== FALLBACK: NO VAULT - USE DOCUMENTS AND MEMORY ==========
-    console.log(
-      "[ORCHESTRATOR] No vault available - using standard context priority",
-    );
+    console.log('[ORCHESTRATOR] No vault available - using standard context priority');
 
     // FIX #4: Enhanced memory acknowledgment in standard mode
     if (context.sources?.hasMemory && context.memory) {
@@ -1981,7 +1946,7 @@ Core Principles:
 Mode: ${modeConfig?.display_name || mode}
 `;
 
-    if (mode === "business_validation") {
+    if (mode === 'business_validation') {
       prompt += `\nBusiness Validation Requirements:
 - Always analyze downside scenarios and risks
 - Consider cash flow and survival impact
@@ -1990,7 +1955,7 @@ Mode: ${modeConfig?.display_name || mode}
 `;
     }
 
-    if (mode === "site_monkeys") {
+    if (mode === 'site_monkeys') {
       prompt += `\nSite Monkeys Mode:
 - Use vault content as authoritative business guidance
 - Enforce founder protection principles
@@ -2004,11 +1969,11 @@ Mode: ${modeConfig?.display_name || mode}
 
   #calculateCost(model, inputTokens, outputTokens) {
     const rates = {
-      "gpt-4": { input: 0.01, output: 0.03 },
-      "claude-sonnet-4.5": { input: 0.003, output: 0.015 },
+      'gpt-4': { input: 0.01, output: 0.03 },
+      'claude-sonnet-4.5': { input: 0.003, output: 0.015 },
     };
 
-    const rate = rates[model] || rates["gpt-4"];
+    const rate = rates[model] || rates['gpt-4'];
 
     const inputCost = (inputTokens / 1000) * rate.input;
     const outputCost = (outputTokens / 1000) * rate.output;
@@ -2040,17 +2005,14 @@ Mode: ${modeConfig?.display_name || mode}
     const processingTime = Date.now() - startTime;
     const count = this.requestStats.totalRequests;
     this.requestStats.avgProcessingTime =
-      (this.requestStats.avgProcessingTime * (count - 1) + processingTime) /
-      count;
+      (this.requestStats.avgProcessingTime * (count - 1) + processingTime) / count;
   }
 
   getStats() {
     return {
       ...this.requestStats,
-      successRate:
-        this.requestStats.successfulRequests / this.requestStats.totalRequests,
-      fallbackRate:
-        this.requestStats.fallbackUsed / this.requestStats.totalRequests,
+      successRate: this.requestStats.successfulRequests / this.requestStats.totalRequests,
+      fallbackRate: this.requestStats.fallbackUsed / this.requestStats.totalRequests,
       timestamp: new Date().toISOString(),
     };
   }

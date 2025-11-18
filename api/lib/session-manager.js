@@ -16,14 +16,14 @@ class SessionManager {
     this.activeSessions = new Map();
     this.sessionContexts = new Map(); // User context buffers
     this.sessionCaches = new Map(); // Per-session caches
-    
+
     // Standard logging: supports format strings
     this.log = (message, ...args) => {
       const timestamp = new Date().toISOString();
       const formatted = args.length ? util.format(message, ...args) : message;
       console.log(`[${timestamp}] [SESSION-MANAGER] ${formatted}`);
     };
-    
+
     // Error logging: supports format strings, tainted input as argument!
     this.error = (message, ...args) => {
       const timestamp = new Date().toISOString();
@@ -35,12 +35,15 @@ class SessionManager {
         console.error(`[${timestamp}] [SESSION-MANAGER ERROR] ${formatted}`);
       }
     };
-    
+
     // Auto-cleanup inactive sessions every 10 minutes
-    this.cleanupInterval = setInterval(() => {
-      this._cleanupInactiveSessions();
-    }, 10 * 60 * 1000);
-    
+    this.cleanupInterval = setInterval(
+      () => {
+        this._cleanupInactiveSessions();
+      },
+      10 * 60 * 1000,
+    );
+
     this.log('Session manager initialized');
   }
 
@@ -50,10 +53,10 @@ class SessionManager {
   initializeSession(sessionId, userId) {
     try {
       if (this.activeSessions.has(sessionId)) {
-        this.log("Session %s already initialized", sessionId);
+        this.log('Session %s already initialized', sessionId);
         return this.activeSessions.get(sessionId);
       }
-      
+
       const session = {
         sessionId,
         userId,
@@ -64,24 +67,23 @@ class SessionManager {
         resources: {
           documents: new Set(),
           vaultAccess: false,
-          memoryLoaded: false
-        }
+          memoryLoaded: false,
+        },
       };
-      
+
       this.activeSessions.set(sessionId, session);
       this.sessionContexts.set(sessionId, {
         conversationHistory: [],
         documentContext: null,
         vaultContext: null,
-        userPreferences: {}
+        userPreferences: {},
       });
       this.sessionCaches.set(sessionId, new Map());
-      
-      this.log("Session %s initialized for user %s", sessionId, userId);
+
+      this.log('Session %s initialized for user %s', sessionId, userId);
       return session;
-      
     } catch (error) {
-      this.error("Failed to initialize session %s", sessionId, error);
+      this.error('Failed to initialize session %s', sessionId, error);
       return null;
     }
   }
@@ -101,12 +103,14 @@ class SessionManager {
    * Get session context
    */
   getContext(sessionId) {
-    return this.sessionContexts.get(sessionId) || {
-      conversationHistory: [],
-      documentContext: null,
-      vaultContext: null,
-      userPreferences: {}
-    };
+    return (
+      this.sessionContexts.get(sessionId) || {
+        conversationHistory: [],
+        documentContext: null,
+        vaultContext: null,
+        userPreferences: {},
+      }
+    );
   }
 
   /**
@@ -115,7 +119,7 @@ class SessionManager {
   updateContext(sessionId, contextUpdates) {
     try {
       const context = this.getContext(sessionId);
-      
+
       // Merge updates
       if (contextUpdates.conversationHistory) {
         context.conversationHistory = contextUpdates.conversationHistory;
@@ -129,20 +133,19 @@ class SessionManager {
       if (contextUpdates.userPreferences) {
         context.userPreferences = {
           ...context.userPreferences,
-          ...contextUpdates.userPreferences
+          ...contextUpdates.userPreferences,
         };
       }
-      
+
       this.sessionContexts.set(sessionId, context);
-      
+
       // Update session stats
       const session = this.activeSessions.get(sessionId);
       if (session) {
         session.contextSize = this._calculateContextSize(context);
       }
-      
     } catch (error) {
-      this.error("Failed to update context for session %s", sessionId, error);
+      this.error('Failed to update context for session %s', sessionId, error);
     }
   }
 
@@ -160,7 +163,7 @@ class SessionManager {
     const cache = this.getCache(sessionId);
     cache.set(key, {
       value,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
     this.sessionCaches.set(sessionId, cache);
   }
@@ -184,22 +187,21 @@ class SessionManager {
       if (cache) {
         const cacheSize = cache.size;
         cache.clear();
-        this.log("Cache flushed for session %s: %d entries cleared", sessionId, cacheSize);
+        this.log('Cache flushed for session %s: %d entries cleared', sessionId, cacheSize);
       }
-      
+
       // Clear session context
       const context = this.sessionContexts.get(sessionId);
       if (context) {
         context.conversationHistory = [];
         context.documentContext = null;
         context.vaultContext = null;
-        this.log("Context cleared for session %s", sessionId);
+        this.log('Context cleared for session %s', sessionId);
       }
-      
+
       return true;
-      
     } catch (error) {
-      this.error("Failed to flush cache for session %s", sessionId, error);
+      this.error('Failed to flush cache for session %s', sessionId, error);
       return false;
     }
   }
@@ -211,31 +213,30 @@ class SessionManager {
     try {
       const session = this.activeSessions.get(sessionId);
       if (!session) {
-        this.log("Session %s not found for cleanup", sessionId);
+        this.log('Session %s not found for cleanup', sessionId);
         return false;
       }
-      
-      this.log("Ending session %s (reason: %s)", sessionId, reason);
-      
+
+      this.log('Ending session %s (reason: %s)', sessionId, reason);
+
       // Flush cache
       this.flushCache(sessionId);
-      
+
       // Clear document references
       if (session.resources.documents.size > 0) {
-        this.log("Clearing %d document references", session.resources.documents.size);
+        this.log('Clearing %d document references', session.resources.documents.size);
         session.resources.documents.clear();
       }
-      
+
       // Remove from active sessions
       this.activeSessions.delete(sessionId);
       this.sessionContexts.delete(sessionId);
       this.sessionCaches.delete(sessionId);
-      
-      this.log("Session %s cleanup complete", sessionId);
+
+      this.log('Session %s cleanup complete', sessionId);
       return true;
-      
     } catch (error) {
-      this.error("Failed to end session %s", sessionId, error);
+      this.error('Failed to end session %s', sessionId, error);
       return false;
     }
   }
@@ -246,7 +247,7 @@ class SessionManager {
   clearUserContext(userId) {
     try {
       let cleared = 0;
-      
+
       // Find all sessions for this user
       for (const [sessionId, session] of this.activeSessions.entries()) {
         if (session.userId === userId) {
@@ -254,12 +255,11 @@ class SessionManager {
           cleared++;
         }
       }
-      
-      this.log("Cleared context for %d sessions belonging to user %s", cleared, userId);
+
+      this.log('Cleared context for %d sessions belonging to user %s', cleared, userId);
       return cleared;
-      
     } catch (error) {
-      this.error("Failed to clear context for user %s", userId, error);
+      this.error('Failed to clear context for user %s', userId, error);
       return 0;
     }
   }
@@ -272,10 +272,10 @@ class SessionManager {
     if (!session) {
       return null;
     }
-    
+
     const context = this.getContext(sessionId);
     const cache = this.getCache(sessionId);
-    
+
     return {
       sessionId: session.sessionId,
       userId: session.userId,
@@ -288,7 +288,7 @@ class SessionManager {
       conversationLength: context.conversationHistory.length,
       hasDocuments: !!context.documentContext,
       hasVault: !!context.vaultContext,
-      resources: session.resources
+      resources: session.resources,
     };
   }
 
@@ -296,11 +296,11 @@ class SessionManager {
    * Get all active sessions
    */
   getActiveSessions() {
-    return Array.from(this.activeSessions.values()).map(session => ({
+    return Array.from(this.activeSessions.values()).map((session) => ({
       sessionId: session.sessionId,
       userId: session.userId,
       lastActivity: session.lastActivity,
-      requestCount: session.requestCount
+      requestCount: session.requestCount,
     }));
   }
 
@@ -310,12 +310,18 @@ class SessionManager {
   getGlobalStats() {
     return {
       activeSessions: this.activeSessions.size,
-      totalContextSize: Array.from(this.activeSessions.values())
-        .reduce((sum, s) => sum + s.contextSize, 0),
-      totalCacheEntries: Array.from(this.sessionCaches.values())
-        .reduce((sum, cache) => sum + cache.size, 0),
-      totalRequests: Array.from(this.activeSessions.values())
-        .reduce((sum, s) => sum + s.requestCount, 0)
+      totalContextSize: Array.from(this.activeSessions.values()).reduce(
+        (sum, s) => sum + s.contextSize,
+        0,
+      ),
+      totalCacheEntries: Array.from(this.sessionCaches.values()).reduce(
+        (sum, cache) => sum + cache.size,
+        0,
+      ),
+      totalRequests: Array.from(this.activeSessions.values()).reduce(
+        (sum, s) => sum + s.requestCount,
+        0,
+      ),
     };
   }
 
@@ -327,20 +333,19 @@ class SessionManager {
       const now = Date.now();
       const inactiveThreshold = 30 * 60 * 1000; // 30 minutes
       let cleaned = 0;
-      
+
       for (const [sessionId, session] of this.activeSessions.entries()) {
         const inactiveDuration = now - session.lastActivity;
-        
+
         if (inactiveDuration > inactiveThreshold) {
           this.endSession(sessionId, 'inactive_timeout');
           cleaned++;
         }
       }
-      
+
       if (cleaned > 0) {
-        this.log("Cleanup: %d inactive sessions removed", cleaned);
+        this.log('Cleanup: %d inactive sessions removed', cleaned);
       }
-      
     } catch (error) {
       this.error('Session cleanup failed', error);
     }
@@ -351,20 +356,19 @@ class SessionManager {
    */
   _calculateContextSize(context) {
     let size = 0;
-    
+
     if (context.conversationHistory) {
-      size += context.conversationHistory.reduce((sum, msg) => 
-        sum + (msg.content?.length || 0), 0);
+      size += context.conversationHistory.reduce((sum, msg) => sum + (msg.content?.length || 0), 0);
     }
-    
+
     if (context.documentContext) {
       size += context.documentContext.length || 0;
     }
-    
+
     if (context.vaultContext) {
       size += context.vaultContext.length || 0;
     }
-    
+
     return size;
   }
 
@@ -374,19 +378,18 @@ class SessionManager {
   cleanup() {
     try {
       this.log('Cleaning up all sessions...');
-      
+
       // Clear interval
       if (this.cleanupInterval) {
         clearInterval(this.cleanupInterval);
       }
-      
+
       // End all active sessions
       for (const sessionId of this.activeSessions.keys()) {
         this.endSession(sessionId, 'process_exit');
       }
-      
+
       this.log('Session manager cleanup complete');
-      
     } catch (error) {
       this.error('Cleanup failed', error);
     }

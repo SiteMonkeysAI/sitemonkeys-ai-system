@@ -5,18 +5,13 @@
 // ================================================================
 
 export class MemoryIntelligenceBridge {
-  constructor(
-    enhancedIntelligence,
-    aiReasoningEngine,
-    intelligenceOrchestrator,
-  ) {
+  constructor(enhancedIntelligence, aiReasoningEngine, intelligenceOrchestrator) {
     this.enhancedIntelligence = enhancedIntelligence;
     this.aiReasoningEngine = aiReasoningEngine;
     this.intelligenceOrchestrator = intelligenceOrchestrator;
     this.logger = {
       log: (msg) => console.log(`[MEMORY-INTELLIGENCE-BRIDGE] ${msg}`),
-      error: (msg, err) =>
-        console.error(`[MEMORY-INTELLIGENCE-BRIDGE ERROR] ${msg}`, err),
+      error: (msg, err) => console.error(`[MEMORY-INTELLIGENCE-BRIDGE ERROR] ${msg}`, err),
     };
   }
 
@@ -24,22 +19,14 @@ export class MemoryIntelligenceBridge {
   // MAIN INTEGRATION POINT - Bridge memory to existing intelligence
   // ================================================================
 
-  async enhanceWithMemoryContext(
-    query,
-    mode,
-    persistentMemoryResult,
-    vaultContext,
-    personality,
-  ) {
+  async enhanceWithMemoryContext(query, mode, persistentMemoryResult, vaultContext, personality) {
     try {
       this.logger.log(
         `Bridging memory context to existing intelligence engines for ${personality}`,
       );
 
       // Step 1: Transform persistent memory to intelligence-compatible format
-      const intelligenceMemoryContext = this.transformMemoryForIntelligence(
-        persistentMemoryResult,
-      );
+      const intelligenceMemoryContext = this.transformMemoryForIntelligence(persistentMemoryResult);
 
       // Step 2: Determine which intelligence engines to activate based on query
       const intelligenceActivation = this.determineIntelligenceActivation(
@@ -50,10 +37,7 @@ export class MemoryIntelligenceBridge {
 
       // Step 3: Feed memory context to existing enhanced-intelligence.js
       let enhancedResponse = null;
-      if (
-        this.enhancedIntelligence &&
-        intelligenceActivation.useEnhancedIntelligence
-      ) {
+      if (this.enhancedIntelligence && intelligenceActivation.useEnhancedIntelligence) {
         enhancedResponse = await this.activateEnhancedIntelligence(
           query,
           mode,
@@ -77,10 +61,7 @@ export class MemoryIntelligenceBridge {
 
       // Step 5: Feed memory context to existing intelligence-orchestrator.js
       let orchestratorResponse = null;
-      if (
-        this.intelligenceOrchestrator &&
-        intelligenceActivation.useOrchestrator
-      ) {
+      if (this.intelligenceOrchestrator && intelligenceActivation.useOrchestrator) {
         orchestratorResponse = await this.activateIntelligenceOrchestrator(
           query,
           mode,
@@ -99,7 +80,7 @@ export class MemoryIntelligenceBridge {
       );
 
       this.logger.log(
-        `Intelligence engines activated: ${intelligenceActivation.enginesUsed.join(", ")}`,
+        `Intelligence engines activated: ${intelligenceActivation.enginesUsed.join(', ')}`,
       );
 
       return {
@@ -112,7 +93,7 @@ export class MemoryIntelligenceBridge {
         memoryTokensUsed: persistentMemoryResult?.tokenCount || 0,
       };
     } catch (error) {
-      this.logger.error("Memory-intelligence bridge failed:", error);
+      this.logger.error('Memory-intelligence bridge failed:', error);
       return this.createFallbackResponse(query, mode, personality);
     }
   }
@@ -125,8 +106,8 @@ export class MemoryIntelligenceBridge {
     if (!persistentMemoryResult || !persistentMemoryResult.hasMemory) {
       return {
         hasContext: false,
-        memoryContent: "",
-        contextType: "none",
+        memoryContent: '',
+        contextType: 'none',
         relevanceScore: 0,
         tokenCount: 0,
       };
@@ -134,9 +115,7 @@ export class MemoryIntelligenceBridge {
 
     // Extract memory content from persistent memory system
     const memoryContent =
-      persistentMemoryResult.systemPrompt ||
-      persistentMemoryResult.conversationContext ||
-      "";
+      persistentMemoryResult.systemPrompt || persistentMemoryResult.conversationContext || '';
 
     // Transform to format expected by existing intelligence engines
     const transformedContext = {
@@ -165,25 +144,21 @@ export class MemoryIntelligenceBridge {
     // CRITICAL: Clean minimally while preserving memory markers
     return (
       memoryContent
-        .replace(/ONGOING CONVERSATION CONTEXT:/g, "MEMORY CONTEXT:")
-        .replace(/Continue this natural conversation\./g, "")
-        .replace(/Reference previous exchanges when relevant\./g, "")
+        .replace(/ONGOING CONVERSATION CONTEXT:/g, 'MEMORY CONTEXT:')
+        .replace(/Continue this natural conversation\./g, '')
+        .replace(/Reference previous exchanges when relevant\./g, '')
         // PRESERVE: [MEMORY] tags and === boundaries for AI recognition
-        .replace(/\n{3,}/g, "\n\n")
+        .replace(/\n{3,}/g, '\n\n')
         .trim()
     );
   }
 
   determineContextType(memoryContent) {
-    if (/business|strategy|revenue|profit|competition/i.test(memoryContent))
-      return "business";
-    if (/health|wellness|stress|personal/i.test(memoryContent))
-      return "personal";
-    if (/technical|system|code|architecture/i.test(memoryContent))
-      return "technical";
-    if (/relationship|family|social|emotional/i.test(memoryContent))
-      return "social";
-    return "general";
+    if (/business|strategy|revenue|profit|competition/i.test(memoryContent)) return 'business';
+    if (/health|wellness|stress|personal/i.test(memoryContent)) return 'personal';
+    if (/technical|system|code|architecture/i.test(memoryContent)) return 'technical';
+    if (/relationship|family|social|emotional/i.test(memoryContent)) return 'social';
+    return 'general';
   }
 
   calculateMemoryRelevance(memoryContent) {
@@ -205,16 +180,12 @@ export class MemoryIntelligenceBridge {
   extractBusinessContext(memoryContent) {
     const businessIndicators = [];
 
-    if (/revenue|income|sales/i.test(memoryContent))
-      businessIndicators.push("revenue_context");
-    if (/cost|expense|budget/i.test(memoryContent))
-      businessIndicators.push("cost_context");
+    if (/revenue|income|sales/i.test(memoryContent)) businessIndicators.push('revenue_context');
+    if (/cost|expense|budget/i.test(memoryContent)) businessIndicators.push('cost_context');
     if (/competition|competitor|market/i.test(memoryContent))
-      businessIndicators.push("competitive_context");
-    if (/strategy|plan|goal/i.test(memoryContent))
-      businessIndicators.push("strategic_context");
-    if (/risk|threat|opportunity/i.test(memoryContent))
-      businessIndicators.push("risk_context");
+      businessIndicators.push('competitive_context');
+    if (/strategy|plan|goal/i.test(memoryContent)) businessIndicators.push('strategic_context');
+    if (/risk|threat|opportunity/i.test(memoryContent)) businessIndicators.push('risk_context');
 
     return {
       indicators: businessIndicators,
@@ -226,14 +197,12 @@ export class MemoryIntelligenceBridge {
   extractStrategicContext(memoryContent) {
     const strategicElements = [];
 
-    if (/decision|choice|option/i.test(memoryContent))
-      strategicElements.push("decision_point");
+    if (/decision|choice|option/i.test(memoryContent)) strategicElements.push('decision_point');
     if (/timeline|deadline|schedule/i.test(memoryContent))
-      strategicElements.push("timing_constraint");
+      strategicElements.push('timing_constraint');
     if (/resource|budget|capacity/i.test(memoryContent))
-      strategicElements.push("resource_constraint");
-    if (/goal|objective|target/i.test(memoryContent))
-      strategicElements.push("objective_context");
+      strategicElements.push('resource_constraint');
+    if (/goal|objective|target/i.test(memoryContent)) strategicElements.push('objective_context');
 
     return {
       elements: strategicElements,
@@ -243,8 +212,7 @@ export class MemoryIntelligenceBridge {
   }
 
   extractQuantitativeData(memoryContent) {
-    const numbers =
-      memoryContent.match(/\$?[\d,]+(?:\.\d+)?(?:%|\s*percent)?/g) || [];
+    const numbers = memoryContent.match(/\$?[\d,]+(?:\.\d+)?(?:%|\s*percent)?/g) || [];
     const financialData = memoryContent.match(/\$[\d,]+(?:\.\d+)?/g) || [];
     const percentages = memoryContent.match(/\d+(?:\.\d+)?%/g) || [];
 
@@ -254,30 +222,25 @@ export class MemoryIntelligenceBridge {
       financialDataPoints: financialData.length,
       percentageData: percentages.length,
       numbers: numbers,
-      quantitativeComplexity:
-        numbers.length > 3 ? "high" : numbers.length > 1 ? "medium" : "low",
+      quantitativeComplexity: numbers.length > 3 ? 'high' : numbers.length > 1 ? 'medium' : 'low',
     };
   }
 
   extractEmotionalContext(memoryContent) {
     const emotionalIndicators = [];
 
-    if (/stress|worried|anxious|pressure/i.test(memoryContent))
-      emotionalIndicators.push("stress");
+    if (/stress|worried|anxious|pressure/i.test(memoryContent)) emotionalIndicators.push('stress');
     if (/excited|enthusiastic|optimistic/i.test(memoryContent))
-      emotionalIndicators.push("positive");
-    if (/frustrated|angry|disappointed/i.test(memoryContent))
-      emotionalIndicators.push("negative");
-    if (/uncertain|confused|unclear/i.test(memoryContent))
-      emotionalIndicators.push("uncertainty");
-    if (/confident|sure|determined/i.test(memoryContent))
-      emotionalIndicators.push("confidence");
+      emotionalIndicators.push('positive');
+    if (/frustrated|angry|disappointed/i.test(memoryContent)) emotionalIndicators.push('negative');
+    if (/uncertain|confused|unclear/i.test(memoryContent)) emotionalIndicators.push('uncertainty');
+    if (/confident|sure|determined/i.test(memoryContent)) emotionalIndicators.push('confidence');
 
     return {
       indicators: emotionalIndicators,
       hasEmotionalContext: emotionalIndicators.length > 0,
       emotionalComplexity: emotionalIndicators.length,
-      primaryEmotion: emotionalIndicators[0] || "neutral",
+      primaryEmotion: emotionalIndicators[0] || 'neutral',
     };
   }
 
@@ -294,15 +257,9 @@ export class MemoryIntelligenceBridge {
         decision_frameworks: this.extractDecisionFrameworks(memoryContent),
       },
       context: {
-        business_critical: /business|strategy|revenue|survival/i.test(
-          memoryContent,
-        ),
-        multiple_stakeholders: /team|customer|client|partner/i.test(
-          memoryContent,
-        ),
-        competitive_pressure: /competition|competitor|market/i.test(
-          memoryContent,
-        ),
+        business_critical: /business|strategy|revenue|survival/i.test(memoryContent),
+        multiple_stakeholders: /team|customer|client|partner/i.test(memoryContent),
+        competitive_pressure: /competition|competitor|market/i.test(memoryContent),
         time_pressure: /deadline|urgent|timeline|asap/i.test(memoryContent),
       },
       memoryContext: memoryContent,
@@ -345,29 +302,29 @@ export class MemoryIntelligenceBridge {
     // Always use enhanced intelligence for complex queries
     if (this.isComplexQuery(query, memoryContext)) {
       activation.useEnhancedIntelligence = true;
-      activation.enginesUsed.push("enhanced-intelligence");
+      activation.enginesUsed.push('enhanced-intelligence');
     }
 
     // Use reasoning engine for business and strategic queries
     if (
-      mode === "business_validation" ||
-      mode === "site_monkeys" ||
+      mode === 'business_validation' ||
+      mode === 'site_monkeys' ||
       this.isStrategicQuery(query, memoryContext)
     ) {
       activation.useReasoningEngine = true;
-      activation.enginesUsed.push("ai-reasoning-engine");
+      activation.enginesUsed.push('ai-reasoning-engine');
     }
 
     // Use orchestrator for multi-modal or extremely complex scenarios
     if (this.requiresOrchestration(query, memoryContext)) {
       activation.useOrchestrator = true;
-      activation.enginesUsed.push("intelligence-orchestrator");
+      activation.enginesUsed.push('intelligence-orchestrator');
     }
 
     // Default to enhanced intelligence if no specific engines triggered
     if (activation.enginesUsed.length === 0) {
       activation.useEnhancedIntelligence = true;
-      activation.enginesUsed.push("enhanced-intelligence");
+      activation.enginesUsed.push('enhanced-intelligence');
     }
 
     return activation;
@@ -383,9 +340,7 @@ export class MemoryIntelligenceBridge {
 
   isStrategicQuery(query, memoryContext) {
     return (
-      /business|strategy|revenue|profit|competition|market|growth|risk/i.test(
-        query,
-      ) ||
+      /business|strategy|revenue|profit|competition|market|growth|risk/i.test(query) ||
       memoryContext.businessContext?.hasBusinessContext ||
       memoryContext.strategicContext?.hasStrategicContext
     );
@@ -394,8 +349,8 @@ export class MemoryIntelligenceBridge {
   requiresOrchestration(query, memoryContext) {
     return (
       /complex|sophisticated|comprehensive|multi|across/i.test(query) ||
-      memoryContext.contextType === "technical" ||
-      memoryContext.quantitativeContext?.quantitativeComplexity === "high"
+      memoryContext.contextType === 'technical' ||
+      memoryContext.quantitativeContext?.quantitativeComplexity === 'high'
     );
   }
 
@@ -403,16 +358,10 @@ export class MemoryIntelligenceBridge {
   // EXISTING INTELLIGENCE ENGINE ACTIVATION
   // ================================================================
 
-  async activateEnhancedIntelligence(
-    query,
-    mode,
-    memoryContext,
-    vaultContext,
-    _activation,
-  ) {
+  async activateEnhancedIntelligence(query, mode, memoryContext, vaultContext, _activation) {
     try {
       // Call existing enhanced-intelligence.js with properly formatted memory
-      const baseResponse = "Processing with enhanced intelligence...";
+      const baseResponse = 'Processing with enhanced intelligence...';
 
       const enhancement = await this.enhancedIntelligence.enhanceResponse(
         baseResponse,
@@ -424,25 +373,19 @@ export class MemoryIntelligenceBridge {
       );
 
       return {
-        engine: "enhanced-intelligence",
+        engine: 'enhanced-intelligence',
         response: enhancement.enhancedResponse,
         reasoning: enhancement.reasoningChain,
         confidence: enhancement.finalConfidence,
         intelligenceApplied: enhancement.intelligenceApplied,
       };
     } catch (error) {
-      this.logger.error("Enhanced intelligence activation failed:", error);
+      this.logger.error('Enhanced intelligence activation failed:', error);
       return null;
     }
   }
 
-  async activateReasoningEngine(
-    query,
-    mode,
-    memoryContext,
-    _vaultContext,
-    _activation,
-  ) {
+  async activateReasoningEngine(query, mode, memoryContext, _vaultContext, _activation) {
     try {
       // Call existing ai-reasoning-engine.js with properly formatted context
       const reasoningContext = {
@@ -450,29 +393,22 @@ export class MemoryIntelligenceBridge {
         ...memoryContext.memoryForReasoning,
       };
 
-      const reasoning =
-        await this.aiReasoningEngine.processQuery(reasoningContext);
+      const reasoning = await this.aiReasoningEngine.processQuery(reasoningContext);
 
       return {
-        engine: "ai-reasoning-engine",
+        engine: 'ai-reasoning-engine',
         response: reasoning.primary_insight,
         reasoning: reasoning.reasoning_chain,
         confidence: reasoning.confidence,
         strategicInsights: reasoning.strategic_insights,
       };
     } catch (error) {
-      this.logger.error("AI reasoning engine activation failed:", error);
+      this.logger.error('AI reasoning engine activation failed:', error);
       return null;
     }
   }
 
-  async activateIntelligenceOrchestrator(
-    query,
-    mode,
-    memoryContext,
-    vaultContext,
-    _activation,
-  ) {
+  async activateIntelligenceOrchestrator(query, mode, memoryContext, vaultContext, _activation) {
     try {
       // Call existing intelligence-orchestrator.js with memory context
       const context = {
@@ -491,14 +427,14 @@ export class MemoryIntelligenceBridge {
         );
 
       return {
-        engine: "intelligence-orchestrator",
+        engine: 'intelligence-orchestrator',
         response: orchestration.response,
         reasoning: orchestration.reasoning,
         confidence: orchestration.confidence,
         extraordinaryIntelligence: true,
       };
     } catch (error) {
-      this.logger.error("Intelligence orchestrator activation failed:", error);
+      this.logger.error('Intelligence orchestrator activation failed:', error);
       return null;
     }
   }
@@ -513,11 +449,9 @@ export class MemoryIntelligenceBridge {
     orchestratorResponse,
     _personality,
   ) {
-    const responses = [
-      enhancedResponse,
-      reasoningResponse,
-      orchestratorResponse,
-    ].filter((r) => r !== null);
+    const responses = [enhancedResponse, reasoningResponse, orchestratorResponse].filter(
+      (r) => r !== null,
+    );
 
     if (responses.length === 0) {
       return this.createFallbackResponse();
@@ -547,7 +481,7 @@ export class MemoryIntelligenceBridge {
     return {
       intelligenceEnhanced: false,
       memoryIntegrated: false,
-      enginesActivated: ["fallback"],
+      enginesActivated: ['fallback'],
       response: "I'll provide my best analysis based on the available context.",
       reasoning: [],
       confidence: 0.5,
@@ -564,22 +498,22 @@ export class MemoryIntelligenceBridge {
 
     if (/survival|sustainability/i.test(content)) {
       principles.push({
-        principle: "Business Survival",
-        application: "Prioritize decisions that ensure business continuity",
+        principle: 'Business Survival',
+        application: 'Prioritize decisions that ensure business continuity',
       });
     }
 
     if (/profit|profitability/i.test(content)) {
       principles.push({
-        principle: "Profitability Focus",
-        application: "Evaluate decisions based on profit impact",
+        principle: 'Profitability Focus',
+        application: 'Evaluate decisions based on profit impact',
       });
     }
 
     if (/customer|client/i.test(content)) {
       principles.push({
-        principle: "Customer Value",
-        application: "Consider customer impact in strategic decisions",
+        principle: 'Customer Value',
+        application: 'Consider customer impact in strategic decisions',
       });
     }
 
@@ -591,17 +525,17 @@ export class MemoryIntelligenceBridge {
 
     if (/market|competition/i.test(content)) {
       intelligence.push({
-        domain: "market_analysis",
-        wisdom: "Market dynamics and competitive positioning insights",
-        application_pattern: "competitive_analysis",
+        domain: 'market_analysis',
+        wisdom: 'Market dynamics and competitive positioning insights',
+        application_pattern: 'competitive_analysis',
       });
     }
 
     if (/financial|revenue|cost/i.test(content)) {
       intelligence.push({
-        domain: "financial_analysis",
-        wisdom: "Financial modeling and cash flow insights",
-        application_pattern: "financial_modeling",
+        domain: 'financial_analysis',
+        wisdom: 'Financial modeling and cash flow insights',
+        application_pattern: 'financial_modeling',
       });
     }
 
@@ -613,13 +547,8 @@ export class MemoryIntelligenceBridge {
 
     if (/decision|choice|option/i.test(content)) {
       frameworks.push({
-        name: "Strategic Decision Framework",
-        sequence: [
-          "Assess Situation",
-          "Identify Options",
-          "Evaluate Risks",
-          "Execute Decision",
-        ],
+        name: 'Strategic Decision Framework',
+        sequence: ['Assess Situation', 'Identify Options', 'Evaluate Risks', 'Execute Decision'],
       });
     }
 
@@ -629,12 +558,11 @@ export class MemoryIntelligenceBridge {
   identifyDomains(content) {
     const domains = [];
 
-    if (/business|strategy|revenue/i.test(content)) domains.push("business");
-    if (/health|wellness|stress/i.test(content)) domains.push("health");
-    if (/technology|system|technical/i.test(content))
-      domains.push("technology");
-    if (/relationship|family|social/i.test(content)) domains.push("social");
-    if (/finance|money|budget/i.test(content)) domains.push("finance");
+    if (/business|strategy|revenue/i.test(content)) domains.push('business');
+    if (/health|wellness|stress/i.test(content)) domains.push('health');
+    if (/technology|system|technical/i.test(content)) domains.push('technology');
+    if (/relationship|family|social/i.test(content)) domains.push('social');
+    if (/finance|money|budget/i.test(content)) domains.push('finance');
 
     return domains;
   }
@@ -643,11 +571,11 @@ export class MemoryIntelligenceBridge {
     const connections = [];
 
     if (/stress.*work|work.*stress/i.test(content)) {
-      connections.push({ from: "health", to: "business", type: "impact" });
+      connections.push({ from: 'health', to: 'business', type: 'impact' });
     }
 
     if (/budget.*family|family.*budget/i.test(content)) {
-      connections.push({ from: "finance", to: "social", type: "constraint" });
+      connections.push({ from: 'finance', to: 'social', type: 'constraint' });
     }
 
     return connections;
@@ -655,41 +583,36 @@ export class MemoryIntelligenceBridge {
 
   assessCrossDomainComplexity(content) {
     const domains = this.identifyDomains(content);
-    return domains.length > 2 ? "high" : domains.length > 1 ? "medium" : "low";
+    return domains.length > 2 ? 'high' : domains.length > 1 ? 'medium' : 'low';
   }
 
   extractCurrentSituation(content) {
     // Extract current state from memory content
-    const situationKeywords =
-      content.match(/currently|now|present|today|situation/gi) || [];
-    return situationKeywords.length > 0
-      ? "dynamic_situation"
-      : "stable_situation";
+    const situationKeywords = content.match(/currently|now|present|today|situation/gi) || [];
+    return situationKeywords.length > 0 ? 'dynamic_situation' : 'stable_situation';
   }
 
   extractConstraints(content) {
     const constraints = [];
-    if (/budget|cost|money/i.test(content)) constraints.push("financial");
-    if (/time|deadline|schedule/i.test(content)) constraints.push("temporal");
-    if (/resource|capacity|bandwidth/i.test(content))
-      constraints.push("resource");
+    if (/budget|cost|money/i.test(content)) constraints.push('financial');
+    if (/time|deadline|schedule/i.test(content)) constraints.push('temporal');
+    if (/resource|capacity|bandwidth/i.test(content)) constraints.push('resource');
     return constraints;
   }
 
   extractOpportunities(content) {
     const opportunities = [];
-    if (/opportunity|chance|potential/i.test(content))
-      opportunities.push("growth");
-    if (/market|customer|client/i.test(content)) opportunities.push("market");
-    if (/innovation|new|novel/i.test(content)) opportunities.push("innovation");
+    if (/opportunity|chance|potential/i.test(content)) opportunities.push('growth');
+    if (/market|customer|client/i.test(content)) opportunities.push('market');
+    if (/innovation|new|novel/i.test(content)) opportunities.push('innovation');
     return opportunities;
   }
 
   extractRisks(content) {
     const risks = [];
-    if (/risk|threat|danger/i.test(content)) risks.push("strategic");
-    if (/competition|competitor/i.test(content)) risks.push("competitive");
-    if (/financial|budget|cost/i.test(content)) risks.push("financial");
+    if (/risk|threat|danger/i.test(content)) risks.push('strategic');
+    if (/competition|competitor/i.test(content)) risks.push('competitive');
+    if (/financial|budget|cost/i.test(content)) risks.push('financial');
     return risks;
   }
 }
