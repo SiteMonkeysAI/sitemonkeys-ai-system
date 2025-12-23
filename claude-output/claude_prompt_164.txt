@@ -1,0 +1,41 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #164: System Alignment Audit - Verify CLAUDE.md Understanding
+
+Issue Description:
+@claude claude-fix
+
+Read the CLAUDE.md file in the root of this repository first. This file contains the complete system philosophy and architecture.
+
+After reading it, perform the following audit:
+
+1. **Philosophy Alignment Check**: Read `/api/core/orchestrator.js` and verify the enforcement chain is intact. List each validator being called and confirm it matches what CLAUDE.md describes.
+
+2. **Memory System Check**: Read `/api/categories/memory/internal/intelligence.js` and `/api/categories/memory/internal/persistent_memory.js`. Identify any issues with memory routing or retrieval that could cause the known issue of "memory retrieved but not recognized by personalities."
+
+3. **Mode Isolation Check**: Verify that vault content in Site Monkeys mode is properly isolated from persistent memory. Trace the code path.
+
+4. **Report your findings** in this format:
+   - What's working as documented
+   - What's broken or misaligned
+   - Specific file:line references for any issues found
+
+Do not make any changes. This is diagnostic only. Show me you understand the system before touching anything.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
