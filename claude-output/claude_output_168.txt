@@ -1,0 +1,252 @@
+I see - the git add commands require approval. Let me provide a comprehensive summary instead:
+
+---SUMMARY---
+
+# Issue #168: Fix Memory Injection Contract + Enforce Sacred Order
+
+## Problem Identified
+
+The diagnostic from Issue #164 revealed that memory IS being retrieved but the AI claims ignorance anyway. This is a **contract violation** in the enforcement pipeline where the AI says "I don't have that information" despite having memory context with the answer.
+
+## Root Cause
+
+The system follows the sacred order: **RETRIEVE → INJECT → GENERATE → VALIDATE**
+
+Memory was being:
+1. ✓ **RETRIEVED** (orchestrator.js:549-651) - Successfully fetching from database
+2. ✓ **INJECTED** (orchestrator.js:1880-1967) - Successfully added to prompt
+3. ✓ **GENERATED** (orchestrator.js:1449-1636) - AI generates response
+4. ✗ **VALIDATE** - **NO VALIDATOR** was checking if AI ignored the memory
+
+The enforcement chain (orchestrator.js:110-276) had 6 validators but NONE checked for memory usage violations.
+
+## Solution Implemented
+
+### 1. Created Memory Usage Enforcer Validator
+
+**File**: `api/lib/validators/memory-usage-enforcer.js` (NEW - 137 lines)
+
+**Key Features**:
+- Singleton class pattern (matching existing validators)
+- Detects 18+ ignorance phrases:
+  - "i don't have information"
+  - "i don't know"  
+  - "you haven't told me"
+  - "i'm not aware"
+  - "i don't recall"
+  - etc.
+- Only validates when `context.sources.hasMemory === true` AND `context.tokenBreakdown.memory > 0`
+- Appends correction when violation detected:
+  ```
+  [System Correction]
+  I apologize - I need to correct my previous statement. I DO have information 
+  from our previous conversations (X relevant memories, ~Y tokens of context).
+  Let me re-examine the memory context...
+  ```
+- Tracks violation history for diagnostics
+- Graceful error handling
+
+### 2. Integrated into Orchestrator Enforcement Chain
+
+**File**: `api/core/orchestrator.js` (MODIFIED)
+
+**Changes**:
+- **Line 26**: Added import `import { memoryUsageEnforcer } from "../lib/validators/memory-usage-enforcer.js";`
+- **Line 108-111**: Updated comment to reflect 7-step chain (was 6-step)
+- **Lines 177-200**: Added STEP 3: Memory Usage Enforcer between Initiative Enforcer and Political Guardrails
+  
+**New 7-Step Enforcement Chain**:
+1. Drift Watcher
+2. Initiative Enforcer  
+3. **Memory Usage Enforcer** ← NEW
+4. Political Guardrails
+5. Product Validation
+6. Founder Protection
+7. Vault Compliance
+
+**Why Step 3?**: Memory usage is a foundational contract (like truth-first). It must be enforced early, before content-specific validators run.
+
+### 3. Enhanced Server-Side Telemetry
+
+**File**: `api/core/orchestrator.js` (MODIFIED)
+
+**Added Logging** (server-log only, not in response JSON):
+
+- **Lines 330-334**: Memory injection verification
+  ```javascript
+  if (memoryContext.hasMemory) {
+    this.log(`[MEMORY] ✓ Memory WILL be injected into prompt (${tokens} tokens)`);
+  } else {
+    this.log(`[MEMORY] ✗ No memory to inject (first conversation or no relevant context)`);
+  }
+  ```
+
+- **Lines 432-437**: Enforcement override details
+  ```javascript
+  enforcedResult.compliance_metadata.overrides.forEach((override) => {
+    this.log(`[ENFORCEMENT] - ${override.module}: ${override.reason || 'applied'}`);
+    if (override.module === 'memory_usage_enforcer') {
+      this.log(`[ENFORCEMENT] ⚠️  MEMORY VIOLATION: AI claimed ignorance despite ${override.memoryTokens} tokens`);
+    }
+  });
+  ```
+
+## How It Works (Before vs After)
+
+### Before This Fix:
+```
+User: "What are my kids' names?"
+[System retrieves: "User has kids named Sarah and Jake" - 50 tokens]
+[System injects into prompt]
+AI: "I don't have that information about your kids."
+[Response sent to user - VIOLATION UNDETECTED]
+```
+
+### After This Fix:
+```
+User: "What are my kids' names?"
+[System retrieves: "User has kids named Sarah and Jake" - 50 tokens]
+[System injects into prompt]
+AI: "I don't have that information about your kids."
+[ENFORCER DETECTS VIOLATION - phrase "i don't have that information"]
+[ENFORCER APPENDS CORRECTION]
+AI Final: "I don't have that information about your kids.
+
+---
+
+**[System Correction]**
+
+I apologize - I need to correct my previous statement. I DO have information 
+from our previous conversations (5 relevant memories, ~50 tokens of context).
+
+Let me re-examine the memory context I have available and provide a more 
+accurate response based on what you've shared with me previously."
+```
+
+### Server Logs:
+```
+[MEMORY] Retrieved 50 tokens from 1 memories
+[MEMORY] ✓ Memory WILL be injected into prompt (50 tokens)
+[ENFORCEMENT] Applied 7 modules
+[ENFORCEMENT] 1 overrides applied
+[ENFORCEMENT] - memory_usage_enforcer: claimed_ignorance_with_memory
+[ENFORCEMENT] ⚠️  MEMORY VIOLATION: AI claimed ignorance despite 50 tokens of memory
+```
+
+## Files Changed
+
+1. **`api/lib/validators/memory-usage-enforcer.js`** - NEW FILE (137 lines)
+   - Memory usage enforcement validator
+   - Singleton pattern matching other validators
+   - Detects ignorance phrases when memory exists
+
+2. **`api/core/orchestrator.js`** - MODIFIED (50 lines changed)
+   - Added memory-usage-enforcer import (line 26)
+   - Updated enforcement chain to 7 steps (line 108-111)
+   - Integrated enforcer as step 3 (lines 177-200)
+   - Enhanced telemetry logging (lines 330-334, 432-437)
+
+## Success Criteria
+
+The fix is successful when:
+
+1. ✓ Memory retrieval shows `tokens > 0`
+2. ✓ Memory is injected into prompt (logs confirm with "✓ Memory WILL be injected")
+3. ✓ AI claims ignorance → Enforcer detects violation
+4. ✓ Correction is appended to response  
+5. ✓ Server logs show "⚠️  MEMORY VIOLATION" alert
+6. ✓ User receives corrected response acknowledging memory exists
+
+## Compliance with CLAUDE.md
+
+This implementation strictly follows CLAUDE.md directives:
+
+- ✓ **Sacred Order Preserved**: RETRIEVE → INJECT → GENERATE → VALIDATE (line 110 comment)
+- ✓ **No Response JSON Schema Changes**: Telemetry is server-log only (lines 330-337, 432-437)
+- ✓ **Memory Must Not Be Dropped**: Enforcer ensures memory acknowledgment when provided
+- ✓ **Minimal Surgical Changes**: Only touched 2 files, followed existing patterns
+- ✓ **Existing Code Patterns**: Singleton validator matching drift-watcher.js pattern
+- ✓ **Zero Tolerance for Fabrication**: A claim of ignorance when memory exists is treated as a contract violation
+
+## Technical Implementation Details
+
+### Validator Pattern (Following drift-watcher.js):
+```javascript
+class MemoryUsageEnforcer {
+  constructor() {
+    this.violationHistory = [];
+    this.maxHistorySize = 100;
+  }
+
+  async enforce({ response, context }) {
+    // Check if memory was provided
+    // Detect ignorance phrases
+    // Return violation result
+  }
+}
+
+const memoryUsageEnforcer = new MemoryUsageEnforcer();
+export { memoryUsageEnforcer, IGNORANCE_PHRASES };
+```
+
+### Integration Pattern (Following existing enforcers):
+```javascript
+// STEP 3: MEMORY USAGE ENFORCER
+try {
+  const memoryResult = await memoryUsageEnforcer.enforce({
+    response: enforcedResponse,
+    context: context,
+  });
+
+  if (memoryResult.modified) {
+    enforcedResponse = memoryResult.response;
+    complianceMetadata.overrides.push({
+      module: "memory_usage_enforcer",
+      reason: memoryResult.reason,
+      matchedPhrase: memoryResult.matchedPhrase,
+      memoryTokens: memoryResult.memoryTokens,
+    });
+  }
+
+  complianceMetadata.enforcement_applied.push("memory_usage_enforcer");
+} catch (error) {
+  this.error("Memory usage enforcer failed:", error);
+  complianceMetadata.warnings.push(
+    "memory_usage_enforcer_error: " + error.message,
+  );
+}
+```
+
+## Next Steps
+
+To complete deployment:
+
+1. Stage the files:
+   ```bash
+   git add api/lib/validators/memory-usage-enforcer.js
+   git add api/core/orchestrator.js
+   ```
+
+2. Commit with message describing the fix
+
+3. Push to repository for Railway auto-deploy
+
+4. Monitor Railway logs for:
+   - `[MEMORY] ✓ Memory WILL be injected` confirmations
+   - `[ENFORCEMENT] ⚠️  MEMORY VIOLATION` alerts
+   - Verify violations are caught and corrected
+
+5. Test with real user scenarios:
+   - Store information in memory (e.g., "My kids are Sarah and Jake")
+   - Ask questions that should use that memory
+   - Verify AI either:
+     - Uses the memory correctly (no violation), OR
+     - Gets caught and corrected (violation detected and fixed)
+
+## Impact
+
+This fix closes the contract violation gap where memory was retrieved and injected but the AI could still claim ignorance without consequence. The system now enforces the sacred principle: **if you have the information, you MUST acknowledge it**.
+
+This is a critical fix for trust - a caring family member who has been told information and pretends not to know is not forgetful, it's a betrayal. The memory usage enforcer ensures this can never happen silently again.
+
+---END SUMMARY---

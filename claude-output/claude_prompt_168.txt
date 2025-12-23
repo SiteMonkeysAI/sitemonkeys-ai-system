@@ -1,0 +1,160 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #168: Fix Memory Injection Contract + Enforce Sacred Order
+
+Issue Description:
+# Issue: Fix Memory Injection Contract + Enforce Sacred Order
+
+## Priority: HIGH
+
+## Context
+
+The diagnostic (Issue #164) identified that memory IS being retrieved but the AI claims ignorance anyway. This is a contract violation in the enforcement pipeline.
+
+CLAUDE.md now specifies a sacred enforcement order that must be verified and enforced:
+
+```
+RETRIEVE → INJECT → GENERATE → VALIDATE
+```
+
+## What Needs to Be Done
+
+### Step 1: Verify Current Flow
+
+Before changing anything, trace the actual code path:
+
+1. Search for memory retrieval (`persistent_memory`, `getMemories`, `retrieveMemories`)
+2. Search for context injection (where memory gets added to the prompt)
+3. Search for AI generation (`openai`, `anthropic`, `completion`, `chat`)
+4. Search for validation (`validator`, `enforcer`, `linter`)
+
+Document what you find. If the order is already correct, note that.
+
+### Step 2: Verify Memory is Not Dropped
+
+Trace `memory_context` (or equivalent) from retrieval to injection:
+
+- Where is it retrieved?
+- Where is it formatted?
+- Where is it injected into the prompt?
+- Is there ANY code path where it could be retrieved but not injected?
+
+If there's a gap, that's the bug.
+
+### Step 3: Implement Memory-Usage-Enforcer
+
+Create a validator that runs in the VALIDATE step (after generation):
+
+**Location:** Find existing validators (search for `modeLinter`, `politicalGuardrails`) and put it in the same directory.
+
+**Logic:**
+```javascript
+// Pseudocode - adapt to actual patterns in codebase
+export function enforceMemoryUsage(response, context) {
+  // Only check if memory was actually provided
+  if (!context.memoryProvided || context.memoryTokens === 0) {
+    return { violation: false };
+  }
+  
+  // Detect ignorance phrases
+  const ignorancePhrases = [
+    "I don't have information",
+    "I don't have any information",
+    "I don't know",
+    "you haven't told me",
+    "I'm not aware",
+    "I don't recall",
+    "you didn't mention",
+    "I have no record",
+    "I don't see any"
+  ];
+  
+  const responseLower = response.toLowerCase();
+  const claimsIgnorance = ignorancePhrases.some(phrase => 
+    responseLower.includes(phrase.toLowerCase())
+  );
+  
+  if (claimsIgnorance) {
+    return {
+      violation: true,
+      severity: 'high',
+      reason: 'AI claimed ignorance when memory context was provided',
+      action: 'rewrite_with_memory_reference'
+    };
+  }
+  
+  return { violation: false };
+}
+```
+
+**Integration:**
+- Add to the enforcement chain AFTER generation
+- If violation detected, either:
+  - Append reminder to response: "Note: I do have information about you from our previous conversations..."
+  - OR trigger a regeneration with stronger prompt: "You MUST use the memory context provided. Do not claim you don't have information when it's in your context."
+
+### Step 4: Add Server-Side Telemetry
+
+In the orchestrator (or equivalent), log:
+
+```javascript
+console.log('[MEMORY] Retrieved:', memoryTokens, 'tokens');
+console.log('[MEMORY] Injected:', injectedIntoPrompt ? 'yes' : 'NO - BUG');
+console.log('[ENFORCE] Memory-usage check:', violation ? 'FAILED' : 'passed');
+```
+
+This is server-log only. Do NOT add to response JSON.
+
+## Constraints
+
+From CLAUDE.md:
+
+- **Do not change response JSON schema** - frontend depends on it
+- **Do not drop memory_context** once retrieved
+- **Telemetry is server-log only** unless debug flag enabled
+- **Follow existing code patterns** - look at how other validators are structured
+- **Minimal surgical changes** - fix this issue, don't refactor
+
+## Success Criteria
+
+After this fix:
+
+1. When memory contains "kids are Sarah and Jake"
+2. And user asks "What are my kids' names?"
+3. The AI MUST respond with the names
+4. It must NOT say "I don't have that information"
+
+## Files to Search (use grep, don't assume paths)
+
+- Memory retrieval: `persistent_memory`, `getMemories`, `retrieveMemories`
+- Context building: `buildPrompt`, `buildContext`, `injectMemory`
+- Orchestrator: `orchestrator`, `processMessage`, `processWithEliAndRoxy`
+- Existing validators: `modeLinter`, `politicalGuardrails`, `productValidation`
+
+## Output
+
+Create a PR with:
+1. The memory-usage-enforcer implementation
+2. Any fixes needed to ensure memory isn't dropped
+3. Server-side logging for memory injection verification
+4. Brief notes on what you found in the codebase
+
+If you find the flow is already correct and the bug is elsewhere, document that finding instead of forcing changes.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
