@@ -1,0 +1,60 @@
+Perfect! Let me create a summary of the changes:
+
+---SUMMARY---
+
+I successfully implemented the browser-based memory test endpoint `/api/test/memory-check` as requested in issue #180. Here's what was done:
+
+## Files Modified:
+
+### server.js
+
+**Changes made:**
+
+1. **Added the memory test endpoint (lines 410-515):**
+   - Created `GET /api/test/memory-check` route around line 410 (after the main chat endpoint)
+   - Implements security check: only accessible when `DEPLOYMENT_TYPE=private` or `DEBUG_MODE=true`
+   - Tests three key memory operations:
+     - **Test 1:** Store a unique tripwire phrase (ZEBRA-TEST-{timestamp})
+     - **Test 2:** Recall the tripwire phrase from memory
+     - **Test 3:** Check for false ignorance claims (phrases like "don't have", "no memory", etc.)
+   - Returns styled HTML results page with:
+     - Test run ID and user ID
+     - Pass/fail status for each test
+     - Detailed test results in JSON format
+     - Visual styling with color-coded pass (green) / fail (red) indicators
+
+2. **Exposed orchestrator globally (line 651):**
+   - Added `global.orchestrator = orchestrator;` after orchestrator initialization
+   - Required for the test endpoint to access the orchestrator's `processRequest` method
+   - Includes logging confirmation: "[SERVER] ✅ Orchestrator exposed as global.orchestrator"
+
+3. **Removed unused import (line 67):**
+   - Removed `import testRoutes from "./api/routes/test.js";` which referenced a non-existent file
+   - This was causing import errors on server startup
+
+4. **Removed unused route registration (line 628):**
+   - Removed `app.use("/api/test", testRoutes);` since we're implementing the endpoint inline
+   - Prevents conflicts and removes dependency on non-existent routes file
+
+## How the endpoint works:
+
+1. User visits `/api/test/memory-check` in their browser (only in debug/private mode)
+2. Endpoint generates a unique tripwire phrase with timestamp
+3. Simulates a chat conversation to store the tripwire in memory
+4. Waits 2 seconds for storage to complete
+5. Simulates another chat asking for the test phrase
+6. Validates that:
+   - The tripwire was successfully stored
+   - The tripwire was successfully recalled
+   - No false ignorance claims were made
+7. Returns a styled HTML page with detailed test results
+
+## Security:
+
+- Endpoint is protected and only runs when `DEPLOYMENT_TYPE=private` or `DEBUG_MODE=true`
+- Returns 403 Forbidden in production mode
+- Uses isolated test user IDs that won't interfere with real user data
+
+The implementation matches the exact specification provided in the issue, including the security check, test structure, HTML styling, and result formatting.
+
+---END SUMMARY---

@@ -1,0 +1,134 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #180: [claude-fix] Add browser-based memory test endpoint /api/test/memory-check
+
+Issue Description:
+Create a simple endpoint that runs memory tests and returns results viewable in a browser.
+Add to server.js
+Add this route (around line 400, near other API routes):
+javascript// GET /api/test/memory-check - Browser-based memory test
+app.get('/api/test/memory-check', async (req, res) => {
+  // Security: Only allow in private/debug mode
+  if (process.env.DEPLOYMENT_TYPE !== 'private' && process.env.DEBUG_MODE !== 'true') {
+    return res.status(403).send('Test endpoint not available in production mode');
+  }
+
+  const runId = Date.now();
+  const testUserId = `test-user-${runId}`;
+  const results = [];
+  const tripwire = `ZEBRA-TEST-${runId}`;
+
+  // Helper to simulate internal chat
+  async function testChat(message) {
+    try {
+      // Use the orchestrator directly if available
+      if (global.orchestrator && global.orchestrator.processRequest) {
+        const result = await global.orchestrator.processRequest({
+          message,
+          userId: testUserId,
+          mode: 'truth_general',
+          conversationHistory: []
+        });
+        return { response: result.response || result.message, success: result.success };
+      }
+      return { error: 'Orchestrator not available' };
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+
+  // Test 1: Store a tripwire
+  const storeResult = await testChat(`Remember this: My test phrase is ${tripwire}`);
+  results.push({
+    test: '1. STORE tripwire',
+    passed: !storeResult.error,
+    tripwire,
+    response: (storeResult.response || storeResult.error || '').substring(0, 200)
+  });
+
+  // Wait for storage to complete
+  await new Promise(r => setTimeout(r, 2000));
+
+  // Test 2: Recall the tripwire
+  const recallResult = await testChat('What is my test phrase?');
+  const foundTripwire = recallResult.response && recallResult.response.includes(tripwire);
+  results.push({
+    test: '2. RECALL tripwire',
+    passed: foundTripwire,
+    expected: tripwire,
+    found: foundTripwire,
+    response: (recallResult.response || recallResult.error || '').substring(0, 300)
+  });
+
+  // Test 3: Check for ignorance phrases
+  const ignorancePhrases = ["don't have", "no memory", "haven't told", "first interaction", "don't recall"];
+  const hasIgnorance = ignorancePhrases.some(p => 
+    (recallResult.response || '').toLowerCase().includes(p.toLowerCase())
+  );
+  results.push({
+    test: '3. NO false ignorance claims',
+    passed: !hasIgnorance,
+    found_ignorance: hasIgnorance,
+    note: hasIgnorance ? 'FAIL: AI claimed no memory when it should have remembered' : 'PASS: No false claims'
+  });
+
+  // Summary
+  const passed = results.filter(r => r.passed).length;
+  const failed = results.filter(r => !r.passed).length;
+
+  // Return HTML
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Memory Test Results</title>
+  <style>
+    body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; max-width: 900px; margin: 0 auto; }
+    h1 { color: #00d4ff; }
+    .pass { color: #4ade80; font-weight: bold; }
+    .fail { color: #f87171; font-weight: bold; }
+    .test { background: #16213e; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #444; }
+    .test.passed { border-left-color: #4ade80; }
+    .test.failed { border-left-color: #f87171; }
+    pre { background: #0f0f23; padding: 10px; overflow-x: auto; border-radius: 4px; }
+    .summary { font-size: 1.2em; padding: 15px; background: #16213e; border-radius: 8px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>🧠 Memory System Test Results</h1>
+  <div class="summary">
+    <strong>Run ID:</strong> ${runId}<br>
+    <strong>Test User:</strong> ${testUserId}<br>
+    <strong>Results:</strong> <span class="pass">${passed} passed</span> | <span class="fail">${failed} failed</span>
+  </div>
+  ${results.map(r => `
+    <div class="test ${r.passed ? 'passed' : 'failed'}">
+      <h3>${r.passed ? '✅' : '❌'} ${r.test}</h3>
+      <pre>${JSON.stringify(r, null, 2)}</pre>
+    </div>
+  `).join('')}
+  <p style="color: #888; margin-top: 30px;">Test completed at ${new Date().toISOString()}</p>
+</body>
+</html>`;
+
+  res.send(html);
+});
+Security
+Only runs when DEPLOYMENT_TYPE=private or DEBUG_MODE=true
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
