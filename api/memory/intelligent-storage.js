@@ -5,6 +5,22 @@
 
 import { OpenAI } from 'openai';
 import { encoding_for_model } from 'tiktoken';
+import { logMemoryOperation } from '../routes/debug.js';
+
+/**
+ * Boilerplate patterns that should NEVER be stored in memory
+ */
+const BOILERPLATE_PATTERNS = [
+  /I don't retain memory/i,
+  /session-based memory/i,
+  /this appears to be our first interaction/i,
+  /I'm an AI assistant/i,
+  /confidence is lower than ideal/i,
+  /I should clarify/i,
+  /founder protection/i,
+  /I cannot access previous conversations/i,
+  /I don't have access to/i
+];
 
 /**
  * Intelligent Memory Storage System
@@ -20,7 +36,7 @@ export class IntelligentMemoryStorage {
     this.db = db;
     this.openai = new OpenAI({ apiKey: openaiKey });
     this.encoder = null;
-    
+
     // Initialize encoder lazily to avoid blocking constructor
     this.initEncoder();
   }
@@ -39,6 +55,31 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Sanitize content before storage - remove AI boilerplate
+   * @param {string} content - Content to sanitize
+   * @returns {string|null} - Sanitized content or null if should not be stored
+   */
+  sanitizeForStorage(content) {
+    if (!content || typeof content !== 'string') return null;
+
+    let sanitized = content;
+
+    // Remove boilerplate patterns
+    for (const pattern of BOILERPLATE_PATTERNS) {
+      sanitized = sanitized.replace(pattern, '');
+    }
+
+    // Trim and check if anything meaningful remains
+    sanitized = sanitized.trim();
+
+    // Reject if too short or looks like pure boilerplate
+    if (sanitized.length < 10) return null;
+    if (sanitized.toLowerCase().includes("i'm an ai")) return null;
+
+    return sanitized;
+  }
+
+  /**
    * Main entry point - stores memory with compression and deduplication
    * @param {string} userId - User identifier
    * @param {string} userMessage - User's message
@@ -49,10 +90,17 @@ export class IntelligentMemoryStorage {
   async storeWithIntelligence(userId, userMessage, aiResponse, category) {
     try {
       console.log('[INTELLIGENT-STORAGE] 🧠 Processing conversation for intelligent storage');
-      
+
+      // Step 0: Sanitize content before processing
+      const sanitizedResponse = this.sanitizeForStorage(aiResponse);
+      if (!sanitizedResponse) {
+        console.log('[INTELLIGENT-STORAGE] Rejected boilerplate content, not storing');
+        return { action: 'rejected', reason: 'boilerplate_rejected' };
+      }
+
       // Step 1: Extract facts (compression)
       console.log('[INTELLIGENT-STORAGE] 📝 Extracting key facts...');
-      const facts = await this.extractKeyFacts(userMessage, aiResponse);
+      const facts = await this.extractKeyFacts(userMessage, sanitizedResponse);
       
       const originalTokens = this.countTokens(userMessage + aiResponse);
       const compressedTokens = this.countTokens(facts);
@@ -67,7 +115,19 @@ export class IntelligentMemoryStorage {
       // Step 3: Update existing OR create new
       if (existing) {
         console.log(`[DEDUP] ♻️ Found similar memory (id=${existing.id}), boosting instead of duplicating`);
-        return await this.boostExistingMemory(existing.id);
+        const boostResult = await this.boostExistingMemory(existing.id);
+
+        // Debug logging hook for dedup case
+        logMemoryOperation(userId, 'store', {
+          memory_id: existing.id,
+          content_preview: facts.substring(0, 120),
+          category: category,
+          dedup_triggered: true,
+          dedup_merged_with: existing.id,
+          stored: false
+        });
+
+        return boostResult;
       } else {
         console.log('[INTELLIGENT-STORAGE] ✨ Storing new compressed memory');
         return await this.storeCompressedMemory(userId, category, facts, {
@@ -190,6 +250,32 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Check if dedup merge should be prevented due to different high-entropy tokens
+   * @param {string} contentA - First content
+   * @param {string} contentB - Second content
+   * @returns {boolean} - True if merge should be prevented
+   */
+  shouldPreventMerge(contentA, contentB) {
+    const HIGH_ENTROPY_PATTERN = /[A-Z]+-[A-Z]+-\d{4,}|[A-Za-z0-9]{12,}/g;
+
+    const tokensA = contentA.match(HIGH_ENTROPY_PATTERN) || [];
+    const tokensB = contentB.match(HIGH_ENTROPY_PATTERN) || [];
+
+    // If either has high-entropy tokens, only allow merge if they share at least one
+    if (tokensA.length > 0 || tokensB.length > 0) {
+      const overlap = tokensA.filter(t => tokensB.includes(t));
+      if (overlap.length === 0) {
+        console.log('[DEDUP] 🛡️ Prevented merge - different high-entropy tokens');
+        console.log(`[DEDUP]   Tokens A: ${tokensA.join(', ')}`);
+        console.log(`[DEDUP]   Tokens B: ${tokensB.join(', ')}`);
+        return true; // PREVENT merge - different unique tokens
+      }
+    }
+
+    return false; // Allow normal dedup logic
+  }
+
+  /**
    * Find similar memories using PostgreSQL full-text search
    * Threshold: 70% keyword overlap = duplicate
    * @param {string} userId - User identifier
@@ -200,8 +286,8 @@ export class IntelligentMemoryStorage {
   async findSimilarMemories(userId, category, facts) {
     try {
       const result = await this.db.query(`
-        SELECT 
-          id, 
+        SELECT
+          id,
           content,
           ts_rank(
             to_tsvector('english', content),
@@ -214,13 +300,21 @@ export class IntelligentMemoryStorage {
         ORDER BY similarity DESC
         LIMIT 5
       `, [userId, category, facts]);
-      
-      // Return most similar if above threshold
-      if (result.rows.length > 0 && result.rows[0].similarity > 0.3) {
-        console.log(`[DEDUP] 📊 Found similar memory with similarity score: ${result.rows[0].similarity.toFixed(3)}`);
-        return result.rows[0];
+
+      // Check each potential match for high-entropy token conflicts
+      for (const row of result.rows) {
+        if (row.similarity > 0.3) {
+          // Apply high-entropy guard before merging
+          if (this.shouldPreventMerge(row.content, facts)) {
+            console.log(`[DEDUP] ⏭️ Skipping similar memory (id=${row.id}) due to high-entropy mismatch`);
+            continue; // Skip this match, check next one
+          }
+
+          console.log(`[DEDUP] 📊 Found similar memory with similarity score: ${row.similarity.toFixed(3)}`);
+          return row;
+        }
       }
-      
+
       console.log('[DEDUP] ✅ No similar memories found');
       return null;
     } catch (error) {
@@ -297,7 +391,7 @@ export class IntelligentMemoryStorage {
       
       const memoryId = result.rows[0].id;
       console.log(`[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=${memoryId}, tokens=${tokenCount}`);
-      
+
       // DIAGNOSTIC LOGGING: Track exact storage details
       console.log('[STORAGE-DEBUG] Memory stored:', {
         id: memoryId,
@@ -307,7 +401,17 @@ export class IntelligentMemoryStorage {
         table: 'persistent_memories',
         timestamp: new Date().toISOString()
       });
-      
+
+      // Debug logging hook for test harness
+      logMemoryOperation(userId, 'store', {
+        memory_id: memoryId,
+        content_preview: facts.substring(0, 120),
+        category: category,
+        dedup_triggered: false,
+        dedup_merged_with: null,
+        stored: true
+      });
+
       return { action: 'created', memoryId };
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Compressed storage failed:', error.message);

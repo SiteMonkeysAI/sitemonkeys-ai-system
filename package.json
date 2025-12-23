@@ -31,7 +31,8 @@
     "test-newline-fix": "node test-newline-fix-unit.js",
     "test-token-budgets": "node test-token-budgets.js",
     "test-token-budgets-unit": "node test-token-budgets-unit.js",
-    "validate-deployment": "node deploy-intelligence-upgrade.js"
+    "validate-deployment": "node deploy-intelligence-upgrade.js",
+    "test:memory": "node scripts/memory-regression-test.js"
   },
   "engines": {
     "node": ">=14.0.0"

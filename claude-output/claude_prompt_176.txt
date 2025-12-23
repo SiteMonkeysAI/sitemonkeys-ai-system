@@ -1,0 +1,220 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #176: [claude-fix] Wire up memory test harness and implement mechanical fixes
+
+Issue Description:
+Context
+Two new files have been added to the repo:
+
+/scripts/memory-regression-test.js - Memory regression test harness
+/api/routes/debug.js - Debug endpoint for memory operations
+
+These need to be wired up, and mechanical fixes need to be implemented in the memory system.
+
+Task 1: Wire Up New Files
+1A. Register debug routes in server.js
+Find where routes are registered and add:
+javascriptimport debugRoutes from './api/routes/debug.js';
+// ... after other route registrations:
+app.use('/api/debug', debugRoutes);
+1B. Add test script to package.json
+In the scripts section, add:
+json"test:memory": "node scripts/memory-regression-test.js"
+
+Task 2: Add Debug Logging Hooks
+The debug endpoint needs to receive data from the memory system. Add logging calls:
+2A. In memory storage (find storeMemory or similar function)
+After successfully storing a memory, add:
+javascriptimport { logMemoryOperation } from '../routes/debug.js';
+
+// After store succeeds:
+logMemoryOperation(userId, 'store', {
+  memory_id: result.id,
+  content_preview: content.substring(0, 120),
+  category: category,
+  dedup_triggered: dedupTriggered || false,
+  dedup_merged_with: mergedWithId || null,
+  stored: true
+});
+2B. In memory retrieval (find retrieveMemory or similar)
+After retrieving memories, add:
+javascriptlogMemoryOperation(userId, 'retrieve', {
+  memory_ids: results.map(r => r.id),
+  query: query,
+  category_searched: category,
+  results_count: results.length
+});
+2C. In orchestrator where memory is injected
+Where memory context is added to the prompt, add:
+javascriptlogMemoryOperation(userId, 'inject', {
+  memory_injected: memories.length > 0,
+  memory_ids: memories.map(m => m.id),
+  token_count: totalTokens
+});
+
+Task 3: Implement Storage Filter
+Before storing ANY memory, filter out AI boilerplate.
+3A. Create sanitizer function
+In the memory storage file, add:
+javascriptconst BOILERPLATE_PATTERNS = [
+  /I don't retain memory/i,
+  /session-based memory/i,
+  /this appears to be our first interaction/i,
+  /I'm an AI assistant/i,
+  /confidence is lower than ideal/i,
+  /I should clarify/i,
+  /founder protection/i,
+  /I cannot access previous conversations/i,
+  /I don't have access to/i
+];
+
+function sanitizeForStorage(content) {
+  if (!content || typeof content !== 'string') return null;
+  
+  let sanitized = content;
+  
+  // Remove boilerplate patterns
+  for (const pattern of BOILERPLATE_PATTERNS) {
+    sanitized = sanitized.replace(pattern, '');
+  }
+  
+  // Trim and check if anything meaningful remains
+  sanitized = sanitized.trim();
+  
+  // Reject if too short or looks like pure boilerplate
+  if (sanitized.length < 10) return null;
+  if (sanitized.toLowerCase().includes("i'm an ai")) return null;
+  
+  return sanitized;
+}
+3B. Apply sanitizer before storage
+In the store function, add early:
+javascriptconst sanitizedContent = sanitizeForStorage(content);
+if (!sanitizedContent) {
+  console.log('[MEMORY] Rejected boilerplate content, not storing');
+  return { stored: false, reason: 'boilerplate_rejected' };
+}
+// Continue with sanitizedContent instead of content
+
+Task 4: Implement Dedup Guards
+Prevent dedup from merging memories with different high-entropy tokens.
+4A. In dedup logic (find where similarity is calculated)
+Before merging, add guard:
+javascriptconst HIGH_ENTROPY_PATTERN = /[A-Z]+-[A-Z]+-\d{4,}|[A-Za-z0-9]{12,}/g;
+
+function shouldPreventMerge(contentA, contentB) {
+  const tokensA = contentA.match(HIGH_ENTROPY_PATTERN) || [];
+  const tokensB = contentB.match(HIGH_ENTROPY_PATTERN) || [];
+  
+  // If either has high-entropy tokens, only allow merge if they share at least one
+  if (tokensA.length > 0 || tokensB.length > 0) {
+    const overlap = tokensA.filter(t => tokensB.includes(t));
+    if (overlap.length === 0) {
+      return true; // PREVENT merge - different unique tokens
+    }
+  }
+  
+  return false; // Allow normal dedup logic
+}
+
+// In dedup decision:
+if (shouldPreventMerge(existingContent, newContent)) {
+  console.log('[DEDUP] Prevented merge - different high-entropy tokens');
+  // Create new memory instead of merging
+}
+
+Task 5: Implement Exact-Match Retrieval
+Add first-pass exact match before fuzzy LIKE search.
+5A. In retrieval function
+Add at the start of retrieval:
+javascriptasync function retrieveMemory(userId, query, options = {}) {
+  // FIRST PASS: Exact match for high-entropy tokens
+  const HIGH_ENTROPY_PATTERN = /[A-Z]+-[A-Z]+-\d{4,}|[A-Za-z0-9]{12,}/g;
+  const queryTokens = query.match(HIGH_ENTROPY_PATTERN) || [];
+  
+  if (queryTokens.length > 0) {
+    const exactMatches = await db.query(
+      `SELECT * FROM persistent_memories 
+       WHERE user_id = $1 
+       AND (${queryTokens.map((_, i) => `content ILIKE $${i + 2}`).join(' OR ')})
+       ORDER BY created_at DESC
+       LIMIT 5`,
+      [userId, ...queryTokens.map(t => `%${t}%`)]
+    );
+    
+    if (exactMatches.rows.length > 0) {
+      console.log('[RETRIEVAL] Found exact match for high-entropy token');
+      return exactMatches.rows;
+    }
+  }
+  
+  // SECOND PASS: Fall through to existing LIKE/semantic search
+  // ... existing retrieval logic ...
+}
+
+Task 6: Add Response Debug Field
+Include debug info in chat response (for test harness).
+6A. In chat response builder
+Add _debug field to response when in debug mode:
+javascriptconst response = {
+  message: aiResponse,
+  // ... other fields ...
+};
+
+// Add debug info in private/debug mode
+if (process.env.DEPLOYMENT_TYPE === 'private' || process.env.DEBUG_MODE === 'true') {
+  response._debug = {
+    memory_injected: memories.length > 0,
+    memory_count: memories.length,
+    memory_ids: memories.map(m => m.id),
+    category: primaryCategory
+  };
+}
+
+Acceptance Criteria
+
+ npm run test:memory command works
+ /api/debug/memory endpoint responds (in private mode)
+ Debug logging hooks capture store/retrieve/inject operations
+ Boilerplate content is rejected from storage
+ High-entropy tokens prevent incorrect dedup merges
+ Exact-match retrieval finds unique tokens reliably
+ Response includes _debug field in private mode
+
+
+Files to Modify
+Search the repo for actual locations:
+
+server.js or main entry - add debug route
+package.json - add test script
+Memory storage file (search: storeMemory, saveMemory)
+Memory retrieval file (search: retrieveMemory, ExtractionEngine)
+Dedup logic (search: similarity, dedup, merge)
+Orchestrator (search: orchestrator, processMessage)
+Chat response builder (search: /api/chat, handleChat)
+
+
+Constraints (from CLAUDE.md)
+
+ES6 modules only (import/export, not require)
+Follow sacred order: RETRIEVE → INJECT → GENERATE → VALIDATE
+Debug features only in private/debug mode
+Do not change response JSON schema (add _debug as separate optional field)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

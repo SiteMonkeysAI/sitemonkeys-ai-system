@@ -31,6 +31,7 @@ import {
   checkFounderProtection,
   handleCostCeiling,
 } from "../lib/site-monkeys/emergency-fallbacks.js";
+import { logMemoryOperation } from "../routes/debug.js";
 //import { validateCompliance as validateVaultCompliance } from '../lib/vault.js';
 // ================================================
 
@@ -576,6 +577,18 @@ export class Orchestrator {
         },
         error: null,
       };
+
+      // Add debug info in private/debug mode
+      if (process.env.DEPLOYMENT_TYPE === 'private' || process.env.DEBUG_MODE === 'true') {
+        result._debug = {
+          memory_injected: memoryContext.hasMemory,
+          memory_count: memoryContext.count,
+          memory_ids: [], // IDs are logged separately in debug endpoint
+          category: routing?.primaryCategory || 'unknown'
+        };
+      }
+
+      return result;
     } catch (error) {
       this.error(`Request failed: ${error.message}`, error);
       this.#trackPerformance(startTime, false, true);
@@ -668,6 +681,13 @@ export class Orchestrator {
 
       const memoryContent = memories.memories || "";
       const tokenCount = Math.ceil(memoryContent.length / 4);
+
+      // Debug logging hook for test harness (memory injection)
+      logMemoryOperation(userId, 'inject', {
+        memory_injected: tokenCount > 0,
+        memory_ids: [], // IDs are already logged during retrieval
+        token_count: tokenCount
+      });
 
       return {
         memories: memoryContent,

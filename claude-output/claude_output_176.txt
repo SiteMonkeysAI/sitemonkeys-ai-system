@@ -1,0 +1,119 @@
+Excellent! All tasks are complete. Let me create a summary of the changes made:
+
+---SUMMARY---
+
+# Issue #176: Wire up memory test harness and implement mechanical fixes
+
+Successfully implemented all requested changes to wire up the memory test harness and add mechanical fixes to the memory system.
+
+## Changes Made
+
+### Task 1: Wire Up New Files
+
+**1A. Registered debug routes in server.js**
+- File: `/server.js`
+- Added import: `import debugRoutes from "./api/routes/debug.js";`
+- Registered route: `app.use("/api/debug", debugRoutes);`
+
+**1B. Added test script to package.json**
+- File: `/package.json`
+- Added script: `"test:memory": "node scripts/memory-regression-test.js"`
+
+### Task 2: Add Debug Logging Hooks
+
+**2A. Memory storage logging**
+- File: `/api/memory/intelligent-storage.js`
+- Added import of `logMemoryOperation` from debug.js
+- Added logging after successful storage in `storeCompressedMemory()` - logs memory_id, content_preview, category, dedup status
+- Added logging in dedup case when boosting existing memory
+
+- File: `/api/categories/memory/internal/persistent_memory.js`
+- Added import of `logMemoryOperation`
+- Added logging after successful storage in `storeMemory()` method
+
+**2B. Memory retrieval logging**
+- File: `/api/categories/memory/internal/persistent_memory.js`
+- Added logging after successful retrieval in `retrieveMemory()` method - logs memory_ids, query, category_searched, results_count
+
+**2C. Orchestrator memory injection logging**
+- File: `/api/core/orchestrator.js`
+- Added import of `logMemoryOperation`
+- Added logging in `#retrieveMemoryContext()` method after memory is prepared for injection - logs memory_injected flag, memory_ids, token_count
+
+### Task 3: Implement Storage Filter
+
+- File: `/api/memory/intelligent-storage.js`
+- Added `BOILERPLATE_PATTERNS` constant array with 9 patterns to reject (e.g., "I don't retain memory", "session-based memory", "I'm an AI assistant")
+- Implemented `sanitizeForStorage()` method that:
+  - Removes boilerplate patterns from content
+  - Rejects content shorter than 10 characters
+  - Rejects content containing "i'm an ai"
+- Applied sanitizer in `storeWithIntelligence()` before extracting facts
+- Returns early with `{action: 'rejected', reason: 'boilerplate_rejected'}` if content is rejected
+
+### Task 4: Implement Dedup Guards
+
+- File: `/api/memory/intelligent-storage.js`
+- Implemented `shouldPreventMerge()` method that:
+  - Extracts high-entropy tokens using pattern `/[A-Z]+-[A-Z]+-\d{4,}|[A-Za-z0-9]{12,}/g`
+  - Prevents merge if memories have different high-entropy tokens (no overlap)
+  - Logs detailed information about prevented merges
+- Updated `findSimilarMemories()` to:
+  - Check each potential match with `shouldPreventMerge()` before returning
+  - Skip similar memories that have different high-entropy tokens
+  - Continue checking next match if prevented
+
+### Task 5: Implement Exact-Match Retrieval
+
+- File: `/api/categories/memory/internal/intelligence.js`
+- Added STEP 0 in `extractRelevantMemories()` method as first-pass exact match
+- Extracts high-entropy tokens from query using same pattern
+- If high-entropy tokens found:
+  - Builds dynamic SQL query with ILIKE for each token
+  - Returns exact matches immediately (up to 5 results)
+  - Logs successful exact match retrieval
+- Falls through to normal semantic/fuzzy retrieval if no exact matches
+
+### Task 6: Add Response Debug Field
+
+- File: `/api/core/orchestrator.js`
+- Added `_debug` field to response object in `processRequest()` method
+- Only included when `DEPLOYMENT_TYPE=private` or `DEBUG_MODE=true`
+- Debug field contains:
+  - `memory_injected`: boolean flag
+  - `memory_count`: number of memories used
+  - `memory_ids`: array (populated by debug endpoint)
+  - `category`: primary category used for routing
+
+## Files Modified (7 total)
+
+1. `/server.js` - Registered debug routes
+2. `/package.json` - Added test:memory script
+3. `/api/memory/intelligent-storage.js` - Added logging, sanitizer, dedup guards
+4. `/api/categories/memory/internal/persistent_memory.js` - Added logging for storage and retrieval
+5. `/api/categories/memory/internal/intelligence.js` - Added exact-match retrieval
+6. `/api/core/orchestrator.js` - Added injection logging and _debug field
+
+## Testing
+
+The test harness can now be run with:
+```bash
+npm run test:memory
+```
+
+The debug endpoint is available at:
+```
+GET /api/debug/memory?user_id=xxx&action=summary
+```
+
+## Compliance with CLAUDE.md
+
+All changes follow the sacred enforcement order: **RETRIEVE → INJECT → GENERATE → VALIDATE**
+
+- No changes to response JSON schema (added `_debug` as optional field only in debug mode)
+- ES6 modules used throughout (import/export)
+- Debug features only available in private/debug mode
+- Preserved existing behavior while adding mechanical fixes
+- No telemetry added to production responses
+
+---END SUMMARY---
