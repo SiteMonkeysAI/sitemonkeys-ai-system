@@ -1403,6 +1403,41 @@ class IntelligenceSystem {
         `Starting extraction for user: ${userId}, query: "${query.substring(0, 50)}..."`,
       );
 
+      // STEP 0: FIRST PASS - Exact match for high-entropy tokens
+      const HIGH_ENTROPY_PATTERN = /[A-Z]+-[A-Z]+-\d{4,}|[A-Za-z0-9]{12,}/g;
+      const queryTokens = query.match(HIGH_ENTROPY_PATTERN) || [];
+
+      if (queryTokens.length > 0) {
+        this.logger.log(
+          `[RETRIEVAL] Found high-entropy tokens in query: ${queryTokens.join(', ')}`,
+        );
+
+        try {
+          const exactMatchQuery = `
+            SELECT * FROM persistent_memories
+            WHERE user_id = $1
+            AND (${queryTokens.map((_, i) => `content ILIKE $${i + 2}`).join(' OR ')})
+            ORDER BY created_at DESC
+            LIMIT 5
+          `;
+
+          const exactMatches = await this.coreSystem.executeQuery(
+            exactMatchQuery,
+            [userId, ...queryTokens.map(t => `%${t}%`)]
+          );
+
+          if (exactMatches.rows.length > 0) {
+            this.logger.log(
+              `[RETRIEVAL] ✅ Found ${exactMatches.rows.length} exact matches for high-entropy tokens`,
+            );
+            return exactMatches.rows;
+          }
+        } catch (error) {
+          this.logger.error('[RETRIEVAL] Exact match query failed:', error);
+          // Fall through to regular retrieval
+        }
+      }
+
       // Get semantic analysis (reuse from routing if available)
       const semanticAnalysis =
         routing.semanticAnalysis ||

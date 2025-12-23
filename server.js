@@ -63,6 +63,7 @@ import { runAllTests } from "./api/test-suite.js";
 import loadVaultHandler from "./api/load-vault.js";
 import { vaultLoader } from "./api/utilities/vault-loader.js";
 import { sessionManager } from "./api/lib/session-manager.js";
+import debugRoutes from "./api/routes/debug.js";
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -511,6 +512,9 @@ app.post("/api/upload-for-analysis", analysisMiddleware, handleAnalysisUpload);
 
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);
+
+// Debug endpoint (only in private/debug mode)
+app.use("/api/debug", debugRoutes);
 
 console.log("[SERVER] ✅ Routes configured");
 

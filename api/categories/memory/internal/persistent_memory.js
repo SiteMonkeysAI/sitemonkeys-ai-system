@@ -5,6 +5,7 @@
 
 import coreSystem from "./core.js";
 import intelligenceSystem from "./intelligence.js";
+import { logMemoryOperation } from "../../../routes/debug.js";
 
 class PersistentMemoryOrchestrator {
   constructor() {
@@ -101,6 +102,14 @@ class PersistentMemoryOrchestrator {
         `Successfully retrieved ${memories.length} memories, ${memoryText.length} characters`,
       );
 
+      // Debug logging hook for test harness
+      logMemoryOperation(userId, 'retrieve', {
+        memory_ids: memories.map(m => m.id),
+        query: query.substring(0, 100),
+        category_searched: routing.primaryCategory,
+        results_count: memories.length
+      });
+
       return {
         success: true,
         memories: memoryText,
@@ -182,6 +191,16 @@ class PersistentMemoryOrchestrator {
       this.logger.log(
         `Successfully stored memory ID: ${memoryId} in category: ${routing.primaryCategory}`,
       );
+
+      // Debug logging hook for test harness
+      logMemoryOperation(userId, 'store', {
+        memory_id: memoryId,
+        content_preview: conversationContent.substring(0, 120),
+        category: routing.primaryCategory,
+        dedup_triggered: false,
+        dedup_merged_with: null,
+        stored: true
+      });
 
       return {
         success: true,
