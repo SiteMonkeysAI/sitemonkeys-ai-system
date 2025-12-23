@@ -1,0 +1,140 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #172: Memory System Mechanical Fixes Title: [claude-fix] Memory Storage Poisoning, Dedup Collapse, and Retrieval Failures
+
+Issue Description:
+Problem Summary
+Memory system is failing mechanically. Logs show:
+	∙	Storage is poisoned with AI boilerplate (not user facts)
+	∙	Dedup is collapsing unrelated memories (tripwires merge into single ID)
+	∙	Retrieval uses weak LIKE filters, misses exact matches
+	∙	Personality inconsistency (Roxy says “stored”, Eli says “no access”)
+Root Causes
+A. STORAGE POISONING
+The intelligent-storage pipeline stores assistant/system boilerplate in persistent memory. This text dominates similarity scoring and causes self-reinforcing “no memory” behavior.
+B. DEDUP COLLAPSE
+Dedup merges unrelated memories (e.g., TURQUOISE code and ZEBRA phrase get 0.947 similarity). Similarity is driven by generic template text, not unique payload. Result: memories collapse into single blob, unique tokens become unretrievable.
+C. RETRIEVAL TOO WEAK
+Retrieval relies on noun/topic LIKE filters. No exact-match strategy for high-entropy tokens. If compression stores “User provided a test phrase…” inconsistently, retrieval returns 0.
+D. POLICY INCONSISTENCY
+Fix A-C first, then verify memory_usage_enforcer catches remaining issues.
+
+Required Patches
+1. STORAGE FILTER (MUST)
+Before storing ANY memory, strip assistant/system boilerplate. Do NOT store:
+	∙	“I don’t retain memory” / “session-based memory”
+	∙	“confidence is lower than ideal”
+	∙	founder protection / enforcement inserts
+	∙	“this appears to be our first interaction”
+	∙	safety disclaimers not provided by the user
+Store only: User facts and clean extracted facts. Not assistant narration.
+Implementation: Add a sanitizeForStorage(content) function that:
+	∙	Detects and removes boilerplate patterns (regex or phrase list)
+	∙	Returns only user-fact payload
+	∙	Rejects storage if result is empty or boilerplate-only
+2. DEDUP GUARDS (MUST)
+Prevent dedup from merging unrelated items.
+Guard logic:
+	∙	If memory contains high-entropy tokens (pattern like WORD-WORD-#### or long random strings), dedup may ONLY merge if other candidate contains the SAME token (exact match)
+	∙	Alternative: compute similarity on user-fact payload only, not on boilerplate
+Goal: New tripwires must create new memory rows, not boost existing ID.
+Implementation: In dedup logic, add:
+
+// Before merging, check for high-entropy tokens
+const highEntropyPattern = /[A-Z]+-[A-Z]+-\d{4}|[A-Za-z0-9]{12,}/g;
+const tokensA = contentA.match(highEntropyPattern) || [];
+const tokensB = contentB.match(highEntropyPattern) || [];
+
+if (tokensA.length > 0 || tokensB.length > 0) {
+  // Only merge if high-entropy tokens match exactly
+  const overlap = tokensA.filter(t => tokensB.includes(t));
+  if (overlap.length === 0) {
+    // DO NOT MERGE - different high-entropy content
+    return false;
+  }
+}
+
+
+3. RETRIEVAL UPGRADE (MUST)
+Add retrieval stage BEFORE topic LIKE search:
+	∙	Exact substring match pass against stored memory content for key identifiers
+	∙	Search for high-entropy tokens if present in query
+	∙	AND/OR store structured field/tag (e.g., tags: ["test_phrase"]) for deterministic retrieval
+Implementation: In retrieval logic, add first-pass:
+
+// First pass: exact match for high-entropy tokens in query
+const queryTokens = query.match(/[A-Z]+-[A-Z]+-\d{4}|[A-Za-z0-9]{12,}/g) || [];
+if (queryTokens.length > 0) {
+  const exactMatches = await db.query(
+    `SELECT * FROM persistent_memories 
+     WHERE user_id = $1 
+     AND content ILIKE ANY($2)`,
+    [userId, queryTokens.map(t => `%${t}%`)]
+  );
+  if (exactMatches.rows.length > 0) {
+    return exactMatches.rows; // Skip fuzzy search, we have exact match
+  }
+}
+// Fall through to existing LIKE search...
+
+
+4. DEBUG PROOF (TEMPORARY OR PERMANENT)
+Add retrieval debug preview when memory is injected:
+	∙	memory_ids selected
+	∙	Short content preview (first 120 chars) or redacted preview
+	∙	memory_injected: true/false
+This enables binary diagnosis: retrieval vs injection vs model ignore.
+Implementation: In orchestrator or chat handler where memory is injected:
+
+console.log('[MEMORY DEBUG]', {
+  memory_ids: retrievedMemories.map(m => m.id),
+  memory_count: retrievedMemories.length,
+  memory_preview: retrievedMemories.map(m => m.content.substring(0, 120)),
+  memory_injected: retrievedMemories.length > 0
+});
+
+
+5. SENSITIVE DATA POLICY (DECIDE + ENFORCE)
+Pick ONE and enforce consistently across Roxy AND Eli:
+Option A (safer): Do not store or return verification/auth codes. Storage rejects. Response instructs user to store externally.
+Option B (internal use): Store in “sensitive” category/tag. Only return on explicit ask with strict gating. Never let generic ranking pull it in.
+Recommendation: Option B for internal/private deployment, with clear tagging.
+
+Acceptance Tests (MUST PASS)
+After implementation, these must work:
+	1.	Store test: "My test phrase is ZEBRA-ANCHOR-7719" → New memory ID created (NOT merged into existing)
+	2.	Recall test: "What's my test phrase?" → Retrieval count=1, memory injected, answer returns ZEBRA-ANCHOR-7719
+	3.	Consistency test: Repeat twice → Same result both times
+	4.	Enforcer test: Only after above pass, verify memory_usage_enforcer behavior (model must not claim ignorance when injected memory contains the answer)
+
+Files to Investigate
+Search for these to find relevant code:
+	∙	storeMemory, saveMemory, persistentMemory
+	∙	dedup, similarity, merge
+	∙	retrieveMemory, extractMemory, ExtractionEngine
+	∙	orchestrator, processMessage
+
+Constraints (from CLAUDE.md)
+	∙	Follow sacred order: RETRIEVE → INJECT → GENERATE → VALIDATE
+	∙	Do not change response JSON schema without founder approval
+	∙	Server-side logging only
+	∙	ES6 modules only (no CommonJS)
+	∙	Test changes against truth-first philosophy
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
