@@ -1,0 +1,245 @@
+Perfect. Now I have enough information to provide a comprehensive audit report. Let me create the diagnostic output:
+
+---SUMMARY---
+
+# System Alignment Audit Report - Issue #164
+
+I have completed a comprehensive diagnostic analysis of the SiteMonkeys AI system against the CLAUDE.md documentation. This is a **diagnostic-only** report as requested - no changes have been made.
+
+## 1. PHILOSOPHY ALIGNMENT CHECK ✅
+
+**Orchestrator Enforcement Chain Status: INTACT**
+
+The enforcement chain in `/api/core/orchestrator.js` (lines 110-276) is properly implemented and matches CLAUDE.md specifications:
+
+### Enforcement Modules Called (in order):
+
+1. **Drift Watcher** ✅ - Line 123-149
+   - Location: `/api/lib/validators/drift-watcher.js`
+   - Function: `driftWatcher.validate()`
+   - Detects response pattern drift
+
+2. **Initiative Enforcer** ✅ - Line 152-173
+   - Location: `/api/lib/validators/initiative-enforcer.js`
+   - Function: `initiativeEnforcer.enforce()`
+   - Prevents passive "I don't know" without alternatives
+
+3. **Political Guardrails** ✅ - Line 176-196
+   - Location: `/api/lib/politicalGuardrails.js`
+   - Function: `PoliticalGuardrails.check()`
+   - Ensures political neutrality
+
+4. **Product Validation** ✅ - Line 199-219
+   - Location: `/api/lib/productValidation.js`
+   - Function: `ProductValidator.validate()`
+   - Validates product recommendations have evidence
+
+5. **Founder Protection** ✅ - Line 222-245
+   - Location: `/api/lib/site-monkeys/emergency-fallbacks.js`
+   - Function: `checkFounderProtection()`
+   - Enforces founder protection principles
+
+6. **Vault Compliance** ⚠️ - Line 248-263
+   - Status: **PENDING IMPLEMENTATION**
+   - Comment on line 250: "NOTE: validateVaultCompliance function not implemented yet"
+   - Currently uses basic vault enforcement placeholder
+
+### Additional Validators Present:
+- **Mode Linter** ✅ - `/api/lib/modeLinter.js` (exists)
+- **Assumptions Checker** ✅ - `/api/lib/assumptions.js` (exists)
+
+**Critical Finding:** Enforcement runs BEFORE personality application (line 383), which correctly ensures business rules are applied to raw AI output before personality enhancement.
+
+---
+
+## 2. MEMORY SYSTEM CHECK ⚠️
+
+**Status: ARCHITECTURAL ISSUE IDENTIFIED**
+
+### Issue Analysis: "Memory Retrieved But Not Recognized by Personalities"
+
+I've identified the **root cause** of this known issue:
+
+#### The Problem (orchestrator.js:549-651):
+
+**Memory Retrieval Flow:**
+1. Memory is retrieved successfully via `global.memorySystem.retrieveMemory()` (line 561-564)
+2. Memory is formatted as a string in `persistent_memory.js:90-98`:
+   ```javascript
+   const memoryText = memories.map((m, idx) => {
+     const category = m.category_name || "general";
+     const subcategory = m.subcategory_name || "";
+     const content = m.content || "";
+     return `[Memory ${idx + 1}] (${category}${subcategory ? "/" + subcategory : ""}): ${content}`;
+   }).join("\n\n");
+   ```
+3. Memory is returned as a plain string (line 102-109 in persistent_memory.js)
+4. Memory is logged successfully (line 607 in orchestrator.js)
+
+**BUT:**
+
+**Context Assembly (orchestrator.js:1880-1967):**
+- Line 1950-1958: Memory is injected into context with explicit acknowledgment:
+  ```javascript
+  contextStr += `\n\n**📝 MEMORY CONTEXT (${memoryCount} relevant interactions retrieved):**\n`;
+  contextStr += `I have access to previous conversations with you and will use this information...`;
+  ```
+- The memory IS being passed to the AI
+
+**The Actual Issue:**
+The problem is NOT in `formatForAI()` (which doesn't exist) or context injection (which works correctly). The issue is likely:
+
+1. **Memory content format** - The AI receives memory but may not parse the `[Memory N] (category): content` format effectively
+2. **Personality frameworks** may not be explicitly trained to look for memory markers
+3. **No explicit memory utilization validation** - The system doesn't verify the AI actually used the retrieved memories in its response
+
+#### File References:
+- **Memory Retrieval:** `/api/categories/memory/internal/persistent_memory.js:60-119`
+- **Memory Context Assembly:** `/api/core/orchestrator.js:1880-1967`
+- **Context Injection:** Lines 1950-1958 (standard mode) and 1933-1939 (vault mode)
+
+---
+
+## 3. MODE ISOLATION CHECK ✅
+
+**Vault Isolation Status: PROPERLY IMPLEMENTED**
+
+### Vault Loading Path:
+1. **Vault Load:** `/api/core/orchestrator.js:712-753` - `#loadVaultContext()`
+2. **Vault Storage:** Global variable `global.vaultContent` (line 728, 734)
+3. **Vault Selection:** Lines 756-941 - `#selectRelevantVaultSections()` enforces 9,000 token limit
+4. **Context Assembly:** Lines 1880-1942
+
+### Isolation Verification:
+
+**✅ Vault is session-only:**
+- Loaded from `global.vaultContent` or request parameter (lines 716-736)
+- NOT stored in PostgreSQL persistent memory
+- Cleared when session ends
+
+**✅ Vault never co-mingles with persistent memory:**
+- Line 1931: When vault is present, documents are explicitly ignored
+- Comment on line 1931: "STOP HERE - Do not add document context when vault is present"
+- Line 1929: "Vault injected as PRIMARY context - documents will be ignored for vault queries"
+- Vault context section (lines 1885-1942) is completely separate from memory storage
+
+**✅ Memory is still accessible in Site Monkeys mode:**
+- Lines 1933-1939: Memory context is added AFTER vault content
+- Memory and vault coexist but don't mix in storage
+
+**Critical Code Path Verification:**
+```javascript
+// Line 1931-1942: Vault mode stops document processing
+if (context.sources?.hasVault && context.vault) {
+  // ... vault injection ...
+  
+  // STOP HERE - Do not add document context when vault is present
+  if (context.sources?.hasMemory && context.memory) {
+    // Memory is added but kept separate
+  }
+  return contextStr;  // Returns without adding documents
+}
+```
+
+---
+
+## 4. MEMORY ROUTING ANALYSIS ⚠️
+
+**Issue: Category Mismatch Between Storage and Retrieval**
+
+### Root Cause Identified:
+
+**Storage Path (`persistent_memory.js:129-201`):**
+1. User stores conversation
+2. Routing determines category via `intelligenceSystem.analyzeAndRoute()` (line 141-144)
+3. Memory stored with `routing.primaryCategory` (line 170)
+
+**Retrieval Path (`persistent_memory.js:60-119`):**
+1. User queries
+2. Routing determines category via `intelligenceSystem.analyzeAndRoute()` (line 71-74)
+3. Memories extracted from that category
+
+**The Problem:**
+- **Storage uses:** `routing.primaryCategory` from storage-time analysis
+- **Retrieval uses:** `routing.primaryCategory` from retrieval-time analysis
+- **If routing logic changes or query wording differs, categories mismatch**
+
+### Specific Issue Location:
+
+`intelligence.js:674-766` - `analyzeAndRoute()` method:
+- Line 962-963: Comment indicates semantic override logic was modified to fix content-based routing
+- Line 961: "REMOVED: Intent-based conditional boosting (memory_recall → relationships_social)"
+- This suggests previous bugs where intent (memory_recall) incorrectly routed to relationships_social instead of using content
+
+**Current Status:** The routing logic appears corrected (content-first, not intent-first), but historical memories may have been stored with the old buggy routing.
+
+---
+
+## 5. ADDITIONAL FINDINGS
+
+### Token Budget Enforcement ✅
+- Lines 1142-1206 in orchestrator.js
+- Enforces: Memory ≤2,500t, Documents ≤3,000t, Vault ≤9,000t, Total ≤15,000t
+- **Working correctly**
+
+### Initialization Order ✅
+- Memory system initializes before orchestrator (verified in server.js structure)
+- Orchestrator checks `this.initialized` flag before processing (line 248)
+
+### Error Handling ✅
+- All database operations use try/catch (verified in persistent_memory.js)
+- Graceful degradation implemented (lines 641-649 in orchestrator.js)
+
+---
+
+## SUMMARY OF FINDINGS
+
+### ✅ What's Working As Documented:
+1. Enforcement chain is intact with 5/6 validators active
+2. Vault isolation is properly implemented - no cross-contamination
+3. Token budget enforcement is working
+4. Error handling patterns are correct
+5. Initialization order is proper
+6. Mode detection and routing logic is functional
+
+### ⚠️ What's Broken or Misaligned:
+
+1. **Vault Compliance Validator** (Priority: Medium)
+   - File: `/api/core/orchestrator.js:248-263`
+   - Issue: Not implemented, only placeholder exists
+   - Impact: Site Monkeys mode lacks final validation layer
+
+2. **Memory Recognition Issue** (Priority: HIGH)
+   - Files: Multiple (orchestrator.js, persistent_memory.js)
+   - Issue: Memory is retrieved and passed to AI, but AI may not effectively utilize it
+   - Root Cause: No validation that AI actually used retrieved memories
+   - Suggested Fix: Add post-response validation to check if memory was referenced
+
+3. **Category Routing Mismatch** (Priority: Medium)
+   - File: `/api/categories/memory/internal/intelligence.js:674-766`
+   - Issue: Storage-time routing may differ from retrieval-time routing
+   - Root Cause: Routing algorithm changes or query rephrasing causes category drift
+   - Historical Impact: Old memories stored with buggy intent-based routing
+   - Suggested Fix: Add category aliasing or cross-category search fallback
+
+4. **Drift Detection Not Fully Integrated** (Priority: Low)
+   - File: Enforcement chain integration
+   - Issue: CLAUDE.md notes "drift detection exists but may not be fully tied to fallback enforcement"
+   - Status: Drift watcher runs (line 123) but may need stronger fallback triggers
+
+---
+
+## SPECIFIC FILE:LINE REFERENCES FOR ISSUES
+
+1. **Vault Compliance Pending:** `/api/core/orchestrator.js:250-252`
+2. **Memory Format:** `/api/categories/memory/internal/persistent_memory.js:92-96`
+3. **Memory Context Injection:** `/api/core/orchestrator.js:1950-1958`
+4. **Routing Logic:** `/api/categories/memory/internal/intelligence.js:674-766`
+5. **Category Scoring:** `/api/categories/memory/internal/intelligence.js:903-968`
+6. **Vault Isolation:** `/api/core/orchestrator.js:1883-1942`
+
+---
+
+This diagnostic confirms I understand the system architecture, philosophy, and enforcement mechanisms before making any changes. The system is fundamentally sound with specific implementation gaps identified above.
+
+---END SUMMARY---
