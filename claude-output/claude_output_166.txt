@@ -1,0 +1,47 @@
+I see - I need user approval to create new files. Let me explain my approach first before creating the files.
+
+## Proposed Solution for Issue #166
+
+Based on my analysis of the codebase, here's my approach to fix the memory recognition issue:
+
+### Root Cause
+Memory IS being retrieved and injected into the context successfully (lines 561-640 in orchestrator.js). However, there's no enforcement mechanism that validates the AI actually USES the retrieved memories. The AI can claim "I don't have that information" even when the memory containing the answer is in the context.
+
+### Solution Design
+
+I'll create a new validator following the existing pattern (similar to `drift-watcher.js` and `initiative-enforcer.js`):
+
+**New File: `/api/lib/validators/memory-usage-enforcer.js`**
+- Checks if memory was provided in context (`context.sources.hasMemory === true`)
+- Detects "ignorance phrases" in AI responses (8 patterns):
+  - "I don't have information"
+  - "I don't know"
+  - "You haven't told me"
+  - "I'm not aware"
+  - "I don't recall"
+  - "You didn't mention"
+  - "I have no record"
+  - "I don't see"
+- If ignorance phrases are detected AND memory exists, flags as violation
+- For high-severity violations: Rewrites the response to reference memory
+- For medium-severity: Appends a reminder to check memory
+- Tracks violations for monitoring
+
+**Modified File: `/api/core/orchestrator.js`**
+- Add import for the new validator (line ~25)
+- Integrate into `#runEnforcementChain` method after drift-watcher, before initiative-enforcer (line ~150)
+- Add violation tracking to compliance metadata
+
+### Integration Points
+1. **Line 25** in orchestrator.js: Add import statement
+2. **Line ~150** in orchestrator.js: Add memory enforcer step in enforcement chain
+3. **Line ~112-118** in orchestrator.js: Add to compliance metadata
+
+### Why This Works
+- **Non-invasive**: Doesn't change memory retrieval (which works), only validates response
+- **Follows existing patterns**: Uses same structure as drift-watcher and initiative-enforcer
+- **Surgical fix**: Only intervenes when violation detected
+- **Preserves token budget**: No changes to 2400 token memory limit
+- **Maintains enforcement chain**: Proper order preserved
+
+Would you like me to proceed with implementing these changes?
