@@ -23,6 +23,7 @@ import _ from "lodash";
 // ========== ENFORCEMENT MODULE IMPORTS ==========
 import { driftWatcher } from "../lib/validators/drift-watcher.js";
 import { initiativeEnforcer } from "../lib/validators/initiative-enforcer.js";
+import { memoryUsageEnforcer } from "../lib/validators/memory-usage-enforcer.js";
 import { costTracker } from "../utils/cost-tracker.js";
 import { PoliticalGuardrails } from "../lib/politicalGuardrails.js";
 import { ProductValidator } from "../lib/productValidation.js";
@@ -104,8 +105,9 @@ export class Orchestrator {
   }
 
   /**
-   * Runs the 6-step enforcement chain on a response
+   * Runs the 7-step enforcement chain on a response
    * CRITICAL: Must execute in exact order - DO NOT REORDER
+   * Sacred order: RETRIEVE → INJECT → GENERATE → VALIDATE
    */
   async #runEnforcementChain(response, analysis, context, mode, personality) {
     let enforcedResponse = response;
@@ -172,7 +174,32 @@ export class Orchestrator {
         );
       }
 
-      // ========== STEP 3: POLITICAL GUARDRAILS ==========
+      // ========== STEP 3: MEMORY USAGE ENFORCER ==========
+      try {
+        const memoryResult = await memoryUsageEnforcer.enforce({
+          response: enforcedResponse,
+          context: context,
+        });
+
+        if (memoryResult.modified) {
+          enforcedResponse = memoryResult.response;
+          complianceMetadata.overrides.push({
+            module: "memory_usage_enforcer",
+            reason: memoryResult.reason,
+            matchedPhrase: memoryResult.matchedPhrase,
+            memoryTokens: memoryResult.memoryTokens,
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("memory_usage_enforcer");
+      } catch (error) {
+        this.error("Memory usage enforcer failed:", error);
+        complianceMetadata.warnings.push(
+          "memory_usage_enforcer_error: " + error.message,
+        );
+      }
+
+      // ========== STEP 4: POLITICAL GUARDRAILS ==========
       try {
         const politicalResult = await PoliticalGuardrails.check({
           response: enforcedResponse,
@@ -195,7 +222,7 @@ export class Orchestrator {
         );
       }
 
-      // ========== STEP 4: PRODUCT VALIDATION ==========
+      // ========== STEP 5: PRODUCT VALIDATION ==========
       try {
         const productResult = await ProductValidator.validate({
           response: enforcedResponse,
@@ -218,7 +245,7 @@ export class Orchestrator {
         );
       }
 
-      // ========== STEP 5: FOUNDER PROTECTION ==========
+      // ========== STEP 6: FOUNDER PROTECTION ==========
       try {
         const founderResult = await checkFounderProtection({
           response: enforcedResponse,
@@ -244,7 +271,7 @@ export class Orchestrator {
         );
       }
 
-      // ========== STEP 6: VAULT COMPLIANCE (Site Monkeys only) ==========
+      // ========== STEP 7: VAULT COMPLIANCE (Site Monkeys only) ==========
       if (mode === "site_monkeys" && context.sources?.hasVault) {
         try {
           // NOTE: validateVaultCompliance function not implemented yet
@@ -299,6 +326,12 @@ export class Orchestrator {
       this.log(
         `[MEMORY] Retrieved ${memoryContext.tokens} tokens from ${memoryContext.count} memories`,
       );
+      // Enhanced telemetry for memory injection verification
+      if (memoryContext.hasMemory) {
+        this.log(`[MEMORY] ✓ Memory WILL be injected into prompt (${memoryContext.tokens} tokens)`);
+      } else {
+        this.log(`[MEMORY] ✗ No memory to inject (first conversation or no relevant context)`);
+      }
 
       // STEP 2: Load document context (always check if document available)
       // Check extractedDocuments Map first, then use documentContext if provided
@@ -395,6 +428,13 @@ export class Orchestrator {
         this.log(
           `[ENFORCEMENT] ${enforcedResult.compliance_metadata.overrides.length} overrides applied`,
         );
+        // Enhanced telemetry: Log specific enforcement actions
+        enforcedResult.compliance_metadata.overrides.forEach((override) => {
+          this.log(`[ENFORCEMENT] - ${override.module}: ${override.reason || 'applied'}`);
+          if (override.module === 'memory_usage_enforcer') {
+            this.log(`[ENFORCEMENT] ⚠️  MEMORY VIOLATION: AI claimed ignorance despite ${override.memoryTokens} tokens of memory`);
+          }
+        });
       }
 
       // STEP 8: Apply personality reasoning framework (AFTER ENFORCEMENT)
