@@ -101,6 +101,20 @@ class PersistentMemoryOrchestrator {
         `Successfully retrieved ${memories.length} memories, ${memoryText.length} characters`,
       );
 
+      // MEMORY INJECTION DEBUG: Preview what's being injected
+      console.log('[MEMORY-INJECTION-DEBUG] Memory context prepared for injection:', {
+        memory_injected: true,
+        memory_count: memories.length,
+        memory_ids: memories.map(m => m.id),
+        memory_preview: memories.map(m => ({
+          id: m.id,
+          category: m.category_name,
+          source: m.source || 'unknown',
+          content_preview: m.content ? m.content.substring(0, 120) : '[empty]'
+        })),
+        total_chars: memoryText.length
+      });
+
       return {
         success: true,
         memories: memoryText,

@@ -1395,6 +1395,94 @@ class IntelligenceSystem {
   // MEMORY EXTRACTION ENGINE - extractRelevantMemories
   // ================================================================
 
+  /**
+   * Extract high-entropy tokens from query for exact matching
+   * High-entropy tokens are unique identifiers like WORD-WORD-#### or long alphanumeric strings
+   * @param {string} query - Query to analyze
+   * @returns {Array<string>} - Array of high-entropy tokens
+   */
+  extractHighEntropyTokens(query) {
+    if (!query) return [];
+
+    // Pattern matches:
+    // - WORD-WORD-#### format (e.g., ZEBRA-ANCHOR-7719, TURQUOISE-DELTA-1234)
+    // - Long alphanumeric strings (12+ chars)
+    const highEntropyPattern = /\b[A-Z]+-[A-Z]+-\d{4}\b|\b[A-Za-z0-9]{12,}\b/g;
+    const tokens = query.match(highEntropyPattern) || [];
+
+    return [...new Set(tokens)]; // Remove duplicates
+  }
+
+  /**
+   * EXACT MATCH RETRIEVAL: Search for high-entropy tokens before fuzzy search
+   * Solves: "My test phrase is ZEBRA-ANCHOR-7719" being stored but not retrieved
+   * Problem: LIKE filters on nouns miss unique tokens if compressed differently
+   * Solution: Exact substring match on high-entropy identifiers
+   * @param {string} userId - User identifier
+   * @param {string} query - User's query
+   * @returns {Promise<Array>} - Memories with exact token matches (or empty array)
+   */
+  async exactMatchRetrieval(userId, query) {
+    try {
+      // Extract high-entropy tokens from query
+      const tokens = this.extractHighEntropyTokens(query);
+
+      if (tokens.length === 0) {
+        // No high-entropy tokens, skip exact match stage
+        return [];
+      }
+
+      this.logger.log(
+        `[EXACT-MATCH] Found ${tokens.length} high-entropy tokens in query: ${tokens.join(', ')}`,
+      );
+
+      return await this.coreSystem.withDbClient(async (client) => {
+        // Build query to search for ANY of the high-entropy tokens
+        const tokenFilters = tokens
+          .map((_, i) => `content::text ILIKE $${i + 2}::text`)
+          .join(' OR ');
+
+        const query = `
+          SELECT id, user_id, category_name, subcategory_name, content,
+                 token_count, relevance_score, usage_frequency,
+                 created_at, last_accessed, metadata
+          FROM persistent_memories
+          WHERE user_id = $1
+            AND (${tokenFilters})
+          ORDER BY relevance_score DESC, created_at DESC
+          LIMIT 10
+        `;
+
+        const params = [userId, ...tokens.map(t => `%${t}%`)];
+
+        this.logger.log(
+          `[EXACT-MATCH] Searching for exact tokens: ${tokens.length} parameters`,
+        );
+
+        const result = await client.query(query, params);
+
+        if (result.rows.length > 0) {
+          this.logger.log(
+            `[EXACT-MATCH] ✅ Found ${result.rows.length} memories with exact token matches`,
+          );
+          console.log('[EXACT-MATCH-DEBUG] Matched memories:', {
+            count: result.rows.length,
+            memory_ids: result.rows.map(r => r.id),
+            tokens_searched: tokens,
+            content_previews: result.rows.map(r => r.content.substring(0, 80))
+          });
+        } else {
+          this.logger.log('[EXACT-MATCH] No exact matches found, falling through to fuzzy search');
+        }
+
+        return result.rows;
+      });
+    } catch (error) {
+      this.logger.error('[EXACT-MATCH] Exact match retrieval failed:', error);
+      return []; // Fall through to normal retrieval
+    }
+  }
+
   async extractRelevantMemories(userId, query, routing) {
     const startTime = Date.now();
 
@@ -1408,7 +1496,31 @@ class IntelligenceSystem {
         routing.semanticAnalysis ||
         (await this.performAdvancedSemanticAnalysis(query.toLowerCase()));
 
-      // STEP 1: Primary category extraction (existing logic)
+      // STEP 0: EXACT MATCH RETRIEVAL (new: high-entropy token search)
+      const exactMatches = await this.exactMatchRetrieval(userId, query);
+
+      // If we got exact matches, return them immediately (skip fuzzy search)
+      if (exactMatches.length > 0) {
+        this.logger.log(
+          `[EXACT-MATCH] Returning ${exactMatches.length} exact matches, skipping fuzzy search`,
+        );
+
+        // Score exact matches and return
+        const scoredExact = exactMatches.map((memory) => ({
+          ...memory,
+          semanticScore: 1.0, // Perfect match
+          keywordScore: 1.0,
+          recencyScore: this.calculateRecencyBoost(memory.created_at, memory.last_accessed),
+          importanceScore: memory.relevance_score || 0,
+          usageScore: Math.min((memory.usage_frequency || 0) / 20, 1.0),
+          relevanceScore: 1.0, // Exact match gets perfect score
+          source: "exact_match",
+        }));
+
+        return scoredExact;
+      }
+
+      // STEP 1: Primary category extraction (existing logic - fuzzy search)
       const primaryMemories = await this.extractFromPrimaryCategory(
         userId,
         query,

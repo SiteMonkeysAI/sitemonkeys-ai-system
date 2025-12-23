@@ -87,6 +87,50 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Sanitize content before storage by removing AI boilerplate
+   * Prevents storage poisoning from assistant/system narrative text
+   * @param {string} content - Content to sanitize
+   * @returns {string} - Sanitized content with only user facts
+   */
+  sanitizeForStorage(content) {
+    if (!content) return '';
+
+    // Boilerplate patterns to remove (AI narration, not user facts)
+    const boilerplatePatterns = [
+      /I don't retain memory|session-based memory|don't have access to previous|no memory of|don't have specific memory/gi,
+      /confidence is lower than ideal|confidence level|lower confidence/gi,
+      /founder protection|enforcement|safety disclaimer/gi,
+      /this appears to be our first interaction|first time we've|haven't interacted before/gi,
+      /I apologize|I'm sorry|I should clarify|let me explain/gi,
+      /As an AI|As a language model|I'm an AI assistant/gi,
+      /I don't have the ability to|I cannot|I'm unable to|I can't access/gi,
+      /Based on our conversation|In our previous discussion|From what you've told me/gi
+    ];
+
+    let sanitized = content;
+
+    // Remove each boilerplate pattern
+    for (const pattern of boilerplatePatterns) {
+      sanitized = sanitized.replace(pattern, '');
+    }
+
+    // Clean up multiple spaces, newlines, and trim
+    sanitized = sanitized
+      .replace(/\s+/g, ' ')
+      .replace(/\n\s*\n/g, '\n')
+      .trim();
+
+    // If after sanitization we're left with only whitespace or very short text,
+    // consider it boilerplate-only
+    if (sanitized.length < 10) {
+      console.log('[STORAGE-FILTER] ⚠️ Content appears to be boilerplate-only, rejecting storage');
+      return '';
+    }
+
+    return sanitized;
+  }
+
+  /**
    * Extract key facts from conversation using GPT-4o-mini
    * Target: 10-20:1 compression ratio
    * @param {string} userMsg - User's message
@@ -95,7 +139,7 @@ export class IntelligentMemoryStorage {
    */
   async extractKeyFacts(userMsg, aiResponse) {
     const prompt = `Extract ATOMIC FACTS from this conversation.\nFormat: One fact per line, 3-8 words max, bullet points.\nFocus on: User preferences, statements, questions, entities, names, numbers.\nExclude: Explanations, reasoning, examples, politeness.\n\nUser: ${userMsg}\nAssistant: ${aiResponse}\n\nExtracted Facts:\nCRITICAL: Maximum 5 facts. Each fact MUST be under 8 words. Be ruthless.`;
-    
+
     try {
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -103,18 +147,32 @@ export class IntelligentMemoryStorage {
         temperature: 0,
         max_tokens: 100
       });
-      
+
       const facts = response.choices[0].message.content.trim();
-      
+
+      // STORAGE FILTER: Remove AI boilerplate before post-processing
+      const sanitizedFacts = this.sanitizeForStorage(facts);
+
+      // Reject storage if only boilerplate remains
+      if (!sanitizedFacts) {
+        console.log('[STORAGE-FILTER] ❌ No user facts after sanitization, aborting storage');
+        throw new Error('No user facts to store after sanitization');
+      }
+
       // AGGRESSIVE POST-PROCESSING: Guarantee 10-20:1 compression
-      const processedFacts = this.aggressivePostProcessing(facts);
-      
+      const processedFacts = this.aggressivePostProcessing(sanitizedFacts);
+
       console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${processedFacts.split('\n').filter(l => l.trim()).length} facts`);
       return processedFacts;
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Fact extraction failed:', error.message);
-      // Fallback: return summarized version
-      return `User stated: ${userMsg.substring(0, 50)}...\nSystem discussed: ${aiResponse.substring(0, 50)}...`;
+      // Fallback: return summarized version (also sanitized)
+      const fallback = `User stated: ${userMsg.substring(0, 50)}...\nSystem discussed: ${aiResponse.substring(0, 50)}...`;
+      const sanitizedFallback = this.sanitizeForStorage(fallback);
+      if (!sanitizedFallback) {
+        throw new Error('Cannot store: no user facts in conversation');
+      }
+      return sanitizedFallback;
     }
   }
 
@@ -190,8 +248,64 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Extract high-entropy tokens from content
+   * High-entropy tokens are unique identifiers like WORD-WORD-#### or long alphanumeric strings
+   * @param {string} content - Content to analyze
+   * @returns {Array<string>} - Array of high-entropy tokens
+   */
+  extractHighEntropyTokens(content) {
+    if (!content) return [];
+
+    // Pattern matches:
+    // - WORD-WORD-#### format (e.g., ZEBRA-ANCHOR-7719, TURQUOISE-DELTA-1234)
+    // - Long alphanumeric strings (12+ chars)
+    const highEntropyPattern = /\b[A-Z]+-[A-Z]+-\d{4}\b|\b[A-Za-z0-9]{12,}\b/g;
+    const tokens = content.match(highEntropyPattern) || [];
+
+    return [...new Set(tokens)]; // Remove duplicates
+  }
+
+  /**
+   * Check if two contents can be deduplicated based on high-entropy tokens
+   * Returns true if safe to merge, false if they contain different high-entropy tokens
+   * @param {string} contentA - First content
+   * @param {string} contentB - Second content
+   * @returns {boolean} - True if safe to merge
+   */
+  canDeduplicate(contentA, contentB) {
+    const tokensA = this.extractHighEntropyTokens(contentA);
+    const tokensB = this.extractHighEntropyTokens(contentB);
+
+    // If neither has high-entropy tokens, safe to merge based on similarity
+    if (tokensA.length === 0 && tokensB.length === 0) {
+      return true;
+    }
+
+    // If one has high-entropy tokens and the other doesn't, they're different
+    if ((tokensA.length > 0 && tokensB.length === 0) ||
+        (tokensA.length === 0 && tokensB.length > 0)) {
+      console.log('[DEDUP-GUARD] ❌ One has high-entropy tokens, other does not - preventing merge');
+      return false;
+    }
+
+    // If both have high-entropy tokens, they must match exactly
+    const overlap = tokensA.filter(t => tokensB.includes(t));
+    if (overlap.length === 0) {
+      console.log('[DEDUP-GUARD] ❌ Different high-entropy tokens detected:', {
+        tokensA: tokensA.slice(0, 3),
+        tokensB: tokensB.slice(0, 3)
+      });
+      return false;
+    }
+
+    console.log('[DEDUP-GUARD] ✅ High-entropy tokens match, safe to merge:', overlap);
+    return true;
+  }
+
+  /**
    * Find similar memories using PostgreSQL full-text search
    * Threshold: 70% keyword overlap = duplicate
+   * WITH DEDUP GUARD: Prevents merging unrelated high-entropy content
    * @param {string} userId - User identifier
    * @param {string} category - Memory category
    * @param {string} facts - Extracted facts to compare
@@ -200,8 +314,8 @@ export class IntelligentMemoryStorage {
   async findSimilarMemories(userId, category, facts) {
     try {
       const result = await this.db.query(`
-        SELECT 
-          id, 
+        SELECT
+          id,
           content,
           ts_rank(
             to_tsvector('english', content),
@@ -214,14 +328,22 @@ export class IntelligentMemoryStorage {
         ORDER BY similarity DESC
         LIMIT 5
       `, [userId, category, facts]);
-      
-      // Return most similar if above threshold
-      if (result.rows.length > 0 && result.rows[0].similarity > 0.3) {
-        console.log(`[DEDUP] 📊 Found similar memory with similarity score: ${result.rows[0].similarity.toFixed(3)}`);
-        return result.rows[0];
+
+      // Check each candidate with dedup guard
+      for (const candidate of result.rows) {
+        if (candidate.similarity > 0.3) {
+          // DEDUP GUARD: Check if safe to merge based on high-entropy tokens
+          if (this.canDeduplicate(facts, candidate.content)) {
+            console.log(`[DEDUP] 📊 Found similar memory with similarity score: ${candidate.similarity.toFixed(3)}, safe to merge`);
+            return candidate;
+          } else {
+            console.log(`[DEDUP] ⚠️ Similar memory found (score: ${candidate.similarity.toFixed(3)}) but BLOCKED by dedup guard`);
+            // Continue checking next candidate
+          }
+        }
       }
-      
-      console.log('[DEDUP] ✅ No similar memories found');
+
+      console.log('[DEDUP] ✅ No similar memories found (or all blocked by dedup guard)');
       return null;
     } catch (error) {
       console.error('[DEDUP] ⚠️ Similarity search failed:', error.message);
