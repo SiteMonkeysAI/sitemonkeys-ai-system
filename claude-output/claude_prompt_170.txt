@@ -1,0 +1,184 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #170: Audit Memory Validation Chain Against Master Ledger
+
+Issue Description:
+@claude claude-fix
+
+Issue: Audit Memory Validation Chain Against Master Ledger
+Priority: MEDIUM (after memory-usage-enforcer fix is deployed)
+Context
+
+This audit must not block deployment of fixes already in progress; it exists to inform founder decisions, not to gate releases.
+
+The Master Completion Ledger defines a comprehensive validation chain for memory operations. This audit verifies the current implementation against Ledger items #10, #12, #13, and #15.
+
+This is an audit, not a blocking spec.
+Document what exists, what’s missing, and what’s working differently than documented.
+Do not force changes to match the Ledger — report findings for founder review.
+
+Audit Scope
+Ledger Item #10: Truth-Validated Injection
+
+Ledger Description:
+
+“Before any retrieved memory is injected into AI context for generating responses, system validates information through truth confidence engine and only injects verified, reliable data.”
+
+Audit Questions:
+
+Is there pre-injection validation of retrieved memories?
+
+If yes, what does it check? (confidence level, consistency, contradictions)
+
+If no, is validation happening elsewhere in the pipeline?
+
+Are low-confidence memories filtered out or flagged before injection?
+
+Search Terms:
+validate, confidence, inject, retriev, memory, truth
+
+Ledger Item #12: Contextual Relevance Ranking
+
+Ledger Description:
+
+“System ranks retrieved memories based on genuine contextual relevance to user's query and current conversation, not just keyword frequency or recency.”
+
+Audit Questions:
+
+How are retrieved memories ranked before injection?
+
+Is ranking based on semantic similarity, recency, frequency, or a combination?
+
+Is there conversation-context-aware ranking (same query returns different results based on conversation flow)?
+
+What determines which memories make it into the prompt vs. which are cut for token budget?
+
+Search Terms:
+rank, relevance, score, priority, semantic, retriev
+
+Ledger Item #13: Vault-Selective Injection Logic
+
+Ledger Description:
+
+“System intelligently determines which vault(s) to retrieve from based on query analysis and current mode, rather than always searching all vaults or requiring manual vault specification.”
+
+Audit Questions:
+
+Does retrieval query specific vaults based on mode?
+
+Is there query analysis that overrides mode-based defaults when appropriate?
+
+Are vault boundaries enforced (e.g., Business vault not accessible in personal mode)?
+
+How does Site Monkeys mode vault loading interact with persistent memory retrieval?
+
+Search Terms:
+vault, mode, isolat, loadVault, getMemories
+
+Ledger Item #15: Multi-Stage Pre/Post Validation Chain
+
+Ledger Description:
+
+“System validates information at two critical points: before storing in memory (pre-storage validation) and before including in AI responses (post-generation validation).”
+
+Note: Although Ledger #15’s short description mentions pre-storage and post-generation validation, this audit also evaluates pre-injection validation as described in Ledger #10 and the full lifecycle chain.
+
+Full Chain Per Ledger:
+
+PRE-STORAGE → RETRIEVE → PRE-INJECTION → INJECT → GENERATE → POST-GENERATION
+
+
+Audit Questions:
+
+Is there pre-storage validation when new memories are saved?
+
+Is there pre-injection validation after retrieval but before prompt building?
+
+Is there post-generation validation before response is sent to the user?
+
+Map the actual validation points in the current codebase
+
+Identify any gaps between Ledger description and implementation
+
+Search Terms:
+store, save, extract, validate, enforce, linter
+
+Output Requirements
+
+Create a file named AUDIT_MEMORY_VALIDATION_CHAIN.md containing:
+
+Section 1: Current Implementation Map
+
+Actual flow discovered in the codebase (with file:line references)
+
+What validation exists at each stage
+
+What’s missing vs. Ledger description
+
+Prompt Assembly Boundary: Identify where MEMORY_CONTEXT is formatted, delimited, and injected into the final model payload (messages array or prompt string). Document how memory is separated from system instructions, vault context, and user input.
+
+Section 2: Findings Per Ledger Item
+
+For each item (#10, #12, #13, #15):
+
+Status: Implemented / Partially Implemented / Not Implemented / Implemented Differently
+
+Evidence: File paths and code references
+
+Gap Analysis: What the Ledger says vs. what the code does
+
+Risk Assessment: Is the gap a problem or acceptable divergence?
+
+Section 3: Recommendations
+
+Which gaps should be addressed (if any)
+
+Suggested priority order
+
+Any Ledger items that should be updated to match working implementation
+
+Constraints
+
+This is audit only — do not make code changes
+
+Frontend Contract Safety: Do not propose changes that alter the API response JSON schema or response shape without explicitly noting potential frontend impact
+
+Report findings — do not force implementation to match Ledger
+
+Be specific — file:line references, not vague descriptions
+
+Note working divergences — if implementation differs but works, document why it might be acceptable
+
+Founder decides — recommendations only, no unilateral changes
+
+Success Criteria
+
+Audit is complete when:
+
+AUDIT_MEMORY_VALIDATION_CHAIN.md exists with all sections filled
+
+Each Ledger item has a clear status and supporting evidence
+
+Gaps are identified with risk assessment
+
+Recommendations are actionable and specific
+
+No code was changed during the audit
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
