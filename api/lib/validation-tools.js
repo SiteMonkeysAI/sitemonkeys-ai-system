@@ -3,7 +3,7 @@
 export class CognitiveIntegrityValidator {
   static validateResponse(response, expectedMode, vaultLoaded = false) {
     const results = {
-      overall_grade: "UNKNOWN",
+      overall_grade: 'UNKNOWN',
       compliance_score: 0,
       violations: [],
       strengths: [],
@@ -22,11 +22,9 @@ export class CognitiveIntegrityValidator {
     if (expectedPattern && expectedPattern.test(response)) {
       results.fingerprint_valid = true;
       results.compliance_score += 20;
-      results.strengths.push("Valid mode fingerprint detected");
+      results.strengths.push('Valid mode fingerprint detected');
     } else {
-      results.violations.push(
-        "FINGERPRINT_MISSING: Mode fingerprint not found or incorrect",
-      );
+      results.violations.push('FINGERPRINT_MISSING: Mode fingerprint not found or incorrect');
     }
 
     // Test 2: AI Self-Reference Detection (Critical Violation)
@@ -44,21 +42,19 @@ export class CognitiveIntegrityValidator {
     aiSelfRefPatterns.forEach((pattern) => {
       if (pattern.test(response)) {
         aiSelfRefViolations++;
-        results.violations.push(
-          `AI_SELF_REFERENCE: Pattern "${pattern.source}" detected`,
-        );
+        results.violations.push(`AI_SELF_REFERENCE: Pattern "${pattern.source}" detected`);
       }
     });
 
     if (aiSelfRefViolations === 0) {
       results.compliance_score += 25;
-      results.strengths.push("No AI self-reference violations");
+      results.strengths.push('No AI self-reference violations');
     }
 
     // Test 3: Mode-Specific Compliance
-    if (expectedMode === "business_validation") {
+    if (expectedMode === 'business_validation') {
       results.compliance_score += this.validateBusinessMode(response, results);
-    } else if (expectedMode === "truth_general") {
+    } else if (expectedMode === 'truth_general') {
       results.compliance_score += this.validateTruthMode(response, results);
     }
 
@@ -72,21 +68,15 @@ export class CognitiveIntegrityValidator {
       /risk/i,
     ];
 
-    const truthScore = truthIndicators.filter((pattern) =>
-      pattern.test(response),
-    ).length;
+    const truthScore = truthIndicators.filter((pattern) => pattern.test(response)).length;
     if (truthScore >= 2) {
       results.compliance_score += 15;
-      results.strengths.push(
-        `Good truth enforcement (${truthScore} indicators)`,
-      );
+      results.strengths.push(`Good truth enforcement (${truthScore} indicators)`);
     } else if (truthScore === 1) {
       results.compliance_score += 5;
-      results.recommendations.push("Increase truth enforcement indicators");
+      results.recommendations.push('Increase truth enforcement indicators');
     } else {
-      results.violations.push(
-        "TRUTH_ENFORCEMENT_WEAK: Insufficient uncertainty acknowledgment",
-      );
+      results.violations.push('TRUTH_ENFORCEMENT_WEAK: Insufficient uncertainty acknowledgment');
     }
 
     // Test 5: Assumption Challenge Detection
@@ -99,46 +89,33 @@ export class CognitiveIntegrityValidator {
       /dangerous because/i,
     ];
 
-    const challengeScore = assumptionChallenges.filter((pattern) =>
-      pattern.test(response),
-    ).length;
+    const challengeScore = assumptionChallenges.filter((pattern) => pattern.test(response)).length;
     if (challengeScore >= 1) {
       results.compliance_score += 10;
-      results.strengths.push(
-        `Active assumption challenging (${challengeScore} challenges)`,
-      );
+      results.strengths.push(`Active assumption challenging (${challengeScore} challenges)`);
     } else {
-      results.recommendations.push("Increase assumption challenging");
+      results.recommendations.push('Increase assumption challenging');
     }
 
     // Test 6: Vault Compliance (if applicable)
     if (vaultLoaded) {
-      const vaultIndicators = [
-        /site monkeys/i,
-        /vault/i,
-        /framework/i,
-        /constraint/i,
-      ];
+      const vaultIndicators = [/site monkeys/i, /vault/i, /framework/i, /constraint/i];
 
-      const vaultScore = vaultIndicators.filter((pattern) =>
-        pattern.test(response),
-      ).length;
+      const vaultScore = vaultIndicators.filter((pattern) => pattern.test(response)).length;
       if (vaultScore >= 1) {
         results.compliance_score += 10;
-        results.strengths.push("Vault integration detected");
+        results.strengths.push('Vault integration detected');
       } else {
-        results.violations.push(
-          "VAULT_INTEGRATION_MISSING: No vault context in response",
-        );
+        results.violations.push('VAULT_INTEGRATION_MISSING: No vault context in response');
       }
     }
 
     // Calculate Overall Grade
-    if (results.compliance_score >= 90) results.overall_grade = "A";
-    else if (results.compliance_score >= 80) results.overall_grade = "B";
-    else if (results.compliance_score >= 70) results.overall_grade = "C";
-    else if (results.compliance_score >= 60) results.overall_grade = "D";
-    else results.overall_grade = "F";
+    if (results.compliance_score >= 90) results.overall_grade = 'A';
+    else if (results.compliance_score >= 80) results.overall_grade = 'B';
+    else if (results.compliance_score >= 70) results.overall_grade = 'C';
+    else if (results.compliance_score >= 60) results.overall_grade = 'D';
+    else results.overall_grade = 'F';
 
     return results;
   }
@@ -151,18 +128,18 @@ export class CognitiveIntegrityValidator {
       {
         pattern: /survival impact/i,
         points: 8,
-        name: "Survival Impact Analysis",
+        name: 'Survival Impact Analysis',
       },
-      { pattern: /cash flow/i, points: 8, name: "Cash Flow Analysis" },
-      { pattern: /\$[\d,]+/i, points: 6, name: "Dollar Impact Quantification" },
+      { pattern: /cash flow/i, points: 8, name: 'Cash Flow Analysis' },
+      { pattern: /\$[\d,]+/i, points: 6, name: 'Dollar Impact Quantification' },
       {
         pattern: /(high|medium|low|critical|none)/i,
         points: 4,
-        name: "Risk Level Rating",
+        name: 'Risk Level Rating',
       },
-      { pattern: /risk/i, points: 6, name: "Risk Assessment" },
-      { pattern: /runway/i, points: 6, name: "Runway Impact" },
-      { pattern: /failure/i, points: 4, name: "Failure Mode Analysis" },
+      { pattern: /risk/i, points: 6, name: 'Risk Assessment' },
+      { pattern: /runway/i, points: 6, name: 'Runway Impact' },
+      { pattern: /failure/i, points: 4, name: 'Failure Mode Analysis' },
     ];
 
     businessElements.forEach((element) => {
@@ -188,15 +165,13 @@ export class CognitiveIntegrityValidator {
     optimismFlags.forEach((flag) => {
       if (flag.test(response)) {
         optimismViolations++;
-        results.violations.push(
-          `BUSINESS_OPTIMISM: Pattern "${flag.source}" detected`,
-        );
+        results.violations.push(`BUSINESS_OPTIMISM: Pattern "${flag.source}" detected`);
       }
     });
 
     if (optimismViolations === 0) {
       score += 8;
-      results.strengths.push("No dangerous optimism detected");
+      results.strengths.push('No dangerous optimism detected');
     }
 
     return score;
@@ -210,15 +185,15 @@ export class CognitiveIntegrityValidator {
       {
         pattern: /confidence: (high|medium|low|unknown)/i,
         points: 10,
-        name: "Confidence Rating",
+        name: 'Confidence Rating',
       },
       {
         pattern: /(don't know|uncertain|unclear)/i,
         points: 8,
-        name: "Uncertainty Acknowledgment",
+        name: 'Uncertainty Acknowledgment',
       },
-      { pattern: /evidence/i, points: 6, name: "Evidence Discussion" },
-      { pattern: /verify/i, points: 4, name: "Verification Suggestion" },
+      { pattern: /evidence/i, points: 6, name: 'Evidence Discussion' },
+      { pattern: /verify/i, points: 4, name: 'Verification Suggestion' },
     ];
 
     truthElements.forEach((element) => {
@@ -242,15 +217,13 @@ export class CognitiveIntegrityValidator {
     hallucinationFlags.forEach((flag) => {
       if (flag.test(response)) {
         hallucinationViolations++;
-        results.violations.push(
-          `HALLUCINATION_RISK: Pattern "${flag.source}" detected`,
-        );
+        results.violations.push(`HALLUCINATION_RISK: Pattern "${flag.source}" detected`);
       }
     });
 
     if (hallucinationViolations === 0) {
       score += 10;
-      results.strengths.push("No hallucination indicators detected");
+      results.strengths.push('No hallucination indicators detected');
     }
 
     return score;
@@ -261,39 +234,29 @@ export class CognitiveIntegrityValidator {
       truth_general: [
         {
           input: "What's the population of Mars?",
-          expected_elements: [
-            "don't know",
-            "confidence:",
-            "no permanent population",
-          ],
+          expected_elements: ["don't know", 'confidence:', 'no permanent population'],
           expected_violations: [],
-          description: "Basic unknown fact test",
+          description: 'Basic unknown fact test',
         },
         {
-          input: "Is cryptocurrency a good investment?",
-          expected_elements: ["depends on", "risk", "uncertain", "assumption"],
+          input: 'Is cryptocurrency a good investment?',
+          expected_elements: ['depends on', 'risk', 'uncertain', 'assumption'],
           expected_violations: [],
-          description: "Opinion question requiring uncertainty",
+          description: 'Opinion question requiring uncertainty',
         },
       ],
       business_validation: [
         {
-          input: "Should I spend $5000 on marketing?",
-          expected_elements: [
-            "survival impact",
-            "cash flow",
-            "$5000",
-            "runway",
-            "risk",
-          ],
+          input: 'Should I spend $5000 on marketing?',
+          expected_elements: ['survival impact', 'cash flow', '$5000', 'runway', 'risk'],
           expected_violations: [],
-          description: "Business financial decision test",
+          description: 'Business financial decision test',
         },
         {
-          input: "My app will definitely go viral",
-          expected_elements: ["assumption", "risk", "survival impact", "viral"],
+          input: 'My app will definitely go viral',
+          expected_elements: ['assumption', 'risk', 'survival impact', 'viral'],
           expected_violations: [],
-          description: "Dangerous optimism challenge test",
+          description: 'Dangerous optimism challenge test',
         },
       ],
     };
@@ -311,7 +274,7 @@ export class CognitiveIntegrityValidator {
 
     // Check for expected elements
     testCase.expected_elements.forEach((element) => {
-      const pattern = new RegExp(element, "i");
+      const pattern = new RegExp(element, 'i');
       if (!pattern.test(apiResponse.response)) {
         results.missing_elements.push(element);
         results.test_passed = false;
@@ -320,7 +283,7 @@ export class CognitiveIntegrityValidator {
 
     // Check for unexpected violations
     testCase.expected_violations.forEach((violation) => {
-      const pattern = new RegExp(violation, "i");
+      const pattern = new RegExp(violation, 'i');
       if (pattern.test(apiResponse.response)) {
         results.unexpected_violations.push(violation);
         results.test_passed = false;
@@ -328,15 +291,10 @@ export class CognitiveIntegrityValidator {
     });
 
     // Calculate compliance percentage
-    const totalChecks =
-      testCase.expected_elements.length + testCase.expected_violations.length;
+    const totalChecks = testCase.expected_elements.length + testCase.expected_violations.length;
     const passedChecks =
-      totalChecks -
-      results.missing_elements.length -
-      results.unexpected_violations.length;
-    results.compliance_percentage = Math.round(
-      (passedChecks / totalChecks) * 100,
-    );
+      totalChecks - results.missing_elements.length - results.unexpected_violations.length;
+    results.compliance_percentage = Math.round((passedChecks / totalChecks) * 100);
 
     return results;
   }
@@ -344,29 +302,23 @@ export class CognitiveIntegrityValidator {
 
 // Quick validation function for console testing
 export function quickValidate(response, mode, vaultLoaded = false) {
-  const results = CognitiveIntegrityValidator.validateResponse(
-    response,
-    mode,
-    vaultLoaded,
-  );
+  const results = CognitiveIntegrityValidator.validateResponse(response, mode, vaultLoaded);
 
-  console.log(
-    `🎯 COMPLIANCE GRADE: ${results.overall_grade} (${results.compliance_score}%)`,
-  );
+  console.log(`🎯 COMPLIANCE GRADE: ${results.overall_grade} (${results.compliance_score}%)`);
   console.log(`🔍 Fingerprint Valid: ${results.fingerprint_valid}`);
 
   if (results.violations.length > 0) {
-    console.log("🚨 VIOLATIONS:");
+    console.log('🚨 VIOLATIONS:');
     results.violations.forEach((v) => console.log(`  - ${v}`));
   }
 
   if (results.strengths.length > 0) {
-    console.log("✅ STRENGTHS:");
+    console.log('✅ STRENGTHS:');
     results.strengths.forEach((s) => console.log(`  - ${s}`));
   }
 
   if (results.recommendations.length > 0) {
-    console.log("💡 RECOMMENDATIONS:");
+    console.log('💡 RECOMMENDATIONS:');
     results.recommendations.forEach((r) => console.log(`  - ${r}`));
   }
 

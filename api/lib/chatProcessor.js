@@ -1,23 +1,21 @@
-import { processWithEliAndRoxy } from "./ai-processors.js";
-import OpenAI from "openai";
-import crypto from "crypto";
+import { processWithEliAndRoxy } from './ai-processors.js';
+import OpenAI from 'openai';
+import crypto from 'crypto';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
 // Helper function to generate secure IDs with timestamp
-function generateId(prefix = "") {
+function generateId(prefix = '') {
   let randomPart;
-  if (typeof crypto.randomUUID === "function") {
+  if (typeof crypto.randomUUID === 'function') {
     randomPart = crypto.randomUUID();
   } else {
-    randomPart = crypto.randomBytes(16).toString("hex");
+    randomPart = crypto.randomBytes(16).toString('hex');
   }
   const timestamp = Date.now();
-  return prefix
-    ? `${prefix}-${timestamp}-${randomPart}`
-    : `${timestamp}-${randomPart}`;
+  return prefix ? `${prefix}-${timestamp}-${randomPart}` : `${timestamp}-${randomPart}`;
 }
 
 // PERSISTENT SESSION STORE - SURVIVES RESTARTS
@@ -67,10 +65,10 @@ class PersistentSessionStore {
       patternWarnings: [],
       enforcementHistory: [
         {
-          type: "SESSION_RESET",
+          type: 'SESSION_RESET',
           timestamp: Date.now(),
           reason: reason,
-          previousDrift: oldSession?.driftScore || "unknown",
+          previousDrift: oldSession?.driftScore || 'unknown',
           previousOverrides: oldSession?.overrideLog?.length || 0,
         },
       ],
@@ -98,16 +96,9 @@ const sessionStore = new PersistentSessionStore();
 
 // OVERRIDE AUDIT SYSTEM
 class OverrideAuditor {
-  static logOverride(
-    session,
-    type,
-    originalRule,
-    overrideApplied,
-    context,
-    userPressure = false,
-  ) {
+  static logOverride(session, type, originalRule, overrideApplied, context, userPressure = false) {
     const overrideRecord = {
-      id: generateId("OVR"),
+      id: generateId('OVR'),
       timestamp: Date.now(),
       type: type,
       originalRule: originalRule,
@@ -120,10 +111,7 @@ class OverrideAuditor {
     };
 
     session.overrideLog.push(overrideRecord);
-    session.driftScore = Math.max(
-      0.1,
-      session.driftScore - overrideRecord.driftImpact,
-    );
+    session.driftScore = Math.max(0.1, session.driftScore - overrideRecord.driftImpact);
 
     this.detectPatterns(session);
     return overrideRecord;
@@ -147,16 +135,15 @@ class OverrideAuditor {
 
   static generateJustification(type, _context) {
     const justifications = {
-      TRUTH_ACCOMMODATION: "Response modified to meet truth-first standards",
-      BUSINESS_RISK_MINIMIZATION:
-        "Added risk analysis to counter optimistic bias",
-      VAULT_RULE_BYPASS: "Vault rule enforcement applied",
-      PRESSURE_ACCOMMODATION: "Pressure resistance activated",
-      EVIDENCE_LOWERING: "Evidence standards enforced",
-      POLITICAL_BIAS: "Political neutrality restored",
+      TRUTH_ACCOMMODATION: 'Response modified to meet truth-first standards',
+      BUSINESS_RISK_MINIMIZATION: 'Added risk analysis to counter optimistic bias',
+      VAULT_RULE_BYPASS: 'Vault rule enforcement applied',
+      PRESSURE_ACCOMMODATION: 'Pressure resistance activated',
+      EVIDENCE_LOWERING: 'Evidence standards enforced',
+      POLITICAL_BIAS: 'Political neutrality restored',
     };
 
-    return justifications[type] || "Cognitive integrity enforcement applied";
+    return justifications[type] || 'Cognitive integrity enforcement applied';
   }
 
   static detectPatterns(session) {
@@ -166,26 +153,23 @@ class OverrideAuditor {
 
     if (recentOverrides.length >= 3) {
       const patternWarning = {
-        type: "FREQUENT_OVERRIDES",
+        type: 'FREQUENT_OVERRIDES',
         timestamp: Date.now(),
         count: recentOverrides.length,
-        severity: "HIGH",
+        severity: 'HIGH',
         message: `${recentOverrides.length} overrides in 15 minutes - potential pressure accommodation`,
       };
 
       session.patternWarnings.push(patternWarning);
     }
 
-    const truthOverrides = recentOverrides.filter((o) =>
-      o.type.includes("TRUTH"),
-    );
+    const truthOverrides = recentOverrides.filter((o) => o.type.includes('TRUTH'));
     if (truthOverrides.length >= 2) {
       session.patternWarnings.push({
-        type: "TRUTH_EROSION",
+        type: 'TRUTH_EROSION',
         timestamp: Date.now(),
-        severity: "CRITICAL",
-        message:
-          "Multiple truth enforcement triggers - truth standards may be eroding",
+        severity: 'CRITICAL',
+        message: 'Multiple truth enforcement triggers - truth standards may be eroding',
       });
     }
   }
@@ -198,12 +182,12 @@ class OverrideAuditor {
       driftScore: session.driftScore,
       integrityStatus:
         session.driftScore > 0.8
-          ? "STRONG"
+          ? 'STRONG'
           : session.driftScore > 0.6
-            ? "MODERATE"
+            ? 'MODERATE'
             : session.driftScore > 0.4
-              ? "COMPROMISED"
-              : "CRITICAL",
+              ? 'COMPROMISED'
+              : 'CRITICAL',
     };
   }
 }
@@ -218,24 +202,24 @@ class PatternDetector {
     );
 
     const truthSoftening = recent.filter(
-      (o) => o.type.includes("TRUTH") || o.type.includes("ACCOMMODATION"),
+      (o) => o.type.includes('TRUTH') || o.type.includes('ACCOMMODATION'),
     );
     if (truthSoftening.length >= 2) {
       patterns.push({
-        type: "TRUTH_SOFTENING",
-        severity: "HIGH",
+        type: 'TRUTH_SOFTENING',
+        severity: 'HIGH',
         evidence: truthSoftening.length,
         message: `Truth enforcement triggered ${truthSoftening.length} times - standards may be softening`,
       });
     }
 
     const riskMinimization = recent.filter(
-      (o) => o.type.includes("RISK") || o.type.includes("BUSINESS"),
+      (o) => o.type.includes('RISK') || o.type.includes('BUSINESS'),
     );
     if (riskMinimization.length >= 2) {
       patterns.push({
-        type: "RISK_MINIMIZATION",
-        severity: "HIGH",
+        type: 'RISK_MINIMIZATION',
+        severity: 'HIGH',
         evidence: riskMinimization.length,
         message: `Business risk enforcement triggered ${riskMinimization.length} times - risk awareness declining`,
       });
@@ -246,8 +230,8 @@ class PatternDetector {
     );
     if (pressurePattern.length >= 3) {
       patterns.push({
-        type: "SUSTAINED_PRESSURE",
-        severity: "CRITICAL",
+        type: 'SUSTAINED_PRESSURE',
+        severity: 'CRITICAL',
         evidence: pressurePattern.length,
         message: `${pressurePattern.length} pressure attempts detected - user may be trying to override system`,
       });
@@ -261,24 +245,24 @@ class PatternDetector {
       score: session.driftScore,
       status:
         session.driftScore > 0.8
-          ? "HEALTHY"
+          ? 'HEALTHY'
           : session.driftScore > 0.6
-            ? "DECLINING"
+            ? 'DECLINING'
             : session.driftScore > 0.4
-              ? "COMPROMISED"
-              : "CRITICAL",
+              ? 'COMPROMISED'
+              : 'CRITICAL',
       patterns: this.analyzeSession(session),
       recommendations: [],
     };
 
     if (health.score < 0.5) {
-      health.recommendations.push("IMMEDIATE_SESSION_RESET");
+      health.recommendations.push('IMMEDIATE_SESSION_RESET');
     } else if (health.score < 0.7) {
-      health.recommendations.push("ESCALATE_ENFORCEMENT");
+      health.recommendations.push('ESCALATE_ENFORCEMENT');
     }
 
     if (health.patterns.length > 0) {
-      health.recommendations.push("PATTERN_INTERVENTION");
+      health.recommendations.push('PATTERN_INTERVENTION');
     }
 
     return health;
@@ -288,10 +272,9 @@ class PatternDetector {
 // MODE FINGERPRINTING SYSTEM
 class ModeFingerprinter {
   static generateFingerprint(mode, enforcementApplied, vaultStatus, timestamp) {
-    const date = new Date(timestamp).toISOString().split("T")[0];
-    const enforcement =
-      enforcementApplied.length > 0 ? enforcementApplied.join("+") : "NONE";
-    const vault = vaultStatus.loaded ? vaultStatus.source : "NONE";
+    const date = new Date(timestamp).toISOString().split('T')[0];
+    const enforcement = enforcementApplied.length > 0 ? enforcementApplied.join('+') : 'NONE';
+    const vault = vaultStatus.loaded ? vaultStatus.source : 'NONE';
 
     const fingerprints = {
       truth_general: `TG-${date}-${enforcement}`,
@@ -312,10 +295,10 @@ class ModeFingerprinter {
   static calculateConfidence(mode, enforcementApplied) {
     let confidence = 0.7;
 
-    if (enforcementApplied.includes("TRUTH_ENFORCEMENT")) confidence += 0.1;
-    if (enforcementApplied.includes("BUSINESS_ENFORCEMENT")) confidence += 0.1;
-    if (enforcementApplied.includes("VAULT_ENFORCEMENT")) confidence += 0.1;
-    if (enforcementApplied.includes("PRESSURE_RESISTANCE")) confidence += 0.05;
+    if (enforcementApplied.includes('TRUTH_ENFORCEMENT')) confidence += 0.1;
+    if (enforcementApplied.includes('BUSINESS_ENFORCEMENT')) confidence += 0.1;
+    if (enforcementApplied.includes('VAULT_ENFORCEMENT')) confidence += 0.1;
+    if (enforcementApplied.includes('PRESSURE_RESISTANCE')) confidence += 0.05;
 
     return Math.min(confidence, 1.0);
   }
@@ -333,16 +316,14 @@ export async function processRequest(requestBody) {
   try {
     const {
       message,
-      mode = "business_validation",
+      mode = 'business_validation',
       conversation_history = [],
       vault_loaded = false,
       user_preference = null,
-      session_id = generateId("session"),
+      session_id = generateId('session'),
     } = requestBody;
 
-    console.log(
-      `🧠 COGNITIVE FIREWALL ACTIVATED: ${mode}, vault: ${vault_loaded}`,
-    );
+    console.log(`🧠 COGNITIVE FIREWALL ACTIVATED: ${mode}, vault: ${vault_loaded}`);
 
     // Get persistent session
     const session = sessionStore.getSession(session_id);
@@ -352,25 +333,25 @@ export async function processRequest(requestBody) {
 
     // VAULT SYSTEM - ONLY FOR SITE MONKEYS
     let _vaultResults = [];
-    let vaultStatus = { loaded: false, required: mode === "site_monkeys" };
+    let vaultStatus = { loaded: false, required: mode === 'site_monkeys' };
 
-    if (mode === "site_monkeys") {
+    if (mode === 'site_monkeys') {
       if (vault_loaded) {
         // Embedded Site Monkeys business rules
         const embeddedVault = {
-          vault_id: "site_monkeys",
-          version: "1.0.0",
+          vault_id: 'site_monkeys',
+          version: '1.0.0',
           decision_frameworks: {
             pricing_logic: {
               minimum_price: 697,
-              currency: "USD",
-              frequency: "monthly",
+              currency: 'USD',
+              frequency: 'monthly',
             },
           },
         };
 
         session.vaultCache = embeddedVault;
-        vaultStatus = { loaded: true, source: "EMBEDDED", required: true };
+        vaultStatus = { loaded: true, source: 'EMBEDDED', required: true };
         _vaultResults = analyzeForVault(message);
       } else {
         return {
@@ -387,7 +368,7 @@ export async function processRequest(requestBody) {
 
     // PROCESS REQUEST WITH FULL ENFORCEMENT
     const vaultVerification = {
-      allowed: vault_loaded && mode === "site_monkeys",
+      allowed: vault_loaded && mode === 'site_monkeys',
     };
 
     const result = await processWithEliAndRoxy({
@@ -410,10 +391,7 @@ export async function processRequest(requestBody) {
     );
 
     // EMBED FINGERPRINT IN RESPONSE
-    const finalResponse = ModeFingerprinter.embedFingerprint(
-      result.response,
-      fingerprint,
-    );
+    const finalResponse = ModeFingerprinter.embedFingerprint(result.response, fingerprint);
 
     // GET COMPREHENSIVE SESSION STATUS
     const auditReport = OverrideAuditor.getAuditReport(session);
@@ -441,11 +419,11 @@ export async function processRequest(requestBody) {
       session_id: session_id,
     };
   } catch (error) {
-    console.error("🔥 Cognitive firewall error:", error);
+    console.error('🔥 Cognitive firewall error:', error);
 
     return {
-      response: `🛡️ COGNITIVE FIREWALL PROTECTION ACTIVE\n\nCritical system error encountered, but all cognitive protection measures remain fully operational.\n\nERROR TYPE: ${error.name || "Unknown System Error"}\nERROR DETAILS: ${error.message || "No details available"}\n\nPROTECTIVE MEASURES ACTIVE:\n• Truth-first analysis principles maintained\n• Business survival assessment frameworks operational\n• Political neutrality enforcement active\n• Evidence-based recommendation filtering active\n• Pressure resistance systems operational\n• Override tracking and pattern detection active\n\nAll decision-making safeguards remain in place. The cognitive firewall continues to protect your thinking even during technical difficulties.\n\nPlease retry your request. If this error persists, the system is actively protecting you from potentially unreliable analysis.`,
-      mode_active: "error",
+      response: `🛡️ COGNITIVE FIREWALL PROTECTION ACTIVE\n\nCritical system error encountered, but all cognitive protection measures remain fully operational.\n\nERROR TYPE: ${error.name || 'Unknown System Error'}\nERROR DETAILS: ${error.message || 'No details available'}\n\nPROTECTIVE MEASURES ACTIVE:\n• Truth-first analysis principles maintained\n• Business survival assessment frameworks operational\n• Political neutrality enforcement active\n• Evidence-based recommendation filtering active\n• Pressure resistance systems operational\n• Override tracking and pattern detection active\n\nAll decision-making safeguards remain in place. The cognitive firewall continues to protect your thinking even during technical difficulties.\n\nPlease retry your request. If this error persists, the system is actively protecting you from potentially unreliable analysis.`,
+      mode_active: 'error',
       vault_loaded: false,
       security_pass: false,
       triggered_frameworks: [],
@@ -461,19 +439,19 @@ function analyzeForVault(message) {
   const lowerMessage = message.toLowerCase();
 
   if (
-    lowerMessage.includes("price") ||
-    lowerMessage.includes("cost") ||
-    lowerMessage.includes("$")
+    lowerMessage.includes('price') ||
+    lowerMessage.includes('cost') ||
+    lowerMessage.includes('$')
   ) {
     const priceMatches = message.match(/\$(\d+(?:,\d{3})*)/g);
     if (priceMatches) {
-      const prices = priceMatches.map((p) => parseInt(p.replace(/[\$,]/g, "")));
+      const prices = priceMatches.map((p) => parseInt(p.replace(/[\$,]/g, '')));
       const minPrice = Math.min(...prices);
 
       if (minPrice < 697) {
         results.push({
-          domain: "pricing",
-          action: "BLOCK",
+          domain: 'pricing',
+          action: 'BLOCK',
           reasoning: `Price $${minPrice} violates minimum threshold of $697`,
           price_found: minPrice,
           required_price: 697,
@@ -484,31 +462,25 @@ function analyzeForVault(message) {
   }
 
   if (
-    lowerMessage.includes("spend") ||
-    lowerMessage.includes("expense") ||
-    lowerMessage.includes("cost")
+    lowerMessage.includes('spend') ||
+    lowerMessage.includes('expense') ||
+    lowerMessage.includes('cost')
   ) {
-    const spendMatches = message.match(
-      /(?:spend|expense|cost).*?\$(\d+(?:,\d{3})*)/gi,
-    );
+    const spendMatches = message.match(/(?:spend|expense|cost).*?\$(\d+(?:,\d{3})*)/gi);
     if (spendMatches) {
       const amounts = spendMatches.map((match) => {
         const numberMatch = match.match(/\$(\d+(?:,\d{3})*)/);
-        return numberMatch ? parseInt(numberMatch[1].replace(/,/g, "")) : 0;
+        return numberMatch ? parseInt(numberMatch[1].replace(/,/g, '')) : 0;
       });
 
       const maxAmount = Math.max(...amounts);
       if (maxAmount >= 5000) {
         results.push({
-          domain: "cash_flow",
-          action: "REQUIRE_ANALYSIS",
+          domain: 'cash_flow',
+          action: 'REQUIRE_ANALYSIS',
           reasoning: `Expense $${maxAmount} exceeds threshold requiring runway analysis`,
           amount_found: maxAmount,
-          required_analysis: [
-            "runway_impact",
-            "roi_justification",
-            "alternatives",
-          ],
+          required_analysis: ['runway_impact', 'roi_justification', 'alternatives'],
           critical: true,
         });
       }
