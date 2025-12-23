@@ -1,0 +1,57 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #166: Fix Memory Recognition - AI Must Use Retrieved Memories
+
+Issue Description:
+@claude claude-fix
+
+## Context
+The diagnostic in Issue #164 identified this as the HIGH PRIORITY issue. Read CLAUDE.md first to understand the system philosophy.
+
+## Problem
+Memory IS being retrieved successfully and passed to the AI in the context. However, there is no validation that the AI actually USES the retrieved memories in its response. Users report the AI saying "I don't have information about that" when the memory containing the answer is literally in the context.
+
+## Evidence from Diagnostic
+- Memory retrieval works: `orchestrator.js:561-564`
+- Memory is formatted: `persistent_memory.js:90-98`
+- Memory is injected into context: `orchestrator.js:1950-1958`
+- BUT: No validation that AI actually referenced the memories
+
+## Required Fix
+1. Add post-response validation that checks if the AI response appropriately used available memory context
+2. If memory was provided but AI claimed ignorance ("I don't know", "I don't have information", "You haven't told me"), flag this as a violation
+3. Either re-prompt the AI with explicit instruction to use the memory, or inject a correction
+
+## Constraints
+- Do NOT change token budgets (must remain 2400 for memory)
+- Do NOT modify the memory retrieval logic itself (it works)
+- Do NOT break the enforcement chain order
+- Follow existing code patterns in the validators
+- Use minimal surgical changes
+
+## Files Likely Involved
+- `/api/core/orchestrator.js` - Add validation after AI response, before returning to user
+- Possibly create new validator in `/api/lib/validators/` if cleaner
+
+## Success Criteria
+When memory contains "User's kids are Sarah and Jake" and user asks "What are my kids' names?", the AI MUST respond with "Sarah and Jake" - not "I don't have that information."
+
+Show your proposed changes before committing. Explain your approach first.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
