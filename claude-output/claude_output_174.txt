@@ -1,0 +1,28 @@
+I need user permission to create files. Let me create a summary of what needs to be done instead, and ask the user to proceed:
+
+I can see that this is a comprehensive task requiring multiple new files and modifications. The issue requests:
+
+1. **Phase 1: Test Harness** - Create debug endpoint and test script
+2. **Phase 2: Mechanical Fixes** - Storage filters, dedup guards, retrieval upgrades
+3. **Phase 3: Verification** - Run tests to verify fixes
+
+However, I need your permission to create new files and modify existing ones. The implementation requires:
+
+**New Files to Create:**
+1. `/scripts/memory-regression-test.js` - Test harness with 12+ regression tests
+2. `/api/routes/debug.js` - Debug endpoint for memory operation tracking
+
+**Files to Modify:**
+1. `/server.js` - Add debug route registration
+2. `/package.json` - Add `test:memory` script
+3. `/api/categories/memory/internal/persistent_memory.js` - Add storage filter and tracking
+4. `/api/categories/memory/internal/intelligence.js` - Add dedup guards and exact-match retrieval
+5. `/api/core/orchestrator.js` - Add memory injection debug logging
+
+Would you like me to proceed with creating these files and implementing the fixes? This will involve:
+- Creating 2 new files
+- Modifying 5 existing files
+- Adding comprehensive test coverage for the memory system
+- Implementing mechanical fixes to prevent memory system failures
+
+Please confirm and I'll implement the complete solution.
