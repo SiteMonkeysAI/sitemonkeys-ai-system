@@ -64,7 +64,6 @@ import loadVaultHandler from "./api/load-vault.js";
 import { vaultLoader } from "./api/utilities/vault-loader.js";
 import { sessionManager } from "./api/lib/session-manager.js";
 import debugRoutes from "./api/routes/debug.js";
-import testRoutes from "./api/routes/test.js";
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -408,6 +407,113 @@ app.post("/api/chat", async (req, res) => {
   }
 });
 
+// GET /api/test/memory-check - Browser-based memory test
+app.get('/api/test/memory-check', async (req, res) => {
+  // Security: Only allow in private/debug mode
+  if (process.env.DEPLOYMENT_TYPE !== 'private' && process.env.DEBUG_MODE !== 'true') {
+    return res.status(403).send('Test endpoint not available in production mode');
+  }
+
+  const runId = Date.now();
+  const testUserId = `test-user-${runId}`;
+  const results = [];
+  const tripwire = `ZEBRA-TEST-${runId}`;
+
+  // Helper to simulate internal chat
+  async function testChat(message) {
+    try {
+      // Use the orchestrator directly if available
+      if (global.orchestrator && global.orchestrator.processRequest) {
+        const result = await global.orchestrator.processRequest({
+          message,
+          userId: testUserId,
+          mode: 'truth_general',
+          conversationHistory: []
+        });
+        return { response: result.response || result.message, success: result.success };
+      }
+      return { error: 'Orchestrator not available' };
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+
+  // Test 1: Store a tripwire
+  const storeResult = await testChat(`Remember this: My test phrase is ${tripwire}`);
+  results.push({
+    test: '1. STORE tripwire',
+    passed: !storeResult.error,
+    tripwire,
+    response: (storeResult.response || storeResult.error || '').substring(0, 200)
+  });
+
+  // Wait for storage to complete
+  await new Promise(r => setTimeout(r, 2000));
+
+  // Test 2: Recall the tripwire
+  const recallResult = await testChat('What is my test phrase?');
+  const foundTripwire = recallResult.response && recallResult.response.includes(tripwire);
+  results.push({
+    test: '2. RECALL tripwire',
+    passed: foundTripwire,
+    expected: tripwire,
+    found: foundTripwire,
+    response: (recallResult.response || recallResult.error || '').substring(0, 300)
+  });
+
+  // Test 3: Check for ignorance phrases
+  const ignorancePhrases = ["don't have", "no memory", "haven't told", "first interaction", "don't recall"];
+  const hasIgnorance = ignorancePhrases.some(p =>
+    (recallResult.response || '').toLowerCase().includes(p.toLowerCase())
+  );
+  results.push({
+    test: '3. NO false ignorance claims',
+    passed: !hasIgnorance,
+    found_ignorance: hasIgnorance,
+    note: hasIgnorance ? 'FAIL: AI claimed no memory when it should have remembered' : 'PASS: No false claims'
+  });
+
+  // Summary
+  const passed = results.filter(r => r.passed).length;
+  const failed = results.filter(r => !r.passed).length;
+
+  // Return HTML
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Memory Test Results</title>
+  <style>
+    body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; max-width: 900px; margin: 0 auto; }
+    h1 { color: #00d4ff; }
+    .pass { color: #4ade80; font-weight: bold; }
+    .fail { color: #f87171; font-weight: bold; }
+    .test { background: #16213e; padding: 15px; margin: 10px 0; border-radius: 8px; border-left: 4px solid #444; }
+    .test.passed { border-left-color: #4ade80; }
+    .test.failed { border-left-color: #f87171; }
+    pre { background: #0f0f23; padding: 10px; overflow-x: auto; border-radius: 4px; }
+    .summary { font-size: 1.2em; padding: 15px; background: #16213e; border-radius: 8px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h1>🧠 Memory System Test Results</h1>
+  <div class="summary">
+    <strong>Run ID:</strong> ${runId}<br>
+    <strong>Test User:</strong> ${testUserId}<br>
+    <strong>Results:</strong> <span class="pass">${passed} passed</span> | <span class="fail">${failed} failed</span>
+  </div>
+  ${results.map(r => `
+    <div class="test ${r.passed ? 'passed' : 'failed'}">
+      <h3>${r.passed ? '✅' : '❌'} ${r.test}</h3>
+      <pre>${JSON.stringify(r, null, 2)}</pre>
+    </div>
+  `).join('')}
+  <p style="color: #888; margin-top: 30px;">Test completed at ${new Date().toISOString()}</p>
+</body>
+</html>`;
+
+  res.send(html);
+});
+
 // ===== SESSION MANAGEMENT ENDPOINTS =====
 // Endpoint to end a session and flush cache
 app.post("/api/session/end", async (req, res) => {
@@ -517,9 +623,6 @@ app.use("/api", repoSnapshotRoute);
 // Debug endpoint (only in private/debug mode)
 app.use("/api/debug", debugRoutes);
 
-// Test endpoint (only in private/debug mode)
-app.use("/api/test", testRoutes);
-
 console.log("[SERVER] ✅ Routes configured");
 
 // ===== START HTTP SERVER =====
@@ -543,6 +646,10 @@ app.listen(PORT, "0.0.0.0", () => {
     console.log("🧠 Initializing orchestrator...");
     await orchestrator.initialize();
     console.log("✅ Orchestrator initialized");
+
+    // CRITICAL FIX: Expose orchestrator as global.orchestrator for test endpoints
+    global.orchestrator = orchestrator;
+    console.log("[SERVER] ✅ Orchestrator exposed as global.orchestrator");
   } catch (err) {
     console.error("⚠️ Orchestrator initialization failed:", err.message);
     console.log("🔄 System running in degraded mode");
