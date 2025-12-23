@@ -1,0 +1,158 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #178: [claude-fix] Add web-based memory test endpoint
+
+Issue Description:
+Create a browser-accessible endpoint that runs memory tests and returns results as JSON/HTML.
+Create: /api/test/memory-check
+Add this endpoint that can be accessed via browser:
+javascript// In server.js or create api/routes/test.js
+
+// GET /api/test/memory-check?user_id=test-user-123
+// Runs basic memory tests and returns results
+
+app.get('/api/test/memory-check', async (req, res) => {
+  // Security: Only allow in private/debug mode
+  if (process.env.DEPLOYMENT_TYPE !== 'private' && process.env.DEBUG_MODE !== 'true') {
+    return res.status(403).json({ error: 'Test endpoint not available in production' });
+  }
+
+  const testUserId = req.query.user_id || `test-user-${Date.now()}`;
+  const results = [];
+  const runId = Date.now();
+  
+  // Helper to call chat endpoint internally
+  async function testChat(message) {
+    try {
+      const response = await fetch(`http://localhost:${process.env.PORT || 3000}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message,
+          user_id: testUserId,
+          conversationHistory: []
+        })
+      });
+      return await response.json();
+    } catch (err) {
+      return { error: err.message };
+    }
+  }
+
+  // Test 1: Store a tripwire
+  const tripwire = `ZEBRA-TEST-${runId}`;
+  const storeResult = await testChat(`Remember this: My test phrase is ${tripwire}`);
+  results.push({
+    test: 'STORE tripwire',
+    passed: !storeResult.error && storeResult.response,
+    tripwire,
+    response: storeResult.response?.substring(0, 200) || storeResult.error
+  });
+
+  // Small delay
+  await new Promise(r => setTimeout(r, 1000));
+
+  // Test 2: Recall the tripwire
+  const recallResult = await testChat('What is my test phrase?');
+  const recallPassed = recallResult.response?.includes(tripwire);
+  results.push({
+    test: 'RECALL tripwire',
+    passed: recallPassed,
+    expected: tripwire,
+    response: recallResult.response?.substring(0, 300) || recallResult.error,
+    found_tripwire: recallPassed
+  });
+
+  // Test 3: Check for ignorance phrases when memory should exist
+  const ignorancePhrases = ["don't have", "no memory", "haven't told", "don't recall", "first interaction"];
+  const hasIgnorance = ignorancePhrases.some(p => 
+    recallResult.response?.toLowerCase().includes(p.toLowerCase())
+  );
+  results.push({
+    test: 'NO ignorance phrases',
+    passed: !hasIgnorance,
+    found_ignorance: hasIgnorance,
+    note: hasIgnorance ? 'AI claimed no memory when it should have had it' : 'Good - no false ignorance claims'
+  });
+
+  // Summary
+  const passed = results.filter(r => r.passed).length;
+  const failed = results.filter(r => !r.passed).length;
+
+  // Return as HTML for easy browser viewing
+  if (req.query.format !== 'json') {
+    const html = `
+<!DOCTYPE html>
+<html>
+<head><title>Memory Test Results</title>
+<style>
+  body { font-family: monospace; background: #1a1a1a; color: #fff; padding: 20px; }
+  .pass { color: #4ade80; }
+  .fail { color: #f87171; }
+  pre { background: #2a2a2a; padding: 10px; overflow-x: auto; }
+</style>
+</head>
+<body>
+<h1>Memory System Test Results</h1>
+<p>Run ID: ${runId}</p>
+<p>Test User: ${testUserId}</p>
+<p>Passed: <span class="pass">${passed}</span> | Failed: <span class="fail">${failed}</span></p>
+<hr>
+${results.map(r => `
+<h3 class="${r.passed ? 'pass' : 'fail'}">${r.passed ? '✅' : '❌'} ${r.test}</h3>
+<pre>${JSON.stringify(r, null, 2)}</pre>
+`).join('')}
+</body>
+</html>`;
+    return res.send(html);
+  }
+
+  res.json({
+    run_id: runId,
+    test_user: testUserId,
+    summary: { passed, failed, total: results.length },
+    results
+  });
+});
+```
+
+### Security
+
+- Only available when `DEPLOYMENT_TYPE=private` or `DEBUG_MODE=true`
+- Uses a unique test user ID per run to avoid polluting real user data
+
+### Usage
+
+After deployment, visit in browser:
+```
+https://sitemonkeys-ai-system-production.up.railway.app/api/test/memory-check
+```
+
+Or for JSON:
+```
+https://sitemonkeys-ai-system-production.up.railway.app/api/test/memory-check?format=json
+Acceptance Criteria
+
+ Endpoint accessible via browser
+ Returns HTML by default with pass/fail results
+ Returns JSON when ?format=json is added
+ Only works in private/debug mode
+ Tests store, recall, and ignorance-phrase detection
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
