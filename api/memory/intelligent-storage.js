@@ -89,14 +89,24 @@ export class IntelligentMemoryStorage {
    */
   async storeWithIntelligence(userId, userMessage, aiResponse, category) {
     try {
+      // TRACE LOGGING - Intelligent storage entry
+      console.log('[TRACE-INTELLIGENT] I1. storeWithIntelligence called');
+      console.log('[TRACE-INTELLIGENT] I2. userId:', userId);
+      console.log('[TRACE-INTELLIGENT] I3. category:', category);
+      console.log('[TRACE-INTELLIGENT] I4. userMessage length:', userMessage?.length || 0);
+      console.log('[TRACE-INTELLIGENT] I5. aiResponse length:', aiResponse?.length || 0);
+
       console.log('[INTELLIGENT-STORAGE] 🧠 Processing conversation for intelligent storage');
 
       // Step 0: Sanitize content before processing
+      console.log('[TRACE-INTELLIGENT] I6. About to sanitize content...');
       const sanitizedResponse = this.sanitizeForStorage(aiResponse);
       if (!sanitizedResponse) {
+        console.log('[TRACE-INTELLIGENT] I7. Content rejected as boilerplate');
         console.log('[INTELLIGENT-STORAGE] Rejected boilerplate content, not storing');
         return { action: 'rejected', reason: 'boilerplate_rejected' };
       }
+      console.log('[TRACE-INTELLIGENT] I8. Content sanitized, length:', sanitizedResponse.length);
 
       // Step 1: Extract facts (compression)
       console.log('[INTELLIGENT-STORAGE] 📝 Extracting key facts...');
@@ -365,8 +375,16 @@ Facts (3-5 words each, max 3):`;
    */
   async storeCompressedMemory(userId, category, facts, metadata) {
     try {
+      // TRACE LOGGING - Store compressed memory
+      console.log('[TRACE-INTELLIGENT] I9. storeCompressedMemory called');
+      console.log('[TRACE-INTELLIGENT] I10. userId:', userId);
+      console.log('[TRACE-INTELLIGENT] I11. category:', category);
+      console.log('[TRACE-INTELLIGENT] I12. facts length:', facts?.length || 0);
+
       const tokenCount = this.countTokens(facts);
-      
+      console.log('[TRACE-INTELLIGENT] I13. tokenCount:', tokenCount);
+
+      console.log('[TRACE-INTELLIGENT] I14. About to execute INSERT query...');
       const result = await this.db.query(`
         INSERT INTO persistent_memories (
           user_id,
@@ -395,8 +413,11 @@ Facts (3-5 words each, max 3):`;
           storage_version: 'intelligent_v1'
         })
       ]);
-      
+
+      console.log('[TRACE-INTELLIGENT] I15. INSERT query completed');
+
       const memoryId = result.rows[0].id;
+      console.log('[TRACE-INTELLIGENT] I16. Stored memory ID:', memoryId);
       console.log(`[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=${memoryId}, tokens=${tokenCount}`);
 
       // DIAGNOSTIC LOGGING: Track exact storage details
@@ -436,9 +457,16 @@ Facts (3-5 words each, max 3):`;
    */
   async storeUncompressed(userId, userMessage, aiResponse, category) {
     try {
+      // TRACE LOGGING - Fallback storage
+      console.log('[TRACE-INTELLIGENT] I17. storeUncompressed (fallback) called');
+      console.log('[TRACE-INTELLIGENT] I18. userId:', userId);
+      console.log('[TRACE-INTELLIGENT] I19. category:', category);
+
       const content = `User: ${userMessage}\nAssistant: ${aiResponse}`;
       const tokenCount = this.countTokens(content);
-      
+      console.log('[TRACE-INTELLIGENT] I20. Uncompressed content length:', content.length);
+      console.log('[TRACE-INTELLIGENT] I21. About to execute INSERT query (fallback)...');
+
       const result = await this.db.query(`
         INSERT INTO persistent_memories (
           user_id,

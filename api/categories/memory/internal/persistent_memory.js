@@ -142,6 +142,12 @@ class PersistentMemoryOrchestrator {
    */
   async storeMemory(userId, userMessage, aiResponse, metadata = {}) {
     try {
+      // TRACE LOGGING - Entry point
+      console.log('[TRACE-STORE] A. storeMemory called with userId:', userId);
+      console.log('[TRACE-STORE] A1. userMessage length:', userMessage?.length || 0);
+      console.log('[TRACE-STORE] A2. aiResponse length:', aiResponse?.length || 0);
+      console.log('[TRACE-STORE] A3. metadata:', JSON.stringify(metadata));
+
       // Sanitize user ID for logging (show only first 8 chars)
       const sanitizedUserId = userId ? `${userId.substring(0, 8)}...` : 'unknown';
       this.logger.log(
@@ -150,24 +156,39 @@ class PersistentMemoryOrchestrator {
 
       // Combine user message and AI response
       const conversationContent = `User: ${userMessage}\nAssistant: ${aiResponse}`;
+      console.log('[TRACE-STORE] A4. Combined content length:', conversationContent.length);
 
       // Route to determine category
+      console.log('[TRACE-STORE] A5. About to call analyzeAndRoute...');
       const routing = await this.intelligenceSystem.analyzeAndRoute(
         userMessage,
         userId,
       );
+      console.log('[TRACE-STORE] A6. Routing complete, category:', routing.primaryCategory);
 
       // Calculate relevance score
+      console.log('[TRACE-STORE] A7. About to calculate relevance score...');
       const relevanceScore =
         await this.intelligenceSystem.calculateRelevanceScore(
           conversationContent,
           metadata,
         );
+      console.log('[TRACE-STORE] A8. Relevance score calculated:', relevanceScore);
 
       // Calculate token count (approximate: 1 token ≈ 4 characters)
       // This is a rough estimate based on OpenAI's tokenization
       const CHARS_PER_TOKEN = 4;
       const tokenCount = Math.ceil(conversationContent.length / CHARS_PER_TOKEN);
+      console.log('[TRACE-STORE] A9. Token count calculated:', tokenCount);
+
+      // TRACE LOGGING - About to insert
+      console.log('[TRACE-STORE] B. About to insert into DB with parameters:');
+      console.log('[TRACE-STORE] B1. userId:', userId);
+      console.log('[TRACE-STORE] B2. category:', routing.primaryCategory);
+      console.log('[TRACE-STORE] B3. subcategory:', routing.subcategory || null);
+      console.log('[TRACE-STORE] B4. content length:', conversationContent.length);
+      console.log('[TRACE-STORE] B5. tokenCount:', tokenCount);
+      console.log('[TRACE-STORE] B6. relevanceScore:', relevanceScore);
 
       // Store in database
       const result = await this.coreSystem.executeQuery(
@@ -192,6 +213,13 @@ class PersistentMemoryOrchestrator {
       );
 
       const memoryId = result.rows[0]?.id;
+
+      // TRACE LOGGING - Insert complete
+      console.log('[TRACE-STORE] C. Insert complete! Result:', JSON.stringify({
+        memoryId: memoryId,
+        rowCount: result.rowCount,
+        success: !!memoryId
+      }));
 
       this.logger.log(
         `Successfully stored memory ID: ${memoryId} in category: ${routing.primaryCategory}`,
