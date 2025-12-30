@@ -197,6 +197,148 @@ router.get('/health', debugModeOnly, (req, res) => {
   });
 });
 
+/**
+ * GET /api/debug/cleanup-boilerplate-preview
+ * Preview memories that would be deleted by boilerplate cleanup
+ * SECURITY: Only available in debug/private mode
+ */
+router.get('/cleanup-boilerplate-preview', debugModeOnly, async (req, res) => {
+  try {
+    console.log('[DEBUG] [CLEANUP-PREVIEW] Starting boilerplate cleanup preview...');
+
+    if (!global.memorySystem || !global.memorySystem.coreSystem) {
+      return res.status(503).json({
+        error: 'Memory system not initialized',
+        hint: 'Wait for system initialization to complete'
+      });
+    }
+
+    const BOILERPLATE_PATTERNS = [
+      '%do not retain information between conversations%',
+      '%each conversation starts fresh%',
+      '%don''t have memory%',
+      '%I don''t retain memory%',
+      '%session-based memory%',
+      '%first interaction%',
+      '%I''m an AI%',
+      '%I cannot access previous%',
+      '%no memory of previous%',
+      '%I am an AI%',
+      '%don''t have the ability to remember%',
+      '%cannot remember previous conversations%',
+      '%no memory of past interactions%'
+    ];
+
+    const conditions = BOILERPLATE_PATTERNS
+      .map((_, i) => `content ILIKE $${i + 1}`)
+      .join(' OR ');
+
+    const query = `
+      SELECT id, user_id, category_name, content, created_at
+      FROM persistent_memories
+      WHERE ${conditions}
+      ORDER BY created_at DESC
+    `;
+
+    const result = await global.memorySystem.coreSystem.pool.query(query, BOILERPLATE_PATTERNS);
+
+    console.log(`[DEBUG] [CLEANUP-PREVIEW] Found ${result.rowCount} contaminated memories`);
+
+    res.json({
+      success: true,
+      preview: true,
+      would_delete_count: result.rowCount,
+      patterns_searched: BOILERPLATE_PATTERNS.length,
+      samples: result.rows.slice(0, 10).map(row => ({
+        id: row.id,
+        user_id: row.user_id,
+        category: row.category_name,
+        content_preview: row.content.substring(0, 200),
+        created_at: row.created_at
+      })),
+      total_found: result.rowCount,
+      note: 'This is a preview only. Use POST /api/debug/cleanup-boilerplate to delete.'
+    });
+  } catch (error) {
+    console.error('[DEBUG] [CLEANUP-PREVIEW] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
+/**
+ * POST /api/debug/cleanup-boilerplate
+ * Delete memories containing AI boilerplate that was incorrectly stored
+ * SECURITY: Only available in debug/private mode
+ */
+router.post('/cleanup-boilerplate', debugModeOnly, async (req, res) => {
+  try {
+    console.log('[DEBUG] [CLEANUP] Starting boilerplate cleanup...');
+
+    if (!global.memorySystem || !global.memorySystem.coreSystem) {
+      return res.status(503).json({
+        error: 'Memory system not initialized',
+        hint: 'Wait for system initialization to complete'
+      });
+    }
+
+    const BOILERPLATE_PATTERNS = [
+      '%do not retain information between conversations%',
+      '%each conversation starts fresh%',
+      '%don''t have memory%',
+      '%I don''t retain memory%',
+      '%session-based memory%',
+      '%first interaction%',
+      '%I''m an AI%',
+      '%I cannot access previous%',
+      '%no memory of previous%',
+      '%I am an AI%',
+      '%don''t have the ability to remember%',
+      '%cannot remember previous conversations%',
+      '%no memory of past interactions%'
+    ];
+
+    const conditions = BOILERPLATE_PATTERNS
+      .map((_, i) => `content ILIKE $${i + 1}`)
+      .join(' OR ');
+
+    const query = `
+      DELETE FROM persistent_memories
+      WHERE ${conditions}
+      RETURNING id, user_id, category_name, content, created_at
+    `;
+
+    const result = await global.memorySystem.coreSystem.pool.query(query, BOILERPLATE_PATTERNS);
+
+    console.log(`[DEBUG] [CLEANUP] Deleted ${result.rowCount} contaminated memories`);
+
+    res.json({
+      success: true,
+      deleted_count: result.rowCount,
+      patterns_used: BOILERPLATE_PATTERNS.length,
+      deleted_samples: result.rows.slice(0, 5).map(row => ({
+        id: row.id,
+        user_id: row.user_id,
+        category: row.category_name,
+        content_preview: row.content.substring(0, 150),
+        created_at: row.created_at
+      })),
+      message: `Successfully deleted ${result.rowCount} boilerplate-contaminated memories`,
+      timestamp: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('[DEBUG] [CLEANUP] Error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message,
+      stack: error.stack
+    });
+  }
+});
+
 export default router;
 
 /**
