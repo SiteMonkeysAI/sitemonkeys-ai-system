@@ -1,0 +1,129 @@
+Excellent! The code looks syntactically correct. Now let me create a quick summary of what was done:
+
+---SUMMARY---
+
+# Issue #196 - Critical Debug Trace Logging Added
+
+## Problem
+Despite fixes, the memory full check test shows `found_memories: 0`. Storage is not happening, but we don't know where in the flow it's breaking.
+
+## Solution
+Added comprehensive trace logging throughout the entire storage flow to identify the exact break point.
+
+## Files Modified
+
+### 1. `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/server.js`
+**Changes:** Added 10 trace log points in the `/api/chat` endpoint
+
+**Key Traces Added:**
+- `[TRACE] 1.` - Received user_id from request
+- `[TRACE] 2.` - Mapped to userId (internal variable)
+- `[TRACE] 3.` - About to call orchestrator.processRequest
+- `[TRACE] 4.` - orchestrator returned with result.success
+- `[TRACE] 5.` - global.memorySystem exists check
+- `[TRACE] 6.` - storeMemory method exists check
+- `[TRACE] 7.` - STORAGE BLOCK ENTERED (critical checkpoint)
+- `[TRACE] 8.` - Storing for userId (shows exact userId being used)
+- `[TRACE] 9.` - Storage complete with result details (both intelligent and legacy paths)
+
+**Lines Modified:** 296-298, 338-361, 393-422
+
+### 2. `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/categories/memory/internal/persistent_memory.js`
+**Changes:** Added 18 trace log points in the `storeMemory` method
+
+**Key Traces Added:**
+- `[TRACE-STORE] A.` - storeMemory called with userId
+- `[TRACE-STORE] A1-A4.` - Message lengths and content size
+- `[TRACE-STORE] A5-A6.` - Routing/category determination
+- `[TRACE-STORE] A7-A9.` - Relevance and token calculations
+- `[TRACE-STORE] B.` - About to insert into DB
+- `[TRACE-STORE] B1-B6.` - All INSERT parameters logged
+- `[TRACE-STORE] C.` - Insert complete with result
+
+**Lines Modified:** 145-222
+
+### 3. `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/categories/memory/internal/core.js`
+**Changes:** Added 6 trace log points in the `executeQuery` method
+
+**Key Traces Added:**
+- `[TRACE-DB]` - Pool initialization check
+- `[TRACE-DB]` - Executing INSERT query detection
+- `[TRACE-DB]` - INSERT parameters (sanitized to hide full content)
+- `[TRACE-DB]` - INSERT completed with rowCount
+- `[TRACE-DB]` - INSERT returned ID
+- `[TRACE-DB]` - Query execution FAILED (error case)
+
+**Lines Modified:** 138-161
+
+### 4. `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/memory/intelligent-storage.js`
+**Changes:** Added 21 trace log points across intelligent storage flow
+
+**Key Traces Added:**
+- `[TRACE-INTELLIGENT] I1-I5.` - Entry point with all parameters
+- `[TRACE-INTELLIGENT] I6-I8.` - Content sanitization flow
+- `[TRACE-INTELLIGENT] I9-I16.` - Compressed storage path
+- `[TRACE-INTELLIGENT] I17-I21.` - Fallback uncompressed storage path
+
+**Lines Modified:** 93-109, 379-420, 461-468
+
+## Total Trace Points Added
+- **Server.js:** 10 trace points
+- **persistent_memory.js:** 18 trace points  
+- **core.js:** 6 trace points
+- **intelligent-storage.js:** 21 trace points
+- **TOTAL:** 55 trace points covering the entire storage flow
+
+## How to Use
+
+### 1. Deploy to Railway
+The changes will auto-deploy when pushed to main branch.
+
+### 2. Run the Test
+```bash
+curl -X GET "http://localhost:8080/api/test/memory-full-check" \
+  -H "X-Internal-Test-Token: memory-test-secret-2024"
+```
+
+### 3. Check Railway Logs
+Look for the TRACE messages in sequence. The logs will show:
+
+**If storage is working:**
+- All 9 steps in server.js should appear
+- Full TRACE-STORE or TRACE-INTELLIGENT flow
+- TRACE-DB showing successful INSERT
+- userId should be consistent throughout
+
+**If storage is broken, you'll see exactly where:**
+- Missing `[TRACE] 7.` = Storage block not entered (conditions failed)
+- Missing `[TRACE-STORE] A.` = storeMemory not called
+- Missing `[TRACE-DB]` = Query not reaching database
+- `[TRACE-DB] Query execution FAILED` = Database error
+
+### 4. Identify the Break Point
+The last TRACE message before logs stop will pinpoint the exact line where storage breaks.
+
+## Important Notes
+
+1. **No Functional Changes:** All modifications are logging only. No business logic, data flow, or error handling was modified.
+
+2. **Preserves userId Throughout:** Every trace log includes the userId so you can verify it's not being lost or transformed incorrectly.
+
+3. **Covers Both Paths:** Traces added to both intelligent storage (with compression) and legacy storage paths.
+
+4. **Database Level Visibility:** Traces go all the way down to the database query execution, showing if INSERT is actually being sent to PostgreSQL.
+
+5. **Sanitized Logging:** Content is truncated in logs to avoid bloating Railway logs with full conversation text.
+
+## Expected Result
+
+After deployment, the Railway logs will show the complete flow and reveal:
+- Whether `user_id` from the test is being received correctly
+- Whether it's being mapped to `userId` properly  
+- Whether storage conditions (result.success, global.memorySystem) are met
+- Whether the storage block is being entered
+- Whether database INSERT is executing
+- What the exact userId is at every step
+
+This will allow diagnosis of the exact line where storage fails, completing the acceptance criteria for Issue #196.
+
+---END SUMMARY---

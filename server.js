@@ -292,9 +292,10 @@ app.post("/api/chat", async (req, res) => {
     
     // Map user_id to userId for internal use
     const userId = user_id || "anonymous";
-    
-    // DEBUG: Log received user_id and mapped userId
-    console.log('[DEBUG] Received user_id:', user_id, 'Mapped to:', userId);
+
+    // TRACE LOGGING - Step 1 & 2
+    console.log('[TRACE] 1. Received user_id from request:', user_id);
+    console.log('[TRACE] 2. Mapped to userId:', userId);
 
     // SECURITY: Input validation - message is required
     // Prevents processing empty/invalid requests
@@ -334,6 +335,9 @@ app.post("/api/chat", async (req, res) => {
       console.log(`  - finalVaultContext: ${finalVaultContext ? 'present' : 'null'}`);
     }
 
+    // TRACE LOGGING - Step 3
+    console.log('[TRACE] 3. About to call orchestrator.processRequest with userId:', userId);
+
     // Process request through orchestrator
     const result = await orchestrator.processRequest({
       message,
@@ -346,13 +350,15 @@ app.post("/api/chat", async (req, res) => {
       conversationHistory,
     });
 
-    // CRITICAL FIX: Store conversation in memory after successful processing
-    console.log('[CHAT] [STORAGE-CHECK] Checking if storage should trigger...');
-    console.log('[CHAT] [STORAGE-CHECK] result.success:', result.success);
-    console.log('[CHAT] [STORAGE-CHECK] global.memorySystem exists:', !!global.memorySystem);
-    console.log('[CHAT] [STORAGE-CHECK] global.memorySystem.storeMemory exists:', !!global.memorySystem?.storeMemory);
+    // TRACE LOGGING - Step 4 & 5 & 6
+    console.log('[TRACE] 4. orchestrator.processRequest returned, result.success:', result.success);
+    console.log('[TRACE] 5. global.memorySystem exists:', !!global.memorySystem);
+    console.log('[TRACE] 6. storeMemory exists:', !!global.memorySystem?.storeMemory);
 
     if (result.success && global.memorySystem && global.memorySystem.storeMemory) {
+      // TRACE LOGGING - Step 7 & 8
+      console.log('[TRACE] 7. STORAGE BLOCK ENTERED');
+      console.log('[TRACE] 8. Storing for userId:', userId);
       console.log('[CHAT] [STORAGE] ✓ Storage conditions met - proceeding with storage...');
       console.log('[CHAT] [STORAGE] Storing for userId:', userId);
       try {
@@ -383,6 +389,13 @@ app.post("/api/chat", async (req, res) => {
 
           intelligentStorage.cleanup();
           console.log(`[CHAT] 💾 Intelligent storage complete: ${storageResult.action} (ID: ${storageResult.memoryId})`);
+
+          // TRACE LOGGING - Step 9 (Intelligent path)
+          console.log('[TRACE] 9. Intelligent storage complete, result:', JSON.stringify({
+            action: storageResult.action,
+            memoryId: storageResult.memoryId,
+            success: storageResult.success
+          }));
         } else {
           // Legacy storage path - always available as fallback
           console.log('[CHAT] [STORAGE] Using legacy storage path...');
@@ -400,6 +413,13 @@ app.post("/api/chat", async (req, res) => {
           );
           console.log("[CHAT] 💾 Conversation stored in memory system (legacy)");
           console.log("[CHAT] [STORAGE] Storage result:", JSON.stringify(storageResult, null, 2));
+
+          // TRACE LOGGING - Step 9 (Legacy path)
+          console.log('[TRACE] 9. Legacy storage complete, result:', JSON.stringify({
+            success: storageResult.success,
+            memoryId: storageResult.memoryId,
+            category: storageResult.category
+          }));
         }
       } catch (_storageError) {
         // Sanitize error message - don't expose database details

@@ -135,11 +135,30 @@ class CoreSystem {
   async executeQuery(query, params = []) {
     try {
       if (!this.pool) {
+        console.log('[TRACE-DB] executeQuery called but pool not initialized!');
         throw new Error("Database pool not initialized");
       }
+
+      // TRACE LOGGING - DB query execution
+      const isInsert = query.trim().toUpperCase().startsWith('INSERT');
+      if (isInsert) {
+        console.log('[TRACE-DB] Executing INSERT query');
+        console.log('[TRACE-DB] Params:', JSON.stringify(params.map((p, i) => {
+          if (i === 3) return `[content: ${p?.length || 0} chars]`; // content param
+          return p;
+        })));
+      }
+
       const result = await this.pool.query(query, params);
+
+      if (isInsert) {
+        console.log('[TRACE-DB] INSERT completed, rowCount:', result.rowCount);
+        console.log('[TRACE-DB] INSERT returned ID:', result.rows[0]?.id);
+      }
+
       return result;
     } catch (error) {
+      console.log('[TRACE-DB] Query execution FAILED:', error.message);
       this.logger.error("Query execution failed:", error);
       throw error;
     }

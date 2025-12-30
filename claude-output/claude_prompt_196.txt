@@ -1,0 +1,55 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #196: [claude-fix] CRITICAL: Debug why storage is not happening - add trace logging throughout storage flow
+
+Issue Description:
+Problem
+Despite fixes, test still shows found_memories: 0. Storage is not happening.
+The Mystery
+Test sends: user_id: "test-full-XXXXX" to /api/chat
+DB query returns: 0 memories for that user
+Add Trace Logging
+Add console.log statements at EVERY step to find where it breaks:
+In /server.js /api/chat route:
+javascriptconsole.log('[TRACE] 1. Received user_id from request:', req.body.user_id);
+console.log('[TRACE] 2. Mapped to userId:', userId);
+console.log('[TRACE] 3. About to call orchestrator.processRequest');
+// after processRequest
+console.log('[TRACE] 4. orchestrator returned, result.success:', result.success);
+console.log('[TRACE] 5. global.memorySystem exists:', !!global.memorySystem);
+console.log('[TRACE] 6. storeMemory exists:', !!global.memorySystem?.storeMemory);
+// in storage block
+console.log('[TRACE] 7. STORAGE BLOCK ENTERED');
+console.log('[TRACE] 8. Storing for userId:', userId);
+// after storage
+console.log('[TRACE] 9. Storage complete, result:', storageResult);
+In /api/categories/memory/index.js or wherever storeMemory is defined:
+javascriptconsole.log('[TRACE-STORE] A. storeMemory called with userId:', userId);
+console.log('[TRACE-STORE] B. About to insert into DB');
+// after insert
+console.log('[TRACE-STORE] C. Insert result:', result);
+Then Check Railway Logs
+After deployment, run the test and check Railway logs for the TRACE messages. This will show exactly where the flow breaks.
+Acceptance Criteria
+
+ Trace logging added to entire storage flow
+ Can see in Railway logs exactly where storage fails
+ Identify the exact line where user_id is lost or storage is skipped
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
