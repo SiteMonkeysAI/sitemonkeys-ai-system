@@ -85,6 +85,7 @@ class PersistentMemoryOrchestrator {
           success: false,
           memories: "",
           count: 0,
+          memory_ids: [],
         };
       }
 
@@ -102,9 +103,12 @@ class PersistentMemoryOrchestrator {
         `Successfully retrieved ${memories.length} memories, ${memoryText.length} characters`,
       );
 
+      // Extract memory IDs for telemetry
+      const memoryIds = memories.map(m => m.id).filter(id => id != null);
+
       // Debug logging hook for test harness
       logMemoryOperation(userId, 'retrieve', {
-        memory_ids: memories.map(m => m.id),
+        memory_ids: memoryIds,
         query: query.substring(0, 100),
         category_searched: routing.primaryCategory,
         results_count: memories.length
@@ -114,6 +118,7 @@ class PersistentMemoryOrchestrator {
         success: true,
         memories: memoryText,
         count: memories.length,
+        memory_ids: memoryIds,
         routing: routing,
       };
     } catch (error) {
