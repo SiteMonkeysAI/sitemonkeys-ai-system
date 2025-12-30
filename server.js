@@ -346,9 +346,16 @@ app.post("/api/chat", async (req, res) => {
     });
 
     // CRITICAL FIX: Store conversation in memory after successful processing
+    console.log('[CHAT] [STORAGE-CHECK] Checking if storage should trigger...');
+    console.log('[CHAT] [STORAGE-CHECK] result.success:', result.success);
+    console.log('[CHAT] [STORAGE-CHECK] global.memorySystem exists:', !!global.memorySystem);
+    console.log('[CHAT] [STORAGE-CHECK] global.memorySystem.storeMemory exists:', !!global.memorySystem?.storeMemory);
+
     if (result.success && global.memorySystem && global.memorySystem.storeMemory) {
+      console.log('[CHAT] [STORAGE] ✓ Storage conditions met - proceeding with storage...');
       try {
         // Intelligent memory storage with compression and deduplication
+        console.log('[CHAT] [STORAGE] ENABLE_INTELLIGENT_STORAGE:', process.env.ENABLE_INTELLIGENT_STORAGE);
         if (process.env.ENABLE_INTELLIGENT_STORAGE === 'true') {
           const { IntelligentMemoryStorage } = await import('./api/memory/intelligent-storage.js');
           const intelligentStorage = new IntelligentMemoryStorage(
@@ -375,7 +382,9 @@ app.post("/api/chat", async (req, res) => {
           console.log(`[CHAT] 💾 Intelligent storage complete: ${storageResult.action} (ID: ${storageResult.memoryId})`);
         } else {
           // Legacy storage path (for rollback)
-          await global.memorySystem.storeMemory(
+          console.log('[CHAT] [STORAGE] Using legacy storage path...');
+          console.log('[CHAT] [STORAGE] Calling storeMemory with userId:', userId);
+          const storageResult = await global.memorySystem.storeMemory(
             userId,
             message,
             result.response,
@@ -387,12 +396,19 @@ app.post("/api/chat", async (req, res) => {
             }
           );
           console.log("[CHAT] 💾 Conversation stored in memory system (legacy)");
+          console.log("[CHAT] [STORAGE] Storage result:", JSON.stringify(storageResult, null, 2));
         }
       } catch (_storageError) {
         // Sanitize error message - don't expose database details
         console.error("[CHAT] ⚠️ Failed to store conversation:", _storageError.message);
+        console.error("[CHAT] ⚠️ Storage error stack:", _storageError.stack);
         // Don't fail the request if storage fails
       }
+    } else {
+      console.log('[CHAT] [STORAGE] ✗ Storage conditions NOT met - skipping storage');
+      if (!result.success) console.log('[CHAT] [STORAGE] Reason: result.success is false');
+      if (!global.memorySystem) console.log('[CHAT] [STORAGE] Reason: global.memorySystem is not available');
+      if (!global.memorySystem?.storeMemory) console.log('[CHAT] [STORAGE] Reason: storeMemory method not available');
     }
 
     res.json(result);
@@ -430,6 +446,27 @@ app.get('/api/test/memory-check', async (req, res) => {
           mode: 'truth_general',
           conversationHistory: []
         });
+
+        // CRITICAL FIX: Store conversation after processing (same as /api/chat route)
+        if (result.success && global.memorySystem && global.memorySystem.storeMemory) {
+          try {
+            console.log('[TEST] [STORAGE] Storing test conversation...');
+            await global.memorySystem.storeMemory(
+              testUserId,
+              message,
+              result.response,
+              {
+                mode: 'truth_general',
+                confidence: result.metadata?.confidence,
+                timestamp: new Date().toISOString(),
+              }
+            );
+            console.log('[TEST] [STORAGE] ✓ Test conversation stored successfully');
+          } catch (storageError) {
+            console.error('[TEST] [STORAGE] ✗ Failed to store:', storageError.message);
+          }
+        }
+
         return { response: result.response || result.message, success: result.success };
       }
       return { error: 'Orchestrator not available' };

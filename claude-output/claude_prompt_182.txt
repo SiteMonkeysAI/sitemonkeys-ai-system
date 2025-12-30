@@ -1,0 +1,63 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #182: [claude-fix] Memory storage not triggering after chat responses
+
+Issue Description:
+Problem
+Memory retrieval works but storage never triggers. Logs show:
+
+✅ Retrieval attempts happen (returns 0 results)
+❌ No storage logs appear after AI responds
+AI says "I've noted your test phrase" but nothing is actually stored
+
+Evidence from logs
+[ORCHESTRATOR] [START] User: test-user-1767124667406
+[PERSISTENT_MEMORY] Retrieving memories...
+[RETRIEVAL-DEBUG] Raw DB results: { count: 0 }
+[ORCHESTRATOR] [COMPLETE] Processing time: 51835ms
+No [STORAGE] or [STORE] entries appear. The memory extraction/storage step after response generation is not firing.
+Task
+
+Find where storeMemory should be called after chat responses
+Verify the storage trigger exists and is being executed
+Add logging to confirm storage attempts
+Fix any broken trigger
+
+Files to investigate
+Search for:
+
+storeMemory
+CRITICAL FIX: Store conversation
+global.memorySystem.storeMemory
+
+In server.js around line 350+, there should be code that stores conversation after successful processing.
+Expected behavior
+After every chat response, the system should:
+
+Extract facts from the conversation
+Call storeMemory() with extracted content
+Log the storage operation
+
+Acceptance criteria
+
+ Storage logs appear after chat responses
+ npm run test:memory or /api/test/memory-check shows Test 1 AND Test 2 passing
+ Tripwire can be stored and recalled successfully
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
