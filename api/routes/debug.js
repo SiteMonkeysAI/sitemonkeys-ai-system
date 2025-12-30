@@ -339,6 +339,125 @@ router.post('/cleanup-boilerplate', debugModeOnly, async (req, res) => {
   }
 });
 
+/**
+ * GET /api/debug/memory-stats
+ * Memory system database statistics
+ * Shows database state for diagnosing memory system issues
+ * SECURITY: Only available when DEBUG_MODE=true
+ */
+router.get('/memory-stats', async (req, res) => {
+  // Security: require debug mode
+  if (process.env.DEBUG_MODE !== 'true') {
+    return res.status(403).json({ error: 'Debug mode not enabled' });
+  }
+
+  try {
+    const pool = global.memorySystem?.coreSystem?.pool;
+
+    if (!pool) {
+      return res.status(500).json({
+        error: 'Database pool not available',
+        memorySystemExists: !!global.memorySystem,
+        coreSystemExists: !!global.memorySystem?.coreSystem
+      });
+    }
+
+    const stats = {};
+
+    // 1. Total memories
+    const totalResult = await pool.query('SELECT COUNT(*) as total FROM persistent_memories');
+    stats.total_memories = parseInt(totalResult.rows[0]?.total || 0);
+
+    // 2. Memories per category
+    const categoryResult = await pool.query(`
+      SELECT category_name, COUNT(*) as count, SUM(token_count) as total_tokens
+      FROM persistent_memories GROUP BY category_name ORDER BY count DESC
+    `);
+    stats.by_category = categoryResult.rows;
+
+    // 3. Memories per user_id
+    const userResult = await pool.query(`
+      SELECT user_id, COUNT(*) as count, SUM(token_count) as total_tokens
+      FROM persistent_memories GROUP BY user_id ORDER BY count DESC LIMIT 20
+    `);
+    stats.by_user = userResult.rows;
+
+    // 4. Recent memories
+    const recentResult = await pool.query(`
+      SELECT id, user_id, category_name, SUBSTRING(content, 1, 150) as preview,
+             token_count, relevance_score, created_at
+      FROM persistent_memories ORDER BY created_at DESC LIMIT 15
+    `);
+    stats.recent = recentResult.rows;
+
+    // 5. Schema
+    const schemaResult = await pool.query(`
+      SELECT column_name, data_type FROM information_schema.columns
+      WHERE table_name = 'persistent_memories' ORDER BY ordinal_position
+    `);
+    stats.schema = schemaResult.rows;
+
+    // Build HTML
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <title>Memory Database Stats</title>
+  <style>
+    body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; max-width: 1200px; margin: 0 auto; }
+    h1 { color: #00d4ff; }
+    h2 { color: #fbbf24; margin-top: 30px; }
+    .big { font-size: 2.5em; color: #4ade80; }
+    table { width: 100%; border-collapse: collapse; margin: 10px 0; }
+    th, td { text-align: left; padding: 8px; border-bottom: 1px solid #333; }
+    th { color: #00d4ff; }
+    .box { background: #16213e; padding: 15px; margin: 10px 0; border-radius: 8px; }
+    pre { background: #0f0f23; padding: 10px; overflow-x: auto; font-size: 11px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>🧠 Memory Database Stats</h1>
+  <p>Generated: ${new Date().toISOString()}</p>
+
+  <div class="box"><span class="big">${stats.total_memories}</span> total memories</div>
+
+  <h2>📁 By Category</h2>
+  <table>
+    <tr><th>Category</th><th>Count</th><th>Tokens</th></tr>
+    ${stats.by_category.map(c => `<tr><td>${c.category_name || 'NULL'}</td><td>${c.count}</td><td>${c.total_tokens || 0}</td></tr>`).join('')}
+  </table>
+
+  <h2>👤 By User ID</h2>
+  <table>
+    <tr><th>User ID</th><th>Count</th><th>Tokens</th></tr>
+    ${stats.by_user.map(u => `<tr><td>${u.user_id}</td><td>${u.count}</td><td>${u.total_tokens || 0}</td></tr>`).join('')}
+  </table>
+
+  <h2>📝 Recent Memories</h2>
+  ${stats.recent.map(m => `
+    <div class="box">
+      <strong>ID ${m.id}</strong> | ${m.user_id} | ${m.category_name}<br>
+      <small>Tokens: ${m.token_count} | Relevance: ${m.relevance_score} | ${m.created_at}</small>
+      <pre>${m.preview}...</pre>
+    </div>
+  `).join('')}
+
+  <h2>🔧 Schema</h2>
+  <table>
+    <tr><th>Column</th><th>Type</th></tr>
+    ${stats.schema.map(s => `<tr><td>${s.column_name}</td><td>${s.data_type}</td></tr>`).join('')}
+  </table>
+
+  <h2>📊 Raw JSON</h2>
+  <pre>${JSON.stringify(stats, null, 2)}</pre>
+</body>
+</html>`;
+
+    res.send(html);
+  } catch (err) {
+    res.status(500).json({ error: err.message, stack: err.stack });
+  }
+});
+
 export default router;
 
 /**
