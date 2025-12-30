@@ -1,0 +1,88 @@
+Perfect! This is a comprehensive test that tests through the API endpoints. Let's create a concise summary of our fix:
+
+---SUMMARY---
+
+## Issue Analysis
+
+The problem was that memory storage was NOT being triggered after chat responses. The logs showed:
+- ✅ Memory retrieval was working (returning 0 results for new users)
+- ❌ No storage logs appeared after AI responses
+- The AI would claim "I've noted your test phrase" but nothing was actually stored
+
+## Root Cause
+
+The memory storage code existed in `server.js` at lines 348-396, BUT it was only being executed for the `/api/chat` POST endpoint. The test endpoint `/api/test/memory-check` was calling `global.orchestrator.processRequest()` directly, which **bypassed the storage logic** since the orchestrator only handles retrieval, not storage.
+
+The storage logic is implemented at the route level, not in the orchestrator, so any code that calls the orchestrator directly would not trigger storage.
+
+## Fix Applied
+
+### 1. Added Comprehensive Diagnostic Logging to `/api/chat` endpoint (lines 349-412)
+
+Added logging to trace:
+- Whether storage conditions are met (`result.success`, `global.memorySystem` availability)
+- Which storage path is taken (intelligent vs legacy)
+- The actual storage operation and its result
+- Why storage was skipped if conditions weren't met
+
+These logs use tags like `[STORAGE-CHECK]` and `[STORAGE]` to make them easy to find.
+
+### 2. Fixed Test Endpoint by Adding Storage Logic (lines 450-468)
+
+The critical fix: Added the same storage logic to the test endpoint's `testChat()` helper function. Now when tests call the orchestrator directly, they also store the conversation in memory, matching the behavior of the main `/api/chat` route.
+
+The storage logic:
+```javascript
+// CRITICAL FIX: Store conversation after processing (same as /api/chat route)
+if (result.success && global.memorySystem && global.memorySystem.storeMemory) {
+  try {
+    console.log('[TEST] [STORAGE] Storing test conversation...');
+    await global.memorySystem.storeMemory(
+      testUserId,
+      message,
+      result.response,
+      { mode: 'truth_general', confidence: result.metadata?.confidence, timestamp: new Date().toISOString() }
+    );
+    console.log('[TEST] [STORAGE] ✓ Test conversation stored successfully');
+  } catch (storageError) {
+    console.error('[TEST] [STORAGE] ✗ Failed to store:', storageError.message);
+  }
+}
+```
+
+## Files Modified
+
+- **server.js** (2 sections updated):
+  - `/api/chat` endpoint: Added extensive storage diagnostic logging
+  - `/api/test/memory-check` endpoint: Added storage logic to the testChat helper function
+
+## Expected Behavior After Fix
+
+1. **Main chat route (`/api/chat`)**: Now logs every step of the storage decision process, making it easy to debug why storage succeeds or fails
+
+2. **Test endpoint (`/api/test/memory-check`)**: Now actually stores conversations in the database, so Test 1 (STORE) and Test 2 (RECALL) will both pass
+
+3. **All logs**: Storage operations now have clear `[STORAGE]` tags:
+   - `[CHAT] [STORAGE-CHECK]` - Checking conditions
+   - `[CHAT] [STORAGE]` - Storage in progress  
+   - `[TEST] [STORAGE]` - Test endpoint storage
+   - Storage success/failure messages
+
+## Verification
+
+After deployment, the logs should show:
+```
+[CHAT] [STORAGE-CHECK] Checking if storage should trigger...
+[CHAT] [STORAGE-CHECK] result.success: true
+[CHAT] [STORAGE-CHECK] global.memorySystem exists: true
+[CHAT] [STORAGE-CHECK] global.memorySystem.storeMemory exists: true
+[CHAT] [STORAGE] ✓ Storage conditions met - proceeding with storage...
+[CHAT] [STORAGE] Using legacy storage path...
+[PERSISTENT_MEMORY] Storing conversation for user: test-use...
+[PERSISTENT_MEMORY] Successfully stored memory ID: 123 in category: general_knowledge
+[CHAT] 💾 Conversation stored in memory system (legacy)
+```
+
+The test endpoint at `/api/test/memory-check` should now show both Test 1 and Test 2 passing with the tripwire being successfully stored and recalled.
+
+---END SUMMARY---
