@@ -354,6 +354,7 @@ app.post("/api/chat", async (req, res) => {
 
     if (result.success && global.memorySystem && global.memorySystem.storeMemory) {
       console.log('[CHAT] [STORAGE] ✓ Storage conditions met - proceeding with storage...');
+      console.log('[CHAT] [STORAGE] Storing for userId:', userId);
       try {
         // Intelligent memory storage with compression and deduplication
         console.log('[CHAT] [STORAGE] ENABLE_INTELLIGENT_STORAGE:', process.env.ENABLE_INTELLIGENT_STORAGE);
@@ -363,26 +364,27 @@ app.post("/api/chat", async (req, res) => {
             global.memorySystem.coreSystem.db,
             process.env.OPENAI_API_KEY
           );
-          
-          // FIX #1: Use semantic routing to determine category (matches retrieval logic)
+
+          // Use semantic routing to determine category (matches retrieval logic)
           // This ensures storage and retrieval use the same 11 semantic categories
           const routing = await global.memorySystem.intelligenceSystem.analyzeAndRoute(
             message,
             userId
           );
           const category = routing.primaryCategory;
-          
+          console.log(`[CHAT] [STORAGE] Routed to category: ${category}`);
+
           const storageResult = await intelligentStorage.storeWithIntelligence(
             userId,
             message,
             result.response,
             category
           );
-          
+
           intelligentStorage.cleanup();
           console.log(`[CHAT] 💾 Intelligent storage complete: ${storageResult.action} (ID: ${storageResult.memoryId})`);
         } else {
-          // Legacy storage path (for rollback)
+          // Legacy storage path - always available as fallback
           console.log('[CHAT] [STORAGE] Using legacy storage path...');
           console.log('[CHAT] [STORAGE] Calling storeMemory with userId:', userId);
           const storageResult = await global.memorySystem.storeMemory(

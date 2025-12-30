@@ -330,6 +330,9 @@ export class Orchestrator {
       // Enhanced telemetry for memory injection verification
       if (memoryContext.hasMemory) {
         this.log(`[MEMORY] ✓ Memory WILL be injected into prompt (${memoryContext.tokens} tokens)`);
+        if (memoryContext.memory_ids && memoryContext.memory_ids.length > 0) {
+          this.log(`[MEMORY] Memory IDs: [${memoryContext.memory_ids.join(', ')}]`);
+        }
       } else {
         this.log(`[MEMORY] ✗ No memory to inject (first conversation or no relevant context)`);
       }
@@ -489,10 +492,12 @@ export class Orchestrator {
           // Context tracking
           memoryUsed: memoryContext.hasMemory,
           memoryTokens: context.tokenBreakdown?.memory || memoryContext.tokens,
+          memory_ids: memoryContext.memory_ids || [],
+          memory_count: memoryContext.count || 0,
           documentTokens: context.tokenBreakdown?.documents || (documentData?.tokens || 0),
           vaultTokens: context.tokenBreakdown?.vault || (vaultData?.tokens || 0),
           totalContextTokens: context.totalTokens,
-          
+
           // Token budget compliance
           budgetCompliance: context.budgetCompliance || {},
           vaultSectionsSelected: vaultData?.sectionsSelected,
@@ -676,16 +681,20 @@ export class Orchestrator {
           count: 0,
           categories: [],
           hasMemory: false,
+          memory_ids: [],
         };
       }
 
       const memoryContent = memories.memories || "";
       const tokenCount = Math.ceil(memoryContent.length / 4);
 
+      // Extract memory IDs from the result
+      const memoryIds = memories.memory_ids || [];
+
       // Debug logging hook for test harness (memory injection)
       logMemoryOperation(userId, 'inject', {
         memory_injected: tokenCount > 0,
-        memory_ids: [], // IDs are already logged during retrieval
+        memory_ids: memoryIds,
         token_count: tokenCount
       });
 
@@ -697,6 +706,7 @@ export class Orchestrator {
           ? [routingResult.primaryCategory]
           : [],
         hasMemory: tokenCount > 0,
+        memory_ids: memoryIds,
       };
     } catch (error) {
       this.error("[MEMORY] Retrieval failed, continuing without memory", error);

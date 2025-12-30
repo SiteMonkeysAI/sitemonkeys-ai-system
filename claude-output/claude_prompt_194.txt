@@ -1,0 +1,101 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #194: [claude-fix] COMPREHENSIVE: Audit and repair entire memory system to match specifications
+
+Issue Description:
+Mission
+Audit the ENTIRE memory system against specifications and fix ALL discrepancies. This is not an incremental fix - this is a full system repair.
+Specifications That Must Be Met
+From project specs - these are non-negotiable:
+
+11 predefined categories + 5 dynamic AI-managed categories
+Each category: 50,000 token capacity
+Retrieval budget: ≤2400 tokens per response
+Compression: 10-20:1 ratio (currently achieving 1.72:1)
+Semantic routing using RoutingIntelligence class
+Deduplication that prevents duplicates but doesn't merge unrelated memories
+Storage hygiene: NEVER store AI boilerplate/disclaimers
+User ID consistency: user_id from request must be used for both storage AND retrieval
+
+Current Test Results (8/10 FAILED)
+❌ 1. Basic Store + Recall - memoryUsed: false, memoryTokens: 0
+❌ 2. Enforcer - AI claims ignorance when memory exists
+❌ 3. Dedup - found_memories: 0 (nothing stored)
+❌ 4. High-Entropy Retrieval - tripwire not found
+✅ 5. Storage Hygiene - PASS
+❌ 6. Category Routing - category: "not found"
+❌ 7. Token Budget - can't measure, no memory injected
+❌ 8. Cross-Request Persistence - FAIL
+✅ 9. Compression - PASS (but only 1.72:1, spec says 10-20:1)
+❌ 10. Telemetry - no memory_ids in metadata
+Root Cause Investigation Required
+
+Why is storage not happening for test users?
+
+Check /api/chat route - is user_id from request body being used?
+Check storeMemory() - what user_id is it receiving?
+Check database - what user_ids exist?
+
+
+Why is retrieval returning 0 memories?
+
+Check retrieveMemory() - what user_id is it querying?
+Check if storage user_id matches retrieval user_id
+
+
+Why is category routing failing?
+
+Is RoutingIntelligence being called?
+Are the 11 categories properly defined?
+Is semantic analysis working?
+
+
+Why is compression only 1.72:1 instead of 10-20:1?
+
+Is IntelligentMemoryStorage being used?
+Is compression actually running?
+
+
+
+Files to Audit
+
+/api/categories/memory/internal/core.js - Core memory system
+/api/categories/memory/internal/intelligence.js - Routing intelligence
+/api/memory/intelligent-storage.js - Compression and dedup
+/api/core/orchestrator.js - Memory retrieval integration
+/server.js - Chat endpoint, user_id handling
+
+Acceptance Criteria
+After this fix, running /api/test/memory-full-check must show:
+
+ Test 1 PASS - Basic store + recall works
+ Test 2 PASS - No false ignorance claims
+ Test 3 PASS - Dedup creates separate memories for different facts
+ Test 4 PASS - High-entropy tokens survive and are retrievable
+ Test 5 PASS - No boilerplate contamination (already passing)
+ Test 6 PASS - Category routing puts memories in correct categories
+ Test 7 PASS - Token budget ≤2400 enforced and reported in metadata
+ Test 8 PASS - Memories persist across requests
+ Test 9 PASS - Compression ratio improved toward 10-20:1
+ Test 10 PASS - Response metadata includes memory_ids, token counts
+
+This Is a Full Repair
+Do not make partial fixes. Trace the entire flow from storage to retrieval, identify ALL breaking points, and fix them comprehensively so the test suite passes.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

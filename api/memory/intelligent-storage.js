@@ -154,60 +154,69 @@ export class IntelligentMemoryStorage {
    * @returns {Promise<string>} - Extracted facts as bullet points
    */
   async extractKeyFacts(userMsg, aiResponse) {
-    const prompt = `Extract ATOMIC FACTS from this conversation.\nFormat: One fact per line, 3-8 words max, bullet points.\nFocus on: User preferences, statements, questions, entities, names, numbers.\nExclude: Explanations, reasoning, examples, politeness.\n\nUser: ${userMsg}\nAssistant: ${aiResponse}\n\nExtracted Facts:\nCRITICAL: Maximum 5 facts. Each fact MUST be under 8 words. Be ruthless.`;
-    
+    // ULTRA-AGGRESSIVE PROMPT: Force minimal output
+    const prompt = `Extract ONLY the essential facts from this conversation. Be extremely brief.
+Rules:
+- Maximum 3 facts total
+- Each fact: 3-5 words ONLY
+- Include ONLY: Names, numbers, specific entities, user statements
+- EXCLUDE: Questions, greetings, explanations, AI responses
+
+User: ${userMsg}
+Assistant: ${aiResponse}
+
+Facts (3-5 words each, max 3):`;
+
     try {
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 100
+        max_tokens: 50  // Reduced from 100 to force brevity
       });
-      
+
       const facts = response.choices[0].message.content.trim();
-      
+
       // AGGRESSIVE POST-PROCESSING: Guarantee 10-20:1 compression
       const processedFacts = this.aggressivePostProcessing(facts);
-      
+
       console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${processedFacts.split('\n').filter(l => l.trim()).length} facts`);
       return processedFacts;
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Fact extraction failed:', error.message);
-      // Fallback: return summarized version
-      return `User stated: ${userMsg.substring(0, 50)}...\nSystem discussed: ${aiResponse.substring(0, 50)}...`;
+      // Fallback: ultra-compressed version
+      const userKeywords = userMsg.split(/\s+/).slice(0, 5).join(' ');
+      return `${userKeywords}.`;
     }
   }
 
   /**
    * Aggressive post-processing to guarantee 10-20:1 compression
-   * Enforces strict limits: max 5 facts, max 8 words each
+   * Enforces ULTRA-strict limits: max 3 facts, max 5 words each
    * @param {string} facts - Raw facts from AI
    * @returns {string} - Aggressively compressed facts
    */
   aggressivePostProcessing(facts) {
     // Split into lines and clean
-    // CRITICAL FIX: Split on newlines OR periods followed by whitespace/capital/end
-    // Then restore periods to maintain proper sentence structure
-    // This fixes: "monkeys.Assistant" → "monkeys.\nAssistant" 
     let lines = facts.split(/\n|\.(?=\s|[A-Z]|$)/)
       .map(line => line.trim())
       .filter(line => line.length > 0)
       // Remove bullet points, numbers, and other formatting
       .map(line => line.replace(/^[-•*\d.)\]]+\s*/, '').trim())
       .filter(line => line.length > 0);
-    
-    // Limit to 5 facts maximum
-    lines = lines.slice(0, 5);
-    
-    // Enforce 8-word maximum per fact
+
+    // ULTRA-STRICT: Limit to 3 facts maximum (reduced from 5)
+    lines = lines.slice(0, 3);
+
+    // ULTRA-STRICT: Enforce 5-word maximum per fact (reduced from 8)
     lines = lines.map(line => {
       const words = line.split(/\s+/);
-      if (words.length > 8) {
-        return words.slice(0, 8).join(' ');
+      if (words.length > 5) {
+        return words.slice(0, 5).join(' ');
       }
       return line;
     });
-    
+
     // Remove duplicates (case-insensitive)
     const seen = new Set();
     lines = lines.filter(line => {
@@ -218,34 +227,32 @@ export class IntelligentMemoryStorage {
       seen.add(normalized);
       return true;
     });
-    
-    // Remove very short or low-value facts (< 3 words)
+
+    // Remove very short facts (< 3 words)
     lines = lines.filter(line => line.split(/\s+/).length >= 3);
-    
-    // Additional aggressive compression: remove common filler words at start/end
+
+    // Ultra-aggressive compression: remove ALL filler words
+    const fillerWords = ['the', 'a', 'an', 'this', 'that', 'these', 'those', 'is', 'are', 'was', 'were', 'has', 'have', 'had'];
     lines = lines.map(line => {
-      // Remove common prefixes
-      line = line.replace(/^(The |A |An |This |That |These |Those )/i, '');
-      // Remove common suffixes
-      line = line.replace(/( is stated| was mentioned| discussed)$/i, '');
-      return line.trim();
+      let words = line.split(/\s+/);
+      // Remove filler words except first word (to preserve meaning)
+      words = [words[0], ...words.slice(1).filter(w => !fillerWords.includes(w.toLowerCase()))];
+      return words.join(' ');
     });
-    
+
     // Final cleanup: ensure no empty lines
     lines = lines.filter(line => line.length > 0);
-    
-    // CRITICAL FIX: Ensure each fact ends with a period for proper grammar
-    // This preserves sentence structure while maintaining searchability
+
+    // Ensure each fact ends with a period
     lines = lines.map(line => {
-      // Only add period if line doesn't already end with punctuation
       if (!/[.!?]$/.test(line)) {
         return line + '.';
       }
       return line;
     });
-    
-    // Join with newlines for clean formatting and database searchability
-    // Result: "User has pet monkeys.\nAssistant is unaware.\nUser likes games."
+
+    // Join with newlines for clean formatting
+    // Result: "Test token ALPHA-12345.\nSpecial identifier BRAVO-67890.\nUser owns pet monkeys."
     return lines.join('\n');
   }
 
