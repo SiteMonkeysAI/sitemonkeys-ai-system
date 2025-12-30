@@ -1,0 +1,41 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #188: [claude-fix] Fix cleanup endpoint routing - currently hitting wrong handler
+
+Issue Description:
+Problem
+The URLs /api/debug/cleanup-boilerplate-preview and /api/debug/cleanup-boilerplate are returning the file inventory response instead of the cleanup preview. The routes aren't being matched correctly.
+Evidence
+Visiting /api/debug/cleanup-boilerplate-preview returns:
+json{"status":"success","fileCount":5417,"totalChars":11860979,"files":[...]}
+This is the repo snapshot response, not the cleanup preview.
+Likely Cause
+Either:
+
+The debug routes aren't registered before the catch-all route in server.js
+The route paths don't match what was intended
+The debug router isn't properly exported/imported
+
+Task
+
+Check /api/routes/debug.js - ensure the cleanup routes are defined correctly
+Check server.js - ensure debug routes are registered BEFORE any catch-all routes
+Verify the route paths match exactly: /api/debug/cleanup-boilerplate-preview and /api/debug/cleanup-boilerplate
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

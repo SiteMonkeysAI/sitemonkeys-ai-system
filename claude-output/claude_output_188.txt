@@ -1,0 +1,35 @@
+Perfect! The routes are defined correctly in debug.js. The issue has been fixed. Let me provide a summary:
+
+---SUMMARY---
+
+## Issue Analysis
+The cleanup endpoints `/api/debug/cleanup-boilerplate-preview` and `/api/debug/cleanup-boilerplate` were returning the file inventory response instead of their intended cleanup preview/execution responses. 
+
+## Root Cause
+In `server.js`, the route registration order was incorrect:
+1. The repo-snapshot route was registered at line 658 with `app.use("/api", repoSnapshotRoute)`
+2. The debug routes were registered AFTER at line 661 with `app.use("/api/debug", debugRoutes)`
+
+The repo-snapshot handler (exported as a single handler function in `api/repo-snapshot.js`) was catching ALL requests to `/api/*` including the debug endpoints because it was registered first. Express routes are matched in the order they are registered, so the catch-all `/api` route was intercepting requests before they could reach the more specific `/api/debug/*` routes.
+
+## Fix Applied
+**File Modified:** `server.js` (lines 653-661)
+
+Changed the route registration order so that the debug routes are registered **before** the catch-all repo-snapshot route:
+
+```javascript
+// Debug endpoint (only in private/debug mode) - MUST come before catch-all routes
+app.use("/api/debug", debugRoutes);
+
+// Repo snapshot endpoint
+app.use("/api", repoSnapshotRoute);
+```
+
+## Result
+Now when requests hit `/api/debug/cleanup-boilerplate-preview` or `/api/debug/cleanup-boilerplate`, Express will:
+1. First check the `/api/debug` routes (more specific match) - ✅ Match found
+2. Only fall through to the `/api` catch-all if no debug route matches
+
+The cleanup endpoints will now correctly return their cleanup preview/execution responses instead of the file inventory.
+
+---END SUMMARY---
