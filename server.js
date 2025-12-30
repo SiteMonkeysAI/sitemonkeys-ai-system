@@ -64,6 +64,7 @@ import loadVaultHandler from "./api/load-vault.js";
 import { vaultLoader } from "./api/utilities/vault-loader.js";
 import { sessionManager } from "./api/lib/session-manager.js";
 import debugRoutes from "./api/routes/debug.js";
+import memoryFullCheckRoutes from "./api/test/memory-full-check.js";
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -656,6 +657,9 @@ app.post("/api/upload-for-analysis", analysisMiddleware, handleAnalysisUpload);
 
 // Debug endpoint (only in private/debug mode) - MUST come before catch-all routes
 app.use("/api/debug", debugRoutes);
+
+// Memory full check test endpoint (only in private/debug mode)
+app.use("/api/test", memoryFullCheckRoutes);
 
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);
