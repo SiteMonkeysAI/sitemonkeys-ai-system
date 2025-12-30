@@ -216,15 +216,15 @@ router.get('/cleanup-boilerplate-preview', debugModeOnly, async (req, res) => {
     const BOILERPLATE_PATTERNS = [
       '%do not retain information between conversations%',
       '%each conversation starts fresh%',
-      '%don''t have memory%',
-      '%I don''t retain memory%',
+      '%don\'t have memory%',
+      '%I don\'t retain memory%',
       '%session-based memory%',
       '%first interaction%',
-      '%I''m an AI%',
+      '%I\'m an AI%',
       '%I cannot access previous%',
       '%no memory of previous%',
       '%I am an AI%',
-      '%don''t have the ability to remember%',
+      '%don\'t have the ability to remember%',
       '%cannot remember previous conversations%',
       '%no memory of past interactions%'
     ];
@@ -288,15 +288,15 @@ router.post('/cleanup-boilerplate', debugModeOnly, async (req, res) => {
     const BOILERPLATE_PATTERNS = [
       '%do not retain information between conversations%',
       '%each conversation starts fresh%',
-      '%don''t have memory%',
-      '%I don''t retain memory%',
+      '%don\'t have memory%',
+      '%I don\'t retain memory%',
       '%session-based memory%',
       '%first interaction%',
-      '%I''m an AI%',
+      '%I\'m an AI%',
       '%I cannot access previous%',
       '%no memory of previous%',
       '%I am an AI%',
-      '%don''t have the ability to remember%',
+      '%don\'t have the ability to remember%',
       '%cannot remember previous conversations%',
       '%no memory of past interactions%'
     ];

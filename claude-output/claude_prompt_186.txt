@@ -1,0 +1,50 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #186: [claude-fix] Fix syntax error in debug.js - wrong quote escaping
+
+Issue Description:
+roblem
+
+Server won't start due to syntax error in `/api/routes/debug.js` line 219.
+
+Error:
+```
+SyntaxError: Unexpected string
+'%don''t have memory%',
+Cause
+Used SQL-style quote escaping ('') instead of JavaScript escaping (\').
+Fix
+In /api/routes/debug.js, find all instances of '' inside strings and replace with \':
+javascript// WRONG (SQL escaping):
+'%don''t have memory%',
+'%I don''t retain memory%',
+'%I''m an AI%',
+
+// CORRECT (JavaScript escaping):
+'%don\'t have memory%',
+'%I don\'t retain memory%',
+'%I\'m an AI%',
+Files to modify
+/api/routes/debug.js - Fix all quote escaping in the BOILERPLATE_PATTERNS array (around lines 215-230)
+Acceptance Criteria
+
+ Server starts without syntax errors
+ /api/debug/cleanup-boilerplate-preview endpoint works
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
