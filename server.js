@@ -654,11 +654,11 @@ app.get("/api/session/stats", (req, res) => {
 app.post("/api/upload", uploadMiddleware, handleFileUpload);
 app.post("/api/upload-for-analysis", analysisMiddleware, handleAnalysisUpload);
 
+// Debug endpoint (only in private/debug mode) - MUST come before catch-all routes
+app.use("/api/debug", debugRoutes);
+
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);
-
-// Debug endpoint (only in private/debug mode)
-app.use("/api/debug", debugRoutes);
 
 console.log("[SERVER] ✅ Routes configured");
 
