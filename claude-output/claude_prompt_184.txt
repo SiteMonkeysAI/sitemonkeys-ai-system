@@ -1,0 +1,99 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #184: [claude-fix] Clean boilerplate-contaminated memories from database
+
+Issue Description:
+Problem
+Old memories contain AI boilerplate that was incorrectly stored before the storage filter was implemented. This causes the AI to see contradictory information (e.g., "I don't retain memory" alongside actual stored memories).
+Task
+Create and run a cleanup script that deletes ONLY memories containing AI self-description boilerplate, preserving all legitimate user memories.
+Implementation
+Add a one-time cleanup endpoint or script:
+javascript// In server.js or as a standalone script
+
+const BOILERPLATE_PATTERNS = [
+  '%do not retain information between conversations%',
+  '%each conversation starts fresh%',
+  '%don''t have memory%',
+  '%I don''t retain memory%',
+  '%session-based memory%',
+  '%first interaction%',
+  '%I''m an AI%',
+  '%I cannot access previous%',
+  '%no memory of previous%'
+];
+
+async function cleanBoilerplateMemories() {
+  const conditions = BOILERPLATE_PATTERNS
+    .map((_, i) => `content ILIKE $${i + 1}`)
+    .join(' OR ');
+  
+  const query = `
+    DELETE FROM persistent_memories 
+    WHERE ${conditions}
+    RETURNING id, content
+  `;
+  
+  const result = await db.query(query, BOILERPLATE_PATTERNS);
+  console.log(`[CLEANUP] Deleted ${result.rowCount} contaminated memories`);
+  return result.rows;
+}
+Option A: Add temporary endpoint
+javascript// GET /api/admin/cleanup-boilerplate (protected, one-time use)
+app.get('/api/admin/cleanup-boilerplate', async (req, res) => {
+  if (process.env.DEBUG_MODE !== 'true') {
+    return res.status(403).send('Not available');
+  }
+  
+  const deleted = await cleanBoilerplateMemories();
+  res.json({ 
+    success: true, 
+    deleted_count: deleted.length,
+    deleted_samples: deleted.slice(0, 5).map(d => d.content.substring(0, 100))
+  });
+});
+Option B: Run directly in database
+If easier, just execute this SQL directly:
+sqlDELETE FROM persistent_memories 
+WHERE content ILIKE '%do not retain information between conversations%'
+   OR content ILIKE '%each conversation starts fresh%'
+   OR content ILIKE '%don''t have memory%'
+   OR content ILIKE '%I don''t retain memory%'
+   OR content ILIKE '%session-based memory%'
+   OR content ILIKE '%first interaction%'
+   OR content ILIKE '%I''m an AI assistant%'
+   OR content ILIKE '%cannot access previous%'
+   OR content ILIKE '%no memory of previous%';
+Acceptance Criteria
+
+ Only boilerplate memories are deleted
+ Legitimate user memories (colors, codes, facts) remain intact
+ Log shows count of deleted records
+ After cleanup, AI no longer sees contradictory memory statements
+
+Safety
+
+This targets ONLY content matching boilerplate patterns
+User facts like "favorite color is blue" will NOT match these patterns
+Run a SELECT first to preview what will be deleted before running DELETE
+
+
+End of Issue
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
