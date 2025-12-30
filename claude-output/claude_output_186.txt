@@ -1,0 +1,24 @@
+Excellent! The fix has been successfully applied to both instances of the BOILERPLATE_PATTERNS array. All the SQL-style quote escaping (`''`) has been replaced with proper JavaScript escaping (`\'`).
+
+---SUMMARY---
+Fixed syntax error in `/api/routes/debug.js` by correcting quote escaping in the BOILERPLATE_PATTERNS array.
+
+**Problem:** 
+The file used SQL-style quote escaping (`''`) instead of JavaScript string escaping (`\'`) in string literals, causing a SyntaxError on line 219.
+
+**Changes Made:**
+Modified `/api/routes/debug.js` - Fixed all instances of incorrect quote escaping in the BOILERPLATE_PATTERNS array (appears twice in the file, once at line 216 and once at line 288).
+
+**Specific fixes:**
+- Line 219: `'%don''t have memory%'` → `'%don\'t have memory%'`
+- Line 220: `'%I don''t retain memory%'` → `'%I don\'t retain memory%'`
+- Line 223: `'%I''m an AI%'` → `'%I\'m an AI%'`
+- Line 227: `'%don''t have the ability to remember%'` → `'%don\'t have the ability to remember%'`
+- Line 291: `'%don''t have memory%'` → `'%don\'t have memory%'`
+- Line 292: `'%I don''t retain memory%'` → `'%I don\'t retain memory%'`
+- Line 295: `'%I''m an AI%'` → `'%I\'m an AI%'`
+- Line 299: `'%don''t have the ability to remember%'` → `'%don\'t have the ability to remember%'`
+
+**Result:**
+The server should now start without syntax errors, and the `/api/debug/cleanup-boilerplate-preview` endpoint should work correctly. The fix is minimal and only changes the quote escaping syntax to be valid JavaScript.
+---END SUMMARY---
