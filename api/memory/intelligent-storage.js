@@ -388,10 +388,11 @@ Facts (preserve all identifiers):`;
 
   /**
    * Check if dedup merge should be prevented due to different high-entropy tokens
-   * CRITICAL FIX (Issue #216): Properly compares NEW content tokens against EXISTING memory tokens
-   * @param {string} existingContent - Content from existing memory (contentA)
-   * @param {string} newContent - Content from new facts to be stored (contentB)
-   * @returns {boolean} - True if merge should be prevented
+   * CRITICAL FIX (Issue #218): Properly compares NEW content tokens against EXISTING memory tokens
+   * Logic: If NEW content has unique identifiers that DON'T appear in EXISTING memory, block the merge
+   * @param {string} existingContent - Content from existing memory in database
+   * @param {string} newContent - Content from new facts to be stored
+   * @returns {boolean} - True if merge should be PREVENTED (block), False if merge is allowed
    */
   shouldPreventMerge(existingContent, newContent) {
     // Issue #214 Fix 2: Enhanced pattern to catch format like ALPHA-1767213514286
@@ -410,6 +411,13 @@ Facts (preserve all identifiers):`;
     const normalizedExisting = existingTokens.map(t => t.toUpperCase());
     const normalizedNew = newTokens.map(t => t.toUpperCase());
 
+    // Validation: Ensure we got the parameters in the right order
+    console.log(`[DEDUP-VALIDATE] shouldPreventMerge called with:`);
+    console.log(`[DEDUP-VALIDATE]   existingContent (first param): "${existingContent.substring(0, 100)}..."`);
+    console.log(`[DEDUP-VALIDATE]   newContent (second param): "${newContent.substring(0, 100)}..."`);
+    console.log(`[DEDUP-VALIDATE]   Extracted EXISTING tokens: [${normalizedExisting.join(', ')}]`);
+    console.log(`[DEDUP-VALIDATE]   Extracted NEW tokens: [${normalizedNew.join(', ')}]`);
+
     // If new content has no high-entropy tokens, allow normal dedup
     if (normalizedNew.length === 0) {
       return false; // Allow merge
@@ -420,12 +428,19 @@ Facts (preserve all identifiers):`;
       return false; // Allow merge
     }
 
-    // CRITICAL: Check if ANY new token exists in existing tokens
+    // CRITICAL FIX (#218): Check if ANY new token exists in existing tokens
+    // We must verify that at least ONE token from NEW content appears in EXISTING content
+    // Example: NEW=[CHARLIE] vs EXISTING=[ALPHA,BRAVO] → hasOverlap=FALSE → block merge
+    // Example: NEW=[ALPHA] vs EXISTING=[ALPHA,BRAVO] → hasOverlap=TRUE → allow merge
     const hasOverlap = normalizedNew.some(newToken =>
-      normalizedExisting.some(existingToken =>
-        newToken === existingToken
-      )
+      normalizedExisting.includes(newToken)
     );
+
+    // DEBUG: Log what we're comparing to catch any logic errors
+    console.log(`[DEDUP-DEBUG] Comparing tokens:`);
+    console.log(`[DEDUP-DEBUG]   NEW tokens: [${normalizedNew.join(', ')}]`);
+    console.log(`[DEDUP-DEBUG]   EXISTING tokens: [${normalizedExisting.join(', ')}]`);
+    console.log(`[DEDUP-DEBUG]   hasOverlap: ${hasOverlap}`);
 
     if (hasOverlap) {
       // Same identifier being discussed - allow merge
