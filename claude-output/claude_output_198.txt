@@ -1,0 +1,132 @@
+Now let me provide a comprehensive summary:
+
+---SUMMARY---
+
+## Issue #198 Analysis and Fix
+
+### Problem 1: Memory Retrieval Uses AND Logic Instead of OR
+
+**Status: ALREADY FIXED** ✅
+
+Upon investigation, I found that the current codebase **already uses OR logic** for topic matching in all three locations:
+
+1. Line 1419: High-entropy token exact matching - uses OR
+2. Line 1640: Topic-aware filtering - uses OR  
+3. Line 1797: Cross-category topic search - uses OR
+
+The SQL query construction at line 1638-1641 in `/api/categories/memory/internal/intelligence.js`:
+```javascript
+const topicFilters = queryNouns
+  .map((noun, i) => `content::text ILIKE $${startIndex + i}::text`)
+  .join(" OR ");
+baseQuery += ` AND (${topicFilters})`;
+```
+
+This correctly produces SQL like: `AND (content ILIKE $3 OR content ILIKE $4 OR content ILIKE $5)`
+
+**Conclusion:** This issue appears to have been fixed in a previous commit. No changes needed for Problem 1.
+
+---
+
+### Problem 2: Compression Extracts 0 Facts and Stores Empty Content
+
+**Status: FIXED** ✅
+
+**Root Cause:** When `extractKeyFacts()` returns an empty string (0 facts extracted), the code proceeded to store empty content directly to the database, destroying user data.
+
+**Fix Applied:** Added two layers of protection in `/api/memory/intelligent-storage.js`:
+
+#### Layer 1: Fallback After Extraction (Lines 115-126)
+Added guard immediately after `extractKeyFacts()` to detect empty results and use fallback:
+```javascript
+// GUARD: Never store empty content - fallback to user message
+if (!facts || facts.trim().length === 0) {
+  console.log('[INTELLIGENT-STORAGE] ⚠️ No facts extracted, using fallback');
+  // Fallback: Extract key info from user message directly
+  facts = userMessage.substring(0, 200).trim();
+  
+  // If user message also empty, skip storage entirely
+  if (!facts || facts.trim().length === 0) {
+    console.log('[INTELLIGENT-STORAGE] ⏭️ Skipping storage - no content');
+    return { action: 'skipped', reason: 'no_content' };
+  }
+}
+```
+
+**Behavior:** 
+- If GPT-4 extracts 0 facts, fallback to first 200 chars of user message
+- If even that is empty, skip storage entirely with reason 'no_content'
+- Never allows empty content to proceed to storage
+
+#### Layer 2: Database Layer Guard (Lines 397-401)
+Added guard in `storeCompressedMemory()` as final protection:
+```javascript
+// GUARD: Refuse to store empty content at database layer
+if (!facts || facts.trim().length === 0) {
+  console.log('[INTELLIGENT-STORAGE] ❌ Refusing to store empty content');
+  return { action: 'skipped', reason: 'empty_content' };
+}
+```
+
+**Behavior:**
+- Prevents any empty content from reaching database INSERT
+- Returns skipped action if somehow empty content gets past first guard
+- Defensive programming - ensures data integrity even if calling code changes
+
+---
+
+### Problem 3: High-Entropy Token Retrieval
+
+**Status: NO CHANGES NEEDED** ✅
+
+The issue description noted that high-entropy tokens (like ALPHA-123) are only retrieved when the NEW query contains a token. However, this is supplementary behavior. The main retrieval (Problem 1) uses topic matching with OR logic, which will find memories containing tokens even when the query doesn't contain the exact token.
+
+Once Problem 1 is confirmed working (already uses OR), regular topic-based retrieval will handle this case correctly.
+
+---
+
+### Files Modified
+
+1. **`/api/memory/intelligent-storage.js`** (2 changes)
+   - Lines 115-126: Added fallback logic after `extractKeyFacts()`
+   - Lines 397-401: Added guard in `storeCompressedMemory()`
+
+### Files Verified (No Changes Needed)
+
+1. **`/api/categories/memory/internal/intelligence.js`**
+   - Confirmed OR logic already in use at lines 1419, 1640, 1797
+   - All topic matching correctly uses OR, not AND
+
+---
+
+### Expected Impact
+
+After this fix:
+
+✅ **Prevents empty content storage** - Two layers of defense ensure no empty strings reach the database
+
+✅ **Preserves user data** - Fallback to user message ensures valuable data isn't lost when AI extraction fails
+
+✅ **Memory retrieval already works** - OR logic was already in place for topic matching
+
+✅ **Test improvements expected:**
+- Test 4 (High-entropy tokens) should now pass - tokens survive via fallback
+- Tests 1-2 should continue passing with better reliability
+- No more "empty content" pollution in database
+
+---
+
+### Testing Recommendations
+
+The fix can be verified using the existing test endpoint:
+```
+GET /api/test/memory-full-check
+Headers: X-Internal-Test-Token: [token]
+```
+
+Expected improvements:
+- Test 1 (Basic Store + Recall): Should pass consistently
+- Test 4 (High-entropy tokens): Should pass - fallback preserves tokens
+- Database should contain no empty `content` fields after this fix
+
+---END SUMMARY---

@@ -110,12 +110,25 @@ export class IntelligentMemoryStorage {
 
       // Step 1: Extract facts (compression)
       console.log('[INTELLIGENT-STORAGE] 📝 Extracting key facts...');
-      const facts = await this.extractKeyFacts(userMessage, sanitizedResponse);
-      
+      let facts = await this.extractKeyFacts(userMessage, sanitizedResponse);
+
+      // GUARD: Never store empty content - fallback to user message
+      if (!facts || facts.trim().length === 0) {
+        console.log('[INTELLIGENT-STORAGE] ⚠️ No facts extracted, using fallback');
+        // Fallback: Extract key info from user message directly
+        facts = userMessage.substring(0, 200).trim();
+
+        // If user message also empty, skip storage entirely
+        if (!facts || facts.trim().length === 0) {
+          console.log('[INTELLIGENT-STORAGE] ⏭️ Skipping storage - no content');
+          return { action: 'skipped', reason: 'no_content' };
+        }
+      }
+
       const originalTokens = this.countTokens(userMessage + aiResponse);
       const compressedTokens = this.countTokens(facts);
       const ratio = originalTokens > 0 ? (originalTokens / compressedTokens).toFixed(1) : 1;
-      
+
       console.log(`[INTELLIGENT-STORAGE] 📊 Compression: ${originalTokens} → ${compressedTokens} tokens (${ratio}:1)`);
       
       // Step 2: Check for duplicates
@@ -380,6 +393,12 @@ Facts (3-5 words each, max 3):`;
       console.log('[TRACE-INTELLIGENT] I10. userId:', userId);
       console.log('[TRACE-INTELLIGENT] I11. category:', category);
       console.log('[TRACE-INTELLIGENT] I12. facts length:', facts?.length || 0);
+
+      // GUARD: Refuse to store empty content at database layer
+      if (!facts || facts.trim().length === 0) {
+        console.log('[INTELLIGENT-STORAGE] ❌ Refusing to store empty content');
+        return { action: 'skipped', reason: 'empty_content' };
+      }
 
       const tokenCount = this.countTokens(facts);
       console.log('[TRACE-INTELLIGENT] I13. tokenCount:', tokenCount);
