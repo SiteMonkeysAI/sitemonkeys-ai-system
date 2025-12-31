@@ -498,7 +498,7 @@ export class Orchestrator {
           vaultTokens: context.tokenBreakdown?.vault || (vaultData?.tokens || 0),
           totalContextTokens: context.totalTokens,
 
-          // Memory retrieval telemetry (Issue #206, enhanced in Issue #208, #210)
+          // Memory retrieval telemetry (Issue #206, enhanced in Issue #208, #210, #212)
           memory_retrieval: {
             method: "sql_keyword_category_filter",
             memories_considered: memoryContext.count || 0,
@@ -508,8 +508,19 @@ export class Orchestrator {
             selection_criteria: "relevance_recency_hybrid",
             injected_memory_ids: memoryContext.memory_ids || [],
             injected_tokens_total: memoryContext.tokens || 0,
-            // Issue #210 Fix 1: Telemetry validity check
-            telemetry_valid: (memoryContext.count === 0) || (memoryContext.memory_ids && memoryContext.memory_ids.length > 0)
+            // Issue #212 Fix: Complete telemetry validity check
+            // Valid if: (1) No memories, OR (2) Both ID arrays populated AND counts match
+            telemetry_valid: (
+              (memoryContext.count === 0) ||
+              (
+                (memoryContext.memory_ids && memoryContext.memory_ids.length > 0) &&
+                (memoryContext.memory_ids.length === memoryContext.count)
+              )
+            ),
+            telemetry_error: (
+              (memoryContext.count === 0) ||
+              (memoryContext.memory_ids && memoryContext.memory_ids.length === memoryContext.count)
+            ) ? null : `ID count mismatch: ${memoryContext.count} memories but ${(memoryContext.memory_ids || []).length} memory IDs`
           },
 
           // Token budget compliance
