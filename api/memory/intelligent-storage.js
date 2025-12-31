@@ -393,21 +393,34 @@ Facts (preserve all identifiers):`;
    * @returns {boolean} - True if merge should be prevented
    */
   shouldPreventMerge(contentA, contentB) {
-    // Use same pattern as protectHighEntropyTokens for consistency
+    // Issue #214 Fix 2: Enhanced pattern to catch format like ALPHA-1767213514286
+    // Pattern breakdown:
+    // - \b[A-Z]+-\d+-[A-Z0-9]+\b : Matches ABC-123-XYZ format
+    // - \b[A-Z]+-\d{10,}\b : Matches ABC-1234567890 format (10+ digits)
+    // - \bDr\.\s*[A-Z]+-\d+\b : Matches Dr. ABC-123 format
+    // - \b[A-Z0-9]{12,}\b : Matches long alphanumeric codes
     const HIGH_ENTROPY_PATTERN = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/gi;
 
     const tokensA = contentA.match(HIGH_ENTROPY_PATTERN) || [];
     const tokensB = contentB.match(HIGH_ENTROPY_PATTERN) || [];
 
+    // Normalize tokens to uppercase for case-insensitive comparison (Issue #214)
+    const normalizedA = tokensA.map(t => t.toUpperCase());
+    const normalizedB = tokensB.map(t => t.toUpperCase());
+
     // If either has high-entropy tokens, only allow merge if they share at least one
-    if (tokensA.length > 0 || tokensB.length > 0) {
-      const overlap = tokensA.filter(t => tokensB.includes(t));
+    if (normalizedA.length > 0 || normalizedB.length > 0) {
+      const overlap = normalizedA.filter(t => normalizedB.includes(t));
       if (overlap.length === 0) {
         console.log('[DEDUP] 🛡️ Prevented merge - different high-entropy tokens');
-        console.log(`[DEDUP]   Tokens A: ${tokensA.join(', ')}`);
-        console.log(`[DEDUP]   Tokens B: ${tokensB.join(', ')}`);
+        console.log(`[DEDUP]   Tokens A: ${normalizedA.join(', ')}`);
+        console.log(`[DEDUP]   Tokens B: ${normalizedB.join(', ')}`);
+        console.log(`[DEDUP]   Original A: ${tokensA.join(', ')}`);
+        console.log(`[DEDUP]   Original B: ${tokensB.join(', ')}`);
         return true; // PREVENT merge - different unique tokens
       }
+      // Log when tokens overlap (merge allowed)
+      console.log(`[DEDUP] ✓ High-entropy tokens overlap: ${overlap.join(', ')} - merge allowed`);
     }
 
     return false; // Allow normal dedup logic

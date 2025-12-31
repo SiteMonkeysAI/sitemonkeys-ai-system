@@ -1,0 +1,247 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #214: [claude-fix]
+
+Issue Description:
+Purpose
+Issue #210 implemented the framework for the three structural guarantees, but runtime testing reveals two remaining gaps that prevent the foundation from being complete:
+
+Telemetry IDs are empty - Retrieval layer not returning id field with memory objects
+Dedup is too aggressive - Different tripwires being merged (0.962 similarity between CHARLIE and BRAVO)
+
+These must be fixed to complete the foundation work.
+
+Evidence From Runtime Logs
+Problem 1: Memory IDs Not Flowing Through
+[ORCHESTRATOR ERROR] [TELEMETRY] ❌ CRITICAL: memory_count=1 but memory_ids=[] - telemetry integrity failure
+[ORCHESTRATOR ERROR] [TELEMETRY] ❌ FAILED: Cannot recover memory IDs - retrieval layer not returning IDs
+This appears repeatedly throughout the test run. The orchestrator is correctly detecting the problem, but the retrieval layer isn't providing the IDs.
+What's happening:
+
+SQL query returns id from database ✅
+Memory objects passed to orchestrator don't include id ❌
+Telemetry shows memory_ids: [] even when memory_count > 0 ❌
+
+Problem 2: Dedup Merging Different Tripwires
+[STORE-CONFIRM] ❌ Failed to confirm CHARLIE-1767213514286 after 5 attempts
+[STORE-CONFIRM] ❌ Failed to confirm DELTA-1767213514286 after 5 attempts
+What's happening:
+[DEDUP] 📊 Found similar memory with similarity score: 0.962
+[DEDUP] ♻️ Found similar memory (id=762), boosting instead of duplicating
+Memory 762 contains BRAVO-1767213514286. The dedup system sees CHARLIE and DELTA as "similar" (0.962) and boosts the existing memory instead of creating new ones.
+This is wrong. CHARLIE ≠ BRAVO ≠ DELTA. They are distinct tripwires that should be stored separately.
+
+Root Cause Analysis
+Root Cause 1: ID Field Stripped During Retrieval Pipeline
+The retrieval pipeline has multiple stages:
+SQL Query → Raw Results → Processing → Memory Objects → Orchestrator
+     ↓           ↓            ↓              ↓
+  id: 761    id: 761      id: ???        id: undefined
+Somewhere in the processing, the id field is being dropped or not mapped.
+Most likely locations:
+
+/api/categories/memory/internal/intelligence.js - extractRelevantMemories()
+Memory object transformation/mapping
+Return value construction
+
+Root Cause 2: Dedup Similarity Calculation Ignores High-Entropy Tokens
+The similarity calculation is likely using general text similarity (Jaccard, cosine, etc.) which sees:
+
+"Test token: BRAVO-1767213514286"
+"Test token: CHARLIE-1767213514286"
+
+As 90%+ similar because most words match. But the high-entropy token (BRAVO vs CHARLIE) is the critical differentiator.
+The fix: High-entropy tokens (alphanumeric codes like BRAVO-123, CHARLIE-456) should have much higher weight in similarity calculation, or should block dedup entirely when they differ.
+
+Fix 1: Pass ID Field Through Retrieval Pipeline
+Step 1: Trace where ID is lost
+bash# Find where memory objects are constructed in retrieval
+grep -n "content:" /api/categories/memory/internal/intelligence.js | head -20
+
+# Find the extractRelevantMemories function
+grep -n "extractRelevantMemories\|function extract" /api/categories/memory/internal/intelligence.js
+Step 2: Verify SQL returns ID
+The SQL query should already return id:
+sqlSELECT id, content, category, tokens, relevance, created_at
+FROM persistent_memories
+WHERE user_id = $1
+-- ...
+Verify this is true. If not, add id to SELECT.
+Step 3: Ensure ID is mapped to memory object
+Find where memory objects are constructed and ensure id is included:
+javascript// CURRENT (likely - ID missing)
+const memoryObject = {
+  content: row.content,
+  category: row.category,
+  tokens: row.tokens,
+  relevance: row.relevance
+  // id is missing!
+};
+
+// FIXED
+const memoryObject = {
+  id: row.id,  // MUST include DB ID
+  content: row.content,
+  category: row.category,
+  tokens: row.tokens,
+  relevance: row.relevance
+};               Step 4: Verify ID flows to orchestrator
+In /api/core/orchestrator.js, the memory extraction should now work:
+javascript// This should now find IDs
+const injectedIds = memories.map(m => m.id).filter(Boolean);
+// injectedIds should be [761, 762, ...] not []
+Definition of Done - Fix 1
+json{
+  "memory_count": 1,
+  "memory_ids": [761],
+  "memory_retrieval": {
+    "memories_injected": 1,
+    "injected_memory_ids": [761],
+    "telemetry_valid": true
+  }
+}
+No more ❌ CRITICAL: memory_count=X but memory_ids=[] errors in logs.
+
+Fix 2: Prevent Dedup From Merging Different High-Entropy Tokens
+Step 1: Find dedup similarity function
+bashgrep -rn "similarity\|dedup\|similar" /api/ | grep -i "function\|const.*="
+Likely location: /api/memory/intelligent-storage.js or similar
+Step 2: Identify the similarity calculation
+javascript// CURRENT (likely)
+function calculateSimilarity(text1, text2) {
+  // Generic text similarity - treats all words equally
+  const words1 = text1.toLowerCase().split(/\s+/);
+  const words2 = text2.toLowerCase().split(/\s+/);
+  // Jaccard or similar...
+  return similarity; // 0.962 for BRAVO vs CHARLIE texts
+}
+Step 3: Add high-entropy token protection
+javascript// FIXED - High-entropy tokens block dedup when different
+function calculateSimilarity(text1, text2) {
+  // Extract high-entropy tokens (alphanumeric codes)
+  const highEntropyPattern = /[A-Z]+-\d+|[A-Z]+-[A-Z]+-\d+|[A-Za-z0-9]{10,}/g;
+  
+  const tokens1 = text1.match(highEntropyPattern) || [];
+  const tokens2 = text2.match(highEntropyPattern) || [];
+  
+  // If both have high-entropy tokens and they differ, NOT similar
+  if (tokens1.length > 0 && tokens2.length > 0) {
+    const tokens1Set = new Set(tokens1.map(t => t.toUpperCase()));
+    const tokens2Set = new Set(tokens2.map(t => t.toUpperCase()));
+    
+    // Check if any tokens match
+    const hasMatchingToken = [...tokens1Set].some(t => tokens2Set.has(t));
+    
+    if (!hasMatchingToken) {
+      console.log(`[DEDUP] 🛡️ High-entropy tokens differ: ${tokens1} vs ${tokens2} - blocking merge`);
+      return 0; // Force no similarity - prevent merge
+    }
+  }
+  
+  // Fall back to normal similarity for non-token content
+  return normalSimilarityCalculation(text1, text2);
+}         Step 4: Alternative - Lower similarity threshold for token-containing content
+javascript// If content contains high-entropy tokens, require higher similarity to merge
+function shouldMerge(text1, text2, similarity) {
+  const hasHighEntropyTokens = /[A-Z]+-\d+/.test(text1) || /[A-Z]+-\d+/.test(text2);
+  
+  if (hasHighEntropyTokens) {
+    // Require 99%+ similarity to merge token-containing content
+    return similarity > 0.99;
+  }
+  
+  // Normal threshold for other content
+  return similarity > 0.85;
+}
+Definition of Done - Fix 2
+[STORE-CONFIRM] ✅ Confirmed CHARLIE-1767213514286 stored as ID 765
+[STORE-CONFIRM] ✅ Confirmed DELTA-1767213514286 stored as ID 766
+CHARLIE and DELTA get separate memory IDs, not merged into existing memory.
+
+Files to Modify
+Fix 1: ID Flow
+
+/api/categories/memory/internal/intelligence.js
+
+extractRelevantMemories() function
+Ensure id: row.id is included in memory object construction
+Trace the full path from SQL result to return value
+
+
+
+Fix 2: Dedup Protection
+
+/api/memory/intelligent-storage.js (or wherever dedup lives)
+
+calculateSimilarity() or equivalent function
+Add high-entropy token detection and protection
+Either block merge when tokens differ, or raise threshold significantly
+
+
+
+
+Implementation Steps
+Step 1: Fix ID Flow (Do First)
+bash# Find the exact line where memory objects are constructed
+grep -n "content:" /api/categories/memory/internal/intelligence.js
+
+# Look for object construction without id
+grep -B5 -A5 "content: row\|content: memory\|content: result" /api/categories/memory/internal/intelligence.js
+Add id: row.id (or equivalent) to every memory object construction.
+Step 2: Verify ID Flow
+After deploying, check logs for:
+
+memory_ids: [761] instead of memory_ids: []
+No more ❌ CRITICAL: memory_count=X but memory_ids=[] errors
+
+Step 3: Fix Dedup (Do Second)
+bash# Find dedup/similarity code
+grep -rn "dedup\|similarity\|similar" /api/memory/
+Add high-entropy token protection to prevent merging different tripwires.
+Step 4: Verify Dedup Fix
+After deploying, Test 3 (Dedup Anti-Merge) should show:
+json{
+  "has_charlie": true,
+  "has_delta": true,
+  "found_memories": 2
+}
+
+Acceptance Criteria
+Fix 1: Telemetry IDs
+
+ Memory objects from retrieval include id field
+ memory_ids array populated when memory_count > 0
+ injected_memory_ids array populated when memories_injected > 0
+ No ❌ CRITICAL: memory_count=X but memory_ids=[] errors in logs
+ telemetry_valid: true in responses
+
+Fix 2: Dedup Protection
+
+ High-entropy tokens (ALPHA-123, BRAVO-456, etc.) detected in similarity check
+ Memories with different high-entropy tokens NOT merged
+ Test 3 passes: CHARLIE and DELTA stored as separate memories
+ Dedup still works for genuinely similar content (without unique tokens)
+
+Overall
+
+ All 11 tests pass (or show honest PARTIAL/WARNING status)
+ Telemetry is complete and trustworthy
+ Foundation is solid for future development
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

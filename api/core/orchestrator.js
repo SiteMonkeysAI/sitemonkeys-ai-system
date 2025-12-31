@@ -684,6 +684,7 @@ export class Orchestrator {
                 success: true,
                 memories: memoryText,
                 count: memoryCount,
+                memory_ids: result.memory_ids || [], // Issue #214 Fix 1: Preserve memory IDs from retrieval layer
               };
 
               this.log(
