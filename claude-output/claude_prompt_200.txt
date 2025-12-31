@@ -1,0 +1,300 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #200: [claude-fix] Issue #199: CRITICAL - Hidden AND Filters ('%my %', '%personal%') Breaking All Memory Retrieval
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Executive Summary</h2>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">Memory retrieval <strong>always returns 0 results</strong> even when memories exist and OR logic is correctly implemented for topic filters. The root cause is <strong>hidden additional AND conditions</strong> (<code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">'%my %'</code> and <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">'%personal%'</code>) being appended to the SQL query, which break retrieval when stored content doesn't contain these exact strings.</p>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Evidence from Production Logs</h2>
+<h3 class="text-text-100 mt-2 -mb-1 text-base font-bold">Storage Succeeds:</h3>
+<div class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-lg"><div class="sticky opacity-0 group-hover/copy:opacity-100 top-2 py-2 h-12 w-0 float-right"><div class="absolute right-0 h-8 px-2 items-center inline-flex z-10"><button class="inline-flex
+  items-center
+  justify-center
+  relative
+  shrink-0
+  can-focus
+  select-none
+  disabled:pointer-events-none
+  disabled:opacity-50
+  disabled:shadow-none
+  disabled:drop-shadow-none border-transparent
+          transition
+          font-base
+          duration-300
+          ease-[cubic-bezier(0.165,0.85,0.45,1)] h-8 w-8 rounded-md active:scale-95 backdrop-blur-md Button_ghost__BUAoh" type="button" aria-label="Copy to clipboard" data-state="closed"><div class="relative"><div class="flex items-center justify-center transition-all opacity-100 scale-100" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 transition-all opacity-100 scale-100" aria-hidden="true"><path d="M12.5 3C13.3284 3 14 3.67157 14 4.5V6H15.5C16.3284 6 17 6.67157 17 7.5V15.5C17 16.3284 16.3284 17 15.5 17H7.5C6.67157 17 6 16.3284 6 15.5V14H4.5C3.67157 14 3 13.3284 3 12.5V4.5C3 3.67157 3.67157 3 4.5 3H12.5ZM14 12.5C14 13.3284 13.3284 14 12.5 14H7V15.5C7 15.7761 7.22386 16 7.5 16H15.5C15.7761 16 16 15.7761 16 15.5V7.5C16 7.22386 15.7761 7 15.5 7H14V12.5ZM4.5 4C4.22386 4 4 4.22386 4 4.5V12.5C4 12.7761 4.22386 13 4.5 13H12.5C12.7761 13 13 12.7761 13 12.5V4.5C13 4.22386 12.7761 4 12.5 4H4.5Z"></path></svg></div><div class="flex items-center justify-center absolute top-0 left-0 transition-all opacity-0 scale-50" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 absolute top-0 left-0 transition-all opacity-0 scale-50" aria-hidden="true"><path d="M15.1883 5.10908C15.3699 4.96398 15.6346 4.96153 15.8202 5.11592C16.0056 5.27067 16.0504 5.53125 15.9403 5.73605L15.8836 5.82003L8.38354 14.8202C8.29361 14.9279 8.16242 14.9925 8.02221 14.9989C7.88203 15.0051 7.74545 14.9526 7.64622 14.8534L4.14617 11.3533L4.08172 11.2752C3.95384 11.0811 3.97542 10.817 4.14617 10.6463C4.31693 10.4755 4.58105 10.4539 4.77509 10.5818L4.85321 10.6463L7.96556 13.7586L15.1161 5.1794L15.1883 5.10908Z"></path></svg></div></div></button></div></div><div><pre class="code-block__code !my-0 !rounded-lg !text-sm !leading-relaxed" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none; padding: 1em; margin: 0.5em 0px; overflow: auto; border-radius: 0.3em;"><code style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre-wrap; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none;"><span><span>[STORAGE-DEBUG] Memory stored: {
+</span></span><span>  id: 704,
+</span><span>  user_id: 'test-full-1767202444378',
+</span><span>  content: 'Test token: ALPHA-1767202444378.',
+</span><span>  category: 'personal_life_interests'
+</span><span>}</span></code></pre></div></div>
+<h3 class="text-text-100 mt-2 -mb-1 text-base font-bold">Retrieval Fails Despite Content Match:</h3>
+<div class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-lg"><div class="sticky opacity-0 group-hover/copy:opacity-100 top-2 py-2 h-12 w-0 float-right"><div class="absolute right-0 h-8 px-2 items-center inline-flex z-10"><button class="inline-flex
+  items-center
+  justify-center
+  relative
+  shrink-0
+  can-focus
+  select-none
+  disabled:pointer-events-none
+  disabled:opacity-50
+  disabled:shadow-none
+  disabled:drop-shadow-none border-transparent
+          transition
+          font-base
+          duration-300
+          ease-[cubic-bezier(0.165,0.85,0.45,1)] h-8 w-8 rounded-md active:scale-95 backdrop-blur-md Button_ghost__BUAoh" type="button" aria-label="Copy to clipboard" data-state="closed"><div class="relative"><div class="flex items-center justify-center transition-all opacity-100 scale-100" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 transition-all opacity-100 scale-100" aria-hidden="true"><path d="M12.5 3C13.3284 3 14 3.67157 14 4.5V6H15.5C16.3284 6 17 6.67157 17 7.5V15.5C17 16.3284 16.3284 17 15.5 17H7.5C6.67157 17 6 16.3284 6 15.5V14H4.5C3.67157 14 3 13.3284 3 12.5V4.5C3 3.67157 3.67157 3 4.5 3H12.5ZM14 12.5C14 13.3284 13.3284 14 12.5 14H7V15.5C7 15.7761 7.22386 16 7.5 16H15.5C15.7761 16 16 15.7761 16 15.5V7.5C16 7.22386 15.7761 7 15.5 7H14V12.5ZM4.5 4C4.22386 4 4 4.22386 4 4.5V12.5C4 12.7761 4.22386 13 4.5 13H12.5C12.7761 13 13 12.7761 13 12.5V4.5C13 4.22386 12.7761 4 12.5 4H4.5Z"></path></svg></div><div class="flex items-center justify-center absolute top-0 left-0 transition-all opacity-0 scale-50" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 absolute top-0 left-0 transition-all opacity-0 scale-50" aria-hidden="true"><path d="M15.1883 5.10908C15.3699 4.96398 15.6346 4.96153 15.8202 5.11592C16.0056 5.27067 16.0504 5.53125 15.9403 5.73605L15.8836 5.82003L8.38354 14.8202C8.29361 14.9279 8.16242 14.9925 8.02221 14.9989C7.88203 15.0051 7.74545 14.9526 7.64622 14.8534L4.14617 11.3533L4.08172 11.2752C3.95384 11.0811 3.97542 10.817 4.14617 10.6463C4.31693 10.4755 4.58105 10.4539 4.77509 10.5818L4.85321 10.6463L7.96556 13.7586L15.1161 5.1794L15.1883 5.10908Z"></path></svg></div></div></button></div></div><div><pre class="code-block__code !my-0 !rounded-lg !text-sm !leading-relaxed" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none; padding: 1em; margin: 0.5em 0px; overflow: auto; border-radius: 0.3em;"><code style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre-wrap; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none;"><span><span>[RETRIEVAL-DEBUG] SQL Query Parameters: {
+</span></span><span>  param_count: 7,
+</span><span>  user_id: 'test-full-1767202444378',
+</span><span>  category: 'personal_life_interests',
+</span><span>  topic_filters: [ '%what%', '%test%', '%token%' ],
+</span><span>  all_params: [
+</span><span>    'test-full-1767202444378',     // $1 = user_id
+</span><span>    'personal_life_interests',     // $2 = category
+</span><span>    '%what%',                      // $3 = topic (OR)
+</span><span>    '%test%',                      // $4 = topic (OR)
+</span><span>    '%token%',                     // $5 = topic (OR)
+</span><span>    '%my %',                       // $6 = HIDDEN FILTER ❌
+</span><span>    '%personal%'                   // $7 = HIDDEN FILTER ❌
+</span><span>  ]
+</span><span>}
+</span><span>[RETRIEVAL-DEBUG] Raw DB results: { count: 0 }</span></code></pre></div></div>
+<h3 class="text-text-100 mt-2 -mb-1 text-base font-bold">Why This Breaks Everything</h3>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">The stored content <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">'Test token: ALPHA-1767202444378.'</code>:</p>
+<ul class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-disc flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2">✅ Contains <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">test</code> → matches <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">%test%</code></li>
+<li class="whitespace-normal break-words pl-2">✅ Contains <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">token</code> → matches <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">%token%</code></li>
+<li class="whitespace-normal break-words pl-2">❌ Does NOT contain <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">my </code> (with space) → fails <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">%my %</code></li>
+<li class="whitespace-normal break-words pl-2">❌ Does NOT contain <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">personal</code> → fails <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">%personal%</code></li>
+</ul>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]"><strong>If the query uses AND for these extra filters, the entire query returns 0 results.</strong></p>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">The Bug Location</h2>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]"><strong>File:</strong> <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">/api/categories/memory/internal/intelligence.js</code></p>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">The SQL query is likely constructed as:</p>
+<div class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-lg"><div class="sticky opacity-0 group-hover/copy:opacity-100 top-2 py-2 h-12 w-0 float-right"><div class="absolute right-0 h-8 px-2 items-center inline-flex z-10"><button class="inline-flex
+  items-center
+  justify-center
+  relative
+  shrink-0
+  can-focus
+  select-none
+  disabled:pointer-events-none
+  disabled:opacity-50
+  disabled:shadow-none
+  disabled:drop-shadow-none border-transparent
+          transition
+          font-base
+          duration-300
+          ease-[cubic-bezier(0.165,0.85,0.45,1)] h-8 w-8 rounded-md active:scale-95 backdrop-blur-md Button_ghost__BUAoh" type="button" aria-label="Copy to clipboard" data-state="closed"><div class="relative"><div class="flex items-center justify-center transition-all opacity-100 scale-100" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 transition-all opacity-100 scale-100" aria-hidden="true"><path d="M12.5 3C13.3284 3 14 3.67157 14 4.5V6H15.5C16.3284 6 17 6.67157 17 7.5V15.5C17 16.3284 16.3284 17 15.5 17H7.5C6.67157 17 6 16.3284 6 15.5V14H4.5C3.67157 14 3 13.3284 3 12.5V4.5C3 3.67157 3.67157 3 4.5 3H12.5ZM14 12.5C14 13.3284 13.3284 14 12.5 14H7V15.5C7 15.7761 7.22386 16 7.5 16H15.5C15.7761 16 16 15.7761 16 15.5V7.5C16 7.22386 15.7761 7 15.5 7H14V12.5ZM4.5 4C4.22386 4 4 4.22386 4 4.5V12.5C4 12.7761 4.22386 13 4.5 13H12.5C12.7761 13 13 12.7761 13 12.5V4.5C13 4.22386 12.7761 4 12.5 4H4.5Z"></path></svg></div><div class="flex items-center justify-center absolute top-0 left-0 transition-all opacity-0 scale-50" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 absolute top-0 left-0 transition-all opacity-0 scale-50" aria-hidden="true"><path d="M15.1883 5.10908C15.3699 4.96398 15.6346 4.96153 15.8202 5.11592C16.0056 5.27067 16.0504 5.53125 15.9403 5.73605L15.8836 5.82003L8.38354 14.8202C8.29361 14.9279 8.16242 14.9925 8.02221 14.9989C7.88203 15.0051 7.74545 14.9526 7.64622 14.8534L4.14617 11.3533L4.08172 11.2752C3.95384 11.0811 3.97542 10.817 4.14617 10.6463C4.31693 10.4755 4.58105 10.4539 4.77509 10.5818L4.85321 10.6463L7.96556 13.7586L15.1161 5.1794L15.1883 5.10908Z"></path></svg></div></div></button></div></div><div class="text-text-500 font-small p-3.5 pb-0">sql</div><div><pre class="code-block__code !my-0 !rounded-lg !text-sm !leading-relaxed" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none; padding: 1em; margin: 0.5em 0px; overflow: auto; border-radius: 0.3em;"><code class="language-sql" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none;"><span><span class="token" style="color: rgb(198, 120, 221);">WHERE</span><span> user_id </span><span class="token" style="color: rgb(97, 175, 239);">=</span><span> $</span><span class="token" style="color: rgb(209, 154, 102);">1</span><span> 
+</span></span><span><span>  </span><span class="token" style="color: rgb(97, 175, 239);">AND</span><span> category </span><span class="token" style="color: rgb(97, 175, 239);">=</span><span> $</span><span class="token" style="color: rgb(209, 154, 102);">2</span><span>
+</span></span><span><span>  </span><span class="token" style="color: rgb(97, 175, 239);">AND</span><span> </span><span class="token" style="color: rgb(171, 178, 191);">(</span><span>content </span><span class="token" style="color: rgb(97, 175, 239);">ILIKE</span><span> $</span><span class="token" style="color: rgb(209, 154, 102);">3</span><span> </span><span class="token" style="color: rgb(97, 175, 239);">OR</span><span> content </span><span class="token" style="color: rgb(97, 175, 239);">ILIKE</span><span> $</span><span class="token" style="color: rgb(209, 154, 102);">4</span><span> </span><span class="token" style="color: rgb(97, 175, 239);">OR</span><span> content </span><span class="token" style="color: rgb(97, 175, 239);">ILIKE</span><span> $</span><span class="token" style="color: rgb(209, 154, 102);">5</span><span class="token" style="color: rgb(171, 178, 191);">)</span><span>  </span><span class="token" style="color: rgb(92, 99, 112); font-style: italic;">-- Topics (correctly OR)</span><span>
+</span></span><span><span>  </span><span class="token" style="color: rgb(97, 175, 239);">AND</span><span> content </span><span class="token" style="color: rgb(97, 175, 239);">ILIKE</span><span> $</span><span class="token" style="color: rgb(209, 154, 102);">6</span><span>   </span><span class="token" style="color: rgb(92, 99, 112); font-style: italic;">-- '%my %' - BREAKS IT!</span><span>
+</span></span><span><span>  </span><span class="token" style="color: rgb(97, 175, 239);">AND</span><span> content </span><span class="token" style="color: rgb(97, 175, 239);">ILIKE</span><span> $</span><span class="token" style="color: rgb(209, 154, 102);">7</span><span>   </span><span class="token" style="color: rgb(92, 99, 112); font-style: italic;">-- '%personal%' - BREAKS IT!</span></span></code></pre></div></div>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Root Cause Analysis</h2>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">These extra filters (<code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">'%my %'</code>, <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">'%personal%'</code>) appear to be an attempt at "personal context" matching - trying to find memories that mention "my" (possessive) or relate to "personal" topics. However:</p>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2"><strong>They're added as AND conditions</strong>, not included in the OR clause</li>
+<li class="whitespace-normal break-words pl-2"><strong>Stored content rarely contains these exact strings</strong> after compression</li>
+<li class="whitespace-normal break-words pl-2"><strong>The compression process removes filler words</strong> like "my" from stored facts</li>
+</ol>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Required Fix</h2>
+<h3 class="text-text-100 mt-2 -mb-1 text-base font-bold">Option A: Remove Hidden Filters Entirely (Recommended)</h3>
+<div class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-lg"><div class="sticky opacity-0 group-hover/copy:opacity-100 top-2 py-2 h-12 w-0 float-right"><div class="absolute right-0 h-8 px-2 items-center inline-flex z-10"><button class="inline-flex
+  items-center
+  justify-center
+  relative
+  shrink-0
+  can-focus
+  select-none
+  disabled:pointer-events-none
+  disabled:opacity-50
+  disabled:shadow-none
+  disabled:drop-shadow-none border-transparent
+          transition
+          font-base
+          duration-300
+          ease-[cubic-bezier(0.165,0.85,0.45,1)] h-8 w-8 rounded-md active:scale-95 backdrop-blur-md Button_ghost__BUAoh" type="button" aria-label="Copy to clipboard" data-state="closed"><div class="relative"><div class="flex items-center justify-center transition-all opacity-100 scale-100" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 transition-all opacity-100 scale-100" aria-hidden="true"><path d="M12.5 3C13.3284 3 14 3.67157 14 4.5V6H15.5C16.3284 6 17 6.67157 17 7.5V15.5C17 16.3284 16.3284 17 15.5 17H7.5C6.67157 17 6 16.3284 6 15.5V14H4.5C3.67157 14 3 13.3284 3 12.5V4.5C3 3.67157 3.67157 3 4.5 3H12.5ZM14 12.5C14 13.3284 13.3284 14 12.5 14H7V15.5C7 15.7761 7.22386 16 7.5 16H15.5C15.7761 16 16 15.7761 16 15.5V7.5C16 7.22386 15.7761 7 15.5 7H14V12.5ZM4.5 4C4.22386 4 4 4.22386 4 4.5V12.5C4 12.7761 4.22386 13 4.5 13H12.5C12.7761 13 13 12.7761 13 12.5V4.5C13 4.22386 12.7761 4 12.5 4H4.5Z"></path></svg></div><div class="flex items-center justify-center absolute top-0 left-0 transition-all opacity-0 scale-50" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 absolute top-0 left-0 transition-all opacity-0 scale-50" aria-hidden="true"><path d="M15.1883 5.10908C15.3699 4.96398 15.6346 4.96153 15.8202 5.11592C16.0056 5.27067 16.0504 5.53125 15.9403 5.73605L15.8836 5.82003L8.38354 14.8202C8.29361 14.9279 8.16242 14.9925 8.02221 14.9989C7.88203 15.0051 7.74545 14.9526 7.64622 14.8534L4.14617 11.3533L4.08172 11.2752C3.95384 11.0811 3.97542 10.817 4.14617 10.6463C4.31693 10.4755 4.58105 10.4539 4.77509 10.5818L4.85321 10.6463L7.96556 13.7586L15.1161 5.1794L15.1883 5.10908Z"></path></svg></div></div></button></div></div><div class="text-text-500 font-small p-3.5 pb-0">javascript</div><div><pre class="code-block__code !my-0 !rounded-lg !text-sm !leading-relaxed" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none; padding: 1em; margin: 0.5em 0px; overflow: auto; border-radius: 0.3em;"><code class="language-javascript" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none;"><span><span class="token" style="color: rgb(92, 99, 112); font-style: italic;">// BEFORE (BROKEN)</span><span>
+</span></span><span><span></span><span class="token" style="color: rgb(198, 120, 221);">const</span><span> params </span><span class="token" style="color: rgb(97, 175, 239);">=</span><span> </span><span class="token" style="color: rgb(171, 178, 191);">[</span><span>userId</span><span class="token" style="color: rgb(171, 178, 191);">,</span><span> category</span><span class="token" style="color: rgb(171, 178, 191);">,</span><span> </span><span class="token spread" style="color: rgb(97, 175, 239);">...</span><span>topicFilters</span><span class="token" style="color: rgb(171, 178, 191);">,</span><span> </span><span class="token" style="color: rgb(152, 195, 121);">'%my %'</span><span class="token" style="color: rgb(171, 178, 191);">,</span><span> </span><span class="token" style="color: rgb(152, 195, 121);">'%personal%'</span><span class="token" style="color: rgb(171, 178, 191);">]</span><span class="token" style="color: rgb(171, 178, 191);">;</span><span>
+</span></span><span>
+</span><span><span></span><span class="token" style="color: rgb(92, 99, 112); font-style: italic;">// AFTER (FIXED)</span><span>
+</span></span><span><span></span><span class="token" style="color: rgb(198, 120, 221);">const</span><span> params </span><span class="token" style="color: rgb(97, 175, 239);">=</span><span> </span><span class="token" style="color: rgb(171, 178, 191);">[</span><span>userId</span><span class="token" style="color: rgb(171, 178, 191);">,</span><span> category</span><span class="token" style="color: rgb(171, 178, 191);">,</span><span> </span><span class="token spread" style="color: rgb(97, 175, 239);">...</span><span>topicFilters</span><span class="token" style="color: rgb(171, 178, 191);">]</span><span class="token" style="color: rgb(171, 178, 191);">;</span><span>
+</span></span><span><span></span><span class="token" style="color: rgb(92, 99, 112); font-style: italic;">// Remove the '%my %' and '%personal%' filters entirely</span></span></code></pre></div></div>
+<h3 class="text-text-100 mt-2 -mb-1 text-base font-bold">Option B: Include in OR Clause (Alternative)</h3>
+<div class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-lg"><div class="sticky opacity-0 group-hover/copy:opacity-100 top-2 py-2 h-12 w-0 float-right"><div class="absolute right-0 h-8 px-2 items-center inline-flex z-10"><button class="inline-flex
+  items-center
+  justify-center
+  relative
+  shrink-0
+  can-focus
+  select-none
+  disabled:pointer-events-none
+  disabled:opacity-50
+  disabled:shadow-none
+  disabled:drop-shadow-none border-transparent
+          transition
+          font-base
+          duration-300
+          ease-[cubic-bezier(0.165,0.85,0.45,1)] h-8 w-8 rounded-md active:scale-95 backdrop-blur-md Button_ghost__BUAoh" type="button" aria-label="Copy to clipboard" data-state="closed"><div class="relative"><div class="flex items-center justify-center transition-all opacity-100 scale-100" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 transition-all opacity-100 scale-100" aria-hidden="true"><path d="M12.5 3C13.3284 3 14 3.67157 14 4.5V6H15.5C16.3284 6 17 6.67157 17 7.5V15.5C17 16.3284 16.3284 17 15.5 17H7.5C6.67157 17 6 16.3284 6 15.5V14H4.5C3.67157 14 3 13.3284 3 12.5V4.5C3 3.67157 3.67157 3 4.5 3H12.5ZM14 12.5C14 13.3284 13.3284 14 12.5 14H7V15.5C7 15.7761 7.22386 16 7.5 16H15.5C15.7761 16 16 15.7761 16 15.5V7.5C16 7.22386 15.7761 7 15.5 7H14V12.5ZM4.5 4C4.22386 4 4 4.22386 4 4.5V12.5C4 12.7761 4.22386 13 4.5 13H12.5C12.7761 13 13 12.7761 13 12.5V4.5C13 4.22386 12.7761 4 12.5 4H4.5Z"></path></svg></div><div class="flex items-center justify-center absolute top-0 left-0 transition-all opacity-0 scale-50" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 absolute top-0 left-0 transition-all opacity-0 scale-50" aria-hidden="true"><path d="M15.1883 5.10908C15.3699 4.96398 15.6346 4.96153 15.8202 5.11592C16.0056 5.27067 16.0504 5.53125 15.9403 5.73605L15.8836 5.82003L8.38354 14.8202C8.29361 14.9279 8.16242 14.9925 8.02221 14.9989C7.88203 15.0051 7.74545 14.9526 7.64622 14.8534L4.14617 11.3533L4.08172 11.2752C3.95384 11.0811 3.97542 10.817 4.14617 10.6463C4.31693 10.4755 4.58105 10.4539 4.77509 10.5818L4.85321 10.6463L7.96556 13.7586L15.1161 5.1794L15.1883 5.10908Z"></path></svg></div></div></button></div></div><div class="text-text-500 font-small p-3.5 pb-0">javascript</div><div><pre class="code-block__code !my-0 !rounded-lg !text-sm !leading-relaxed" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none; padding: 1em; margin: 0.5em 0px; overflow: auto; border-radius: 0.3em;"><code class="language-javascript" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none;"><span><span class="token" style="color: rgb(92, 99, 112); font-style: italic;">// If these filters serve a purpose, include them in the OR:</span><span>
+</span></span><span><span></span><span class="token" style="color: rgb(198, 120, 221);">const</span><span> allFilters </span><span class="token" style="color: rgb(97, 175, 239);">=</span><span> </span><span class="token" style="color: rgb(171, 178, 191);">[</span><span class="token spread" style="color: rgb(97, 175, 239);">...</span><span>topicFilters</span><span class="token" style="color: rgb(171, 178, 191);">,</span><span> </span><span class="token" style="color: rgb(152, 195, 121);">'%my %'</span><span class="token" style="color: rgb(171, 178, 191);">,</span><span> </span><span class="token" style="color: rgb(152, 195, 121);">'%personal%'</span><span class="token" style="color: rgb(171, 178, 191);">]</span><span class="token" style="color: rgb(171, 178, 191);">;</span><span>
+</span></span><span><span></span><span class="token" style="color: rgb(198, 120, 221);">const</span><span> filterClause </span><span class="token" style="color: rgb(97, 175, 239);">=</span><span> allFilters
+</span></span><span><span>  </span><span class="token" style="color: rgb(171, 178, 191);">.</span><span class="token method property-access" style="color: rgb(97, 175, 239);">map</span><span class="token" style="color: rgb(171, 178, 191);">(</span><span class="token" style="color: rgb(171, 178, 191);">(</span><span class="token parameter">_</span><span class="token parameter" style="color: rgb(171, 178, 191);">,</span><span class="token parameter"> i</span><span class="token" style="color: rgb(171, 178, 191);">)</span><span> </span><span class="token arrow" style="color: rgb(97, 175, 239);">=&gt;</span><span> </span><span class="token template-string template-punctuation" style="color: rgb(152, 195, 121);">`</span><span class="token template-string" style="color: rgb(152, 195, 121);">content ILIKE $</span><span class="token template-string interpolation" style="color: rgb(171, 178, 191);">${</span><span class="token template-string interpolation">startIndex </span><span class="token template-string interpolation" style="color: rgb(97, 175, 239);">+</span><span class="token template-string interpolation"> i</span><span class="token template-string interpolation" style="color: rgb(171, 178, 191);">}</span><span class="token template-string template-punctuation" style="color: rgb(152, 195, 121);">`</span><span class="token" style="color: rgb(171, 178, 191);">)</span><span>
+</span></span><span><span>  </span><span class="token" style="color: rgb(171, 178, 191);">.</span><span class="token method property-access" style="color: rgb(97, 175, 239);">join</span><span class="token" style="color: rgb(171, 178, 191);">(</span><span class="token" style="color: rgb(152, 195, 121);">' OR '</span><span class="token" style="color: rgb(171, 178, 191);">)</span><span class="token" style="color: rgb(171, 178, 191);">;</span><span>
+</span></span><span><span>query </span><span class="token" style="color: rgb(97, 175, 239);">+=</span><span> </span><span class="token template-string template-punctuation" style="color: rgb(152, 195, 121);">`</span><span class="token template-string" style="color: rgb(152, 195, 121);"> AND (</span><span class="token template-string interpolation" style="color: rgb(171, 178, 191);">${</span><span class="token template-string interpolation">filterClause</span><span class="token template-string interpolation" style="color: rgb(171, 178, 191);">}</span><span class="token template-string" style="color: rgb(152, 195, 121);">)</span><span class="token template-string template-punctuation" style="color: rgb(152, 195, 121);">`</span><span class="token" style="color: rgb(171, 178, 191);">;</span></span></code></pre></div></div>
+<h3 class="text-text-100 mt-2 -mb-1 text-base font-bold">Option C: Make Them Optional (Most Flexible)</h3>
+<div class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-lg"><div class="sticky opacity-0 group-hover/copy:opacity-100 top-2 py-2 h-12 w-0 float-right"><div class="absolute right-0 h-8 px-2 items-center inline-flex z-10"><button class="inline-flex
+  items-center
+  justify-center
+  relative
+  shrink-0
+  can-focus
+  select-none
+  disabled:pointer-events-none
+  disabled:opacity-50
+  disabled:shadow-none
+  disabled:drop-shadow-none border-transparent
+          transition
+          font-base
+          duration-300
+          ease-[cubic-bezier(0.165,0.85,0.45,1)] h-8 w-8 rounded-md active:scale-95 backdrop-blur-md Button_ghost__BUAoh" type="button" aria-label="Copy to clipboard" data-state="closed"><div class="relative"><div class="flex items-center justify-center transition-all opacity-100 scale-100" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 transition-all opacity-100 scale-100" aria-hidden="true"><path d="M12.5 3C13.3284 3 14 3.67157 14 4.5V6H15.5C16.3284 6 17 6.67157 17 7.5V15.5C17 16.3284 16.3284 17 15.5 17H7.5C6.67157 17 6 16.3284 6 15.5V14H4.5C3.67157 14 3 13.3284 3 12.5V4.5C3 3.67157 3.67157 3 4.5 3H12.5ZM14 12.5C14 13.3284 13.3284 14 12.5 14H7V15.5C7 15.7761 7.22386 16 7.5 16H15.5C15.7761 16 16 15.7761 16 15.5V7.5C16 7.22386 15.7761 7 15.5 7H14V12.5ZM4.5 4C4.22386 4 4 4.22386 4 4.5V12.5C4 12.7761 4.22386 13 4.5 13H12.5C12.7761 13 13 12.7761 13 12.5V4.5C13 4.22386 12.7761 4 12.5 4H4.5Z"></path></svg></div><div class="flex items-center justify-center absolute top-0 left-0 transition-all opacity-0 scale-50" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 absolute top-0 left-0 transition-all opacity-0 scale-50" aria-hidden="true"><path d="M15.1883 5.10908C15.3699 4.96398 15.6346 4.96153 15.8202 5.11592C16.0056 5.27067 16.0504 5.53125 15.9403 5.73605L15.8836 5.82003L8.38354 14.8202C8.29361 14.9279 8.16242 14.9925 8.02221 14.9989C7.88203 15.0051 7.74545 14.9526 7.64622 14.8534L4.14617 11.3533L4.08172 11.2752C3.95384 11.0811 3.97542 10.817 4.14617 10.6463C4.31693 10.4755 4.58105 10.4539 4.77509 10.5818L4.85321 10.6463L7.96556 13.7586L15.1161 5.1794L15.1883 5.10908Z"></path></svg></div></div></button></div></div><div class="text-text-500 font-small p-3.5 pb-0">javascript</div><div><pre class="code-block__code !my-0 !rounded-lg !text-sm !leading-relaxed" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none; padding: 1em; margin: 0.5em 0px; overflow: auto; border-radius: 0.3em;"><code class="language-javascript" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none;"><span><span class="token" style="color: rgb(92, 99, 112); font-style: italic;">// Only add personal filters if no topic filters exist</span><span>
+</span></span><span><span></span><span class="token control-flow" style="color: rgb(198, 120, 221);">if</span><span> </span><span class="token" style="color: rgb(171, 178, 191);">(</span><span>topicFilters</span><span class="token" style="color: rgb(171, 178, 191);">.</span><span class="token property-access">length</span><span> </span><span class="token" style="color: rgb(97, 175, 239);">===</span><span> </span><span class="token" style="color: rgb(209, 154, 102);">0</span><span class="token" style="color: rgb(171, 178, 191);">)</span><span> </span><span class="token" style="color: rgb(171, 178, 191);">{</span><span>
+</span></span><span><span>  </span><span class="token" style="color: rgb(92, 99, 112); font-style: italic;">// Use '%my %' and '%personal%' as fallback</span><span>
+</span></span><span><span></span><span class="token" style="color: rgb(171, 178, 191);">}</span><span> </span><span class="token control-flow" style="color: rgb(198, 120, 221);">else</span><span> </span><span class="token" style="color: rgb(171, 178, 191);">{</span><span>
+</span></span><span><span>  </span><span class="token" style="color: rgb(92, 99, 112); font-style: italic;">// Use only topic filters</span><span>
+</span></span><span><span></span><span class="token" style="color: rgb(171, 178, 191);">}</span></span></code></pre></div></div>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Search Strategy for Claude Code</h2>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2"><strong>Find where parameters are constructed:</strong></li>
+</ol>
+<div class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-lg"><div class="sticky opacity-0 group-hover/copy:opacity-100 top-2 py-2 h-12 w-0 float-right"><div class="absolute right-0 h-8 px-2 items-center inline-flex z-10"><button class="inline-flex
+  items-center
+  justify-center
+  relative
+  shrink-0
+  can-focus
+  select-none
+  disabled:pointer-events-none
+  disabled:opacity-50
+  disabled:shadow-none
+  disabled:drop-shadow-none border-transparent
+          transition
+          font-base
+          duration-300
+          ease-[cubic-bezier(0.165,0.85,0.45,1)] h-8 w-8 rounded-md active:scale-95 backdrop-blur-md Button_ghost__BUAoh" type="button" aria-label="Copy to clipboard" data-state="closed"><div class="relative"><div class="flex items-center justify-center transition-all opacity-100 scale-100" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 transition-all opacity-100 scale-100" aria-hidden="true"><path d="M12.5 3C13.3284 3 14 3.67157 14 4.5V6H15.5C16.3284 6 17 6.67157 17 7.5V15.5C17 16.3284 16.3284 17 15.5 17H7.5C6.67157 17 6 16.3284 6 15.5V14H4.5C3.67157 14 3 13.3284 3 12.5V4.5C3 3.67157 3.67157 3 4.5 3H12.5ZM14 12.5C14 13.3284 13.3284 14 12.5 14H7V15.5C7 15.7761 7.22386 16 7.5 16H15.5C15.7761 16 16 15.7761 16 15.5V7.5C16 7.22386 15.7761 7 15.5 7H14V12.5ZM4.5 4C4.22386 4 4 4.22386 4 4.5V12.5C4 12.7761 4.22386 13 4.5 13H12.5C12.7761 13 13 12.7761 13 12.5V4.5C13 4.22386 12.7761 4 12.5 4H4.5Z"></path></svg></div><div class="flex items-center justify-center absolute top-0 left-0 transition-all opacity-0 scale-50" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 absolute top-0 left-0 transition-all opacity-0 scale-50" aria-hidden="true"><path d="M15.1883 5.10908C15.3699 4.96398 15.6346 4.96153 15.8202 5.11592C16.0056 5.27067 16.0504 5.53125 15.9403 5.73605L15.8836 5.82003L8.38354 14.8202C8.29361 14.9279 8.16242 14.9925 8.02221 14.9989C7.88203 15.0051 7.74545 14.9526 7.64622 14.8534L4.14617 11.3533L4.08172 11.2752C3.95384 11.0811 3.97542 10.817 4.14617 10.6463C4.31693 10.4755 4.58105 10.4539 4.77509 10.5818L4.85321 10.6463L7.96556 13.7586L15.1161 5.1794L15.1883 5.10908Z"></path></svg></div></div></button></div></div><div class="text-text-500 font-small p-3.5 pb-0">bash</div><div><pre class="code-block__code !my-0 !rounded-lg !text-sm !leading-relaxed" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none; padding: 1em; margin: 0.5em 0px; overflow: auto; border-radius: 0.3em;"><code class="language-bash" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none;"><span><span>   </span><span class="token" style="color: rgb(97, 175, 239);">grep</span><span> -n </span><span class="token" style="color: rgb(152, 195, 121);">"my %"</span><span> /api/categories/memory/internal/intelligence.js
+</span></span><span><span>   </span><span class="token" style="color: rgb(97, 175, 239);">grep</span><span> -n </span><span class="token" style="color: rgb(152, 195, 121);">"personal%"</span><span> /api/categories/memory/internal/intelligence.js</span></span></code></pre></div></div>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-2 pl-8 mb-3" start="2">
+<li class="whitespace-normal break-words pl-2"><strong>Find the SQL query builder:</strong></li>
+</ol>
+<div class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-lg"><div class="sticky opacity-0 group-hover/copy:opacity-100 top-2 py-2 h-12 w-0 float-right"><div class="absolute right-0 h-8 px-2 items-center inline-flex z-10"><button class="inline-flex
+  items-center
+  justify-center
+  relative
+  shrink-0
+  can-focus
+  select-none
+  disabled:pointer-events-none
+  disabled:opacity-50
+  disabled:shadow-none
+  disabled:drop-shadow-none border-transparent
+          transition
+          font-base
+          duration-300
+          ease-[cubic-bezier(0.165,0.85,0.45,1)] h-8 w-8 rounded-md active:scale-95 backdrop-blur-md Button_ghost__BUAoh" type="button" aria-label="Copy to clipboard" data-state="closed"><div class="relative"><div class="flex items-center justify-center transition-all opacity-100 scale-100" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 transition-all opacity-100 scale-100" aria-hidden="true"><path d="M12.5 3C13.3284 3 14 3.67157 14 4.5V6H15.5C16.3284 6 17 6.67157 17 7.5V15.5C17 16.3284 16.3284 17 15.5 17H7.5C6.67157 17 6 16.3284 6 15.5V14H4.5C3.67157 14 3 13.3284 3 12.5V4.5C3 3.67157 3.67157 3 4.5 3H12.5ZM14 12.5C14 13.3284 13.3284 14 12.5 14H7V15.5C7 15.7761 7.22386 16 7.5 16H15.5C15.7761 16 16 15.7761 16 15.5V7.5C16 7.22386 15.7761 7 15.5 7H14V12.5ZM4.5 4C4.22386 4 4 4.22386 4 4.5V12.5C4 12.7761 4.22386 13 4.5 13H12.5C12.7761 13 13 12.7761 13 12.5V4.5C13 4.22386 12.7761 4 12.5 4H4.5Z"></path></svg></div><div class="flex items-center justify-center absolute top-0 left-0 transition-all opacity-0 scale-50" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 absolute top-0 left-0 transition-all opacity-0 scale-50" aria-hidden="true"><path d="M15.1883 5.10908C15.3699 4.96398 15.6346 4.96153 15.8202 5.11592C16.0056 5.27067 16.0504 5.53125 15.9403 5.73605L15.8836 5.82003L8.38354 14.8202C8.29361 14.9279 8.16242 14.9925 8.02221 14.9989C7.88203 15.0051 7.74545 14.9526 7.64622 14.8534L4.14617 11.3533L4.08172 11.2752C3.95384 11.0811 3.97542 10.817 4.14617 10.6463C4.31693 10.4755 4.58105 10.4539 4.77509 10.5818L4.85321 10.6463L7.96556 13.7586L15.1161 5.1794L15.1883 5.10908Z"></path></svg></div></div></button></div></div><div class="text-text-500 font-small p-3.5 pb-0">bash</div><div><pre class="code-block__code !my-0 !rounded-lg !text-sm !leading-relaxed" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none; padding: 1em; margin: 0.5em 0px; overflow: auto; border-radius: 0.3em;"><code class="language-bash" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none;"><span><span>   </span><span class="token" style="color: rgb(97, 175, 239);">grep</span><span> -n </span><span class="token" style="color: rgb(152, 195, 121);">"ILIKE"</span><span> /api/categories/memory/internal/intelligence.js</span></span></code></pre></div></div>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-2 pl-8 mb-3" start="3">
+<li class="whitespace-normal break-words pl-2"><strong>Look for the params array construction</strong> around lines 1600-1700</li>
+</ol>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Files to Modify</h2>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2"><strong><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">/api/categories/memory/internal/intelligence.js</code></strong>
+<ul class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-disc flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2">Location: Around line 1638-1660 (based on Issue #198 analysis)</li>
+<li class="whitespace-normal break-words pl-2">Find where <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">'%my %'</code> and <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">'%personal%'</code> are added to params</li>
+<li class="whitespace-normal break-words pl-2">Either remove them OR include them in the OR clause</li>
+</ul>
+</li>
+</ol>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Verification</h2>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">After fix, the test endpoint should show improvement:</p>
+<div class="relative group/copy bg-bg-000/50 border-0.5 border-border-400 rounded-lg"><div class="sticky opacity-0 group-hover/copy:opacity-100 top-2 py-2 h-12 w-0 float-right"><div class="absolute right-0 h-8 px-2 items-center inline-flex z-10"><button class="inline-flex
+  items-center
+  justify-center
+  relative
+  shrink-0
+  can-focus
+  select-none
+  disabled:pointer-events-none
+  disabled:opacity-50
+  disabled:shadow-none
+  disabled:drop-shadow-none border-transparent
+          transition
+          font-base
+          duration-300
+          ease-[cubic-bezier(0.165,0.85,0.45,1)] h-8 w-8 rounded-md active:scale-95 backdrop-blur-md Button_ghost__BUAoh" type="button" aria-label="Copy to clipboard" data-state="closed"><div class="relative"><div class="flex items-center justify-center transition-all opacity-100 scale-100" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 transition-all opacity-100 scale-100" aria-hidden="true"><path d="M12.5 3C13.3284 3 14 3.67157 14 4.5V6H15.5C16.3284 6 17 6.67157 17 7.5V15.5C17 16.3284 16.3284 17 15.5 17H7.5C6.67157 17 6 16.3284 6 15.5V14H4.5C3.67157 14 3 13.3284 3 12.5V4.5C3 3.67157 3.67157 3 4.5 3H12.5ZM14 12.5C14 13.3284 13.3284 14 12.5 14H7V15.5C7 15.7761 7.22386 16 7.5 16H15.5C15.7761 16 16 15.7761 16 15.5V7.5C16 7.22386 15.7761 7 15.5 7H14V12.5ZM4.5 4C4.22386 4 4 4.22386 4 4.5V12.5C4 12.7761 4.22386 13 4.5 13H12.5C12.7761 13 13 12.7761 13 12.5V4.5C13 4.22386 12.7761 4 12.5 4H4.5Z"></path></svg></div><div class="flex items-center justify-center absolute top-0 left-0 transition-all opacity-0 scale-50" style="width: 20px; height: 20px;"><svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg" class="shrink-0 absolute top-0 left-0 transition-all opacity-0 scale-50" aria-hidden="true"><path d="M15.1883 5.10908C15.3699 4.96398 15.6346 4.96153 15.8202 5.11592C16.0056 5.27067 16.0504 5.53125 15.9403 5.73605L15.8836 5.82003L8.38354 14.8202C8.29361 14.9279 8.16242 14.9925 8.02221 14.9989C7.88203 15.0051 7.74545 14.9526 7.64622 14.8534L4.14617 11.3533L4.08172 11.2752C3.95384 11.0811 3.97542 10.817 4.14617 10.6463C4.31693 10.4755 4.58105 10.4539 4.77509 10.5818L4.85321 10.6463L7.96556 13.7586L15.1161 5.1794L15.1883 5.10908Z"></path></svg></div></div></button></div></div><div><pre class="code-block__code !my-0 !rounded-lg !text-sm !leading-relaxed" style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none; padding: 1em; margin: 0.5em 0px; overflow: auto; border-radius: 0.3em;"><code style="background: transparent; color: rgb(171, 178, 191); text-shadow: rgba(0, 0, 0, 0.3) 0px 1px; font-family: var(--font-mono); direction: ltr; text-align: left; white-space: pre-wrap; word-spacing: normal; word-break: normal; line-height: 1.5; tab-size: 2; hyphens: none;"><span><span>GET /api/test/memory-full-check
+</span></span><span>Headers: X-Internal-Test-Token: sitemonkeys-fullcheck-abc123</span></code></pre></div></div>
+<h3 class="text-text-100 mt-2 -mb-1 text-base font-bold">Expected Changes:</h3>
+<div class="overflow-x-auto w-full px-2 mb-6">
+Test | Before | After
+-- | -- | --
+1. Basic Store + Recall | ❌ FAIL | ✅ PASS
+2. Memory Enforcer | ❌ FAIL | ✅ PASS
+3. Dedup Anti-Merge | ❌ FAIL | ✅ PASS
+4. High-Entropy Retrieval | ❌ FAIL | ✅ PASS
+5. Storage Hygiene | ✅ PASS | ✅ PASS
+6. Category Routing | ✅ PASS | ✅ PASS
+7. Token Budget | ❌ FAIL | Needs separate fix
+8. Cross-Request Persistence | ❌ FAIL | ✅ PASS
+9. Compression | ✅ PASS | ✅ PASS
+10. Telemetry | ✅ PASS | ✅ PASS
+
+</div>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]"><strong>Current: 4/10 → Target: 8/10</strong> (with this fix alone)</p>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Why This Is Critical</h2>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2"><strong>All memory retrieval is broken</strong> - users experience a system with no memory</li>
+<li class="whitespace-normal break-words pl-2"><strong>$50K revenue validation at risk</strong> - core differentiator doesn't work</li>
+<li class="whitespace-normal break-words pl-2"><strong>6 of 10 tests fail</strong> due to this single root cause</li>
+<li class="whitespace-normal break-words pl-2"><strong>Simple fix</strong> - removing or repositioning 2 filter parameters</li>
+</ol>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Connection to Specification</h2>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">From the Master Completion Ledger, the system should support:</p>
+<blockquote class="ml-2 border-l-4 border-border-300/10 pl-4 text-text-300">
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">"Semantic + Mode-Aware Indexing... finding conceptually related information even when exact keywords don't match"</p>
+</blockquote>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">The current hidden AND filters violate this by requiring exact string matches for "my" and "personal" that often don't exist in compressed content.</p>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Additional Context</h2>
+<ul class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-disc flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2">Issue #198 fixed the empty content storage problem ✅</li>
+<li class="whitespace-normal break-words pl-2">Issue #198 confirmed OR logic exists for topic filters ✅</li>
+<li class="whitespace-normal break-words pl-2">This issue (#199) addresses the <strong>hidden AND filters</strong> that bypass the OR logic</li>
+</ul>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Acceptance Criteria</h2>
+<ul class="contains-task-list">
+<li class="task-list-item"><input disabled="" type="checkbox"> <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">'%my %'</code> filter is removed or made optional</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">'%personal%'</code> filter is removed or made optional</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Test 1 (Basic Store + Recall) passes</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Test 2 (Memory Enforcer) passes</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> SQL debug logs show only topic filters, not hidden extras</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Retrieval returns &gt;0 results when content matches ANY topic filter</li>
+</ul>
+<hr class="border-border-200 border-t-0.5 my-3 mx-1.5">
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">🤖 Generated with Claude Code GitHub Action</p><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

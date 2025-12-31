@@ -1650,11 +1650,14 @@ class IntelligenceSystem {
           paramIndex++; // Increment after adding 1 parameter
         }
 
-        if (semanticAnalysis.personalContext) {
-          baseQuery += ` AND (content::text ILIKE $${paramIndex}::text OR content::text ILIKE $${paramIndex + 1}::text)`;
-          queryParams.push("%my %", "%personal%");
-          paramIndex += 2; // Increment after adding 2 parameters
-        }
+        // REMOVED: Hidden AND filters for '%my %' and '%personal%' that were breaking retrieval
+        // Issue #200: These filters required exact string matches that often don't exist in compressed content
+        // The topic filters (queryNouns) already provide sufficient filtering via OR logic
+        // if (semanticAnalysis.personalContext) {
+        //   baseQuery += ` AND (content::text ILIKE $${paramIndex}::text OR content::text ILIKE $${paramIndex + 1}::text)`;
+        //   queryParams.push("%my %", "%personal%");
+        //   paramIndex += 2; // Increment after adding 2 parameters
+        // }
 
         // FILTER OUT PURE QUESTION MEMORIES
         baseQuery += ` AND NOT (

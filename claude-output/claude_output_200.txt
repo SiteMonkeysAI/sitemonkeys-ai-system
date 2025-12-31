@@ -1,0 +1,68 @@
+Perfect! The fix is complete and correct. The query construction now flows as:
+
+1. Start with base query filtering by `user_id` and `category_name` (params $1, $2)
+2. Add topic filters with OR logic (params $3, $4, $5... based on number of nouns)
+3. Optionally add emotional weight filter (if > 0.5)
+4. **REMOVED**: The problematic personal context filters (`%my %`, `%personal%`)
+5. Add the question filtering logic
+
+This means the query will now correctly retrieve memories based on topic filters using OR logic, without the hidden AND filters breaking everything.
+
+Let me create a summary of the changes:
+
+---SUMMARY---
+
+## Issue Fixed: Hidden AND Filters Breaking Memory Retrieval
+
+### Problem
+Memory retrieval was returning 0 results even when memories existed and matched topic filters. The root cause was hidden AND conditions (`'%my %'` and `'%personal%'`) being appended to SQL queries, which broke retrieval when stored content didn't contain these exact strings.
+
+### Root Cause
+In `/api/categories/memory/internal/intelligence.js` at lines 1653-1657, when `semanticAnalysis.personalContext` was true, the code added:
+```javascript
+baseQuery += ` AND (content::text ILIKE $${paramIndex}::text OR content::text ILIKE $${paramIndex + 1}::text)`;
+queryParams.push("%my %", "%personal%");
+```
+
+This created additional AND conditions that required content to contain either "my " (with space) or "personal". Since the compression process removes filler words like "my" from stored facts, these filters almost always failed, causing 0 results even when topic filters matched.
+
+### Solution Applied
+Removed the problematic personal context filters entirely (Option A from the issue description) by commenting out lines 1653-1657 and replacing with explanatory comments. This is the recommended approach because:
+
+1. The compression process removes filler words from stored content
+2. These filters were too restrictive and broke legitimate retrieval
+3. The topic filters (queryNouns) already provide sufficient filtering via OR logic
+
+### File Modified
+- `/api/categories/memory/internal/intelligence.js` (lines 1653-1660)
+
+### Changes Made
+```javascript
+// REMOVED: Hidden AND filters for '%my %' and '%personal%' that were breaking retrieval
+// Issue #200: These filters required exact string matches that often don't exist in compressed content
+// The topic filters (queryNouns) already provide sufficient filtering via OR logic
+// if (semanticAnalysis.personalContext) {
+//   baseQuery += ` AND (content::text ILIKE $${paramIndex}::text OR content::text ILIKE $${paramIndex + 1}::text)`;
+//   queryParams.push("%my %", "%personal%");
+//   paramIndex += 2; // Increment after adding 2 parameters
+// }
+```
+
+### Expected Impact
+After this fix, the test endpoint `/api/test/memory-full-check` should show significant improvement:
+- Test 1 (Basic Store + Recall): ❌ FAIL → ✅ PASS
+- Test 2 (Memory Enforcer): ❌ FAIL → ✅ PASS
+- Test 3 (Dedup Anti-Merge): ❌ FAIL → ✅ PASS
+- Test 4 (High-Entropy Retrieval): ❌ FAIL → ✅ PASS
+- Test 8 (Cross-Request Persistence): ❌ FAIL → ✅ PASS
+
+Overall test pass rate: 4/10 → 8/10 (with this fix alone)
+
+### Verification
+The fix ensures that:
+1. Only topic filters are used for content matching (via OR logic)
+2. SQL debug logs show only the expected parameters (userId, category, topic filters)
+3. Retrieval returns results when content matches ANY topic filter
+4. No hidden AND conditions break the OR logic of topic filters
+
+---END SUMMARY---
