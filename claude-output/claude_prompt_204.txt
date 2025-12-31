@@ -1,0 +1,153 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #204: [claude-fix] Issue #203: CRITICAL - Compression Destroying Unique Identifiers (Root Cause of Tests 4 & 6)
+
+Issue Description:
+Current Status: 8/10 Tests Passing
+The Problem
+The compression/extraction system is destroying unique identifiers during the fact extraction process. This is proven by diagnostic data from Test 6:
+Evidence
+What was stored:
+"My doctor's name is Dr. FOXTROT-1767204140342"
+What compression produced:
+json{ "id": 725, "category": "health_wellness", "preview": "Test identifier sequence." }
+The doctor's name Dr. FOXTROT-1767204140342 was completely lost. The compression reduced it to meaningless generic text: "Test identifier sequence."
+Same Issue Affects Test 4
+What was stored:
+"My license plate number is ECHO-1767204140342-9K7X"
+What the system can't find: ECHO-1767204140342-9K7X
+The license plate token was likely compressed away to something generic.
+
+Root Cause
+File: /api/memory/intelligent-storage.js
+The extractKeyFacts() function calls GPT-4 to compress conversations into key facts. The prompt or post-processing is:
+
+Not preserving high-entropy tokens (alphanumeric strings like ECHO-1767204140342-9K7X)
+Not preserving proper nouns (names like Dr. FOXTROT)
+Over-generalizing specific information into generic summaries
+
+
+The Fix
+Option A: Enhance the GPT-4 Extraction Prompt (Recommended)
+In extractKeyFacts(), modify the system prompt to explicitly instruct preservation:
+javascriptconst systemPrompt = `Extract key facts from this conversation. 
+
+CRITICAL RULES:
+1. ALWAYS preserve exact alphanumeric identifiers (e.g., ECHO-123-ABC, ALPHA-456)
+2. ALWAYS preserve names exactly as written (e.g., Dr. Smith, FOXTROT-123)
+3. ALWAYS preserve numbers, codes, IDs, license plates, serial numbers VERBATIM
+4. Never generalize unique identifiers into descriptions like "identifier" or "code"
+5. If someone says "My X is Y", the output MUST contain Y exactly
+
+Example:
+Input: "My license plate is ABC-123-XYZ"
+Output: "License plate: ABC-123-XYZ"
+NOT: "Has a license plate" or "Vehicle identifier stored"
+
+Input: "My doctor is Dr. FOXTROT-789"  
+Output: "Doctor: Dr. FOXTROT-789"
+NOT: "Has a doctor" or "Medical contact stored"
+`;
+Option B: Post-Processing Protection
+After GPT-4 extraction, scan for high-entropy tokens in the ORIGINAL message and ensure they appear in the output:
+javascriptasync function extractKeyFacts(userMessage, aiResponse) {
+  // Get GPT-4's extraction
+  let facts = await callGPT4ForExtraction(content);
+  
+  // PROTECTION: Find high-entropy tokens in original message
+  const tokenPattern = /[A-Z]+-\d+-[A-Z0-9]+|[A-Z]+-\d{10,}|Dr\.\s*[A-Z]+-\d+/gi;
+  const originalTokens = userMessage.match(tokenPattern) || [];
+  
+  // Ensure each token appears in the facts
+  for (const token of originalTokens) {
+    if (!facts.includes(token)) {
+      // Token was lost - append it
+      facts += `\nIdentifier: ${token}`;
+    }
+  }
+  
+  return facts;
+}
+Option C: Hybrid (Most Robust)
+Combine both: Better prompt AND post-processing verification.
+
+Files to Modify
+Primary
+/api/memory/intelligent-storage.js
+
+Locate extractKeyFacts() function
+Update the GPT-4 prompt to emphasize identifier preservation
+Add post-processing to verify critical tokens survived
+
+Search Strategy
+bashgrep -n "extractKeyFacts" /api/memory/intelligent-storage.js
+grep -n "key facts" /api/memory/intelligent-storage.js
+grep -n "systemPrompt\|system_prompt" /api/memory/intelligent-storage.js
+
+Why This Is The Final Fix
+This is upstream of everything else:
+User Input → extractKeyFacts() → Storage → Retrieval → Response
+                   ↑
+            BUG IS HERE
+If the data is destroyed during extraction, no amount of retrieval fixes will help. We've already fixed:
+
+✅ Storage triggers
+✅ Retrieval OR logic
+✅ Hidden AND filters
+✅ Test metadata
+
+The only remaining issue is that compression is destroying the actual content before it's stored.
+
+Acceptance Criteria
+
+ When storing "My doctor's name is Dr. FOXTROT-123", the stored content contains "FOXTROT-123"
+ When storing "My license plate is ECHO-456-9K7X", the stored content contains "ECHO-456-9K7X"
+ Test 4 (High-Entropy Retrieval) passes
+ Test 6 (Category Routing) passes
+ Overall: 10/10 tests passing
+
+
+Verification
+After fix, run:
+javascriptfetch('https://sitemonkeys-ai-system-production.up.railway.app/api/test/memory-full-check', {headers: {'X-Internal-Test-Token': 'sitemonkeys-fullcheck-abc123'}}).then(r => r.text()).then(console.log)
+Expected: ✅ Passed: 10 | ❌ Failed: 0 | Total: 10
+
+Context From Specifications
+From the Master Completion Ledger:
+
+"Meaning-Preserving Compression Layer"
+"Advanced semantic compression analyzes each conversation segment to identify and preserve core meaning, key facts, important context, and relationships."
+
+
+"When information is retrieved and reconstructed, users get the full context and understanding they need"
+
+The current implementation is violating this spec by destroying key identifiers during compression.
+
+This Should Be The Last Memory Fix
+After this:
+
+Storage: ✅ Working
+Compression: ✅ Will preserve identifiers
+Retrieval: ✅ Working (OR logic fixed)
+Dedup: ✅ Working
+Category Routing: ✅ Working (data just needs to survive compression)
+
+10/10 expected after this fix.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
