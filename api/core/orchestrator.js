@@ -498,7 +498,7 @@ export class Orchestrator {
           vaultTokens: context.tokenBreakdown?.vault || (vaultData?.tokens || 0),
           totalContextTokens: context.totalTokens,
 
-          // Memory retrieval telemetry (Issue #206, enhanced in Issue #208)
+          // Memory retrieval telemetry (Issue #206, enhanced in Issue #208, #210)
           memory_retrieval: {
             method: "sql_keyword_category_filter",
             memories_considered: memoryContext.count || 0,
@@ -507,7 +507,9 @@ export class Orchestrator {
             categories_searched: memoryContext.categories || [],
             selection_criteria: "relevance_recency_hybrid",
             injected_memory_ids: memoryContext.memory_ids || [],
-            injected_tokens_total: memoryContext.tokens || 0
+            injected_tokens_total: memoryContext.tokens || 0,
+            // Issue #210 Fix 1: Telemetry validity check
+            telemetry_valid: (memoryContext.count === 0) || (memoryContext.memory_ids && memoryContext.memory_ids.length > 0)
           },
 
           // Token budget compliance
@@ -703,12 +705,21 @@ export class Orchestrator {
       // Extract memory IDs from the result - ensure consistency
       let memoryIds = memories.memory_ids || [];
 
-      // Fix inconsistency: if we have memories but no IDs, try to extract them
+      // CRITICAL FIX (Issue #210): If we have memories but no IDs, this is a TELEMETRY FAILURE
       if (tokenCount > 0 && memoryIds.length === 0 && memories.count > 0) {
-        this.log(`[MEMORY] WARNING: memory_count=${memories.count} but memory_ids=[] - inconsistency detected`);
-        // Try to get IDs from the memories array if available
+        this.error(`[TELEMETRY] ❌ CRITICAL: memory_count=${memories.count} but memory_ids=[] - telemetry integrity failure`);
+
+        // Try to extract IDs from the memories array if available
         if (Array.isArray(memories.memories)) {
           memoryIds = memories.memories.map(m => m.id).filter(id => id !== undefined);
+          if (memoryIds.length > 0) {
+            this.log(`[TELEMETRY] ⚠️  Recovered ${memoryIds.length} IDs from memories array - but this should not be necessary`);
+          }
+        }
+
+        // If still no IDs after recovery attempt, this is a FAIL condition
+        if (memoryIds.length === 0) {
+          this.error(`[TELEMETRY] ❌ FAILED: Cannot recover memory IDs - retrieval layer not returning IDs`);
         }
       }
 

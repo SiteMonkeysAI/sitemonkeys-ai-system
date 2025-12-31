@@ -69,93 +69,199 @@ router.get('/memory-full-check', async (req, res) => {
   // Helper: Wait for storage to complete
   const wait = (ms) => new Promise(r => setTimeout(r, ms));
 
+  // Helper: Store via HTTP and confirm in DB (Issue #210 Fix 2)
+  async function storeViaHTTPAndConfirm(message, tripwire, maxRetries = 5) {
+    // Step 1: Store via real HTTP endpoint (exercises full pipeline)
+    const storeResponse = await chatViaHTTP(message);
+
+    if (!storeResponse.success) {
+      return {
+        success: false,
+        error: 'HTTP store failed',
+        httpError: storeResponse.error
+      };
+    }
+
+    // Step 2: Poll DB until tripwire confirmed
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        const memories = await queryDB(
+          `SELECT id, content FROM persistent_memories
+           WHERE user_id = $1 AND content ILIKE $2
+           ORDER BY created_at DESC LIMIT 1`,
+          [testUserId, `%${tripwire}%`]
+        );
+
+        if (memories.rows.length > 0) {
+          console.log(`[STORE-CONFIRM] ✅ Confirmed ${tripwire} stored as ID ${memories.rows[0].id}`);
+          return {
+            success: true,
+            id: memories.rows[0].id,
+            content: memories.rows[0].content
+          };
+        }
+      } catch (dbErr) {
+        console.error(`[STORE-CONFIRM] DB query error on attempt ${i + 1}:`, dbErr.message);
+      }
+
+      await wait(300);  // Short poll interval
+    }
+
+    console.error(`[STORE-CONFIRM] ❌ Failed to confirm ${tripwire} after ${maxRetries} attempts`);
+    return {
+      success: false,
+      error: 'Storage not confirmed in DB after polling'
+    };
+  }
+
   console.log(`[TEST] Starting memory-full-check run ${runId}`);
 
   try {
     // ===== TEST 1: Basic Store + Recall =====
     const tripwire1 = `ALPHA-${runId}`;
-    await chatViaHTTP(`Remember this: My test identifier is ${tripwire1}`);
-    await wait(2500);
-    const recall1 = await chatViaHTTP('What is my test identifier?');
+    const store1 = await storeViaHTTPAndConfirm(
+      `Remember this: My test identifier is ${tripwire1}`,
+      tripwire1
+    );
 
-    const hasExactToken1 = recall1.response?.includes(tripwire1) || false;
-    const hasHallucination1 = recall1.response?.match(/evolved|changed|updated|previous|earlier/i);
+    if (!store1.success) {
+      results.push({
+        test: '1. Basic Store + Recall',
+        passed: false,
+        note: 'FAIL: Storage not confirmed via HTTP pipeline',
+        error: store1.error
+      });
+    } else {
+      const recall1 = await chatViaHTTP('What is my test identifier?');
 
-    results.push({
-      test: '1. Basic Store + Recall',
-      passed: hasExactToken1 && !hasHallucination1,
-      expected: tripwire1,
-      found_in_response: hasExactToken1,
-      hallucination_detected: !!hasHallucination1,
-      warning: hasHallucination1 ? 'AI invented provenance not in stored memory' : null,
-      response_preview: recall1.response?.substring(0, 250) || 'no response',
-      metadata: recall1.metadata || {}
-    });
+      const hasExactToken1 = recall1.response?.includes(tripwire1) || false;
+      const hasHallucination1 = recall1.response?.match(/evolved|changed|updated|previous|earlier/i);
+
+      results.push({
+        test: '1. Basic Store + Recall',
+        passed: hasExactToken1 && !hasHallucination1,
+        expected: tripwire1,
+        found_in_response: hasExactToken1,
+        hallucination_detected: !!hasHallucination1,
+        warning: hasHallucination1 ? 'AI invented provenance not in stored memory' : null,
+        response_preview: recall1.response?.substring(0, 250) || 'no response',
+        metadata: recall1.metadata || {},
+        storage_confirmed_id: store1.id
+      });
+    }
 
     // ===== TEST 2: Memory-Used-Not-Ignored (Enforcer Test) =====
     const tripwire2 = `BRAVO-${runId}`;
-    await chatViaHTTP(`My test token is ${tripwire2}`);
-    await wait(2500);
-    const recall2 = await chatViaHTTP('What is my test token?');
+    const store2 = await storeViaHTTPAndConfirm(
+      `My test token is ${tripwire2}`,
+      tripwire2
+    );
 
-    const hasIgnorance2 = hasIgnorancePhrases(recall2.response);
-    const foundTripwire2 = recall2.response?.includes(tripwire2) || false;
-    const hasHallucination2 = recall2.response?.match(/evolved|changed|updated|previous|earlier/i);
+    if (!store2.success) {
+      results.push({
+        test: '2. Memory-Used-Not-Ignored (Enforcer)',
+        passed: false,
+        note: 'FAIL: Storage not confirmed via HTTP pipeline',
+        error: store2.error
+      });
+    } else {
+      const recall2 = await chatViaHTTP('What is my test token?');
 
-    results.push({
-      test: '2. Memory-Used-Not-Ignored (Enforcer)',
-      passed: foundTripwire2 && !hasIgnorance2 && !hasHallucination2,
-      found_tripwire: foundTripwire2,
-      found_ignorance_phrases: hasIgnorance2,
-      hallucination_detected: !!hasHallucination2,
-      warning: hasHallucination2 ? 'AI invented provenance not in stored memory' : null,
-      enforcer_status: hasIgnorance2 ? 'FAIL - AI claimed ignorance' : 'PASS',
-      response_preview: recall2.response?.substring(0, 250) || 'no response'
-    });
+      const hasIgnorance2 = hasIgnorancePhrases(recall2.response);
+      const foundTripwire2 = recall2.response?.includes(tripwire2) || false;
+      const hasHallucination2 = recall2.response?.match(/evolved|changed|updated|previous|earlier/i);
+
+      results.push({
+        test: '2. Memory-Used-Not-Ignored (Enforcer)',
+        passed: foundTripwire2 && !hasIgnorance2 && !hasHallucination2,
+        found_tripwire: foundTripwire2,
+        found_ignorance_phrases: hasIgnorance2,
+        hallucination_detected: !!hasHallucination2,
+        warning: hasHallucination2 ? 'AI invented provenance not in stored memory' : null,
+        enforcer_status: hasIgnorance2 ? 'FAIL - AI claimed ignorance' : 'PASS',
+        response_preview: recall2.response?.substring(0, 250) || 'no response',
+        storage_confirmed_id: store2.id
+      });
+    }
 
     // ===== TEST 3: Dedup Anti-Merge Test =====
     const tripwire3a = `CHARLIE-${runId}`;
     const tripwire3b = `DELTA-${runId}`;
-    await chatViaHTTP(`My first test token is ${tripwire3a}`);
-    await wait(1500);
-    await chatViaHTTP(`My second test token is ${tripwire3b}`);
-    await wait(2500);
 
-    // Query DB directly to verify separate storage
-    const dbCheck3 = await queryDB(
-      `SELECT id, content, category_name FROM persistent_memories 
-       WHERE user_id = $1 AND (content ILIKE $2 OR content ILIKE $3)`,
-      [testUserId, `%${tripwire3a}%`, `%${tripwire3b}%`]
+    const store3a = await storeViaHTTPAndConfirm(
+      `My first test token is ${tripwire3a}`,
+      tripwire3a
     );
-    
-    const distinctCount = dbCheck3.rows.length;
-    const hasCharlie = dbCheck3.rows.some(r => r.content.includes(tripwire3a));
-    const hasDelta = dbCheck3.rows.some(r => r.content.includes(tripwire3b));
 
-    results.push({
-      test: '3. Dedup Anti-Merge',
-      passed: distinctCount >= 2 && hasCharlie && hasDelta,
-      expected: '2 distinct memories with different test tokens',
-      found_memories: distinctCount,
-      has_charlie: hasCharlie,
-      has_delta: hasDelta,
-      memory_ids: dbCheck3.rows.map(r => r.id),
-      note: distinctCount < 2 ? 'FAIL: Memories incorrectly merged into one' : 'PASS: Separate memories preserved'
-    });
+    const store3b = await storeViaHTTPAndConfirm(
+      `My second test token is ${tripwire3b}`,
+      tripwire3b
+    );
+
+    // Only proceed if both confirmed
+    if (!store3a.success || !store3b.success) {
+      results.push({
+        test: '3. Dedup Anti-Merge',
+        passed: false,
+        note: 'FAIL: Storage not confirmed via HTTP pipeline',
+        charlie_stored: store3a.success,
+        charlie_error: store3a.error,
+        charlie_id: store3a.id,
+        delta_stored: store3b.success,
+        delta_error: store3b.error,
+        delta_id: store3b.id
+      });
+    } else {
+      // Query DB directly to verify separate storage
+      const dbCheck3 = await queryDB(
+        `SELECT id, content, category_name FROM persistent_memories
+         WHERE user_id = $1 AND (content ILIKE $2 OR content ILIKE $3)`,
+        [testUserId, `%${tripwire3a}%`, `%${tripwire3b}%`]
+      );
+
+      const distinctCount = dbCheck3.rows.length;
+      const hasCharlie = dbCheck3.rows.some(r => r.content.includes(tripwire3a));
+      const hasDelta = dbCheck3.rows.some(r => r.content.includes(tripwire3b));
+
+      results.push({
+        test: '3. Dedup Anti-Merge',
+        passed: distinctCount >= 2 && hasCharlie && hasDelta,
+        expected: '2 distinct memories with different test tokens',
+        found_memories: distinctCount,
+        has_charlie: hasCharlie,
+        has_delta: hasDelta,
+        memory_ids: dbCheck3.rows.map(r => r.id),
+        storage_confirmed_ids: [store3a.id, store3b.id],
+        note: distinctCount < 2 ? 'FAIL: Memories incorrectly merged into one' : 'PASS: Separate memories preserved'
+      });
+    }
 
     // ===== TEST 4: High-Entropy Retrieval =====
     const tripwire4 = `ECHO-${runId}-9K7X`;
-    await chatViaHTTP(`My license plate number is ${tripwire4}`);
-    await wait(2500);
-    const recall4 = await chatViaHTTP('What is my license plate number?');
+    const store4 = await storeViaHTTPAndConfirm(
+      `My license plate number is ${tripwire4}`,
+      tripwire4
+    );
 
-    results.push({
-      test: '4. High-Entropy Retrieval',
-      passed: recall4.response?.includes(tripwire4) || false,
-      expected: tripwire4,
-      found: recall4.response?.includes(tripwire4) || false,
-      note: 'Tests that unique alphanumeric tokens survive compression and retrieval'
-    });
+    if (!store4.success) {
+      results.push({
+        test: '4. High-Entropy Retrieval',
+        passed: false,
+        note: 'FAIL: Storage not confirmed via HTTP pipeline',
+        error: store4.error
+      });
+    } else {
+      const recall4 = await chatViaHTTP('What is my license plate number?');
+
+      results.push({
+        test: '4. High-Entropy Retrieval',
+        passed: recall4.response?.includes(tripwire4) || false,
+        expected: tripwire4,
+        found: recall4.response?.includes(tripwire4) || false,
+        storage_confirmed_id: store4.id,
+        note: 'Tests that unique alphanumeric tokens survive compression and retrieval'
+      });
+    }
 
     // ===== TEST 5: Storage Hygiene (No Boilerplate) =====
     // Check if any boilerplate has been stored for this test user
@@ -184,44 +290,56 @@ router.get('/memory-full-check', async (req, res) => {
 
     // ===== TEST 6: Category Routing =====
     const tripwire6 = `FOXTROT-${runId}`;
-    await chatViaHTTP(`My doctor's name is Dr. ${tripwire6}`);
-    await wait(3000); // Increased from 2500ms to ensure storage completion
-
-    const categoryCheck = await queryDB(
-      `SELECT category_name, content FROM persistent_memories
-       WHERE user_id = $1 AND content ILIKE $2`,
-      [testUserId, `%${tripwire6}%`]
+    const store6 = await storeViaHTTPAndConfirm(
+      `My doctor's name is Dr. ${tripwire6}`,
+      tripwire6
     );
 
-    const routedCategory = categoryCheck.rows[0]?.category_name;
-    const expectedCategories = ['health_wellness', 'health', 'medical'];
+    if (!store6.success) {
+      results.push({
+        test: '6. Category Routing',
+        passed: false,
+        note: 'FAIL: Storage not confirmed via HTTP pipeline',
+        error: store6.error
+      });
+    } else {
+      const categoryCheck = await queryDB(
+        `SELECT category_name, content FROM persistent_memories
+         WHERE user_id = $1 AND content ILIKE $2`,
+        [testUserId, `%${tripwire6}%`]
+      );
 
-    // Additional diagnostic: check ALL memories for this user to see what was actually stored
-    const allUserMemories = await queryDB(
-      `SELECT id, category_name, LEFT(content, 100) as content_preview
-       FROM persistent_memories
-       WHERE user_id = $1
-       ORDER BY created_at DESC
-       LIMIT 5`,
-      [testUserId]
-    );
+      const routedCategory = categoryCheck.rows[0]?.category_name;
+      const expectedCategories = ['health_wellness', 'health', 'medical'];
 
-    results.push({
-      test: '6. Category Routing',
-      passed: expectedCategories.some(c => routedCategory?.toLowerCase().includes(c)) || routedCategory === 'health_wellness',
-      expected_category: 'health_wellness (or similar)',
-      actual_category: routedCategory || 'not found',
-      note: 'Doctor information should route to health category',
-      diagnostic: {
-        found_memory: categoryCheck.rows.length > 0,
-        total_user_memories: allUserMemories.rows.length,
-        recent_memories: allUserMemories.rows.map(r => ({
-          id: r.id,
-          category: r.category_name,
-          preview: r.content_preview
-        }))
-      }
-    });
+      // Additional diagnostic: check ALL memories for this user to see what was actually stored
+      const allUserMemories = await queryDB(
+        `SELECT id, category_name, LEFT(content, 100) as content_preview
+         FROM persistent_memories
+         WHERE user_id = $1
+         ORDER BY created_at DESC
+         LIMIT 5`,
+        [testUserId]
+      );
+
+      results.push({
+        test: '6. Category Routing',
+        passed: expectedCategories.some(c => routedCategory?.toLowerCase().includes(c)) || routedCategory === 'health_wellness',
+        expected_category: 'health_wellness (or similar)',
+        actual_category: routedCategory || 'not found',
+        storage_confirmed_id: store6.id,
+        note: 'Doctor information should route to health category',
+        diagnostic: {
+          found_memory: categoryCheck.rows.length > 0,
+          total_user_memories: allUserMemories.rows.length,
+          recent_memories: allUserMemories.rows.map(r => ({
+            id: r.id,
+            category: r.category_name,
+            preview: r.content_preview
+          }))
+        }
+      });
+    }
 
     // ===== TEST 7: Token Budget =====
     // Check metadata from previous responses for token counts
@@ -255,38 +373,48 @@ router.get('/memory-full-check', async (req, res) => {
     });
 
     // ===== TEST 9: Compression Verification =====
-    const verboseInput = `This is an extremely verbose and unnecessarily long message with lots of redundant words and filler content that should definitely be compressed by the intelligent memory system while still preserving the essential and critical fact that my unique project identifier is HOTEL-${runId} which represents the key information that must survive the compression process intact`;
+    const tripwire9 = `HOTEL-${runId}`;
+    const verboseInput = `This is an extremely verbose and unnecessarily long message with lots of redundant words and filler content that should definitely be compressed by the intelligent memory system while still preserving the essential and critical fact that my unique project identifier is ${tripwire9} which represents the key information that must survive the compression process intact`;
 
-    await chatViaHTTP(verboseInput);
-    await wait(2500);
+    const store9 = await storeViaHTTPAndConfirm(verboseInput, tripwire9);
 
-    const compressionCheck = await queryDB(
-      `SELECT content, LENGTH(content) as stored_len FROM persistent_memories
-       WHERE user_id = $1 AND content ILIKE $2`,
-      [testUserId, `%HOTEL-${runId}%`]
-    );
+    if (!store9.success) {
+      results.push({
+        test: '9. Compression Verification',
+        passed: false,
+        note: 'FAIL: Storage not confirmed via HTTP pipeline',
+        error: store9.error
+      });
+    } else {
+      const compressionCheck = await queryDB(
+        `SELECT content, LENGTH(content) as stored_len FROM persistent_memories
+         WHERE user_id = $1 AND content ILIKE $2`,
+        [testUserId, `%${tripwire9}%`]
+      );
 
-    const storedLen = compressionCheck.rows[0]?.stored_len || 0;
-    const inputLen = verboseInput.length;
-    const ratio = storedLen > 0 ? (inputLen / storedLen) : 0;
-    const tripwirePreserved = compressionCheck.rows[0]?.content?.includes(`HOTEL-${runId}`) || false;
-    const compressionOccurred = storedLen > 0 && storedLen < inputLen;
+      const storedLen = compressionCheck.rows[0]?.stored_len || 0;
+      const inputLen = verboseInput.length;
+      const ratio = storedLen > 0 ? (inputLen / storedLen) : 0;
+      const tripwirePreserved = compressionCheck.rows[0]?.content?.includes(tripwire9) || false;
+      const compressionOccurred = storedLen > 0 && storedLen < inputLen;
 
-    const TARGET_RATIO_MIN = 10;
-    const ratioStatus = ratio >= TARGET_RATIO_MIN ? 'OK' : 'WARNING: Below target ratio';
+      const TARGET_RATIO_MIN = 10;
+      const ratioStatus = ratio >= TARGET_RATIO_MIN ? 'OK' : 'WARNING: Below target ratio';
 
-    results.push({
-      test: '9. Compression Verification',
-      passed: tripwirePreserved && compressionOccurred,
-      input_length: inputLen,
-      stored_length: storedLen,
-      compression_ratio: `${ratio.toFixed(1)}:1`,
-      ratio_status: ratioStatus,
-      tripwire_preserved: tripwirePreserved,
-      note: tripwirePreserved
-        ? `PASS: Key info survived compression (${ratio.toFixed(1)}:1${ratio < TARGET_RATIO_MIN ? ' - below 10:1 target' : ''})`
-        : 'FAIL: Tripwire lost in compression'
-    });
+      results.push({
+        test: '9. Compression Verification',
+        passed: tripwirePreserved && compressionOccurred,
+        input_length: inputLen,
+        stored_length: storedLen,
+        compression_ratio: `${ratio.toFixed(1)}:1`,
+        ratio_status: ratioStatus,
+        tripwire_preserved: tripwirePreserved,
+        storage_confirmed_id: store9.id,
+        note: tripwirePreserved
+          ? `PASS: Key info survived compression (${ratio.toFixed(1)}:1${ratio < TARGET_RATIO_MIN ? ' - below 10:1 target' : ''})`
+          : 'FAIL: Tripwire lost in compression'
+      });
+    }
 
     // ===== TEST 10: Memory Injection Telemetry =====
     const hasTelemetry = recall1.metadata?.memory_ids || recall1.metadata?.memories_injected;
@@ -308,43 +436,55 @@ router.get('/memory-full-check', async (req, res) => {
     const tripwire11 = `TANGO-${runId}`;
 
     // Step 1: Store a fact with specific keywords
-    await chatViaHTTP(`My test identifier is ${tripwire11}`);
-    await wait(3000); // Wait for storage to complete
+    const store11 = await storeViaHTTPAndConfirm(
+      `My test identifier is ${tripwire11}`,
+      tripwire11
+    );
 
-    // Step 2: Query with paraphrase
-    const recall11 = await chatViaHTTP('What identifier did I ask you to remember for myself?');
+    if (!store11.success) {
+      results.push({
+        test: '11. Paraphrase Recall (Keyword-Template Tolerant)',
+        passed: false,
+        note: 'FAIL: Storage not confirmed via HTTP pipeline',
+        error: store11.error
+      });
+    } else {
+      // Step 2: Query with paraphrase
+      const recall11 = await chatViaHTTP('What identifier did I ask you to remember for myself?');
 
-    // Step 3: Evaluate
-    const foundTango = recall11.response?.includes(tripwire11) || false;
-    const memoriesInjected = recall11.metadata?.memory_retrieval?.memories_injected || 0;
-    const targetedRetrieval = memoriesInjected <= 5;  // Not bulk injection
+      // Step 3: Evaluate
+      const foundTango = recall11.response?.includes(tripwire11) || false;
+      const memoriesInjected = recall11.metadata?.memory_retrieval?.memories_injected || 0;
+      const targetedRetrieval = memoriesInjected <= 5;  // Not bulk injection
 
-    const retrievalQuality = memoriesInjected <= 3
-      ? 'EXCELLENT'
-      : memoriesInjected <= 5
-        ? 'GOOD'
-        : memoriesInjected <= 10
-          ? 'ACCEPTABLE'
-          : 'POOR (bulk injection)';
+      const retrievalQuality = memoriesInjected <= 3
+        ? 'EXCELLENT'
+        : memoriesInjected <= 5
+          ? 'GOOD'
+          : memoriesInjected <= 10
+            ? 'ACCEPTABLE'
+            : 'POOR (bulk injection)';
 
-    results.push({
-      test: '11. Paraphrase Recall (Keyword-Template Tolerant)',
-      passed: foundTango && targetedRetrieval,
-      expected: tripwire11,
-      found: foundTango,
-      retrieval_method: recall11.metadata?.memory_retrieval?.method || 'unknown',
-      memories_considered: recall11.metadata?.memory_retrieval?.memories_considered || 'unknown',
-      memories_injected: memoriesInjected,
-      retrieval_quality: retrievalQuality,
-      note: foundTango && targetedRetrieval
-        ? 'PASS: Targeted retrieval found correct memory'
-        : foundTango && !targetedRetrieval
-          ? `PARTIAL: Found via bulk injection (${memoriesInjected} memories injected - not targeted)`
-          : 'FAIL: Could not retrieve paraphrased memory',
-      query_used: 'What identifier did I ask you to remember for myself?',
-      original_storage: `My test identifier is ${tripwire11}`,
-      keyword_overlap: 'identifier (partial match)'
-    });
+      results.push({
+        test: '11. Paraphrase Recall (Keyword-Template Tolerant)',
+        passed: foundTango && targetedRetrieval,
+        expected: tripwire11,
+        found: foundTango,
+        retrieval_method: recall11.metadata?.memory_retrieval?.method || 'unknown',
+        memories_considered: recall11.metadata?.memory_retrieval?.memories_considered || 'unknown',
+        memories_injected: memoriesInjected,
+        retrieval_quality: retrievalQuality,
+        storage_confirmed_id: store11.id,
+        note: foundTango && targetedRetrieval
+          ? 'PASS: Targeted retrieval found correct memory'
+          : foundTango && !targetedRetrieval
+            ? `PARTIAL: Found via bulk injection (${memoriesInjected} memories injected - not targeted)`
+            : 'FAIL: Could not retrieve paraphrased memory',
+        query_used: 'What identifier did I ask you to remember for myself?',
+        original_storage: `My test identifier is ${tripwire11}`,
+        keyword_overlap: 'identifier (partial match)'
+      });
+    }
 
   } catch (err) {
     results.push({

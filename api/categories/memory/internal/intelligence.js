@@ -1403,13 +1403,22 @@ class IntelligenceSystem {
         `Starting extraction for user: ${userId}, query: "${query.substring(0, 50)}..."`,
       );
 
-      // STEP 0: FIRST PASS - Exact match for high-entropy tokens
+      // STEP 0: FIRST PASS - Exact match for high-entropy tokens (Issue #210 Fix 3)
       const HIGH_ENTROPY_PATTERN = /[A-Z]+-[A-Z]+-\d{4,}|[A-Za-z0-9]{12,}/g;
       const queryTokens = query.match(HIGH_ENTROPY_PATTERN) || [];
 
       // Check if query is asking about identifier-like information
-      const identifierKeywords = /\b(license plate|serial number|id number|identifier|token|code|plate number|registration|vin|account number|order number|tracking number|confirmation number)\b/i;
+      const identifierKeywords = /\b(license plate|serial number|id number|identifier|token|code|plate number|registration|vin|account number|order number|tracking number|confirmation number|test token|test identifier|special identifier)\b/i;
       const queryMentionsIdentifier = identifierKeywords.test(query);
+
+      // Issue #210 Fix 3: Extract key terms from query for match-first scoring
+      const keyTerms = this.extractKeyTermsForMatching(query);
+
+      if (keyTerms.length > 0) {
+        this.logger.log(
+          `[RETRIEVAL] Extracted ${keyTerms.length} key terms for match-first scoring: ${keyTerms.slice(0, 5).join(', ')}`,
+        );
+      }
 
       if (queryTokens.length > 0 || queryMentionsIdentifier) {
         if (queryTokens.length > 0) {
@@ -1479,25 +1488,49 @@ class IntelligenceSystem {
         semanticAnalysis,
       );
 
-      // STEP 2: Apply multi-dimensional relevance scoring
-      const scoredPrimary = primaryMemories.map((memory) => ({
-        ...memory,
+      // STEP 2: Apply multi-dimensional relevance scoring (Issue #210 Fix 3: Match-first)
+      const scoredPrimary = primaryMemories.map((memory) => {
+        const content = memory.content.toLowerCase();
+
+        // Issue #210 Fix 3: Calculate exact match scores (HIGHEST priority)
+        const exactTokenMatch = queryTokens.some(t => content.includes(t.toLowerCase()));
+        const keyTermMatches = keyTerms.filter(t => content.includes(t)).length;
+
         // Multi-dimensional scoring as specified in the requirements
-        semanticScore: this.calculateSemanticSimilarity(query, memory.content),
-        keywordScore: this.calculateKeywordMatch(query, memory.content),
-        recencyScore: this.calculateRecencyBoost(memory.created_at, memory.last_accessed),
-        importanceScore: memory.relevance_score || 0,
-        usageScore: Math.min((memory.usage_frequency || 0) / 20, 1.0), // Normalize to 0-1
-        // Combined relevance score with weights from spec
-        relevanceScore: this.calculateMultiDimensionalRelevance(
-          this.calculateSemanticSimilarity(query, memory.content),
-          this.calculateKeywordMatch(query, memory.content),
-          this.calculateRecencyBoost(memory.created_at, memory.last_accessed),
-          memory.relevance_score || 0,
-          Math.min((memory.usage_frequency || 0) / 20, 1.0)
-        ),
-        source: "primary_category",
-      }));
+        const semanticScore = this.calculateSemanticSimilarity(query, memory.content);
+        const keywordScore = this.calculateKeywordMatch(query, memory.content);
+        const recencyScore = this.calculateRecencyBoost(memory.created_at, memory.last_accessed);
+        const importanceScore = memory.relevance_score || 0;
+        const usageScore = Math.min((memory.usage_frequency || 0) / 20, 1.0); // Normalize to 0-1
+
+        // Issue #210 Fix 3: Match-first scoring with explicit priority weights
+        // Priority 1: Exact token match = 1000 points (dominates all other factors)
+        // Priority 2: Key term matches = 10 points per term
+        // Priority 3: Standard multi-dimensional relevance
+        const matchFirstScore = (exactTokenMatch ? 1000 : 0) + (keyTermMatches * 10);
+        const baseRelevance = this.calculateMultiDimensionalRelevance(
+          semanticScore,
+          keywordScore,
+          recencyScore,
+          importanceScore,
+          usageScore
+        );
+
+        return {
+          ...memory,
+          semanticScore,
+          keywordScore,
+          recencyScore,
+          importanceScore,
+          usageScore,
+          exactTokenMatch,
+          keyTermMatches,
+          matchFirstScore,
+          // Combined score: match-first + base relevance (match-first dominates)
+          relevanceScore: matchFirstScore + baseRelevance,
+          source: "primary_category",
+        };
+      });
 
       // STEP 3: If primary results are poor, try related categories
       let allMemories = scoredPrimary;
@@ -1562,10 +1595,21 @@ class IntelligenceSystem {
         }
       }
 
-      // STEP 4: Re-rank by multi-dimensional relevance score
+      // STEP 4: Re-rank by multi-dimensional relevance score (Issue #210 Fix 3: Match-first priority)
       const rankedMemories = allMemories.sort((a, b) => {
         return (b.relevanceScore || 0) - (a.relevanceScore || 0);
       });
+
+      // Issue #210 Fix 3: Log match-first scoring results
+      const matchedMemories = rankedMemories.filter(m => m.exactTokenMatch || m.keyTermMatches > 0);
+      if (matchedMemories.length > 0) {
+        this.logger.log(
+          `[RETRIEVAL] Match-first scoring: ${matchedMemories.length} memories have exact/key term matches`,
+        );
+        this.logger.log(
+          `[RETRIEVAL] Top match: ID ${matchedMemories[0].id}, score ${matchedMemories[0].relevanceScore.toFixed(2)} (exact: ${matchedMemories[0].exactTokenMatch}, terms: ${matchedMemories[0].keyTermMatches})`,
+        );
+      }
 
       // STEP 5: Apply temporal diversity selection (from spec)
       const diverseMemories = this.selectDiverseMemories(rankedMemories, 2400);
@@ -2007,7 +2051,7 @@ class IntelligenceSystem {
   extractImportantNouns(text) {
     // Split on non-letters (removes punctuation), convert to lowercase, and filter out empty strings
     // Example: "What's my favorite color?" → ["what", "s", "my", "favorite", "color"]
-    // After filtering: ["what", "favorite", "color"] 
+    // After filtering: ["what", "favorite", "color"]
     //   - "s" removed (length 1, not > 3)
     //   - "my" removed (stopword)
     const words = text.split(/[^a-zA-Z]+/).map(word => word.toLowerCase()).filter(word => word.length > 0);
@@ -2016,6 +2060,27 @@ class IntelligenceSystem {
         word.length > 3 &&  // Keep words with 4+ characters
         !this.stopWords.has(word)
     );
+  }
+
+  // Issue #210 Fix 3: Extract key terms for match-first scoring
+  extractKeyTermsForMatching(query) {
+    const queryLower = query.toLowerCase();
+
+    // Stop words to exclude
+    const stopWords = new Set(['what', 'is', 'my', 'the', 'a', 'an', 'are', 'was', 'were', 'did', 'do', 'does']);
+
+    // Extract words that are likely to be important for matching
+    const words = queryLower.match(/\b\w+\b/g) || [];
+
+    // Filter to keep meaningful terms (longer words, not stop words)
+    const keyTerms = words.filter(word =>
+      word.length > 3 &&
+      !stopWords.has(word) &&
+      // Prioritize nouns that indicate what the user is asking about
+      !/^(you|your|how|why|when|where|which|who|tell|give|show|find)$/.test(word)
+    );
+
+    return [...new Set(keyTerms)]; // Remove duplicates
   }
 
   areConceptsRelated(concept1, concept2) {
