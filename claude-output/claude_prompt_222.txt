@@ -1,0 +1,120 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #222: [claude-fix] Issue #220: SEMANTIC INTELLIGENCE LAYER - Unified Retrieval + Fact Management
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Version: 2.0 (Revised per audit findings)</h2>
+<hr class="border-border-200 border-t-0.5 my-3 mx-1.5">
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">EXECUTIVE SUMMARY</h2>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">This issue implements the unified Semantic Intelligence Layer that transforms the memory system from "correct" to "intelligent." It combines:</p>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2"><strong>Semantic Retrieval</strong> - Meaning-based recall using embeddings and vector similarity</li>
+<li class="whitespace-normal break-words pl-2"><strong>Fact Management</strong> - Deterministic update/overwrite logic with versioning</li>
+<li class="whitespace-normal break-words pl-2"><strong>Document Integration</strong> - Unified fact pipeline for all content sources</li>
+</ol>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">These three capabilities are designed as a single system because they reinforce each other:</p>
+<ul class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-disc flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2">Semantic retrieval without fact management returns outdated information</li>
+<li class="whitespace-normal break-words pl-2">Fact management without semantic retrieval cannot find related facts to supersede</li>
+<li class="whitespace-normal break-words pl-2">Documents without unified fact handling create parallel, inconsistent knowledge stores</li>
+</ul>
+<hr class="border-border-200 border-t-0.5 my-3 mx-1.5">
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">FOUNDATION ASSUMPTIONS (MUST REMAIN INTACT)</h2>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">This implementation builds on the completed Truth Layer. The following MUST NOT be modified or bypassed:</p>
+<div class="overflow-x-auto w-full px-2 mb-6">
+Component | Status | Contract
+-- | -- | --
+Deterministic storage | ✅ COMPLETE | Every store returns memory ID or fails explicitly
+Provable telemetry | ✅ COMPLETE | All operations logged with IDs, timestamps, outcomes
+Match-first correctness | ✅ COMPLETE | High-entropy tokens (IDs, numbers) always checked first
+Deduplication guards | ✅ COMPLETE | Unique tokens block merge, identical tokens allow merge
+Test endpoint | ✅ COMPLETE | /api/test/memory-full-check validates store/retrieve loop
+
+</div>
+<hr class="border-border-200 border-t-0.5 my-3 mx-1.5">
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">PART 12: IMPLEMENTATION ORDER</h2>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2"><strong>Schema Truth Gate</strong> - Verify current columns, document canonical names</li>
+<li class="whitespace-normal break-words pl-2"><strong>Schema changes</strong> - Enable pgvector, add columns, create indexes</li>
+<li class="whitespace-normal break-words pl-2"><strong>Post-schema</strong> - Run ANALYZE, set ivfflat.probes</li>
+<li class="whitespace-normal break-words pl-2"><strong>Embedding service</strong> - With timeout and async support</li>
+<li class="whitespace-normal break-words pl-2"><strong>Fact fingerprinting</strong> - Entity-aware with confidence</li>
+<li class="whitespace-normal break-words pl-2"><strong>Transactional supersession</strong> - With partial unique constraint</li>
+<li class="whitespace-normal break-words pl-2"><strong>Modify storage</strong> - Integrate fingerprinting + async embedding</li>
+<li class="whitespace-normal break-words pl-2"><strong>Unified retrieval</strong> - Hybrid sourcing + combined ranking</li>
+<li class="whitespace-normal break-words pl-2"><strong>Document ingestion</strong> - Chunk + async embed</li>
+<li class="whitespace-normal break-words pl-2"><strong>Telemetry</strong> - All events logged</li>
+<li class="whitespace-normal break-words pl-2"><strong>E2E tests</strong> - Via /api/chat, verify DB + telemetry</li>
+<li class="whitespace-normal break-words pl-2"><strong>Calibration</strong> - Run evaluation set, tune weights</li>
+<li class="whitespace-normal break-words pl-2"><strong>Backfill migration</strong> - Existing memories get embeddings + fingerprints</li>
+</ol>
+<hr class="border-border-200 border-t-0.5 my-3 mx-1.5">
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">PART 13: FILES TO CREATE/MODIFY</h2>
+<h3 class="text-text-100 mt-2 -mb-1 text-base font-bold">New Files (8)</h3>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/core/intelligence/embedding-service.js</code></li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/core/intelligence/semantic-retrieval.js</code></li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/core/intelligence/fact-fingerprint.js</code></li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/core/intelligence/fact-types.js</code></li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/core/intelligence/supersession.js</code></li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/core/intelligence/document-chunker.js</code></li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/core/intelligence/document-ingestion.js</code></li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/workers/embedding-backfill.js</code></li>
+</ol>
+<h3 class="text-text-100 mt-2 -mb-1 text-base font-bold">Modified Files (4)</h3>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/memory/intelligent-storage.js</code> - Add fingerprinting + async embedding</li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/core/intelligence/intelligence.js</code> - Use unified retrieval</li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/database/schema.js</code> or migration - Schema changes</li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/routes/test-routes.js</code> - Add test endpoints</li>
+</ol>
+<h3 class="text-text-100 mt-2 -mb-1 text-base font-bold">Test Files (3)</h3>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1.5 [li_&amp;]:gap-1.5 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-2 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/test/semantic-e2e.test.js</code></li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/test/evaluation-dataset.js</code></li>
+<li class="whitespace-normal break-words pl-2"><code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">api/test/calibration-runner.js</code></li>
+</ol>
+<hr class="border-border-200 border-t-0.5 my-3 mx-1.5">
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">DEFINITION OF DONE</h2>
+<ul class="contains-task-list">
+<li class="task-list-item"><input disabled="" type="checkbox"> Schema Truth Gate completed (columns documented and canonical names used)</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> pgvector extension enabled</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> All schema changes deployed</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> ANALYZE run, ivfflat.probes configured</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Embedding service with 3s timeout</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Async embedding queue functional</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Fact fingerprinting with entity awareness and confidence</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Transactional supersession with partial unique constraint</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Unified retrieval combining memories + documents</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Hybrid candidate sourcing (embedded + non-embedded)</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Configurable ranking weights</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> All 12 acceptance criteria tests PASS</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Calibration run with documented results</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> All telemetry events logging correctly</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Backfill migration completed</li>
+<li class="task-list-item"><input disabled="" type="checkbox"> Truth Layer tests still pass</li>
+</ul>
+<hr class="border-border-200 border-t-0.5 my-3 mx-1.5">
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]"><strong>This issue transforms the memory system from "correct" to "intelligent" while maintaining all existing guarantees.</strong></p><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
