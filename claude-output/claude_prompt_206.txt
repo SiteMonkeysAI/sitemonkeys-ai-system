@@ -1,0 +1,299 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #206: [claude-fix] Issue #205: System Discovery & Audit - Truth Extraction
+
+Issue Description:
+Purpose (Non-Negotiable)
+Convert assumptions about the memory system into provable facts.
+This is not a refactor. This is not an optimization. This is truth extraction.
+We will not write another line of "fix" code until we know exactly what exists, what doesn't, and what is spec-only vs. runtime reality.
+
+Background
+After achieving 10/10 on basic memory tests, real-world usage revealed:
+
+Old memories override new ones (BANANA-TEST-2024 vs BANANA-12345-XYZ)
+Update/overwrite logic may not exist
+Retrieval method is unknown (semantic vs keyword vs recency)
+Document integration is unverified
+Dynamic categories (5 AI-managed) status unknown
+
+The Engineering Spec shows SQL-based retrieval with keyword categorization, but specs drift from production. We need proof of what's actually running.
+
+Definition of Done
+This issue is complete when ALL FIVE deliverables are produced with evidence.
+
+Deliverable 1: Semantic Paraphrase Test
+Add to /api/test/memory-full-check.js:
+Test Implementation     // TEST: SEMANTIC PARAPHRASE RECALL
+// This is the litmus test for "real intelligence"
+{
+  name: "11. Semantic Paraphrase Recall",
+  
+  // Step 1: Store a fact with specific keywords
+  store: {
+    message: `My verification code is TANGO-${runId}`,
+    // Keywords: "verification", "code", "TANGO"
+  },
+  
+  // Step 2: Wait for storage
+  wait: 3000,
+  
+  // Step 3: Query with ZERO keyword overlap
+  query: "What identifier did I ask you to remember for myself?",
+  // No "verification", no "code", no "TANGO", no "test"
+  
+  // Step 4: Evaluate
+  pass_condition: response.includes(`TANGO-${runId}`),
+  
+  // Step 5: Record result
+  result: {
+    passed: boolean,
+    expected: `TANGO-${runId}`,
+    found: boolean,
+    retrieval_method: metadata.retrieval_method || "unknown",
+    note: passed 
+      ? "PASS: Semantic retrieval confirmed" 
+      : "FAIL: Retrieval is NOT semantic (keyword/recency only)"
+  }
+}   <html>
+<body>
+<!--StartFragment--><h3 class="text-text-100 mt-2 -mb-1 text-base font-bold">What This Proves</h3>
+<div class="overflow-x-auto w-full px-2 mb-6">
+Result | Meaning
+-- | --
+PASS | System has some semantic capability
+FAIL | Retrieval is keyword-based or recency-based, NOT meaning-based
+
+</div>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]"><strong>This single test determines whether "intelligence" exists or is theater.</strong></p>
+<hr class="border-border-200 border-t-0.5 my-3 mx-1.5">
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Deliverable 2: Retrieval Method Telemetry</h2>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]"><strong>Modify <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">/api/chat</code> response metadata to include:</strong></p><!--EndFragment-->
+</body>
+</html>
+    {
+  // ... existing metadata ...
+  
+  memory_retrieval: {
+    method: "sql_category_relevance" | "vector_cosine" | "sql_ilike" | "recency" | "hybrid",
+    memories_considered: number,    // How many were evaluated
+    memories_injected: number,      // How many made it into prompt
+    tokens_injected: number,        // Total tokens from memory
+    categories_searched: string[],  // Which categories were queried
+    query_used: string,             // The actual SQL/vector query (sanitized)
+    selection_criteria: string      // "relevance_desc" | "recency" | "similarity_score"
+  }
+}    {
+  // ... existing metadata ...
+  
+  memory_retrieval: {
+    method: "sql_category_relevance" | "vector_cosine" | "sql_ilike" | "recency" | "hybrid",
+    memories_considered: number,    // How many were evaluated
+    memories_injected: number,      // How many made it into prompt
+    tokens_injected: number,        // Total tokens from memory
+    categories_searched: string[],  // Which categories were queried
+    query_used: string,             // The actual SQL/vector query (sanitized)
+    selection_criteria: string      // "relevance_desc" | "recency" | "similarity_score"
+  }
+}    Implementation Location
+Find and modify the function that assembles the /api/chat response. Add these fields from the retrieval operation.
+Verification
+After implementation, every /api/chat response must show:  "memory_retrieval": {
+  "method": "sql_category_relevance",
+  "memories_considered": 12,
+  "memories_injected": 3,
+  "tokens_injected": 156,
+  "categories_searched": ["personal_life_interests", "work_career"],
+  "selection_criteria": "relevance_desc_created_desc"
+}    If this isn't visible, it isn't auditable.
+
+Deliverable 3: Runtime Code Path Confirmation
+Not specs. Not comments. Actual running code.
+Task: Trace the Memory Selection Path
+Starting from /api/chat, identify:
+
+Entry Point
+
+File: /api/routes.js or /api/chat.js
+Function: router.post('/chat', ...)
+
+Orchestrator Call
+
+File: ?
+Function: ?
+What it imports from memory module
+
+Memory Retrieval Function
+
+File: ? (likely /api/categories/memory/internal/intelligence.js)
+Function: ? (likely extractMemoriesForContext or similar)
+Actual query executed (SQL? Vector? Hybrid?)
+
+Selection Logic
+
+What fields are used for ranking?
+Is there embedding/similarity calculation?
+Or just ORDER BY relevance DESC, created_at DESC?
+
+Output Format    ## Runtime Code Path (Verified)
+
+### Entry: /api/chat
+- File: /api/chat.js
+- Line: 47
+- Calls: orchestrator.processRequest()
+
+### Orchestrator: /api/core/orchestrator.js  
+- Line: 123
+- Calls: memorySystem.retrieve()
+
+### Memory Retrieval: /api/categories/memory/internal/intelligence.js
+- Line: 1580
+- Function: extractMemoriesForContext()
+- Query Type: SQL
+- Actual Query: 
+```sql
+  SELECT * FROM persistent_memories 
+  WHERE user_id = $1 AND category = ANY($2)
+  ORDER BY relevance DESC, created_at DESC
+  LIMIT 50
+```
+
+### Selection: Same file
+- Line: 1620
+- Method: Token budget loop (first N that fit)
+- No embedding calculation
+- No similarity scoring  This must be verified by reading actual code, not specs.
+
+Deliverable 4: Truth Map
+A short, blunt artifact. No fluff. No optimism.
+Template  # TRUTH MAP - Memory System
+Generated: [date]
+Verified by: [method - code review / runtime test / both]
+
+## RETRIEVAL
+| Capability | Spec Says | Reality | Evidence |
+|------------|-----------|---------|----------|
+| Semantic search | ✅ Yes | ❌ No | SQL ILIKE only, no embeddings |
+| Vector/embedding | ✅ Yes | ❌ No | No vector DB, no embedding generation |
+| Keyword matching | ✅ Yes | ✅ Yes | ILIKE queries in intelligence.js:1653 |
+| Recency ranking | ✅ Yes | ✅ Yes | ORDER BY created_at DESC |
+| Relevance scoring | ✅ Yes | ⚠️ Partial | Field exists, scoring logic unknown |
+
+## STORAGE
+| Capability | Spec Says | Reality | Evidence |
+|------------|-----------|---------|----------|
+| Compression | ✅ Yes | ✅ Yes | GPT-4 extractKeyFacts(), 10-20:1 ratio |
+| Deduplication | ✅ Yes | ✅ Yes | Similarity check before insert |
+| Update/overwrite | ✅ Yes | ❌ No | INSERT only, no UPDATE on conflict |
+| 11 predefined categories | ✅ Yes | ✅ Yes | Defined in CATEGORIES constant |
+| 5 dynamic categories | ✅ Yes | ❌ No | DYNAMIC_SLOTS defined, no creation logic |
+
+## DOCUMENTS
+| Capability | Spec Says | Reality | Evidence |
+|------------|-----------|---------|----------|
+| Upload handling | ✅ Yes | ⚠️ Unknown | Endpoint exists, behavior unverified |
+| Chunking | ✅ Yes | ❌ Unknown | No chunking code found |
+| Indexing | ✅ Yes | ❌ Unknown | No index creation found |
+| Retrieval integration | ✅ Yes | ❌ Unknown | Not tested |
+
+## SCALE
+| Capability | Spec Says | Reality | Evidence |
+|------------|-----------|---------|----------|
+| 3M token capacity | ✅ Yes | ❓ Untested | Never loaded, unknown |
+| 6M token capacity | ✅ Yes | ❓ Untested | Never loaded, unknown |
+| <10K retrieval tokens | ✅ Yes | ⚠️ Partial | Budget exists, efficiency unknown |
+
+## INTELLIGENCE
+| Capability | Spec Says | Reality | Evidence |
+|------------|-----------|---------|----------|
+| Cross-reference | ✅ Yes | ❌ No | No relationship/graph structure |
+| Meaning understanding | ✅ Yes | ❌ No | Keyword matching only |
+| Context awareness | ✅ Yes | ⚠️ Partial | Category filtering only |    Key Questions This Answers
+
+Is retrieval semantic? → Yes/No with proof
+Does update logic exist? → Yes/No with proof
+Are documents integrated? → Yes/No with proof
+What's real vs. spec-only? → Complete list
+
+Deliverable 5: Issue #206 Trigger
+Based on Truth Map, create Issue #206 with ONE of these conclusions:
+If Semantic Retrieval EXISTS:  # Issue #206: Fix Semantic Retrieval Gaps
+
+## Verified Working
+- Embedding generation: ✅
+- Vector search: ✅
+- Similarity ranking: ✅
+
+## Gaps to Fix
+- Update logic missing
+- Document integration incomplete
+- [specific gaps with file:line references]   If Semantic Retrieval DOES NOT EXIST:  # Issue #206: Build Semantic Intelligence Layer
+
+## Current State (Verified)
+- Retrieval: SQL keyword/category filter
+- No embeddings
+- No vector search
+- No semantic understanding
+
+## Required Implementation
+1. Embedding generation (OpenAI ada-002 or similar)
+2. Vector storage (pgvector extension)
+3. Similarity search function
+4. Update/overwrite logic
+5. Document chunking and indexing
+6. Dynamic category creation
+7. Cross-reference capability
+
+## Architecture Design
+[Detailed based on truth map findings]   Issue #206 becomes architectural with certainty, not exploratory with assumptions.
+
+Implementation Steps for Claude Code
+Step 1: Add Semantic Paraphrase Test    # File: /api/test/memory-full-check.js
+# Add test 11 after existing tests
+# Follow pattern of existing tests
+# Use TANGO-{runId} tripwire with no-keyword query     # File: /api/test/memory-full-check.js
+# Add test 11 after existing tests
+# Follow pattern of existing tests
+# Use TANGO-{runId} tripwire with no-keyword query    Step 2: Add Retrieval Telemetry    # Find where memory retrieval happens
+grep -rn "retrieveMemory\|extractMemories" /api/
+
+# Add telemetry object to response metadata
+# Include: method, considered, injected, tokens, categories  Step 3: Trace Runtime Path    # Start from /api/chat endpoint
+grep -rn "router.post.*chat\|app.post.*chat" /api/
+
+# Follow imports to orchestrator
+# Follow imports to memory retrieval
+# Document each hop with file:line    Step 4: Generate Truth Map    # After Steps 1-3, compile findings into truth-map.md
+# Use template from Deliverable 4
+# Every claim must have evidence (file:line or test result)   # After Steps 1-3, compile findings into truth-map.md
+# Use template from Deliverable 4
+# Every claim must have evidence (file:line or test result)    # After Steps 1-3, compile findings into truth-map.md
+# Use template from Deliverable 4
+# Every claim must have evidence (file:line or test result)    Step 5: Create Issue #206    # Based on truth map, create appropriate issue
+# If semantic exists: gap-fix issue
+# If semantic missing: build-layer issue    Acceptance Criteria
+
+ Semantic paraphrase test added and runs
+ Test result clearly shows PASS or FAIL
+ Retrieval telemetry visible in /api/chat responses
+ Runtime code path documented with file:line references
+ Truth map produced with evidence for each claim
+ Issue #206 created with appropriate scope based on findings
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
