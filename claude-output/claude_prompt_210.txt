@@ -1,0 +1,464 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #210: [claude-fix] Issue #208: Three Structural Guarantees - Fix Foundation Before Features
+
+Issue Description:
+⚠️ CRITICAL IMPLEMENTATION RULES
+Before implementing, these rules are NON-NEGOTIABLE:
+
+ALL store operations in tests MUST go through HTTP POST to /api/chat - NEVER call storeMemory() directly. The tests must exercise the real pipeline end-to-end.
+Fix 3 MUST identify the actual selection layer (SQL vs JS vs hybrid) before implementing. Do not assume file paths - trace the actual code path first.
+If memories_injected > 0 and IDs are missing, that's a FAIL - not a warning. Without IDs, selection correctness cannot be debugged.
+
+
+Purpose
+The audit revealed three foundational breakpoints that make the entire memory system untrustworthy:
+
+Telemetry is lying - memory_count: 1 but memory_ids: []
+Storage is timing-dependent - Test 3 found 0 rows when writes happened
+Retrieval is wrong - Asked for BRAVO, got ALPHA
+
+These are not tweaks. These are structural guarantees that must exist before any other work matters.
+
+The Three Problems
+Problem 1: Telemetry is Lying / Incomplete
+Evidence from Test 1:
+json{
+  "memory_count": 1,
+  "memory_ids": [],
+  "memory_retrieval": {
+    "memories_injected": 1,
+    "injected_memory_ids": []
+  }
+}
+The system is injecting memories but not reporting which ones.
+Until this is fixed:
+
+Cannot verify "targeted retrieval" vs "bulk injection"
+Cannot audit what the AI actually saw
+Cannot debug retrieval correctness
+
+This is a hard blocker.
+
+Problem 2: Storage is Timing-Sensitive
+Evidence from Test 3:
+json{
+  "found_memories": 0,
+  "has_charlie": false,
+  "has_delta": false,
+  "note": "FAIL: Memories incorrectly merged into one"
+}
+But Test 6 shows memories exist:
+json{
+  "total_user_memories": 4,
+  "recent_memories": [
+    { "id": 750, "preview": "FOXTROT-1767210930271." },
+    { "id": 749, "preview": "License plate number: ECHO-..." },
+    { "id": 748, "preview": "Test token: ALPHA-..." },
+    { "id": 747, "preview": "Test identifier: ALPHA-..." }
+  ]
+}
+CHARLIE and DELTA are missing entirely. Either:
+
+Store didn't commit before query ran
+Store got deduplicated incorrectly
+Timing race condition
+
+If tests pass or fail based on timing, we'll chase ghosts forever.
+
+Problem 3: Retrieval Returns Wrong Memory
+Evidence from Test 2:
+json{
+  "found_tripwire": false,  // Asked for BRAVO
+  "response_preview": "your test token is: **ALPHA-1767210930271**"  // Got ALPHA
+}
+The user stored BRAVO, asked for their "special identifier", and got ALPHA instead.
+This is not a semantic vs keyword issue. This is basic correctness - the system returned the wrong answer.
+
+The Three Fixes
+Fix 1: Make Telemetry Provable (IDs or It Didn't Happen)
+Rule: If memories_injected > 0, then injected_memory_ids MUST be a non-empty array of DB IDs. Missing IDs is a FAIL, not a warning.
+Implementation:
+Step 1: Find where memories are retrieved
+bashgrep -rn "extractRelevantMemories\|retrieveMemory" /api/
+Step 2: Ensure retrieval returns IDs
+The memory objects returned must include the database ID:
+javascript// REQUIRED shape of memory objects
+{
+  id: 747,           // DB ID - MUST be present
+  content: "Test identifier: ALPHA-...",
+  category: "personal_life_interests",
+  tokens: 21,
+  relevance: 0.8
+}
+Step 3: Extract IDs in orchestrator
+File: /api/core/orchestrator.js
+Find the block that sets memory_retrieval metadata and fix it:
+javascript// CURRENT (broken)
+memory_retrieval: {
+  memories_injected: memories.length,
+  injected_memory_ids: [],  // Always empty - BUG
+  // ...
+}
+
+// FIXED
+const injectedIds = memories.map(m => m.id).filter(Boolean);
+
+// FAIL if we have memories but no IDs - this is a telemetry integrity failure
+if (memories.length > 0 && injectedIds.length === 0) {
+  console.error('[TELEMETRY] ❌ CRITICAL: memories_injected > 0 but no IDs extracted');
+  console.error('[TELEMETRY] Memory objects missing id field:', memories.slice(0, 2));
+}
+
+memory_retrieval: {
+  memories_injected: memories.length,
+  injected_memory_ids: injectedIds,  // Extract actual IDs
+  injected_tokens_total: memories.reduce((sum, m) => sum + (m.tokens || 0), 0),
+  telemetry_valid: memories.length === 0 || injectedIds.length > 0,  // MUST be true
+  // ...
+}
+Step 4: Fix memory_ids consistency
+javascript// Also fix the top-level memory_ids - MUST match memory_count
+const memoryIds = memories.map(m => m.id).filter(Boolean);
+memory_ids: memoryIds,
+memory_count: memories.length,
+
+// Add validation
+if (memories.length > 0 && memoryIds.length !== memories.length) {
+  console.error(`[TELEMETRY] ❌ ID mismatch: ${memories.length} memories but ${memoryIds.length} IDs`);
+}
+Definition of Done:
+json{
+  "memory_count": 1,
+  "memory_ids": [747],
+  "memory_retrieval": {
+    "memories_injected": 1,
+    "injected_memory_ids": [747],
+    "injected_tokens_total": 21,
+    "telemetry_valid": true
+  }
+}
+Test Suite Validation:
+
+If memory_count > 0 and memory_ids.length === 0 → Test FAILS
+If memories_injected > 0 and injected_memory_ids.length === 0 → Test FAILS
+This is not optional - without IDs, nothing else can be debugged
+
+
+---
+
+### Fix 2: Make Writes Deterministic (Store-Proof Loop)
+
+**Rule:** Never proceed to retrieval until storage is confirmed in DB. ALL stores must go through `/api/chat` HTTP endpoint.
+
+**⚠️ CRITICAL: Do NOT call `storeMemory()` directly in tests. That bypasses the real pipeline and defeats end-to-end testing.**
+
+**Implementation:**
+
+#### Replace sleep-and-hope with HTTP-store-then-poll
+
+**File:** `/api/test/memory-full-check.js`
+```javascript
+// CURRENT (flaky AND wrong - may be using direct store)
+await storeMemory(userId, message, category);  // ❌ WRONG - bypasses pipeline
+await sleep(2500);  // Hope it's done
+const memories = await retrieveMemories(userId);
+
+// FIXED (deterministic AND end-to-end compliant)
+async function storeViaHTTPAndConfirm(userId, message, tripwire, maxRetries = 5) {
+  // Step 1: Store via real HTTP endpoint (exercises full pipeline)
+  const storeResponse = await fetch(`${BASE_URL}/api/chat`, {
+    method: 'POST',
+    headers: { 
+      'Content-Type': 'application/json',
+      'X-Internal-Test-Token': TEST_TOKEN 
+    },
+    body: JSON.stringify({
+      message: message,
+      user_id: userId,
+      mode: 'truth_general'
+    })
+  });
+  
+  if (!storeResponse.ok) {
+    return { success: false, error: 'HTTP store failed' };
+  }
+  
+  // Step 2: Poll DB until tripwire confirmed (NOT via storeMemory - via DB query)
+  for (let i = 0; i < maxRetries; i++) {
+    const memories = await pool.query(
+      `SELECT id, content FROM persistent_memories 
+       WHERE user_id = $1 AND content ILIKE $2
+       ORDER BY created_at DESC LIMIT 1`,
+      [userId, `%${tripwire}%`]
+    );
+    
+    if (memories.rows.length > 0) {
+      console.log(`[STORE-CONFIRM] ✅ Confirmed ${tripwire} stored as ID ${memories.rows[0].id}`);
+      return { success: true, id: memories.rows[0].id };
+    }
+    
+    await sleep(300);  // Short poll interval
+  }
+  
+  console.error(`[STORE-CONFIRM] ❌ Failed to confirm ${tripwire} after ${maxRetries} attempts`);
+  return { success: false, error: 'Storage not confirmed in DB' };
+}
+```
+
+#### Apply to all test stores
+```javascript
+// Test 3: Dedup Anti-Merge - MUST use HTTP, not direct store
+const charlieResult = await storeViaHTTPAndConfirm(
+  userId, 
+  `My first test token is CHARLIE-${runId}`,
+  `CHARLIE-${runId}`
+);
+
+const deltaResult = await storeViaHTTPAndConfirm(
+  userId,
+  `My second test token is DELTA-${runId}`,
+  `DELTA-${runId}`
+);
+
+// Only proceed if both confirmed
+if (!charlieResult.success || !deltaResult.success) {
+  return {
+    test: "3. Dedup Anti-Merge",
+    passed: false,
+    note: "FAIL: Storage not confirmed via HTTP pipeline",
+    charlie_stored: charlieResult.success,
+    charlie_error: charlieResult.error,
+    delta_stored: deltaResult.success,
+    delta_error: deltaResult.error
+  };
+}
+```
+
+**Definition of Done:**
+- ALL test stores go through `/api/chat` HTTP POST
+- NO direct `storeMemory()` calls in test file
+- Test 3 never shows "0 memories found" when stores were attempted
+- Either both CHARLIE and DELTA exist, or test fails with clear "storage not confirmed" message
+- No timing-dependent flakiness
+
+---
+
+### Fix 3: Fix Retrieval Correctness (Match-First Priority)
+
+**Rule:** If user asks for a specific identifier, return that identifier - not a different one.
+
+**⚠️ CRITICAL: Before implementing, you MUST identify WHERE selection actually happens.**
+
+**The Problem:**
+User stored BRAVO, asked for "special identifier", got ALPHA.
+
+**Root Cause:**
+Selection prioritizes recency over match. ALPHA was stored more recently than BRAVO.
+
+**REQUIRED FIRST STEP: Trace the Selection Layer**
+
+Before writing any code, execute this trace and document findings:
+```bash
+# Step 1: Find where memories are retrieved
+grep -rn "ORDER BY" /api/ | grep -i "memor\|relevan\|recen"
+
+# Step 2: Find where memories are ranked/selected for injection  
+grep -rn "sort\|rank\|score" /api/ | grep -i "memor"
+
+# Step 3: Find the final selection before prompt injection
+grep -rn "inject\|context\|prompt" /api/core/orchestrator.js
+```
+
+**Document the actual selection layer:**
+```markdown
+## Selection Layer Analysis (REQUIRED BEFORE FIX)
+
+### Where candidates are gathered:
+- File: _______________
+- Line: _______________
+- Method: SQL / JS / Hybrid
+
+### Where ranking/scoring happens:
+- File: _______________  
+- Line: _______________
+- Current criteria: _______________
+
+### Where final selection occurs:
+- File: _______________
+- Line: _______________
+- LIMIT applied: Yes/No
+- Recency bias: Yes/No
+```
+
+**Implementation (AFTER layer identification):**
+
+Apply match-first ranking at the **actual selection layer** (SQL, JS, or both):
+
+#### If selection is primarily SQL:
+```sql
+-- Add match scoring to the ORDER BY
+SELECT *, 
+  CASE 
+    WHEN content ILIKE '%' || $query_token || '%' THEN 1000
+    ELSE 0 
+  END as match_score
+FROM persistent_memories
+WHERE user_id = $1
+ORDER BY match_score DESC, relevance DESC, created_at DESC
+LIMIT 10
+```
+
+#### If selection is primarily JS:
+```javascript
+function scoreMemory(memory, query) {
+  const content = memory.content.toLowerCase();
+  
+  // Priority 1: Exact token match (highest)
+  const tokens = extractHighEntropyTokens(query);  // e.g., BRAVO-12345
+  const exactMatch = tokens.some(t => content.includes(t.toLowerCase()));
+  
+  // Priority 2: Key term match
+  const keyTerms = extractKeyTerms(query);  // e.g., "special", "identifier"
+  const termMatches = keyTerms.filter(t => content.includes(t)).length;
+  
+  // Priority 3: Recency (lowest priority - tiebreaker only)
+  const recency = getRecencyScore(memory.created_at);
+  
+  return {
+    exactMatch: exactMatch ? 1000 : 0,      // Exact match dominates
+    termMatch: termMatches * 10,             // Key terms matter
+    recency: recency,                        // Recency is tiebreaker only
+    total: (exactMatch ? 1000 : 0) + (termMatches * 10) + recency
+  };
+}
+
+// Sort by total score descending
+memories.sort((a, b) => scoreMemory(b, query).total - scoreMemory(a, query).total);
+```
+
+#### If selection is hybrid (SQL + JS):
+Apply match-first at BOTH layers to ensure correct behavior.
+
+**Definition of Done:**
+- Selection layer explicitly identified and documented
+- Match-first implemented at the correct layer
+- Test 2: Ask for BRAVO → Get BRAVO (not ALPHA)
+- If multiple memories match, most specific match wins
+- Recency only breaks ties between equally-matched memories
+- Test 11 may still fail (no semantics) but for the correct reason
+
+---
+
+## Files to Modify
+
+### Primary (all three fixes)
+
+1. **`/api/core/orchestrator.js`**
+   - Fix `memory_ids` extraction
+   - Fix `injected_memory_ids` extraction
+   - Ensure IDs flow through from retrieval
+
+2. **`/api/test/memory-full-check.js`**
+   - Replace sleep-and-hope with store-and-confirm
+   - Add polling verification for all stores
+
+3. **`/api/categories/memory/internal/intelligence.js`** (or retrieval location)
+   - Add match-first scoring
+   - Prioritize exact token match over recency
+
+### Secondary (investigate)
+
+4. **Memory retrieval function** - Ensure it returns `id` field on memory objects
+
+---
+
+## Implementation Order
+
+**Must be done in sequence:**
+
+1. **Fix 1 (Telemetry)** - Without this, we can't verify Fix 2 or Fix 3 worked
+2. **Fix 2 (Storage Verification)** - Without this, tests are flaky
+3. **Fix 3 (Retrieval Correctness)** - Now we can trust the results
+
+---
+
+## Acceptance Criteria
+
+### Fix 1: Telemetry
+- [ ] `memory_count > 0` implies `memory_ids.length > 0` - **FAIL if not**
+- [ ] `memories_injected > 0` implies `injected_memory_ids.length > 0` - **FAIL if not**
+- [ ] IDs in telemetry match actual DB row IDs
+- [ ] `telemetry_valid: true` in all responses with memory
+
+### Fix 2: Storage Verification
+- [ ] ALL test stores use HTTP POST to `/api/chat` - **NO direct storeMemory() calls**
+- [ ] `storeViaHTTPAndConfirm()` function implemented with DB polling
+- [ ] Test 3 never shows "0 memories found" due to timing
+- [ ] All stores confirmed via DB query before retrieval attempted
+- [ ] Clear error message distinguishes "storage failed" from "dedup merged"
+
+### Fix 3: Retrieval Correctness
+- [ ] Selection layer explicitly identified and documented (SQL vs JS vs hybrid)
+- [ ] Match-first implemented at the correct layer(s)
+- [ ] Test 2: BRAVO query returns BRAVO (not ALPHA)
+- [ ] Exact token matches prioritized over recency
+- [ ] Test 11 may still fail (no semantics) but for correct reason
+
+### Overall
+- [ ] Tests pass/fail for real reasons, not timing or telemetry bugs
+- [ ] Audit output is trustworthy
+- [ ] No false confidence, no false failures
+- [ ] No direct storeMemory() calls in test suite
+
+---
+
+## Expected Test Results After Fix
+✅ 1. Basic Store + Recall
+memory_ids: [747]
+injected_memory_ids: [747]
+hallucination_detected: false  // Or still true - that's AI behavior
+✅ 2. Memory-Used-Not-Ignored
+found_tripwire: true  // BRAVO found, not ALPHA
+✅ 3. Dedup Anti-Merge
+found_memories: 2
+has_charlie: true
+has_delta: true
+✅ 4-10. [Existing passes maintained]
+⚠️ 11. Paraphrase Recall
+passed: false  // Still fails - no semantic capability
+note: "FAIL: Could not retrieve paraphrased memory"
+// But now we TRUST this result
+
+---
+
+## Why This Matters
+
+**Without these three guarantees:**
+- Telemetry lies → Can't audit anything
+- Storage flakes → Chase timing ghosts
+- Retrieval wrong → Users get wrong answers
+
+**With these three guarantees:**
+- Audit is trustworthy
+- Tests are deterministic
+- Retrieval is correct (within keyword limits)
+- Next architectural decision (semantic layer) becomes obvious and evidence-based
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
