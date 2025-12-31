@@ -1,0 +1,66 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #218: [claude-fix] # Issue #217: CRITICAL - Dedup Token Comparison Still Broken
+
+Issue Description:
+## Evidence
+
+Logs show:
+```
+[DEDUP] ✓ Token overlap found: ALPHA-1767217285502, BRAVO-1767217285502 exists in memory - merge allowed
+[STORE-CONFIRM] ❌ Failed to confirm CHARLIE-1767217285502 after 5 attempts
+```
+
+The NEW content has CHARLIE. The EXISTING memory has ALPHA and BRAVO.
+CHARLIE ≠ ALPHA and CHARLIE ≠ BRAVO.
+**There is NO overlap, but the function says "overlap found".**
+
+## Root Cause
+
+The `shouldPreventMerge` function is checking the WRONG condition. It appears to be checking:
+- "Does the existing memory have high-entropy tokens?" (YES - ALPHA, BRAVO)
+
+Instead of:
+- "Does CHARLIE appear in [ALPHA, BRAVO]?" (NO - should BLOCK merge)
+
+## Required Fix
+
+The overlap check must verify that at least one NEW token appears in the EXISTING tokens array:
+```javascript
+// newTokens = ['CHARLIE-xxx']
+// existingTokens = ['ALPHA-xxx', 'BRAVO-xxx']
+
+const hasOverlap = newTokens.some(newToken => 
+  existingTokens.some(existingToken => 
+    newToken.toUpperCase() === existingToken.toUpperCase()
+  )
+);
+
+// hasOverlap should be FALSE because CHARLIE is not in [ALPHA, BRAVO]
+// Therefore shouldPreventMerge should return TRUE (block the merge)
+```
+
+## Expected Log After Fix
+```
+[DEDUP] 🛡️ No overlap: new=[CHARLIE-1767217285502] vs existing=[ALPHA-1767217285502,BRAVO-1767217285502] - BLOCKING merge
+[INTELLIGENT-STORAGE] ✨ Storing new compressed memory
+[STORE-CONFIRM] ✅ Confirmed CHARLIE-1767217285502 stored as ID 805
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
