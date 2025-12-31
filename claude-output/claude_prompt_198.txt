@@ -1,0 +1,205 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #198: [claude-fix] CRITICAL: Memory retrieval uses AND logic instead of OR + compression stores empty content
+
+Issue Description:
+Executive Summary
+The memory system is storing data correctly but retrieval always returns 0 results due to SQL using AND logic instead of OR for topic matching. Additionally, compression sometimes extracts 0 facts and stores empty strings, destroying user data.
+
+Problem 1: Retrieval SQL Uses AND Instead of OR (ROOT CAUSE OF TEST FAILURES)
+Evidence from Production Logs
+Storage succeeds:
+[STORAGE-DEBUG] Memory stored: {
+  id: 696,
+  user_id: 'test-full-1767201318837',
+  content: 'Test token: ALPHA-1767201318837.',
+  category: 'personal_life_interests'
+}
+But retrieval fails:
+[RETRIEVAL-DEBUG] Raw DB results: {
+  count: 0,
+  user_ids: [],
+  memory_ids: []
+}
+Why It Fails
+Query: "What is my test token?"
+Extracted topics: ['%what%', '%test%', '%token%']
+Stored content: "Test token: ALPHA-1767201318837."
+The stored content contains "test" and "token" but NOT "what".
+Current SQL logic:
+sqlWHERE content ILIKE '%what%' 
+  AND content ILIKE '%test%' 
+  AND content ILIKE '%token%'
+This returns 0 results because AND requires ALL terms to match.
+The Fix
+File: /api/categories/memory/internal/intelligence.js (or memory_system/intelligence.js)
+Find the SQL query builder that constructs topic filters. Look for patterns like:
+javascript// CURRENT (BROKEN)
+topics.forEach((topic, index) => {
+  conditions.push(`content ILIKE $${paramIndex}`);
+  // These get joined with AND
+});
+whereClause = conditions.join(' AND ');
+Change to:
+javascript// FIXED - Use OR for topic matching
+if (topics.length > 0) {
+  const topicConditions = topics.map((topic, index) => {
+    return `content ILIKE $${paramIndex + index}`;
+  });
+  whereClause += ` AND (${topicConditions.join(' OR ')})`;
+}
+Verification
+After fix, the query should match content containing ANY of the topic words, not ALL of them.
+
+Problem 2: Compression Extracts 0 Facts, Stores Empty Content
+Evidence from Production Logs
+[INTELLIGENT-STORAGE] ✅ Extracted 0 facts
+[INTELLIGENT-STORAGE] 📊 Compression: 137 → 0 tokens (Infinity:1)
+[STORAGE-DEBUG] Memory stored: {
+  id: 700,
+  content: '',  // <-- EMPTY! User data destroyed!
+}
+This happened multiple times:
+
+ID 700: Empty content
+ID 702: Empty content
+
+Why It Happens
+The GPT-4 extraction prompt sometimes returns no facts (perhaps the input didn't seem "important" enough). The code then stores empty content without any fallback.
+The Fix
+File: /api/memory/intelligent-storage.js
+Find the section after fact extraction, before storage:
+javascript// CURRENT (BROKEN) - stores empty content
+const facts = extractedFacts.join('\n');
+// proceeds to store even if facts is empty
+
+// FIXED - Never store empty, fallback to original message
+let factsToStore = extractedFacts.join('\n').trim();
+
+if (!factsToStore || factsToStore.length === 0) {
+  console.log('[INTELLIGENT-STORAGE] ⚠️ No facts extracted, using fallback');
+  // Fallback: Extract key info from user message directly
+  factsToStore = userMessage.substring(0, 200).trim();
+  
+  // If user message also empty, skip storage entirely
+  if (!factsToStore) {
+    console.log('[INTELLIGENT-STORAGE] ⏭️ Skipping storage - no content');
+    return { action: 'skipped', reason: 'no_content' };
+  }
+}
+Additional Guard: Don't Store Empty in storeCompressedMemory
+In the same file, add a guard at the database insert:
+javascriptasync storeCompressedMemory(userId, category, facts, tokenCount) {
+  // Guard against empty storage
+  if (!facts || facts.trim().length === 0) {
+    console.log('[INTELLIGENT-STORAGE] ❌ Refusing to store empty content');
+    return { action: 'skipped', reason: 'empty_content' };
+  }
+  
+  // ... existing INSERT logic
+}
+
+Problem 3: High-Entropy Token Retrieval Only Works When User Message Contains Token
+Evidence
+When the user's NEW message contains the token (e.g., "My identifier is BRAVO-123"), the high-entropy detection finds it:
+[INTELLIGENCE] [RETRIEVAL] ✅ Found 2 exact matches for high-entropy tokens
+But when the user asks a question WITHOUT the token (e.g., "What is my test token?"), the high-entropy search doesn't trigger because there's no token in the query.
+The Issue
+The system only searches for high-entropy tokens that appear IN THE CURRENT QUERY. But when asking "What is my token?", there's no token in the query - it's in the stored memory.
+The Fix
+The high-entropy exact-match is a supplementary retrieval, not a replacement. The main topic-based retrieval (Problem 1) must work correctly first. Once Problem 1 is fixed, regular retrieval will find memories containing tokens.
+No code change needed for this - fixing Problem 1 will resolve this automatically.
+
+Files to Modify
+
+/api/categories/memory/internal/intelligence.js (or memory_system/intelligence.js)
+
+Change topic matching from AND to OR logic
+Location: Look for SQL query builder, search for ILIKE usage
+
+
+/api/memory/intelligent-storage.js
+
+Add fallback when 0 facts extracted
+Add guard against storing empty content
+Location: After extractKeyFacts() call and in storeCompressedMemory()
+
+
+
+
+Acceptance Criteria
+After this fix, the /api/test/memory-full-check endpoint should show:
+
+ Test 1 PASS - Basic store + recall works
+ Test 2 PASS - No false ignorance claims (memory enforcer)
+ Test 3 PASS - Dedup creates separate memories for different facts
+ Test 4 PASS - High-entropy tokens survive and are retrievable
+ Test 5 PASS - No boilerplate contamination (already passing)
+ Test 6 PASS - Category routing puts memories in correct categories
+ Test 7 PASS - Token budget ≤2400 enforced
+ Test 8 PASS - Memories persist across requests
+ Test 9 PASS - Compression ratio improved (already passing)
+ Test 10 PASS - Response metadata includes memory_ids (already passing)
+
+Current: 3/10 → Target: 10/10
+
+Technical Context from Logs
+Successful Storage Flow
+[TRACE] 8. Storing for userId: test-full-1767201318837
+[INTELLIGENT-STORAGE] 📝 Extracting key facts...
+[INTELLIGENT-STORAGE] ✅ Extracted 1 facts
+[INTELLIGENT-STORAGE] 📊 Compression: 160 → 11 tokens (14.5:1)
+[DEDUP] ✅ No similar memories found
+[INTELLIGENT-STORAGE] ✨ Storing new compressed memory
+[TRACE-INTELLIGENT] I16. Stored memory ID: 696
+[STORAGE-DEBUG] Memory stored: {
+  id: 696,
+  user_id: 'test-full-1767201318837',
+  content: 'Test token: ALPHA-1767201318837.',
+  category: 'personal_life_interests'
+}
+Failed Retrieval Flow
+[RETRIEVAL-DEBUG] SQL Query Parameters: {
+  user_id: 'test-full-1767201318837',
+  category: 'personal_life_interests',
+  topic_filters: [ '%what%', '%test%', '%token%' ]
+}
+[RETRIEVAL-DEBUG] Raw DB results: {
+  count: 0,  // <-- ZERO despite memory existing!
+  memory_ids: []
+}
+[INTELLIGENCE] Retrieved 0 memories
+[ORCHESTRATOR] [MEMORY] ✗ No memory to inject
+
+Why This Is Critical
+
+User data is being stored but never retrieved - the system appears broken to users
+Empty content is being stored - wasting database space and causing retrieval noise
+All 7 failing tests trace back to these two root causes
+Revenue-validated system now appears non-functional
+
+
+Implementation Notes for Claude Code
+
+Search Strategy: Look for ILIKE in intelligence.js and trace how conditions are joined
+Test the Change: After modifying, the SQL log should show (content ILIKE $3 OR content ILIKE $4 OR content ILIKE $5) instead of AND
+Preserve High-Entropy Path: The exact-match high-entropy token search should remain as-is - it's a supplementary fast-path that works correctly
+Don't Break Dedup: The similarity/dedup logic is working - don't modify that code path
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
