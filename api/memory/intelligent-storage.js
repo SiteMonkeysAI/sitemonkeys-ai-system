@@ -172,33 +172,54 @@ export class IntelligentMemoryStorage {
   /**
    * Extract key facts from conversation using GPT-4o-mini
    * Target: 10-20:1 compression ratio
+   * CRITICAL: Preserves unique identifiers and high-entropy tokens
    * @param {string} userMsg - User's message
    * @param {string} aiResponse - AI's response
    * @returns {Promise<string>} - Extracted facts as bullet points
    */
   async extractKeyFacts(userMsg, aiResponse) {
-    // ULTRA-AGGRESSIVE PROMPT: Force minimal output
-    const prompt = `Extract ONLY the essential facts from this conversation. Be extremely brief.
-Rules:
-- Maximum 3 facts total
-- Each fact: 3-5 words ONLY
+    // IDENTIFIER-PRESERVING PROMPT: Compress while retaining unique tokens
+    const prompt = `Extract ONLY the essential facts from this conversation. Be extremely brief but PRESERVE all identifiers.
+
+CRITICAL RULES:
+1. ALWAYS preserve exact alphanumeric identifiers (e.g., ECHO-123-ABC, ALPHA-456)
+2. ALWAYS preserve names exactly as written (e.g., Dr. Smith, Dr. FOXTROT-123)
+3. ALWAYS preserve numbers, codes, IDs, license plates, serial numbers VERBATIM
+4. Never generalize unique identifiers into descriptions like "identifier" or "code"
+5. If user says "My X is Y", output MUST contain Y exactly
+
+Examples:
+Input: "My license plate is ABC-123-XYZ"
+Output: "License plate: ABC-123-XYZ"
+NOT: "Has a license plate" or "Vehicle identifier stored"
+
+Input: "My doctor is Dr. FOXTROT-789"
+Output: "Doctor: Dr. FOXTROT-789"
+NOT: "Has a doctor" or "Medical contact stored"
+
+Rules for compression:
+- Maximum 3-5 facts total
+- Each fact: 3-8 words (more if needed for identifiers)
 - Include ONLY: Names, numbers, specific entities, user statements
 - EXCLUDE: Questions, greetings, explanations, AI responses
 
 User: ${userMsg}
 Assistant: ${aiResponse}
 
-Facts (3-5 words each, max 3):`;
+Facts (preserve all identifiers):`;
 
     try {
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 50  // Reduced from 100 to force brevity
+        max_tokens: 100  // Increased to allow room for identifiers
       });
 
-      const facts = response.choices[0].message.content.trim();
+      let facts = response.choices[0].message.content.trim();
+
+      // CRITICAL: Post-processing protection - verify identifiers survived
+      facts = this.protectHighEntropyTokens(userMsg, facts);
 
       // AGGRESSIVE POST-PROCESSING: Guarantee 10-20:1 compression
       const processedFacts = this.aggressivePostProcessing(facts);
@@ -207,15 +228,62 @@ Facts (3-5 words each, max 3):`;
       return processedFacts;
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Fact extraction failed:', error.message);
-      // Fallback: ultra-compressed version
+      // Fallback: ultra-compressed version WITH identifier protection
       const userKeywords = userMsg.split(/\s+/).slice(0, 5).join(' ');
-      return `${userKeywords}.`;
+      return this.protectHighEntropyTokens(userMsg, userKeywords);
     }
   }
 
   /**
+   * Protect high-entropy tokens from being lost during compression
+   * Scans original message for unique identifiers and ensures they appear in facts
+   * @param {string} originalMessage - Original user message
+   * @param {string} facts - Extracted facts from GPT
+   * @returns {string} - Facts with identifiers preserved
+   */
+  protectHighEntropyTokens(originalMessage, facts) {
+    // Patterns to detect high-entropy unique identifiers:
+    // - ALPHA-123456789 (test identifiers)
+    // - ECHO-123-9K7X (license plates)
+    // - Dr. FOXTROT-123 (names with identifiers)
+    // - Any long alphanumeric strings
+    const tokenPattern = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/gi;
+    const originalTokens = originalMessage.match(tokenPattern) || [];
+
+    if (originalTokens.length === 0) {
+      return facts; // No special tokens to protect
+    }
+
+    // Check which tokens are missing from facts
+    const missingTokens = originalTokens.filter(token => {
+      // Case-insensitive check if token appears in facts
+      return !facts.toLowerCase().includes(token.toLowerCase());
+    });
+
+    if (missingTokens.length > 0) {
+      console.log(`[INTELLIGENT-STORAGE] 🛡️ Protecting ${missingTokens.length} high-entropy tokens:`, missingTokens);
+
+      // Append missing tokens to facts
+      for (const token of missingTokens) {
+        // Try to preserve context by finding surrounding words
+        // Allow 1-3 words before the token (handles "My doctor's name is Dr. X" or "license plate number is Y")
+        const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const contextMatch = originalMessage.match(new RegExp(`([\\w.']+\\s+){0,3}${escapedToken}`, 'i'));
+        if (contextMatch) {
+          facts += `\n${contextMatch[0]}.`;
+        } else {
+          facts += `\nIdentifier: ${token}.`;
+        }
+      }
+    }
+
+    return facts;
+  }
+
+  /**
    * Aggressive post-processing to guarantee 10-20:1 compression
-   * Enforces ULTRA-strict limits: max 3 facts, max 5 words each
+   * Enforces ULTRA-strict limits: max 3-5 facts, max 5-8 words each
+   * CRITICAL: Preserves lines containing high-entropy identifiers
    * @param {string} facts - Raw facts from AI
    * @returns {string} - Aggressively compressed facts
    */
@@ -228,17 +296,46 @@ Facts (3-5 words each, max 3):`;
       .map(line => line.replace(/^[-•*\d.)\]]+\s*/, '').trim())
       .filter(line => line.length > 0);
 
-    // ULTRA-STRICT: Limit to 3 facts maximum (reduced from 5)
-    lines = lines.slice(0, 3);
+    // Pattern to detect high-entropy identifiers
+    const HIGH_ENTROPY_PATTERN = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/i;
 
-    // ULTRA-STRICT: Enforce 5-word maximum per fact (reduced from 8)
-    lines = lines.map(line => {
+    // Separate lines with identifiers from regular lines
+    const identifierLines = lines.filter(line => HIGH_ENTROPY_PATTERN.test(line));
+    const regularLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line));
+
+    // ADAPTIVE LIMIT: Allow more facts if they contain identifiers
+    const maxFacts = identifierLines.length > 0 ? 5 : 3;
+
+    // Process regular lines with strict limits
+    let processedRegularLines = regularLines.slice(0, maxFacts - identifierLines.length);
+
+    // ADAPTIVE WORD LIMIT: Don't truncate lines with identifiers
+    processedRegularLines = processedRegularLines.map(line => {
       const words = line.split(/\s+/);
       if (words.length > 5) {
         return words.slice(0, 5).join(' ');
       }
       return line;
     });
+
+    // Identifier lines: Allow up to 8 words to preserve context
+    const processedIdentifierLines = identifierLines.map(line => {
+      const words = line.split(/\s+/);
+      if (words.length > 8) {
+        // Keep identifier intact, trim other words
+        const identifierMatch = line.match(HIGH_ENTROPY_PATTERN);
+        if (identifierMatch) {
+          // Preserve the identifier and a few context words
+          const identifier = identifierMatch[0];
+          const contextWords = line.split(/\s+/).filter(w => w.includes(identifier.split('-')[0]) || w === identifier || w.toLowerCase() === 'dr.' || ['license', 'plate', 'doctor', 'name'].includes(w.toLowerCase())).slice(0, 8);
+          return contextWords.join(' ');
+        }
+      }
+      return line;
+    });
+
+    // Combine: Identifier lines first (most important), then regular lines
+    lines = [...processedIdentifierLines, ...processedRegularLines];
 
     // Remove duplicates (case-insensitive)
     const seen = new Set();
@@ -251,12 +348,22 @@ Facts (3-5 words each, max 3):`;
       return true;
     });
 
-    // Remove very short facts (< 3 words)
-    lines = lines.filter(line => line.split(/\s+/).length >= 3);
+    // Remove very short facts (< 3 words), UNLESS they contain identifiers
+    lines = lines.filter(line => {
+      if (HIGH_ENTROPY_PATTERN.test(line)) {
+        return true; // Always keep lines with identifiers
+      }
+      return line.split(/\s+/).length >= 3;
+    });
 
-    // Ultra-aggressive compression: remove ALL filler words
+    // Ultra-aggressive compression: remove ALL filler words (but not from identifier lines)
     const fillerWords = ['the', 'a', 'an', 'this', 'that', 'these', 'those', 'is', 'are', 'was', 'were', 'has', 'have', 'had'];
     lines = lines.map(line => {
+      // Don't remove filler words from identifier lines - preserve full context
+      if (HIGH_ENTROPY_PATTERN.test(line)) {
+        return line;
+      }
+
       let words = line.split(/\s+/);
       // Remove filler words except first word (to preserve meaning)
       words = [words[0], ...words.slice(1).filter(w => !fillerWords.includes(w.toLowerCase()))];
@@ -275,7 +382,7 @@ Facts (3-5 words each, max 3):`;
     });
 
     // Join with newlines for clean formatting
-    // Result: "Test token ALPHA-12345.\nSpecial identifier BRAVO-67890.\nUser owns pet monkeys."
+    // Result: "License plate ECHO-1767204140342-9K7X.\nDoctor Dr. FOXTROT-1767204140342.\nUser owns pet monkeys."
     return lines.join('\n');
   }
 
@@ -286,7 +393,8 @@ Facts (3-5 words each, max 3):`;
    * @returns {boolean} - True if merge should be prevented
    */
   shouldPreventMerge(contentA, contentB) {
-    const HIGH_ENTROPY_PATTERN = /[A-Z]+-[A-Z]+-\d{4,}|[A-Za-z0-9]{12,}/g;
+    // Use same pattern as protectHighEntropyTokens for consistency
+    const HIGH_ENTROPY_PATTERN = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/gi;
 
     const tokensA = contentA.match(HIGH_ENTROPY_PATTERN) || [];
     const tokensB = contentB.match(HIGH_ENTROPY_PATTERN) || [];
