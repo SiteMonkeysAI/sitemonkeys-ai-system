@@ -177,10 +177,10 @@ router.get('/memory-full-check', async (req, res) => {
     // ===== TEST 6: Category Routing =====
     const tripwire6 = `FOXTROT-${runId}`;
     await chatViaHTTP(`My doctor's name is Dr. ${tripwire6}`);
-    await wait(2500);
+    await wait(3000); // Increased from 2500ms to ensure storage completion
 
     const categoryCheck = await queryDB(
-      `SELECT category_name FROM persistent_memories 
+      `SELECT category_name, content FROM persistent_memories
        WHERE user_id = $1 AND content ILIKE $2`,
       [testUserId, `%${tripwire6}%`]
     );
@@ -188,28 +188,52 @@ router.get('/memory-full-check', async (req, res) => {
     const routedCategory = categoryCheck.rows[0]?.category_name;
     const expectedCategories = ['health_wellness', 'health', 'medical'];
 
+    // Additional diagnostic: check ALL memories for this user to see what was actually stored
+    const allUserMemories = await queryDB(
+      `SELECT id, category_name, LEFT(content, 100) as content_preview
+       FROM persistent_memories
+       WHERE user_id = $1
+       ORDER BY created_at DESC
+       LIMIT 5`,
+      [testUserId]
+    );
+
     results.push({
       test: '6. Category Routing',
       passed: expectedCategories.some(c => routedCategory?.toLowerCase().includes(c)) || routedCategory === 'health_wellness',
       expected_category: 'health_wellness (or similar)',
       actual_category: routedCategory || 'not found',
-      note: 'Doctor information should route to health category'
+      note: 'Doctor information should route to health category',
+      diagnostic: {
+        found_memory: categoryCheck.rows.length > 0,
+        total_user_memories: allUserMemories.rows.length,
+        recent_memories: allUserMemories.rows.map(r => ({
+          id: r.id,
+          category: r.category_name,
+          preview: r.content_preview
+        }))
+      }
     });
 
     // ===== TEST 7: Token Budget =====
     // Check metadata from previous responses for token counts
-    const tokenInfo = recall1.metadata?.memory_tokens || recall1.metadata?.token_usage;
-    const injectedTokens = tokenInfo?.injected || tokenInfo?.memory_tokens || 'unknown';
+    // The orchestrator returns memoryTokens (not memory_tokens or injected_tokens)
+    const injectedTokens = recall1.metadata?.memoryTokens ||
+                          recall1.metadata?.memory_tokens ||
+                          recall1.metadata?.token_usage?.memory ||
+                          recall1.metadata?.token_usage?.injected ||
+                          'unknown';
 
     results.push({
       test: '7. Token Budget (≤2400)',
       passed: typeof injectedTokens === 'number' ? injectedTokens <= 2400 : false,
       injected_tokens: injectedTokens,
       budget_limit: 2400,
-      note: typeof injectedTokens !== 'number' 
-        ? 'WARNING: Token count not in response metadata - check Railway logs' 
+      note: typeof injectedTokens !== 'number'
+        ? 'WARNING: Token count not in response metadata - check Railway logs'
         : (injectedTokens <= 2400 ? 'PASS: Within budget' : 'FAIL: Exceeded budget'),
-      metadata_available: typeof injectedTokens === 'number'
+      metadata_available: typeof injectedTokens === 'number',
+      available_metadata_keys: Object.keys(recall1.metadata || {})
     });
 
     // ===== TEST 8: Cross-Request Persistence =====

@@ -1407,28 +1407,56 @@ class IntelligenceSystem {
       const HIGH_ENTROPY_PATTERN = /[A-Z]+-[A-Z]+-\d{4,}|[A-Za-z0-9]{12,}/g;
       const queryTokens = query.match(HIGH_ENTROPY_PATTERN) || [];
 
-      if (queryTokens.length > 0) {
-        this.logger.log(
-          `[RETRIEVAL] Found high-entropy tokens in query: ${queryTokens.join(', ')}`,
-        );
+      // Check if query is asking about identifier-like information
+      const identifierKeywords = /\b(license plate|serial number|id number|identifier|token|code|plate number|registration|vin|account number|order number|tracking number|confirmation number)\b/i;
+      const queryMentionsIdentifier = identifierKeywords.test(query);
+
+      if (queryTokens.length > 0 || queryMentionsIdentifier) {
+        if (queryTokens.length > 0) {
+          this.logger.log(
+            `[RETRIEVAL] Found high-entropy tokens in query: ${queryTokens.join(', ')}`,
+          );
+        }
+        if (queryMentionsIdentifier) {
+          this.logger.log(
+            `[RETRIEVAL] Query asks about identifier-like information, searching for high-entropy tokens in memory`,
+          );
+        }
 
         try {
-          const exactMatchQuery = `
-            SELECT * FROM persistent_memories
-            WHERE user_id = $1
-            AND (${queryTokens.map((_, i) => `content ILIKE $${i + 2}`).join(' OR ')})
-            ORDER BY created_at DESC
-            LIMIT 5
-          `;
+          let exactMatchQuery;
+          let exactMatchParams;
+
+          if (queryTokens.length > 0) {
+            // Query contains high-entropy tokens - search for exact matches
+            exactMatchQuery = `
+              SELECT * FROM persistent_memories
+              WHERE user_id = $1
+              AND (${queryTokens.map((_, i) => `content ILIKE $${i + 2}`).join(' OR ')})
+              ORDER BY created_at DESC
+              LIMIT 5
+            `;
+            exactMatchParams = [userId, ...queryTokens.map(t => `%${t}%`)];
+          } else {
+            // Query asks about identifiers but doesn't contain one - search for any high-entropy content
+            exactMatchQuery = `
+              SELECT * FROM persistent_memories
+              WHERE user_id = $1
+              AND content ~ '[A-Z]+-[A-Z]+-[0-9]{4,}|[A-Za-z0-9]{12,}'
+              ORDER BY created_at DESC
+              LIMIT 10
+            `;
+            exactMatchParams = [userId];
+          }
 
           const exactMatches = await this.coreSystem.executeQuery(
             exactMatchQuery,
-            [userId, ...queryTokens.map(t => `%${t}%`)]
+            exactMatchParams
           );
 
           if (exactMatches.rows.length > 0) {
             this.logger.log(
-              `[RETRIEVAL] ✅ Found ${exactMatches.rows.length} exact matches for high-entropy tokens`,
+              `[RETRIEVAL] ✅ Found ${exactMatches.rows.length} memories with high-entropy tokens`,
             );
             return exactMatches.rows;
           }
