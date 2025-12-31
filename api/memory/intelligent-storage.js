@@ -428,29 +428,30 @@ Facts (preserve all identifiers):`;
       return false; // Allow merge
     }
 
-    // CRITICAL FIX (#218): Check if ANY new token exists in existing tokens
-    // We must verify that at least ONE token from NEW content appears in EXISTING content
-    // Example: NEW=[CHARLIE] vs EXISTING=[ALPHA,BRAVO] → hasOverlap=FALSE → block merge
-    // Example: NEW=[ALPHA] vs EXISTING=[ALPHA,BRAVO] → hasOverlap=TRUE → allow merge
-    const hasOverlap = normalizedNew.some(newToken =>
-      normalizedExisting.includes(newToken)
+    // CRITICAL FIX (#220): Check if ANY new token is unique (not in existing memory)
+    // If NEW content has ANY unique identifier not present in EXISTING memory, block the merge
+    // Example: NEW=[DELTA,ALPHA,CHARLIE] vs EXISTING=[CHARLIE,ALPHA] → hasUniqueNewToken=TRUE (DELTA is unique) → block merge
+    // Example: NEW=[ALPHA] vs EXISTING=[ALPHA,BRAVO] → hasUniqueNewToken=FALSE → allow merge
+    // Example: NEW=[ALPHA,CHARLIE] vs EXISTING=[ALPHA,BRAVO,CHARLIE] → hasUniqueNewToken=FALSE → allow merge
+    const hasUniqueNewToken = normalizedNew.some(newToken =>
+      !normalizedExisting.includes(newToken)
     );
 
     // DEBUG: Log what we're comparing to catch any logic errors
     console.log(`[DEDUP-DEBUG] Comparing tokens:`);
     console.log(`[DEDUP-DEBUG]   NEW tokens: [${normalizedNew.join(', ')}]`);
     console.log(`[DEDUP-DEBUG]   EXISTING tokens: [${normalizedExisting.join(', ')}]`);
-    console.log(`[DEDUP-DEBUG]   hasOverlap: ${hasOverlap}`);
+    console.log(`[DEDUP-DEBUG]   hasUniqueNewToken: ${hasUniqueNewToken}`);
 
-    if (hasOverlap) {
-      // Same identifier being discussed - allow merge
-      const overlappingTokens = normalizedNew.filter(t => normalizedExisting.includes(t));
-      console.log(`[DEDUP] ✓ Token overlap found: ${overlappingTokens.join(', ')} exists in memory - merge allowed`);
-      return false; // Allow merge
+    if (hasUniqueNewToken) {
+      // New content has a unique identifier - store separately
+      const uniqueTokens = normalizedNew.filter(t => !normalizedExisting.includes(t));
+      console.log(`[DEDUP] 🛡️ Unique new token detected: new=[${normalizedNew.join(',')}] vs existing=[${normalizedExisting.join(',')}] - BLOCKING merge (unique: ${uniqueTokens.join(',')})`);
+      return true; // PREVENT merge - new identifier must be stored separately
     } else {
-      // DIFFERENT identifiers - BLOCK merge, store separately
-      console.log(`[DEDUP] 🛡️ No overlap: new=[${normalizedNew.join(',')}] vs existing=[${normalizedExisting.join(',')}] - BLOCKING merge`);
-      return true; // PREVENT merge
+      // All new tokens already exist in memory - safe to merge
+      console.log(`[DEDUP] ✓ All tokens exist in memory: [${normalizedNew.join(',')}] - merge allowed`);
+      return false; // Allow merge - no new unique identifiers
     }
   }
 

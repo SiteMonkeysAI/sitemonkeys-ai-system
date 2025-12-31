@@ -1,0 +1,75 @@
+Perfect! The changes are exactly what we need. Let me verify once more by looking at what the expected behavior should be:
+
+---SUMMARY---
+
+## Issue Fixed: #220 - Deduplication Logic Inversion
+
+### Problem
+The deduplication logic was incorrectly allowing merges when NEW content had unique tokens. The old logic checked "Does ANY token overlap?" and allowed merge if yes. This caused unique identifiers like DELTA to be lost when there was any overlap with existing tokens.
+
+**Example of the bug:**
+- NEW tokens: [DELTA, ALPHA, CHARLIE]  
+- EXISTING tokens: [CHARLIE, ALPHA]
+- Old behavior: ALPHA and CHARLIE overlap → ✅ Allow merge → ❌ DELTA lost
+- Correct behavior: DELTA is unique → 🛡️ Block merge → ✅ Store separately
+
+### Solution
+Changed the logic in `shouldPreventMerge()` function (api/memory/intelligent-storage.js:431-455) to check if ANY new token is NOT in existing memory, rather than checking if any token overlaps.
+
+### Changes Made
+
+**File Modified:** `/api/memory/intelligent-storage.js`
+
+**Lines Changed:** 431-455
+
+**Key Logic Change:**
+```javascript
+// OLD (WRONG):
+const hasOverlap = normalizedNew.some(newToken =>
+  normalizedExisting.includes(newToken)
+);
+if (hasOverlap) {
+  return false; // Allow merge
+} else {
+  return true; // Block merge  
+}
+
+// NEW (CORRECT):
+const hasUniqueNewToken = normalizedNew.some(newToken =>
+  !normalizedExisting.includes(newToken)
+);
+if (hasUniqueNewToken) {
+  return true; // PREVENT merge - new identifier must be stored separately
+} else {
+  return false; // Allow merge - no new unique identifiers
+}
+```
+
+### Logic Table After Fix
+
+| NEW Tokens | EXISTING Tokens | hasUniqueNewToken | Result |
+|------------|-----------------|-------------------|---------|
+| [DELTA, ALPHA, CHARLIE] | [CHARLIE, ALPHA] | TRUE (DELTA unique) | ✅ **BLOCK merge** |
+| [ALPHA] | [ALPHA] | FALSE | ✅ Allow merge |
+| [ALPHA, BRAVO] | [ALPHA, BRAVO] | FALSE | ✅ Allow merge |
+| [CHARLIE] | [ALPHA, BRAVO] | TRUE (CHARLIE unique) | ✅ BLOCK merge |
+
+### Expected Behavior After Deployment
+
+When the test endpoint `/api/test/memory-full-check` is run, both CHARLIE and DELTA should now be stored in separate memory records:
+- `has_charlie: true` ✅
+- `has_delta: true` ✅
+
+### Updated Log Output
+
+The fixed code will now produce logs like:
+```
+[DEDUP-DEBUG]   NEW tokens: [DELTA-1767218025112, ALPHA-1767218025112, CHARLIE-1767218025112]
+[DEDUP-DEBUG]   EXISTING tokens: [CHARLIE-1767218025112, ALPHA-1767218025112]
+[DEDUP-DEBUG]   hasUniqueNewToken: true
+[DEDUP] 🛡️ Unique new token detected: new=[DELTA-1767218025112,ALPHA-1767218025112,CHARLIE-1767218025112] vs existing=[CHARLIE-1767218025112,ALPHA-1767218025112] - BLOCKING merge (unique: DELTA-1767218025112)
+[INTELLIGENT-STORAGE] ✨ Storing new compressed memory
+[STORE-CONFIRM] ✅ Confirmed DELTA-1767218025112 stored as ID 809
+```
+
+---END SUMMARY---
