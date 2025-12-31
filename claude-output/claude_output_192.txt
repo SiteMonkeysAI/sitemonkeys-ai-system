@@ -1,0 +1,65 @@
+Perfect! The implementation is complete and correctly placed. Let me verify the changes against all acceptance criteria:
+
+---SUMMARY---
+
+Successfully implemented the `/api/debug/memory-stats` endpoint in `/api/routes/debug.js`.
+
+## Changes Made:
+
+**File Modified:** `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/routes/debug.js`
+
+**What was added:**
+- New GET route handler at line 348-459 for `/memory-stats` endpoint
+- Route added after the existing `cleanup-boilerplate` POST route (before the `export default router` statement)
+
+## Implementation Details:
+
+The new endpoint includes all required functionality:
+
+1. **Security Protection** ✅
+   - Protected by `DEBUG_MODE=true` environment variable check
+   - Returns 403 error if debug mode not enabled
+
+2. **Database Connection Validation** ✅
+   - Checks for `global.memorySystem?.coreSystem?.pool` availability
+   - Returns detailed error if pool not available
+
+3. **Database Queries** ✅
+   - Total memory count from `persistent_memories` table
+   - Breakdown by category (with count and token totals)
+   - Breakdown by user_id (top 20 users with count and token totals)
+   - Recent memories (last 15 with preview, limited to 150 chars)
+   - Database schema information from `information_schema.columns`
+
+4. **HTML Response** ✅
+   - Styled HTML page with dark theme matching debug aesthetic
+   - Displays total memories in large format
+   - Tables for category and user breakdowns
+   - Individual boxes for recent memory previews
+   - Schema table showing column structure
+   - Raw JSON dump at bottom for detailed inspection
+
+5. **Error Handling** ✅
+   - Try-catch block wrapping all database operations
+   - Returns 500 status with error message and stack trace on failure
+
+## Acceptance Criteria Verification:
+
+- ✅ Route added to `/api/routes/debug.js`
+- ✅ Endpoint accessible at `/api/debug/memory-stats`
+- ✅ Shows total memory count
+- ✅ Shows breakdown by category
+- ✅ Shows breakdown by user_id
+- ✅ Shows recent memory samples
+- ✅ Shows database schema
+- ✅ Protected by DEBUG_MODE check
+
+## Integration Status:
+
+The debug routes are already properly integrated in `server.js`:
+- Import statement exists at line 66: `import debugRoutes from "./api/routes/debug.js"`
+- Route registration exists at line 659: `app.use("/api/debug", debugRoutes)`
+
+No additional integration work is required. The endpoint will be immediately available at `/api/debug/memory-stats` when the server runs with `DEBUG_MODE=true`.
+
+---END SUMMARY---
