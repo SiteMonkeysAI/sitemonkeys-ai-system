@@ -1,0 +1,141 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #216: [claude-fix] Issue #215: CRITICAL - Dedup shouldPreventMerge Logic Inverted - Comparing Wrong Token Sets
+
+Issue Description:
+Summary
+The shouldPreventMerge function in intelligent-storage.js has inverted logic that checks whether tokens exist in the OLD memory rather than whether the NEW content's tokens overlap with the OLD memory's tokens. This causes different high-entropy identifiers (CHARLIE, DELTA) to be incorrectly merged into existing memories (containing ALPHA, BRAVO).
+
+Evidence From Logs
+What the logs show:
+[DEDUP] ✓ High-entropy tokens overlap: BRAVO-1767216124046, ALPHA-1767216124046 - merge allowed
+[DEDUP] 📊 Found similar memory with similarity score: 0.962
+[DEDUP] ♻️ Found similar memory (id=796), boosting instead of duplicating
+...
+[STORE-CONFIRM] ❌ Failed to confirm CHARLIE-1767216124046 after 5 attempts
+What this reveals:
+
+Memory 796 contains: BRAVO-1767216124046 and ALPHA-1767216124046
+New content contains: CHARLIE-1767216124046
+The function logs: "High-entropy tokens overlap: BRAVO, ALPHA - merge allowed"
+But CHARLIE ≠ BRAVO and CHARLIE ≠ ALPHA!
+The merge should have been BLOCKED, not allowed
+
+
+Root Cause
+The current implementation checks:
+
+"Does the OLD memory have high-entropy tokens? If yes, allow merge."
+
+The correct implementation should check:
+
+"Does the NEW content's token appear in the OLD memory's tokens? If NO overlap, BLOCK merge."
+
+
+Current Broken Logic (Pseudocode)
+javascriptfunction shouldPreventMerge(newContent, existingMemory) {
+  const existingTokens = extractHighEntropyTokens(existingMemory.content);
+  
+  // BUG: This just checks if OLD memory has tokens
+  // It does NOT check if NEW content's tokens overlap with OLD
+  if (existingTokens.length > 0) {
+    console.log(`High-entropy tokens overlap: ${existingTokens.join(', ')} - merge allowed`);
+    return false; // Allow merge (WRONG!)
+  }
+  
+  return false; // Default allow merge
+}
+
+Correct Logic Required
+javascriptfunction shouldPreventMerge(newContent, existingMemory) {
+  // Extract tokens from BOTH new and existing content
+  const newTokens = extractHighEntropyTokens(newContent);
+  const existingTokens = extractHighEntropyTokens(existingMemory.content);
+  
+  // If new content has no high-entropy tokens, allow normal dedup
+  if (newTokens.length === 0) {
+    return false; // Allow merge
+  }
+  
+  // If existing memory has no high-entropy tokens, allow merge
+  if (existingTokens.length === 0) {
+    return false; // Allow merge
+  }
+  
+  // CRITICAL: Check if ANY new token exists in existing tokens
+  const hasOverlap = newTokens.some(newToken => 
+    existingTokens.some(existingToken => 
+      newToken.toUpperCase() === existingToken.toUpperCase()
+    )
+  );
+  
+  if (hasOverlap) {
+    // Same identifier being discussed - allow merge
+    console.log(`[DEDUP] ✓ Token overlap found: ${newTokens[0]} exists in memory - merge allowed`);
+    return false; // Allow merge
+  } else {
+    // DIFFERENT identifiers - BLOCK merge, store separately
+    console.log(`[DEDUP] 🛡️ No overlap: new=[${newTokens.join(',')}] vs existing=[${existingTokens.join(',')}] - BLOCKING merge`);
+    return true; // PREVENT merge
+  }
+}
+
+File Location
+File: /api/memory/intelligent-storage.js
+Function: shouldPreventMerge (approximately lines 395-427 based on PR #215)
+
+Test Case
+After fix, this test should pass:
+Test 3: Dedup Anti-Merge
+
+Store: "My first test token is CHARLIE-1767216124046" → Should create NEW memory (e.g., ID 800)
+Store: "My second test token is DELTA-1767216124046" → Should create ANOTHER NEW memory (e.g., ID 801)
+Verify: Both CHARLIE and DELTA exist as separate memories
+
+Expected Log Output After Fix:
+[DEDUP] 🛡️ No overlap: new=[CHARLIE-1767216124046] vs existing=[BRAVO-1767216124046,ALPHA-1767216124046] - BLOCKING merge
+[INTELLIGENT-STORAGE] ✨ Storing new compressed memory
+[TRACE-INTELLIGENT] I16. Stored memory ID: 800
+[STORE-CONFIRM] ✅ Confirmed CHARLIE-1767216124046 stored as ID 800
+
+Verification Command
+After deployment, run this in browser console:
+javascriptfetch('https://sitemonkeys-ai-system-production.up.railway.app/api/test/memory-full-check', {
+  headers: {'X-Internal-Test-Token': 'sitemonkeys-fullcheck-abc123'}
+})
+.then(r => r.text())
+.then(html => {
+  console.log('has_charlie:', html.includes('"has_charlie": true') || html.includes('"has_charlie":true'));
+  console.log('has_delta:', html.includes('"has_delta": true') || html.includes('"has_delta":true'));
+});
+Success criteria:
+has_charlie: true
+has_delta: true
+
+Acceptance Criteria
+
+ shouldPreventMerge extracts tokens from BOTH new content AND existing memory
+ Function compares new tokens against existing tokens for overlap
+ If new token NOT in existing tokens → return true (PREVENT merge)
+ If new token IS in existing tokens → return false (allow merge)
+ Log messages clearly show which tokens are being compared
+ Test 3 (Dedup Anti-Merge) passes with has_charlie: true and has_delta: true
+ CHARLIE and DELTA stored as separate memory IDs
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

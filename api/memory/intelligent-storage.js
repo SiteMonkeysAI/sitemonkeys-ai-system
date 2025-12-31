@@ -388,11 +388,12 @@ Facts (preserve all identifiers):`;
 
   /**
    * Check if dedup merge should be prevented due to different high-entropy tokens
-   * @param {string} contentA - First content
-   * @param {string} contentB - Second content
+   * CRITICAL FIX (Issue #216): Properly compares NEW content tokens against EXISTING memory tokens
+   * @param {string} existingContent - Content from existing memory (contentA)
+   * @param {string} newContent - Content from new facts to be stored (contentB)
    * @returns {boolean} - True if merge should be prevented
    */
-  shouldPreventMerge(contentA, contentB) {
+  shouldPreventMerge(existingContent, newContent) {
     // Issue #214 Fix 2: Enhanced pattern to catch format like ALPHA-1767213514286
     // Pattern breakdown:
     // - \b[A-Z]+-\d+-[A-Z0-9]+\b : Matches ABC-123-XYZ format
@@ -401,29 +402,41 @@ Facts (preserve all identifiers):`;
     // - \b[A-Z0-9]{12,}\b : Matches long alphanumeric codes
     const HIGH_ENTROPY_PATTERN = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/gi;
 
-    const tokensA = contentA.match(HIGH_ENTROPY_PATTERN) || [];
-    const tokensB = contentB.match(HIGH_ENTROPY_PATTERN) || [];
+    // Extract tokens from BOTH existing and new content
+    const existingTokens = existingContent.match(HIGH_ENTROPY_PATTERN) || [];
+    const newTokens = newContent.match(HIGH_ENTROPY_PATTERN) || [];
 
-    // Normalize tokens to uppercase for case-insensitive comparison (Issue #214)
-    const normalizedA = tokensA.map(t => t.toUpperCase());
-    const normalizedB = tokensB.map(t => t.toUpperCase());
+    // Normalize tokens to uppercase for case-insensitive comparison
+    const normalizedExisting = existingTokens.map(t => t.toUpperCase());
+    const normalizedNew = newTokens.map(t => t.toUpperCase());
 
-    // If either has high-entropy tokens, only allow merge if they share at least one
-    if (normalizedA.length > 0 || normalizedB.length > 0) {
-      const overlap = normalizedA.filter(t => normalizedB.includes(t));
-      if (overlap.length === 0) {
-        console.log('[DEDUP] 🛡️ Prevented merge - different high-entropy tokens');
-        console.log(`[DEDUP]   Tokens A: ${normalizedA.join(', ')}`);
-        console.log(`[DEDUP]   Tokens B: ${normalizedB.join(', ')}`);
-        console.log(`[DEDUP]   Original A: ${tokensA.join(', ')}`);
-        console.log(`[DEDUP]   Original B: ${tokensB.join(', ')}`);
-        return true; // PREVENT merge - different unique tokens
-      }
-      // Log when tokens overlap (merge allowed)
-      console.log(`[DEDUP] ✓ High-entropy tokens overlap: ${overlap.join(', ')} - merge allowed`);
+    // If new content has no high-entropy tokens, allow normal dedup
+    if (normalizedNew.length === 0) {
+      return false; // Allow merge
     }
 
-    return false; // Allow normal dedup logic
+    // If existing memory has no high-entropy tokens, allow merge
+    if (normalizedExisting.length === 0) {
+      return false; // Allow merge
+    }
+
+    // CRITICAL: Check if ANY new token exists in existing tokens
+    const hasOverlap = normalizedNew.some(newToken =>
+      normalizedExisting.some(existingToken =>
+        newToken === existingToken
+      )
+    );
+
+    if (hasOverlap) {
+      // Same identifier being discussed - allow merge
+      const overlappingTokens = normalizedNew.filter(t => normalizedExisting.includes(t));
+      console.log(`[DEDUP] ✓ Token overlap found: ${overlappingTokens.join(', ')} exists in memory - merge allowed`);
+      return false; // Allow merge
+    } else {
+      // DIFFERENT identifiers - BLOCK merge, store separately
+      console.log(`[DEDUP] 🛡️ No overlap: new=[${normalizedNew.join(',')}] vs existing=[${normalizedExisting.join(',')}] - BLOCKING merge`);
+      return true; // PREVENT merge
+    }
   }
 
   /**
