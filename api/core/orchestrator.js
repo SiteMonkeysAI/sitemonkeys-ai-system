@@ -498,14 +498,16 @@ export class Orchestrator {
           vaultTokens: context.tokenBreakdown?.vault || (vaultData?.tokens || 0),
           totalContextTokens: context.totalTokens,
 
-          // Memory retrieval telemetry (Issue #206)
+          // Memory retrieval telemetry (Issue #206, enhanced in Issue #208)
           memory_retrieval: {
             method: "sql_keyword_category_filter",
             memories_considered: memoryContext.count || 0,
             memories_injected: memoryContext.count || 0,
             tokens_injected: memoryContext.tokens || 0,
             categories_searched: memoryContext.categories || [],
-            selection_criteria: "relevance_recency_hybrid"
+            selection_criteria: "relevance_recency_hybrid",
+            injected_memory_ids: memoryContext.memory_ids || [],
+            injected_tokens_total: memoryContext.tokens || 0
           },
 
           // Token budget compliance
@@ -698,8 +700,17 @@ export class Orchestrator {
       const memoryContent = memories.memories || "";
       const tokenCount = Math.ceil(memoryContent.length / 4);
 
-      // Extract memory IDs from the result
-      const memoryIds = memories.memory_ids || [];
+      // Extract memory IDs from the result - ensure consistency
+      let memoryIds = memories.memory_ids || [];
+
+      // Fix inconsistency: if we have memories but no IDs, try to extract them
+      if (tokenCount > 0 && memoryIds.length === 0 && memories.count > 0) {
+        this.log(`[MEMORY] WARNING: memory_count=${memories.count} but memory_ids=[] - inconsistency detected`);
+        // Try to get IDs from the memories array if available
+        if (Array.isArray(memories.memories)) {
+          memoryIds = memories.memories.map(m => m.id).filter(id => id !== undefined);
+        }
+      }
 
       // Debug logging hook for test harness (memory injection)
       logMemoryOperation(userId, 'inject', {

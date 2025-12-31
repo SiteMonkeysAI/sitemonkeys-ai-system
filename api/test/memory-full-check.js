@@ -74,33 +74,41 @@ router.get('/memory-full-check', async (req, res) => {
   try {
     // ===== TEST 1: Basic Store + Recall =====
     const tripwire1 = `ALPHA-${runId}`;
-    await chatViaHTTP(`Remember this: My test token is ${tripwire1}`);
+    await chatViaHTTP(`Remember this: My test identifier is ${tripwire1}`);
     await wait(2500);
-    const recall1 = await chatViaHTTP('What is my test token?');
-    
+    const recall1 = await chatViaHTTP('What is my test identifier?');
+
+    const hasExactToken1 = recall1.response?.includes(tripwire1) || false;
+    const hasHallucination1 = recall1.response?.match(/evolved|changed|updated|previous|earlier/i);
+
     results.push({
       test: '1. Basic Store + Recall',
-      passed: recall1.response?.includes(tripwire1) || false,
+      passed: hasExactToken1 && !hasHallucination1,
       expected: tripwire1,
-      found_in_response: recall1.response?.includes(tripwire1) || false,
+      found_in_response: hasExactToken1,
+      hallucination_detected: !!hasHallucination1,
+      warning: hasHallucination1 ? 'AI invented provenance not in stored memory' : null,
       response_preview: recall1.response?.substring(0, 250) || 'no response',
       metadata: recall1.metadata || {}
     });
 
     // ===== TEST 2: Memory-Used-Not-Ignored (Enforcer Test) =====
     const tripwire2 = `BRAVO-${runId}`;
-    await chatViaHTTP(`My special identifier is ${tripwire2}`);
+    await chatViaHTTP(`My test token is ${tripwire2}`);
     await wait(2500);
-    const recall2 = await chatViaHTTP('What is my special identifier?');
-    
+    const recall2 = await chatViaHTTP('What is my test token?');
+
     const hasIgnorance2 = hasIgnorancePhrases(recall2.response);
     const foundTripwire2 = recall2.response?.includes(tripwire2) || false;
-    
+    const hasHallucination2 = recall2.response?.match(/evolved|changed|updated|previous|earlier/i);
+
     results.push({
       test: '2. Memory-Used-Not-Ignored (Enforcer)',
-      passed: foundTripwire2 && !hasIgnorance2,
+      passed: foundTripwire2 && !hasIgnorance2 && !hasHallucination2,
       found_tripwire: foundTripwire2,
       found_ignorance_phrases: hasIgnorance2,
+      hallucination_detected: !!hasHallucination2,
+      warning: hasHallucination2 ? 'AI invented provenance not in stored memory' : null,
       enforcer_status: hasIgnorance2 ? 'FAIL - AI claimed ignorance' : 'PASS',
       response_preview: recall2.response?.substring(0, 250) || 'no response'
     });
@@ -108,9 +116,9 @@ router.get('/memory-full-check', async (req, res) => {
     // ===== TEST 3: Dedup Anti-Merge Test =====
     const tripwire3a = `CHARLIE-${runId}`;
     const tripwire3b = `DELTA-${runId}`;
-    await chatViaHTTP(`My first tripwire is ${tripwire3a}`);
+    await chatViaHTTP(`My first test token is ${tripwire3a}`);
     await wait(1500);
-    await chatViaHTTP(`My second tripwire is ${tripwire3b}`);
+    await chatViaHTTP(`My second test token is ${tripwire3b}`);
     await wait(2500);
 
     // Query DB directly to verify separate storage
@@ -127,7 +135,7 @@ router.get('/memory-full-check', async (req, res) => {
     results.push({
       test: '3. Dedup Anti-Merge',
       passed: distinctCount >= 2 && hasCharlie && hasDelta,
-      expected: '2 distinct memories with different tripwires',
+      expected: '2 distinct memories with different test tokens',
       found_memories: distinctCount,
       has_charlie: hasCharlie,
       has_delta: hasDelta,
@@ -248,29 +256,36 @@ router.get('/memory-full-check', async (req, res) => {
 
     // ===== TEST 9: Compression Verification =====
     const verboseInput = `This is an extremely verbose and unnecessarily long message with lots of redundant words and filler content that should definitely be compressed by the intelligent memory system while still preserving the essential and critical fact that my unique project identifier is HOTEL-${runId} which represents the key information that must survive the compression process intact`;
-    
+
     await chatViaHTTP(verboseInput);
     await wait(2500);
 
     const compressionCheck = await queryDB(
-      `SELECT content, LENGTH(content) as stored_len FROM persistent_memories 
+      `SELECT content, LENGTH(content) as stored_len FROM persistent_memories
        WHERE user_id = $1 AND content ILIKE $2`,
       [testUserId, `%HOTEL-${runId}%`]
     );
 
     const storedLen = compressionCheck.rows[0]?.stored_len || 0;
     const inputLen = verboseInput.length;
-    const compressionRatio = storedLen > 0 ? (inputLen / storedLen).toFixed(2) : 'N/A';
+    const ratio = storedLen > 0 ? (inputLen / storedLen) : 0;
     const tripwirePreserved = compressionCheck.rows[0]?.content?.includes(`HOTEL-${runId}`) || false;
+    const compressionOccurred = storedLen > 0 && storedLen < inputLen;
+
+    const TARGET_RATIO_MIN = 10;
+    const ratioStatus = ratio >= TARGET_RATIO_MIN ? 'OK' : 'WARNING: Below target ratio';
 
     results.push({
       test: '9. Compression Verification',
-      passed: storedLen > 0 && tripwirePreserved,
+      passed: tripwirePreserved && compressionOccurred,
       input_length: inputLen,
       stored_length: storedLen,
-      compression_ratio: `${compressionRatio}:1`,
+      compression_ratio: `${ratio.toFixed(1)}:1`,
+      ratio_status: ratioStatus,
       tripwire_preserved: tripwirePreserved,
-      note: tripwirePreserved ? 'PASS: Key info survived compression' : 'FAIL: Tripwire lost in compression'
+      note: tripwirePreserved
+        ? `PASS: Key info survived compression (${ratio.toFixed(1)}:1${ratio < TARGET_RATIO_MIN ? ' - below 10:1 target' : ''})`
+        : 'FAIL: Tripwire lost in compression'
     });
 
     // ===== TEST 10: Memory Injection Telemetry =====
@@ -287,36 +302,48 @@ router.get('/memory-full-check', async (req, res) => {
         : 'NEEDS IMPROVEMENT: Add memory_ids, previews, token counts to response metadata'
     });
 
-    // ===== TEST 11: Semantic Paraphrase Recall =====
-    // CRITICAL: This is the litmus test for "real intelligence"
-    // Tests if retrieval is semantic vs keyword-based
+    // ===== TEST 11: Paraphrase Recall (Keyword-Template Tolerant) =====
+    // Tests if retrieval can handle paraphrased queries
+    // This tests keyword-template tolerance, NOT semantic embeddings
     const tripwire11 = `TANGO-${runId}`;
 
     // Step 1: Store a fact with specific keywords
-    await chatViaHTTP(`My verification code is ${tripwire11}`);
+    await chatViaHTTP(`My test identifier is ${tripwire11}`);
     await wait(3000); // Wait for storage to complete
 
-    // Step 2: Query with ZERO keyword overlap
-    // No "verification", no "code", no "TANGO", no "test"
+    // Step 2: Query with paraphrase
     const recall11 = await chatViaHTTP('What identifier did I ask you to remember for myself?');
 
     // Step 3: Evaluate
     const foundTango = recall11.response?.includes(tripwire11) || false;
+    const memoriesInjected = recall11.metadata?.memory_retrieval?.memories_injected || 0;
+    const targetedRetrieval = memoriesInjected <= 5;  // Not bulk injection
+
+    const retrievalQuality = memoriesInjected <= 3
+      ? 'EXCELLENT'
+      : memoriesInjected <= 5
+        ? 'GOOD'
+        : memoriesInjected <= 10
+          ? 'ACCEPTABLE'
+          : 'POOR (bulk injection)';
 
     results.push({
-      test: '11. Semantic Paraphrase Recall',
-      passed: foundTango,
+      test: '11. Paraphrase Recall (Keyword-Template Tolerant)',
+      passed: foundTango && targetedRetrieval,
       expected: tripwire11,
       found: foundTango,
       retrieval_method: recall11.metadata?.memory_retrieval?.method || 'unknown',
       memories_considered: recall11.metadata?.memory_retrieval?.memories_considered || 'unknown',
-      memories_injected: recall11.metadata?.memory_retrieval?.memories_injected || 'unknown',
-      note: foundTango
-        ? 'PASS: Semantic retrieval confirmed - system understood paraphrased query'
-        : 'FAIL: Retrieval is NOT semantic (keyword/recency only)',
+      memories_injected: memoriesInjected,
+      retrieval_quality: retrievalQuality,
+      note: foundTango && targetedRetrieval
+        ? 'PASS: Targeted retrieval found correct memory'
+        : foundTango && !targetedRetrieval
+          ? `PARTIAL: Found via bulk injection (${memoriesInjected} memories injected - not targeted)`
+          : 'FAIL: Could not retrieve paraphrased memory',
       query_used: 'What identifier did I ask you to remember for myself?',
-      original_storage: `My verification code is ${tripwire11}`,
-      keyword_overlap: 'ZERO (identifier ≠ verification/code/TANGO)'
+      original_storage: `My test identifier is ${tripwire11}`,
+      keyword_overlap: 'identifier (partial match)'
     });
 
   } catch (err) {

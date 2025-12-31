@@ -1,0 +1,213 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #208: [claude-fix] Issue #207: Audit Accuracy Fixes - Remove False Confidence from Test Suite
+
+Issue Description:
+Purpose
+The Discovery Audit (Issue #205) delivered valuable telemetry, but the test suite is over-declaring capabilities and telemetry is incomplete. This creates false confidence risk.
+Test #11 passed, but retrieval_method is sql_keyword_category_filter.
+That is NOT semantic retrieval. The test label is misleading.
+
+Problems Identified
+1. Test #11 Mislabeled
+
+Current: "Semantic Paraphrase Recall" with "PASS: Semantic retrieval confirmed"
+Reality: Retrieval method was sql_keyword_category_filter
+What happened: System injected ALL 8 memories, Claude found the answer
+This is not semantic retrieval - it's "inject everything, let Claude figure it out"
+
+2. "Verification Code" Wording Risk
+
+Using "verification code" may trigger policy refusal variability
+Should use neutral terms: "test token", "tripwire", "identifier"
+
+3. PASS Criteria Too Loose
+
+Test #2 response includes invented provenance: "evolved from earlier identifier"
+AI is hallucinating context that doesn't exist
+Regression tests should require exact token only, no invented narrative
+
+4. Telemetry Inconsistent
+
+Test 1: memory_count: 1 but memory_ids: [] - inconsistent
+No way to verify WHICH memories were injected
+Missing: actual DB IDs of injected memories
+
+5. Compression Ratio Reporting
+
+4.87:1 ratio passes, but target is 10-20:1
+Should be labeled WARNING, not just PASS
+
+6. Test #11 False Positive Risk
+
+Test passes by injecting ALL memories (8/8)
+At scale, this won't work
+Need stricter criteria: must find correct memory without injecting everything
+
+
+Required Changes
+Fix 1: Rename Test #11
+Before:
+javascriptname: "11. Semantic Paraphrase Recall"
+note: "PASS: Semantic retrieval confirmed - system understood paraphrased query"
+After:
+javascriptname: "11. Paraphrase Recall (Keyword-Template Tolerant)"
+note: passed && memories_injected <= 5
+  ? "PASS: Targeted retrieval found correct memory"
+  : passed && memories_injected > 5
+    ? "PARTIAL: Found via bulk injection (not targeted retrieval)"
+    : "FAIL: Could not retrieve paraphrased memory"
+Fix 2: Remove "Verification Code" Wording
+Before:
+javascriptstore: `My verification code is TANGO-${runId}`
+After:
+javascriptstore: `My test identifier is TANGO-${runId}`
+// Or: "My tripwire token is TANGO-${runId}"
+// Or: "Remember this token for me: TANGO-${runId}"
+Apply to all tests using "verification", "code", "secret".
+Fix 3: Tighten PASS Criteria
+For regression tests (Tests 1-2):
+javascript// Current: Just checks if tripwire appears
+passed: response.includes(tripwire)
+
+// New: Check exact token AND no hallucinated provenance
+const hasExactToken = response.includes(tripwire);
+const hasHallucination = response.match(/evolved|changed|updated|previous|earlier/i);
+
+passed: hasExactToken && !hasHallucination
+
+// If hallucination detected, add warning
+warning: hasHallucination 
+  ? "AI invented provenance not in stored memory" 
+  : null
+Fix 4: Fix Telemetry - Add Injected Memory IDs
+File: /api/core/orchestrator.js
+Current metadata:
+javascriptmemory_retrieval: {
+  method: "sql_keyword_category_filter",
+  memories_considered: 8,
+  memories_injected: 8,
+  tokens_injected: 156,
+  categories_searched: ["general"],
+  selection_criteria: "relevance_recency_hybrid"
+}
+Required metadata:
+javascriptmemory_retrieval: {
+  method: "sql_keyword_category_filter",
+  memories_considered: 8,
+  memories_injected: 8,
+  tokens_injected: 156,
+  categories_searched: ["general"],
+  selection_criteria: "relevance_recency_hybrid",
+  
+  // NEW FIELDS
+  injected_memory_ids: [738, 739, 740, 741, 742, 743, 744, 745],  // Actual DB IDs
+  injected_tokens_total: 156,  // Explicit total
+  injected_previews: [  // Optional, truncated for safety
+    { id: 738, preview: "Test token ALPHA-..." },
+    { id: 739, preview: "Special identifier BRAVO-..." }
+  ]
+}
+Also fix inconsistency:
+
+When memory_count > 0, memory_ids MUST be populated
+Current: memory_count: 1, memory_ids: [] - this is a bug
+
+Fix 5: Compression Ratio Warning
+File: /api/test/memory-full-check.js - Test 9
+Current:
+javascriptpassed: tripwire_preserved && compression_occurred
+note: "PASS: Key info survived compression"
+New:
+javascriptconst TARGET_RATIO_MIN = 10;
+const ratio = input_length / stored_length;
+const tripwire_preserved = stored_content.includes(tripwire);
+
+passed: tripwire_preserved && compression_occurred
+
+// Add ratio assessment
+ratio_status: ratio >= TARGET_RATIO_MIN 
+  ? "OK" 
+  : "WARNING: Below target ratio"
+
+note: tripwire_preserved 
+  ? `PASS: Key info survived compression (${ratio.toFixed(1)}:1${ratio < TARGET_RATIO_MIN ? ' - below 10:1 target' : ''})`
+  : "FAIL: Tripwire lost in compression"
+Fix 6: Test #11 Stricter Criteria
+Current:
+javascriptpassed: response.includes(`TANGO-${runId}`)
+New:
+javascriptconst found = response.includes(`TANGO-${runId}`);
+const targeted_retrieval = memories_injected <= 5;  // Not bulk injection
+
+passed: found && targeted_retrieval
+
+note: found && targeted_retrieval
+  ? "PASS: Targeted retrieval found correct memory"
+  : found && !targeted_retrieval
+    ? `PARTIAL: Found via bulk injection (${memories_injected} memories injected - not targeted)`
+    : "FAIL: Could not retrieve paraphrased memory"
+
+// Add explicit retrieval quality assessment
+retrieval_quality: memories_injected <= 3 
+  ? "EXCELLENT" 
+  : memories_injected <= 5 
+    ? "GOOD" 
+    : memories_injected <= 10 
+      ? "ACCEPTABLE" 
+      : "POOR (bulk injection)"
+
+Files to Modify
+Primary
+
+/api/test/memory-full-check.js
+
+Rename Test #11
+Update wording (remove "verification code")
+Tighten PASS criteria
+Add compression ratio warning
+Add retrieval quality assessment
+
+
+/api/core/orchestrator.js
+
+Add injected_memory_ids to telemetry
+Add injected_previews (optional)
+Fix memory_ids inconsistency
+
+
+
+Secondary (if needed)
+
+Memory retrieval function - Ensure it returns actual memory IDs for telemetry
+
+
+Acceptance Criteria
+
+ Test #11 renamed to "Paraphrase Recall (Keyword-Template Tolerant)"
+ "Semantic retrieval confirmed" language removed
+ "Verification code" replaced with "test identifier" or "tripwire"
+ Test #11 shows PARTIAL if memories_injected > 5
+ Regression tests flag hallucinated provenance as warning
+ memory_ids populated when memory_count > 0
+ injected_memory_ids added to telemetry
+ Compression ratio shows WARNING if below 10:1 target
+ All 11 tests still pass (or show appropriate PARTIAL/WARNING)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
