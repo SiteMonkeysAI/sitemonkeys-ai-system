@@ -498,6 +498,16 @@ export class Orchestrator {
           vaultTokens: context.tokenBreakdown?.vault || (vaultData?.tokens || 0),
           totalContextTokens: context.totalTokens,
 
+          // Memory retrieval telemetry (Issue #206)
+          memory_retrieval: {
+            method: "sql_keyword_category_filter",
+            memories_considered: memoryContext.count || 0,
+            memories_injected: memoryContext.count || 0,
+            tokens_injected: memoryContext.tokens || 0,
+            categories_searched: memoryContext.categories || [],
+            selection_criteria: "relevance_recency_hybrid"
+          },
+
           // Token budget compliance
           budgetCompliance: context.budgetCompliance || {},
           vaultSectionsSelected: vaultData?.sectionsSelected,

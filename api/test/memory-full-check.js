@@ -282,9 +282,41 @@ router.get('/memory-full-check', async (req, res) => {
       has_memory_ids: !!recall1.metadata?.memory_ids,
       has_token_counts: !!recall1.metadata?.memory_tokens,
       available_metadata_keys: Object.keys(recall1.metadata || {}),
-      note: hasTelemetry 
-        ? 'PASS: Response includes memory injection details' 
+      note: hasTelemetry
+        ? 'PASS: Response includes memory injection details'
         : 'NEEDS IMPROVEMENT: Add memory_ids, previews, token counts to response metadata'
+    });
+
+    // ===== TEST 11: Semantic Paraphrase Recall =====
+    // CRITICAL: This is the litmus test for "real intelligence"
+    // Tests if retrieval is semantic vs keyword-based
+    const tripwire11 = `TANGO-${runId}`;
+
+    // Step 1: Store a fact with specific keywords
+    await chatViaHTTP(`My verification code is ${tripwire11}`);
+    await wait(3000); // Wait for storage to complete
+
+    // Step 2: Query with ZERO keyword overlap
+    // No "verification", no "code", no "TANGO", no "test"
+    const recall11 = await chatViaHTTP('What identifier did I ask you to remember for myself?');
+
+    // Step 3: Evaluate
+    const foundTango = recall11.response?.includes(tripwire11) || false;
+
+    results.push({
+      test: '11. Semantic Paraphrase Recall',
+      passed: foundTango,
+      expected: tripwire11,
+      found: foundTango,
+      retrieval_method: recall11.metadata?.memory_retrieval?.method || 'unknown',
+      memories_considered: recall11.metadata?.memory_retrieval?.memories_considered || 'unknown',
+      memories_injected: recall11.metadata?.memory_retrieval?.memories_injected || 'unknown',
+      note: foundTango
+        ? 'PASS: Semantic retrieval confirmed - system understood paraphrased query'
+        : 'FAIL: Retrieval is NOT semantic (keyword/recency only)',
+      query_used: 'What identifier did I ask you to remember for myself?',
+      original_storage: `My verification code is ${tripwire11}`,
+      keyword_overlap: 'ZERO (identifier ≠ verification/code/TANGO)'
     });
 
   } catch (err) {
