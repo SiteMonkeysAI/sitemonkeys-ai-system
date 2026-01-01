@@ -51,6 +51,10 @@ import migrateSemanticHandler from "./api/routes/migrate-semantic.js";
 import migrateSemanticV2Handler from "./api/routes/migrate-semantic-v2.js";
 import testSemanticHandler from "./api/routes/test-semantic.js";
 import rateLimit from "express-rate-limit";
+// ========== SEMANTIC INTEGRATION ==========
+import { storeWithSupersession, generateFactFingerprint } from "./api/services/supersession.js";
+import { embedMemoryNonBlocking } from "./api/services/embedding-service.js";
+// ================================================
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -422,40 +426,79 @@ app.post("/api/chat", async (req, res) => {
             }),
           );
         } else {
-          // Legacy storage path - always available as fallback
-          console.log("[CHAT] [STORAGE] Using legacy storage path...");
-          console.log(
-            "[CHAT] [STORAGE] Calling storeMemory with userId:",
-            userId,
-          );
-          const storageResult = await global.memorySystem.storeMemory(
-            userId,
-            message,
-            result.response,
-            {
-              mode: mode,
-              sessionId: sessionId,
-              confidence: result.metadata?.confidence,
-              timestamp: new Date().toISOString(),
-            },
-          );
-          console.log(
-            "[CHAT] 💾 Conversation stored in memory system (legacy)",
-          );
-          console.log(
-            "[CHAT] [STORAGE] Storage result:",
-            JSON.stringify(storageResult, null, 2),
-          );
+          // Supersession-aware storage path
+          console.log("[CHAT] [STORAGE] Using supersession-aware storage...");
 
-          // TRACE LOGGING - Step 9 (Legacy path)
-          console.log(
-            "[TRACE] 9. Legacy storage complete, result:",
-            JSON.stringify({
-              success: storageResult.success,
-              memoryId: storageResult.memoryId,
-              category: storageResult.category,
-            }),
-          );
+          // Combine message and response for storage
+          const content = `User: ${message}\nAssistant: ${result.response}`;
+
+          // Generate fingerprint (deterministic-first, model-fallback with timeout)
+          let fingerprint = null;
+          let fingerprintConfidence = 0;
+
+          try {
+            const fpResult = await Promise.race([
+              generateFactFingerprint(content),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+            ]);
+            fingerprint = fpResult.fingerprint;
+            fingerprintConfidence = fpResult.confidence;
+
+            if (fingerprint) {
+              console.log(`[STORE] Fingerprint detected: ${fingerprint} (${fpResult.method}, confidence: ${fingerprintConfidence})`);
+            }
+          } catch (e) {
+            console.log(`[STORE] Fingerprint generation skipped: ${e.message}`);
+          }
+
+          // Get database pool
+          const pool = global.memorySystem?.pool;
+          if (!pool) {
+            console.error("[CHAT] [STORAGE] No database pool available, falling back to legacy storage");
+            const storageResult = await global.memorySystem.storeMemory(
+              userId,
+              message,
+              result.response,
+              {
+                mode: mode,
+                sessionId: sessionId,
+                confidence: result.metadata?.confidence,
+                timestamp: new Date().toISOString(),
+              },
+            );
+            console.log("[CHAT] 💾 Legacy fallback storage complete");
+          } else {
+            // Store with supersession (transaction-safe)
+            const storeResult = await storeWithSupersession(pool, {
+              userId,
+              content,
+              factFingerprint: fingerprint,
+              fingerprintConfidence: fingerprintConfidence,
+              mode: mode || 'truth-general',
+              categoryName: 'general', // Could enhance with semantic routing
+              tokenCount: Math.ceil(content.length / 4)
+            });
+
+            console.log(
+              `[CHAT] 💾 Supersession storage complete (ID: ${storeResult.memoryId}, superseded: ${storeResult.supersededCount})`
+            );
+
+            // Generate embedding (non-blocking, fire-and-forget)
+            embedMemoryNonBlocking(pool, storeResult.memoryId, content)
+              .then(r => console.log(`[STORE] Embedding ${r.status || 'initiated'} for ID ${storeResult.memoryId}`))
+              .catch(e => console.log(`[STORE] Embedding deferred for ID ${storeResult.memoryId}: ${e.message}`));
+
+            // TRACE LOGGING - Step 9 (Supersession path)
+            console.log(
+              "[TRACE] 9. Supersession storage complete, result:",
+              JSON.stringify({
+                success: storeResult.success,
+                memoryId: storeResult.memoryId,
+                superseded: storeResult.supersededCount,
+                fingerprint: fingerprint
+              }),
+            );
+          }
         }
       } catch (_storageError) {
         // Sanitize error message - don't expose database details

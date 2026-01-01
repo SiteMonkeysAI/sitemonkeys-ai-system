@@ -1,0 +1,270 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #242: [claude-fix] COMPLETE SEMANTIC INTEGRATION: Orchestrator + Storage + DB Constraint
+
+Issue Description:
+# [claude-fix] COMPLETE SEMANTIC INTEGRATION: Orchestrator + Storage + DB Constraint
+
+## Context
+PR #241 added the service enhancements but did NOT complete the critical integration points. The semantic layer is built but NOT active in `/api/chat`. This issue completes the integration.
+
+## CRITICAL: These are REQUIRED, not optional
+
+---
+
+## 1. Add supersession.js to repository
+
+The file `api/services/supersession.js` must be created. Complete implementation is provided below with:
+- **Deterministic-first fingerprinting** (regex patterns for phone/email/name/address - NO API call by default)
+- **Model-assist as fallback only** (with 2s timeout)
+- **Transaction-safe storage** with SELECT FOR UPDATE and retry logic
+- **Correct schema** (INTEGER id, category_name not category)
+- **DB constraint function** to enforce one-current-fact
+
+**File location:** `api/services/supersession.js`
+
+The complete file content has been provided to the repository owner separately.
+
+---
+
+## 2. Create DB constraint for supersession
+
+Run this SQL to enforce one current fact per fingerprint at the database level:
+
+```sql
+-- First, clean up any existing duplicates (keeps newest)
+WITH duplicates AS (
+  SELECT id, user_id, mode, fact_fingerprint, created_at,
+         ROW_NUMBER() OVER (
+           PARTITION BY user_id, mode, fact_fingerprint 
+           ORDER BY created_at DESC
+         ) as rn
+  FROM persistent_memories
+  WHERE is_current = true 
+    AND fact_fingerprint IS NOT NULL
+)
+UPDATE persistent_memories p
+SET is_current = false, superseded_at = NOW()
+FROM duplicates d
+WHERE p.id = d.id AND d.rn > 1;
+
+-- Then create the unique constraint
+CREATE UNIQUE INDEX idx_one_current_fact 
+ON persistent_memories (user_id, mode, fact_fingerprint) 
+WHERE is_current = true AND fact_fingerprint IS NOT NULL;
+```
+
+---
+
+## 3. Integrate semantic retrieval into orchestrator.js
+
+**File:** `api/core/orchestrator.js`
+
+**Find** the `#retrieveMemoryContext()` method (around line 632+)
+
+**Add imports at top of file:**
+```javascript
+import { retrieveSemanticMemories } from '../services/semantic-retrieval.js';
+```
+
+**Modify the retrieval method to use semantic retrieval with fallback:**
+
+```javascript
+async #retrieveMemoryContext(userId, userMessage, options = {}) {
+  const { mode = 'truth-general', tokenBudget = 2000 } = options;
+  
+  let telemetry = {
+    method: 'keyword_fallback',
+    fallback_reason: 'initialization',
+    candidates_considered: 0,
+    latency_ms: 0
+  };
+  
+  try {
+    // Attempt semantic retrieval
+    const pool = global.memorySystem?.pool || this.pool;
+    const result = await retrieveSemanticMemories(pool, userMessage, {
+      userId,
+      mode,
+      tokenBudget,
+      includePinned: true
+    });
+    
+    telemetry = result.telemetry;
+    
+    // Store telemetry for response metadata
+    this._lastRetrievalTelemetry = telemetry;
+    
+    return result.memories;
+    
+  } catch (error) {
+    console.error(`[ORCHESTRATOR] Semantic retrieval failed: ${error.message}`);
+    telemetry.method = 'keyword_fallback';
+    telemetry.fallback_reason = error.message;
+    telemetry.latency_ms = Date.now() - (telemetry.startTime || Date.now());
+    
+    this._lastRetrievalTelemetry = telemetry;
+    
+    // Fallback to existing keyword/category retrieval
+    return await this.#keywordRetrievalFallback(userId, userMessage, mode);
+  }
+}
+```
+
+**Ensure response includes telemetry** - in the response builder section:
+```javascript
+// Include retrieval telemetry in response metadata
+const responseMetadata = {
+  ...existingMetadata,
+  retrieval: this._lastRetrievalTelemetry || { method: 'unknown' },
+  mode: currentMode
+};
+```
+
+---
+
+## 4. Integrate supersession into storage flow
+
+**File:** `server.js` (or wherever memory storage happens in chat flow)
+
+**Add imports:**
+```javascript
+import { storeWithSupersession, generateFactFingerprint } from './api/services/supersession.js';
+import { embedMemoryNonBlocking } from './api/services/embedding-service.js';
+```
+
+**Modify the memory storage section** (around line 380+):
+
+```javascript
+async function storeMemoryFromChat(pool, userId, content, options = {}) {
+  const { mode = 'truth-general' } = options;
+  
+  // Generate fingerprint (deterministic-first, model-fallback with timeout)
+  let fingerprint = null;
+  let confidence = 0;
+  
+  try {
+    const fpResult = await Promise.race([
+      generateFactFingerprint(content),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2000))
+    ]);
+    fingerprint = fpResult.fingerprint;
+    confidence = fpResult.confidence;
+    
+    if (fingerprint) {
+      console.log(`[STORE] Fingerprint detected: ${fingerprint} (${fpResult.method}, confidence: ${confidence})`);
+    }
+  } catch (e) {
+    console.log(`[STORE] Fingerprint generation skipped: ${e.message}`);
+  }
+  
+  // Store with supersession (transaction-safe)
+  const storeResult = await storeWithSupersession(pool, {
+    userId,
+    content,
+    factFingerprint: fingerprint,
+    fingerprintConfidence: confidence,
+    mode
+  });
+  
+  // Generate embedding (non-blocking, fire-and-forget)
+  embedMemoryNonBlocking(pool, storeResult.memoryId, content)
+    .then(r => console.log(`[STORE] Embedding ${r.status || 'initiated'} for ID ${storeResult.memoryId}`))
+    .catch(e => console.log(`[STORE] Embedding deferred for ID ${storeResult.memoryId}: ${e.message}`));
+  
+  return storeResult;
+}
+```
+
+---
+
+## 5. Add endpoint to create DB constraint
+
+**File:** `api/routes/test-semantic.js`
+
+Add case for creating the constraint:
+
+```javascript
+case 'create-constraint': {
+  const { createSupersessionConstraint, cleanupDuplicateCurrentFacts } = await import('../services/supersession.js');
+  
+  // First cleanup any duplicates
+  const cleanupResult = await cleanupDuplicateCurrentFacts(pool);
+  
+  // Then create constraint
+  const constraintResult = await createSupersessionConstraint(pool);
+  
+  return res.json({
+    action: 'create-constraint',
+    cleanup: cleanupResult,
+    constraint: constraintResult,
+    timestamp: new Date().toISOString()
+  });
+}
+```
+
+---
+
+## Acceptance Criteria
+
+After this PR merges:
+
+1. **POST /api/chat** response includes `retrieval` telemetry object
+2. `retrieval.method` shows "semantic" or "hybrid" when embeddings are available
+3. **GET /api/test-semantic?action=test-paraphrase** passes
+4. **GET /api/test-semantic?action=test-supersession** passes
+5. **GET /api/test-semantic?action=test-mode-isolation** passes
+6. **GET /api/test-semantic?action=create-constraint** creates the unique index
+7. Storing "My phone is 111" then "My phone is 222" results in only one current fact
+
+---
+
+## Schema Reference (verified)
+
+```
+id = INTEGER (auto-increment)
+user_id = TEXT
+category_name = VARCHAR
+content = TEXT
+fact_fingerprint = TEXT
+fingerprint_confidence = DOUBLE PRECISION
+is_current = BOOLEAN
+superseded_by = UUID
+superseded_at = TIMESTAMPTZ
+mode = VARCHAR
+embedding = ARRAY (FLOAT4[])
+embedding_status = VARCHAR
+```
+
+---
+
+## Rate Limiting
+
+Any new endpoints must include rate limiting. Use existing `rateLimit` patterns.
+
+---
+
+## Error Handling
+
+- All async operations must have try/catch
+- Failures must not crash the server
+- Fallback to keyword retrieval on semantic failure
+- Log errors with `[MODULE]` prefix
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
