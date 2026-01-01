@@ -1,0 +1,41 @@
+Perfect! The fix is now complete. Let me verify the changes are correct:
+
+1. ✅ Imports are present at the top (lines 50-51)
+2. ✅ Routes are registered BEFORE the catch-all `repoSnapshotRoute` (lines 789-790)
+3. ✅ Routes are registered exactly as specified in the issue (without rate limiting middleware)
+4. ✅ Comment "// Semantic layer routes - MUST be before catch-all" is present
+
+The issue has been fixed. The semantic layer routes (`/api/migrate-semantic-v2` and `/api/test-semantic`) are now properly registered as direct handlers before the catch-all repo-snapshot route, which means they will be handled by their specific handlers instead of falling through to the repo-snapshot route.
+
+---SUMMARY---
+
+## Fixed Issue #236: Added missing semantic layer route registrations
+
+### Problem
+The semantic layer routes `/api/migrate-semantic-v2` and `/api/test-semantic` were not properly registered in server.js, causing them to fall through to the repo-snapshot catch-all route instead of being handled by their specific handlers.
+
+### Changes Made
+
+**File Modified:** `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/server.js`
+
+1. **Verified imports** (lines 50-51): The required imports were already present:
+   - `import migrateSemanticV2Handler from "./api/routes/migrate-semantic-v2.js";`
+   - `import testSemanticHandler from "./api/routes/test-semantic.js";`
+
+2. **Updated route registrations** (lines 788-790): Replaced the rate-limited route registrations with direct handler registrations as specified in the issue:
+   ```javascript
+   // Semantic layer routes - MUST be before catch-all
+   app.get('/api/migrate-semantic-v2', migrateSemanticV2Handler);
+   app.get('/api/test-semantic', testSemanticHandler);
+   ```
+
+3. **Route placement**: Ensured these routes are registered BEFORE the catch-all `app.use("/api", repoSnapshotRoute)` on line 793, preventing them from being intercepted by the repo-snapshot handler.
+
+### Verification
+After this fix, the following requests will now be handled by their specific handlers instead of returning repo-snapshot data:
+- `GET /api/migrate-semantic-v2` → Handled by `migrateSemanticV2Handler`
+- `GET /api/test-semantic?action=health` → Handled by `testSemanticHandler`
+
+The routes are now properly registered in the correct order, ensuring semantic layer functionality works as expected.
+
+---END SUMMARY---

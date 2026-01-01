@@ -1,0 +1,43 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #236: [claude-fix] URGENT: Add missing semantic layer route registrations to server.js`
+
+Issue Description:
+## Problem
+PR #233 was merged but the route registrations are NOT in server.js. The routes return repo-snapshot instead of the handlers.
+
+## Required Changes
+Add these exact lines to server.js BEFORE the line `app.use("/api", repoSnapshotRoute)`:
+```javascript
+// Semantic layer routes - MUST be before catch-all
+app.get('/api/migrate-semantic-v2', migrateSemanticV2Handler);
+app.get('/api/test-semantic', testSemanticHandler);
+```
+
+Also ensure these imports exist at the top of server.js:
+```javascript
+import migrateSemanticV2Handler from "./api/routes/migrate-semantic-v2.js";
+import testSemanticHandler from "./api/routes/test-semantic.js";
+```
+
+## Verification
+After fix, this should NOT return repo files:
+`fetch('/api/test-semantic?action=health')`[Claude is AI and can make mistakes. Please double-check responses.](https://support.anthropic.com/en/articles/8525154-claude-is-providing-incorrect-or-misleading-responses-what-s-going-on)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

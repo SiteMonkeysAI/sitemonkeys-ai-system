@@ -785,17 +785,9 @@ app.get(
   migrateSemanticHandler,
 );
 
-// Semantic layer v2 endpoints - MUST come before catch-all routes
-app.get(
-  "/api/migrate-semantic-v2",
-  migrateSemanticRateLimiter,
-  migrateSemanticV2Handler,
-);
-app.get(
-  '/api/test-semantic',
-  migrateSemanticRateLimiter,
-  testSemanticHandler,
-);
+// Semantic layer routes - MUST be before catch-all
+app.get('/api/migrate-semantic-v2', migrateSemanticV2Handler);
+app.get('/api/test-semantic', testSemanticHandler);
 
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);
