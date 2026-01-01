@@ -1,0 +1,26 @@
+Perfect! Both handler files exist and export default functions. The changes have been successfully completed.
+
+---SUMMARY---
+Successfully fixed issue #232 by registering the semantic layer routes in server.js.
+
+**Changes made to server.js:**
+
+1. **Added imports at lines 51-52** (after existing imports):
+   - `import migrateSemanticV2Handler from "./api/routes/migrate-semantic-v2.js";`
+   - `import testSemanticHandler from "./api/routes/test-semantic.js";`
+
+2. **Added route registrations at lines 788-790** (before the catch-all repo-snapshot route):
+   - `app.get('/api/migrate-semantic-v2', migrateSemanticV2Handler);`
+   - `app.get('/api/test-semantic', testSemanticHandler);`
+
+**Verification:**
+- Both handler files exist and export default async functions:
+  - `/api/routes/migrate-semantic-v2.js` - handles semantic layer migration v2
+  - `/api/routes/test-semantic.js` - handles semantic retrieval testing
+- Routes are properly positioned before the catch-all `app.use("/api", repoSnapshotRoute)` to ensure they are matched correctly
+- Routes follow existing conventions in the codebase (using GET method, placed in the correct section with proper comments)
+
+The semantic layer endpoints are now registered and will be accessible at:
+- `GET /api/migrate-semantic-v2` 
+- `GET /api/test-semantic`
+---END SUMMARY---
