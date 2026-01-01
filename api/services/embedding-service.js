@@ -201,13 +201,56 @@ export async function embedMemory(pool, memoryId, content, options = {}) {
 }
 
 // ============================================
+// NON-BLOCKING EMBEDDING (FOR CHAT FLOW)
+// ============================================
+
+/**
+ * Generate and store embedding for a memory with timeout wrapper
+ * Never blocks memory storage - gracefully degrades to 'pending' on timeout/failure
+ *
+ * @param {object} pool - PostgreSQL connection pool
+ * @param {string} memoryId - UUID of the memory
+ * @param {string} content - Content to embed
+ * @param {object} options - Optional settings
+ * @returns {Promise<{success: boolean, status: string, error?: string}>}
+ */
+export async function embedMemoryNonBlocking(pool, memoryId, content, options = {}) {
+  const { timeout = 3000 } = options; // Shorter timeout for non-blocking context
+
+  try {
+    const result = await Promise.race([
+      embedMemory(pool, memoryId, content, { timeout }),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Embedding timeout')), timeout)
+      )
+    ]);
+    return result;
+  } catch (error) {
+    // Timeout or failure - mark as pending for backfill
+    try {
+      await pool.query(`
+        UPDATE persistent_memories
+        SET embedding_status = 'pending', embedding_updated_at = NOW()
+        WHERE id = $1
+      `, [memoryId]);
+
+      console.log(`[EMBEDDING] ⏳ Marked ${memoryId} as pending (${error.message})`);
+      return { success: false, status: 'pending', error: error.message };
+    } catch (dbError) {
+      console.error(`[EMBEDDING] ❌ Could not mark as pending: ${dbError.message}`);
+      return { success: false, status: 'failed', error: dbError.message };
+    }
+  }
+}
+
+// ============================================
 // BACKFILL SERVICE
 // ============================================
 
 /**
  * Backfill pending/failed embeddings
  * Run as a background job or manual trigger
- * 
+ *
  * @param {object} pool - PostgreSQL connection pool
  * @param {object} options - Batch size, limits, etc.
  * @returns {Promise<{processed: number, succeeded: number, failed: number, remaining: number}>}
@@ -380,6 +423,7 @@ export function createEmbeddingTelemetry() {
 export default {
   generateEmbedding,
   embedMemory,
+  embedMemoryNonBlocking,
   backfillEmbeddings,
   cosineSimilarity,
   rankBySimilarity,

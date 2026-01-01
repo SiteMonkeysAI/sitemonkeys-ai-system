@@ -1,0 +1,593 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #240: [claude-fix] SEMANTIC INTELLIGENCE LIVE: Complete Integration of Semantic Retrieval + Deterministic Supersession into /api/chat
+
+Issue Description:
+<h2>OBJECTIVE</h2>
+<p>Transform <code>/api/chat</code> from keyword/category retrieval to <strong>semantic/hybrid retrieval</strong> with <strong>deterministic fact supersession</strong>, fully integrated, provable via telemetry, and fallback-safe.</p>
+<p><strong>Success Criteria:</strong> The three falsification tests pass end-to-end through actual HTTP calls to <code>/api/chat</code> with DB proof and telemetry assertions.</p>
+<hr>
+<h2>NON-NEGOTIABLES (Cannot Be Changed or Weakened)</h2>
+<h3>1. Store-Time Embeddings Must NOT Block Chat</h3>
+<ul>
+<li>Memory stores IMMEDIATELY with <code>embedding_status = 'pending'</code></li>
+<li>Embedding generation happens async (or sync with 3-second timeout, then fallback to pending)</li>
+<li>If OpenAI embedding API is down/slow, chat continues normally</li>
+<li>Zero latency regression to user experience</li>
+<li>Backfill worker catches pending embeddings later</li>
+</ul>
+<h3>2. Supersession Must Be Transaction-Safe</h3>
+<ul>
+<li>One current fact per fingerprint (enforced, not hoped for)</li>
+<li>Store + supersede in single database transaction</li>
+<li>Concurrency cannot produce multiple <code>is_current = true</code> for same fingerprint</li>
+<li>Use <code>SELECT FOR UPDATE</code> or equivalent locking</li>
+<li>If conflict, retry with backoff (max 3 attempts)</li>
+</ul>
+<h3>3. Retrieval Must Be Mode-Aware and Bounded</h3>
+<ul>
+<li>Prefilter candidates via SQL: <code>user_id</code>, <code>mode</code>, <code>is_current = true</code>, bounded by <code>LIMIT</code></li>
+<li>Mode boundaries enforced (truth-general sees only truth-general; site-monkeys sees all)</li>
+<li>Pinned memories always included in candidate set</li>
+<li>Token budget enforced (never exceed configured injection limit)</li>
+<li>Scoring: semantic similarity + match-first bonus + recency boost + confidence weight</li>
+</ul>
+<h3>4. Telemetry Must Prove Behavior</h3>
+<p>Every <code>/api/chat</code> response metadata must include:</p>
+<pre><code class="language-json">{
+  "retrieval": {
+    "method": "semantic|hybrid|keyword_fallback",
+    "candidates_considered": 142,
+    "candidates_with_embeddings": 138,
+    "vectors_compared": 138,
+    "results_injected": 8,
+    "injected_memory_ids": ["uuid1", "uuid2", ...],
+    "top_scores": [0.89, 0.84, 0.76, ...],
+    "token_budget": 2000,
+    "tokens_used": 1847,
+    "fallback_reason": null | "embedding_api_down" | "no_embeddings_ready",
+    "latency_ms": 127
+  }
+}
+</code></pre>
+<h3>5. Fallback Must Be Safe</h3>
+<ul>
+<li>If embedding API down → use keyword/category retrieval (not crash)</li>
+<li>If no embeddings ready for user → use keyword/category retrieval</li>
+<li>If semantic retrieval throws → catch, log, fallback to keyword</li>
+<li>Fallback reason always logged in telemetry</li>
+</ul>
+<hr>
+<h2>REQUIRED CHANGES</h2>
+<h3>File 1: <code>/api/services/embedding-service.js</code> (EXISTS - needs integration)</h3>
+<p><strong>Current state:</strong> File exists with <code>generateEmbedding</code>, <code>embedMemory</code>, <code>backfillEmbeddings</code>, <code>cosineSimilarity</code>, <code>rankBySimilarity</code></p>
+<p><strong>Required additions:</strong></p>
+<pre><code class="language-javascript">// Add timeout wrapper for non-blocking embed
+export async function embedMemoryNonBlocking(pool, memoryId, content, options = {}) {
+  const { timeout = 3000 } = options;
+  
+  try {
+    const result = await Promise.race([
+      embedMemory(pool, memoryId, content),
+      new Promise((_, reject) =&gt; 
+        setTimeout(() =&gt; reject(new Error('Embedding timeout')), timeout)
+      )
+    ]);
+    return result;
+  } catch (error) {
+    // Timeout or failure - mark as pending for backfill
+    await pool.query(`
+      UPDATE persistent_memories 
+      SET embedding_status = 'pending', embedding_updated_at = NOW()
+      WHERE id = $1
+    `, [memoryId]);
+    
+    console.log(`[EMBEDDING] ⏳ Marked ${memoryId} as pending (${error.message})`);
+    return { success: false, status: 'pending', error: error.message };
+  }
+}
+</code></pre>
+<h3>File 2: <code>/api/services/semantic-retrieval.js</code> (EXISTS - needs enhancement)</h3>
+<p><strong>Required additions:</strong></p>
+<pre><code class="language-javascript">// Add telemetry object to return
+// Add pinned memory inclusion
+// Add token budget enforcement
+// Add fallback detection
+
+export async function retrieveSemanticMemories(pool, query, options = {}) {
+  const telemetry = {
+    method: 'semantic',
+    candidates_considered: 0,
+    candidates_with_embeddings: 0,
+    vectors_compared: 0,
+    results_injected: 0,
+    injected_memory_ids: [],
+    top_scores: [],
+    token_budget: options.tokenBudget || 2000,
+    tokens_used: 0,
+    fallback_reason: null,
+    latency_ms: 0
+  };
+  
+  const startTime = Date.now();
+  
+  // ... existing logic with telemetry tracking ...
+  
+  // If no embeddings available, set fallback
+  if (candidatesWithEmbeddings === 0) {
+    telemetry.method = 'keyword_fallback';
+    telemetry.fallback_reason = 'no_embeddings_ready';
+    // Call keyword retrieval instead
+  }
+  
+  telemetry.latency_ms = Date.now() - startTime;
+  
+  return { memories, telemetry };
+}
+</code></pre>
+<h3>File 3: <code>/api/services/supersession.js</code> (CREATE NEW)</h3>
+<pre><code class="language-javascript">/**
+ * SUPERSESSION SERVICE
+ * 
+ * Handles deterministic fact replacement with transaction safety.
+ * Ensures one current fact per fingerprint.
+ */
+
+/**
+ * Store memory with supersession check
+ * Transaction-safe: old fact marked not current in same transaction as new fact stored
+ */
+export async function storeWithSupersession(pool, memoryData) {
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Lock any existing current facts with same fingerprint
+    const existing = await client.query(`
+      SELECT id, content, fact_fingerprint 
+      FROM persistent_memories 
+      WHERE user_id = $1 
+        AND fact_fingerprint = $2 
+        AND is_current = true
+      FOR UPDATE
+    `, [memoryData.userId, memoryData.factFingerprint]);
+    
+    // Insert new memory
+    const newMemory = await client.query(`
+      INSERT INTO persistent_memories (
+        user_id, content, fact_fingerprint, fingerprint_confidence,
+        is_current, mode, embedding_status, created_at
+      ) VALUES ($1, $2, $3, $4, true, $5, 'pending', NOW())
+      RETURNING id
+    `, [
+      memoryData.userId,
+      memoryData.content,
+      memoryData.factFingerprint,
+      memoryData.fingerprintConfidence || 0.5,
+      memoryData.mode || 'truth-general'
+    ]);
+    
+    const newId = newMemory.rows[0].id;
+    
+    // Supersede old facts (if any)
+    if (existing.rows.length &gt; 0) {
+      await client.query(`
+        UPDATE persistent_memories 
+        SET is_current = false, 
+            superseded_by = $1, 
+            superseded_at = NOW()
+        WHERE id = ANY($2::uuid[])
+      `, [newId, existing.rows.map(r =&gt; r.id)]);
+      
+      console.log(`[SUPERSESSION] Replaced ${existing.rows.length} old facts with ${newId}`);
+    }
+    
+    await client.query('COMMIT');
+    
+    return {
+      success: true,
+      memoryId: newId,
+      superseded: existing.rows.map(r =&gt; r.id),
+      supersededCount: existing.rows.length
+    };
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error(`[SUPERSESSION] Transaction failed: ${error.message}`);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Generate fact fingerprint from content
+ * Uses semantic analysis to identify what fact is being stated
+ */
+export async function generateFactFingerprint(content, options = {}) {
+  // For facts that can be superseded (personal info, preferences, status)
+  // Generate a canonical fingerprint
+  
+  // This should call OpenAI to extract the fact type
+  // e.g., "My phone number is 555-1234" → "user_phone_number"
+  // e.g., "I live in Texas" → "user_location_residence"
+  
+  // For now, return null for non-superseding content
+  // Full implementation uses GPT to classify
+  
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'system',
+        content: `You identify if a statement contains a superseding personal fact.
+If it does, return a canonical fingerprint like "user_phone_number", "user_location_residence", "user_job_title", "user_name", etc.
+If it's not a superseding fact (opinions, conversations, questions), return "null".
+Return ONLY the fingerprint or "null", nothing else.`
+      }, {
+        role: 'user',
+        content: content
+      }],
+      max_tokens: 50,
+      temperature: 0
+    })
+  });
+  
+  const data = await response.json();
+  const fingerprint = data.choices?.[0]?.message?.content?.trim();
+  
+  if (fingerprint === 'null' || !fingerprint) {
+    return { fingerprint: null, confidence: 0 };
+  }
+  
+  return { fingerprint, confidence: 0.85 };
+}
+</code></pre>
+<h3>File 4: <code>/api/core/orchestrator.js</code> (MODIFY - Critical Integration Point)</h3>
+<p><strong>Find the memory retrieval section and replace with:</strong></p>
+<pre><code class="language-javascript">// === SEMANTIC MEMORY RETRIEVAL ===
+import { retrieveSemanticMemories } from '../services/semantic-retrieval.js';
+import { generateEmbedding } from '../services/embedding-service.js';
+
+async function retrieveMemoriesForChat(pool, userId, userMessage, options = {}) {
+  const { mode = 'truth-general', tokenBudget = 2000 } = options;
+  
+  let telemetry = {
+    method: 'keyword_fallback',
+    fallback_reason: 'initialization'
+  };
+  
+  try {
+    // Attempt semantic retrieval
+    const result = await retrieveSemanticMemories(pool, userMessage, {
+      userId,
+      mode,
+      tokenBudget,
+      includePinned: true
+    });
+    
+    telemetry = result.telemetry;
+    return { memories: result.memories, telemetry };
+    
+  } catch (error) {
+    console.error(`[ORCHESTRATOR] Semantic retrieval failed: ${error.message}`);
+    telemetry.method = 'keyword_fallback';
+    telemetry.fallback_reason = error.message;
+    
+    // Fallback to keyword/category retrieval
+    const fallbackMemories = await keywordRetrievalFallback(pool, userId, userMessage, mode);
+    return { memories: fallbackMemories, telemetry };
+  }
+}
+</code></pre>
+<p><strong>Find the memory storage section and integrate supersession:</strong></p>
+<pre><code class="language-javascript">// === MEMORY STORAGE WITH SUPERSESSION ===
+import { storeWithSupersession, generateFactFingerprint } from '../services/supersession.js';
+import { embedMemoryNonBlocking } from '../services/embedding-service.js';
+
+async function storeMemoryFromChat(pool, userId, content, options = {}) {
+  const { mode = 'truth-general' } = options;
+  
+  // Generate fingerprint (non-blocking, with timeout)
+  let fingerprint = null;
+  let confidence = 0;
+  
+  try {
+    const fpResult = await Promise.race([
+      generateFactFingerprint(content),
+      new Promise((_, reject) =&gt; setTimeout(() =&gt; reject(new Error('timeout')), 2000))
+    ]);
+    fingerprint = fpResult.fingerprint;
+    confidence = fpResult.confidence;
+  } catch (e) {
+    console.log(`[STORE] Fingerprint generation skipped: ${e.message}`);
+  }
+  
+  // Store with supersession (transaction-safe)
+  const storeResult = await storeWithSupersession(pool, {
+    userId,
+    content,
+    factFingerprint: fingerprint,
+    fingerprintConfidence: confidence,
+    mode
+  });
+  
+  // Generate embedding (non-blocking)
+  embedMemoryNonBlocking(pool, storeResult.memoryId, content)
+    .then(r =&gt; console.log(`[STORE] Embedding ${r.status} for ${storeResult.memoryId}`))
+    .catch(e =&gt; console.log(`[STORE] Embedding deferred for ${storeResult.memoryId}`));
+  
+  return storeResult;
+}
+</code></pre>
+<p><strong>Ensure chat response includes telemetry:</strong></p>
+<pre><code class="language-javascript">// In the chat response builder
+return {
+  response: aiResponse,
+  metadata: {
+    ...existingMetadata,
+    retrieval: telemetry,  // Include retrieval telemetry
+    memories_injected: telemetry.results_injected,
+    mode: currentMode
+  }
+};
+</code></pre>
+<h3>File 5: <code>/api/routes/test-semantic.js</code> (MODIFY - Add falsification tests)</h3>
+<p><strong>Add test endpoints:</strong></p>
+<pre><code class="language-javascript">// Add to existing test-semantic.js
+
+case 'test-paraphrase': {
+  // Test: Store "My name is Chris", retrieve with "What's the user called?"
+  // Should find the memory via semantic similarity
+  
+  const testUserId = 'test-paraphrase-' + Date.now();
+  
+  // Store memory
+  await storeWithSupersession(pool, {
+    userId: testUserId,
+    content: 'My name is Chris',
+    factFingerprint: 'user_name',
+    fingerprintConfidence: 0.9,
+    mode: 'truth-general'
+  });
+  
+  // Generate embedding for it
+  const memories = await pool.query(
+    'SELECT id, content FROM persistent_memories WHERE user_id = $1',
+    [testUserId]
+  );
+  await embedMemory(pool, memories.rows[0].id, memories.rows[0].content);
+  
+  // Retrieve with paraphrase
+  const result = await retrieveSemanticMemories(pool, "What's the user called?", {
+    userId: testUserId,
+    mode: 'truth-general'
+  });
+  
+  const found = result.memories.some(m =&gt; m.content.includes('Chris'));
+  
+  // Cleanup
+  await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
+  
+  return res.json({
+    test: 'paraphrase-recall',
+    passed: found,
+    query: "What's the user called?",
+    expected: 'Should find "My name is Chris"',
+    found: found ? 'YES - Memory found via semantic similarity' : 'NO - Failed to find',
+    telemetry: result.telemetry
+  });
+}
+
+case 'test-supersession': {
+  // Test: Store "My phone is 111", then "My phone is 222"
+  // Only 222 should be current
+  
+  const testUserId = 'test-supersession-' + Date.now();
+  
+  // Store first value
+  await storeWithSupersession(pool, {
+    userId: testUserId,
+    content: 'My phone number is 111-1111',
+    factFingerprint: 'user_phone_number',
+    fingerprintConfidence: 0.9,
+    mode: 'truth-general'
+  });
+  
+  // Store second value (should supersede)
+  await storeWithSupersession(pool, {
+    userId: testUserId,
+    content: 'My phone number is 222-2222',
+    factFingerprint: 'user_phone_number',
+    fingerprintConfidence: 0.9,
+    mode: 'truth-general'
+  });
+  
+  // Check database state
+  const currentFacts = await pool.query(`
+    SELECT content, is_current, superseded_by 
+    FROM persistent_memories 
+    WHERE user_id = $1 AND fact_fingerprint = 'user_phone_number'
+    ORDER BY created_at
+  `, [testUserId]);
+  
+  const oldFact = currentFacts.rows[0];
+  const newFact = currentFacts.rows[1];
+  
+  const passed = (
+    oldFact.is_current === false &amp;&amp;
+    oldFact.superseded_by === newFact.id &amp;&amp;
+    newFact.is_current === true
+  );
+  
+  // Cleanup
+  await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
+  
+  return res.json({
+    test: 'supersession-determinism',
+    passed,
+    expected: 'Old fact is_current=false, new fact is_current=true, old.superseded_by=new.id',
+    actual: {
+      old_fact: { content: oldFact?.content, is_current: oldFact?.is_current, superseded_by: oldFact?.superseded_by },
+      new_fact: { content: newFact?.content, is_current: newFact?.is_current }
+    }
+  });
+}
+
+case 'test-mode-isolation': {
+  // Test: Store memory in truth-general, retrieve in business-validation
+  // Should NOT find it (mode isolation)
+  
+  const testUserId = 'test-mode-' + Date.now();
+  
+  // Store in truth-general mode
+  await storeWithSupersession(pool, {
+    userId: testUserId,
+    content: 'Secret truth-general memory about cats',
+    factFingerprint: null,
+    mode: 'truth-general'
+  });
+  
+  // Generate embedding
+  const mem = await pool.query(
+    'SELECT id, content FROM persistent_memories WHERE user_id = $1',
+    [testUserId]
+  );
+  await embedMemory(pool, mem.rows[0].id, mem.rows[0].content);
+  
+  // Retrieve in business-validation mode
+  const result = await retrieveSemanticMemories(pool, 'cats', {
+    userId: testUserId,
+    mode: 'business-validation'  // Different mode!
+  });
+  
+  const leaked = result.memories.some(m =&gt; m.content.includes('cats'));
+  
+  // Cleanup
+  await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
+  
+  return res.json({
+    test: 'mode-isolation',
+    passed: !leaked,  // Pass if NOT found (no leak)
+    expected: 'truth-general memory should NOT appear in business-validation retrieval',
+    found_leak: leaked,
+    telemetry: result.telemetry
+  });
+}
+</code></pre>
+<hr>
+<h2>ACCEPTANCE CRITERIA (All Must Pass)</h2>
+<h3>Automated Tests (via /api/test-semantic)</h3>
+<ol>
+<li>
+<p><strong>GET /api/test-semantic?action=test-paraphrase</strong></p>
+<ul>
+<li>Returns <code>{ "passed": true }</code></li>
+<li>Telemetry shows <code>method: "semantic"</code> (not keyword_fallback)</li>
+</ul>
+</li>
+<li>
+<p><strong>GET /api/test-semantic?action=test-supersession</strong></p>
+<ul>
+<li>Returns <code>{ "passed": true }</code></li>
+<li>Old fact has <code>is_current: false</code></li>
+<li>New fact has <code>is_current: true</code></li>
+<li>Old fact's <code>superseded_by</code> equals new fact's ID</li>
+</ul>
+</li>
+<li>
+<p><strong>GET /api/test-semantic?action=test-mode-isolation</strong></p>
+<ul>
+<li>Returns <code>{ "passed": true }</code></li>
+<li><code>found_leak: false</code></li>
+</ul>
+</li>
+</ol>
+<h3>Manual Verification</h3>
+<ol start="4">
+<li>
+<p><strong>POST /api/chat</strong> with a message</p>
+<ul>
+<li>Response includes <code>retrieval</code> object in metadata</li>
+<li><code>retrieval.method</code> is "semantic" or "hybrid" (not always "keyword_fallback")</li>
+<li><code>retrieval.candidates_considered</code> &gt; 0</li>
+<li><code>retrieval.latency_ms</code> &lt; 500</li>
+</ul>
+</li>
+<li>
+<p><strong>Embedding Coverage</strong></p>
+<ul>
+<li>After backfill: <code>SELECT COUNT(*) FROM persistent_memories WHERE embedding_status = 'ready'</code> should be &gt; 95% of total</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2>FILES TO CREATE/MODIFY</h2>
+
+File | Action | Purpose
+-- | -- | --
+api/services/supersession.js | CREATE | Transaction-safe fact replacement
+api/services/embedding-service.js | MODIFY | Add non-blocking wrapper
+api/services/semantic-retrieval.js | MODIFY | Add telemetry, pinned support, token budget
+api/core/orchestrator.js | MODIFY | Integrate semantic retrieval + supersession
+api/routes/test-semantic.js | MODIFY | Add 3 falsification test endpoints
+server.js | VERIFY | Ensure routes registered correctly (already done)
+
+
+<hr>
+<h2>RATE LIMITING REQUIREMENTS</h2>
+<p>All new database-accessing functions must be rate-limited when exposed via routes:</p>
+<ul>
+<li>Use existing <code>rateLimit</code> import</li>
+<li>Apply to any new endpoints</li>
+<li>Do NOT add new endpoints without rate limiting</li>
+</ul>
+<hr>
+<h2>ERROR HANDLING REQUIREMENTS</h2>
+<ul>
+<li>All async operations must have try/catch</li>
+<li>Database errors must not crash the server</li>
+<li>OpenAI API errors must trigger fallback, not crash</li>
+<li>All errors must be logged with <code>[MODULE]</code> prefix</li>
+<li>Return structured error objects: <code>{ success: false, error: string }</code></li>
+</ul>
+<hr>
+<h2>WHAT SUCCESS LOOKS LIKE</h2>
+<p>After this PR merges and deploys:</p>
+<ol>
+<li>A user says "My name is Chris"</li>
+<li>Memory is stored with <code>embedding_status: 'pending'</code></li>
+<li>Embedding is generated async (or within 3s timeout)</li>
+<li>Status updates to <code>ready</code></li>
+<li>User asks "What am I called?"</li>
+<li>Semantic retrieval finds "My name is Chris" via embedding similarity</li>
+<li>Response includes telemetry proving semantic method was used</li>
+<li>If user later says "My name is Christopher", the old "Chris" memory is marked <code>is_current: false</code></li>
+</ol>
+<p><strong>The system understands meaning, not just keywords. Facts update deterministically. Behavior is provable via telemetry.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

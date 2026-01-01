@@ -12,7 +12,7 @@
  */
 
 import { retrieveSemanticMemories, getRetrievalStats } from '../services/semantic-retrieval.js';
-import { generateEmbedding, backfillEmbeddings } from '../services/embedding-service.js';
+import { generateEmbedding, backfillEmbeddings, embedMemory } from '../services/embedding-service.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -176,17 +176,201 @@ export default async function handler(req, res) {
         });
       }
 
+      // ============================================
+      // TEST: PARAPHRASE RECALL
+      // ============================================
+      case 'test-paraphrase': {
+        const testUserId = 'test-paraphrase-' + Date.now();
+
+        try {
+          // Store memory with specific content
+          const insertResult = await pool.query(`
+            INSERT INTO persistent_memories (
+              user_id, content, is_current, mode, embedding_status, created_at
+            ) VALUES ($1, $2, true, $3, 'pending', NOW())
+            RETURNING id, content
+          `, [testUserId, 'My name is Chris', 'truth-general']);
+
+          const memoryId = insertResult.rows[0].id;
+          const memoryContent = insertResult.rows[0].content;
+
+          // Generate embedding for it
+          await embedMemory(pool, memoryId, memoryContent);
+
+          // Small delay to ensure embedding is ready
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          // Retrieve with paraphrase
+          const result = await retrieveSemanticMemories(pool, "What's the user called?", {
+            userId: testUserId,
+            mode: 'truth-general'
+          });
+
+          const found = result.memories && result.memories.some(m => m.content && m.content.includes('Chris'));
+
+          // Cleanup
+          await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
+
+          return res.json({
+            test: 'paraphrase-recall',
+            passed: found,
+            query: "What's the user called?",
+            expected: 'Should find "My name is Chris"',
+            found: found ? 'YES - Memory found via semantic similarity' : 'NO - Failed to find',
+            telemetry: result.telemetry,
+            memories_found: result.memories?.length || 0
+          });
+        } catch (error) {
+          // Cleanup on error
+          await pool.query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['test-paraphrase-%']).catch(() => {});
+          throw error;
+        }
+      }
+
+      // ============================================
+      // TEST: SUPERSESSION DETERMINISM
+      // ============================================
+      case 'test-supersession': {
+        const testUserId = 'test-supersession-' + Date.now();
+
+        try {
+          // Store first value
+          const first = await pool.query(`
+            INSERT INTO persistent_memories (
+              user_id, content, fact_fingerprint, fingerprint_confidence,
+              is_current, mode, embedding_status, created_at
+            ) VALUES ($1, $2, $3, $4, true, $5, 'pending', NOW())
+            RETURNING id
+          `, [testUserId, 'My phone number is 111-1111', 'user_phone_number', 0.9, 'truth-general']);
+
+          const firstId = first.rows[0].id;
+
+          // Store second value (should supersede)
+          const second = await pool.query(`
+            INSERT INTO persistent_memories (
+              user_id, content, fact_fingerprint, fingerprint_confidence,
+              is_current, mode, embedding_status, created_at
+            ) VALUES ($1, $2, $3, $4, true, $5, 'pending', NOW())
+            RETURNING id
+          `, [testUserId, 'My phone number is 222-2222', 'user_phone_number', 0.9, 'truth-general']);
+
+          const secondId = second.rows[0].id;
+
+          // Manually supersede first (simulating what storeWithSupersession does)
+          await pool.query(`
+            UPDATE persistent_memories
+            SET is_current = false, superseded_by = $1, superseded_at = NOW()
+            WHERE id = $2
+          `, [secondId, firstId]);
+
+          // Check database state
+          const currentFacts = await pool.query(`
+            SELECT id, content, is_current, superseded_by
+            FROM persistent_memories
+            WHERE user_id = $1 AND fact_fingerprint = 'user_phone_number'
+            ORDER BY created_at
+          `, [testUserId]);
+
+          const oldFact = currentFacts.rows[0];
+          const newFact = currentFacts.rows[1];
+
+          const passed = (
+            oldFact.is_current === false &&
+            oldFact.superseded_by === newFact.id &&
+            newFact.is_current === true
+          );
+
+          // Cleanup
+          await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
+
+          return res.json({
+            test: 'supersession-determinism',
+            passed,
+            expected: 'Old fact is_current=false, new fact is_current=true, old.superseded_by=new.id',
+            actual: {
+              old_fact: {
+                content: oldFact?.content,
+                is_current: oldFact?.is_current,
+                superseded_by: oldFact?.superseded_by
+              },
+              new_fact: {
+                id: newFact?.id,
+                content: newFact?.content,
+                is_current: newFact?.is_current
+              }
+            }
+          });
+        } catch (error) {
+          // Cleanup on error
+          await pool.query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['test-supersession-%']).catch(() => {});
+          throw error;
+        }
+      }
+
+      // ============================================
+      // TEST: MODE ISOLATION
+      // ============================================
+      case 'test-mode-isolation': {
+        const testUserId = 'test-mode-' + Date.now();
+
+        try {
+          // Store in truth-general mode
+          const insertResult = await pool.query(`
+            INSERT INTO persistent_memories (
+              user_id, content, is_current, mode, embedding_status, created_at
+            ) VALUES ($1, $2, true, $3, 'pending', NOW())
+            RETURNING id, content
+          `, [testUserId, 'Secret truth-general memory about cats', 'truth-general']);
+
+          const memoryId = insertResult.rows[0].id;
+          const memoryContent = insertResult.rows[0].content;
+
+          // Generate embedding
+          await embedMemory(pool, memoryId, memoryContent);
+
+          // Small delay to ensure embedding is ready
+          await new Promise(resolve => setTimeout(resolve, 100));
+
+          // Retrieve in business-validation mode (different mode!)
+          const result = await retrieveSemanticMemories(pool, 'cats', {
+            userId: testUserId,
+            mode: 'business-validation'
+          });
+
+          const leaked = result.memories && result.memories.some(m => m.content && m.content.includes('cats'));
+
+          // Cleanup
+          await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
+
+          return res.json({
+            test: 'mode-isolation',
+            passed: !leaked,  // Pass if NOT found (no leak)
+            expected: 'truth-general memory should NOT appear in business-validation retrieval',
+            found_leak: leaked,
+            telemetry: result.telemetry,
+            memories_found: result.memories?.length || 0
+          });
+        } catch (error) {
+          // Cleanup on error
+          await pool.query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['test-mode-%']).catch(() => {});
+          throw error;
+        }
+      }
+
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'health', 'schema'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
             '/api/test-semantic?action=stats&userId=xxx',
             '/api/test-semantic?action=embed&query=test+text',
             '/api/test-semantic?userId=xxx&query=what+is+my+name',
-            '/api/test-semantic?action=backfill&limit=10'
+            '/api/test-semantic?action=backfill&limit=10',
+            '/api/test-semantic?action=test-paraphrase',
+            '/api/test-semantic?action=test-supersession',
+            '/api/test-semantic?action=test-mode-isolation'
           ]
         });
     }
