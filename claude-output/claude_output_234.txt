@@ -1,0 +1,33 @@
+The fix has been applied successfully. Let me create a summary of the changes.
+
+---SUMMARY---
+
+## Issue Fixed: Missing fetch and AbortController imports in embedding-service.js
+
+### Problem
+The server was failing to start because `api/routes/embedding-service.js` was using browser globals (`fetch` and `AbortController`) that weren't properly referenced in the Node.js module scope, causing "not defined" errors on lines 58 and 61.
+
+### Solution Applied
+Added explicit references to `fetch` and `AbortController` from `globalThis` at the top of the file (lines 15-18), just before the configuration section.
+
+### Changes Made
+**File Modified:** `api/routes/embedding-service.js`
+
+Added the following code after the JSDoc header and before the configuration section:
+```javascript
+// Node.js 18+ has native fetch and AbortController as globals
+// This explicit reference ensures they're available in the module scope
+const fetch = globalThis.fetch;
+const AbortController = globalThis.AbortController;
+```
+
+### Why This Approach
+- Node.js 18+ includes native `fetch` and `AbortController` as globals
+- Using `globalThis.fetch` and `globalThis.AbortController` ensures these are properly scoped to the module
+- No additional dependencies needed (no node-fetch package required)
+- Maintains ES6 module syntax consistent with the project
+- Minimal change that directly addresses the root cause
+
+The fix ensures that when the `generateEmbedding` function creates an `AbortController` instance (line 63) and calls `fetch` (line 66), both references are properly defined and available in the module scope.
+
+---END SUMMARY---
