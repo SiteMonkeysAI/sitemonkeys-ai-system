@@ -167,14 +167,25 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     includeAllModes = false
   } = options;
 
-  // Initialize telemetry
+  // Initialize comprehensive telemetry
   const telemetry = {
+    method: 'semantic',
     query_length: query.length,
     mode: mode,
     categories_filter: categories,
-    candidates_fetched: 0,
+    candidates_considered: 0,
     candidates_with_embeddings: 0,
+    vectors_compared: 0,
     candidates_above_threshold: 0,
+    results_injected: 0,
+    injected_memory_ids: [],
+    top_scores: [],
+    token_budget: options.tokenBudget || 2000,
+    tokens_used: 0,
+    fallback_reason: null,
+    latency_ms: 0,
+    // Legacy telemetry (for compatibility)
+    candidates_fetched: 0,
     results_returned: 0,
     top_similarity: 0,
     avg_similarity: 0,
@@ -236,10 +247,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const { rows: candidates } = await pool.query(sql, params);
     telemetry.db_fetch_ms = Date.now() - dbStart;
     telemetry.candidates_fetched = candidates.length;
+    telemetry.candidates_considered = candidates.length;
 
     if (candidates.length === 0) {
       console.log(`[SEMANTIC RETRIEVAL] No candidates found for user ${userId} in mode ${mode}`);
       telemetry.total_ms = Date.now() - startTime;
+      telemetry.latency_ms = Date.now() - startTime;
       return {
         success: true,
         memories: [],
@@ -251,10 +264,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const scoringStart = Date.now();
     
     // Filter to only those with valid embeddings
-    const withEmbeddings = candidates.filter(c => 
+    const withEmbeddings = candidates.filter(c =>
       c.embedding && Array.isArray(c.embedding) && c.embedding.length > 0
     );
     telemetry.candidates_with_embeddings = withEmbeddings.length;
+    telemetry.vectors_compared = withEmbeddings.length;
 
     // Calculate similarity scores
     const scored = withEmbeddings.map(candidate => ({
@@ -279,14 +293,25 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // STEP 4: Take top K results
     const results = filtered.slice(0, topK);
     telemetry.results_returned = results.length;
+    telemetry.results_injected = results.length;
+
+    // Collect memory IDs and scores
+    telemetry.injected_memory_ids = results.map(r => r.id);
+    telemetry.top_scores = results.slice(0, 10).map(r => parseFloat(r.similarity.toFixed(3)));
 
     // Calculate telemetry stats
     if (results.length > 0) {
       telemetry.top_similarity = results[0].similarity;
       telemetry.avg_similarity = results.reduce((sum, r) => sum + r.similarity, 0) / results.length;
+
+      // Calculate token usage (rough estimate: ~4 chars per token)
+      telemetry.tokens_used = Math.ceil(
+        results.reduce((sum, r) => sum + (r.content?.length || 0), 0) / 4
+      );
     }
 
     telemetry.total_ms = Date.now() - startTime;
+    telemetry.latency_ms = Date.now() - startTime;
 
     // Clean up results (remove embeddings from response to save bandwidth)
     const cleanResults = results.map(({ embedding, ...rest }) => ({
