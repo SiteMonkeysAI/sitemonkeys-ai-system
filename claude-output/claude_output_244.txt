@@ -1,0 +1,41 @@
+Excellent! All the changes have been applied correctly. Let me create a summary of the fix:
+
+---SUMMARY---
+
+Fixed issue #244 by adding the missing `category_name` column to all INSERT statements in api/routes/test-semantic.js that were violating the NOT NULL constraint.
+
+**Changes made to /home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/routes/test-semantic.js:**
+
+1. **test-paraphrase test case (line 187-192)**:
+   - Added `category_name` to the INSERT column list
+   - Added `$4` placeholder to VALUES clause
+   - Added `'personal_info'` as the 4th parameter in the array
+   - This test stores user name information, so 'personal_info' is the appropriate category
+
+2. **test-supersession test case - first insert (line 238-244)**:
+   - Added `category_name` to the INSERT column list
+   - Added `$6` placeholder to VALUES clause (since there were already 5 parameters)
+   - Added `'personal_info'` as the 6th parameter in the array
+   - This test stores phone number information, so 'personal_info' is the appropriate category
+
+3. **test-supersession test case - second insert (line 249-255)**:
+   - Added `category_name` to the INSERT column list
+   - Added `$6` placeholder to VALUES clause
+   - Added `'personal_info'` as the 6th parameter in the array
+   - This test also stores phone number information, so 'personal_info' is the appropriate category
+
+4. **test-mode-isolation test case (line 318-323)**:
+   - Added `category_name` to the INSERT column list
+   - Added `$4` placeholder to VALUES clause
+   - Added `'general'` as the 4th parameter in the array
+   - This test stores general memory content about cats, so 'general' is the appropriate category
+
+**Result:**
+All three test endpoints should now work without throwing database constraint violations:
+- GET /api/test-semantic?action=test-paraphrase
+- GET /api/test-semantic?action=test-supersession
+- GET /api/test-semantic?action=test-mode-isolation
+
+The tests will now return proper test results (pass/fail) instead of 500 errors caused by NULL constraint violations on the category_name column.
+
+---END SUMMARY---

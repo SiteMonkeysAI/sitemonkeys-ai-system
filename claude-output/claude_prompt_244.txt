@@ -1,0 +1,67 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #244: [claude-fix] CRITICAL: Add categoryName to all test-semantic.js test cases
+
+Issue Description:
+## Problem
+All three falsification tests fail with:
+`null value in column "category_name" of relation "persistent_memories" violates not-null constraint`
+
+## Root Cause
+The test cases in test-semantic.js call storeWithSupersession() without providing categoryName, but category_name is a NOT NULL column.
+
+## Required Fix
+In api/routes/test-semantic.js, update ALL calls to storeWithSupersession to include categoryName.
+
+### test-paraphrase (around line 190):
+```javascript
+await storeWithSupersession(pool, {
+  userId: testUserId,
+  content: 'My name is Chris',
+  factFingerprint: 'user_name',
+  fingerprintConfidence: 0.9,
+  mode: 'truth-general',
+  categoryName: 'personal_info'  // ADD THIS
+});
+```
+
+### test-supersession (around lines 240 and 250):
+Both storeWithSupersession calls need:
+```javascript
+categoryName: 'personal_info'  // ADD THIS
+```
+
+### test-mode-isolation (around line 320):
+```javascript
+await storeWithSupersession(pool, {
+  userId: testUserId,
+  content: 'Secret truth-general memory about cats',
+  factFingerprint: null,
+  mode: 'truth-general',
+  categoryName: 'general'  // ADD THIS
+});
+```
+
+## Acceptance Criteria
+After fix:
+- GET /api/test-semantic?action=test-paraphrase returns { "passed": true } or { "passed": false } (not 500 error)
+- GET /api/test-semantic?action=test-supersession returns { "passed": true } or { "passed": false } (not 500 error)
+- GET /api/test-semantic?action=test-mode-isolation returns { "passed": true } or { "passed": false } (not 500 error)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
