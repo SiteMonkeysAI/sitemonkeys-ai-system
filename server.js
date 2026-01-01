@@ -4,6 +4,8 @@
 //Redeploy2
 
 // Enhanced logging for Railway visibility
+const rateLimit = require("express-rate-limit");
+
 const logWithTimestamp = (level, category, message, data = null) => {
   const timestamp = new Date().toISOString();
   const logMessage = `[${timestamp}] [${level}] [${category}] ${message}`;
@@ -674,6 +676,13 @@ app.get("/api/session/stats", (req, res) => {
   }
 });
 
+const migrateSemanticRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 migration requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Upload endpoints
 app.post("/api/upload", uploadMiddleware, handleFileUpload);
 app.post("/api/upload-for-analysis", analysisMiddleware, handleAnalysisUpload);
@@ -685,7 +694,7 @@ app.use("/api/debug", debugRoutes);
 app.use("/api/test", memoryFullCheckRoutes);
 
 // Migration endpoint - MUST come before catch-all routes
-app.get('/api/migrate-semantic', migrateSemanticHandler);
+app.get('/api/migrate-semantic', migrateSemanticRateLimiter, migrateSemanticHandler);
 
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);
