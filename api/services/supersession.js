@@ -395,20 +395,15 @@ export async function storeWithSupersession(pool, memoryData) {
       // Supersede old facts (if any)
       if (existing.rows.length > 0) {
         const oldIds = existing.rows.map(r => r.id);
-        
-        // Note: superseded_by is UUID type but we're storing INTEGER id
-        // Cast to text to avoid type mismatch (this is a schema inconsistency)
+
+        // Note: superseded_by is UUID type but id is INTEGER - we can't store INTEGER in UUID
+        // So we just mark as not current and set superseded_at timestamp
         await client.query(`
-          UPDATE persistent_memories 
-          SET is_current = false, 
-              superseded_by = $1::text::uuid, 
+          UPDATE persistent_memories
+          SET is_current = false,
               superseded_at = NOW()
-          WHERE id = ANY($2::integer[])
-        `, [
-          // Generate a deterministic UUID from the integer ID
-          `00000000-0000-0000-0000-${String(newId).padStart(12, '0')}`,
-          oldIds
-        ]);
+          WHERE id = ANY($1::integer[])
+        `, [oldIds]);
 
         console.log(`[SUPERSESSION] ✅ Replaced ${existing.rows.length} old facts with ID ${newId}`);
         console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);

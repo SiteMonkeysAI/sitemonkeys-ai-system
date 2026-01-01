@@ -1,0 +1,100 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #248: [claude-fix] Fix supersession UUID type mismatch and paraphrase test timing
+
+Issue Description:
+"candidates_considered": 0,
+"candidates_with_embeddings": 0
+```
+
+The test stores the memory and immediately tries to retrieve it, but the **embedding isn't generated yet** (it's async/non-blocking). The memory exists but has no embedding, so semantic search finds nothing.
+
+**This is a timing issue**, not a logic issue. The test needs to either:
+- Wait for embedding to complete, OR
+- Call `embedMemory` synchronously before retrieval
+
+### 3. Supersession Test - UUID Error
+```
+"invalid input syntax for type uuid: \"841\""
+```
+
+This is the schema mismatch I warned about: `id` is INTEGER (841) but `superseded_by` is UUID type. The code is trying to store the integer ID in a UUID column.
+
+---
+
+## One more fix needed - create this issue:
+
+**Title:** `[claude-fix] Fix supersession UUID type mismatch and paraphrase test timing`
+
+**Body:**
+```
+## Problem 1: Supersession UUID Error
+`invalid input syntax for type uuid: "841"`
+
+The `id` column is INTEGER but `superseded_by` is UUID. When marking old facts as superseded, we're trying to store an INTEGER in a UUID column.
+
+### Fix in api/services/supersession.js (storeWithSupersession function):
+
+Change the UPDATE query from:
+```javascript
+await client.query(`
+  UPDATE persistent_memories 
+  SET is_current = false, 
+      superseded_by = $1::text::uuid, 
+      superseded_at = NOW()
+  WHERE id = ANY($2::integer[])
+`, [newId, oldIds]);
+```
+
+To simply not set superseded_by (since we can't store INTEGER in UUID):
+```javascript
+await client.query(`
+  UPDATE persistent_memories 
+  SET is_current = false, 
+      superseded_at = NOW()
+  WHERE id = ANY($1::integer[])
+`, [oldIds]);
+```
+
+Or alternatively, store the ID as a string in a different way. The key requirement is that is_current becomes false.
+
+## Problem 2: Paraphrase Test Timing
+The test stores a memory then immediately retrieves, but embedding generation is async. The memory has no embedding yet, so semantic search finds 0 candidates.
+
+### Fix in api/routes/test-semantic.js (test-paraphrase case):
+
+After calling embedMemory, add a small wait or verify the embedding was stored:
+```javascript
+// Generate embedding for it (WAIT for completion)
+const embedResult = await embedMemory(pool, memories.rows[0].id, memories.rows[0].content);
+console.log('[TEST] Embedding result:', embedResult);
+
+// Verify embedding exists before retrieval
+const checkEmbed = await pool.query(
+  'SELECT embedding_status FROM persistent_memories WHERE id = $1',
+  [memories.rows[0].id]
+);
+console.log('[TEST] Embedding status:', checkEmbed.rows[0]?.embedding_status);
+```
+
+## Acceptance Criteria
+- test-supersession returns pass/fail (not 500 error)
+- test-paraphrase finds the stored memory (candidates_considered > 0)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
