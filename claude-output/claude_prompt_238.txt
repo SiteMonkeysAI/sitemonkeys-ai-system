@@ -1,0 +1,71 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #238: [claude-fix] COMPREHENSIVE FIX: Semantic Layer Complete Route Registration with Rate Limiting
+
+Issue Description:
+## CRITICAL: Complete server.js Route Fix Required
+
+Multiple PRs have been merged but routes still not working. This issue requires a COMPLETE audit and fix.
+
+### PROBLEM
+- /api/migrate-semantic-v2 returns repo-snapshot (should return migration handler)
+- /api/test-semantic returns repo-snapshot (should return test handler)
+- Routes are either not registered OR registered AFTER the catch-all
+
+### REQUIRED: Complete verification and fix
+
+1. VERIFY these imports exist at top of server.js:
+```javascript
+import migrateSemanticV2Handler from "./api/routes/migrate-semantic-v2.js";
+import testSemanticHandler from "./api/routes/test-semantic.js";
+```
+
+2. VERIFY the rate limiter exists (create if not):
+```javascript
+const semanticRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { error: 'Too many requests, please try again later' }
+});
+```
+
+3. ADD these route registrations IMMEDIATELY BEFORE `app.use("/api", repoSnapshotRoute)`:
+```javascript
+// Semantic layer routes with rate limiting - MUST be before catch-all
+app.get('/api/migrate-semantic-v2', semanticRateLimiter, migrateSemanticV2Handler);
+app.get('/api/test-semantic', semanticRateLimiter, testSemanticHandler);
+```
+
+4. VERIFY the line `app.use("/api", repoSnapshotRoute)` comes AFTER all specific /api routes
+
+### VERIFICATION STEPS
+After deployment, confirm:
+- `fetch('/api/test-semantic?action=health')` does NOT return fileCount/files array
+- `fetch('/api/migrate-semantic-v2')` does NOT return fileCount/files array
+
+### WHY THIS KEEPS FAILING
+Previous PRs may have added routes but:
+- In wrong location (after catch-all)
+- Without proper imports
+- Were reverted by other PRs
+- Never actually deployed
+
+This fix must be verified end-to-end.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

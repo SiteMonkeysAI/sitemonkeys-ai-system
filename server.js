@@ -4,8 +4,6 @@
 //Redeploy2
 
 // Enhanced logging for Railway visibility
-const RateLimit = require("express-rate-limit");
-
 console.log = ((oldLog) => {
   return (...args) => {
     oldLog.apply(console, args);
@@ -763,12 +761,32 @@ app.get("/api/session/stats", (req, res) => {
   }
 });
 
+// ===== RATE LIMITERS =====
+// Define all rate limiters before route registration
+
 const migrateSemanticRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 10, // limit each IP to 10 migration requests per windowMs
   standardHeaders: true,
   legacyHeaders: false,
 });
+
+const testSemanticRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs for this route
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const migrateSemanticV2RateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs for this route
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+// ===== ROUTE REGISTRATION =====
+// CRITICAL: Specific routes MUST be registered BEFORE catch-all routes
 
 // Upload endpoints
 app.post("/api/upload", uploadMiddleware, handleFileUpload);
@@ -780,26 +798,8 @@ app.use("/api/debug", debugRoutes);
 // Memory full check test endpoint (only in private/debug mode)
 app.use("/api/test", memoryFullCheckRoutes);
 
-// Migration endpoint - MUST come before catch-all routes
-app.get(
-  "/api/migrate-semantic",
-  migrateSemanticRateLimiter,
-  migrateSemanticHandler,
-);
-
-// Rate limiter for semantic test endpoint
-const testSemanticRateLimiter = RateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs for this route
-});
-
-// Rate limiter for semantic migrate v2 endpoint
-const migrateSemanticV2RateLimiter = RateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs for this route
-});
-
 // Semantic layer routes - MUST be before catch-all
+app.get("/api/migrate-semantic", migrateSemanticRateLimiter, migrateSemanticHandler);
 app.get('/api/migrate-semantic-v2', migrateSemanticV2RateLimiter, migrateSemanticV2Handler);
 app.get('/api/test-semantic', testSemanticRateLimiter, testSemanticHandler);
 
