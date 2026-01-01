@@ -1,0 +1,1117 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #224: [claude-fix] Issue: IMPLEMENT Semantic Intelligence Layer - Executable Implementation
+
+Issue Description:
+Type: Implementation (NOT analysis - actually write the code)
+
+INSTRUCTION TO CLAUDE CODE
+DO NOT ANALYZE. DO NOT CREATE A PR WITH ANALYSIS. ACTUALLY IMPLEMENT.
+This issue requires you to:
+
+Run the SQL migration
+Create 8 new files with the EXACT code provided below
+Modify 2 existing files at the EXACT locations specified
+Test that it works
+
+If you cannot write files directly, create a PR with ALL the file contents ready to merge.
+
+PHASE 1: DATABASE MIGRATION
+File to create: sql/002-semantic-intelligence-layer.sql
+sql-- ============================================
+-- SEMANTIC INTELLIGENCE LAYER MIGRATION
+-- Run this FIRST before deploying code changes
+-- ============================================
+
+-- Step 1: Enable pgvector extension
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Step 2: Add semantic columns to persistent_memories table
+ALTER TABLE persistent_memories 
+ADD COLUMN IF NOT EXISTS embedding vector(1536),
+ADD COLUMN IF NOT EXISTS fact_fingerprint TEXT,
+ADD COLUMN IF NOT EXISTS fingerprint_confidence FLOAT DEFAULT 0.5,
+ADD COLUMN IF NOT EXISTS is_current BOOLEAN DEFAULT true,
+ADD COLUMN IF NOT EXISTS superseded_by UUID,
+ADD COLUMN IF NOT EXISTS superseded_at TIMESTAMPTZ,
+ADD COLUMN IF NOT EXISTS version_number INTEGER DEFAULT 1,
+ADD COLUMN IF NOT EXISTS previous_version_id UUID;
+
+-- Step 3: Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_memories_embedding 
+ON persistent_memories USING ivfflat (embedding vector_cosine_ops) 
+WITH (lists = 100);
+
+CREATE INDEX IF NOT EXISTS idx_memories_fingerprint 
+ON persistent_memories (user_id, fact_fingerprint) 
+WHERE is_current = true AND superseded_by IS NULL;
+
+CREATE INDEX IF NOT EXISTS idx_memories_is_current 
+ON persistent_memories (user_id, is_current) 
+WHERE is_current = true;
+
+-- Step 4: Create partial unique constraint for active facts
+-- (Only one "current" version of each fact per user)
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_fact
+ON persistent_memories (user_id, fact_fingerprint)
+WHERE is_current = true AND superseded_by IS NULL AND fact_fingerprint IS NOT NULL;
+
+-- Step 5: Set ivfflat probes for better recall
+SET ivfflat.probes = 10;
+
+-- Step 6: Analyze table for query planner
+ANALYZE persistent_memories;
+
+-- Verification query (run manually to confirm)
+-- SELECT column_name, data_type FROM information_schema.columns 
+-- WHERE table_name = 'persistent_memories' ORDER BY ordinal_position;
+IMPORTANT: This SQL must be run on Railway PostgreSQL BEFORE deploying code.
+
+PHASE 2: CREATE EMBEDDING SERVICE
+File to create: api/core/intelligence/embedding-service.js
+javascript/**
+ * Embedding Service - Generates vector embeddings via OpenAI
+ * Part of Issue #220 Semantic Intelligence Layer
+ */
+
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const EMBEDDING_MODEL = 'text-embedding-3-small';
+const EMBEDDING_DIMENSIONS = 1536;
+const TIMEOUT_MS = 3000;
+
+// Async queue for failed/timeout embeddings
+const embeddingQueue = [];
+let isProcessingQueue = false;
+
+/**
+ * Generate embedding for text content
+ * @param {string} text - Text to embed
+ * @param {object} options - Options
+ * @returns {Promise<{embedding: number[], cached: boolean, error?: string}>}
+ */
+export async function generateEmbedding(text, options = {}) {
+  const { timeout = TIMEOUT_MS, async = false } = options;
+  
+  if (!OPENAI_API_KEY) {
+    console.warn('[Embedding] No OpenAI API key configured');
+    return { embedding: null, cached: false, error: 'no_api_key' };
+  }
+  
+  if (!text || text.trim().length === 0) {
+    return { embedding: null, cached: false, error: 'empty_text' };
+  }
+  
+  // Truncate to ~8000 tokens (~32000 chars) for safety
+  const truncatedText = text.slice(0, 32000);
+  
+  const startTime = Date.now();
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    const response = await fetch('https://api.openai.com/v1/embeddings', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: EMBEDDING_MODEL,
+        input: truncatedText,
+        dimensions: EMBEDDING_DIMENSIONS
+      }),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    if (!response.ok) {
+      const error = await response.text();
+      console.error('[Embedding] API error:', error);
+      
+      if (async) {
+        queueForRetry({ text: truncatedText, options });
+      }
+      
+      return { embedding: null, cached: false, error: `api_error_${response.status}` };
+    }
+    
+    const data = await response.json();
+    const embedding = data.data?.[0]?.embedding;
+    
+    if (!embedding || embedding.length !== EMBEDDING_DIMENSIONS) {
+      return { embedding: null, cached: false, error: 'invalid_response' };
+    }
+    
+    const duration = Date.now() - startTime;
+    
+    console.log(JSON.stringify({
+      event: 'EMBEDDING_GENERATED',
+      timestamp: new Date().toISOString(),
+      textLength: truncatedText.length,
+      dimensions: embedding.length,
+      durationMs: duration,
+      model: EMBEDDING_MODEL
+    }));
+    
+    return { embedding, cached: false, durationMs: duration };
+    
+  } catch (error) {
+    const duration = Date.now() - startTime;
+    
+    if (error.name === 'AbortError') {
+      console.warn(`[Embedding] Timeout after ${duration}ms`);
+      
+      if (async) {
+        queueForRetry({ text: truncatedText, options });
+      }
+      
+      return { embedding: null, cached: false, error: 'timeout' };
+    }
+    
+    console.error('[Embedding] Error:', error.message);
+    return { embedding: null, cached: false, error: error.message };
+  }
+}
+
+/**
+ * Generate embedding asynchronously (non-blocking)
+ * Returns immediately, processes in background
+ */
+export async function generateEmbeddingAsync(text, callback) {
+  // Return immediately
+  setImmediate(async () => {
+    const result = await generateEmbedding(text, { async: true });
+    if (callback) {
+      callback(result);
+    }
+  });
+  
+  return { queued: true };
+}
+
+/**
+ * Queue failed embedding for retry
+ */
+function queueForRetry(item) {
+  embeddingQueue.push({
+    ...item,
+    attempts: (item.attempts || 0) + 1,
+    queuedAt: Date.now()
+  });
+  
+  console.log(JSON.stringify({
+    event: 'EMBEDDING_QUEUED',
+    timestamp: new Date().toISOString(),
+    queueLength: embeddingQueue.length
+  }));
+  
+  // Start processing if not already
+  if (!isProcessingQueue) {
+    processQueue();
+  }
+}
+
+/**
+ * Process queued embeddings
+ */
+async function processQueue() {
+  if (isProcessingQueue || embeddingQueue.length === 0) return;
+  
+  isProcessingQueue = true;
+  
+  while (embeddingQueue.length > 0) {
+    const item = embeddingQueue.shift();
+    
+    // Skip if too many attempts
+    if (item.attempts > 3) {
+      console.warn('[Embedding] Dropping item after 3 attempts');
+      continue;
+    }
+    
+    // Wait before retry (exponential backoff)
+    await new Promise(r => setTimeout(r, Math.pow(2, item.attempts) * 1000));
+    
+    const result = await generateEmbedding(item.text, { 
+      ...item.options, 
+      async: false // Don't re-queue
+    });
+    
+    if (item.callback) {
+      item.callback(result);
+    }
+  }
+  
+  isProcessingQueue = false;
+}
+
+/**
+ * Calculate cosine similarity between two embeddings
+ */
+export function cosineSimilarity(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  
+  let dotProduct = 0;
+  let normA = 0;
+  let normB = 0;
+  
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  
+  const magnitude = Math.sqrt(normA) * Math.sqrt(normB);
+  return magnitude === 0 ? 0 : dotProduct / magnitude;
+}
+
+export default {
+  generateEmbedding,
+  generateEmbeddingAsync,
+  cosineSimilarity,
+  EMBEDDING_DIMENSIONS
+};
+
+PHASE 3: CREATE FACT FINGERPRINT SERVICE
+File to create: api/core/intelligence/fact-fingerprint.js
+javascript/**
+ * Fact Fingerprint Service - Entity-aware deterministic fact identification
+ * Part of Issue #220 Semantic Intelligence Layer
+ */
+
+import crypto from 'crypto';
+
+// Fact type patterns for entity extraction
+const FACT_PATTERNS = {
+  phone: {
+    pattern: /(?:phone|cell|mobile|contact)\s*(?:number|#)?\s*[:=]?\s*([\d\-\(\)\+\s]{7,})/i,
+    entityType: 'phone_number',
+    confidence: 0.9
+  },
+  email: {
+    pattern: /(?:email|e-mail)\s*[:=]?\s*([^\s@]+@[^\s@]+\.[^\s@]+)/i,
+    entityType: 'email_address',
+    confidence: 0.9
+  },
+  name: {
+    pattern: /(?:my name is|i'm called|call me)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
+    entityType: 'person_name',
+    confidence: 0.85
+  },
+  location: {
+    pattern: /(?:i live in|i'm from|located in|based in)\s+([A-Z][a-zA-Z\s,]+)/i,
+    entityType: 'location',
+    confidence: 0.8
+  },
+  company: {
+    pattern: /(?:i work (?:at|for)|my company is|employed at)\s+([A-Z][a-zA-Z\s&]+)/i,
+    entityType: 'company',
+    confidence: 0.8
+  },
+  preference: {
+    pattern: /(?:i (?:like|love|prefer|hate|dislike))\s+(.+?)(?:\.|$)/i,
+    entityType: 'preference',
+    confidence: 0.6
+  },
+  medical: {
+    pattern: /(?:diagnosed with|i have|suffering from)\s+([a-zA-Z\s]+?)(?:\.|,|$)/i,
+    entityType: 'medical_condition',
+    confidence: 0.4  // Low confidence - should coexist, not supersede
+  }
+};
+
+/**
+ * Extract fact type and entities from content
+ * @param {string} content - Memory content
+ * @returns {object} { factType, entities, confidence }
+ */
+export function extractFactInfo(content) {
+  if (!content) {
+    return { factType: 'general', entities: [], confidence: 0.3 };
+  }
+  
+  const normalizedContent = content.toLowerCase().trim();
+  
+  for (const [factType, config] of Object.entries(FACT_PATTERNS)) {
+    const match = content.match(config.pattern);
+    if (match) {
+      return {
+        factType: config.entityType,
+        entities: [match[1]?.trim()].filter(Boolean),
+        confidence: config.confidence,
+        matchedPattern: factType
+      };
+    }
+  }
+  
+  // No specific pattern matched - general fact
+  return {
+    factType: 'general',
+    entities: [],
+    confidence: 0.3
+  };
+}
+
+/**
+ * Generate deterministic fingerprint for a fact
+ * Same fact = same fingerprint, regardless of phrasing
+ * 
+ * @param {string} content - Memory content
+ * @param {string} userId - User ID for namespacing
+ * @returns {object} { fingerprint, factType, confidence, shouldSupersede }
+ */
+export function generateFingerprint(content, userId) {
+  const factInfo = extractFactInfo(content);
+  
+  // Build canonical representation
+  let canonical;
+  
+  if (factInfo.entities.length > 0) {
+    // Entity-based fingerprint: type + normalized entity
+    const normalizedEntity = factInfo.entities[0]
+      .toLowerCase()
+      .replace(/[\s\-\(\)]/g, '')  // Remove spaces, dashes, parens
+      .trim();
+    
+    canonical = `${factInfo.factType}:${normalizedEntity}`;
+  } else {
+    // Content-based fingerprint for general facts
+    // Extract key nouns/verbs for comparison
+    const keyTerms = extractKeyTerms(content);
+    canonical = `general:${keyTerms.join(':')}`;
+  }
+  
+  // Generate hash
+  const fingerprint = crypto
+    .createHash('sha256')
+    .update(`${userId}:${canonical}`)
+    .digest('hex')
+    .substring(0, 32);  // 32 char fingerprint
+  
+  // Determine if this fact type should supersede or coexist
+  const shouldSupersede = factInfo.confidence >= 0.7;
+  
+  console.log(JSON.stringify({
+    event: 'FINGERPRINT_GENERATED',
+    timestamp: new Date().toISOString(),
+    factType: factInfo.factType,
+    confidence: factInfo.confidence,
+    shouldSupersede,
+    fingerprintPrefix: fingerprint.substring(0, 8)
+  }));
+  
+  return {
+    fingerprint,
+    factType: factInfo.factType,
+    confidence: factInfo.confidence,
+    shouldSupersede,
+    entities: factInfo.entities
+  };
+}
+
+/**
+ * Extract key terms from content for general fingerprinting
+ */
+function extractKeyTerms(content) {
+  // Remove stop words and extract meaningful terms
+  const stopWords = new Set([
+    'i', 'me', 'my', 'is', 'are', 'was', 'were', 'the', 'a', 'an',
+    'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
+    'that', 'this', 'it', 'be', 'have', 'has', 'had', 'do', 'does'
+  ]);
+  
+  const terms = content
+    .toLowerCase()
+    .replace(/[^\w\s]/g, '')
+    .split(/\s+/)
+    .filter(word => word.length > 2 && !stopWords.has(word))
+    .sort()  // Deterministic order
+    .slice(0, 5);  // Max 5 key terms
+  
+  return terms;
+}
+
+/**
+ * Check if two fingerprints represent the same fact
+ */
+export function isSameFact(fingerprint1, fingerprint2) {
+  return fingerprint1 && fingerprint2 && fingerprint1 === fingerprint2;
+}
+
+export default {
+  extractFactInfo,
+  generateFingerprint,
+  isSameFact,
+  FACT_PATTERNS
+};
+
+PHASE 4: CREATE SEMANTIC RETRIEVAL SERVICE
+File to create: api/core/intelligence/semantic-retrieval.js
+javascript/**
+ * Semantic Retrieval Service - Hybrid vector + keyword search
+ * Part of Issue #220 Semantic Intelligence Layer
+ */
+
+import { generateEmbedding, cosineSimilarity } from './embedding-service.js';
+
+// Configurable weights for hybrid ranking
+const DEFAULT_WEIGHTS = {
+  semantic: 0.5,    // Vector similarity
+  keyword: 0.3,     // Token match
+  recency: 0.1,     // Time decay
+  matchFirst: 0.1   // High-entropy token bonus
+};
+
+/**
+ * Unified semantic retrieval combining vector search + keyword fallback
+ * 
+ * @param {object} db - Database connection
+ * @param {string} userId - User ID
+ * @param {string} query - Search query
+ * @param {object} options - Retrieval options
+ * @returns {Promise<object>} { memories, telemetry }
+ */
+export async function semanticRetrieve(db, userId, query, options = {}) {
+  const {
+    limit = 10,
+    category = null,
+    weights = DEFAULT_WEIGHTS,
+    includeSuperseded = false
+  } = options;
+  
+  const startTime = Date.now();
+  const telemetry = {
+    method: 'semantic_hybrid',
+    vectorCandidates: 0,
+    keywordCandidates: 0,
+    totalCandidates: 0,
+    embeddingGenerated: false,
+    embeddingError: null
+  };
+  
+  // Step 1: Generate query embedding
+  const embeddingResult = await generateEmbedding(query);
+  telemetry.embeddingGenerated = !!embeddingResult.embedding;
+  telemetry.embeddingError = embeddingResult.error || null;
+  
+  let candidates = [];
+  
+  // Step 2: Vector search (if embedding available)
+  if (embeddingResult.embedding) {
+    const vectorCandidates = await getVectorCandidates(
+      db, userId, embeddingResult.embedding, category, limit * 2, includeSuperseded
+    );
+    telemetry.vectorCandidates = vectorCandidates.length;
+    candidates.push(...vectorCandidates);
+  }
+  
+  // Step 3: Keyword search (always run as fallback/supplement)
+  const keywordCandidates = await getKeywordCandidates(
+    db, userId, query, category, limit * 2, includeSuperseded
+  );
+  telemetry.keywordCandidates = keywordCandidates.length;
+  
+  // Merge candidates (deduplicate by ID)
+  const seenIds = new Set(candidates.map(c => c.id));
+  for (const kc of keywordCandidates) {
+    if (!seenIds.has(kc.id)) {
+      candidates.push(kc);
+      seenIds.add(kc.id);
+    }
+  }
+  
+  telemetry.totalCandidates = candidates.length;
+  
+  // Step 4: Hybrid ranking
+  const rankedMemories = rankCandidates(
+    candidates, 
+    query, 
+    embeddingResult.embedding, 
+    weights
+  );
+  
+  // Step 5: Take top N
+  const results = rankedMemories.slice(0, limit);
+  
+  telemetry.durationMs = Date.now() - startTime;
+  telemetry.resultsReturned = results.length;
+  
+  console.log(JSON.stringify({
+    event: 'SEMANTIC_RETRIEVAL',
+    timestamp: new Date().toISOString(),
+    userId,
+    query: query.substring(0, 50),
+    ...telemetry
+  }));
+  
+  return { memories: results, telemetry };
+}
+
+/**
+ * Get candidates via vector similarity search
+ */
+async function getVectorCandidates(db, userId, queryEmbedding, category, limit, includeSuperseded) {
+  try {
+    // Format embedding for PostgreSQL
+    const embeddingStr = `[${queryEmbedding.join(',')}]`;
+    
+    let sql = `
+      SELECT 
+        id, user_id, category_name, content, token_count,
+        relevance_score, created_at, metadata,
+        embedding <=> $1::vector AS vector_distance
+      FROM persistent_memories
+      WHERE user_id = $2
+        AND embedding IS NOT NULL
+    `;
+    
+    const params = [embeddingStr, userId];
+    let paramIndex = 3;
+    
+    if (category) {
+      sql += ` AND category_name = $${paramIndex}`;
+      params.push(category);
+      paramIndex++;
+    }
+    
+    if (!includeSuperseded) {
+      sql += ` AND (is_current = true OR is_current IS NULL)`;
+      sql += ` AND superseded_by IS NULL`;
+    }
+    
+    sql += ` ORDER BY vector_distance ASC LIMIT $${paramIndex}`;
+    params.push(limit);
+    
+    const result = await db.query(sql, params);
+    
+    return result.rows.map(row => ({
+      ...row,
+      scores: {
+        vector: 1 - (row.vector_distance || 1),  // Convert distance to similarity
+        keyword: 0,
+        recency: 0,
+        matchFirst: 0
+      }
+    }));
+    
+  } catch (error) {
+    console.error('[SemanticRetrieval] Vector search error:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Get candidates via keyword/token search
+ */
+async function getKeywordCandidates(db, userId, query, category, limit, includeSuperseded) {
+  try {
+    // Extract significant tokens
+    const tokens = query
+      .toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .split(/\s+/)
+      .filter(t => t.length > 2);
+    
+    if (tokens.length === 0) {
+      return [];
+    }
+    
+    // Build ILIKE conditions
+    const conditions = tokens.map((_, i) => `LOWER(content) LIKE $${i + 3}`);
+    const params = [userId, limit, ...tokens.map(t => `%${t}%`)];
+    
+    let sql = `
+      SELECT 
+        id, user_id, category_name, content, token_count,
+        relevance_score, created_at, metadata
+      FROM persistent_memories
+      WHERE user_id = $1
+        AND (${conditions.join(' OR ')})
+    `;
+    
+    if (category) {
+      sql += ` AND category_name = $${params.length + 1}`;
+      params.push(category);
+    }
+    
+    if (!includeSuperseded) {
+      sql += ` AND (is_current = true OR is_current IS NULL)`;
+      sql += ` AND superseded_by IS NULL`;
+    }
+    
+    sql += ` ORDER BY created_at DESC LIMIT $2`;
+    
+    const result = await db.query(sql, params);
+    
+    return result.rows.map(row => ({
+      ...row,
+      scores: {
+        vector: 0,
+        keyword: calculateKeywordScore(row.content, tokens),
+        recency: 0,
+        matchFirst: 0
+      }
+    }));
+    
+  } catch (error) {
+    console.error('[SemanticRetrieval] Keyword search error:', error.message);
+    return [];
+  }
+}
+
+/**
+ * Calculate keyword match score
+ */
+function calculateKeywordScore(content, queryTokens) {
+  if (!content || queryTokens.length === 0) return 0;
+  
+  const contentLower = content.toLowerCase();
+  let matches = 0;
+  
+  for (const token of queryTokens) {
+    if (contentLower.includes(token)) {
+      matches++;
+    }
+  }
+  
+  return matches / queryTokens.length;
+}
+
+/**
+ * Rank candidates using hybrid scoring
+ */
+function rankCandidates(candidates, query, queryEmbedding, weights) {
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  
+  // Extract high-entropy tokens from query
+  const highEntropyTokens = extractHighEntropyTokens(query);
+  
+  return candidates
+    .map(candidate => {
+      // Calculate recency score (decay over 30 days)
+      const ageMs = now - new Date(candidate.created_at).getTime();
+      const recencyScore = Math.max(0, 1 - (ageMs / (30 * dayMs)));
+      
+      // Calculate match-first bonus
+      const matchFirstScore = calculateMatchFirstBonus(
+        candidate.content, 
+        highEntropyTokens
+      );
+      
+      // Combine scores
+      const finalScore = 
+        (candidate.scores.vector * weights.semantic) +
+        (candidate.scores.keyword * weights.keyword) +
+        (recencyScore * weights.recency) +
+        (matchFirstScore * weights.matchFirst);
+      
+      return {
+        ...candidate,
+        scores: {
+          ...candidate.scores,
+          recency: recencyScore,
+          matchFirst: matchFirstScore,
+          final: finalScore
+        }
+      };
+    })
+    .sort((a, b) => b.scores.final - a.scores.final);
+}
+
+/**
+ * Extract high-entropy tokens (unique identifiers, codes, numbers)
+ */
+function extractHighEntropyTokens(text) {
+  const tokens = [];
+  
+  // Find alphanumeric codes (e.g., ABC-123, PROJ-456)
+  const codePattern = /\b[A-Z]{2,}[-_]?\d{2,}\b/gi;
+  const codes = text.match(codePattern) || [];
+  tokens.push(...codes);
+  
+  // Find phone numbers
+  const phonePattern = /\b\d{3}[-.\s]?\d{3}[-.\s]?\d{4}\b/g;
+  const phones = text.match(phonePattern) || [];
+  tokens.push(...phones);
+  
+  // Find emails
+  const emailPattern = /\b[^\s@]+@[^\s@]+\.[^\s@]+\b/gi;
+  const emails = text.match(emailPattern) || [];
+  tokens.push(...emails);
+  
+  return tokens;
+}
+
+/**
+ * Calculate match-first bonus for high-entropy tokens
+ */
+function calculateMatchFirstBonus(content, highEntropyTokens) {
+  if (!content || highEntropyTokens.length === 0) return 0;
+  
+  const contentLower = content.toLowerCase();
+  let matches = 0;
+  
+  for (const token of highEntropyTokens) {
+    if (contentLower.includes(token.toLowerCase())) {
+      matches++;
+    }
+  }
+  
+  // Strong bonus for matching high-entropy tokens
+  return matches > 0 ? Math.min(1, matches * 0.5) : 0;
+}
+
+export default {
+  semanticRetrieve,
+  DEFAULT_WEIGHTS
+};
+
+PHASE 5: CREATE SUPERSESSION SERVICE
+File to create: api/core/intelligence/supersession.js
+javascript/**
+ * Fact Supersession Service - Manages fact versions
+ * Part of Issue #220 Semantic Intelligence Layer
+ */
+
+import { generateFingerprint } from './fact-fingerprint.js';
+
+/**
+ * Check if new memory should supersede existing facts
+ * Returns existing fact to supersede, or null if none
+ * 
+ * @param {object} db - Database connection
+ * @param {string} userId - User ID
+ * @param {string} content - New memory content
+ * @returns {Promise<object|null>} Existing fact to supersede, or null
+ */
+export async function findFactToSupersede(db, userId, content) {
+  const fingerprint = generateFingerprint(content, userId);
+  
+  // Low confidence facts should coexist, not supersede
+  if (!fingerprint.shouldSupersede) {
+    console.log(JSON.stringify({
+      event: 'SUPERSESSION_SKIP',
+      timestamp: new Date().toISOString(),
+      reason: 'low_confidence',
+      factType: fingerprint.factType,
+      confidence: fingerprint.confidence
+    }));
+    return null;
+  }
+  
+  try {
+    // Find existing current fact with same fingerprint
+    const result = await db.query(`
+      SELECT id, content, version_number, created_at
+      FROM persistent_memories
+      WHERE user_id = $1 
+        AND fact_fingerprint = $2
+        AND is_current = true
+        AND superseded_by IS NULL
+      LIMIT 1
+    `, [userId, fingerprint.fingerprint]);
+    
+    if (result.rows.length > 0) {
+      return {
+        existingFact: result.rows[0],
+        fingerprint: fingerprint.fingerprint,
+        factType: fingerprint.factType,
+        confidence: fingerprint.confidence
+      };
+    }
+    
+    return null;
+    
+  } catch (error) {
+    console.error('[Supersession] Error finding fact:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Perform transactional supersession
+ * Marks old fact as superseded and links to new fact
+ * 
+ * @param {object} db - Database connection
+ * @param {string} oldFactId - ID of fact being superseded
+ * @param {string} newFactId - ID of new fact
+ * @param {string} fingerprint - Shared fact fingerprint
+ * @param {number} oldVersion - Version number of old fact
+ */
+export async function performSupersession(db, oldFactId, newFactId, fingerprint, oldVersion) {
+  const client = db.pool ? await db.pool.connect() : db;
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Mark old fact as superseded
+    await client.query(`
+      UPDATE persistent_memories
+      SET 
+        is_current = false,
+        superseded_by = $1,
+        superseded_at = NOW()
+      WHERE id = $2
+    `, [newFactId, oldFactId]);
+    
+    // Update new fact with version chain info
+    await client.query(`
+      UPDATE persistent_memories
+      SET 
+        fact_fingerprint = $1,
+        version_number = $2,
+        previous_version_id = $3,
+        is_current = true
+      WHERE id = $4
+    `, [fingerprint, oldVersion + 1, oldFactId, newFactId]);
+    
+    await client.query('COMMIT');
+    
+    console.log(JSON.stringify({
+      event: 'SUPERSESSION_COMPLETE',
+      timestamp: new Date().toISOString(),
+      oldFactId,
+      newFactId,
+      newVersion: oldVersion + 1,
+      fingerprintPrefix: fingerprint.substring(0, 8)
+    }));
+    
+    return true;
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    console.error('[Supersession] Transaction failed:', error.message);
+    throw error;
+  } finally {
+    if (db.pool) {
+      client.release();
+    }
+  }
+}
+
+/**
+ * Get version history for a fact
+ */
+export async function getFactHistory(db, userId, fingerprint) {
+  try {
+    const result = await db.query(`
+      SELECT id, content, version_number, is_current, created_at, superseded_at
+      FROM persistent_memories
+      WHERE user_id = $1 AND fact_fingerprint = $2
+      ORDER BY version_number DESC
+    `, [userId, fingerprint]);
+    
+    return result.rows;
+  } catch (error) {
+    console.error('[Supersession] Error getting history:', error.message);
+    return [];
+  }
+}
+
+export default {
+  findFactToSupersede,
+  performSupersession,
+  getFactHistory
+};
+
+PHASE 6: MODIFY INTELLIGENT-STORAGE.JS
+File to modify: api/memory/intelligent-storage.js
+Location: After the extractKeyFacts function call (around line 235), add fingerprinting:
+javascript// ADD AFTER extractKeyFacts() CALL:
+
+// === SEMANTIC LAYER: Fact Fingerprinting ===
+import { generateFingerprint } from '../core/intelligence/fact-fingerprint.js';
+import { findFactToSupersede, performSupersession } from '../core/intelligence/supersession.js';
+import { generateEmbeddingAsync } from '../core/intelligence/embedding-service.js';
+
+// Inside storeCompressedMemory function, after extractKeyFacts:
+const fingerprintResult = generateFingerprint(content, userId);
+
+// Check for supersession
+const supersessionTarget = await findFactToSupersede(db, userId, content);
+
+// Store the memory (existing code)
+// ... existing insert code ...
+
+// After successful insert, if there's a supersession target:
+if (supersessionTarget && newMemoryId) {
+  await performSupersession(
+    db,
+    supersessionTarget.existingFact.id,
+    newMemoryId,
+    supersessionTarget.fingerprint,
+    supersessionTarget.existingFact.version_number || 1
+  );
+}
+
+// === SEMANTIC LAYER: Async Embedding ===
+// After successful memory storage (around line 612):
+if (newMemoryId) {
+  generateEmbeddingAsync(content, async (result) => {
+    if (result.embedding) {
+      try {
+        const embeddingStr = `[${result.embedding.join(',')}]`;
+        await db.query(`
+          UPDATE persistent_memories 
+          SET embedding = $1::vector
+          WHERE id = $2
+        `, [embeddingStr, newMemoryId]);
+        
+        console.log(JSON.stringify({
+          event: 'EMBEDDING_STORED',
+          timestamp: new Date().toISOString(),
+          memoryId: newMemoryId
+        }));
+      } catch (error) {
+        console.error('[Embedding] Storage error:', error.message);
+      }
+    }
+  });
+}
+
+PHASE 7: MODIFY RETRIEVAL TO USE SEMANTIC SEARCH
+File to modify: api/categories/memory/internal/intelligence.js
+Replace the extractRelevantMemories function (or equivalent retrieval method) with:
+javascript// ADD IMPORT AT TOP:
+import { semanticRetrieve } from '../../../core/intelligence/semantic-retrieval.js';
+
+// REPLACE extractRelevantMemories function:
+async function extractRelevantMemories(db, userId, query, options = {}) {
+  const { category, limit = 10, mode } = options;
+  
+  // Use semantic retrieval
+  const { memories, telemetry } = await semanticRetrieve(db, userId, query, {
+    limit,
+    category,
+    includeSuperseded: false
+  });
+  
+  // Add telemetry to response metadata
+  return {
+    memories,
+    metadata: {
+      memory_retrieval: {
+        method: telemetry.method,
+        memories_considered: telemetry.totalCandidates,
+        memories_injected: memories.length,
+        vector_candidates: telemetry.vectorCandidates,
+        keyword_candidates: telemetry.keywordCandidates,
+        embedding_generated: telemetry.embeddingGenerated,
+        duration_ms: telemetry.durationMs
+      }
+    }
+  };
+}
+
+PHASE 8: ADD TEST ENDPOINT
+File to modify: api/routes/test-routes.js (or create if doesn't exist)
+javascript// ADD THIS ENDPOINT:
+
+router.get('/api/test/semantic-status', async (req, res) => {
+  try {
+    const db = req.app.locals.db;
+    
+    // Check pgvector extension
+    const pgvectorCheck = await db.query(`
+      SELECT EXISTS(SELECT 1 FROM pg_extension WHERE extname = 'vector') as has_pgvector
+    `);
+    
+    // Check embedding column
+    const columnCheck = await db.query(`
+      SELECT column_name 
+      FROM information_schema.columns 
+      WHERE table_name = 'persistent_memories' 
+        AND column_name IN ('embedding', 'fact_fingerprint', 'is_current')
+    `);
+    
+    // Count memories with embeddings
+    const embeddingCount = await db.query(`
+      SELECT 
+        COUNT(*) as total,
+        COUNT(embedding) as with_embedding,
+        COUNT(fact_fingerprint) as with_fingerprint
+      FROM persistent_memories
+    `);
+    
+    res.json({
+      success: true,
+      semantic_layer: {
+        pgvector_enabled: pgvectorCheck.rows[0]?.has_pgvector || false,
+        columns_present: columnCheck.rows.map(r => r.column_name),
+        memory_stats: embeddingCount.rows[0]
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      success: false, 
+      error: error.message 
+    });
+  }
+});
+
+VERIFICATION AFTER IMPLEMENTATION
+After all phases are complete, run this in browser console:
+javascriptconst BASE_URL = 'https://sitemonkeys-ai-system-production.up.railway.app';
+
+// Check semantic layer status
+fetch(`${BASE_URL}/api/test/semantic-status`)
+  .then(r => r.json())
+  .then(data => {
+    console.log('Semantic Layer Status:', data);
+    
+    if (data.semantic_layer?.pgvector_enabled) {
+      console.log('✅ pgvector enabled');
+    } else {
+      console.log('❌ pgvector NOT enabled - run SQL migration');
+    }
+    
+    if (data.semantic_layer?.columns_present?.includes('embedding')) {
+      console.log('✅ embedding column exists');
+    } else {
+      console.log('❌ embedding column missing');
+    }
+  });
+
+SUCCESS CRITERIA
+
+ /api/test/semantic-status shows pgvector enabled
+ /api/test/semantic-status shows embedding column exists
+ Paraphrase test passes ("What's my cell?" finds stored phone number)
+ Fact supersession works (new phone replaces old)
+ Response metadata shows method: "semantic_hybrid"
+
+
+DO NOT
+
+❌ Create an "analysis" PR
+❌ Say "manual implementation required"
+❌ Create a PR that just describes the changes
+❌ Skip any of the 8 phases
+
+DO
+
+✅ Run the SQL migration
+✅ Create all 5 new files with exact code above
+✅ Modify the 2 existing files at specified locations
+✅ Add the test endpoint
+✅ Commit and deploy
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
