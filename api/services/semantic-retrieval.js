@@ -77,17 +77,17 @@ function buildPrefilterQuery(options) {
 
   // Category filtering
   if (categories && Array.isArray(categories) && categories.length > 0) {
-    conditions.push(`category = ANY($${paramIndex}::text[])`);
+    conditions.push(`category_name = ANY($${paramIndex}::text[])`);
     params.push(categories);
     paramIndex++;
   }
 
   // Build query with ordering by recency (for tie-breaking)
   const sql = `
-    SELECT 
+    SELECT
       id,
       content,
-      category,
+      category_name,
       mode,
       embedding,
       fact_fingerprint,
@@ -394,14 +394,14 @@ export async function findByFingerprint(pool, userId, fingerprint) {
 export async function getRetrievalStats(pool, userId) {
   try {
     const { rows: [stats] } = await pool.query(`
-      SELECT 
+      SELECT
         COUNT(*) as total_memories,
         COUNT(*) FILTER (WHERE is_current = true) as current_memories,
         COUNT(*) FILTER (WHERE embedding IS NOT NULL) as with_embeddings,
         COUNT(*) FILTER (WHERE embedding_status = 'ready') as ready_embeddings,
         COUNT(*) FILTER (WHERE embedding_status = 'pending') as pending_embeddings,
         COUNT(*) FILTER (WHERE embedding_status = 'failed') as failed_embeddings,
-        COUNT(DISTINCT category) as unique_categories,
+        COUNT(DISTINCT category_name) as unique_categories,
         COUNT(DISTINCT mode) as unique_modes,
         MIN(created_at) as oldest_memory,
         MAX(created_at) as newest_memory

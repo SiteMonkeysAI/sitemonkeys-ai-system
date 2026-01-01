@@ -1,0 +1,79 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #250: [claude-fix] CRITICAL: Fix column name "category" → "category_name" across entire codebase
+
+Issue Description:
+## Problem
+Multiple SQL queries fail with:
+`ERROR: column "category" does not exist`
+
+The database column is `category_name` but multiple files reference it as `category`.
+
+## Files That Need Fixing
+
+### 1. api/services/semantic-retrieval.js
+The SELECT query uses `category` - change to `category_name`:
+```sql
+SELECT 
+  id,
+  content,
+  category,  -- WRONG: change to category_name
+  mode,
+  embedding,
+  fact_fingerprint,
+  fingerprint_confidence,
+  importance,
+  created_at,
+  ...
+```
+
+### 2. Database schema/index creation (likely in api/core/core-system.js or similar)
+```sql
+CREATE INDEX IF NOT EXISTS idx_memories_user_category 
+ON persistent_memories (user_id, category)  -- WRONG: change to category_name
+```
+
+## Search Pattern
+Search the ENTIRE codebase for:
+- `category,` (with comma)
+- `category)` (with parenthesis) 
+- `(category` (with parenthesis)
+- `category =`
+- `.category`
+
+And replace with `category_name` where it refers to the persistent_memories table column.
+
+Do NOT change:
+- Variable names like `categoryName`
+- Object properties in JavaScript
+- Only change SQL column references
+
+## Verification
+After fix, these queries should work:
+```sql
+SELECT category_name FROM persistent_memories LIMIT 1;
+CREATE INDEX ... ON persistent_memories (user_id, category_name);
+```
+
+## Acceptance Criteria
+- No more "column category does not exist" errors in logs
+- test-paraphrase shows `candidates_considered > 0`
+- test-paraphrase returns `passed: true`
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

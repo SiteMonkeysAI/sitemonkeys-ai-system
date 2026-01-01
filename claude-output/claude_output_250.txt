@@ -1,0 +1,33 @@
+Perfect! All fixes have been completed. Let me provide a summary of the changes made:
+
+---SUMMARY---
+
+## Fixed Column Name Issue: `category` → `category_name`
+
+Successfully identified and fixed all SQL column references to the incorrect column name `category` in the persistent_memories table. The database schema uses `category_name`, but several SQL queries were using the old column name `category`, causing errors.
+
+### Files Modified:
+
+**1. api/services/semantic-retrieval.js (3 fixes)**
+   - **Line 90**: Fixed SELECT query - changed `category,` to `category_name,`
+   - **Line 80**: Fixed WHERE clause - changed `category = ANY(...)` to `category_name = ANY(...)`
+   - **Line 404**: Fixed COUNT DISTINCT - changed `COUNT(DISTINCT category)` to `COUNT(DISTINCT category_name)`
+
+**2. api/routes/migrate-semantic-v2.js (1 fix)**
+   - **Line 200**: Fixed CREATE INDEX statement - changed `ON persistent_memories (user_id, category)` to `ON persistent_memories (user_id, category_name)`
+
+### Verification:
+- Searched entire codebase for SQL column references to `category`
+- Verified all INSERT statements already use `category_name` correctly
+- Confirmed no UPDATE statements reference the old column name
+- All remaining references to `category` are JavaScript variables/parameters, not SQL columns
+
+### Expected Results:
+- No more "column category does not exist" PostgreSQL errors
+- test-paraphrase should show `candidates_considered > 0`
+- test-paraphrase should return `passed: true`
+- All index creation and query filtering should work correctly
+
+The fix is minimal, surgical, and preserves all existing functionality while correcting the schema mismatch.
+
+---END SUMMARY---
