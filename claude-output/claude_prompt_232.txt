@@ -1,0 +1,34 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #232: [claude-fix] Register semantic layer routes
+
+Issue Description:
+Add route registration for the semantic layer endpoints in server.js:
+
+1. Add imports at top:
+import migrateSemanticV2Handler from "./api/routes/migrate-semantic-v2.js";
+import testSemanticHandler from "./api/routes/test-semantic.js";
+
+2. Add route registrations BEFORE the catch-all repo-snapshot route:
+app.get('/api/migrate-semantic-v2', migrateSemanticV2Handler);
+app.get('/api/test-semantic', testSemanticHandler);
+
+Files to modify: server.js
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

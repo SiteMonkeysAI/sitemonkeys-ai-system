@@ -48,6 +48,8 @@ import { sessionManager } from "./api/lib/session-manager.js";
 import debugRoutes from "./api/routes/debug.js";
 import memoryFullCheckRoutes from "./api/test/memory-full-check.js";
 import migrateSemanticHandler from "./api/routes/migrate-semantic.js";
+import migrateSemanticV2Handler from "./api/routes/migrate-semantic-v2.js";
+import testSemanticHandler from "./api/routes/test-semantic.js";
 import rateLimit from "express-rate-limit";
 
 console.log("[SERVER] ✅ Dependencies loaded");
@@ -781,6 +783,18 @@ app.get(
   "/api/migrate-semantic",
   migrateSemanticRateLimiter,
   migrateSemanticHandler,
+);
+
+// Semantic layer v2 endpoints - MUST come before catch-all routes
+app.get(
+  "/api/migrate-semantic-v2",
+  migrateSemanticRateLimiter,
+  migrateSemanticV2Handler,
+);
+app.get(
+  '/api/test-semantic',
+  migrateSemanticRateLimiter,
+  testSemanticHandler,
 );
 
 // Repo snapshot endpoint
