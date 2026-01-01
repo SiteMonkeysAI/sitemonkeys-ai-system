@@ -1,0 +1,47 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #227: [claude-fix] Fix routing: /api/migrate-semantic returns repo-snapshot instead of migration handler
+
+Issue Description:
+## Problem
+The endpoint `/api/migrate-semantic` is returning the repo-snapshot output instead of executing the migration handler in `api/routes/migrate-semantic.js`.
+
+## Root Cause
+The route registration in `server.js` is likely missing or the repo-snapshot route is catching all `/api/*` requests before specific routes are matched.
+
+## Required Fix
+1. In `server.js`, add explicit route registration for the migration endpoint BEFORE any catch-all routes:
+```javascript
+import migrateSemanticHandler from "./api/routes/migrate-semantic.js";
+
+// Add this BEFORE repoSnapshotRoute or any catch-all
+app.get('/api/migrate-semantic', migrateSemanticHandler);
+```
+
+2. Ensure the route order in server.js follows this pattern:
+   - Specific routes first (like `/api/migrate-semantic`)
+   - Catch-all routes last (like repo-snapshot)
+
+## Verification
+After fix, hitting `https://sitemonkeys-ai-system-production.up.railway.app/api/migrate-semantic` should return JSON with `steps` array showing database migration progress, NOT a `files` array with repo contents.
+
+## Files to modify
+- `server.js` - Add route registration for migrate-semantic
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

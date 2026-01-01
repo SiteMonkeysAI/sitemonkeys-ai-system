@@ -4,24 +4,6 @@
 //Redeploy2
 
 // Enhanced logging for Railway visibility
-const logWithTimestamp = (level, category, message, data = null) => {
-  const timestamp = new Date().toISOString();
-  const logMessage = `[${timestamp}] [${level}] [${category}] ${message}`;
-  
-  if (level === "ERROR") {
-    console.error(logMessage, data || "");
-  } else if (level === "WARN") {
-    console.warn(logMessage, data || "");
-  } else {
-    console.log(logMessage, data || "");
-  }
-  
-  // Ensure logs are flushed immediately (important for Railway)
-  if (process.stdout && process.stdout.write) {
-    process.stdout.write("");
-  }
-};
-
 console.log = ((oldLog) => {
   return (...args) => {
     oldLog.apply(console, args);
@@ -65,6 +47,8 @@ import { vaultLoader } from "./api/utilities/vault-loader.js";
 import { sessionManager } from "./api/lib/session-manager.js";
 import debugRoutes from "./api/routes/debug.js";
 import memoryFullCheckRoutes from "./api/test/memory-full-check.js";
+import migrateSemanticHandler from "./api/routes/migrate-semantic.js";
+import rateLimit from "express-rate-limit";
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -143,7 +127,9 @@ if (process.env.DATABASE_URL) {
   console.warn(
     "[SERVER] ⚠️ Session storage: MemoryStore (development only - will leak memory in production)",
   );
-  console.warn("[SERVER] ⚠️ Set DATABASE_URL to use PostgreSQL session storage");
+  console.warn(
+    "[SERVER] ⚠️ Set DATABASE_URL to use PostgreSQL session storage",
+  );
 }
 
 app.use(session(sessionConfig));
@@ -186,9 +172,14 @@ async function initializeMemorySystem() {
     try {
       await vaultLoader.initialize();
       const vaultStats = vaultLoader.getStats();
-      console.log(`[SERVER] ✅ Vault loader initialized: ${vaultStats.coreTokens} core tokens, ${vaultStats.indexedFiles} files indexed`);
+      console.log(
+        `[SERVER] ✅ Vault loader initialized: ${vaultStats.coreTokens} core tokens, ${vaultStats.indexedFiles} files indexed`,
+      );
     } catch (vaultError) {
-      console.error("[SERVER] ⚠️ Vault loader initialization failed:", vaultError.message);
+      console.error(
+        "[SERVER] ⚠️ Vault loader initialization failed:",
+        vaultError.message,
+      );
       console.log("[SERVER] System will continue without vault preload");
     }
 
@@ -289,13 +280,13 @@ app.post("/api/chat", async (req, res) => {
       vault_content,
       conversationHistory = [],
     } = req.body;
-    
+
     // Map user_id to userId for internal use
     const userId = user_id || "anonymous";
 
     // TRACE LOGGING - Step 1 & 2
-    console.log('[TRACE] 1. Received user_id from request:', user_id);
-    console.log('[TRACE] 2. Mapped to userId:', userId);
+    console.log("[TRACE] 1. Received user_id from request:", user_id);
+    console.log("[TRACE] 2. Mapped to userId:", userId);
 
     // SECURITY: Input validation - message is required
     // Prevents processing empty/invalid requests
@@ -324,7 +315,9 @@ app.post("/api/chat", async (req, res) => {
         content: vault_content,
         loaded: true,
       };
-      console.log(`[CHAT] 🍌 Vault content transformed: ${vault_content.length} chars`);
+      console.log(
+        `[CHAT] 🍌 Vault content transformed: ${vault_content.length} chars`,
+      );
     }
 
     // Diagnostic logging for vault flow
@@ -332,11 +325,16 @@ app.post("/api/chat", async (req, res) => {
       console.log("[CHAT] 🍌 Site Monkeys mode detected:");
       console.log(`  - vaultEnabled: ${vaultEnabled}`);
       console.log(`  - vault_content length: ${vault_content?.length || 0}`);
-      console.log(`  - finalVaultContext: ${finalVaultContext ? 'present' : 'null'}`);
+      console.log(
+        `  - finalVaultContext: ${finalVaultContext ? "present" : "null"}`,
+      );
     }
 
     // TRACE LOGGING - Step 3
-    console.log('[TRACE] 3. About to call orchestrator.processRequest with userId:', userId);
+    console.log(
+      "[TRACE] 3. About to call orchestrator.processRequest with userId:",
+      userId,
+    );
 
     // Process request through orchestrator
     const result = await orchestrator.processRequest({
@@ -351,32 +349,52 @@ app.post("/api/chat", async (req, res) => {
     });
 
     // TRACE LOGGING - Step 4 & 5 & 6
-    console.log('[TRACE] 4. orchestrator.processRequest returned, result.success:', result.success);
-    console.log('[TRACE] 5. global.memorySystem exists:', !!global.memorySystem);
-    console.log('[TRACE] 6. storeMemory exists:', !!global.memorySystem?.storeMemory);
+    console.log(
+      "[TRACE] 4. orchestrator.processRequest returned, result.success:",
+      result.success,
+    );
+    console.log(
+      "[TRACE] 5. global.memorySystem exists:",
+      !!global.memorySystem,
+    );
+    console.log(
+      "[TRACE] 6. storeMemory exists:",
+      !!global.memorySystem?.storeMemory,
+    );
 
-    if (result.success && global.memorySystem && global.memorySystem.storeMemory) {
+    if (
+      result.success &&
+      global.memorySystem &&
+      global.memorySystem.storeMemory
+    ) {
       // TRACE LOGGING - Step 7 & 8
-      console.log('[TRACE] 7. STORAGE BLOCK ENTERED');
-      console.log('[TRACE] 8. Storing for userId:', userId);
-      console.log('[CHAT] [STORAGE] ✓ Storage conditions met - proceeding with storage...');
-      console.log('[CHAT] [STORAGE] Storing for userId:', userId);
+      console.log("[TRACE] 7. STORAGE BLOCK ENTERED");
+      console.log("[TRACE] 8. Storing for userId:", userId);
+      console.log(
+        "[CHAT] [STORAGE] ✓ Storage conditions met - proceeding with storage...",
+      );
+      console.log("[CHAT] [STORAGE] Storing for userId:", userId);
       try {
         // Intelligent memory storage with compression and deduplication
-        console.log('[CHAT] [STORAGE] ENABLE_INTELLIGENT_STORAGE:', process.env.ENABLE_INTELLIGENT_STORAGE);
-        if (process.env.ENABLE_INTELLIGENT_STORAGE === 'true') {
-          const { IntelligentMemoryStorage } = await import('./api/memory/intelligent-storage.js');
+        console.log(
+          "[CHAT] [STORAGE] ENABLE_INTELLIGENT_STORAGE:",
+          process.env.ENABLE_INTELLIGENT_STORAGE,
+        );
+        if (process.env.ENABLE_INTELLIGENT_STORAGE === "true") {
+          const { IntelligentMemoryStorage } =
+            await import("./api/memory/intelligent-storage.js");
           const intelligentStorage = new IntelligentMemoryStorage(
             global.memorySystem.coreSystem.db,
-            process.env.OPENAI_API_KEY
+            process.env.OPENAI_API_KEY,
           );
 
           // Use semantic routing to determine category (matches retrieval logic)
           // This ensures storage and retrieval use the same 11 semantic categories
-          const routing = await global.memorySystem.intelligenceSystem.analyzeAndRoute(
-            message,
-            userId
-          );
+          const routing =
+            await global.memorySystem.intelligenceSystem.analyzeAndRoute(
+              message,
+              userId,
+            );
           const category = routing.primaryCategory;
           console.log(`[CHAT] [STORAGE] Routed to category: ${category}`);
 
@@ -384,22 +402,30 @@ app.post("/api/chat", async (req, res) => {
             userId,
             message,
             result.response,
-            category
+            category,
           );
 
           intelligentStorage.cleanup();
-          console.log(`[CHAT] 💾 Intelligent storage complete: ${storageResult.action} (ID: ${storageResult.memoryId})`);
+          console.log(
+            `[CHAT] 💾 Intelligent storage complete: ${storageResult.action} (ID: ${storageResult.memoryId})`,
+          );
 
           // TRACE LOGGING - Step 9 (Intelligent path)
-          console.log('[TRACE] 9. Intelligent storage complete, result:', JSON.stringify({
-            action: storageResult.action,
-            memoryId: storageResult.memoryId,
-            success: storageResult.success
-          }));
+          console.log(
+            "[TRACE] 9. Intelligent storage complete, result:",
+            JSON.stringify({
+              action: storageResult.action,
+              memoryId: storageResult.memoryId,
+              success: storageResult.success,
+            }),
+          );
         } else {
           // Legacy storage path - always available as fallback
-          console.log('[CHAT] [STORAGE] Using legacy storage path...');
-          console.log('[CHAT] [STORAGE] Calling storeMemory with userId:', userId);
+          console.log("[CHAT] [STORAGE] Using legacy storage path...");
+          console.log(
+            "[CHAT] [STORAGE] Calling storeMemory with userId:",
+            userId,
+          );
           const storageResult = await global.memorySystem.storeMemory(
             userId,
             message,
@@ -409,29 +435,49 @@ app.post("/api/chat", async (req, res) => {
               sessionId: sessionId,
               confidence: result.metadata?.confidence,
               timestamp: new Date().toISOString(),
-            }
+            },
           );
-          console.log("[CHAT] 💾 Conversation stored in memory system (legacy)");
-          console.log("[CHAT] [STORAGE] Storage result:", JSON.stringify(storageResult, null, 2));
+          console.log(
+            "[CHAT] 💾 Conversation stored in memory system (legacy)",
+          );
+          console.log(
+            "[CHAT] [STORAGE] Storage result:",
+            JSON.stringify(storageResult, null, 2),
+          );
 
           // TRACE LOGGING - Step 9 (Legacy path)
-          console.log('[TRACE] 9. Legacy storage complete, result:', JSON.stringify({
-            success: storageResult.success,
-            memoryId: storageResult.memoryId,
-            category: storageResult.category
-          }));
+          console.log(
+            "[TRACE] 9. Legacy storage complete, result:",
+            JSON.stringify({
+              success: storageResult.success,
+              memoryId: storageResult.memoryId,
+              category: storageResult.category,
+            }),
+          );
         }
       } catch (_storageError) {
         // Sanitize error message - don't expose database details
-        console.error("[CHAT] ⚠️ Failed to store conversation:", _storageError.message);
+        console.error(
+          "[CHAT] ⚠️ Failed to store conversation:",
+          _storageError.message,
+        );
         console.error("[CHAT] ⚠️ Storage error stack:", _storageError.stack);
         // Don't fail the request if storage fails
       }
     } else {
-      console.log('[CHAT] [STORAGE] ✗ Storage conditions NOT met - skipping storage');
-      if (!result.success) console.log('[CHAT] [STORAGE] Reason: result.success is false');
-      if (!global.memorySystem) console.log('[CHAT] [STORAGE] Reason: global.memorySystem is not available');
-      if (!global.memorySystem?.storeMemory) console.log('[CHAT] [STORAGE] Reason: storeMemory method not available');
+      console.log(
+        "[CHAT] [STORAGE] ✗ Storage conditions NOT met - skipping storage",
+      );
+      if (!result.success)
+        console.log("[CHAT] [STORAGE] Reason: result.success is false");
+      if (!global.memorySystem)
+        console.log(
+          "[CHAT] [STORAGE] Reason: global.memorySystem is not available",
+        );
+      if (!global.memorySystem?.storeMemory)
+        console.log(
+          "[CHAT] [STORAGE] Reason: storeMemory method not available",
+        );
     }
 
     res.json(result);
@@ -447,10 +493,15 @@ app.post("/api/chat", async (req, res) => {
 });
 
 // GET /api/test/memory-check - Browser-based memory test
-app.get('/api/test/memory-check', async (req, res) => {
+app.get("/api/test/memory-check", async (req, res) => {
   // Security: Only allow in private/debug mode
-  if (process.env.DEPLOYMENT_TYPE !== 'private' && process.env.DEBUG_MODE !== 'true') {
-    return res.status(403).send('Test endpoint not available in production mode');
+  if (
+    process.env.DEPLOYMENT_TYPE !== "private" &&
+    process.env.DEBUG_MODE !== "true"
+  ) {
+    return res
+      .status(403)
+      .send("Test endpoint not available in production mode");
   }
 
   const runId = Date.now();
@@ -466,76 +517,105 @@ app.get('/api/test/memory-check', async (req, res) => {
         const result = await global.orchestrator.processRequest({
           message,
           userId: testUserId,
-          mode: 'truth_general',
-          conversationHistory: []
+          mode: "truth_general",
+          conversationHistory: [],
         });
 
         // CRITICAL FIX: Store conversation after processing (same as /api/chat route)
-        if (result.success && global.memorySystem && global.memorySystem.storeMemory) {
+        if (
+          result.success &&
+          global.memorySystem &&
+          global.memorySystem.storeMemory
+        ) {
           try {
-            console.log('[TEST] [STORAGE] Storing test conversation...');
+            console.log("[TEST] [STORAGE] Storing test conversation...");
             await global.memorySystem.storeMemory(
               testUserId,
               message,
               result.response,
               {
-                mode: 'truth_general',
+                mode: "truth_general",
                 confidence: result.metadata?.confidence,
                 timestamp: new Date().toISOString(),
-              }
+              },
             );
-            console.log('[TEST] [STORAGE] ✓ Test conversation stored successfully');
+            console.log(
+              "[TEST] [STORAGE] ✓ Test conversation stored successfully",
+            );
           } catch (storageError) {
-            console.error('[TEST] [STORAGE] ✗ Failed to store:', storageError.message);
+            console.error(
+              "[TEST] [STORAGE] ✗ Failed to store:",
+              storageError.message,
+            );
           }
         }
 
-        return { response: result.response || result.message, success: result.success };
+        return {
+          response: result.response || result.message,
+          success: result.success,
+        };
       }
-      return { error: 'Orchestrator not available' };
+      return { error: "Orchestrator not available" };
     } catch (err) {
       return { error: err.message };
     }
   }
 
   // Test 1: Store a tripwire
-  const storeResult = await testChat(`Remember this: My test phrase is ${tripwire}`);
+  const storeResult = await testChat(
+    `Remember this: My test phrase is ${tripwire}`,
+  );
   results.push({
-    test: '1. STORE tripwire',
+    test: "1. STORE tripwire",
     passed: !storeResult.error,
     tripwire,
-    response: (storeResult.response || storeResult.error || '').substring(0, 200)
+    response: (storeResult.response || storeResult.error || "").substring(
+      0,
+      200,
+    ),
   });
 
   // Wait for storage to complete
-  await new Promise(r => setTimeout(r, 2000));
+  await new Promise((r) => setTimeout(r, 2000));
 
   // Test 2: Recall the tripwire
-  const recallResult = await testChat('What is my test phrase?');
-  const foundTripwire = recallResult.response && recallResult.response.includes(tripwire);
+  const recallResult = await testChat("What is my test phrase?");
+  const foundTripwire =
+    recallResult.response && recallResult.response.includes(tripwire);
   results.push({
-    test: '2. RECALL tripwire',
+    test: "2. RECALL tripwire",
     passed: foundTripwire,
     expected: tripwire,
     found: foundTripwire,
-    response: (recallResult.response || recallResult.error || '').substring(0, 300)
+    response: (recallResult.response || recallResult.error || "").substring(
+      0,
+      300,
+    ),
   });
 
   // Test 3: Check for ignorance phrases
-  const ignorancePhrases = ["don't have", "no memory", "haven't told", "first interaction", "don't recall"];
-  const hasIgnorance = ignorancePhrases.some(p =>
-    (recallResult.response || '').toLowerCase().includes(p.toLowerCase())
+  const ignorancePhrases = [
+    "don't have",
+    "no memory",
+    "haven't told",
+    "first interaction",
+    "don't recall",
+  ];
+  const hasIgnorance = ignorancePhrases.some((p) =>
+    (recallResult.response || "").toLowerCase().includes(p.toLowerCase()),
   );
   results.push({
-    test: '3. NO false ignorance claims',
+    test: "3. NO false ignorance claims",
     passed: !hasIgnorance,
     found_ignorance: hasIgnorance,
-    note: hasIgnorance ? 'FAIL: AI claimed no memory when it should have remembered' : 'PASS: No false claims'
+    note: hasIgnorance
+      ? "FAIL: AI claimed no memory when it should have remembered"
+      : "PASS: No false claims",
   });
 
   // Summary
-  const passed = results.filter(r => r.passed).length;
-  const failed = results.filter(r => !r.passed).length;
+  const passed = results.filter((r) => r.passed).length;
+  const failed = results.filter((r) => !r.passed).length;
 
   // Return HTML
   const html = `<!DOCTYPE html>
@@ -561,12 +641,16 @@ app.get('/api/test/memory-check', async (req, res) => {
     <strong>Test User:</strong> ${testUserId}<br>
     <strong>Results:</strong> <span class="pass">${passed} passed</span> | <span class="fail">${failed} failed</span>
   </div>
-  ${results.map(r => `
-    <div class="test ${r.passed ? 'passed' : 'failed'}">
-      <h3>${r.passed ? '✅' : '❌'} ${r.test}</h3>
+  ${results
+    .map(
+      (r) => `
+    <div class="test ${r.passed ? "passed" : "failed"}">
+      <h3>${r.passed ? "✅" : "❌"} ${r.test}</h3>
       <pre>${JSON.stringify(r, null, 2)}</pre>
     </div>
-  `).join('')}
+  `,
+    )
+    .join("")}
   <p style="color: #888; margin-top: 30px;">Test completed at ${new Date().toISOString()}</p>
 </body>
 </html>`;
@@ -579,33 +663,33 @@ app.get('/api/test/memory-check', async (req, res) => {
 app.post("/api/session/end", async (req, res) => {
   try {
     const { sessionId } = req.body;
-    
+
     if (!sessionId) {
       return res.status(400).json({
         success: false,
-        error: "Session ID is required"
+        error: "Session ID is required",
       });
     }
-    
+
     const ended = sessionManager.endSession(sessionId, "user_logout");
-    
+
     if (ended) {
       console.log(`[SESSION] Session ${sessionId} ended and cache flushed`);
       return res.json({
         success: true,
-        message: "Session ended and cache flushed"
+        message: "Session ended and cache flushed",
       });
     } else {
       return res.json({
         success: false,
-        message: "Session not found or already ended"
+        message: "Session not found or already ended",
       });
     }
   } catch (error) {
     console.error("[SESSION] Error ending session:", error);
     return res.status(500).json({
       success: false,
-      error: "Failed to end session"
+      error: "Failed to end session",
     });
   }
 });
@@ -615,27 +699,29 @@ app.post("/api/session/clear-context", async (req, res) => {
   try {
     const { user_id } = req.body;
     const userId = user_id; // Map for internal use
-    
+
     if (!userId) {
       return res.status(400).json({
         success: false,
-        error: "User ID is required"
+        error: "User ID is required",
       });
     }
-    
+
     const cleared = sessionManager.clearUserContext(userId);
-    
-    console.log(`[SESSION] Cleared context for user ${userId}: ${cleared} sessions`);
+
+    console.log(
+      `[SESSION] Cleared context for user ${userId}: ${cleared} sessions`,
+    );
     return res.json({
       success: true,
       sessionsCleared: cleared,
-      message: `Context cleared for ${cleared} sessions`
+      message: `Context cleared for ${cleared} sessions`,
     });
   } catch (error) {
     console.error("[SESSION] Error clearing user context:", error);
     return res.status(500).json({
       success: false,
-      error: "Failed to clear user context"
+      error: "Failed to clear user context",
     });
   }
 });
@@ -644,7 +730,7 @@ app.post("/api/session/clear-context", async (req, res) => {
 app.get("/api/session/stats", (req, res) => {
   try {
     const { sessionId } = req.query;
-    
+
     if (sessionId) {
       const stats = sessionManager.getSessionStats(sessionId);
       if (stats) {
@@ -652,7 +738,7 @@ app.get("/api/session/stats", (req, res) => {
       } else {
         return res.status(404).json({
           success: false,
-          error: "Session not found"
+          error: "Session not found",
         });
       }
     } else {
@@ -661,16 +747,23 @@ app.get("/api/session/stats", (req, res) => {
       return res.json({
         success: true,
         global: globalStats,
-        sessions: activeSessions
+        sessions: activeSessions,
       });
     }
   } catch (error) {
     console.error("[SESSION] Error getting session stats:", error);
     return res.status(500).json({
       success: false,
-      error: "Failed to get session stats"
+      error: "Failed to get session stats",
     });
   }
+});
+
+const migrateSemanticRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10, // limit each IP to 10 migration requests per windowMs
+  standardHeaders: true,
+  legacyHeaders: false,
 });
 
 // Upload endpoints
@@ -682,6 +775,13 @@ app.use("/api/debug", debugRoutes);
 
 // Memory full check test endpoint (only in private/debug mode)
 app.use("/api/test", memoryFullCheckRoutes);
+
+// Migration endpoint - MUST come before catch-all routes
+app.get(
+  "/api/migrate-semantic",
+  migrateSemanticRateLimiter,
+  migrateSemanticHandler,
+);
 
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);

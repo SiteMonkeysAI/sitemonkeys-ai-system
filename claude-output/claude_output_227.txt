@@ -1,0 +1,37 @@
+---SUMMARY---
+
+## Issue Analysis
+The endpoint `/api/migrate-semantic` was returning the repo-snapshot output instead of executing the migration handler because of a route ordering issue in `server.js`.
+
+## Root Cause
+The repo-snapshot route was registered as a catch-all with `app.use("/api", repoSnapshotRoute)` at line 687, which intercepts ALL `/api/*` requests before any specific routes could be matched. Since the migrate-semantic endpoint was never explicitly registered, all requests to `/api/migrate-semantic` were being caught by the repo-snapshot handler.
+
+## Changes Made
+
+### File Modified: `server.js`
+
+1. **Added import statement (line 68):**
+   - Imported `migrateSemanticHandler` from `./api/routes/migrate-semantic.js`
+
+2. **Added explicit route registration (line 688):**
+   - Added `app.get('/api/migrate-semantic', migrateSemanticHandler);`
+   - Placed BEFORE the catch-all repo-snapshot route
+   - Added comment: "Migration endpoint - MUST come before catch-all routes"
+
+## Route Order Now (Correct)
+1. Specific routes first:
+   - `/api/debug` 
+   - `/api/test`
+   - `/api/migrate-semantic` ✅ (NEW)
+2. Catch-all routes last:
+   - `/api` (repo-snapshot)
+
+## Verification
+After this fix, hitting `https://sitemonkeys-ai-system-production.up.railway.app/api/migrate-semantic` will now:
+- Execute the migration handler from `api/routes/migrate-semantic.js`
+- Return JSON with a `steps` array showing database migration progress
+- NOT return the `files` array from repo-snapshot
+
+The fix follows the Express.js routing principle: specific routes must be registered before catch-all routes to prevent the catch-all from intercepting intended requests.
+
+---END SUMMARY---
