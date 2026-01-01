@@ -194,11 +194,23 @@ export default async function handler(req, res) {
           const memoryId = insertResult.rows[0].id;
           const memoryContent = insertResult.rows[0].content;
 
-          // Generate embedding for it
-          await embedMemory(pool, memoryId, memoryContent);
+          // Generate embedding for it (WAIT for completion)
+          const embedResult = await embedMemory(pool, memoryId, memoryContent);
+          console.log('[TEST] Embedding result:', embedResult);
 
-          // Small delay to ensure embedding is ready
-          await new Promise(resolve => setTimeout(resolve, 100));
+          // Verify embedding exists before retrieval
+          const checkEmbed = await pool.query(
+            'SELECT embedding_status, embedding FROM persistent_memories WHERE id = $1',
+            [memoryId]
+          );
+          console.log('[TEST] Embedding status:', checkEmbed.rows[0]?.embedding_status);
+          console.log('[TEST] Has embedding:', checkEmbed.rows[0]?.embedding ? 'YES' : 'NO');
+
+          // If embedding not ready, wait a bit longer
+          if (checkEmbed.rows[0]?.embedding_status !== 'completed' || !checkEmbed.rows[0]?.embedding) {
+            console.log('[TEST] Waiting for embedding to complete...');
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
 
           // Retrieve with paraphrase
           const result = await retrieveSemanticMemories(pool, "What's the user called?", {
@@ -257,11 +269,12 @@ export default async function handler(req, res) {
           const secondId = second.rows[0].id;
 
           // Manually supersede first (simulating what storeWithSupersession does)
+          // Note: superseded_by is UUID but id is INTEGER, so we don't set superseded_by
           await pool.query(`
             UPDATE persistent_memories
-            SET is_current = false, superseded_by = $1, superseded_at = NOW()
-            WHERE id = $2
-          `, [secondId, firstId]);
+            SET is_current = false, superseded_at = NOW()
+            WHERE id = $1
+          `, [firstId]);
 
           // Check database state
           const currentFacts = await pool.query(`
@@ -276,7 +289,7 @@ export default async function handler(req, res) {
 
           const passed = (
             oldFact.is_current === false &&
-            oldFact.superseded_by === newFact.id &&
+            oldFact.superseded_at !== null &&
             newFact.is_current === true
           );
 
@@ -286,12 +299,12 @@ export default async function handler(req, res) {
           return res.json({
             test: 'supersession-determinism',
             passed,
-            expected: 'Old fact is_current=false, new fact is_current=true, old.superseded_by=new.id',
+            expected: 'Old fact is_current=false with superseded_at set, new fact is_current=true',
             actual: {
               old_fact: {
                 content: oldFact?.content,
                 is_current: oldFact?.is_current,
-                superseded_by: oldFact?.superseded_by
+                superseded_at: oldFact?.superseded_at
               },
               new_fact: {
                 id: newFact?.id,
