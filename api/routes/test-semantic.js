@@ -357,10 +357,38 @@ export default async function handler(req, res) {
         }
       }
 
+      // ============================================
+      // CREATE SUPERSESSION CONSTRAINT
+      // ============================================
+      case 'create-constraint': {
+        const { createSupersessionConstraint, cleanupDuplicateCurrentFacts } = await import('../services/supersession.js');
+
+        try {
+          // First cleanup any duplicates
+          const cleanupResult = await cleanupDuplicateCurrentFacts(pool);
+
+          // Then create constraint
+          const constraintResult = await createSupersessionConstraint(pool);
+
+          return res.json({
+            action: 'create-constraint',
+            cleanup: cleanupResult,
+            constraint: constraintResult,
+            timestamp: new Date().toISOString()
+          });
+        } catch (error) {
+          return res.status(500).json({
+            action: 'create-constraint',
+            error: error.message,
+            stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+          });
+        }
+      }
+
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'create-constraint'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -370,7 +398,8 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=backfill&limit=10',
             '/api/test-semantic?action=test-paraphrase',
             '/api/test-semantic?action=test-supersession',
-            '/api/test-semantic?action=test-mode-isolation'
+            '/api/test-semantic?action=test-mode-isolation',
+            '/api/test-semantic?action=create-constraint'
           ]
         });
     }

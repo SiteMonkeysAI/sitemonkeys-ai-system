@@ -33,6 +33,8 @@ import {
 } from "../lib/site-monkeys/emergency-fallbacks.js";
 import { logMemoryOperation } from "../routes/debug.js";
 //import { validateCompliance as validateVaultCompliance } from '../lib/vault.js';
+// ========== SEMANTIC INTEGRATION ==========
+import { retrieveSemanticMemories } from "../services/semantic-retrieval.js";
 // ================================================
 
 // ==================== ORCHESTRATOR CLASS ====================
@@ -323,7 +325,7 @@ export class Orchestrator {
       this.log(`[START] User: ${userId}, Mode: ${mode}`);
 
       // STEP 1: Retrieve memory context (up to 2,500 tokens)
-      const memoryContext = await this.#retrieveMemoryContext(userId, message);
+      const memoryContext = await this.#retrieveMemoryContext(userId, message, { mode });
       this.log(
         `[MEMORY] Retrieved ${memoryContext.tokens} tokens from ${memoryContext.count} memories`,
       );
@@ -498,29 +500,12 @@ export class Orchestrator {
           vaultTokens: context.tokenBreakdown?.vault || (vaultData?.tokens || 0),
           totalContextTokens: context.totalTokens,
 
-          // Memory retrieval telemetry (Issue #206, enhanced in Issue #208, #210, #212)
-          memory_retrieval: {
-            method: "sql_keyword_category_filter",
-            memories_considered: memoryContext.count || 0,
-            memories_injected: memoryContext.count || 0,
-            tokens_injected: memoryContext.tokens || 0,
-            categories_searched: memoryContext.categories || [],
-            selection_criteria: "relevance_recency_hybrid",
-            injected_memory_ids: memoryContext.memory_ids || [],
-            injected_tokens_total: memoryContext.tokens || 0,
-            // Issue #212 Fix: Complete telemetry validity check
-            // Valid if: (1) No memories, OR (2) Both ID arrays populated AND counts match
-            telemetry_valid: (
-              (memoryContext.count === 0) ||
-              (
-                (memoryContext.memory_ids && memoryContext.memory_ids.length > 0) &&
-                (memoryContext.memory_ids.length === memoryContext.count)
-              )
-            ),
-            telemetry_error: (
-              (memoryContext.count === 0) ||
-              (memoryContext.memory_ids && memoryContext.memory_ids.length === memoryContext.count)
-            ) ? null : `ID count mismatch: ${memoryContext.count} memories but ${(memoryContext.memory_ids || []).length} memory IDs`
+          // Memory retrieval telemetry (Issue #206, enhanced in Issue #208, #210, #212, #242)
+          retrieval: this._lastRetrievalTelemetry || {
+            method: 'keyword_fallback',
+            fallback_reason: 'no_telemetry',
+            memories_retrieved: memoryContext.count || 0,
+            tokens_retrieved: memoryContext.tokens || 0
           },
 
           // Token budget compliance
@@ -629,7 +614,91 @@ export class Orchestrator {
 
   // ==================== STEP 1: RETRIEVE MEMORY CONTEXT ====================
 
-  async #retrieveMemoryContext(userId, message) {
+  async #retrieveMemoryContext(userId, message, options = {}) {
+    const { mode = 'truth-general', tokenBudget = 2000 } = options;
+
+    let telemetry = {
+      method: 'keyword_fallback',
+      fallback_reason: 'initialization',
+      candidates_considered: 0,
+      latency_ms: 0
+    };
+
+    try {
+      // Attempt semantic retrieval
+      const pool = global.memorySystem?.pool || this.pool;
+
+      if (!pool) {
+        this.error("[MEMORY] No database pool available, using keyword fallback");
+        telemetry.fallback_reason = 'no_pool';
+        return await this.#keywordRetrievalFallback(userId, message, mode);
+      }
+
+      const result = await retrieveSemanticMemories(pool, message, {
+        userId,
+        mode,
+        tokenBudget,
+        includePinned: true
+      });
+
+      telemetry = result.telemetry;
+
+      // Store telemetry for response metadata
+      this._lastRetrievalTelemetry = telemetry;
+
+      // Format memories into string for context injection
+      let memoryText = "";
+      let memoryIds = [];
+
+      if (result.memories && result.memories.length > 0) {
+        memoryText = result.memories
+          .map((m) => {
+            if (m.id) memoryIds.push(m.id);
+            return m.content || "";
+          })
+          .filter(c => c.length > 0)
+          .join("\n\n");
+      }
+
+      const tokenCount = Math.ceil(memoryText.length / 4);
+
+      // Debug logging hook for test harness
+      logMemoryOperation(userId, 'inject', {
+        memory_injected: tokenCount > 0,
+        memory_ids: memoryIds,
+        token_count: tokenCount
+      });
+
+      this.log(
+        `[MEMORY] Semantic retrieval: ${result.memories.length} memories, ${tokenCount} tokens (method: ${telemetry.method})`
+      );
+
+      return {
+        memories: memoryText,
+        tokens: tokenCount,
+        count: result.memories.length,
+        categories: [], // Semantic retrieval doesn't use category filtering
+        hasMemory: tokenCount > 0,
+        memory_ids: memoryIds,
+      };
+
+    } catch (error) {
+      this.error(`[MEMORY] Semantic retrieval failed: ${error.message}`);
+      telemetry.method = 'keyword_fallback';
+      telemetry.fallback_reason = error.message;
+      telemetry.latency_ms = Date.now() - (telemetry.startTime || Date.now());
+
+      this._lastRetrievalTelemetry = telemetry;
+
+      // Fallback to existing keyword/category retrieval
+      return await this.#keywordRetrievalFallback(userId, message, mode);
+    }
+  }
+
+  /**
+   * Fallback keyword retrieval when semantic retrieval fails
+   */
+  async #keywordRetrievalFallback(userId, message, mode) {
     try {
       const routingResult = { primaryCategory: "general" };
 
@@ -684,11 +753,11 @@ export class Orchestrator {
                 success: true,
                 memories: memoryText,
                 count: memoryCount,
-                memory_ids: result.memory_ids || [], // Issue #214 Fix 1: Preserve memory IDs from retrieval layer
+                memory_ids: result.memory_ids || [],
               };
 
               this.log(
-                `[MEMORY] Successfully loaded ${memoryCount} memories, ${memoryText.length} chars`,
+                `[MEMORY] Keyword fallback loaded ${memoryCount} memories, ${memoryText.length} chars`,
               );
             } else {
               this.log("[MEMORY] Result received but no usable memory content found");
@@ -753,13 +822,14 @@ export class Orchestrator {
         memory_ids: memoryIds,
       };
     } catch (error) {
-      this.error("[MEMORY] Retrieval failed, continuing without memory", error);
+      this.error("[MEMORY] Fallback retrieval failed, continuing without memory", error);
       return {
         memories: "",
         tokens: 0,
         count: 0,
         categories: [],
         hasMemory: false,
+        memory_ids: [],
       };
     }
   }
