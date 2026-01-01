@@ -92,7 +92,6 @@ function buildPrefilterQuery(options) {
       embedding,
       fact_fingerprint,
       fingerprint_confidence,
-      importance,
       created_at,
       EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400 as days_ago
     FROM persistent_memories
@@ -134,11 +133,6 @@ function calculateHybridScore(memory, options = {}) {
   // Confidence boost (higher fingerprint confidence = small boost)
   if (memory.fingerprint_confidence) {
     score += memory.fingerprint_confidence * confidenceWeight;
-  }
-
-  // Importance boost (if importance field exists)
-  if (memory.importance) {
-    score += (memory.importance / 100) * 0.05;
   }
 
   return Math.min(score, 1.0); // Cap at 1.0

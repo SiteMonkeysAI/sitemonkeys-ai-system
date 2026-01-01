@@ -1,0 +1,87 @@
+Perfect! The changes have been successfully applied. Let me create a summary of what was done.
+
+---SUMMARY---
+## Issue #252 Fixed: Removed non-existent "importance" column from semantic-retrieval.js
+
+### Changes Made:
+
+**File Modified:** `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/services/semantic-retrieval.js`
+
+#### 1. Removed `importance` from SQL SELECT query (lines 86-101)
+- **Location:** `buildPrefilterQuery()` function
+- **Change:** Removed `importance,` from the SELECT statement
+- **Impact:** Eliminates the database error "column importance does not exist"
+
+**Before:**
+```sql
+SELECT
+  id,
+  content,
+  category_name,
+  mode,
+  embedding,
+  fact_fingerprint,
+  fingerprint_confidence,
+  importance,  -- REMOVED
+  created_at,
+  EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400 as days_ago
+FROM persistent_memories
+```
+
+**After:**
+```sql
+SELECT
+  id,
+  content,
+  category_name,
+  mode,
+  embedding,
+  fact_fingerprint,
+  fingerprint_confidence,
+  created_at,
+  EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400 as days_ago
+FROM persistent_memories
+```
+
+#### 2. Removed importance-based scoring logic (lines 133-138)
+- **Location:** `calculateHybridScore()` function
+- **Change:** Removed the conditional block that checked for and used `memory.importance`
+- **Impact:** Hybrid scoring now only uses similarity, recency boost, and confidence boost
+
+**Before:**
+```javascript
+// Confidence boost (higher fingerprint confidence = small boost)
+if (memory.fingerprint_confidence) {
+  score += memory.fingerprint_confidence * confidenceWeight;
+}
+
+// Importance boost (if importance field exists)
+if (memory.importance) {
+  score += (memory.importance / 100) * 0.05;
+}
+
+return Math.min(score, 1.0);
+```
+
+**After:**
+```javascript
+// Confidence boost (higher fingerprint confidence = small boost)
+if (memory.fingerprint_confidence) {
+  score += memory.fingerprint_confidence * confidenceWeight;
+}
+
+return Math.min(score, 1.0);
+```
+
+### Verification:
+- Confirmed no other references to "importance" remain in the semantic-retrieval.js file
+- Verified no other database queries in the codebase reference the importance column from persistent_memories table
+
+### Expected Results:
+✅ No more "ERROR: column importance does not exist" errors
+✅ Semantic retrieval queries will execute successfully
+✅ test-paraphrase should show `candidates_considered > 0`
+✅ test-paraphrase should return `passed: true`
+
+The fix is minimal, surgical, and addresses exactly what was specified in the issue requirements.
+---END SUMMARY---

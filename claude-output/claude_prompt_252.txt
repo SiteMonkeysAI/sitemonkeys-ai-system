@@ -1,0 +1,72 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #252: [claude-fix] Remove non-existent "importance" column from semantic-retrieval.js
+
+Issue Description:
+## Problem
+Semantic retrieval fails with:
+`ERROR: column "importance" does not exist`
+
+The SELECT query in semantic-retrieval.js references an `importance` column that doesn't exist in the persistent_memories table.
+
+## Root Cause
+In api/services/semantic-retrieval.js, the SELECT query includes `importance` which is not a real column.
+
+## Required Fix
+In api/services/semantic-retrieval.js, find the SELECT query and REMOVE the `importance` column:
+
+Change FROM:
+```sql
+SELECT
+  id,
+  content,
+  category_name,
+  mode,
+  embedding,
+  fact_fingerprint,
+  fingerprint_confidence,
+  importance,  -- REMOVE THIS LINE
+  created_at,
+  EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400 as days_ago
+FROM persistent_memories
+```
+
+Change TO:
+```sql
+SELECT
+  id,
+  content,
+  category_name,
+  mode,
+  embedding,
+  fact_fingerprint,
+  fingerprint_confidence,
+  created_at,
+  EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400 as days_ago
+FROM persistent_memories
+```
+
+Also search for any JavaScript code that references `importance` and either remove it or set a default value.
+
+## Acceptance Criteria
+- No more "column importance does not exist" errors
+- test-paraphrase shows `candidates_considered > 0`
+- test-paraphrase returns `passed: true`
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
