@@ -1,0 +1,69 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #246: [claude-fix] Add tokenCount to test-semantic.js test cases
+
+Issue Description:
+## Problem
+All three falsification tests fail with:
+`null value in column "token_count" of relation "persistent_memories" violates not-null constraint`
+
+## Root Cause
+The test cases in test-semantic.js call storeWithSupersession() without providing tokenCount, but token_count is a NOT NULL column.
+
+## Required Fix
+In api/routes/test-semantic.js, add tokenCount to ALL storeWithSupersession calls:
+
+### test-paraphrase (around line 190):
+```javascript
+await storeWithSupersession(pool, {
+  userId: testUserId,
+  content: 'My name is Chris',
+  factFingerprint: 'user_name',
+  fingerprintConfidence: 0.9,
+  mode: 'truth-general',
+  categoryName: 'personal_info',
+  tokenCount: 5  // ADD THIS
+});
+```
+
+### test-supersession (around lines 240 and 255):
+BOTH storeWithSupersession calls need:
+```javascript
+tokenCount: 8  // ADD THIS
+```
+
+### test-mode-isolation (around line 325):
+```javascript
+await storeWithSupersession(pool, {
+  userId: testUserId,
+  content: 'Secret truth-general memory about cats',
+  factFingerprint: null,
+  mode: 'truth-general',
+  categoryName: 'general',
+  tokenCount: 10  // ADD THIS
+});
+```
+
+## Acceptance Criteria
+After fix, all three tests return pass/fail results (not 500 errors):
+- GET /api/test-semantic?action=test-paraphrase
+- GET /api/test-semantic?action=test-supersession  
+- GET /api/test-semantic?action=test-mode-isolation
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -1,0 +1,52 @@
+Perfect! All three test cases have been successfully updated. Let me create a summary of the changes:
+
+---SUMMARY---
+
+## Fixed Issue #246: Added tokenCount to test-semantic.js test cases
+
+### Problem
+All three falsification tests in `/api/routes/test-semantic.js` were failing with a database constraint violation:
+```
+null value in column "token_count" of relation "persistent_memories" violates not-null constraint
+```
+
+### Root Cause
+The test cases were using direct SQL INSERT statements without providing the `token_count` column value, which is defined as `INTEGER NOT NULL` in the database schema.
+
+### Changes Made
+Modified `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/routes/test-semantic.js`:
+
+1. **test-paraphrase (line 187-192)**: 
+   - Added `token_count` to the INSERT column list
+   - Added `$5` placeholder to VALUES clause
+   - Added `5` as the tokenCount parameter value
+
+2. **test-supersession - First INSERT (line 238-244)**:
+   - Added `token_count` to the INSERT column list
+   - Added `$7` placeholder to VALUES clause (after the 6 existing parameters)
+   - Added `8` as the tokenCount parameter value
+
+3. **test-supersession - Second INSERT (line 249-255)**:
+   - Added `token_count` to the INSERT column list
+   - Added `$7` placeholder to VALUES clause
+   - Added `8` as the tokenCount parameter value
+
+4. **test-mode-isolation (line 318-323)**:
+   - Added `token_count` to the INSERT column list
+   - Added `$5` placeholder to VALUES clause
+   - Added `10` as the tokenCount parameter value
+
+### Token Count Values Used
+- test-paraphrase: `5` tokens (for "My name is Chris")
+- test-supersession: `8` tokens (for both phone number entries)
+- test-mode-isolation: `10` tokens (for "Secret truth-general memory about cats")
+
+These values are reasonable estimates based on the content length, following the common approximation of ~4 characters per token.
+
+### Expected Outcome
+After this fix, all three test endpoints should now successfully insert test data and return pass/fail results instead of 500 errors:
+- GET /api/test-semantic?action=test-paraphrase
+- GET /api/test-semantic?action=test-supersession
+- GET /api/test-semantic?action=test-mode-isolation
+
+---END SUMMARY---

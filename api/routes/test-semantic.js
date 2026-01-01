@@ -186,10 +186,10 @@ export default async function handler(req, res) {
           // Store memory with specific content
           const insertResult = await pool.query(`
             INSERT INTO persistent_memories (
-              user_id, content, is_current, mode, embedding_status, category_name, created_at
-            ) VALUES ($1, $2, true, $3, 'pending', $4, NOW())
+              user_id, content, is_current, mode, embedding_status, category_name, token_count, created_at
+            ) VALUES ($1, $2, true, $3, 'pending', $4, $5, NOW())
             RETURNING id, content
-          `, [testUserId, 'My name is Chris', 'truth-general', 'personal_info']);
+          `, [testUserId, 'My name is Chris', 'truth-general', 'personal_info', 5]);
 
           const memoryId = insertResult.rows[0].id;
           const memoryContent = insertResult.rows[0].content;
@@ -238,10 +238,10 @@ export default async function handler(req, res) {
           const first = await pool.query(`
             INSERT INTO persistent_memories (
               user_id, content, fact_fingerprint, fingerprint_confidence,
-              is_current, mode, embedding_status, category_name, created_at
-            ) VALUES ($1, $2, $3, $4, true, $5, 'pending', $6, NOW())
+              is_current, mode, embedding_status, category_name, token_count, created_at
+            ) VALUES ($1, $2, $3, $4, true, $5, 'pending', $6, $7, NOW())
             RETURNING id
-          `, [testUserId, 'My phone number is 111-1111', 'user_phone_number', 0.9, 'truth-general', 'personal_info']);
+          `, [testUserId, 'My phone number is 111-1111', 'user_phone_number', 0.9, 'truth-general', 'personal_info', 8]);
 
           const firstId = first.rows[0].id;
 
@@ -249,10 +249,10 @@ export default async function handler(req, res) {
           const second = await pool.query(`
             INSERT INTO persistent_memories (
               user_id, content, fact_fingerprint, fingerprint_confidence,
-              is_current, mode, embedding_status, category_name, created_at
-            ) VALUES ($1, $2, $3, $4, true, $5, 'pending', $6, NOW())
+              is_current, mode, embedding_status, category_name, token_count, created_at
+            ) VALUES ($1, $2, $3, $4, true, $5, 'pending', $6, $7, NOW())
             RETURNING id
-          `, [testUserId, 'My phone number is 222-2222', 'user_phone_number', 0.9, 'truth-general', 'personal_info']);
+          `, [testUserId, 'My phone number is 222-2222', 'user_phone_number', 0.9, 'truth-general', 'personal_info', 8]);
 
           const secondId = second.rows[0].id;
 
@@ -317,10 +317,10 @@ export default async function handler(req, res) {
           // Store in truth-general mode
           const insertResult = await pool.query(`
             INSERT INTO persistent_memories (
-              user_id, content, is_current, mode, embedding_status, category_name, created_at
-            ) VALUES ($1, $2, true, $3, 'pending', $4, NOW())
+              user_id, content, is_current, mode, embedding_status, category_name, token_count, created_at
+            ) VALUES ($1, $2, true, $3, 'pending', $4, $5, NOW())
             RETURNING id, content
-          `, [testUserId, 'Secret truth-general memory about cats', 'truth-general', 'general']);
+          `, [testUserId, 'Secret truth-general memory about cats', 'truth-general', 'general', 10]);
 
           const memoryId = insertResult.rows[0].id;
           const memoryContent = insertResult.rows[0].content;
