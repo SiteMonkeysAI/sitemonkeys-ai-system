@@ -65,6 +65,7 @@ import { vaultLoader } from "./api/utilities/vault-loader.js";
 import { sessionManager } from "./api/lib/session-manager.js";
 import debugRoutes from "./api/routes/debug.js";
 import memoryFullCheckRoutes from "./api/test/memory-full-check.js";
+import migrateSemanticHandler from "./api/routes/migrate-semantic.js";
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -682,6 +683,9 @@ app.use("/api/debug", debugRoutes);
 
 // Memory full check test endpoint (only in private/debug mode)
 app.use("/api/test", memoryFullCheckRoutes);
+
+// Migration endpoint - MUST come before catch-all routes
+app.get('/api/migrate-semantic', migrateSemanticHandler);
 
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);
