@@ -196,8 +196,8 @@ export default async function handler(req, res) {
     // Index 2: Category filtering
     try {
       await client.query(`
-        CREATE INDEX IF NOT EXISTS idx_memories_user_category 
-        ON persistent_memories (user_id, category)
+        CREATE INDEX IF NOT EXISTS idx_memories_user_category
+        ON persistent_memories (user_id, category_name)
       `);
       results.steps.push('✅ idx_memories_user_category created');
     } catch (err) {
