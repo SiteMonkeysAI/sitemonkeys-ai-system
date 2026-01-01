@@ -791,7 +791,11 @@ app.get(
   migrateSemanticRateLimiter,
   migrateSemanticV2Handler,
 );
-app.get('/api/test-semantic', testSemanticHandler);
+app.get(
+  '/api/test-semantic',
+  migrateSemanticRateLimiter,
+  testSemanticHandler,
+);
 
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);
