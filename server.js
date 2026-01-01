@@ -793,8 +793,14 @@ const testSemanticRateLimiter = RateLimit({
   max: 100, // limit each IP to 100 requests per windowMs for this route
 });
 
+// Rate limiter for semantic migrate v2 endpoint
+const migrateSemanticV2RateLimiter = RateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs for this route
+});
+
 // Semantic layer routes - MUST be before catch-all
-app.get('/api/migrate-semantic-v2', migrateSemanticV2Handler);
+app.get('/api/migrate-semantic-v2', migrateSemanticV2RateLimiter, migrateSemanticV2Handler);
 app.get('/api/test-semantic', testSemanticRateLimiter, testSemanticHandler);
 
 // Repo snapshot endpoint
