@@ -4,6 +4,8 @@
 //Redeploy2
 
 // Enhanced logging for Railway visibility
+const RateLimit = require("express-rate-limit");
+
 console.log = ((oldLog) => {
   return (...args) => {
     oldLog.apply(console, args);
@@ -785,9 +787,15 @@ app.get(
   migrateSemanticHandler,
 );
 
+// Rate limiter for semantic test endpoint
+const testSemanticRateLimiter = RateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs for this route
+});
+
 // Semantic layer routes - MUST be before catch-all
 app.get('/api/migrate-semantic-v2', migrateSemanticV2Handler);
-app.get('/api/test-semantic', testSemanticHandler);
+app.get('/api/test-semantic', testSemanticRateLimiter, testSemanticHandler);
 
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);
