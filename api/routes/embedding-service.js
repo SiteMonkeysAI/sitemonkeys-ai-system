@@ -1,16 +1,21 @@
 /**
  * EMBEDDING SERVICE
- * 
+ *
  * Generates and manages embeddings for semantic memory retrieval.
- * 
+ *
  * Key Design Principles:
  * - Store-time embedding (not query-time for memories)
  * - Graceful degradation: never blocks memory storage
  * - Backfill support for pending/failed embeddings
  * - Telemetry for monitoring
- * 
+ *
  * @module api/services/embedding-service
  */
+
+// Node.js 18+ has native fetch and AbortController as globals
+// This explicit reference ensures they're available in the module scope
+const fetch = globalThis.fetch;
+const AbortController = globalThis.AbortController;
 
 // ============================================
 // CONFIGURATION

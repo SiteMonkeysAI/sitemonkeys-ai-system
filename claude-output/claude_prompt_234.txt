@@ -1,0 +1,43 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #234: [claude-fix] Fix embedding-service.js - add node-fetch and AbortController imports
+
+Issue Description:
+## Problem
+Server fails to start because embedding-service.js uses browser globals that don't exist in Node.js:
+- 'fetch' is not defined (line 61)
+- 'AbortController' is not defined (line 58)
+
+## Fix Required
+At the top of api/services/embedding-service.js (or api/routes/embedding-service.js), add:
+```javascript
+import fetch from 'node-fetch';
+```
+
+Note: AbortController is global in Node 18+, but fetch is not. If node-fetch isn't installed, use the native fetch with:
+```javascript
+const fetch = globalThis.fetch || (await import('node-fetch')).default;
+```
+
+Or simply use dynamic import inside the function.
+
+## Files to modify
+- api/services/embedding-service.js OR api/routes/embedding-service.js (whichever location it's in)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
