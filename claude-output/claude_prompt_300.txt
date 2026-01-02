@@ -1,0 +1,147 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #300: [claude-fix] Complete document ingestion: populate service + create database tables
+
+Issue Description:
+## Context
+
+Placeholder file `/api/services/document-service.js` has been created. The bot needs to:
+1. Populate the document service with full implementation
+2. Create database tables (via migration or direct creation in the service)
+3. Add test endpoints to test-semantic.js
+4. Ensure cosineSimilarity is exported from embedding-service.js
+
+## Critical: Database Tables
+
+The service must create these tables if they don't exist. Add this to the top of document-service.js as an initialization function that runs on first import:
+```javascript
+async function initializeDocumentTables(pool) {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id SERIAL PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      mode VARCHAR(50) DEFAULT 'truth-general',
+      filename TEXT NOT NULL,
+      original_size INTEGER,
+      content_type TEXT,
+      full_content TEXT,
+      store_full_content BOOLEAN DEFAULT false,
+      chunk_count INTEGER DEFAULT 0,
+      total_tokens INTEGER DEFAULT 0,
+      metadata JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS document_chunks (
+      id SERIAL PRIMARY KEY,
+      document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
+      user_id TEXT NOT NULL,
+      mode VARCHAR(50) DEFAULT 'truth-general',
+      chunk_index INTEGER NOT NULL,
+      content TEXT NOT NULL,
+      token_count INTEGER,
+      embedding FLOAT4[],
+      embedding_status TEXT DEFAULT 'pending',
+      metadata JSONB DEFAULT '{}'::jsonb,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  
+  // Create indexes
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_documents_user_mode ON documents(user_id, mode)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_document_chunks_user_mode ON document_chunks(user_id, mode)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id ON document_chunks(document_id, chunk_index)`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding_status ON document_chunks(embedding_status)`);
+  
+  console.log('[DOCUMENT-SERVICE] Database tables initialized');
+}
+
+// Call on module load
+let tablesInitialized = false;
+export async function ensureTablesExist(pool) {
+  if (!tablesInitialized) {
+    await initializeDocumentTables(pool);
+    tablesInitialized = true;
+  }
+}
+```
+
+## Files to Populate/Modify
+
+### 1. `/api/services/document-service.js` (populate placeholder)
+
+Full implementation with:
+- `initializeDocumentTables()` and `ensureTablesExist()` - Auto-create tables
+- `extractText(buffer, mimetype, filename)` - PDF, DOCX, TXT extraction
+- `chunkText(text, config)` - Split into 512-1024 token chunks
+- `storeDocument(userId, mode, filename, buffer, mimetype, options)`
+- `embedDocumentChunks(documentId, options)` - Async embedding
+- `backfillDocumentEmbeddings(options)` - Resumable backfill
+- `searchDocuments(userId, mode, queryEmbedding, options)` - With token budget
+- `getUserDocuments(userId, mode)`
+- `deleteDocument(documentId, userId)`
+- `getDocumentStatus(documentId)`
+
+**Architecture Notes:**
+- Embeddings stored as FLOAT4[] (same as persistent_memories)
+- Similarity computed in Node using cosine, NOT SQL operators
+- Chunks include user_id + mode for isolation
+- Embedding generation is async/resumable
+- Import pool from existing db connection
+
+### 2. `/api/services/embedding-service.js` (modify)
+
+Ensure `cosineSimilarity` is exported:
+```javascript
+export function cosineSimilarity(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dotProduct = 0, normA = 0, normB = 0;
+  for (let i = 0; i < a.length; i++) {
+    dotProduct += a[i] * b[i];
+    normA += a[i] * a[i];
+    normB += b[i] * b[i];
+  }
+  return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+}
+```
+
+### 3. `/api/routes/test-semantic.js` (modify)
+
+Add these action handlers:
+- `case 'test-document-ingestion':` - Full end-to-end test (code in issue #298)
+- `case 'backfill-doc-embeddings':` - Resumable embedding backfill
+- `case 'doc-status':` - Check document/user status
+
+Each handler should call `ensureTablesExist(pool)` before using document functions.
+
+## Acceptance Test
+```javascript
+fetch("https://sitemonkeys-ai-system-production.up.railway.app/api/test-semantic?action=test-document-ingestion", {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json()).then(d => {
+  console.log("Document Ingestion:", d.summary, d.passed ? "✅" : "❌");
+});
+// Expected: 6/6 tests passed ✅
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
