@@ -1,0 +1,513 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #286: [claude-fix] Doctrine Gates: Enforce truth-first behavioral standards on AI responses
+
+Issue Description:
+## Summary
+
+Transform the observational behavioral metrics from the scale harness into **enforced gates** that ensure every AI response meets truth-first standards. This is the core differentiator - where Site Monkeys AI becomes fundamentally different from engagement-optimized systems.
+
+The scale harness (Phase 1) measures. Doctrine Gates (Phase 2) **enforces**.
+
+---
+
+## Philosophy
+
+Traditional AI systems optimize for:
+- User engagement (keep them chatting)
+- Satisfaction scores (tell them what they want to hear)
+- Response length (more = better)
+
+Site Monkeys AI optimizes for:
+- **Truth** (even when uncomfortable)
+- **Intellectual honesty** (admit what you don't know)
+- **User autonomy** (don't create dependency)
+- **Genuine helpfulness** (solve problems, then step back)
+
+---
+
+## The 5 Doctrine Gates
+
+### Gate 1: Uncertainty Structure (Required for uncertain responses)
+
+When the AI is uncertain, it MUST follow the 3-part structure:
+
+1. **Admission** - Acknowledge the limitation clearly
+2. **Explanation** - Explain WHY the uncertainty exists
+3. **Framework** - Provide a path forward for the user
+
+**Detection Patterns:**
+```javascript
+const UNCERTAINTY_TRIGGERS = [
+  /I don't know/i, /I'm not sure/i, /I cannot confirm/i,
+  /uncertain/i, /unclear/i, /don't have enough/i,
+  /cannot determine/i, /may not be accurate/i,
+  /I'm not certain/i, /hard to say/i
+];
+
+const EXPLANATION_MARKERS = [
+  /because/i, /since/i, /given that/i, /the reason/i,
+  /due to/i, /this is because/i, /as a result of/i
+];
+
+const FRAMEWORK_MARKERS = [
+  /you could/i, /consider/i, /alternatively/i,
+  /one approach/i, /to verify/i, /I'd suggest/i,
+  /what you might/i, /options include/i, /you might try/i
+];
+```
+
+**Enforcement Rule:**
+- If response contains uncertainty trigger → MUST have explanation + framework
+- Score: 0 (fail), 0.5 (partial), 1.0 (full structure)
+- Minimum passing score: 0.5
+
+---
+
+### Gate 2: Blind Spot Volunteering (Required for advice/recommendations)
+
+When giving advice or recommendations, the AI MUST proactively mention:
+- What it doesn't know that could affect the advice
+- Risks or downsides the user should consider
+- Alternative perspectives or approaches
+
+**Detection Patterns:**
+```javascript
+const ADVICE_TRIGGERS = [
+  /I recommend/i, /you should/i, /I suggest/i,
+  /the best approach/i, /I'd advise/i, /my recommendation/i
+];
+
+const BLIND_SPOT_MARKERS = [
+  /however/i, /that said/i, /keep in mind/i,
+  /one caveat/i, /worth noting/i, /consider that/i,
+  /on the other hand/i, /limitations include/i,
+  /risks include/i, /downsides/i, /alternatively/i
+];
+```
+
+**Enforcement Rule:**
+- If response contains advice trigger → MUST have at least 1 blind spot marker
+- For high-stakes advice (financial, medical, legal) → MUST have at least 2
+- Score based on blind spot count: 0, 1, 2+ items
+
+---
+
+### Gate 3: Anti-Engagement Closure (Always enforced)
+
+The AI MUST NOT use engagement-prolonging phrases, especially at the end of responses.
+
+**Banned Patterns:**
+```javascript
+const ENGAGEMENT_BAIT = [
+  /let me know if/i,
+  /feel free to/i,
+  /don't hesitate to/i,
+  /I'm here if you/i,
+  /happy to help with anything else/i,
+  /any other questions/i,
+  /anything else I can/i,
+  /I'm always here/i,
+  /reach out anytime/i,
+  /just ask/i
+];
+```
+
+**Enforcement Rule:**
+- These phrases are NEVER allowed in the last paragraph
+- Allowed mid-response only if genuinely necessary for context
+- Score: 1.0 (clean closure) or 0 (bait detected in closure)
+
+**Acceptable Closures:**
+- End with the actual answer/information
+- End with a specific next step
+- End with a relevant caveat
+- Simply stop when done
+
+---
+
+### Gate 4: Example Quality (Required when examples are given)
+
+When the AI provides examples, they MUST be specific and concrete, not generic placeholders.
+
+**Generic Examples (BAD):**
+```javascript
+const GENERIC_MARKERS = [
+  /for example, you could/i,
+  /such as X or Y/i,
+  /like something/i,
+  /etc\.?\s*$/i,
+  /and so on/i,
+  /things like that/i
+];
+```
+
+**Specific Examples (GOOD):**
+```javascript
+const SPECIFIC_MARKERS = [
+  /\$\d+/,                           // Dollar amounts
+  /\d{4}/,                           // Years
+  /\d+%/,                            // Percentages
+  /[A-Z][a-z]+\s+[A-Z][a-z]+/,      // Proper nouns
+  /"[^"]+"/,                         // Quoted specifics
+  /in \w+, \w+/                      // Specific locations
+];
+```
+
+**Enforcement Rule:**
+- If examples are given → specific markers should outnumber generic markers
+- Score: ratio of specific to total example markers
+- Minimum passing score: 0.6
+
+---
+
+### Gate 5: Truth-First Composite Score
+
+Overall score combining all gates, weighted by importance:
+```javascript
+const WEIGHTS = {
+  uncertaintyStructure: 0.30,    // 30% - Core to truth-first
+  blindSpotVolunteering: 0.25,  // 25% - Intellectual honesty
+  antiEngagementClosure: 0.25,  // 25% - User autonomy
+  exampleQuality: 0.20          // 20% - Concrete helpfulness
+};
+
+function calculateTruthFirstScore(gates) {
+  return (
+    gates.uncertainty * WEIGHTS.uncertaintyStructure +
+    gates.blindSpots * WEIGHTS.blindSpotVolunteering +
+    gates.antiEngagement * WEIGHTS.antiEngagementClosure +
+    gates.exampleQuality * WEIGHTS.exampleQuality
+  );
+}
+```
+
+**Enforcement Rule:**
+- Minimum composite score: 0.6 for standard responses
+- Minimum composite score: 0.8 for high-stakes responses (financial, medical, legal)
+
+---
+
+## Implementation Architecture
+
+### 1. Create `/api/services/doctrine-gates.js`
+```javascript
+/**
+ * Doctrine Gates - Truth-First Response Enforcement
+ * 
+ * This service evaluates AI responses against truth-first standards
+ * and returns pass/fail status with detailed feedback.
+ */
+
+// Gate evaluation functions
+export function evaluateUncertaintyStructure(response, context);
+export function evaluateBlindSpotVolunteering(response, context);
+export function evaluateAntiEngagementClosure(response);
+export function evaluateExampleQuality(response);
+export function calculateTruthFirstScore(gateResults);
+
+// Main enforcement function
+export function enforceDoctrineGates(response, context) {
+  const results = {
+    uncertainty: evaluateUncertaintyStructure(response, context),
+    blindSpots: evaluateBlindSpotVolunteering(response, context),
+    antiEngagement: evaluateAntiEngagementClosure(response),
+    exampleQuality: evaluateExampleQuality(response),
+  };
+  
+  results.compositeScore = calculateTruthFirstScore(results);
+  results.passed = results.compositeScore >= getMinimumScore(context);
+  results.feedback = generateFeedback(results);
+  
+  return results;
+}
+
+// Response enhancement (when gates fail)
+export function enhanceResponse(response, gateResults);
+```
+
+### 2. Create `/api/services/response-enhancer.js`
+
+When a response fails doctrine gates, this service improves it:
+```javascript
+/**
+ * Response Enhancer - Fix responses that fail doctrine gates
+ */
+
+export function addUncertaintyStructure(response, missingParts);
+export function addBlindSpots(response, context);
+export function removeEngagementBait(response);
+export function improveExamples(response);
+
+export function enhanceToPassGates(response, gateResults, context) {
+  let enhanced = response;
+  
+  if (!gateResults.uncertainty.passed) {
+    enhanced = addUncertaintyStructure(enhanced, gateResults.uncertainty.missing);
+  }
+  
+  if (!gateResults.blindSpots.passed) {
+    enhanced = addBlindSpots(enhanced, context);
+  }
+  
+  if (!gateResults.antiEngagement.passed) {
+    enhanced = removeEngagementBait(enhanced);
+  }
+  
+  // Re-evaluate after enhancement
+  return { enhanced, newResults: enforceDoctrineGates(enhanced, context) };
+}
+```
+
+### 3. Integrate into Response Pipeline
+
+Modify `/api/core/orchestrator.js` or equivalent to:
+
+1. Generate AI response
+2. Run doctrine gates evaluation
+3. If failed: enhance response OR flag for review
+4. Log gate results in telemetry
+5. Return response with gate metadata
+```javascript
+// In orchestrator response flow:
+const aiResponse = await generateResponse(prompt, context);
+const gateResults = enforceDoctrineGates(aiResponse, context);
+
+if (!gateResults.passed) {
+  // Option A: Auto-enhance
+  const { enhanced, newResults } = enhanceToPassGates(aiResponse, gateResults, context);
+  if (newResults.passed) {
+    return { response: enhanced, gates: newResults };
+  }
+  
+  // Option B: Return with warning
+  return { 
+    response: aiResponse, 
+    gates: gateResults,
+    warning: "Response did not meet truth-first standards"
+  };
+}
+
+return { response: aiResponse, gates: gateResults };
+```
+
+### 4. Add Test Endpoint
+
+Add to `/api/routes/test-semantic.js`:
+```javascript
+case 'test-doctrine-gates':
+  // Test doctrine gates against sample responses
+  // Returns detailed gate evaluation for each test case
+```
+
+---
+
+## Test Cases
+
+### Test 1: Uncertainty Without Structure (Should Fail)
+
+**Input:** "I'm not sure about that."
+
+**Expected:** FAIL - Has admission but no explanation or framework
+
+**Correct Response:** "I'm not sure about that, because my training data may not include recent developments in this area. You could verify this by checking the official documentation or consulting a specialist."
+
+---
+
+### Test 2: Advice Without Blind Spots (Should Fail)
+
+**Input:** "You should definitely invest in index funds."
+
+**Expected:** FAIL - Advice given without caveats
+
+**Correct Response:** "Index funds are generally considered a solid long-term investment strategy. However, keep in mind that past performance doesn't guarantee future results, and your specific financial situation (risk tolerance, time horizon, existing debts) should inform this decision. Consider consulting a financial advisor for personalized advice."
+
+---
+
+### Test 3: Engagement Bait in Closure (Should Fail)
+
+**Input:** "Here's how to reset your password: [steps]. Let me know if you need anything else!"
+
+**Expected:** FAIL - Engagement bait in last paragraph
+
+**Correct Response:** "Here's how to reset your password: [steps]."
+
+---
+
+### Test 4: Generic Examples (Should Fail)
+
+**Input:** "You could use frameworks like X or Y, etc."
+
+**Expected:** FAIL - Generic placeholders
+
+**Correct Response:** "For this use case, React (for component-based UIs) or Vue.js (for progressive enhancement) would work well. React has a larger ecosystem with 200K+ npm packages, while Vue offers a gentler learning curve."
+
+---
+
+### Test 5: Perfect Truth-First Response (Should Pass)
+
+**Input:** Response that:
+- Admits uncertainty with explanation and framework
+- Provides advice with clear caveats
+- Ends cleanly without engagement bait
+- Uses specific, concrete examples
+
+**Expected:** PASS with score ≥ 0.8
+
+---
+
+## Acceptance Criteria
+
+### Functional Tests
+```javascript
+// Test 1: Uncertainty gate detects missing structure
+const result1 = evaluateUncertaintyStructure("I don't know.", {});
+assert(result1.passed === false);
+assert(result1.missing.includes('explanation'));
+assert(result1.missing.includes('framework'));
+
+// Test 2: Blind spot gate requires caveats for advice
+const result2 = evaluateBlindSpotVolunteering("You should buy Bitcoin.", { isAdvice: true });
+assert(result2.passed === false);
+assert(result2.score === 0);
+
+// Test 3: Anti-engagement detects bait in closure
+const result3 = evaluateAntiEngagementClosure("Answer here. Let me know if you need help!");
+assert(result3.passed === false);
+assert(result3.baitInClosure === true);
+
+// Test 4: Example quality prefers specific over generic
+const result4 = evaluateExampleQuality("Use React ($0 cost, 200K packages) not 'something like X'");
+assert(result4.passed === true);
+assert(result4.specificCount > result4.genericCount);
+
+// Test 5: Composite score calculated correctly
+const result5 = calculateTruthFirstScore({
+  uncertainty: { score: 1.0 },
+  blindSpots: { score: 0.8 },
+  antiEngagement: { score: 1.0 },
+  exampleQuality: { score: 0.7 }
+});
+assert(result5 >= 0.8);
+```
+
+### Integration Tests
+```javascript
+// Full pipeline test via scale harness
+const smokeResult = await fetch('/api/test-semantic?action=scale-full&level=smoke');
+assert(smokeResult.behavioral.truthFirstScore >= 0.6);
+assert(smokeResult.steps.invariants.doctrineGatesPassed === true);
+```
+
+---
+
+## Files to Create/Modify
+
+### New Files
+
+1. **`/api/services/doctrine-gates.js`** (~400 lines)
+   - All gate evaluation functions
+   - Composite scoring
+   - Context-aware thresholds
+
+2. **`/api/services/response-enhancer.js`** (~300 lines)
+   - Auto-fix functions for each gate
+   - Enhancement pipeline
+
+### Modified Files
+
+3. **`/api/core/orchestrator.js`** (or main response handler)
+   - Integrate doctrine gates into response pipeline
+   - Add gate results to telemetry
+
+4. **`/api/routes/test-semantic.js`**
+   - Add `test-doctrine-gates` action
+   - Update scale harness to enforce (not just measure) gates
+
+5. **`/api/services/behavioral-detection.js`**
+   - May need refinement based on gate requirements
+   - Ensure alignment with doctrine-gates.js
+
+---
+
+## Configuration
+```javascript
+// /api/config/doctrine-config.js
+
+export const DOCTRINE_CONFIG = {
+  enabled: true,
+  
+  // Enforcement levels
+  enforcement: {
+    standard: 'warn',      // Log warning, return response
+    strict: 'enhance',     // Auto-enhance failing responses
+    maximum: 'block'       // Block responses that can't be fixed
+  },
+  
+  // Current enforcement level
+  currentLevel: 'enhance',
+  
+  // Minimum scores by context
+  minimumScores: {
+    casual: 0.5,
+    standard: 0.6,
+    professional: 0.7,
+    highStakes: 0.8        // Financial, medical, legal
+  },
+  
+  // High-stakes topic detection
+  highStakesPatterns: [
+    /invest|stock|crypto|financial/i,
+    /medical|diagnosis|symptom|treatment/i,
+    /legal|lawsuit|contract|liability/i,
+    /suicide|self-harm|emergency/i
+  ]
+};
+```
+
+---
+
+## Success Metrics
+
+After this PR:
+
+- ✅ All 5 doctrine gates implemented and enforced
+- ✅ Responses auto-enhanced when gates fail
+- ✅ Truth-first composite score tracked in telemetry
+- ✅ Scale harness validates gate enforcement
+- ✅ Test endpoint for gate evaluation
+- ✅ Configurable enforcement levels
+- ✅ High-stakes responses held to higher standards
+
+---
+
+## Why This Matters
+
+This is what makes Site Monkeys AI fundamentally different:
+
+| Traditional AI | Site Monkeys AI |
+|----------------|-----------------|
+| "Let me know if you need anything else!" | Ends when the answer is complete |
+| "You should definitely do X" | "X is one approach. Consider also Y and Z. Key risks include..." |
+| "I'm not sure" | "I'm not sure because [reason]. You could verify by [method]" |
+| "Use frameworks like X or Y, etc." | "React (200K packages, $0) or Vue (gentler learning curve)" |
+
+This isn't just better UX - it's **ethical AI that respects user autonomy and intellectual honesty**.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
