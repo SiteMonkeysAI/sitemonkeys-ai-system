@@ -1,0 +1,47 @@
+Excellent! The changes look good. Now let me create a summary of the fix:
+
+---SUMMARY---
+
+## Issue Analysis
+The live-proof test was failing because the polling query used to detect embedding completion was using a `LIKE` pattern match on the content:
+
+```sql
+WHERE user_id = $1 AND content LIKE $2
+```
+
+This pattern match (`content LIKE '%testFact%'`) was unreliable because:
+1. The content stored in the database might not exactly match `testFact`
+2. The `/api/chat` endpoint might process or modify the content before storage
+3. The pattern matching added unnecessary complexity
+
+## Fix Applied
+Modified the polling query in `/api/routes/test-semantic.js` (lines 745-780) to:
+
+### Changes Made:
+1. **Simplified the query** - Removed the `content LIKE` clause and now query only by `user_id`:
+   ```sql
+   SELECT id, embedding_status, embedding
+   FROM persistent_memories
+   WHERE user_id = $1
+   ORDER BY created_at DESC
+   LIMIT 1
+   ```
+
+2. **Enhanced debug logging** - Added the requested debug format:
+   ```javascript
+   console.log(`[LIVE-PROOF] Polling memory ${memoryId}, status: ${currentStatus}, has_embedding: ${hasEmbedding}`);
+   ```
+
+3. **Improved error handling** - Added explicit logging when no memory is found yet during polling
+
+4. **Maintained correct logic** - Still checks that both `embedding_status = 'ready'` AND `embedding !== null` before considering it ready
+
+## Why This Works
+Since `testUserId` is unique to each test run (includes timestamp), we can safely query by user_id alone and get the most recently created memory. This is more reliable than trying to pattern-match the content, which was causing false negatives.
+
+## Acceptance Criteria Met
+✅ Polling now queries: `SELECT embedding_status FROM persistent_memories WHERE user_id = $1`
+✅ Detects when `embedding_status = 'ready'` AND `embedding !== null`
+✅ Added debug logging: `[LIVE-PROOF] Polling memory {id}, status: {status}, has_embedding: {bool}`
+
+---END SUMMARY---
