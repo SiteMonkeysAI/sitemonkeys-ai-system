@@ -317,6 +317,97 @@ export class Orchestrator {
     };
   }
 
+  /**
+   * Applies doctrine gates to enforce truth-first standards
+   * CRITICAL: Runs AFTER enforcement chain, BEFORE personality
+   */
+  async #applyDoctrineGates(response, context, message) {
+    try {
+      const { enforceDoctrineGates } = await import('../services/doctrine-gates.js');
+      const { enhanceToPassGates } = await import('../services/response-enhancer.js');
+      const { DOCTRINE_CONFIG } = await import('../config/doctrine-config.js');
+
+      // Skip if disabled
+      if (!DOCTRINE_CONFIG.enabled) {
+        this.log('[DOCTRINE-GATES] Disabled in config');
+        return {
+          response: response,
+          gateResults: { passed: true, compositeScore: 1.0, minimumScore: 0.6 },
+          enhanced: false,
+          enhancements: []
+        };
+      }
+
+      // Evaluate with doctrine gates
+      const gateContext = {
+        mode: context.mode,
+        message: message,
+        highStakes: DOCTRINE_CONFIG.highStakesPatterns.some(pattern => pattern.test(message))
+      };
+
+      const gateResults = enforceDoctrineGates(response, gateContext);
+
+      // Handle based on enforcement level
+      const enforcementLevel = DOCTRINE_CONFIG.currentLevel;
+
+      if (!gateResults.passed) {
+        if (enforcementLevel === 'warn') {
+          // Just log warning
+          this.log(`[DOCTRINE-GATES] ⚠️ Response failed gates (score: ${gateResults.compositeScore})`);
+          return {
+            response: response,
+            gateResults: gateResults,
+            enhanced: false,
+            enhancements: []
+          };
+        } else if (enforcementLevel === 'enhance') {
+          // Auto-enhance the response
+          this.log('[DOCTRINE-GATES] Enhancing response to meet standards...');
+          const enhancementResult = enhanceToPassGates(response, gateResults, gateContext);
+
+          return {
+            response: enhancementResult.enhanced,
+            gateResults: enhancementResult.newResults,
+            enhanced: true,
+            enhancements: enhancementResult.enhancements
+          };
+        } else if (enforcementLevel === 'block') {
+          // Try to enhance, but block if still failing
+          const enhancementResult = enhanceToPassGates(response, gateResults, gateContext);
+
+          if (!enhancementResult.newResults.passed) {
+            this.log('[DOCTRINE-GATES] ❌ Response blocked - cannot meet standards');
+            throw new Error('Response does not meet truth-first standards and cannot be enhanced');
+          }
+
+          return {
+            response: enhancementResult.enhanced,
+            gateResults: enhancementResult.newResults,
+            enhanced: true,
+            enhancements: enhancementResult.enhancements
+          };
+        }
+      }
+
+      // Passed gates
+      return {
+        response: response,
+        gateResults: gateResults,
+        enhanced: false,
+        enhancements: []
+      };
+
+    } catch (error) {
+      this.error('[DOCTRINE-GATES] Evaluation failed, using original response', error);
+      return {
+        response: response,
+        gateResults: { passed: true, compositeScore: 1.0, minimumScore: 0.6, error: error.message },
+        enhanced: false,
+        enhancements: []
+      };
+    }
+  }
+
   // ==================== MAIN ENTRY POINT ====================
 
   async processRequest(requestData) {
@@ -455,11 +546,29 @@ export class Orchestrator {
         });
       }
 
-      // STEP 8: Apply personality reasoning framework (AFTER ENFORCEMENT)
+      // ========== RUN DOCTRINE GATES (AFTER ENFORCEMENT, BEFORE PERSONALITY) ==========
+      this.log("[DOCTRINE-GATES] Evaluating truth-first standards...");
+      const doctrineResult = await this.#applyDoctrineGates(
+        enforcedResult.response,
+        context,
+        message
+      );
+
+      this.log(
+        `[DOCTRINE-GATES] Score: ${doctrineResult.gateResults.compositeScore.toFixed(2)}/${doctrineResult.gateResults.minimumScore.toFixed(2)} ${doctrineResult.gateResults.passed ? '✅' : '❌'}`,
+      );
+
+      if (doctrineResult.enhanced) {
+        this.log(
+          `[DOCTRINE-GATES] Response enhanced: ${doctrineResult.enhancements.join(', ')}`,
+        );
+      }
+
+      // STEP 8: Apply personality reasoning framework (AFTER ENFORCEMENT AND DOCTRINE GATES)
       // Personality enhances the already-compliant response
       const personalityStartTime = Date.now();
       const personalityResponse = await this.#applyPersonality(
-        enforcedResult.response,
+        doctrineResult.response,
         analysis,
         mode,
         context,
@@ -565,6 +674,11 @@ export class Orchestrator {
 
           // NEW: Compliance metadata
           compliance_metadata: enforcedResult.compliance_metadata,
+
+          // NEW: Doctrine gates results
+          doctrine_gates: doctrineResult.gateResults,
+          doctrine_enhanced: doctrineResult.enhanced || false,
+          doctrine_enhancements: doctrineResult.enhancements || [],
 
           // NEW: Cost tracking
           cost_tracking: {

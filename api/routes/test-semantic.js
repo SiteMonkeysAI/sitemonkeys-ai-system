@@ -1222,10 +1222,109 @@ export default async function handler(req, res) {
         }
       }
 
+      // ============================================
+      // TEST: DOCTRINE GATES
+      // ============================================
+      case 'test-doctrine-gates': {
+        const { enforceDoctrineGates } = await import('../services/doctrine-gates.js');
+        const { enhanceToPassGates } = await import('../services/response-enhancer.js');
+
+        // Test cases from issue #286
+        const testCases = [
+          {
+            name: 'Test 1: Uncertainty Without Structure',
+            response: "I'm not sure about that.",
+            context: {},
+            shouldFail: true,
+            expectedIssue: 'missing explanation and framework'
+          },
+          {
+            name: 'Test 2: Advice Without Blind Spots',
+            response: "You should definitely invest in index funds.",
+            context: {},
+            shouldFail: true,
+            expectedIssue: 'missing caveats'
+          },
+          {
+            name: 'Test 3: Engagement Bait in Closure',
+            response: "Here's how to reset your password: Click Settings, then Security, then Reset Password. Let me know if you need anything else!",
+            context: {},
+            shouldFail: true,
+            expectedIssue: 'engagement bait in closure'
+          },
+          {
+            name: 'Test 4: Generic Examples',
+            response: "You could use frameworks like X or Y, etc.",
+            context: {},
+            shouldFail: true,
+            expectedIssue: 'generic examples'
+          },
+          {
+            name: 'Test 5: Perfect Truth-First Response',
+            response: "I'm not certain about the exact implementation details because this depends on your specific setup. However, based on common configurations, you could try using React (with 200K+ npm packages and strong TypeScript support) or Vue.js (gentler learning curve, 10K+ packages). That said, keep in mind that framework choice depends on your team's expertise and project requirements. Consider also that switching frameworks mid-project can be costly.",
+            context: {},
+            shouldFail: false,
+            expectedIssue: 'none'
+          }
+        ];
+
+        const results = [];
+
+        for (const testCase of testCases) {
+          console.log(`[TEST-DOCTRINE-GATES] Running: ${testCase.name}`);
+
+          // Evaluate with doctrine gates
+          const gateResult = enforceDoctrineGates(testCase.response, testCase.context);
+
+          // Check if result matches expectation
+          const passed = testCase.shouldFail ? !gateResult.passed : gateResult.passed;
+
+          // Try enhancement if it failed
+          let enhancementResult = null;
+          if (!gateResult.passed) {
+            enhancementResult = enhanceToPassGates(testCase.response, gateResult, testCase.context);
+          }
+
+          results.push({
+            test: testCase.name,
+            passed: passed,
+            expected: testCase.shouldFail ? 'FAIL' : 'PASS',
+            actual: gateResult.passed ? 'PASS' : 'FAIL',
+            compositeScore: gateResult.compositeScore,
+            minimumScore: gateResult.minimumScore,
+            gates: {
+              uncertainty: gateResult.uncertainty,
+              blindSpots: gateResult.blindSpots,
+              antiEngagement: gateResult.antiEngagement,
+              exampleQuality: gateResult.exampleQuality
+            },
+            feedback: gateResult.feedback,
+            enhancement: enhancementResult ? {
+              improved: enhancementResult.improved,
+              newScore: enhancementResult.newResults.compositeScore,
+              enhancements: enhancementResult.enhancements
+            } : null
+          });
+        }
+
+        const allPassed = results.every(r => r.passed);
+
+        return res.status(200).json({
+          action: 'test-doctrine-gates',
+          passed: allPassed,
+          totalTests: results.length,
+          passedTests: results.filter(r => r.passed).length,
+          results: results,
+          summary: allPassed
+            ? '✅ All doctrine gate tests passed'
+            : `❌ ${results.filter(r => !r.passed).length} test(s) failed`
+        });
+      }
+
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed', 'test-doctrine-gates'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -1246,7 +1345,8 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=scale-full&level=smoke',
             '/api/test-semantic?action=scale-cleanup&userId=test-scale-123',
             '/api/test-semantic?action=scale-status&userId=test-scale-123',
-            '/api/test-semantic?action=scale-embed&userId=test-scale-123&batchSize=10'
+            '/api/test-semantic?action=scale-embed&userId=test-scale-123&batchSize=10',
+            '/api/test-semantic?action=test-doctrine-gates'
           ]
         });
     }
