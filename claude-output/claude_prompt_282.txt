@@ -1,0 +1,139 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #282: [claude-fix] Populate scale harness placeholder files with full implementation
+
+Issue Description:
+## Context
+
+Placeholder files have been created. The bot can now use the Edit tool to populate them.
+
+## Files to Populate
+
+### 1. `/api/services/behavioral-detection.js`
+
+Currently empty placeholder. Populate with full implementation from issue #276:
+
+- `detectUncertaintyStructure(response)` - Detect 3-part uncertainty (admission + explanation + framework)
+- `countBlindSpots(response)` - Count distinct volunteered blind spots with marker detection
+- `detectEngagementBait(response)` - Detect patterns, focus on last paragraph
+- `assessExampleQuality(response)` - Check specific vs generic examples
+- `measureBehavioral(response)` - Combined analysis, returns all metrics
+- Add `_note: "Observational only - not enforced until Doctrine Gates"` to output
+
+### 2. `/api/services/scale-harness.js`
+
+Currently empty placeholder. Populate with full implementation from issues #276 and #278:
+
+**Cost Controls:**
+```javascript
+const COST_LIMITS = {
+  maxEmbeddingsPerRun: 200,
+  maxTotalEmbeddingsPerUser: 5000,
+  batchSize: 50,
+  maxMemoriesPerTestUser: 25000
+};
+```
+
+**Functions needed:**
+- `generateTestData(userId, count, options)` - Generate memories with tripwires
+- `generateTripwires(userId, runId, mode)` - Create 5+ retrievable test facts
+- `generateSupersessionChains(userId, runId, mode)` - Create fact chains for determinism testing
+- `runBenchmark(userId, queryCount, options)` - Run queries, measure latency/precision/determinism
+- `validateInvariants(results)` - Check all 8 hard invariants
+- `calculatePercentiles(values)` - Helper for p50/p95/p99
+- `cleanup(userId, runId)` - Delete test data
+- `getStatus(userId)` - Get user's current test data state
+
+**Tripwires:**
+```javascript
+const TRIPWIRES = [
+  { content: "The user's secret code is ALPHA-7749", fingerprint: "tripwire_secret_code", query: "What is my secret code?" },
+  { content: "The user's favorite dinosaur is Velociraptor", fingerprint: "tripwire_dinosaur", query: "What's my favorite dinosaur?" },
+  { content: "The user's lucky number is 42", fingerprint: "tripwire_lucky_number", query: "What's my lucky number?" },
+  { content: "The user was born in Helsinki", fingerprint: "tripwire_birthplace", query: "Where was I born?" },
+  { content: "The user's childhood pet was named Sparky", fingerprint: "tripwire_pet", query: "What was my childhood pet's name?" }
+];
+```
+
+**8 Hard Invariants:**
+1. Token budget never exceeded
+2. Supersession deterministic (no leaked superseded facts)
+3. Tripwire precision >= 0.9
+4. Latency p99 < 2000ms
+5. Fallback rate < 0.1
+6. Mode isolation maintained
+7. Candidate ceiling not exceeded (<= 1000)
+8. Vectors compared matches candidates
+
+### 3. `/api/middleware/scale-rate-limit.js`
+
+Currently empty placeholder. Populate with:
+```javascript
+const rateLimit = require('express-rate-limit');
+
+const scaleRateLimiters = {
+  generate: rateLimit({ windowMs: 60000, max: 5, message: { error: 'Rate limit exceeded for scale-generate' } }),
+  benchmark: rateLimit({ windowMs: 60000, max: 3, message: { error: 'Rate limit exceeded for scale-benchmark' } }),
+  full: rateLimit({ windowMs: 60000, max: 1, message: { error: 'Rate limit exceeded for scale-full' } }),
+  cleanup: rateLimit({ windowMs: 60000, max: 10, message: { error: 'Rate limit exceeded for scale-cleanup' } }),
+  status: rateLimit({ windowMs: 60000, max: 10, message: { error: 'Rate limit exceeded for scale-status' } }),
+  embed: rateLimit({ windowMs: 60000, max: 3, message: { error: 'Rate limit exceeded for scale-embed' } })
+};
+
+module.exports = scaleRateLimiters;
+```
+
+### 4. Modify `/api/routes/test-semantic.js`
+
+Add these action handlers to the existing switch statement:
+
+- `case 'scale-generate':` - Generate test data with cost caps, resumability via runId
+- `case 'scale-benchmark':` - Run benchmark, validate invariants, measure behavioral
+- `case 'scale-full':` - Combined endpoint with levels (smoke/light/medium/heavy/extreme)
+- `case 'scale-cleanup':` - Delete test data by userId/runId
+- `case 'scale-status':` - Check user's test data state
+- `case 'scale-embed':` - Two-phase embedding for existing rows
+
+**Stress Test Levels:**
+| Level | Memories | Queries |
+|-------|----------|---------|
+| smoke | 100 | 20 |
+| light | 500 | 50 |
+| medium | 2000 | 100 |
+| heavy | 5000 | 150 |
+| extreme | 25000 | 500 (requires allowExtreme=true) |
+
+## Important Implementation Notes
+
+1. All scale endpoints require `X-Internal-Test-Token` header
+2. Store `run_id` in memory metadata for resumability
+3. Behavioral metrics are OBSERVATIONAL ONLY - never fail the harness
+4. Time cap: 30 seconds default, return partial results with cursor if exceeded
+5. Import from existing services: `semantic-retrieval.js`, `supersession.js`, `embedding-service.js`
+
+## Acceptance Test
+```javascript
+fetch("https://sitemonkeys-ai-system-production.up.railway.app/api/test-semantic?action=scale-full&level=smoke", {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json()).then(d => console.log(JSON.stringify(d, null, 2)));
+```
+
+Should return results with `invariants` object showing pass/fail for each of the 8 checks.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

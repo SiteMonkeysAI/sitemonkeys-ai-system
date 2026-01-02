@@ -938,10 +938,294 @@ export default async function handler(req, res) {
         }
       }
 
+      // ============================================
+      // SCALE: GENERATE TEST DATA
+      // ============================================
+      case 'scale-generate': {
+        const { generateTestData } = await import('../services/scale-harness.js');
+
+        const testUserId = req.query.userId || `test-scale-${Date.now()}`;
+        const count = Math.min(parseInt(req.query.count) || 100, 200); // Cap at 200 for cost control
+        const runId = req.query.runId || `run-${Date.now()}`;
+        const mode = req.query.mode || 'truth-general';
+        const skipEmbedding = req.query.skipEmbedding === 'true';
+
+        const result = await generateTestData(pool, testUserId, count, {
+          runId,
+          mode,
+          skipEmbedding
+        });
+
+        return res.status(200).json({
+          action: 'scale-generate',
+          ...result
+        });
+      }
+
+      // ============================================
+      // SCALE: RUN BENCHMARK
+      // ============================================
+      case 'scale-benchmark': {
+        const { runBenchmark, validateInvariants } = await import('../services/scale-harness.js');
+        const { measureBehavioral } = await import('../services/behavioral-detection.js');
+
+        const testUserId = req.query.userId;
+        if (!testUserId) {
+          return res.status(400).json({
+            error: 'Missing userId parameter',
+            usage: '/api/test-semantic?action=scale-benchmark&userId=test-scale-xxx&queryCount=20'
+          });
+        }
+
+        const queryCount = Math.min(parseInt(req.query.queryCount) || 20, 500);
+        const mode = req.query.mode || 'truth-general';
+
+        const benchmarkResult = await runBenchmark(pool, testUserId, queryCount, { mode });
+
+        // Validate invariants
+        const invariantResult = await validateInvariants(pool, testUserId, benchmarkResult);
+
+        // Measure behavioral (observational only)
+        const behavioral = measureBehavioral(JSON.stringify(benchmarkResult));
+
+        return res.status(200).json({
+          action: 'scale-benchmark',
+          benchmark: benchmarkResult,
+          invariants: invariantResult,
+          behavioral
+        });
+      }
+
+      // ============================================
+      // SCALE: FULL STRESS TEST
+      // ============================================
+      case 'scale-full': {
+        const { generateTestData, generateSupersessionChains, runBenchmark, validateInvariants, cleanup } = await import('../services/scale-harness.js');
+        const { measureBehavioral } = await import('../services/behavioral-detection.js');
+
+        const level = req.query.level || 'smoke';
+        const allowExtreme = req.query.allowExtreme === 'true';
+
+        // Define stress test levels
+        const levels = {
+          smoke: { memories: 100, queries: 20 },
+          light: { memories: 500, queries: 50 },
+          medium: { memories: 2000, queries: 100 },
+          heavy: { memories: 5000, queries: 150 },
+          extreme: { memories: 25000, queries: 500 }
+        };
+
+        if (!levels[level]) {
+          return res.status(400).json({
+            error: `Invalid level: ${level}`,
+            availableLevels: Object.keys(levels)
+          });
+        }
+
+        if (level === 'extreme' && !allowExtreme) {
+          return res.status(403).json({
+            error: 'Extreme level requires allowExtreme=true parameter',
+            warning: 'This will generate 25,000 memories and cost significant API credits'
+          });
+        }
+
+        const config = levels[level];
+        const testUserId = `test-scale-${level}-${Date.now()}`;
+        const runId = `run-${level}-${Date.now()}`;
+        const mode = req.query.mode || 'truth-general';
+        const maxSeconds = parseInt(req.query.maxSeconds) || 30;
+
+        const startTime = Date.now();
+        const results = {
+          level,
+          config,
+          testUserId,
+          runId,
+          steps: {}
+        };
+
+        try {
+          // Step 1: Generate test data
+          console.log(`[SCALE-FULL] Step 1: Generating ${config.memories} memories...`);
+          const generateResult = await generateTestData(pool, testUserId, config.memories, {
+            runId,
+            mode,
+            skipEmbedding: false
+          });
+          results.steps.generate = generateResult;
+
+          // Check time budget
+          if ((Date.now() - startTime) / 1000 >= maxSeconds) {
+            results.timeout = true;
+            results.elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(2);
+            await cleanup(pool, testUserId);
+            return res.status(200).json(results);
+          }
+
+          // Step 2: Generate supersession chains
+          console.log(`[SCALE-FULL] Step 2: Generating supersession chains...`);
+          const supersessionResult = await generateSupersessionChains(pool, testUserId, runId, mode);
+          results.steps.supersession = supersessionResult;
+
+          // Step 3: Run benchmark
+          console.log(`[SCALE-FULL] Step 3: Running ${config.queries} queries...`);
+          const benchmarkResult = await runBenchmark(pool, testUserId, config.queries, { mode });
+          results.steps.benchmark = benchmarkResult;
+
+          // Step 4: Validate invariants
+          console.log(`[SCALE-FULL] Step 4: Validating invariants...`);
+          const invariantResult = await validateInvariants(pool, testUserId, benchmarkResult);
+          results.steps.invariants = invariantResult;
+
+          // Step 5: Measure behavioral (observational)
+          console.log(`[SCALE-FULL] Step 5: Measuring behavioral patterns...`);
+          const behavioral = measureBehavioral(JSON.stringify(benchmarkResult));
+          results.steps.behavioral = behavioral;
+
+          // Step 6: Cleanup
+          console.log(`[SCALE-FULL] Step 6: Cleaning up test data...`);
+          const cleanupResult = await cleanup(pool, testUserId);
+          results.steps.cleanup = cleanupResult;
+
+          results.elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(2);
+          results.passed = invariantResult.allPassed;
+
+          console.log(`[SCALE-FULL] Complete: ${results.passed ? 'PASSED' : 'FAILED'} in ${results.elapsedSeconds}s`);
+
+          return res.status(200).json(results);
+
+        } catch (error) {
+          console.error('[SCALE-FULL] Error:', error.message);
+
+          // Attempt cleanup on error
+          await cleanup(pool, testUserId).catch(() => {});
+
+          return res.status(500).json({
+            action: 'scale-full',
+            error: error.message,
+            level,
+            testUserId,
+            results
+          });
+        }
+      }
+
+      // ============================================
+      // SCALE: CLEANUP TEST DATA
+      // ============================================
+      case 'scale-cleanup': {
+        const { cleanup } = await import('../services/scale-harness.js');
+
+        const testUserId = req.query.userId;
+        if (!testUserId) {
+          return res.status(400).json({
+            error: 'Missing userId parameter',
+            usage: '/api/test-semantic?action=scale-cleanup&userId=test-scale-xxx'
+          });
+        }
+
+        const runId = req.query.runId || null;
+        const result = await cleanup(pool, testUserId, runId);
+
+        return res.status(200).json({
+          action: 'scale-cleanup',
+          ...result
+        });
+      }
+
+      // ============================================
+      // SCALE: GET STATUS
+      // ============================================
+      case 'scale-status': {
+        const { getStatus } = await import('../services/scale-harness.js');
+
+        const testUserId = req.query.userId;
+        if (!testUserId) {
+          return res.status(400).json({
+            error: 'Missing userId parameter',
+            usage: '/api/test-semantic?action=scale-status&userId=test-scale-xxx'
+          });
+        }
+
+        const result = await getStatus(pool, testUserId);
+
+        return res.status(200).json({
+          action: 'scale-status',
+          ...result
+        });
+      }
+
+      // ============================================
+      // SCALE: TWO-PHASE EMBEDDING
+      // ============================================
+      case 'scale-embed': {
+        const { embedMemory } = await import('../services/embedding-service.js');
+
+        const testUserId = req.query.userId;
+        if (!testUserId) {
+          return res.status(400).json({
+            error: 'Missing userId parameter',
+            usage: '/api/test-semantic?action=scale-embed&userId=test-scale-xxx&batchSize=10'
+          });
+        }
+
+        const batchSize = Math.min(parseInt(req.query.batchSize) || 10, 50);
+        const startTime = Date.now();
+        let processed = 0;
+        let succeeded = 0;
+        let failed = 0;
+
+        try {
+          // Find memories needing embeddings
+          const { rows } = await pool.query(`
+            SELECT id, content
+            FROM persistent_memories
+            WHERE user_id = $1
+              AND embedding_status IN ('pending', 'failed')
+              AND embedding IS NULL
+              AND content IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT $2
+          `, [testUserId, batchSize]);
+
+          for (const memory of rows) {
+            const result = await embedMemory(pool, memory.id, memory.content);
+            processed++;
+            if (result.success) {
+              succeeded++;
+            } else {
+              failed++;
+            }
+          }
+
+          const elapsedMs = Date.now() - startTime;
+
+          return res.status(200).json({
+            action: 'scale-embed',
+            userId: testUserId,
+            processed,
+            succeeded,
+            failed,
+            elapsedMs
+          });
+
+        } catch (error) {
+          console.error('[SCALE-EMBED] Error:', error.message);
+          return res.status(500).json({
+            action: 'scale-embed',
+            error: error.message,
+            userId: testUserId,
+            processed,
+            succeeded,
+            failed
+          });
+        }
+      }
+
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -956,7 +1240,13 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=fix-superseded-by-type',
             '/api/test-semantic?action=create-constraint',
             '/api/test-semantic?action=debug-facts&userId=xxx&fingerprint=user_phone_number',
-            '/api/test-semantic?action=live-proof'
+            '/api/test-semantic?action=live-proof',
+            '/api/test-semantic?action=scale-generate&count=100&userId=test-scale-123',
+            '/api/test-semantic?action=scale-benchmark&userId=test-scale-123&queryCount=20',
+            '/api/test-semantic?action=scale-full&level=smoke',
+            '/api/test-semantic?action=scale-cleanup&userId=test-scale-123',
+            '/api/test-semantic?action=scale-status&userId=test-scale-123',
+            '/api/test-semantic?action=scale-embed&userId=test-scale-123&batchSize=10'
           ]
         });
     }
