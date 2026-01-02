@@ -1,0 +1,91 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #288: [claude-fix] Populate doctrine gates placeholder files with full implementation
+
+Issue Description:
+## Context
+
+Placeholder files have been created. The bot can now use the Edit tool to populate them.
+
+## Files to Populate
+
+### 1. `/api/services/doctrine-gates.js`
+
+Implement the 5 doctrine gates from issue #286:
+- `evaluateUncertaintyStructure(response, context)`
+- `evaluateBlindSpotVolunteering(response, context)`
+- `evaluateAntiEngagementClosure(response)`
+- `evaluateExampleQuality(response)`
+- `calculateTruthFirstScore(gateResults)`
+- `enforceDoctrineGates(response, context)` - Main function
+
+Include all detection patterns (UNCERTAINTY_TRIGGERS, EXPLANATION_MARKERS, FRAMEWORK_MARKERS, ADVICE_TRIGGERS, BLIND_SPOT_MARKERS, ENGAGEMENT_BAIT, GENERIC_MARKERS, SPECIFIC_MARKERS).
+
+### 2. `/api/services/response-enhancer.js`
+
+Implement auto-fix functions:
+- `addUncertaintyStructure(response, missingParts)`
+- `addBlindSpots(response, context)`
+- `removeEngagementBait(response)`
+- `improveExamples(response)`
+- `enhanceToPassGates(response, gateResults, context)` - Main function
+
+### 3. `/api/config/doctrine-config.js`
+```javascript
+export const DOCTRINE_CONFIG = {
+  enabled: true,
+  enforcement: {
+    standard: 'warn',
+    strict: 'enhance',
+    maximum: 'block'
+  },
+  currentLevel: 'enhance',
+  minimumScores: {
+    casual: 0.5,
+    standard: 0.6,
+    professional: 0.7,
+    highStakes: 0.8
+  },
+  highStakesPatterns: [
+    /invest|stock|crypto|financial/i,
+    /medical|diagnosis|symptom|treatment/i,
+    /legal|lawsuit|contract|liability/i,
+    /suicide|self-harm|emergency/i
+  ]
+};
+```
+
+### 4. Modify `/api/routes/test-semantic.js`
+
+Add `case 'test-doctrine-gates':` action with 5 test cases from issue #286.
+
+### 5. Modify `/api/core/orchestrator.js`
+
+Integrate doctrine gates into response pipeline (after AI response, before personality application).
+
+## Acceptance Test
+```javascript
+fetch("https://sitemonkeys-ai-system-production.up.railway.app/api/test-semantic?action=test-doctrine-gates", {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json()).then(d => console.log(JSON.stringify(d, null, 2)));
+```
+
+Should return results showing all 5 test cases evaluated correctly.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
