@@ -323,6 +323,7 @@ export class Orchestrator {
    */
   async #applyDoctrineGates(response, context, message) {
     try {
+      this.log('[DOCTRINE-GATES] Loading doctrine gates module...');
       const { enforceDoctrineGates } = await import('../services/doctrine-gates.js');
       const { enhanceToPassGates } = await import('../services/response-enhancer.js');
       const { DOCTRINE_CONFIG } = await import('../config/doctrine-config.js');
@@ -337,6 +338,8 @@ export class Orchestrator {
           enhancements: []
         };
       }
+
+      this.log('[DOCTRINE-GATES] Module loaded, config enabled');
 
       // Evaluate with doctrine gates
       const gateContext = {
