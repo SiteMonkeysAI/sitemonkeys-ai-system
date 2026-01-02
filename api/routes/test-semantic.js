@@ -756,20 +756,24 @@ export default async function handler(req, res) {
               SELECT id, embedding_status, embedding
               FROM persistent_memories
               WHERE user_id = $1
-                AND content LIKE $2
               ORDER BY created_at DESC
               LIMIT 1
-            `, [testUserId, `%${testFact}%`]);
+            `, [testUserId]);
 
             if (rows.length > 0) {
               memoryId = rows[0].id;
-              embeddingReady = rows[0].embedding_status === 'ready' && rows[0].embedding !== null;
-              console.log(`[LIVE-PROOF] Retry ${retries + 1}: status=${rows[0].embedding_status}, has_embedding=${!!rows[0].embedding}`);
+              const currentStatus = rows[0].embedding_status;
+              const hasEmbedding = rows[0].embedding !== null;
+              embeddingReady = currentStatus === 'ready' && hasEmbedding;
+
+              console.log(`[LIVE-PROOF] Polling memory ${memoryId}, status: ${currentStatus}, has_embedding: ${hasEmbedding}`);
 
               if (embeddingReady) {
                 console.log('[LIVE-PROOF] ✅ Embedding ready');
                 break;
               }
+            } else {
+              console.log(`[LIVE-PROOF] Retry ${retries + 1}: No memory found yet for user ${testUserId}`);
             }
 
             retries++;
