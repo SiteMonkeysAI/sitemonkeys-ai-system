@@ -35,4 +35,11 @@ Required:
 - `DATABASE_URL` - PostgreSQL connection string
 - `SESSION_SECRET` - Session secret key
 
+Optional:
+
+- `INTERNAL_TEST_TOKEN` - Security token for `/api/test-semantic` endpoints (required in production)
+- `VALIDATION_ENABLED` - Enable validation layer (default: true)
+- `ENABLE_INTELLIGENT_STORAGE` - Enable intelligent memory storage (default: false)
+- `ENABLE_INTELLIGENT_ROUTING` - Enable intelligent category routing (default: false)
+
 See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete setup instructions.

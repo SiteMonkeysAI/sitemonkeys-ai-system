@@ -1,10 +1,10 @@
 /**
  * SUPERSESSION SERVICE
- * 
+ *
  * Handles deterministic fact replacement with transaction safety.
  * Ensures one current fact per fingerprint per user/mode combination.
- * 
- * SCHEMA TRUTH (verified 2026-01-01):
+ *
+ * SCHEMA TRUTH (verified 2026-01-02):
  * - id = INTEGER (not UUID)
  * - user_id = TEXT
  * - category_name = VARCHAR (not "category")
@@ -12,10 +12,13 @@
  * - fact_fingerprint = TEXT
  * - fingerprint_confidence = DOUBLE PRECISION
  * - is_current = BOOLEAN
- * - superseded_by = UUID (note: type mismatch with INTEGER id - we store as string)
+ * - superseded_by = INTEGER (fixed via migration to match id type)
  * - superseded_at = TIMESTAMPTZ
  * - mode = VARCHAR
  * - embedding_status = VARCHAR
+ *
+ * IMPORTANT: Run /api/test-semantic?action=fix-superseded-by-type to migrate
+ * superseded_by from UUID to INTEGER before using supersession features.
  */
 
 // ============================================================================
@@ -329,9 +332,9 @@ export async function generateFactFingerprint(content, options = {}) {
 /**
  * Store memory with supersession check.
  * Transaction-safe: old fact marked not current in same transaction as new fact stored.
- * 
- * SCHEMA: id is INTEGER, superseded_by is UUID (we cast INTEGER to TEXT for storage)
- * 
+ *
+ * SCHEMA: Both id and superseded_by are INTEGER (after running fix-superseded-by-type migration)
+ *
  * @param {object} pool - PostgreSQL pool
  * @param {object} memoryData - Memory data to store
  * @returns {Promise<{ success: boolean, memoryId: number, superseded: number[], supersededCount: number }>}
@@ -396,14 +399,15 @@ export async function storeWithSupersession(pool, memoryData) {
       if (existing.rows.length > 0) {
         const oldIds = existing.rows.map(r => r.id);
 
-        // Note: superseded_by is UUID type but id is INTEGER - we can't store INTEGER in UUID
-        // So we just mark as not current and set superseded_at timestamp
+        // Mark old facts as superseded and link to new fact
+        // After running fix-superseded-by-type migration, superseded_by is INTEGER matching id
         await client.query(`
           UPDATE persistent_memories
           SET is_current = false,
+              superseded_by = $1,
               superseded_at = NOW()
-          WHERE id = ANY($1::integer[])
-        `, [oldIds]);
+          WHERE id = ANY($2::integer[])
+        `, [newId, oldIds]);
 
         console.log(`[SUPERSESSION] ✅ Replaced ${existing.rows.length} old facts with ID ${newId}`);
         console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);

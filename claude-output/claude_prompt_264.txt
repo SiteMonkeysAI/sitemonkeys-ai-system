@@ -1,0 +1,91 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #264: [claude-fix] Production readiness: embedding backfill + type fix + live verification
+
+Issue Description:
+## Context
+Semantic retrieval is wired up and working, but finds 0 results because existing memories lack embeddings. This PR makes the system production-ready with no silent failure modes.
+
+## Requirements (ALL must be in this PR)
+
+### 1. Embedding Backfill Endpoint (Resumable + Safe)
+Add: /api/test-semantic?action=backfill-embeddings
+
+Must:
+- Find memories WHERE embedding IS NULL AND embedding_status IN ('pending', 'failed')
+- While processing each batch, set embedding_status = 'processing'
+- On success: set embedding_status = 'ready' AND embedding_updated_at = NOW()
+- On failure: set embedding_status = 'failed' AND store error message in metadata column
+- Process in batches of 10-20 (rate limit protection)
+- Support query params: limit (max memories to process) and maxSeconds (timeout protection)
+- Return exactly: { processed: N, failed: N, remaining: N, seconds_elapsed: N }
+
+This design allows repeated calls without timeouts and retry of failures.
+
+### 2. Fix superseded_by Type Mismatch (Safe Migration)
+The id column is INTEGER but superseded_by is UUID. This causes errors on supersession.
+
+Migration must:
+- First: SELECT COUNT(*) FROM persistent_memories WHERE superseded_by IS NOT NULL
+- If count > 0: Check if values are safely castable to INTEGER; if not, fail loudly with error message
+- If count = 0 or castable: ALTER TABLE persistent_memories ALTER COLUMN superseded_by TYPE INTEGER USING superseded_by::INTEGER
+- Optional but recommended: ADD CONSTRAINT fk_superseded_by FOREIGN KEY (superseded_by) REFERENCES persistent_memories(id) ON DELETE SET NULL
+
+### 3. Add Trust Proxy
+In server.js after `const app = express();`:
+```javascript
+app.set('trust proxy', 1);
+```
+
+### 4. Live Verification Test (Strengthened Assertions)
+Add: /api/test-semantic?action=live-proof
+
+Must:
+- Store a test memory via HTTP POST to /api/chat (actual production path, not direct DB)
+- Poll database until embedding_status = 'ready' (bounded retries, max 30 seconds)
+- Query via semantic retrieval with a paraphrase of the stored content
+- Assert ALL of:
+  - retrieval.method is 'semantic' OR 'hybrid'
+  - results_injected > 0
+  - injected_memory_ids is non-empty array
+  - response content references the stored fact
+- Return: { passed: boolean, details: {}, telemetry: {} }
+
+### 5. Security for Test Endpoints
+All /api/test-semantic actions must:
+- Require header: X-Internal-Test-Token
+- Validate against process.env.INTERNAL_TEST_TOKEN
+- Return 403 Forbidden if missing or invalid
+- Add INTERNAL_TEST_TOKEN to environment variables documentation
+
+## Acceptance Criteria
+- [ ] backfill-embeddings processes existing memories and is safely resumable
+- [ ] Type mismatch on superseded_by is fixed without data loss
+- [ ] No X-Forwarded-For warnings in logs
+- [ ] live-proof returns passed: true
+- [ ] Test endpoints are secured with token authentication
+- [ ] /api/chat retrieves memories via semantic method with results_injected > 0
+
+## Files Likely Affected
+- api/routes/test-semantic.js (backfill, live-proof, security)
+- api/core/memory-system.js or migration script (type fix)
+- server.js (trust proxy)
+- .env.example (document INTERNAL_TEST_TOKEN)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

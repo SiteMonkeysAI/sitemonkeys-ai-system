@@ -20,6 +20,21 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed. Use GET.' });
   }
 
+  // Security: Check for internal test token
+  const testToken = req.headers['x-internal-test-token'];
+  const requiredToken = process.env.INTERNAL_TEST_TOKEN;
+
+  if (!requiredToken) {
+    console.warn('[TEST-SEMANTIC] ⚠️ INTERNAL_TEST_TOKEN not configured in environment');
+  }
+
+  if (requiredToken && testToken !== requiredToken) {
+    return res.status(403).json({
+      error: 'Forbidden: Invalid or missing X-Internal-Test-Token header',
+      hint: 'Set INTERNAL_TEST_TOKEN environment variable and include X-Internal-Test-Token header'
+    });
+  }
+
   const { Pool } = await import('pg');
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
@@ -110,30 +125,116 @@ export default async function handler(req, res) {
       }
 
       // ============================================
-      // BACKFILL EMBEDDINGS FOR EXISTING MEMORIES
+      // BACKFILL EMBEDDINGS FOR EXISTING MEMORIES (RESUMABLE + SAFE)
       // ============================================
       case 'backfill-embeddings': {
+        const startTime = Date.now();
         console.log('[BACKFILL-EMBEDDINGS] Starting backfill process...');
 
-        const batchSize = parseInt(req.query.batchSize) || 20;
-        const maxBatches = parseInt(req.query.maxBatches) || 10;
+        // Parse query params with safe defaults
+        const maxLimit = parseInt(req.query.limit) || 1000; // Max memories to process
+        const maxSeconds = parseInt(req.query.maxSeconds) || 300; // Timeout protection (5 min default)
+        const batchSize = Math.min(parseInt(req.query.batchSize) || 10, 20); // Rate limit protection
 
-        const result = await backfillEmbeddings(pool, {
-          batchSize: Math.min(batchSize, 20), // Cap at 20 to avoid rate limits
-          maxBatches,
-          statusFilter: ['pending'] // Only process pending, not 'failed' or 'ready'
-        });
+        let totalProcessed = 0;
+        let totalFailed = 0;
+        let shouldContinue = true;
 
-        console.log(`[BACKFILL-EMBEDDINGS] Complete: ${result.succeeded}/${result.processed} succeeded, ${result.remaining} remaining`);
+        while (shouldContinue) {
+          // Check timeout
+          const elapsedSeconds = (Date.now() - startTime) / 1000;
+          if (elapsedSeconds >= maxSeconds) {
+            console.log(`[BACKFILL-EMBEDDINGS] ⏱️ Timeout reached (${maxSeconds}s)`);
+            break;
+          }
+
+          // Check limit
+          if (totalProcessed >= maxLimit) {
+            console.log(`[BACKFILL-EMBEDDINGS] 📊 Limit reached (${maxLimit} memories)`);
+            break;
+          }
+
+          // Find memories needing embeddings (pending or failed status)
+          const { rows: batch } = await pool.query(`
+            SELECT id, content
+            FROM persistent_memories
+            WHERE embedding_status IN ('pending', 'failed')
+              AND embedding IS NULL
+              AND content IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT $1
+          `, [batchSize]);
+
+          if (batch.length === 0) {
+            console.log('[BACKFILL-EMBEDDINGS] ✅ No more memories to process');
+            shouldContinue = false;
+            break;
+          }
+
+          // Process batch
+          for (const memory of batch) {
+            // Set to 'processing' status
+            await pool.query(`
+              UPDATE persistent_memories
+              SET embedding_status = 'processing'
+              WHERE id = $1
+            `, [memory.id]);
+
+            // Generate embedding
+            const embedResult = await embedMemory(pool, memory.id, memory.content, {
+              timeout: 10000 // Longer timeout for backfill
+            });
+
+            if (embedResult.success) {
+              console.log(`[BACKFILL-EMBEDDINGS] ✅ ID ${memory.id}: ${embedResult.status}`);
+            } else {
+              console.log(`[BACKFILL-EMBEDDINGS] ❌ ID ${memory.id}: ${embedResult.error}`);
+
+              // On failure: update status to 'failed' and store error in metadata
+              await pool.query(`
+                UPDATE persistent_memories
+                SET embedding_status = 'failed',
+                    metadata = jsonb_set(
+                      COALESCE(metadata, '{}'::jsonb),
+                      '{embedding_error}',
+                      to_jsonb($2::text)
+                    )
+                WHERE id = $1
+              `, [memory.id, embedResult.error || 'Unknown error']);
+
+              totalFailed++;
+            }
+
+            totalProcessed++;
+
+            // Check limits after each memory
+            if (totalProcessed >= maxLimit) break;
+            if ((Date.now() - startTime) / 1000 >= maxSeconds) break;
+
+            // Small delay to avoid rate limiting
+            await new Promise(r => setTimeout(r, 100));
+          }
+        }
+
+        // Count remaining
+        const { rows: [{ count }] } = await pool.query(`
+          SELECT COUNT(*) as count
+          FROM persistent_memories
+          WHERE embedding_status IN ('pending', 'failed')
+            AND embedding IS NULL
+            AND content IS NOT NULL
+        `);
+
+        const remaining = parseInt(count);
+        const secondsElapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+
+        console.log(`[BACKFILL-EMBEDDINGS] Complete: ${totalProcessed - totalFailed}/${totalProcessed} succeeded, ${remaining} remaining (${secondsElapsed}s)`);
 
         return res.status(200).json({
-          action: 'backfill-embeddings',
-          processed: result.processed,
-          succeeded: result.succeeded,
-          failed: result.failed,
-          remaining: result.remaining,
-          timeMs: result.timeMs,
-          message: `Processed ${result.processed} memories (${result.succeeded} succeeded, ${result.failed} failed). ${result.remaining} remaining.`
+          processed: totalProcessed,
+          failed: totalFailed,
+          remaining: remaining,
+          seconds_elapsed: parseFloat(secondsElapsed)
         });
       }
 
@@ -400,6 +501,143 @@ export default async function handler(req, res) {
       }
 
       // ============================================
+      // FIX SUPERSEDED_BY TYPE MISMATCH
+      // ============================================
+      case 'fix-superseded-by-type': {
+        console.log('[FIX-TYPE] Starting superseded_by type migration...');
+
+        try {
+          // Step 1: Check current column types
+          const schemaCheck = await pool.query(`
+            SELECT column_name, data_type, udt_name
+            FROM information_schema.columns
+            WHERE table_name = 'persistent_memories'
+              AND column_name IN ('id', 'superseded_by')
+            ORDER BY column_name
+          `);
+
+          const idType = schemaCheck.rows.find(r => r.column_name === 'id')?.data_type;
+          const supersededByType = schemaCheck.rows.find(r => r.column_name === 'superseded_by')?.data_type;
+
+          if (!supersededByType) {
+            return res.json({
+              action: 'fix-superseded-by-type',
+              success: true,
+              message: 'superseded_by column does not exist',
+              currentSchema: schemaCheck.rows
+            });
+          }
+
+          if (supersededByType.toLowerCase() === 'integer') {
+            return res.json({
+              action: 'fix-superseded-by-type',
+              success: true,
+              message: 'superseded_by is already INTEGER',
+              currentSchema: schemaCheck.rows
+            });
+          }
+
+          // Step 2: Check for existing non-null values
+          const dataCheck = await pool.query(`
+            SELECT COUNT(*) as count
+            FROM persistent_memories
+            WHERE superseded_by IS NOT NULL
+          `);
+
+          const existingCount = parseInt(dataCheck.rows[0].count);
+          console.log(`[FIX-TYPE] Found ${existingCount} rows with superseded_by set`);
+
+          if (existingCount > 0) {
+            // Step 3: Validate castability
+            const testCast = await pool.query(`
+              SELECT
+                COUNT(*) as total,
+                COUNT(CASE WHEN superseded_by::text ~ '^[0-9]+$' THEN 1 END) as castable
+              FROM persistent_memories
+              WHERE superseded_by IS NOT NULL
+            `);
+
+            const total = parseInt(testCast.rows[0].total);
+            const castable = parseInt(testCast.rows[0].castable);
+
+            if (castable < total) {
+              return res.status(400).json({
+                action: 'fix-superseded-by-type',
+                success: false,
+                error: `Cannot safely cast ${total - castable} UUID values to INTEGER`,
+                existingValues: existingCount,
+                recommendation: 'Clear superseded_by values or manually review data'
+              });
+            }
+          }
+
+          // Step 4: Perform the migration in a transaction
+          await pool.query('BEGIN');
+
+          try {
+            // Convert existing values if any
+            if (existingCount > 0) {
+              await pool.query(`
+                UPDATE persistent_memories
+                SET superseded_by = NULL
+                WHERE superseded_by IS NOT NULL
+              `);
+              console.log(`[FIX-TYPE] Cleared ${existingCount} existing superseded_by values (they were UUID, cannot cast)`);
+            }
+
+            // Alter the column type
+            await pool.query(`
+              ALTER TABLE persistent_memories
+              ALTER COLUMN superseded_by TYPE INTEGER USING NULL
+            `);
+
+            console.log('[FIX-TYPE] Column type changed to INTEGER');
+
+            // Add foreign key constraint
+            const constraintCheck = await pool.query(`
+              SELECT constraint_name
+              FROM information_schema.table_constraints
+              WHERE table_name = 'persistent_memories'
+                AND constraint_name = 'fk_superseded_by'
+            `);
+
+            if (constraintCheck.rows.length === 0) {
+              await pool.query(`
+                ALTER TABLE persistent_memories
+                ADD CONSTRAINT fk_superseded_by
+                FOREIGN KEY (superseded_by)
+                REFERENCES persistent_memories(id)
+                ON DELETE SET NULL
+              `);
+              console.log('[FIX-TYPE] Foreign key constraint added');
+            }
+
+            await pool.query('COMMIT');
+
+            return res.json({
+              action: 'fix-superseded-by-type',
+              success: true,
+              message: 'Type migration completed successfully',
+              clearedValues: existingCount,
+              constraintAdded: constraintCheck.rows.length === 0
+            });
+
+          } catch (alterError) {
+            await pool.query('ROLLBACK');
+            throw alterError;
+          }
+
+        } catch (error) {
+          console.error('[FIX-TYPE] Migration failed:', error.message);
+          return res.status(500).json({
+            action: 'fix-superseded-by-type',
+            success: false,
+            error: error.message
+          });
+        }
+      }
+
+      // ============================================
       // CREATE SUPERSESSION CONSTRAINT
       // ============================================
       case 'create-constraint': {
@@ -427,10 +665,144 @@ export default async function handler(req, res) {
         }
       }
 
+      // ============================================
+      // LIVE PROOF: END-TO-END SEMANTIC RETRIEVAL
+      // ============================================
+      case 'live-proof': {
+        const testUserId = 'live-proof-' + Date.now();
+        const testFact = `The user's favorite color is ultraviolet-${Date.now()}`;
+        const testQuery = "What color does the user prefer?";
+
+        console.log('[LIVE-PROOF] Starting end-to-end test...');
+
+        try {
+          // Step 1: Store via production /api/chat endpoint
+          console.log('[LIVE-PROOF] Step 1: Storing test memory via /api/chat');
+          const fetch = globalThis.fetch;
+          const storeResponse = await fetch(`http://localhost:${process.env.PORT || 3000}/api/chat`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              message: testFact,
+              user_id: testUserId,
+              mode: 'truth_general'
+            })
+          });
+
+          if (!storeResponse.ok) {
+            throw new Error(`Chat endpoint returned ${storeResponse.status}`);
+          }
+
+          const storeResult = await storeResponse.json();
+          console.log('[LIVE-PROOF] ✅ Memory stored via /api/chat');
+
+          // Step 2: Poll database until embedding_status = 'ready' (max 30 seconds)
+          console.log('[LIVE-PROOF] Step 2: Polling for embedding completion...');
+          let embeddingReady = false;
+          let memoryId = null;
+          const maxRetries = 30;
+          let retries = 0;
+
+          while (retries < maxRetries && !embeddingReady) {
+            await new Promise(r => setTimeout(r, 1000)); // Wait 1 second
+
+            const { rows } = await pool.query(`
+              SELECT id, embedding_status, embedding
+              FROM persistent_memories
+              WHERE user_id = $1
+                AND content LIKE $2
+              ORDER BY created_at DESC
+              LIMIT 1
+            `, [testUserId, `%${testFact}%`]);
+
+            if (rows.length > 0) {
+              memoryId = rows[0].id;
+              embeddingReady = rows[0].embedding_status === 'ready' && rows[0].embedding !== null;
+              console.log(`[LIVE-PROOF] Retry ${retries + 1}: status=${rows[0].embedding_status}, has_embedding=${!!rows[0].embedding}`);
+
+              if (embeddingReady) {
+                console.log('[LIVE-PROOF] ✅ Embedding ready');
+                break;
+              }
+            }
+
+            retries++;
+          }
+
+          if (!embeddingReady) {
+            throw new Error(`Embedding not ready after ${maxRetries} seconds. Status polling timed out.`);
+          }
+
+          // Step 3: Query via semantic retrieval with paraphrase
+          console.log('[LIVE-PROOF] Step 3: Querying with paraphrase...');
+          const retrievalResult = await retrieveSemanticMemories(pool, testQuery, {
+            userId: testUserId,
+            mode: 'truth-general',
+            topK: 5
+          });
+
+          console.log('[LIVE-PROOF] Retrieval result:', {
+            method: retrievalResult.method,
+            memoriesFound: retrievalResult.memories?.length || 0,
+            telemetry: retrievalResult.telemetry
+          });
+
+          // Step 4: Assert ALL conditions
+          const assertions = {
+            method_is_semantic_or_hybrid: ['semantic', 'hybrid'].includes(retrievalResult.method),
+            results_injected_gt_zero: (retrievalResult.telemetry?.results_injected || 0) > 0,
+            injected_memory_ids_nonempty: Array.isArray(retrievalResult.telemetry?.injected_memory_ids) &&
+                                          retrievalResult.telemetry.injected_memory_ids.length > 0,
+            response_contains_fact: retrievalResult.memories?.some(m =>
+              m.content && m.content.toLowerCase().includes('ultraviolet')
+            ) || false
+          };
+
+          const allPassed = Object.values(assertions).every(v => v === true);
+
+          console.log('[LIVE-PROOF] Assertions:', assertions);
+          console.log(`[LIVE-PROOF] ${allPassed ? '✅ PASSED' : '❌ FAILED'}`);
+
+          // Cleanup
+          await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
+
+          return res.json({
+            passed: allPassed,
+            details: {
+              stored_fact: testFact,
+              query_used: testQuery,
+              memory_id: memoryId,
+              embedding_ready_after_seconds: retries,
+              retrieval_method: retrievalResult.method,
+              memories_found: retrievalResult.memories?.length || 0,
+              assertions: assertions
+            },
+            telemetry: retrievalResult.telemetry
+          });
+
+        } catch (error) {
+          // Cleanup on error
+          await pool.query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['live-proof-%']).catch(() => {});
+
+          console.error('[LIVE-PROOF] ❌ Test failed:', error.message);
+
+          return res.status(500).json({
+            passed: false,
+            error: error.message,
+            details: {
+              test_user_id: testUserId,
+              test_fact: testFact
+            }
+          });
+        }
+      }
+
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'create-constraint'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'live-proof'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -438,11 +810,13 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=embed&query=test+text',
             '/api/test-semantic?userId=xxx&query=what+is+my+name',
             '/api/test-semantic?action=backfill&limit=10',
-            '/api/test-semantic?action=backfill-embeddings&batchSize=20&maxBatches=10',
+            '/api/test-semantic?action=backfill-embeddings&limit=100&maxSeconds=60',
             '/api/test-semantic?action=test-paraphrase',
             '/api/test-semantic?action=test-supersession',
             '/api/test-semantic?action=test-mode-isolation',
-            '/api/test-semantic?action=create-constraint'
+            '/api/test-semantic?action=fix-superseded-by-type',
+            '/api/test-semantic?action=create-constraint',
+            '/api/test-semantic?action=live-proof'
           ]
         });
     }
