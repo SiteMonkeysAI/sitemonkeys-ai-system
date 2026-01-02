@@ -392,39 +392,43 @@ export default async function handler(req, res) {
           `);
           console.log('[TEST-SUPERSESSION] Cleanup complete');
 
-          // Store first value
-          const first = await pool.query(`
-            INSERT INTO persistent_memories (
-              user_id, content, fact_fingerprint, fingerprint_confidence,
-              is_current, mode, embedding_status, category_name, token_count, created_at
-            ) VALUES ($1, $2, $3, $4, true, $5, 'pending', $6, $7, NOW())
-            RETURNING id
-          `, [testUserId, 'My phone number is 111-1111', 'user_phone_number', 0.9, 'truth-general', 'personal_info', 8]);
+          // Import supersession service
+          const { storeWithSupersession } = await import('../services/supersession.js');
 
-          const firstId = first.rows[0].id;
+          // Store first value using storeWithSupersession
+          console.log('[TEST-SUPERSESSION] Storing first fact...');
+          const firstResult = await storeWithSupersession(pool, {
+            userId: testUserId,
+            content: 'My phone number is 111-1111',
+            factFingerprint: 'user_phone_number',
+            fingerprintConfidence: 0.9,
+            mode: 'truth-general',
+            categoryName: 'personal_info',
+            tokenCount: 8
+          });
 
-          // Store second value (should supersede)
-          const second = await pool.query(`
-            INSERT INTO persistent_memories (
-              user_id, content, fact_fingerprint, fingerprint_confidence,
-              is_current, mode, embedding_status, category_name, token_count, created_at
-            ) VALUES ($1, $2, $3, $4, true, $5, 'pending', $6, $7, NOW())
-            RETURNING id
-          `, [testUserId, 'My phone number is 222-2222', 'user_phone_number', 0.9, 'truth-general', 'personal_info', 8]);
+          const firstId = firstResult.memoryId;
+          console.log(`[TEST-SUPERSESSION] First fact stored with ID ${firstId}`);
 
-          const secondId = second.rows[0].id;
+          // Store second value (should supersede first)
+          console.log('[TEST-SUPERSESSION] Storing second fact (should supersede)...');
+          const secondResult = await storeWithSupersession(pool, {
+            userId: testUserId,
+            content: 'My phone number is 222-2222',
+            factFingerprint: 'user_phone_number',
+            fingerprintConfidence: 0.9,
+            mode: 'truth-general',
+            categoryName: 'personal_info',
+            tokenCount: 8
+          });
 
-          // Manually supersede first (simulating what storeWithSupersession does)
-          // Note: superseded_by is UUID but id is INTEGER, so we don't set superseded_by
-          await pool.query(`
-            UPDATE persistent_memories
-            SET is_current = false, superseded_at = NOW()
-            WHERE id = $1
-          `, [firstId]);
+          const secondId = secondResult.memoryId;
+          console.log(`[TEST-SUPERSESSION] Second fact stored with ID ${secondId}`);
+          console.log(`[TEST-SUPERSESSION] Superseded count: ${secondResult.supersededCount}`);
 
           // Check database state
           const currentFacts = await pool.query(`
-            SELECT id, content, is_current, superseded_by
+            SELECT id, content, is_current, superseded_by, superseded_at
             FROM persistent_memories
             WHERE user_id = $1 AND fact_fingerprint = 'user_phone_number'
             ORDER BY created_at
@@ -436,7 +440,9 @@ export default async function handler(req, res) {
           const passed = (
             oldFact.is_current === false &&
             oldFact.superseded_at !== null &&
-            newFact.is_current === true
+            oldFact.superseded_by === secondId &&
+            newFact.is_current === true &&
+            secondResult.supersededCount === 1
           );
 
           // Cleanup
@@ -445,17 +451,23 @@ export default async function handler(req, res) {
           return res.json({
             test: 'supersession-determinism',
             passed,
-            expected: 'Old fact is_current=false with superseded_at set, new fact is_current=true',
+            expected: 'Old fact is_current=false with superseded_at and superseded_by set, new fact is_current=true',
             actual: {
               old_fact: {
+                id: oldFact?.id,
                 content: oldFact?.content,
                 is_current: oldFact?.is_current,
-                superseded_at: oldFact?.superseded_at
+                superseded_at: oldFact?.superseded_at,
+                superseded_by: oldFact?.superseded_by
               },
               new_fact: {
                 id: newFact?.id,
                 content: newFact?.content,
                 is_current: newFact?.is_current
+              },
+              supersession_result: {
+                supersededCount: secondResult.supersededCount,
+                superseded: secondResult.superseded
               }
             }
           });
