@@ -313,6 +313,14 @@ export default async function handler(req, res) {
         const testUserId = 'test-paraphrase-' + Date.now();
 
         try {
+          // CLEANUP: Delete any leftover test data from previous runs
+          console.log('[TEST-PARAPHRASE] Cleaning up previous test data...');
+          await pool.query(`
+            DELETE FROM persistent_memories
+            WHERE user_id LIKE 'test-paraphrase-%'
+          `);
+          console.log('[TEST-PARAPHRASE] Cleanup complete');
+
           // Store memory with specific content
           const insertResult = await pool.query(`
             INSERT INTO persistent_memories (
@@ -337,7 +345,7 @@ export default async function handler(req, res) {
           console.log('[TEST] Has embedding:', checkEmbed.rows[0]?.embedding ? 'YES' : 'NO');
 
           // If embedding not ready, wait a bit longer
-          if (checkEmbed.rows[0]?.embedding_status !== 'completed' || !checkEmbed.rows[0]?.embedding) {
+          if (checkEmbed.rows[0]?.embedding_status !== 'ready' || !checkEmbed.rows[0]?.embedding) {
             console.log('[TEST] Waiting for embedding to complete...');
             await new Promise(resolve => setTimeout(resolve, 500));
           }
@@ -376,6 +384,14 @@ export default async function handler(req, res) {
         const testUserId = 'test-supersession-' + Date.now();
 
         try {
+          // CLEANUP: Delete any leftover test data from previous runs
+          console.log('[TEST-SUPERSESSION] Cleaning up previous test data...');
+          await pool.query(`
+            DELETE FROM persistent_memories
+            WHERE user_id LIKE 'test-supersession-%'
+          `);
+          console.log('[TEST-SUPERSESSION] Cleanup complete');
+
           // Store first value
           const first = await pool.query(`
             INSERT INTO persistent_memories (
@@ -457,6 +473,14 @@ export default async function handler(req, res) {
         const testUserId = 'test-mode-' + Date.now();
 
         try {
+          // CLEANUP: Delete any leftover test data from previous runs
+          console.log('[TEST-MODE-ISOLATION] Cleaning up previous test data...');
+          await pool.query(`
+            DELETE FROM persistent_memories
+            WHERE user_id LIKE 'test-mode-%'
+          `);
+          console.log('[TEST-MODE-ISOLATION] Cleanup complete');
+
           // Store in truth-general mode
           const insertResult = await pool.query(`
             INSERT INTO persistent_memories (
@@ -676,6 +700,14 @@ export default async function handler(req, res) {
         console.log('[LIVE-PROOF] Starting end-to-end test...');
 
         try {
+          // CLEANUP: Delete any leftover test data from previous runs
+          console.log('[LIVE-PROOF] Cleaning up previous test data...');
+          await pool.query(`
+            DELETE FROM persistent_memories
+            WHERE user_id LIKE 'live-proof-%'
+          `);
+          console.log('[LIVE-PROOF] Cleanup complete');
+
           // Step 1: Store via production /api/chat endpoint
           console.log('[LIVE-PROOF] Step 1: Storing test memory via /api/chat');
           const fetch = globalThis.fetch;

@@ -1,0 +1,106 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #266: [claude-fix] Fix embedding generation for new memories + supersession test cleanup
+
+Issue Description:
+CRITICAL: Do not mark this complete until ALL FOUR test commands in the Verification section return passed: true. Partial fixes are not acceptable.
+
+## Context
+Semantic retrieval works for existing memories (paraphrase test passes, 135 memories at 100% embedding coverage).
+Two issues remain before the system is fully production-ready.
+
+## Issue 1: New memories don't get embeddings generated
+
+### Symptom
+live-proof test times out after 30 seconds waiting for embedding_status to become 'ready'.
+Memory is stored successfully but embedding is never generated.
+
+### Root Cause Investigation Required
+Trace the storage flow in server.js and api/routes/chat.js:
+1. When a memory is stored, what triggers embedding generation?
+2. Is there an async call to embedding-service.js that's missing or failing silently?
+3. Check if generateEmbedding() is being called after memory INSERT
+
+### Required Fix
+After a memory is stored with embedding_status='pending', the system MUST:
+- Call embedding-service.generateEmbedding(memoryId, content)
+- Update embedding column with the vector
+- Set embedding_status='ready' and embedding_updated_at=NOW()
+
+This should happen either:
+- Synchronously before returning from the storage function, OR  
+- Via a reliable async trigger that doesn't fail silently
+
+Add logging: [EMBEDDING] Generating embedding for memory {id}...
+Add logging: [EMBEDDING] ✅ Embedding generated for memory {id} ({ms}ms)
+Add logging: [EMBEDDING] ❌ Embedding failed for memory {id}: {error}
+
+### Acceptance Criteria
+- live-proof test passes (embedding generated within 30 seconds)
+- New memories stored via /api/chat get embeddings automatically
+- Logs show embedding generation happening
+
+## Issue 2: Supersession test fails due to leftover test data
+
+### Symptom
+
+duplicate key value violates unique constraint "idx_one_current_fact"
+
+### Root Cause
+Previous test runs left rows with is_current=true and fingerprint='user_phone_number'.
+New test run tries to insert, constraint blocks it.
+
+### Required Fix
+In test-semantic.js, the test-supersession action must:
+1. BEFORE inserting any test data, DELETE existing test data:
+```sql
+   DELETE FROM persistent_memories 
+   WHERE user_id LIKE 'test-supersession-%'
+```
+2. Use unique user_id per run: `test-supersession-${Date.now()}`
+3. AFTER test completes, clean up the test data
+
+### Acceptance Criteria
+- test-supersession passes on repeated runs
+- No leftover test data accumulates in database
+
+## Verification
+After this PR, ALL of these must pass:
+```javascript
+// All three core tests
+fetch('/api/test-semantic?action=test-paraphrase', {headers:{'X-Internal-Test-Token':'...'}})
+// Expected: passed: true
+
+fetch('/api/test-semantic?action=test-supersession', {headers:{'X-Internal-Test-Token':'...'}})  
+// Expected: passed: true
+
+fetch('/api/test-semantic?action=test-mode-isolation', {headers:{'X-Internal-Test-Token':'...'}})
+// Expected: passed: true
+
+// Live proof (end-to-end)
+fetch('/api/test-semantic?action=live-proof', {headers:{'X-Internal-Test-Token':'...'}})
+// Expected: passed: true
+```
+
+## Files Likely Affected
+- api/routes/chat.js or server.js (embedding trigger after storage)
+- api/services/embedding-service.js (verify generateEmbedding works)
+- api/routes/test-semantic.js (supersession test cleanup)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
