@@ -275,10 +275,12 @@ export async function backfillEmbeddings(pool, options = {}) {
   for (let batch = 0; batch < maxBatches; batch++) {
     // Fetch batch of memories needing embeddings
     const { rows: memories } = await pool.query(`
-      SELECT id, content 
-      FROM persistent_memories 
-      WHERE embedding_status = ANY($1::varchar[])
-        OR (embedding IS NULL AND content IS NOT NULL)
+      SELECT id, content
+      FROM persistent_memories
+      WHERE (
+        embedding_status = ANY($1::varchar[])
+        OR (embedding IS NULL AND content IS NOT NULL AND embedding_status != 'failed')
+      )
       ORDER BY created_at DESC
       LIMIT $2
     `, [statusFilter, batchSize]);
@@ -309,11 +311,13 @@ export async function backfillEmbeddings(pool, options = {}) {
 
   // Count remaining
   const { rows: [{ count }] } = await pool.query(`
-    SELECT COUNT(*) as count 
-    FROM persistent_memories 
-    WHERE embedding_status IN ('pending', 'failed')
-      OR (embedding IS NULL AND content IS NOT NULL)
-  `);
+    SELECT COUNT(*) as count
+    FROM persistent_memories
+    WHERE (
+      embedding_status = ANY($1::varchar[])
+      OR (embedding IS NULL AND content IS NOT NULL AND embedding_status != 'failed')
+    )
+  `, [statusFilter]);
   stats.remaining = parseInt(count);
   stats.timeMs = Date.now() - stats.startTime;
 

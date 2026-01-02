@@ -1,0 +1,95 @@
+Perfect! Everything looks good. Let me create a final summary of the changes:
+
+---SUMMARY---
+
+## Issue #260: Add embedding backfill endpoint for existing memories
+
+### Problem
+Existing memories in the database had no embeddings (embedding IS NULL, embedding_status = 'pending'), making semantic retrieval ineffective since no memories could be found.
+
+### Solution
+Added a new endpoint `/api/test-semantic?action=backfill-embeddings` that processes existing memories without embeddings.
+
+### Changes Made
+
+#### 1. `/api/routes/test-semantic.js`
+- **Added new action handler** `case 'backfill-embeddings'` (lines 115-138):
+  - Accepts query parameters: `batchSize` (default: 20) and `maxBatches` (default: 10)
+  - Processes memories in batches to avoid API rate limits (capped at 20 per batch)
+  - Uses `statusFilter: ['pending']` to only process pending memories, excluding failed ones
+  - Returns detailed statistics: processed count, succeeded count, failed count, remaining count, and time taken
+  - Includes comprehensive logging at start and completion
+
+- **Updated documentation** (lines 1-13):
+  - Added usage example: `GET /api/test-semantic?action=backfill-embeddings&batchSize=20&maxBatches=10`
+
+- **Updated available actions list** (line 433):
+  - Added 'backfill-embeddings' to the list of available actions
+
+- **Updated examples** (line 441):
+  - Added example usage for the new endpoint
+
+#### 2. `/api/services/embedding-service.js`
+- **Improved SQL query in `backfillEmbeddings` function** (lines 277-286):
+  - Changed query to explicitly exclude failed embeddings when `embedding IS NULL`
+  - Query now: `WHERE (embedding_status = ANY($1) OR (embedding IS NULL AND content IS NOT NULL AND embedding_status != 'failed'))`
+  - This ensures failed embeddings are not retried unless explicitly requested via statusFilter
+
+- **Fixed remaining count query** (lines 313-320):
+  - Made the query use the statusFilter parameter instead of hardcoded values
+  - Now uses parameterized query: `WHERE (embedding_status = ANY($1) OR (embedding IS NULL AND content IS NOT NULL AND embedding_status != 'failed'))`
+  - This ensures the remaining count accurately reflects what will be processed
+
+### How It Works
+
+1. **Finds memories that need embeddings**:
+   - Memories with `embedding_status = 'pending'`
+   - Memories with `embedding IS NULL` AND `embedding_status != 'failed'`
+
+2. **Processes in batches**:
+   - Default batch size: 20 (configurable, capped at 20)
+   - Default max batches: 10 (configurable)
+   - 100ms delay between memories to avoid rate limiting
+
+3. **Generates embeddings**:
+   - Uses OpenAI's `text-embedding-3-small` model
+   - 10-second timeout per memory (longer than inline generation)
+   - Updates `embedding`, `embedding_status`, `embedding_updated_at`, and `embedding_model` fields
+
+4. **Returns comprehensive statistics**:
+   ```json
+   {
+     "action": "backfill-embeddings",
+     "processed": 200,
+     "succeeded": 195,
+     "failed": 5,
+     "remaining": 50,
+     "timeMs": 45000,
+     "message": "Processed 200 memories (195 succeeded, 5 failed). 50 remaining."
+   }
+   ```
+
+### Usage
+
+```bash
+# Process up to 200 memories (20 per batch × 10 batches)
+GET /api/test-semantic?action=backfill-embeddings
+
+# Custom batch size and limit
+GET /api/test-semantic?action=backfill-embeddings&batchSize=10&maxBatches=5
+
+# Process all pending embeddings (run multiple times until remaining = 0)
+while [ $(curl -s '/api/test-semantic?action=backfill-embeddings' | jq .remaining) -gt 0 ]; do
+  echo "Processing batch..."
+  sleep 1
+done
+```
+
+### Acceptance Criteria Met
+✅ Running the endpoint populates embeddings for existing memories  
+✅ Subsequent semantic queries will find relevant results (memories now have embeddings)  
+✅ Processes in configurable batches (10-20 at a time) to avoid rate limits  
+✅ Returns count of processed memories with detailed statistics  
+✅ Logs progress at start and completion  
+
+---END SUMMARY---
