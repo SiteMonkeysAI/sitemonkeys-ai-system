@@ -55,6 +55,9 @@ export class Orchestrator {
       apiKey: process.env.ANTHROPIC_API_KEY || "sk-ant-dummy-key-for-testing",
     });
 
+    // Database pool for semantic retrieval (set during initialization)
+    this.pool = null;
+
     // Initialization flag
     this.initialized = false;
 
@@ -94,6 +97,15 @@ export class Orchestrator {
     try {
       this.log("[INIT] Initializing SemanticAnalyzer...");
       await this.semanticAnalyzer.initialize();
+
+      // Get database pool from global memory system
+      if (global.memorySystem?.pool) {
+        this.pool = global.memorySystem.pool;
+        this.log("[INIT] Database pool acquired from memory system");
+      } else {
+        this.log("[INIT] WARNING: No database pool available - semantic retrieval will use keyword fallback");
+      }
+
       this.initialized = true;
       this.log("[INIT] SemanticAnalyzer initialization complete");
       return true;

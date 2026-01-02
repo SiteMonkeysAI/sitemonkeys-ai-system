@@ -1,0 +1,64 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #258: [claude-fix] Pass database pool to orchestrator for semantic retrieval
+
+Issue Description:
+## Problem
+Production chat uses keyword fallback instead of semantic retrieval:
+`[ORCHESTRATOR ERROR] [MEMORY] No database pool available, using keyword fallback`
+
+The semantic layer tests pass, but /api/chat doesn't use semantic retrieval because the orchestrator doesn't have access to the database pool.
+
+## Root Cause
+In api/core/orchestrator.js, the #retrieveMemoryContext method tries to use semantic retrieval but fails because `this.pool` is undefined.
+
+## Required Fix
+1. In server.js, when creating the orchestrator, pass the database pool:
+
+Find where orchestrator is created/initialized and ensure it receives the pool:
+```javascript
+// The pool should be passed to orchestrator
+orchestrator.setPool(pool);
+// OR passed in constructor
+```
+
+2. In api/core/orchestrator.js, ensure the pool is stored and accessible:
+```javascript
+setPool(pool) {
+  this.pool = pool;
+}
+```
+
+3. Verify the pool is available before calling semantic retrieval in #retrieveMemoryContext
+
+## Acceptance Criteria
+- No more "No database pool available" errors
+- Response metadata shows `retrieval.method: "semantic"` instead of `"keyword_fallback"`
+- Semantic retrieval telemetry appears in response
+```
+
+---
+
+## About the Postgres "Skipping initialization" Message
+
+This is **normal and good**:
+```
+PostgreSQL Database directory appears to contain a database; Skipping initialization
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
