@@ -1,0 +1,106 @@
+I understand - the system requires user permission before creating new files. Since I'm being blocked from creating files, let me provide a comprehensive summary of what needs to be done so the user can approve and I can proceed.
+
+---SUMMARY---
+
+I've analyzed the issue and identified all the components needed to implement the scale harness for stress testing, behavioral measurement, and regression prevention. Here's what needs to be created:
+
+## Files to Create:
+
+### 1. `/api/services/behavioral-detection.js` (NEW FILE - ~250 lines)
+This service implements the behavioral measurement patterns:
+- `detectUncertaintyStructure()` - Detects 3-part uncertainty (admission + explanation + framework)
+- `countBlindSpots()` - Counts distinct volunteered blind spots
+- `detectEngagementBait()` - Detects engagement bait patterns (focus on last paragraph)
+- `assessExampleQuality()` - Assesses whether examples are specific vs generic
+- `measureBehavioral()` - Combined analysis function
+
+### 2. `/api/services/scale-harness.js` (NEW FILE - ~800 lines)
+This is the main scale harness service with:
+- Cost limits enforcement (max 200 embeddings/run, 5000/user)
+- `generateTestData()` - Generates test memories with tripwires and supersession chains
+- `generateTripwires()` - Creates retrievable test facts (secret codes, favorite dinosaurs, etc.)
+- `generateSupersessionChains()` - Creates fact supersession test data
+- `runBenchmark()` - Runs queries and measures latency, retrieval, token budget, precision, determinism
+- `validateInvariants()` - Checks all 8 hard invariants
+- `calculatePercentiles()` - Helper for p50/p95/p99 calculations
+- Behavioral measurement integration
+
+### 3. `/api/middleware/scale-rate-limit.js` (NEW FILE - ~60 lines)
+Rate limiting middleware specific to scale endpoints:
+- scale-generate: 5 requests/minute
+- scale-benchmark: 3 requests/minute
+- scale-full: 1 request/minute  
+- scale-cleanup: 10 requests/minute
+- Token validation wrapper
+
+### 4. `/api/routes/test-semantic.js` (MODIFY EXISTING)
+Add 4 new action handlers to the existing switch statement:
+- `case 'scale-generate'`: Generate test data with cost caps and resumability
+- `case 'scale-benchmark'`: Run benchmark queries with behavioral measurement
+- `case 'scale-full'`: Combined endpoint with predefined levels (smoke/light/medium/heavy/extreme)
+- `case 'scale-cleanup'`: Clean up test data by userId/runId
+
+### 5. `server.js` (MODIFY EXISTING)
+Add rate limiters for scale endpoints:
+```javascript
+const scaleGenerateRateLimiter = rateLimit({ windowMs: 60000, max: 5 });
+const scaleBenchmarkRateLimiter = rateLimit({ windowMs: 60000, max: 3 });
+const scaleFullRateLimiter = rateLimit({ windowMs: 60000, max: 1 });
+const scaleCleanupRateLimiter = rateLimit({ windowMs: 60000, max: 10 });
+```
+
+## Key Features Implemented:
+
+1. **Cost Controls**:
+   - Max 200 embeddings per run
+   - Max 5000 embeddings per test user
+   - Batch processing (50 per batch)
+   - Query embedding reuse within benchmarks
+   - Extreme level requires explicit `allowExtreme=true`
+
+2. **Resumability**:
+   - `run_id` stored in memory metadata
+   - Can resume partial runs
+   - Won't recreate existing tripwires
+
+3. **8 Hard Invariants**:
+   - Token budget never exceeded
+   - Supersession deterministic (no leaked superseded facts)
+   - Tripwire precision ≥ 0.9
+   - Latency p99 < 2000ms
+   - Fallback rate < 0.1
+   - Mode isolation maintained
+   - Candidate ceiling not exceeded
+   - Vectors compared matches candidates
+
+4. **Behavioral Measurement** (recorded, not enforced):
+   - Uncertainty structure rate
+   - Blind spots volunteered average
+   - Engagement bait detection rate
+   - Clean closure rate
+   - Example quality score
+
+5. **Security**:
+   - All scale endpoints require `X-Internal-Test-Token`
+   - Rate limiting per endpoint type
+   - Cost caps prevent runaway embedding costs
+
+## Current Status:
+
+I'm ready to create all these files but the system requires user approval for new file creation. Once approved, I will:
+
+1. Create behavioral-detection.js with all pattern detection functions
+2. Create scale-harness.js with full test generation and benchmark logic
+3. Create scale-rate-limit.js middleware
+4. Modify test-semantic.js to add the 4 new scale-* actions
+5. Test the implementation with a smoke level run
+
+The implementation follows all CLAUDE.md principles:
+- Truth-first (hard invariants enforce correctness)
+- Respects user's time (resumable, bounded operations)
+- No engagement optimization (measured and prevented)
+- Maintains enforcement architecture (validates before returning)
+
+Ready to proceed upon approval.
+
+---END SUMMARY---
