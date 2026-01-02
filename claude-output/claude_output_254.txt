@@ -1,0 +1,60 @@
+Perfect! The fix has been completed. Let me create a summary of the changes:
+
+---SUMMARY---
+
+## Changes Made
+
+Fixed mode isolation issue in `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/services/semantic-retrieval.js`
+
+### Problem
+The `buildPrefilterQuery()` function in semantic-retrieval.js was using an `IN` clause for business-validation mode, allowing it to retrieve memories from both 'truth-general' and 'business-validation' modes. This violated mode isolation - when querying with mode='business-validation', truth-general memories were incorrectly being returned.
+
+### Solution
+Modified lines 62-73 in semantic-retrieval.js to enforce exact mode matching for all modes (except site-monkeys which intentionally has access to all modes):
+
+**Before:**
+```javascript
+// Mode filtering (respects vault boundaries)
+if (!includeAllModes) {
+  if (mode === 'site-monkeys') {
+    // Site Monkeys can access all modes
+    // No mode filter needed
+  } else if (mode === 'business-validation') {
+    // Business can access truth-general + business
+    conditions.push(`mode IN ('truth-general', 'business-validation')`);
+  } else {
+    // Truth-general only sees truth-general
+    conditions.push(`mode = $${paramIndex}`);
+    params.push(mode);
+    paramIndex++;
+  }
+}
+```
+
+**After:**
+```javascript
+// Mode filtering (respects vault boundaries)
+if (!includeAllModes) {
+  if (mode === 'site-monkeys') {
+    // Site Monkeys can access all modes
+    // No mode filter needed
+  } else {
+    // All modes use exact matching (mode isolation)
+    conditions.push(`mode = $${paramIndex}`);
+    params.push(mode);
+    paramIndex++;
+  }
+}
+```
+
+### Impact
+- Now uses exact mode matching: `mode = $2` instead of `mode IN ('truth-general', 'business-validation')`
+- Each mode now only sees its own memories (except site-monkeys which has access to all)
+- The test-mode-isolation test should now pass with `found_leak: false`
+
+### Verification
+- Checked all other files in the codebase - no other instances of the problematic `mode IN` clause were found
+- The fix applies to the single query builder that is used by all semantic retrieval operations
+- Test file at `api/routes/test-semantic.js` confirms the expected behavior (lines 326-371)
+
+---END SUMMARY---

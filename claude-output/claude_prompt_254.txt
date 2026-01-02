@@ -1,0 +1,67 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #254: claude-fix] Fix mode isolation - use exact mode match, not IN clause
+
+Issue Description:
+## Problem
+Mode isolation test FAILS - truth-general memories are visible in business-validation retrieval.
+
+Test stores a memory with mode='truth-general', then queries with mode='business-validation'.
+The memory should NOT be found, but it IS being returned (found_leak: true).
+
+## Root Cause
+In api/services/semantic-retrieval.js, the SQL WHERE clause uses:
+```sql
+mode IN ('truth-general', 'business-validation')
+```
+
+This allows BOTH modes to be returned regardless of which mode was requested.
+
+## Required Fix
+Change the SQL query to use exact mode matching:
+
+FROM:
+```sql
+WHERE user_id = $1 
+  AND is_current = true 
+  AND embedding IS NOT NULL 
+  AND embedding_status = 'ready' 
+  AND mode IN ('truth-general', 'business-validation')
+```
+
+TO:
+```sql
+WHERE user_id = $1 
+  AND is_current = true 
+  AND embedding IS NOT NULL 
+  AND embedding_status = 'ready' 
+  AND mode = $2
+```
+
+Make sure the mode parameter ($2 or appropriate placeholder) is passed to the query from the function's mode argument.
+
+There may be multiple queries in this file - check ALL of them and ensure each one filters by the exact requested mode, not a list of modes.
+
+## Acceptance Criteria
+- test-mode-isolation returns `passed: true`
+- `found_leak: false`
+- When querying with mode='business-validation', only business-validation memories are returned
+- When querying with mode='truth-general', only truth-general memories are returned
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
