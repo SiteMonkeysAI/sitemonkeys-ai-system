@@ -6,6 +6,7 @@
 import { OpenAI } from 'openai';
 import { encoding_for_model } from 'tiktoken';
 import { logMemoryOperation } from '../routes/debug.js';
+import { embedMemoryNonBlocking } from '../services/embedding-service.js';
 
 /**
  * Boilerplate patterns that should NEVER be stored in memory
@@ -599,6 +600,24 @@ Facts (preserve all identifiers):`;
         timestamp: new Date().toISOString()
       });
 
+      // CRITICAL: Generate embedding for the newly stored memory
+      // This enables semantic retrieval for this memory
+      if (memoryId && this.db) {
+        console.log(`[EMBEDDING] Generating embedding for memory ${memoryId}...`);
+        // Use non-blocking embedding to avoid delaying the response
+        embedMemoryNonBlocking(this.db, memoryId, facts, { timeout: 3000 })
+          .then(embedResult => {
+            if (embedResult.success) {
+              console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+            } else {
+              console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+            }
+          })
+          .catch(error => {
+            console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
+          });
+      }
+
       // Debug logging hook for test harness
       logMemoryOperation(userId, 'store', {
         memory_id: memoryId,
@@ -666,7 +685,7 @@ Facts (preserve all identifiers):`;
       
       const memoryId = result.rows[0].id;
       console.log(`[INTELLIGENT-STORAGE] ⚠️ Stored uncompressed fallback: ID=${memoryId}, tokens=${tokenCount}`);
-      
+
       // DIAGNOSTIC LOGGING: Track exact storage details
       console.log('[STORAGE-DEBUG] Memory stored (fallback):', {
         id: memoryId,
@@ -676,7 +695,25 @@ Facts (preserve all identifiers):`;
         table: 'persistent_memories',
         timestamp: new Date().toISOString()
       });
-      
+
+      // CRITICAL: Generate embedding for the newly stored memory
+      // This enables semantic retrieval for this memory
+      if (memoryId && this.db) {
+        console.log(`[EMBEDDING] Generating embedding for memory ${memoryId}...`);
+        // Use non-blocking embedding to avoid delaying the response
+        embedMemoryNonBlocking(this.db, memoryId, content, { timeout: 3000 })
+          .then(embedResult => {
+            if (embedResult.success) {
+              console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+            } else {
+              console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+            }
+          })
+          .catch(error => {
+            console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
+          });
+      }
+
       return { action: 'fallback', memoryId };
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Fallback storage failed:', error.message);

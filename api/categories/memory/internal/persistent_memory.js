@@ -6,6 +6,7 @@
 import coreSystem from "./core.js";
 import intelligenceSystem from "./intelligence.js";
 import { logMemoryOperation } from "../../../routes/debug.js";
+import { embedMemoryNonBlocking } from "../../../services/embedding-service.js";
 
 class PersistentMemoryOrchestrator {
   constructor() {
@@ -224,6 +225,24 @@ class PersistentMemoryOrchestrator {
       this.logger.log(
         `Successfully stored memory ID: ${memoryId} in category: ${routing.primaryCategory}`,
       );
+
+      // CRITICAL: Generate embedding for the newly stored memory
+      // This enables semantic retrieval for this memory
+      if (memoryId && this.coreSystem.pool) {
+        console.log(`[EMBEDDING] Generating embedding for memory ${memoryId}...`);
+        // Use non-blocking embedding to avoid delaying the response
+        embedMemoryNonBlocking(this.coreSystem.pool, memoryId, conversationContent, { timeout: 3000 })
+          .then(embedResult => {
+            if (embedResult.success) {
+              console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+            } else {
+              console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+            }
+          })
+          .catch(error => {
+            console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
+          });
+      }
 
       // Debug logging hook for test harness
       logMemoryOperation(userId, 'store', {

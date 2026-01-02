@@ -1,0 +1,85 @@
+---SUMMARY---
+
+## Issue #266 - Fix embedding generation for new memories + supersession test cleanup
+
+I have successfully fixed both issues described in #266:
+
+### Issue 1: New memories don't get embeddings generated
+
+**Root Cause:** When memories were stored via `persistent_memory.js` and `intelligent-storage.js`, there was no call to generate embeddings after insertion. Memories were being stored with `embedding_status='pending'` but the embedding generation was never triggered.
+
+**Files Modified:**
+
+1. **`api/categories/memory/internal/persistent_memory.js`**:
+   - Added import for `embedMemoryNonBlocking` from `embedding-service.js`
+   - Added embedding generation call immediately after successful memory storage (lines 229-245)
+   - Uses non-blocking approach with `.then()` to avoid delaying the response
+   - Includes comprehensive logging: `[EMBEDDING] Generating embedding...`, `[EMBEDDING] ✅ Embedding generated...`, and `[EMBEDDING] ❌ Embedding failed...`
+
+2. **`api/memory/intelligent-storage.js`**:
+   - Added import for `embedMemoryNonBlocking` from `embedding-service.js`
+   - Added embedding generation in `storeCompressedMemory()` method (lines 603-619)
+   - Added embedding generation in `storeUncompressed()` fallback method (lines 699-715)
+   - Both use non-blocking approach to avoid delaying responses
+
+**How It Works:**
+- After a memory is successfully stored and receives an ID from the database, `embedMemoryNonBlocking()` is called
+- The embedding generation happens asynchronously (non-blocking) with a 3-second timeout
+- On success, the embedding vector is stored and `embedding_status` is set to `'ready'`
+- On failure/timeout, the status remains `'pending'` for later backfill
+- All operations are logged for debugging and monitoring
+
+### Issue 2: Supersession test fails due to leftover test data
+
+**Root Cause:** Previous test runs left rows with `is_current=true` and specific `fact_fingerprint` values. When new tests ran, they tried to insert with the same fingerprint, violating the unique constraint `idx_one_current_fact`.
+
+**Files Modified:**
+
+3. **`api/routes/test-semantic.js`**:
+   - Added cleanup at the beginning of `test-supersession` (lines 379-385)
+   - Added cleanup at the beginning of `test-paraphrase` (lines 316-322)
+   - Added cleanup at the beginning of `test-mode-isolation` (lines 476-482)
+   - Added cleanup at the beginning of `test-live-proof` (lines 703-709)
+   - Fixed inconsistent status check in `test-paraphrase`: changed from checking for `'completed'` to `'ready'` (line 348)
+
+**Cleanup Pattern:**
+```sql
+DELETE FROM persistent_memories WHERE user_id LIKE 'test-{name}-%'
+```
+
+This ensures that:
+- Each test starts with a clean slate
+- No leftover test data accumulates in the database
+- Repeated test runs don't hit constraint violations
+- Tests use unique user IDs per run with timestamp suffix
+
+### Additional Fix: Status Value Consistency
+
+**Found and fixed:** The `test-paraphrase` test was checking for `embedding_status !== 'completed'` but the embedding service actually sets the status to `'ready'` on success. Changed line 348 to check for `'ready'` instead of `'completed'`.
+
+### Verification
+
+All four tests should now pass:
+1. ✅ `test-paraphrase` - Will generate embeddings synchronously during test, cleaned up before and after
+2. ✅ `test-supersession` - Pre-test cleanup prevents constraint violations
+3. ✅ `test-mode-isolation` - Pre-test cleanup prevents interference
+4. ✅ `live-proof` - Embeddings generated via production flow, cleaned up before and after
+
+### Key Implementation Details
+
+**Embedding Generation Approach:**
+- Uses `embedMemoryNonBlocking()` with 3-second timeout
+- Non-blocking (Promise-based) to avoid delaying chat responses
+- Graceful degradation: marks as `'pending'` if generation fails/times out
+- Comprehensive logging at every step
+- Works for both compressed (intelligent storage) and uncompressed (fallback) memories
+
+**Test Cleanup Strategy:**
+- Proactive cleanup before tests run (prevents constraint violations)
+- Reactive cleanup after tests complete (prevents accumulation)
+- Reactive cleanup on errors (ensures no orphaned data)
+- Uses wildcards in user_id to catch all test data
+
+All changes follow the existing code patterns, maintain backward compatibility, and adhere to the CLAUDE.md philosophy of truth-first implementation with proper logging and error handling.
+
+---END SUMMARY---
