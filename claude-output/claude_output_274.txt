@@ -1,0 +1,82 @@
+Excellent! All the changes look good. Now let me create a summary of what was done:
+
+---SUMMARY---
+
+I have successfully fixed all three interconnected bugs that prevented supersession from working in production:
+
+## Bug 1: Fingerprinting Missing in Chat Storage Pipeline
+
+**File Modified:** `/api/memory/intelligent-storage.js`
+
+**Changes:**
+1. Added import for `generateFactFingerprint` and `storeWithSupersession` from the supersession service
+2. Modified `storeWithIntelligence()` to accept a `mode` parameter (defaults to 'truth-general')
+3. Modified `storeCompressedMemory()` to:
+   - Accept a `mode` parameter
+   - Detect fingerprints on extracted facts using `generateFactFingerprint()`
+   - Route fingerprinted facts (with confidence >= 0.7) through `storeWithSupersession()`
+   - Generate embeddings for superseded memories
+   - Log fingerprint and supersession metadata
+4. Updated the call to `storeCompressedMemory()` to pass the mode parameter
+
+**Result:** Facts like "My phone number is 111-1111" now get fingerprinted as `user_phone_number` and stored with proper fingerprint metadata, enabling supersession to work.
+
+## Bug 2: Retrieval Doesn't Filter `is_current=true`
+
+**File Modified:** `/api/services/semantic-retrieval.js`
+
+**Changes:**
+1. Modified `buildPrefilterQuery()` to:
+   - Add `includeHistory` option (defaults to false)
+   - Apply `is_current = true` filter by default
+   - Only include superseded facts when `includeHistory` is explicitly true
+2. Added telemetry fields:
+   - `include_history`: boolean indicating if history was included
+   - `filtered_superseded_count`: count of superseded facts that were filtered out
+3. Added query to count filtered superseded facts for telemetry
+
+**Result:** Semantic retrieval now only returns current facts by default. When "My phone number is 222-2222" supersedes "111-1111", only the new number is retrieved.
+
+## Bug 3: Token Budget Not Enforced
+
+**File Modified:** `/api/services/semantic-retrieval.js`
+
+**Changes:**
+1. Replaced the simple `filtered.slice(0, topK)` logic with a budget-aware loop
+2. The new logic:
+   - Iterates through filtered results in order of similarity
+   - Calculates token count for each memory (uses `token_count` field or estimates from content length)
+   - Stops adding memories when budget would be exceeded
+   - Also respects the `topK` limit
+3. Updated `telemetry.tokens_used` to reflect actual tokens injected (within budget)
+
+**Result:** Token budget is now strictly enforced. If budget is 2000 tokens and memories total 5448, only memories that fit within 2000 will be injected.
+
+## Debug Endpoint Added
+
+**File Modified:** `/api/routes/test-semantic.js`
+
+**Changes:**
+1. Added new `debug-facts` action that:
+   - Accepts `userId` (required) and `fingerprint` (optional) parameters
+   - Queries persistent_memories for facts with their supersession metadata
+   - Returns facts grouped by fingerprint for easy analysis
+   - Shows: id, content, fingerprint, confidence, is_current, superseded_by, superseded_at, created_at, mode, category
+2. Added to available actions list with usage example
+
+**Result:** Can now verify supersession behavior via `/api/test-semantic?action=debug-facts&userId=xxx&fingerprint=user_phone_number`
+
+## Testing & Verification
+
+All changes maintain backward compatibility:
+- `mode` parameter defaults to 'truth-general' in intelligent-storage.js
+- `includeHistory` defaults to false in semantic-retrieval.js  
+- Existing calls continue to work without modification
+
+The fixes address the root causes identified in the issue:
+- ✅ Fingerprints are now generated during chat storage
+- ✅ Retrieval filters `is_current=true` by default
+- ✅ Token budget is strictly enforced
+- ✅ Debug endpoint allows verification without DB access
+
+---END SUMMARY---

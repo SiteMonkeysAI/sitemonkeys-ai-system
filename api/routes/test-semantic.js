@@ -702,6 +702,97 @@ export default async function handler(req, res) {
       }
 
       // ============================================
+      // DEBUG FACTS: INSPECT FINGERPRINTED FACTS
+      // ============================================
+      case 'debug-facts': {
+        const { userId: debugUserId, fingerprint } = req.query;
+
+        if (!debugUserId) {
+          return res.status(400).json({
+            error: 'Missing userId parameter',
+            usage: '/api/test-semantic?action=debug-facts&userId=xxx&fingerprint=user_phone_number'
+          });
+        }
+
+        try {
+          let query = `
+            SELECT
+              id,
+              content,
+              fact_fingerprint,
+              fingerprint_confidence,
+              is_current,
+              superseded_by,
+              superseded_at,
+              created_at,
+              mode,
+              category_name
+            FROM persistent_memories
+            WHERE user_id = $1
+          `;
+          const params = [debugUserId];
+
+          // Filter by fingerprint if provided
+          if (fingerprint) {
+            query += ` AND fact_fingerprint = $2`;
+            params.push(fingerprint);
+          }
+
+          query += ` ORDER BY created_at DESC LIMIT 100`;
+
+          const { rows } = await pool.query(query, params);
+
+          // Group by fingerprint for easier analysis
+          const grouped = {};
+          for (const row of rows) {
+            const fp = row.fact_fingerprint || 'none';
+            if (!grouped[fp]) {
+              grouped[fp] = [];
+            }
+            grouped[fp].push({
+              id: row.id,
+              content: row.content.substring(0, 100),
+              fingerprint: row.fact_fingerprint,
+              confidence: row.fingerprint_confidence,
+              is_current: row.is_current,
+              superseded_by: row.superseded_by,
+              superseded_at: row.superseded_at,
+              created_at: row.created_at,
+              mode: row.mode,
+              category: row.category_name
+            });
+          }
+
+          return res.status(200).json({
+            action: 'debug-facts',
+            userId: debugUserId,
+            fingerprint_filter: fingerprint || 'all',
+            total_facts: rows.length,
+            facts_by_fingerprint: grouped,
+            raw_facts: rows.map(r => ({
+              id: r.id,
+              content: r.content,
+              fact_fingerprint: r.fact_fingerprint,
+              fingerprint_confidence: r.fingerprint_confidence,
+              is_current: r.is_current,
+              superseded_by: r.superseded_by,
+              superseded_at: r.superseded_at,
+              created_at: r.created_at,
+              mode: r.mode,
+              category_name: r.category_name
+            }))
+          });
+
+        } catch (error) {
+          console.error('[DEBUG-FACTS] Error:', error.message);
+          return res.status(500).json({
+            action: 'debug-facts',
+            error: error.message
+          });
+        }
+      }
+
+      // ============================================
       // LIVE PROOF: END-TO-END SEMANTIC RETRIEVAL
       // ============================================
       case 'live-proof': {
@@ -850,7 +941,7 @@ export default async function handler(req, res) {
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'live-proof'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -864,6 +955,7 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=test-mode-isolation',
             '/api/test-semantic?action=fix-superseded-by-type',
             '/api/test-semantic?action=create-constraint',
+            '/api/test-semantic?action=debug-facts&userId=xxx&fingerprint=user_phone_number',
             '/api/test-semantic?action=live-proof'
           ]
         });

@@ -1,0 +1,241 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #274: [claude-fix] Chat flow missing fingerprint generation + enforce token budget + filter current facts
+
+Issue Description:
+## Summary
+
+Three interconnected bugs prevent supersession from working in production:
+1. Fingerprinting not generated during chat storage
+2. Retrieval doesn't filter `is_current=true`
+3. Token budget not enforced
+
+## Definitive Evidence
+
+After storing via `/api/chat`:
+- "My phone number is 111-1111"
+- "My phone number is 222-2222"
+
+DB shows:
+```json
+{
+  "id": 907,
+  "content": "Phone number: 111-1111.",
+  "fact_fingerprint": null,
+  "is_current": true
+},
+{
+  "id": 908,
+  "content": "Phone number: 222-2222.",
+  "fact_fingerprint": null,
+  "is_current": true
+}
+```
+
+Both have `fact_fingerprint: null` and `is_current: true`. Supersession cannot trigger without fingerprints.
+
+---
+
+## Bug 1: Fingerprinting Missing in Chat Storage Pipeline
+
+### Root Cause
+`/api/memory/intelligent-storage.js` extracts facts but does NOT:
+1. Detect canonical fact patterns
+2. Generate fingerprints
+3. Route fingerprinted facts through `storeWithSupersession()`
+
+### Required Fix
+
+In `intelligent-storage.js`, after fact extraction, run fingerprint detection on the **extracted fact content** (not raw user message):
+```javascript
+// Fingerprint detection runs on extracted fact string
+function detectFingerprint(extractedFact) {
+  const CANONICAL_PATTERNS = [
+    { regex: /phone\s*(?:number)?[:\s]*[\d\-\(\)\s\.]+/i, fingerprint: 'user_phone_number' },
+    { regex: /email[:\s]*\S+@\S+/i, fingerprint: 'user_email' },
+    { regex: /(?:name|called)[:\s]*(\w+)/i, fingerprint: 'user_name' },
+    { regex: /(?:live|reside|address)[:\s]*.+/i, fingerprint: 'user_location_residence' },
+    { regex: /birthday[:\s]*/i, fingerprint: 'user_birthday' },
+    { regex: /(?:spouse|wife|husband|partner)[:\s]*/i, fingerprint: 'user_spouse' },
+  ];
+  
+  for (const { regex, fingerprint } of CANONICAL_PATTERNS) {
+    if (regex.test(extractedFact)) {
+      return { fingerprint, confidence: 0.9 };
+    }
+  }
+  return { fingerprint: null, confidence: 0.5 };
+}
+```
+
+Only supersede for fingerprints in the allowlist. Everything else stores normally.
+```javascript
+// In storeCompressedMemory or its caller:
+const { fingerprint, confidence } = detectFingerprint(factContent);
+
+if (fingerprint) {
+  // Route through supersession
+  return await storeWithSupersession(userId, factContent, fingerprint, confidence, mode, category, tokenCount);
+} else {
+  // Normal storage
+  return await directInsert(userId, factContent, category, tokenCount, mode);
+}
+```
+
+---
+
+## Bug 2: Retrieval Must Filter `is_current=true` by Default
+
+### Root Cause
+Semantic retrieval candidate query fetches ALL memories regardless of `is_current` status.
+
+### Required Fix
+
+In `/api/services/semantic-retrieval.js`, modify candidate fetch:
+```sql
+SELECT id, content, category_name, mode, embedding, fact_fingerprint, ...
+FROM persistent_memories
+WHERE user_id = $1 
+  AND mode = $2
+  AND is_current = true  -- ADD THIS DEFAULT
+  AND embedding IS NOT NULL 
+  AND embedding_status = 'ready'
+```
+
+Only include history when:
+- Explicit flag `include_history=true`, OR
+- Query contains "previous", "old", "history", "past"
+
+Add telemetry:
+- `include_history: boolean`
+- `filtered_superseded_count: number`
+
+---
+
+## Bug 3: Token Budget Must Be Enforced
+
+### Evidence
+```json
+"token_budget": 2000,
+"tokens_used": 5448
+```
+
+### Required Fix
+
+In `/api/services/semantic-retrieval.js`, enforce budget in injection loop:
+```javascript
+let usedTokens = 0;
+const toInject = [];
+
+for (const memory of rankedResults) {
+  const memoryTokens = memory.token_count || estimateTokens(memory.content);
+  if (usedTokens + memoryTokens > tokenBudget) {
+    break;  // Stop before exceeding budget
+  }
+  toInject.push(memory);
+  usedTokens += memoryTokens;
+}
+
+// Update telemetry to reflect ACTUAL injected tokens
+telemetry.tokens_used = usedTokens;
+telemetry.results_injected = toInject.length;
+```
+
+---
+
+## Add Debug Endpoint
+
+Add `/api/test-semantic?action=debug-facts&userId=X&fingerprint=Y` that returns:
+```json
+{
+  "action": "debug-facts",
+  "rows": [
+    { "id": 907, "content": "...", "fact_fingerprint": "user_phone_number", "is_current": false, "superseded_by": 908, "created_at": "..." },
+    { "id": 908, "content": "...", "fact_fingerprint": "user_phone_number", "is_current": true, "superseded_by": null, "created_at": "..." }
+  ]
+}
+```
+
+This enables console-based verification without DB access.
+
+---
+
+## Acceptance Criteria
+
+### Test 1: Fingerprinting + Supersession
+```javascript
+const user = "test-supersession-" + Date.now();
+await chat("My phone number is 111-1111.", user);
+await delay(3000);
+await chat("My phone number is 222-2222.", user);
+await delay(3000);
+
+// Verify via debug endpoint
+const debug = await fetch(`/api/test-semantic?action=debug-facts&userId=${user}&fingerprint=user_phone_number`);
+const rows = debug.rows;
+
+assert(rows.length === 2, "Should have 2 rows");
+assert(rows.filter(r => r.is_current).length === 1, "Exactly one current");
+assert(rows.find(r => r.is_current).content.includes("222"), "Current should be newer");
+assert(rows.find(r => !r.is_current).superseded_by !== null, "Old should have superseded_by");
+```
+
+### Test 2: Retrieval Filters Current Only
+```javascript
+const retrieval = await retrieve(user, "phone number");
+assert(retrieval.memories.length === 1, "Should only return current fact");
+assert(retrieval.memories[0].content.includes("222"), "Should be the newer number");
+assert(retrieval.telemetry.filtered_superseded_count >= 1, "Should report filtered count");
+```
+
+### Test 3: Token Budget Enforced
+```javascript
+const r = await retrieve(user, "some query");
+assert(r.telemetry.tokens_used <= r.telemetry.token_budget, "Must respect budget");
+```
+
+### Test 4: End-to-End Chat
+```javascript
+const response = await chat("What is my phone number?", user);
+assert(response.includes("222"), "Should mention current number");
+assert(!response.includes("111"), "Should NOT mention superseded number");
+```
+
+---
+
+## Files to Modify
+
+1. **`/api/memory/intelligent-storage.js`**
+   - Add `detectFingerprint()` function
+   - Route fingerprinted facts through `storeWithSupersession()`
+   - Import supersession service
+
+2. **`/api/services/semantic-retrieval.js`**
+   - Add `is_current=true` to candidate query (default)
+   - Add history detection for explicit requests
+   - Enforce token budget in injection loop
+   - Add telemetry: `include_history`, `filtered_superseded_count`
+
+3. **`/api/routes/test-semantic.js`**
+   - Add `debug-facts` action for verification
+
+4. **`/api/services/supersession.js`** (if needed)
+   - Ensure exported and accepts category/tokenCount params
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -51,13 +51,19 @@ function buildPrefilterQuery(options) {
 
   const params = [userId];
   let paramIndex = 2;
-  
+
   const conditions = [
     'user_id = $1',
-    'is_current = true',
     'embedding IS NOT NULL',
     "embedding_status = 'ready'"
   ];
+
+  // Filter by is_current=true by default (only show current facts)
+  // Include history only if explicitly requested
+  const includeHistory = options.includeHistory || false;
+  if (!includeHistory) {
+    conditions.push('is_current = true');
+  }
 
   // Mode filtering (respects vault boundaries)
   if (!includeAllModes) {
@@ -164,6 +170,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     query_length: query.length,
     mode: mode,
     categories_filter: categories,
+    include_history: options.includeHistory || false,
+    filtered_superseded_count: 0,
     candidates_considered: 0,
     candidates_with_embeddings: 0,
     vectors_compared: 0,
@@ -240,6 +248,20 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     telemetry.candidates_fetched = candidates.length;
     telemetry.candidates_considered = candidates.length;
 
+    // Count how many superseded facts were filtered out (if not including history)
+    if (!options.includeHistory) {
+      const { rows: [countRow] } = await pool.query(`
+        SELECT COUNT(*) as superseded_count
+        FROM persistent_memories
+        WHERE user_id = $1
+          AND mode = $2
+          AND is_current = false
+          AND embedding IS NOT NULL
+          AND embedding_status = 'ready'
+      `, [userId, mode]);
+      telemetry.filtered_superseded_count = parseInt(countRow.superseded_count || 0);
+    }
+
     if (candidates.length === 0) {
       console.log(`[SEMANTIC RETRIEVAL] No candidates found for user ${userId} in mode ${mode}`);
       telemetry.total_ms = Date.now() - startTime;
@@ -281,10 +303,33 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     telemetry.candidates_above_threshold = filtered.length;
     telemetry.scoring_ms = Date.now() - scoringStart;
 
-    // STEP 4: Take top K results
-    const results = filtered.slice(0, topK);
+    // STEP 4: Enforce token budget and take results that fit
+    const tokenBudget = options.tokenBudget || 2000;
+    let usedTokens = 0;
+    const results = [];
+
+    for (const memory of filtered) {
+      // Estimate tokens for this memory (use token_count if available, else estimate)
+      const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
+
+      // Check if adding this memory would exceed budget
+      if (usedTokens + memoryTokens > tokenBudget) {
+        console.log(`[SEMANTIC RETRIEVAL] Token budget reached: ${usedTokens}/${tokenBudget} tokens used`);
+        break;  // Stop before exceeding budget
+      }
+
+      results.push(memory);
+      usedTokens += memoryTokens;
+
+      // Also respect topK limit
+      if (results.length >= topK) {
+        break;
+      }
+    }
+
     telemetry.results_returned = results.length;
     telemetry.results_injected = results.length;
+    telemetry.tokens_used = usedTokens;  // Actual tokens used (within budget)
 
     // Collect memory IDs and scores
     telemetry.injected_memory_ids = results.map(r => r.id);
@@ -294,11 +339,6 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     if (results.length > 0) {
       telemetry.top_similarity = results[0].similarity;
       telemetry.avg_similarity = results.reduce((sum, r) => sum + r.similarity, 0) / results.length;
-
-      // Calculate token usage (rough estimate: ~4 chars per token)
-      telemetry.tokens_used = Math.ceil(
-        results.reduce((sum, r) => sum + (r.content?.length || 0), 0) / 4
-      );
     }
 
     telemetry.total_ms = Date.now() - startTime;
