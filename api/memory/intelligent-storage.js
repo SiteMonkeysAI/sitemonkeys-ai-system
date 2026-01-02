@@ -7,6 +7,7 @@ import { OpenAI } from 'openai';
 import { encoding_for_model } from 'tiktoken';
 import { logMemoryOperation } from '../routes/debug.js';
 import { embedMemoryNonBlocking } from '../services/embedding-service.js';
+import { generateFactFingerprint, storeWithSupersession } from '../services/supersession.js';
 
 /**
  * Boilerplate patterns that should NEVER be stored in memory
@@ -86,9 +87,10 @@ export class IntelligentMemoryStorage {
    * @param {string} userMessage - User's message
    * @param {string} aiResponse - AI's response
    * @param {string} category - Memory category
+   * @param {string} mode - Mode (truth-general, business-validation, site-monkeys)
    * @returns {Promise<object>} - Storage result with action taken
    */
-  async storeWithIntelligence(userId, userMessage, aiResponse, category) {
+  async storeWithIntelligence(userId, userMessage, aiResponse, category, mode = 'truth-general') {
     try {
       // TRACE LOGGING - Intelligent storage entry
       console.log('[TRACE-INTELLIGENT] I1. storeWithIntelligence called');
@@ -158,7 +160,7 @@ export class IntelligentMemoryStorage {
           original_tokens: originalTokens,
           compressed_tokens: compressedTokens,
           compression_ratio: parseFloat(ratio)
-        });
+        }, mode);
       }
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Error:', error.message);
@@ -535,9 +537,10 @@ Facts (preserve all identifiers):`;
    * @param {string} category - Memory category
    * @param {string} facts - Compressed facts
    * @param {object} metadata - Compression metadata
+   * @param {string} mode - Mode (truth-general, business-validation, site-monkeys)
    * @returns {Promise<object>} - Storage result
    */
-  async storeCompressedMemory(userId, category, facts, metadata) {
+  async storeCompressedMemory(userId, category, facts, metadata, mode = 'truth-general') {
     try {
       // TRACE LOGGING - Store compressed memory
       console.log('[TRACE-INTELLIGENT] I9. storeCompressedMemory called');
@@ -553,6 +556,67 @@ Facts (preserve all identifiers):`;
 
       const tokenCount = this.countTokens(facts);
       console.log('[TRACE-INTELLIGENT] I13. tokenCount:', tokenCount);
+
+      // CRITICAL: Detect fingerprints on extracted facts (not raw user message)
+      console.log('[INTELLIGENT-STORAGE] 🔍 Detecting fact fingerprint...');
+      const fingerprintResult = await generateFactFingerprint(facts, { skipModel: false });
+      console.log(`[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`);
+
+      // If fingerprint detected, route through supersession
+      if (fingerprintResult.fingerprint && fingerprintResult.confidence >= 0.7) {
+        console.log(`[INTELLIGENT-STORAGE] ✨ Routing through supersession for fingerprint: ${fingerprintResult.fingerprint}`);
+
+        const supersessionResult = await storeWithSupersession(this.db, {
+          userId,
+          content: facts,
+          factFingerprint: fingerprintResult.fingerprint,
+          fingerprintConfidence: fingerprintResult.confidence,
+          mode,
+          categoryName: category,
+          tokenCount
+        });
+
+        if (supersessionResult.success) {
+          const memoryId = supersessionResult.memoryId;
+
+          // Generate embedding for the newly stored memory
+          if (memoryId && this.db) {
+            console.log(`[EMBEDDING] Generating embedding for memory ${memoryId}...`);
+            embedMemoryNonBlocking(this.db, memoryId, facts, { timeout: 3000 })
+              .then(embedResult => {
+                if (embedResult.success) {
+                  console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+                } else {
+                  console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+                }
+              })
+              .catch(error => {
+                console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
+              });
+          }
+
+          // Debug logging hook
+          logMemoryOperation(userId, 'store', {
+            memory_id: memoryId,
+            content_preview: facts.substring(0, 120),
+            category: category,
+            dedup_triggered: false,
+            dedup_merged_with: null,
+            stored: true,
+            fingerprint: fingerprintResult.fingerprint,
+            superseded_count: supersessionResult.supersededCount
+          });
+
+          return {
+            action: 'created',
+            memoryId,
+            superseded: supersessionResult.supersededCount,
+            fingerprint: fingerprintResult.fingerprint
+          };
+        }
+      }
+
+      // No fingerprint or confidence too low - use normal storage
 
       console.log('[TRACE-INTELLIGENT] I14. About to execute INSERT query...');
       const result = await this.db.query(`

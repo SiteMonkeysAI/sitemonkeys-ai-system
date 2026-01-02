@@ -1,0 +1,11 @@
+Starting issue-fix mode at Fri Jan  2 19:01:25 UTC 2026
+Fetching issue #274 details
+Using repository: SiteMonkeysAI/sitemonkeys-ai-system
+Creating a new branch: fix-issue-274-20260102190125
+From https://github.com/SiteMonkeysAI/sitemonkeys-ai-system
+ * branch            main       -> FETCH_HEAD
+Switched to a new branch 'fix-issue-274-20260102190125'
+branch 'fix-issue-274-20260102190125' set up to track 'origin/main'.
+Prompt saved to ./claude-output/claude_prompt_274.txt for debugging
+Running Claude to fix the issue...
+Committing changes...
