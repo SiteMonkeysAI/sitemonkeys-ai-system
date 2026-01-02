@@ -1442,11 +1442,21 @@ export default async function handler(req, res) {
           await ensureTablesExist(pool);
           console.log('[TEST-DOC] Tables ensured');
 
-          // TEST 1: Text Extraction (PDF simulation with plain text)
-          const testText = 'This is a test document.\n\nIt contains multiple paragraphs.\n\nThis is the third paragraph with important information.';
-          const testBuffer = Buffer.from(testText, 'utf-8');
+          // TEST 1: Text Extraction (using inline test data)
+          const testContent = Buffer.from(
+            'This is a comprehensive test document about artificial intelligence and machine learning. ' +
+            'AI systems can learn from data and improve their performance over time. ' +
+            'Machine learning algorithms identify patterns in large datasets. ' +
+            'Deep learning uses neural networks with many layers. ' +
+            'Natural language processing enables computers to understand human language.'
+          );
 
-          const extractResult = await extractText(testBuffer, 'text/plain', 'test.txt');
+          const extractResult = await extractText(testContent, 'text/plain', 'test-ai.txt');
+          const testText = 'This is a comprehensive test document about artificial intelligence and machine learning. ' +
+            'AI systems can learn from data and improve their performance over time. ' +
+            'Machine learning algorithms identify patterns in large datasets. ' +
+            'Deep learning uses neural networks with many layers. ' +
+            'Natural language processing enables computers to understand human language.';
           results.tests.push({
             name: 'Text Extraction',
             passed: extractResult.success && extractResult.text === testText,
@@ -1467,8 +1477,8 @@ export default async function handler(req, res) {
           const storeResult = await storeDocument(
             testUserId,
             testMode,
-            'test-document.txt',
-            testBuffer,
+            'test-ai.txt',
+            testContent,
             'text/plain',
             { pool }
           );
