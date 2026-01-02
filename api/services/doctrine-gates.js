@@ -441,6 +441,11 @@ export function enforceDoctrineGates(response, context = {}) {
     hardFailConditions.push('High-stakes advice without caveats');
   }
 
+  // Generic examples when examples are given = automatic fail
+  if (results.exampleQuality.applicable && results.exampleQuality.score === 0) {
+    hardFailConditions.push('Examples are too generic');
+  }
+
   // Check for hard fails
   if (hardFailConditions.length > 0) {
     results.passed = false;
