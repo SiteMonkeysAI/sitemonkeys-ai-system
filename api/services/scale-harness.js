@@ -7,6 +7,7 @@
  * @module api/services/scale-harness
  */
 
+import crypto from 'crypto';
 import { retrieveSemanticMemories } from './semantic-retrieval.js';
 import { storeWithSupersession } from './supersession.js';
 import { embedMemory } from './embedding-service.js';
@@ -52,7 +53,7 @@ export async function generateTestData(pool, userId, count, options = {}) {
     // Generate regular memories
     const regularCount = count - TRIPWIRES.length;
     for (let i = 0; i < regularCount; i++) {
-      const content = `Test memory ${i + 1} for scale testing - random content ${Math.random().toString(36).substring(7)}`;
+      const content = `Test memory ${i + 1} for scale testing - random content ${crypto.randomUUID().substring(0, 8)}`;
 
       const result = await pool.query(`
         INSERT INTO persistent_memories (
@@ -160,7 +161,7 @@ export async function generateSupersessionChains(pool, userId, runId, mode = 'tr
 
       // Store 3 versions of the same fact
       for (let version = 1; version <= 3; version++) {
-        const content = `Chain ${i} version ${version} - value ${Math.random().toString(36).substring(7)}`;
+        const content = `Chain ${i} version ${version} - value ${crypto.randomUUID().substring(0, 8)}`;
 
         const result = await storeWithSupersession(pool, {
           userId,
@@ -261,7 +262,7 @@ export async function runBenchmark(pool, userId, queryCount, options = {}) {
     for (let i = 0; i < randomQueryCount; i++) {
       const queryStart = Date.now();
 
-      const randomQuery = `test query ${Math.random().toString(36).substring(7)}`;
+      const randomQuery = `test query ${crypto.randomUUID().substring(0, 8)}`;
       const result = await retrieveSemanticMemories(pool, randomQuery, {
         userId,
         mode,
