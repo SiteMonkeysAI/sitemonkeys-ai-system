@@ -366,14 +366,32 @@ export async function storeWithSupersession(pool, memoryData) {
 
       // Lock any existing current facts with same fingerprint for this user/mode
       const existing = await client.query(`
-        SELECT id, content, fact_fingerprint 
-        FROM persistent_memories 
-        WHERE user_id = $1 
+        SELECT id, content, fact_fingerprint
+        FROM persistent_memories
+        WHERE user_id = $1
           AND mode = $2
-          AND fact_fingerprint = $3 
+          AND fact_fingerprint = $3
           AND is_current = true
         FOR UPDATE
       `, [userId, mode, factFingerprint]);
+
+      // CRITICAL: Mark old facts as not current BEFORE inserting new fact
+      // This prevents violating the unique constraint idx_one_current_fact
+      let oldIds = [];
+      if (existing.rows.length > 0) {
+        oldIds = existing.rows.map(r => r.id);
+
+        // Mark old facts as not current (superseded_by will be set after insert)
+        await client.query(`
+          UPDATE persistent_memories
+          SET is_current = false,
+              superseded_at = NOW()
+          WHERE id = ANY($1::integer[])
+        `, [oldIds]);
+
+        console.log(`[SUPERSESSION] Marked ${existing.rows.length} old facts as not current`);
+        console.log(`[SUPERSESSION]    Old IDs: ${oldIds.join(', ')}`);
+      }
 
       // Insert new memory (id is INTEGER with sequence, auto-generated)
       const newMemory = await client.query(`
@@ -395,23 +413,17 @@ export async function storeWithSupersession(pool, memoryData) {
 
       const newId = newMemory.rows[0].id; // INTEGER
 
-      // Supersede old facts (if any)
-      if (existing.rows.length > 0) {
-        const oldIds = existing.rows.map(r => r.id);
-
-        // Mark old facts as superseded and link to new fact
+      // Link old facts to new fact via superseded_by
+      if (oldIds.length > 0) {
         // After running fix-superseded-by-type migration, superseded_by is INTEGER matching id
         await client.query(`
           UPDATE persistent_memories
-          SET is_current = false,
-              superseded_by = $1,
-              superseded_at = NOW()
+          SET superseded_by = $1
           WHERE id = ANY($2::integer[])
         `, [newId, oldIds]);
 
-        console.log(`[SUPERSESSION] ✅ Replaced ${existing.rows.length} old facts with ID ${newId}`);
+        console.log(`[SUPERSESSION] ✅ Replaced ${oldIds.length} old facts with ID ${newId}`);
         console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
-        console.log(`[SUPERSESSION]    Old IDs: ${oldIds.join(', ')}`);
       }
 
       await client.query('COMMIT');

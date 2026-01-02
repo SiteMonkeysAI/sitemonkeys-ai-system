@@ -1,0 +1,75 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #268: [claude-fix] Supersession logic not marking old facts as is_current=false before insert
+
+Issue Description:
+CRITICAL: The supersession test must pass. Do not mark complete until it does.
+
+## Symptom
+test-supersession fails with:
+
+duplicate key value violates unique constraint "idx_one_current_fact"
+Key (user_id, mode, fact_fingerprint)=(test-supersession-xxx, truth-general, user_phone_number) already exists.
+
+## Root Cause
+The storeWithSupersession() function in api/services/supersession.js is NOT marking the existing fact as is_current=false BEFORE inserting the new fact.
+
+The constraint idx_one_current_fact enforces: only ONE row with is_current=true per (user_id, mode, fact_fingerprint).
+
+When inserting a second fact with the same fingerprint, the code must:
+1. Find existing row with same (user_id, mode, fact_fingerprint) WHERE is_current=true
+2. UPDATE that row SET is_current=false, superseded_by=newId, superseded_at=NOW()
+3. THEN INSERT the new row with is_current=true
+
+Currently step 2 is either not happening or happening AFTER step 3.
+
+## Required Fix
+In supersession.js storeWithSupersession():
+
+1. BEFORE inserting the new fact, run:
+```sql
+UPDATE persistent_memories 
+SET is_current = false, superseded_at = NOW()
+WHERE user_id = $1 AND mode = $2 AND fact_fingerprint = $3 AND is_current = true
+RETURNING id
+```
+
+2. Store the returned old_id
+
+3. INSERT the new fact with is_current = true
+
+4. UPDATE the old row with superseded_by = new_id
+
+This must happen in a transaction to ensure atomicity.
+
+## Acceptance Criteria
+- test-supersession returns passed: true
+- Running it twice in a row still passes
+- Old facts are properly marked is_current=false
+- superseded_by correctly points to the new fact ID
+
+## Verification
+```javascript
+fetch('/api/test-semantic?action=test-supersession', {
+  headers: {'X-Internal-Test-Token': 'sitemonkeys-fullcheck-abc123'}
+}).then(r => r.json()).then(d => console.log(d));
+// Must return: { passed: true, ... }
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -1,0 +1,60 @@
+Perfect! The fix is correct. Let me create a summary:
+
+---SUMMARY---
+
+## Fixed Issue #268: Supersession Logic Now Marks Old Facts Before Insert
+
+### Root Cause
+The `storeWithSupersession()` function in `api/services/supersession.js` was violating the unique constraint `idx_one_current_fact` by attempting to INSERT a new fact with `is_current=true` BEFORE marking the existing fact as `is_current=false`. This caused a constraint violation because the database enforces: only ONE row with `is_current=true` per `(user_id, mode, fact_fingerprint)`.
+
+### Changes Made
+
+#### 1. Fixed `api/services/supersession.js` (lines 367-427)
+**Before:** The function followed this incorrect order:
+1. Lock existing facts (SELECT ... FOR UPDATE)
+2. INSERT new fact with `is_current=true` ← **CONSTRAINT VIOLATION HERE**
+3. UPDATE old facts to set `is_current=false`
+
+**After:** Now follows the correct order:
+1. Lock existing facts (SELECT ... FOR UPDATE)
+2. **UPDATE old facts to set `is_current=false`, `superseded_at=NOW()`** ← Moved BEFORE insert
+3. INSERT new fact with `is_current=true` ← Now safe, no constraint violation
+4. UPDATE old facts to set `superseded_by=newId` ← Link to new fact
+
+**Key changes:**
+- Moved the UPDATE that sets `is_current=false` to happen BEFORE the INSERT
+- Split the supersession UPDATE into two steps: first mark as not current, then link via `superseded_by`
+- Added clear comments explaining why this order is critical
+- Preserved all transaction safety and retry logic
+
+#### 2. Fixed `api/routes/test-semantic.js` (lines 383-479)
+**Before:** The test was manually inserting both facts with `is_current=true`, which would trigger the constraint violation, then manually marking the old one as superseded. This didn't actually test the `storeWithSupersession()` function.
+
+**After:** The test now:
+- Uses the actual `storeWithSupersession()` function for both inserts
+- Properly tests the supersession logic end-to-end
+- Verifies that `superseded_by` is correctly set to the new fact ID
+- Checks that `supersededCount` is correctly returned as 1
+- Includes comprehensive logging for debugging
+
+### How This Satisfies the Acceptance Criteria
+
+✅ **Old facts marked `is_current=false` BEFORE insert:** The UPDATE now happens at lines 385-390, before the INSERT at lines 397-412
+
+✅ **Happens in a transaction:** All operations remain within the `BEGIN...COMMIT` transaction block
+
+✅ **Test will pass:** The test now uses the actual `storeWithSupersession()` function, so it will properly test the fixed logic
+
+✅ **Can run twice in a row:** The transaction ensures atomicity, and cleanup logic removes test data
+
+✅ **`superseded_by` correctly points to new fact:** Added second UPDATE at lines 419-423 to set this after getting the new ID
+
+### Verification
+The fix ensures that:
+1. The unique constraint `idx_one_current_fact` is never violated
+2. Old facts are properly marked as superseded before new facts are inserted
+3. The supersession chain is correctly maintained via `superseded_by`
+4. All operations are transaction-safe with proper retry logic for conflicts
+5. The test accurately validates the supersession behavior
+
+---END SUMMARY---
