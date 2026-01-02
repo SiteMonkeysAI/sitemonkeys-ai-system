@@ -1,0 +1,79 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #304: [claude-fix] Export ensureTablesExist from document-service.js and fix initialization
+
+Issue Description:
+## Problem
+
+Two issues preventing document ingestion from working:
+
+1. `ensureTablesExist` is not exported from `/api/services/document-service.js`
+2. Database tables `documents` and `document_chunks` don't exist
+
+## Evidence from logs
+```
+[TEST-DOC] Error: ensureTablesExist is not a function
+ERROR: relation "documents" does not exist at character 13
+```
+
+## Fix Required
+
+### In `/api/services/document-service.js`
+
+Find the `ensureTablesExist` function and ensure it has the `export` keyword:
+```javascript
+// WRONG (missing export):
+async function ensureTablesExist(pool) { ... }
+
+// CORRECT (with export):
+export async function ensureTablesExist(pool) {
+  if (!tablesInitialized) {
+    await initializeDocumentTables(pool);
+    tablesInitialized = true;
+  }
+}
+```
+
+Also verify `initializeDocumentTables` exists and creates both tables with proper SQL.
+
+### Verify the module exports
+
+At the end of the file or inline, ensure these are all exported:
+- `ensureTablesExist`
+- `storeDocument`
+- `searchDocuments`
+- `getUserDocuments`
+- `deleteDocument`
+- `getDocumentStatus`
+- `embedDocumentChunks`
+- `backfillDocumentEmbeddings`
+- `extractText`
+- `chunkText`
+
+## Acceptance Test
+```javascript
+fetch("https://sitemonkeys-ai-system-production.up.railway.app/api/test-semantic?action=test-document-ingestion", {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json()).then(d => {
+  console.log("Document Ingestion:", d.summary, d.passed ? "✅" : "❌");
+});
+// Expected: 6/6 tests passed ✅
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
