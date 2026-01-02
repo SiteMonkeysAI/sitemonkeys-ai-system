@@ -1,0 +1,82 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #302: [claude-fix] Fix ensureTablesExist export in document-service.js
+
+Issue Description:
+## Problem
+
+The test-document-ingestion endpoint fails with:
+```
+"error": "ensureTablesExist is not a function"
+```
+
+## Likely Cause
+
+Either:
+1. `ensureTablesExist` is not exported from `/api/services/document-service.js`
+2. The import in `/api/routes/test-semantic.js` is incorrect
+
+## Fix
+
+### In `/api/services/document-service.js`
+
+Ensure the function is exported:
+```javascript
+export async function ensureTablesExist(pool) {
+  if (!tablesInitialized) {
+    await initializeDocumentTables(pool);
+    tablesInitialized = true;
+  }
+}
+```
+
+Make sure `export` keyword is present.
+
+### In `/api/routes/test-semantic.js`
+
+Verify the import includes `ensureTablesExist`:
+```javascript
+case 'test-document-ingestion': {
+  const { 
+    ensureTablesExist,
+    storeDocument, 
+    searchDocuments, 
+    getUserDocuments, 
+    deleteDocument, 
+    getDocumentStatus 
+  } = await import('../services/document-service.js');
+  
+  // First call to ensure tables exist
+  await ensureTablesExist(pool);
+  
+  // ... rest of test code
+}
+```
+
+## Acceptance Test
+```javascript
+fetch("https://sitemonkeys-ai-system-production.up.railway.app/api/test-semantic?action=test-document-ingestion", {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json()).then(d => {
+  console.log("Document Ingestion:", d.summary, d.passed ? "✅" : "❌");
+});
+// Expected: 6/6 tests passed ✅
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
