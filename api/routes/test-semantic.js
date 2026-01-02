@@ -1415,10 +1415,266 @@ export default async function handler(req, res) {
         });
       }
 
+      // ============================================
+      // TEST: DOCUMENT INGESTION (END-TO-END)
+      // ============================================
+      case 'test-document-ingestion': {
+        const {
+          ensureTablesExist,
+          extractText,
+          chunkText,
+          storeDocument,
+          embedDocumentChunks,
+          searchDocuments
+        } = await import('../services/document-service.js');
+        const { generateEmbedding } = await import('../services/embedding-service.js');
+
+        const testUserId = 'test-doc-' + Date.now();
+        const testMode = 'truth-general';
+        const results = {
+          tests: [],
+          passed: 0,
+          failed: 0
+        };
+
+        try {
+          // Ensure tables exist
+          await ensureTablesExist(pool);
+          console.log('[TEST-DOC] Tables ensured');
+
+          // TEST 1: Text Extraction (PDF simulation with plain text)
+          const testText = 'This is a test document.\n\nIt contains multiple paragraphs.\n\nThis is the third paragraph with important information.';
+          const testBuffer = Buffer.from(testText, 'utf-8');
+
+          const extractResult = await extractText(testBuffer, 'text/plain', 'test.txt');
+          results.tests.push({
+            name: 'Text Extraction',
+            passed: extractResult.success && extractResult.text === testText,
+            details: extractResult
+          });
+          if (extractResult.success) results.passed++; else results.failed++;
+
+          // TEST 2: Text Chunking
+          const chunks = chunkText(testText);
+          results.tests.push({
+            name: 'Text Chunking',
+            passed: chunks.length > 0 && chunks[0].content && chunks[0].tokenCount > 0,
+            details: { chunkCount: chunks.length, sample: chunks[0] }
+          });
+          if (chunks.length > 0) results.passed++; else results.failed++;
+
+          // TEST 3: Document Storage
+          const storeResult = await storeDocument(
+            testUserId,
+            testMode,
+            'test-document.txt',
+            testBuffer,
+            'text/plain',
+            { pool }
+          );
+          results.tests.push({
+            name: 'Document Storage',
+            passed: storeResult.success && storeResult.documentId > 0,
+            details: storeResult
+          });
+          if (storeResult.success) results.passed++; else results.failed++;
+
+          if (!storeResult.success) {
+            throw new Error('Storage failed, cannot continue tests');
+          }
+
+          const documentId = storeResult.documentId;
+
+          // TEST 4: Embedding Generation
+          const embedResult = await embedDocumentChunks(documentId, { pool, timeout: 10000 });
+          results.tests.push({
+            name: 'Embedding Generation',
+            passed: embedResult.success && embedResult.embedded > 0,
+            details: embedResult
+          });
+          if (embedResult.success && embedResult.embedded > 0) results.passed++; else results.failed++;
+
+          // Wait a moment for embeddings to settle
+          await new Promise(r => setTimeout(r, 500));
+
+          // TEST 5: Semantic Search
+          const queryText = 'important information';
+          const queryEmbedResult = await generateEmbedding(queryText);
+
+          if (queryEmbedResult.success) {
+            const searchResult = await searchDocuments(
+              testUserId,
+              testMode,
+              queryEmbedResult.embedding,
+              { pool, topK: 5, tokenBudget: 3000 }
+            );
+            results.tests.push({
+              name: 'Semantic Search',
+              passed: searchResult.chunks && searchResult.chunks.length > 0,
+              details: {
+                chunksFound: searchResult.chunks?.length || 0,
+                totalTokens: searchResult.totalTokens,
+                topResult: searchResult.chunks?.[0]
+              }
+            });
+            if (searchResult.chunks && searchResult.chunks.length > 0) results.passed++; else results.failed++;
+          } else {
+            results.tests.push({
+              name: 'Semantic Search',
+              passed: false,
+              details: { error: 'Query embedding failed' }
+            });
+            results.failed++;
+          }
+
+          // TEST 6: Mode Isolation
+          const searchOtherMode = await searchDocuments(
+            testUserId,
+            'business-validation', // Different mode
+            queryEmbedResult.embedding,
+            { pool, topK: 5 }
+          );
+          results.tests.push({
+            name: 'Mode Isolation',
+            passed: searchOtherMode.chunks && searchOtherMode.chunks.length === 0,
+            details: {
+              chunksFound: searchOtherMode.chunks?.length || 0,
+              expected: 0,
+              message: 'Documents should not leak across modes'
+            }
+          });
+          if (searchOtherMode.chunks && searchOtherMode.chunks.length === 0) results.passed++; else results.failed++;
+
+          // Cleanup
+          await pool.query('DELETE FROM documents WHERE user_id = $1', [testUserId]);
+          console.log('[TEST-DOC] Cleanup complete');
+
+          return res.json({
+            action: 'test-document-ingestion',
+            passed: results.failed === 0,
+            summary: `${results.passed}/${results.tests.length} tests passed`,
+            results: results.tests
+          });
+
+        } catch (error) {
+          // Cleanup on error
+          await pool.query('DELETE FROM documents WHERE user_id LIKE $1', ['test-doc-%']).catch(() => {});
+
+          console.error('[TEST-DOC] Error:', error.message);
+          return res.status(500).json({
+            action: 'test-document-ingestion',
+            passed: false,
+            error: error.message,
+            results: results.tests
+          });
+        }
+      }
+
+      // ============================================
+      // BACKFILL DOCUMENT EMBEDDINGS
+      // ============================================
+      case 'backfill-doc-embeddings': {
+        const { backfillDocumentEmbeddings, ensureTablesExist } = await import('../services/document-service.js');
+
+        try {
+          await ensureTablesExist(pool);
+
+          const batchSize = Math.min(parseInt(req.query.batchSize) || 10, 50);
+          const maxBatches = Math.min(parseInt(req.query.maxBatches) || 5, 20);
+
+          const stats = await backfillDocumentEmbeddings({
+            pool,
+            batchSize,
+            maxBatches
+          });
+
+          return res.json({
+            action: 'backfill-doc-embeddings',
+            success: true,
+            ...stats
+          });
+
+        } catch (error) {
+          console.error('[BACKFILL-DOC] Error:', error.message);
+          return res.status(500).json({
+            action: 'backfill-doc-embeddings',
+            success: false,
+            error: error.message
+          });
+        }
+      }
+
+      // ============================================
+      // DOCUMENT STATUS
+      // ============================================
+      case 'doc-status': {
+        const { getDocumentStatus, getUserDocuments, ensureTablesExist } = await import('../services/document-service.js');
+
+        try {
+          await ensureTablesExist(pool);
+
+          const { userId: docUserId, documentId } = req.query;
+
+          if (documentId) {
+            // Get status for specific document
+            const status = await getDocumentStatus(parseInt(documentId), { pool });
+            return res.json({
+              action: 'doc-status',
+              ...status
+            });
+          } else if (docUserId) {
+            // Get all documents for user
+            const mode = req.query.mode || 'truth-general';
+            const documents = await getUserDocuments(docUserId, mode, { pool });
+
+            // Get aggregate stats
+            const { rows: [aggStats] } = await pool.query(`
+              SELECT
+                COUNT(DISTINCT d.id) as total_documents,
+                SUM(d.chunk_count) as total_chunks,
+                SUM(d.total_tokens) as total_tokens,
+                COUNT(CASE WHEN dc.embedding_status = 'ready' THEN 1 END) as embedded_chunks,
+                COUNT(CASE WHEN dc.embedding_status = 'pending' THEN 1 END) as pending_chunks,
+                COUNT(CASE WHEN dc.embedding_status = 'failed' THEN 1 END) as failed_chunks
+              FROM documents d
+              LEFT JOIN document_chunks dc ON d.id = dc.document_id
+              WHERE d.user_id = $1 AND d.mode = $2
+            `, [docUserId, mode]);
+
+            return res.json({
+              action: 'doc-status',
+              userId: docUserId,
+              mode,
+              documents,
+              aggregateStats: {
+                totalDocuments: parseInt(aggStats.total_documents) || 0,
+                totalChunks: parseInt(aggStats.total_chunks) || 0,
+                totalTokens: parseInt(aggStats.total_tokens) || 0,
+                embeddedChunks: parseInt(aggStats.embedded_chunks) || 0,
+                pendingChunks: parseInt(aggStats.pending_chunks) || 0,
+                failedChunks: parseInt(aggStats.failed_chunks) || 0
+              }
+            });
+          } else {
+            return res.status(400).json({
+              error: 'Missing userId or documentId parameter',
+              usage: '/api/test-semantic?action=doc-status&userId=xxx OR documentId=123'
+            });
+          }
+
+        } catch (error) {
+          console.error('[DOC-STATUS] Error:', error.message);
+          return res.status(500).json({
+            action: 'doc-status',
+            error: error.message
+          });
+        }
+      }
+
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed', 'test-doctrine-gates'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed', 'test-doctrine-gates', 'test-document-ingestion', 'backfill-doc-embeddings', 'doc-status'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -1440,7 +1696,11 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=scale-cleanup&userId=test-scale-123',
             '/api/test-semantic?action=scale-status&userId=test-scale-123',
             '/api/test-semantic?action=scale-embed&userId=test-scale-123&batchSize=10',
-            '/api/test-semantic?action=test-doctrine-gates'
+            '/api/test-semantic?action=test-doctrine-gates',
+            '/api/test-semantic?action=test-document-ingestion',
+            '/api/test-semantic?action=backfill-doc-embeddings&batchSize=10&maxBatches=5',
+            '/api/test-semantic?action=doc-status&userId=xxx',
+            '/api/test-semantic?action=doc-status&documentId=123'
           ]
         });
     }
