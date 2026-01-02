@@ -799,7 +799,7 @@ export default async function handler(req, res) {
 
           // Step 4: Assert ALL conditions
           const assertions = {
-            method_is_semantic_or_hybrid: ['semantic', 'hybrid'].includes(retrievalResult.method),
+            method_is_semantic_or_hybrid: ['semantic', 'hybrid'].includes(retrievalResult.telemetry?.method),
             results_injected_gt_zero: (retrievalResult.telemetry?.results_injected || 0) > 0,
             injected_memory_ids_nonempty: Array.isArray(retrievalResult.telemetry?.injected_memory_ids) &&
                                           retrievalResult.telemetry.injected_memory_ids.length > 0,

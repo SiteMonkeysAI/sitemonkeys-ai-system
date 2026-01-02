@@ -1,0 +1,60 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #272: [claude-fix] Live-proof assertion checks wrong property path for method
+
+Issue Description:
+CRITICAL: One-line fix. Live-proof is functionally working but assertion is wrong.
+
+## Current Status
+All functionality works:
+- Memory stored ✅
+- Embedding generated ✅  
+- Semantic retrieval found the memory ✅
+- Response contains the fact ✅
+
+But test fails because:
+method_is_semantic_or_hybrid: false
+
+## Root Cause
+The test checks:
+result.method === 'semantic'
+
+But the actual structure is:
+result.telemetry.method === 'semantic'
+
+Logs prove this:
+method: undefined,  // at top level
+telemetry: {
+  method: 'semantic',  // actual location
+}
+
+## Required Fix
+In test-semantic.js live-proof action, change:
+
+FROM:
+method_is_semantic_or_hybrid: result.method === 'semantic' || result.method === 'hybrid'
+
+TO:
+method_is_semantic_or_hybrid: result.telemetry?.method === 'semantic' || result.telemetry?.method === 'hybrid'
+
+## Verification
+fetch('/api/test-semantic?action=live-proof', {headers:{'X-Internal-Test-Token':'...'}})
+// Must return: { passed: true }
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
