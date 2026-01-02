@@ -1,0 +1,71 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #308: [claude-fix] Fix pdf-parse import error and use inline test data for document ingestion
+
+Issue Description:
+## Problem
+
+The `pdf-parse` npm package has a known bug - it tries to load a test file on import:
+```
+ENOENT: no such file or directory, open './test/data/05-versions-space.pdf'
+```
+
+This happens at `/app/node_modules/pdf-parse/index.js:15:25` when the package is imported.
+
+## Fix Required
+
+### Option A: Lazy import (preferred)
+In `/api/services/document-service.js`, change the pdf-parse import to be lazy/dynamic:
+```javascript
+// WRONG - imports on module load, triggers the bug
+import pdf from 'pdf-parse';
+
+// CORRECT - import only when needed
+async function extractTextFromPDF(buffer) {
+  const pdf = (await import('pdf-parse')).default;
+  const data = await pdf(buffer);
+  return data.text;
+}
+```
+
+### Option B: Use pdf-parse/lib/pdf-parse.js directly
+```javascript
+// This path avoids the problematic index.js
+import pdf from 'pdf-parse/lib/pdf-parse.js';
+```
+
+### Also fix test-semantic.js
+In `/api/routes/test-semantic.js`, the `test-document-ingestion` case should use inline test data (plain text), NOT a PDF file:
+```javascript
+// Use plain text for testing - no PDF needed
+const testContent = Buffer.from(
+  'This is a test document about artificial intelligence. ' +
+  'AI systems learn from data and improve over time.'
+);
+const result = await storeDocument(testUserId, testMode, 'test.txt', testContent, 'text/plain');
+```
+
+## Acceptance Test
+```javascript
+fetch("https://sitemonkeys-ai-system-production.up.railway.app/api/test-semantic?action=test-document-ingestion", {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json()).then(d => console.log(d.passed ? "✅" : "❌", d.summary));
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -3,7 +3,6 @@
 
 import { encoding_for_model } from 'tiktoken';
 import { generateEmbedding, cosineSimilarity } from './embedding-service.js';
-import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
 
 // Initialize tiktoken encoder for token counting
@@ -88,6 +87,8 @@ export async function extractText(buffer, mimetype, filename) {
 
     // Handle PDF files
     if (mimetype === 'application/pdf' || filename.endsWith('.pdf')) {
+      // Lazy import pdf-parse to avoid test file bug on module load
+      const pdfParse = (await import('pdf-parse')).default;
       const pdfData = await pdfParse(buffer);
       text = pdfData.text;
       metadata.pageCount = pdfData.numpages;
