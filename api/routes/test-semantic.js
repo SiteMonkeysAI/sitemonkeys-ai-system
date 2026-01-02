@@ -1,13 +1,14 @@
 /**
  * SEMANTIC LAYER TEST ENDPOINT
- * 
+ *
  * Test and verify semantic retrieval functionality
- * 
- * Usage: 
+ *
+ * Usage:
  *   GET /api/test-semantic?userId=xxx&query=your+query
  *   GET /api/test-semantic?action=stats&userId=xxx
  *   GET /api/test-semantic?action=backfill&limit=10
- * 
+ *   GET /api/test-semantic?action=backfill-embeddings&batchSize=20&maxBatches=10
+ *
  * @module api/routes/test-semantic
  */
 
@@ -105,6 +106,34 @@ export default async function handler(req, res) {
         return res.status(200).json({
           action: 'backfill',
           ...result
+        });
+      }
+
+      // ============================================
+      // BACKFILL EMBEDDINGS FOR EXISTING MEMORIES
+      // ============================================
+      case 'backfill-embeddings': {
+        console.log('[BACKFILL-EMBEDDINGS] Starting backfill process...');
+
+        const batchSize = parseInt(req.query.batchSize) || 20;
+        const maxBatches = parseInt(req.query.maxBatches) || 10;
+
+        const result = await backfillEmbeddings(pool, {
+          batchSize: Math.min(batchSize, 20), // Cap at 20 to avoid rate limits
+          maxBatches,
+          statusFilter: ['pending'] // Only process pending, not 'failed' or 'ready'
+        });
+
+        console.log(`[BACKFILL-EMBEDDINGS] Complete: ${result.succeeded}/${result.processed} succeeded, ${result.remaining} remaining`);
+
+        return res.status(200).json({
+          action: 'backfill-embeddings',
+          processed: result.processed,
+          succeeded: result.succeeded,
+          failed: result.failed,
+          remaining: result.remaining,
+          timeMs: result.timeMs,
+          message: `Processed ${result.processed} memories (${result.succeeded} succeeded, ${result.failed} failed). ${result.remaining} remaining.`
         });
       }
 
@@ -401,7 +430,7 @@ export default async function handler(req, res) {
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'create-constraint'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'create-constraint'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -409,6 +438,7 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=embed&query=test+text',
             '/api/test-semantic?userId=xxx&query=what+is+my+name',
             '/api/test-semantic?action=backfill&limit=10',
+            '/api/test-semantic?action=backfill-embeddings&batchSize=20&maxBatches=10',
             '/api/test-semantic?action=test-paraphrase',
             '/api/test-semantic?action=test-supersession',
             '/api/test-semantic?action=test-mode-isolation',
