@@ -1,0 +1,37 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #256: [claude-fix] Add trust proxy setting for Railway deployment
+
+Issue Description:
+## Problem
+Rate limiter shows warning on every request:
+`ValidationError: The 'X-Forwarded-For' header is set but the Express 'trust proxy' setting is false`
+
+## Required Fix
+In server.js, find this line:
+const app = express();
+
+Add immediately after it:
+// Trust proxy for Railway deployment (required for accurate rate limiting)
+app.set('trust proxy', 1);
+
+## Acceptance Criteria
+- No more X-Forwarded-For warnings in logs
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

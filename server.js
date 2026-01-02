@@ -95,6 +95,8 @@ process.on("SIGTERM", () => {
 
 // NOW declare your variables:
 const app = express();
+// Trust proxy for Railway deployment (required for accurate rate limiting)
+app.set('trust proxy', 1);
 addInventoryEndpoint(app);
 
 // 🔐 SESSION CONFIGURATION

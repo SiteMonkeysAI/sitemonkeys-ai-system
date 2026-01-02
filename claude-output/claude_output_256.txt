@@ -1,0 +1,18 @@
+Excellent! The fix has been successfully applied. The trust proxy setting is now configured immediately after the Express app is created.
+
+---SUMMARY---
+Fixed the rate limiter warning by adding the trust proxy setting to server.js.
+
+**Changes made:**
+- **File modified:** `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/server.js`
+- **Location:** Lines 98-99 (immediately after `const app = express();` on line 97)
+- **Change:** Added `app.set('trust proxy', 1);` with an explanatory comment
+
+**What this fixes:**
+The `express-rate-limit` package was showing a ValidationError warning because it detected the `X-Forwarded-For` header (set by Railway's proxy) but Express wasn't configured to trust proxy headers. By setting `trust proxy` to `1`, Express will now trust the first proxy in the chain (Railway's load balancer), allowing the rate limiter to correctly identify client IPs and eliminating the warning.
+
+**Acceptance criteria met:**
+✅ Trust proxy setting added immediately after `const app = express();`
+✅ Includes descriptive comment explaining the purpose
+✅ Will eliminate X-Forwarded-For warnings in Railway deployment logs
+---END SUMMARY---
