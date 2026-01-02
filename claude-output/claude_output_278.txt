@@ -1,0 +1,10 @@
+I need user permission to create new files. Let me ask the user:
+
+I need to create new files to implement the scale harness hardening features described in issue #278. This is a follow-up to issue #275/#276 which planned the scale harness architecture. 
+
+Issue #278 requires creating:
+1. `/api/services/behavioral-detection.js` - Observational behavioral metrics
+2. `/api/services/scale-harness.js` - Scale testing with time caps, two-phase embedding, safety guards
+3. Modifications to `/api/routes/test-semantic.js` - Add scale-* actions
+
+May I proceed with creating these files?

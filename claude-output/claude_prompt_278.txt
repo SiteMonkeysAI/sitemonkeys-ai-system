@@ -1,0 +1,179 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #278: [claude-fix] Scale Harness Hardening: timeouts, two-phase embedding, precision rules, safety guards
+
+Issue Description:
+## Summary
+
+Production hardening for the scale harness (follow-up to #275).
+
+---
+
+## 1. Time Cap + Resumable Runs
+
+**Problem:** `scale-full` at medium/heavy can exceed Railway request timeouts.
+
+**Fix:**
+- Add `maxSeconds` param (default: 30)
+- If time cap hit, return:
+```json
+{
+  "status": "partial",
+  "next_cursor": "...",
+  "remaining_work": { "queries_remaining": 50, "memories_remaining": 1000 },
+  "resume_command": "scale-full&cursor=X&runId=Y"
+}
+```
+- Same resumable pattern as backfill
+
+---
+
+## 2. Two-Phase Generation (Explicit Design)
+
+**Problem:** "Generate 10K memories" with 200 embedding cap creates confusing mismatch.
+
+**Fix:** Make the two-phase design explicit:
+```javascript
+// Phase 1: Create rows (no embeddings)
+/api/test-semantic?action=scale-generate&count=10000&embeddings=false
+
+// Phase 2: Embed in batches
+/api/test-semantic?action=scale-embed&userId=X&batchSize=200&maxBatches=5
+
+// Benchmark handles partial coverage
+/api/test-semantic?action=scale-benchmark&userId=X
+// Returns: embedding_coverage: 0.10, fallback_rate: 0.90
+```
+
+- `scale-generate` creates N rows, embeddings optional
+- `scale-embed` processes in capped batches
+- `scale-benchmark` measures fallback behavior with partial coverage
+- Document expected behavior when coverage < 100%
+
+---
+
+## 3. Tripwire Precision Rules (Auditable)
+
+**Problem:** "tripwires_found" is ambiguous without clear rules.
+
+**Fix:** Define precisely:
+```javascript
+const TRIPWIRE_FOUND_CRITERIA = {
+  position: "top_3",           // Must appear in top 3 results
+  similarity_minimum: 0.25,    // Above semantic threshold
+  must_be_injected: true       // Must be in injected_memory_ids
+};
+```
+
+Add to response:
+```json
+{
+  "tripwire_details": [
+    { "fingerprint": "tripwire_secret_code", "found": true, "position": 1, "similarity": 0.72 },
+    { "fingerprint": "tripwire_dinosaur", "found": false, "position": null, "best_similarity": 0.18 }
+  ],
+  "tripwire_misses": [
+    { "fingerprint": "tripwire_dinosaur", "reason": "below_threshold", "best_similarity": 0.18 }
+  ]
+}
+```
+
+---
+
+## 4. Behavioral Metrics = Observational Only
+
+**Problem:** Regex-based behavioral detection will have false positives/negatives.
+
+**Fix:** Add explicit documentation and code comment:
+```javascript
+// IMPORTANT: Behavioral metrics are OBSERVATIONAL ONLY in Phase 1.
+// They measure but do not fail the harness.
+// Enforcement happens in Phase 2 (Doctrine Gates).
+
+const behavioralResults = measureBehavioral(response);
+// Log but don't assert
+telemetry.behavioral = behavioralResults;
+// DO NOT: assert(behavioralResults.uncertainty_rate > 0.8)
+```
+
+Add to response:
+```json
+{
+  "behavioral": {
+    "_note": "Observational only - not enforced until Doctrine Gates",
+    "uncertainty_structure": { ... },
+    "blind_spots": { ... }
+  }
+}
+```
+
+---
+
+## 5. Infrastructure Safety Guards
+
+**Problem:** Test users could accumulate 25K+ rows and bloat DB.
+
+**Fix:**
+```javascript
+const SAFETY_LIMITS = {
+  maxMemoriesPerTestUser: 25000,
+  requireCleanupForNonDebug: true,
+  autoCleanupOnFailure: true
+};
+```
+
+- Hard cap: refuse to generate if user already has 25K rows
+- For `scale-full` without `debug=true`: require `cleanup=true`
+- Auto-cleanup on failure when `cleanup=true` (already planned, make mandatory)
+- Add `/api/test-semantic?action=scale-status&userId=X` to check user's current row count
+```json
+{
+  "action": "scale-status",
+  "userId": "scale-test-xxx",
+  "total_memories": 5000,
+  "total_embeddings": 1000,
+  "runs": [
+    { "runId": "run-123", "memories": 2000, "created_at": "..." },
+    { "runId": "run-456", "memories": 3000, "created_at": "..." }
+  ],
+  "approaching_limit": false,
+  "limit": 25000
+}
+```
+
+---
+
+## Acceptance Criteria
+
+1. `scale-full&level=medium` completes within 30s or returns partial + cursor
+2. Can generate 10K memories across multiple `scale-generate` calls
+3. Tripwire misses are reported with reasons
+4. Behavioral metrics logged but never fail harness
+5. Cannot exceed 25K rows per test user
+6. `scale-status` endpoint works
+
+---
+
+## Files to Modify
+
+1. `/api/routes/test-semantic.js` - Add time cap, scale-status action
+2. `/api/services/scale-harness.js` - Two-phase logic, safety guards
+3. `/api/services/behavioral-detection.js` - Add observational-only comments
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
