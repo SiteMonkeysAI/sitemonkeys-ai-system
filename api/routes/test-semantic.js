@@ -115,13 +115,13 @@ export default async function handler(req, res) {
       case 'backfill-embeddings': {
         console.log('[BACKFILL-EMBEDDINGS] Starting backfill process...');
 
-        const batchSize = parseInt(req.query.batchSize) || 20;
-        const maxBatches = parseInt(req.query.maxBatches) || 10;
+        const limit = parseInt(req.query.limit) || 20;
+        const maxSeconds = parseInt(req.query.maxSeconds) || 20;
 
         const result = await backfillEmbeddings(pool, {
-          batchSize: Math.min(batchSize, 20), // Cap at 20 to avoid rate limits
-          maxBatches,
-          statusFilter: ['pending'] // Only process pending, not 'failed' or 'ready'
+          limit,
+          maxSeconds,
+          statusFilter: ['pending', 'failed'] // Process both pending and failed
         });
 
         console.log(`[BACKFILL-EMBEDDINGS] Complete: ${result.succeeded}/${result.processed} succeeded, ${result.remaining} remaining`);
@@ -129,10 +129,9 @@ export default async function handler(req, res) {
         return res.status(200).json({
           action: 'backfill-embeddings',
           processed: result.processed,
-          succeeded: result.succeeded,
           failed: result.failed,
           remaining: result.remaining,
-          timeMs: result.timeMs,
+          seconds_elapsed: result.seconds_elapsed,
           message: `Processed ${result.processed} memories (${result.succeeded} succeeded, ${result.failed} failed). ${result.remaining} remaining.`
         });
       }
@@ -400,6 +399,167 @@ export default async function handler(req, res) {
       }
 
       // ============================================
+      // FIX SUPERSESSION TYPE (UUID → INTEGER)
+      // ============================================
+      case 'fix-supersession': {
+        const results = {
+          success: false,
+          steps: [],
+          errors: [],
+          dataCheck: {},
+          timestamp: new Date().toISOString()
+        };
+
+        try {
+          results.steps.push('Checking existing superseded_by data...');
+
+          // Check current data type
+          const columnInfo = await pool.query(`
+            SELECT data_type, column_default
+            FROM information_schema.columns
+            WHERE table_name = 'persistent_memories'
+            AND column_name = 'superseded_by'
+          `);
+
+          if (columnInfo.rows.length === 0) {
+            results.errors.push('superseded_by column does not exist');
+            results.steps.push('❌ superseded_by column not found');
+            return res.status(500).json(results);
+          }
+
+          results.dataCheck.currentType = columnInfo.rows[0].data_type;
+          results.steps.push(`Current type: ${results.dataCheck.currentType}`);
+
+          // Check if already INTEGER
+          if (results.dataCheck.currentType === 'integer') {
+            results.steps.push('✅ superseded_by is already INTEGER type');
+            results.success = true;
+            results.message = 'No migration needed - superseded_by is already INTEGER';
+            return res.status(200).json(results);
+          }
+
+          // Count non-null values
+          const nonNullCount = await pool.query(`
+            SELECT COUNT(*) as count
+            FROM persistent_memories
+            WHERE superseded_by IS NOT NULL
+          `);
+
+          results.dataCheck.nonNullValues = parseInt(nonNullCount.rows[0].count);
+          results.steps.push(`Found ${results.dataCheck.nonNullValues} non-null superseded_by values`);
+
+          // If non-null values exist, check if they can be converted
+          if (results.dataCheck.nonNullValues > 0) {
+            const sampleValues = await pool.query(`
+              SELECT id, superseded_by
+              FROM persistent_memories
+              WHERE superseded_by IS NOT NULL
+              LIMIT 5
+            `);
+
+            results.dataCheck.sampleValues = sampleValues.rows;
+            results.steps.push(`Sample values: ${JSON.stringify(sampleValues.rows)}`);
+
+            // Check if values look like valid integers
+            const hasValidIntegers = sampleValues.rows.some(row => {
+              const val = row.superseded_by;
+              return val && /^\d+$/.test(String(val));
+            });
+
+            if (!hasValidIntegers) {
+              results.errors.push(`Cannot convert: ${results.dataCheck.nonNullValues} non-null values exist that are not valid integers`);
+              results.steps.push('⚠️ WARNING: Existing data cannot be safely converted to INTEGER');
+              results.suggestion = 'Clear superseded_by first: UPDATE persistent_memories SET superseded_by = NULL';
+              return res.status(400).json(results);
+            }
+          }
+
+          // Perform migration
+          results.steps.push('Converting superseded_by from UUID to INTEGER...');
+
+          await pool.query('BEGIN');
+
+          if (results.dataCheck.nonNullValues > 0) {
+            // Preserve data
+            await pool.query(`
+              ALTER TABLE persistent_memories
+              ADD COLUMN IF NOT EXISTS superseded_by_temp INTEGER
+            `);
+
+            await pool.query(`
+              UPDATE persistent_memories
+              SET superseded_by_temp = CAST(superseded_by AS INTEGER)
+              WHERE superseded_by IS NOT NULL
+              AND superseded_by ~ '^[0-9]+$'
+            `);
+
+            await pool.query(`
+              ALTER TABLE persistent_memories
+              DROP COLUMN superseded_by
+            `);
+
+            await pool.query(`
+              ALTER TABLE persistent_memories
+              RENAME COLUMN superseded_by_temp TO superseded_by
+            `);
+
+            results.steps.push('✅ Column converted with data preservation');
+          } else {
+            // Simple conversion
+            await pool.query(`
+              ALTER TABLE persistent_memories
+              DROP COLUMN superseded_by
+            `);
+
+            await pool.query(`
+              ALTER TABLE persistent_memories
+              ADD COLUMN superseded_by INTEGER
+            `);
+
+            results.steps.push('✅ Column converted (no data to preserve)');
+          }
+
+          // Add foreign key constraint
+          await pool.query(`
+            DO $$ BEGIN
+              ALTER TABLE persistent_memories
+              ADD CONSTRAINT fk_superseded_by
+              FOREIGN KEY (superseded_by)
+              REFERENCES persistent_memories(id)
+              ON DELETE SET NULL;
+            EXCEPTION
+              WHEN duplicate_object THEN NULL;
+            END $$;
+          `);
+          results.steps.push('✅ Foreign key constraint added');
+
+          await pool.query('COMMIT');
+          results.success = true;
+
+          // Verify
+          const verification = await pool.query(`
+            SELECT data_type
+            FROM information_schema.columns
+            WHERE table_name = 'persistent_memories'
+            AND column_name = 'superseded_by'
+          `);
+
+          results.verification = verification.rows[0];
+          results.steps.push(`✅ Verified: superseded_by is now ${verification.rows[0]?.data_type}`);
+          results.message = '🎉 Supersession type fix completed!';
+
+          return res.json(results);
+
+        } catch (error) {
+          await pool.query('ROLLBACK').catch(() => {});
+          results.errors.push('Error: ' + error.message);
+          results.steps.push('❌ Migration failed: ' + error.message);
+          results.message = '⚠️ Migration had issues. Check errors.';
+          return res.status(500).json(results);
+        }
+      }
+
+      // ============================================
       // CREATE SUPERSESSION CONSTRAINT
       // ============================================
       case 'create-constraint': {
@@ -427,10 +587,204 @@ export default async function handler(req, res) {
         }
       }
 
+      // ============================================
+      // LIVE PROOF: END-TO-END /api/chat TEST
+      // ============================================
+      case 'live-proof': {
+        const testUserId = 'live-proof-test-' + Date.now();
+        const testFact = 'My favorite color is chartreuse';
+        const paraphraseQuery = 'What color do I prefer?';
+
+        const results = {
+          passed: false,
+          steps: [],
+          errors: [],
+          details: {},
+          telemetry: {},
+          timestamp: new Date().toISOString()
+        };
+
+        try {
+          // Step 1: POST /api/chat with a store message
+          results.steps.push('Step 1: Storing test fact via /api/chat...');
+
+          const storeResponse = await fetch(`http://localhost:${process.env.PORT || 3000}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: testFact,
+              user_id: testUserId,
+              mode: 'truth_general'
+            })
+          });
+
+          if (!storeResponse.ok) {
+            results.errors.push(`Store request failed: ${storeResponse.status}`);
+            results.steps.push(`❌ Store failed with status ${storeResponse.status}`);
+            return res.status(500).json(results);
+          }
+
+          const storeResult = await storeResponse.json();
+          results.details.storeResponse = storeResult;
+          results.steps.push('✅ Fact stored via /api/chat');
+
+          // Step 2: Poll DB until embedding_status='ready' (bounded retries)
+          results.steps.push('Step 2: Polling for embedding completion...');
+
+          let embeddingReady = false;
+          let memoryId = null;
+          const maxRetries = 20; // 10 seconds max
+          const retryDelay = 500;
+
+          for (let i = 0; i < maxRetries; i++) {
+            const checkResult = await pool.query(`
+              SELECT id, embedding_status, embedding
+              FROM persistent_memories
+              WHERE user_id = $1
+              AND content = $2
+              ORDER BY created_at DESC
+              LIMIT 1
+            `, [testUserId, testFact]);
+
+            if (checkResult.rows.length > 0) {
+              const memory = checkResult.rows[0];
+              memoryId = memory.id;
+              results.details.embeddingStatus = memory.embedding_status;
+              results.details.hasEmbedding = memory.embedding ? 'YES' : 'NO';
+
+              if (memory.embedding_status === 'ready' && memory.embedding) {
+                embeddingReady = true;
+                results.steps.push(`✅ Embedding ready after ${(i + 1) * retryDelay}ms`);
+                break;
+              }
+            }
+
+            await new Promise(r => setTimeout(r, retryDelay));
+          }
+
+          if (!embeddingReady) {
+            results.errors.push('Embedding did not become ready within timeout');
+            results.steps.push('❌ Timeout waiting for embedding');
+            // Cleanup before returning
+            await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
+            return res.status(500).json(results);
+          }
+
+          // Step 3: POST /api/chat with paraphrase query
+          results.steps.push('Step 3: Querying with paraphrase via /api/chat...');
+
+          const queryResponse = await fetch(`http://localhost:${process.env.PORT || 3000}/api/chat`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: paraphraseQuery,
+              user_id: testUserId,
+              mode: 'truth_general'
+            })
+          });
+
+          if (!queryResponse.ok) {
+            results.errors.push(`Query request failed: ${queryResponse.status}`);
+            results.steps.push(`❌ Query failed with status ${queryResponse.status}`);
+            // Cleanup before returning
+            await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
+            return res.status(500).json(results);
+          }
+
+          const queryResult = await queryResponse.json();
+          results.details.queryResponse = queryResult;
+          results.steps.push('✅ Query completed');
+
+          // Step 4: Assert conditions
+          results.steps.push('Step 4: Validating semantic retrieval...');
+
+          const telemetry = queryResult.telemetry || {};
+          results.telemetry = telemetry;
+
+          // Check retrieval method
+          const retrievalMethod = telemetry.retrieval_method || telemetry.method;
+          const methodValid = retrievalMethod === 'semantic' || retrievalMethod === 'hybrid';
+          results.details.retrieval_method = retrievalMethod;
+          results.details.method_valid = methodValid;
+
+          if (!methodValid) {
+            results.errors.push(`Expected semantic/hybrid method, got: ${retrievalMethod}`);
+            results.steps.push(`❌ Retrieval method: ${retrievalMethod}`);
+          } else {
+            results.steps.push(`✅ Retrieval method: ${retrievalMethod}`);
+          }
+
+          // Check results_injected
+          const resultsInjected = telemetry.results_injected || telemetry.memories_injected || 0;
+          const injectedValid = resultsInjected > 0;
+          results.details.results_injected = resultsInjected;
+          results.details.injected_valid = injectedValid;
+
+          if (!injectedValid) {
+            results.errors.push(`Expected results_injected > 0, got: ${resultsInjected}`);
+            results.steps.push(`❌ Results injected: ${resultsInjected}`);
+          } else {
+            results.steps.push(`✅ Results injected: ${resultsInjected}`);
+          }
+
+          // Check if stored fact was found
+          const responseText = queryResult.response || '';
+          const factFound = responseText.toLowerCase().includes('chartreuse');
+          results.details.fact_found_in_response = factFound;
+
+          if (!factFound) {
+            results.errors.push('Stored fact (chartreuse) not found in response');
+            results.steps.push('❌ Fact not found in response');
+          } else {
+            results.steps.push('✅ Fact found in response');
+          }
+
+          // Check telemetry IDs present
+          const hasTelemetryIds = telemetry.memory_ids || telemetry.retrieved_ids;
+          results.details.has_telemetry_ids = !!hasTelemetryIds;
+
+          if (!hasTelemetryIds) {
+            results.errors.push('Telemetry IDs not present');
+            results.steps.push('⚠️ Telemetry IDs missing');
+          } else {
+            results.steps.push('✅ Telemetry IDs present');
+          }
+
+          // Overall pass/fail
+          results.passed = methodValid && injectedValid && factFound;
+
+          if (results.passed) {
+            results.steps.push('🎉 Live proof PASSED - End-to-end semantic retrieval working!');
+          } else {
+            results.steps.push('❌ Live proof FAILED - See errors above');
+          }
+
+          // Step 5: Cleanup
+          results.steps.push('Step 5: Cleaning up test data...');
+          await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
+          results.steps.push('✅ Test data cleaned up');
+
+          return res.json(results);
+
+        } catch (error) {
+          results.errors.push('Test error: ' + error.message);
+          results.steps.push('❌ Test failed: ' + error.message);
+
+          // Cleanup on error
+          try {
+            await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
+          } catch (cleanupError) {
+            results.errors.push('Cleanup error: ' + cleanupError.message);
+          }
+
+          return res.status(500).json(results);
+        }
+      }
+
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'create-constraint'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-supersession', 'create-constraint', 'live-proof'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -438,11 +792,13 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=embed&query=test+text',
             '/api/test-semantic?userId=xxx&query=what+is+my+name',
             '/api/test-semantic?action=backfill&limit=10',
-            '/api/test-semantic?action=backfill-embeddings&batchSize=20&maxBatches=10',
+            '/api/test-semantic?action=backfill-embeddings&limit=20&maxSeconds=20',
             '/api/test-semantic?action=test-paraphrase',
             '/api/test-semantic?action=test-supersession',
             '/api/test-semantic?action=test-mode-isolation',
-            '/api/test-semantic?action=create-constraint'
+            '/api/test-semantic?action=fix-supersession',
+            '/api/test-semantic?action=create-constraint',
+            '/api/test-semantic?action=live-proof'
           ]
         });
     }

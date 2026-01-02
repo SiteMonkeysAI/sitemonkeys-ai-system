@@ -1,0 +1,78 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #262: [claude-fix] Production readiness: embedding backfill + supersession type fix + live proof through /api/chat
+
+Issue Description:
+Backfill endpoint must be resumable and rate-safe:
+
+/api/test-semantic?action=backfill-embeddings&limit=20&maxSeconds=20
+
+Processes only rows where embedding IS NULL AND embedding_status IN ('pending','failed') (failed optional)
+
+Sets embedding_status='processing' while working
+
+On success: sets embedding, embedding_status='ready', embedding_updated_at=NOW()
+
+On failure: sets embedding_status='failed' and stores error in metadata
+
+Response includes { processed, failed, remaining, seconds_elapsed }
+
+Superseded_by type fix must be data-aware:
+
+Before migration: count non-null values of superseded_by
+
+If non-null values exist, use safe cast or fail loudly; do NOT blindly wipe
+
+Convert superseded_by to INTEGER (matches id)
+
+Add FK reference if desired: REFERENCES persistent_memories(id)
+
+Trust proxy:
+
+app.set('trust proxy', 1);
+
+Live proof endpoint MUST be end-to-end through /api/chat:
+
+/api/test-semantic?action=live-proof
+
+Step 1: POST /api/chat with a store message for a new test user_id
+
+Step 2: Poll DB until embedding_status='ready' for that stored memory (bounded retries)
+
+Step 3: POST /api/chat with paraphrase query
+
+Assert: retrieval.method in ('semantic','hybrid'), results_injected > 0, injected memory contains stored fact, telemetry IDs present
+
+Cleanup: delete test user memories afterward
+
+Return { passed, details, telemetry }
+
+Acceptance:
+
+after repeated backfill calls, % ready >= 95% of existing memories
+
+live-proof returns passed: true
+
+no type errors in supersession operations
+
+no trust proxy warnings
+
+/api/chat shows semantic/hybrid method with non-empty injection for real users once embeddings exist
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

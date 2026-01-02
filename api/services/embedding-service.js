@@ -248,19 +248,24 @@ export async function embedMemoryNonBlocking(pool, memoryId, content, options = 
 // ============================================
 
 /**
- * Backfill pending/failed embeddings
+ * Backfill pending/failed embeddings with resumable, rate-safe operation
  * Run as a background job or manual trigger
  *
  * @param {object} pool - PostgreSQL connection pool
- * @param {object} options - Batch size, limits, etc.
- * @returns {Promise<{processed: number, succeeded: number, failed: number, remaining: number}>}
+ * @param {object} options - Batch size, limits, maxSeconds, etc.
+ * @returns {Promise<{processed: number, succeeded: number, failed: number, remaining: number, seconds_elapsed: number}>}
  */
 export async function backfillEmbeddings(pool, options = {}) {
-  const { 
-    batchSize = EMBEDDING_CONFIG.batchSize, 
-    maxBatches = 5,
+  const {
+    limit = 20,
+    maxSeconds = 20,
+    batchSize,
+    maxBatches,
     statusFilter = ['pending', 'failed']
   } = options;
+
+  // Support legacy parameters for backward compatibility
+  const effectiveLimit = batchSize && maxBatches ? Math.min(batchSize * maxBatches, 100) : limit;
 
   const stats = {
     processed: 0,
@@ -270,58 +275,119 @@ export async function backfillEmbeddings(pool, options = {}) {
     startTime: Date.now()
   };
 
-  console.log(`[EMBEDDING BACKFILL] Starting (batch size: ${batchSize}, max batches: ${maxBatches})`);
+  const endTime = Date.now() + (maxSeconds * 1000);
 
-  for (let batch = 0; batch < maxBatches; batch++) {
-    // Fetch batch of memories needing embeddings
+  console.log(`[EMBEDDING BACKFILL] Starting (limit: ${effectiveLimit}, maxSeconds: ${maxSeconds})`);
+
+  // Process memories one at a time until limit reached or time expires
+  let processedCount = 0;
+
+  while (processedCount < effectiveLimit && Date.now() < endTime) {
+    // Fetch one memory needing embedding
+    // Only process rows where embedding IS NULL AND embedding_status IN ('pending','failed')
     const { rows: memories } = await pool.query(`
       SELECT id, content
       FROM persistent_memories
-      WHERE (
-        embedding_status = ANY($1::varchar[])
-        OR (embedding IS NULL AND content IS NOT NULL AND embedding_status != 'failed')
-      )
+      WHERE embedding IS NULL
+        AND embedding_status = ANY($1::varchar[])
+        AND content IS NOT NULL
       ORDER BY created_at DESC
-      LIMIT $2
-    `, [statusFilter, batchSize]);
+      LIMIT 1
+    `, [statusFilter]);
 
     if (memories.length === 0) {
       console.log(`[EMBEDDING BACKFILL] No more memories to process`);
       break;
     }
 
-    console.log(`[EMBEDDING BACKFILL] Processing batch ${batch + 1}: ${memories.length} memories`);
+    const memory = memories[0];
 
-    for (const memory of memories) {
-      const result = await embedMemory(pool, memory.id, memory.content, { 
-        timeout: 10000 // Longer timeout for backfill
-      });
-      
-      stats.processed++;
-      if (result.success) {
-        stats.succeeded++;
-      } else {
-        stats.failed++;
-      }
-
-      // Small delay to avoid rate limiting
-      await new Promise(r => setTimeout(r, 100));
+    // Set status to 'processing' while working
+    try {
+      await pool.query(`
+        UPDATE persistent_memories
+        SET embedding_status = 'processing', embedding_updated_at = NOW()
+        WHERE id = $1
+      `, [memory.id]);
+    } catch (err) {
+      console.error(`[EMBEDDING BACKFILL] Failed to set processing status for ${memory.id}: ${err.message}`);
+      continue;
     }
+
+    // Generate embedding
+    const embedResult = await generateEmbedding(memory.content, {
+      timeout: 10000 // Longer timeout for backfill
+    });
+
+    stats.processed++;
+    processedCount++;
+
+    if (embedResult.success) {
+      // On success: set embedding, embedding_status='ready', embedding_updated_at=NOW()
+      try {
+        await pool.query(`
+          UPDATE persistent_memories
+          SET
+            embedding = $1::float4[],
+            embedding_status = 'ready',
+            embedding_updated_at = NOW(),
+            embedding_model = $2
+          WHERE id = $3
+        `, [embedResult.embedding, embedResult.model, memory.id]);
+
+        stats.succeeded++;
+        console.log(`[EMBEDDING BACKFILL] ✅ ${memory.id} (${embedResult.timeMs}ms)`);
+      } catch (dbError) {
+        stats.failed++;
+        console.error(`[EMBEDDING BACKFILL] ❌ DB error for ${memory.id}: ${dbError.message}`);
+
+        // Store error in metadata (using JSONB merge)
+        await pool.query(`
+          UPDATE persistent_memories
+          SET
+            embedding_status = 'failed',
+            embedding_updated_at = NOW(),
+            metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
+          WHERE id = $2
+        `, [JSON.stringify({ embedding_error: dbError.message, error_time: new Date().toISOString() }), memory.id]).catch(() => {});
+      }
+    } else {
+      // On failure: set embedding_status='failed' and store error in metadata
+      stats.failed++;
+      console.error(`[EMBEDDING BACKFILL] ❌ ${memory.id}: ${embedResult.error}`);
+
+      try {
+        await pool.query(`
+          UPDATE persistent_memories
+          SET
+            embedding_status = 'failed',
+            embedding_updated_at = NOW(),
+            metadata = COALESCE(metadata, '{}'::jsonb) || $1::jsonb
+          WHERE id = $2
+        `, [JSON.stringify({ embedding_error: embedResult.error, error_time: new Date().toISOString() }), memory.id]);
+      } catch (metaError) {
+        console.error(`[EMBEDDING BACKFILL] Failed to store error metadata: ${metaError.message}`);
+      }
+    }
+
+    // Small delay to avoid rate limiting
+    await new Promise(r => setTimeout(r, 100));
   }
 
-  // Count remaining
+  // Count remaining (only those that need processing)
   const { rows: [{ count }] } = await pool.query(`
     SELECT COUNT(*) as count
     FROM persistent_memories
-    WHERE (
-      embedding_status = ANY($1::varchar[])
-      OR (embedding IS NULL AND content IS NOT NULL AND embedding_status != 'failed')
-    )
+    WHERE embedding IS NULL
+      AND embedding_status = ANY($1::varchar[])
+      AND content IS NOT NULL
   `, [statusFilter]);
   stats.remaining = parseInt(count);
-  stats.timeMs = Date.now() - stats.startTime;
 
-  console.log(`[EMBEDDING BACKFILL] Complete: ${stats.succeeded}/${stats.processed} succeeded, ${stats.remaining} remaining (${stats.timeMs}ms)`);
+  const elapsedMs = Date.now() - stats.startTime;
+  stats.seconds_elapsed = parseFloat((elapsedMs / 1000).toFixed(2));
+
+  console.log(`[EMBEDDING BACKFILL] Complete: ${stats.succeeded}/${stats.processed} succeeded, ${stats.failed} failed, ${stats.remaining} remaining (${stats.seconds_elapsed}s)`);
 
   return stats;
 }
