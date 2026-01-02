@@ -1,0 +1,54 @@
+Perfect! The fix is complete. Let me create a summary:
+
+---SUMMARY---
+
+## Fixed Issue #308: PDF-parse Import Error and Test Data
+
+I've successfully fixed the `pdf-parse` import error that was causing the `ENOENT` error when the module tried to load a test file on import.
+
+### Changes Made:
+
+#### 1. `/api/services/document-service.js`
+- **Removed** the top-level import of `pdf-parse` (line 6)
+- **Added** lazy/dynamic import within the `extractText` function (lines 90-91)
+- The `pdf-parse` module is now only imported when actually needed (when processing a PDF file), avoiding the test file bug that occurs on module load
+
+**Before:**
+```javascript
+import pdfParse from 'pdf-parse';
+// ... later in extractText function
+const pdfData = await pdfParse(buffer);
+```
+
+**After:**
+```javascript
+// No top-level import
+// ... later in extractText function
+// Lazy import pdf-parse to avoid test file bug on module load
+const pdfParse = (await import('pdf-parse')).default;
+const pdfData = await pdfParse(buffer);
+```
+
+#### 2. `/api/routes/test-semantic.js`
+- **No changes needed** - The test case `test-document-ingestion` was already correctly using inline plain text data (Buffer.from() with mimetype 'text/plain') at lines 1446-1452, avoiding the PDF import issue entirely.
+
+### How This Fixes the Issue:
+
+1. **Lazy Import**: By moving the pdf-parse import inside the `extractText` function, the module is only loaded when a PDF file actually needs to be processed. This prevents the ENOENT error from occurring during module initialization.
+
+2. **Test Uses Plain Text**: The test-document-ingestion test already uses plain text data (not PDF), so it never triggers the PDF code path and won't encounter the pdf-parse bug at all.
+
+### Verification:
+
+The acceptance test can now be run successfully:
+```javascript
+fetch("https://sitemonkeys-ai-system-production.up.railway.app/api/test-semantic?action=test-document-ingestion", {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json()).then(d => console.log(d.passed ? "✅" : "❌", d.summary));
+```
+
+This test will now work because:
+- The test uses plain text, avoiding pdf-parse entirely
+- Even if PDF functionality is used elsewhere, the lazy import ensures pdf-parse only loads when needed, avoiding the test file bug
+
+---END SUMMARY---
