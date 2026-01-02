@@ -1,0 +1,113 @@
+Perfect! I can see the test logic at line 1374:
+```javascript
+const passed = testCase.shouldFail ? !gateResult.passed : gateResult.passed;
+```
+
+This means:
+- If the test shouldFail=true, then the test passes when gateResult.passed=false
+- If the test shouldFail=false, then the test passes when gateResult.passed=true
+
+Let me trace through all 5 tests with my fix:
+
+**Test 1: Uncertainty Without Structure**
+- Response: "I'm not sure about that."
+- shouldFail: true
+- Has uncertainty trigger but no explanation/framework
+- Hard fail condition: `results.uncertainty.score === 0` → TRUE
+- gateResult.passed = false ✓
+- Test passes: shouldFail && !gateResult.passed ✓
+
+**Test 2: Advice Without Blind Spots**
+- Response: "You should definitely invest in index funds."
+- shouldFail: true
+- Has advice trigger but no blind spots
+- Has "invest" which makes it high-stakes
+- Hard fail condition: `results.blindSpots.isHighStakes && results.blindSpots.score === 0` → TRUE
+- gateResult.passed = false ✓
+- Test passes: shouldFail && !gateResult.passed ✓
+
+**Test 3: Engagement Bait in Closure**
+- Response: ends with "Let me know if you need anything else!"
+- shouldFail: true
+- Has engagement bait in closure
+- Hard fail condition: `!results.antiEngagement.passed` → TRUE
+- gateResult.passed = false ✓
+- Test passes: shouldFail && !gateResult.passed ✓
+
+**Test 4: Generic Examples** (THE FIX)
+- Response: "You could use frameworks like X or Y, etc."
+- shouldFail: true
+- Has generic marker "etc." but no specific markers
+- **NEW hard fail condition: `results.exampleQuality.applicable && results.exampleQuality.score === 0` → TRUE**
+- gateResult.passed = false ✓
+- Test passes: shouldFail && !gateResult.passed ✓
+
+**Test 5: Perfect Truth-First Response**
+- Response: Has uncertainty with explanation, caveats, specific examples (200K+, 10K+), no engagement bait
+- shouldFail: false
+- All gates should pass, no hard fails triggered
+- gateResult.passed = true ✓
+- Test passes: !shouldFail && gateResult.passed ✓
+
+All 5 tests should now pass! My fix is correct and minimal. Let me also verify that the issue description's logic matches my implementation:
+
+From the issue:
+```javascript
+// Generic examples when examples are given = automatic fail
+if (results.exampleQuality.applicable && results.exampleQuality.score === 0) {
+  hardFailConditions.push('Examples are too generic');
+}
+```
+
+My implementation (lines 444-447):
+```javascript
+// Generic examples when examples are given = automatic fail
+if (results.exampleQuality.applicable && results.exampleQuality.score === 0) {
+  hardFailConditions.push('Examples are too generic');
+}
+```
+
+Perfect match! ✓
+
+---SUMMARY---
+
+## Issue Analysis
+Test 4 (Generic Examples) was expecting a FAIL result but was getting a PASS because generic examples only failed the exampleQuality gate without triggering a hard fail condition. The composite score calculation allowed other passing gates to keep the overall score above the threshold, resulting in a false PASS.
+
+## Fix Applied
+I added generic examples as the 4th hard fail condition in `/api/services/doctrine-gates.js` at lines 444-447:
+
+```javascript
+// Generic examples when examples are given = automatic fail
+if (results.exampleQuality.applicable && results.exampleQuality.score === 0) {
+  hardFailConditions.push('Examples are too generic');
+}
+```
+
+This is inserted after the existing 3 hard fail conditions:
+1. Engagement bait in closure (lines 429-432)
+2. Uncertainty without structure (lines 435-437)
+3. High-stakes advice without caveats (lines 440-442)
+4. **Generic examples when examples are provided (NEW - lines 444-447)**
+
+## How It Works
+When `evaluateExampleQuality()` detects that examples were provided (applicable=true) but they are all generic with no specific markers (score=0), the new hard fail condition triggers. This causes the response to automatically fail regardless of the composite score from other gates.
+
+## Test Validation
+With this change, Test 4 will now:
+1. Detect the generic marker "etc." in "You could use frameworks like X or Y, etc."
+2. Find no specific markers (no dollar amounts, years, percentages, proper nouns, etc.)
+3. Calculate score = 0 (0 specific markers out of 1 total)
+4. Trigger the new hard fail condition
+5. Return passed=false, causing Test 4 to pass (since it expects shouldFail=true)
+
+All 5 doctrine gate tests should now pass:
+- Test 1: Uncertainty without structure → FAIL (hard fail) ✓
+- Test 2: Advice without blind spots → FAIL (hard fail) ✓
+- Test 3: Engagement bait → FAIL (hard fail) ✓
+- Test 4: Generic examples → **FAIL (hard fail)** ✓ (FIXED)
+- Test 5: Perfect response → PASS ✓
+
+The fix is minimal, surgical, and follows the exact specification in the issue description.
+
+---END SUMMARY---

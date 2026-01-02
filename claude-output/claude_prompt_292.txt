@@ -1,0 +1,64 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #292: [claude-fix] Fix Test 4 generic examples - add hard fail for example quality
+
+Issue Description:
+## Problem
+
+Test 4 (Generic Examples) expects FAIL but gets PASS because:
+- The test response only fails the exampleQuality gate
+- Other gates pass, keeping composite score above threshold
+- Generic examples is not a hard fail condition
+
+## Evidence
+```
+Test 4: Generic Examples - ❌ (expected: FAIL, actual: PASS)
+```
+
+## Fix
+
+Add generic examples as a 4th hard fail condition in `/api/services/doctrine-gates.js`:
+```javascript
+// In enforceDoctrineGates(), add to hardFailConditions:
+
+// Generic examples when examples are given = automatic fail
+if (results.exampleQuality.applicable && results.exampleQuality.score === 0) {
+  hardFailConditions.push('Examples are too generic');
+}
+```
+
+This makes the hard fail conditions:
+1. Engagement bait in closure
+2. Uncertainty without structure
+3. High-stakes advice without caveats
+4. **Generic examples when examples are provided** (NEW)
+
+## Acceptance Criteria
+```javascript
+const tests = await fetch('/api/test-semantic?action=test-doctrine-gates', {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json());
+
+assert(tests.passed === true);
+assert(tests.passedTests === 5);
+```
+
+All 5 tests should pass.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
