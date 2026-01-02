@@ -64,11 +64,8 @@ function buildPrefilterQuery(options) {
     if (mode === 'site-monkeys') {
       // Site Monkeys can access all modes
       // No mode filter needed
-    } else if (mode === 'business-validation') {
-      // Business can access truth-general + business
-      conditions.push(`mode IN ('truth-general', 'business-validation')`);
     } else {
-      // Truth-general only sees truth-general
+      // All modes use exact matching (mode isolation)
       conditions.push(`mode = $${paramIndex}`);
       params.push(mode);
       paramIndex++;
