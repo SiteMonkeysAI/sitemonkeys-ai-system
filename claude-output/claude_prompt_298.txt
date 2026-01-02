@@ -1,0 +1,197 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #298: [claude-fix] Add missing document ingestion test endpoints to test-semantic.js
+
+Issue Description:
+## Problem
+
+PR #296 created `/api/services/document-service.js` but did NOT add the test endpoints to `/api/routes/test-semantic.js`.
+
+## Evidence
+```javascript
+fetch("/api/test-semantic?action=test-document-ingestion", {...})
+// Returns: "Unknown action: test-document-ingestion"
+```
+
+Available actions do NOT include:
+- `test-document-ingestion`
+- `backfill-doc-embeddings`
+- `doc-status`
+
+## Fix Required
+
+Add these three action handlers to `/api/routes/test-semantic.js` in the switch statement:
+
+### 1. `case 'test-document-ingestion':`
+```javascript
+case 'test-document-ingestion': {
+  const { storeDocument, searchDocuments, getUserDocuments, deleteDocument, getDocumentStatus } = await import('../services/document-service.js');
+  const { generateEmbedding } = await import('../services/embedding-service.js');
+  
+  const testUserId = 'test-doc-' + Date.now();
+  const testMode = 'truth-general';
+  const results = { tests: [], passed: true };
+  
+  try {
+    // Test 1: Store a document
+    const testContent = Buffer.from(
+      'This is a comprehensive test document about artificial intelligence and machine learning. ' +
+      'AI systems can learn from data and improve their performance over time. ' +
+      'Machine learning algorithms identify patterns in large datasets. ' +
+      'Deep learning uses neural networks with many layers. ' +
+      'Natural language processing enables computers to understand human language.'
+    );
+    
+    const storeResult = await storeDocument(testUserId, testMode, 'test-ai.txt', testContent, 'text/plain');
+    results.tests.push({
+      name: 'Store document',
+      passed: storeResult.success && storeResult.documentId > 0,
+      details: storeResult
+    });
+    
+    // Wait for embeddings (poll with timeout)
+    let embeddingsReady = false;
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const status = await getDocumentStatus(storeResult.documentId);
+      if (status && parseInt(status.ready) === parseInt(status.chunk_count)) {
+        embeddingsReady = true;
+        break;
+      }
+    }
+    
+    results.tests.push({
+      name: 'Embeddings generated',
+      passed: embeddingsReady,
+      details: { waited: embeddingsReady ? 'success' : 'timeout' }
+    });
+    
+    // Test 2: Search for document
+    const queryEmbedding = await generateEmbedding('machine learning neural networks');
+    const searchResult = await searchDocuments(testUserId, testMode, queryEmbedding, { minScore: 0.5 });
+    
+    results.tests.push({
+      name: 'Semantic search finds document',
+      passed: searchResult.chunks.length > 0,
+      details: {
+        chunksFound: searchResult.chunks.length,
+        topScore: searchResult.chunks[0]?.similarity
+      }
+    });
+    
+    // Test 3: List user documents
+    const docs = await getUserDocuments(testUserId);
+    results.tests.push({
+      name: 'List user documents',
+      passed: docs.length > 0,
+      details: { count: docs.length }
+    });
+    
+    // Test 4: Delete document
+    const deleted = await deleteDocument(storeResult.documentId, testUserId);
+    results.tests.push({
+      name: 'Delete document',
+      passed: deleted,
+      details: { deleted }
+    });
+    
+    // Verify deletion
+    const docsAfter = await getUserDocuments(testUserId);
+    results.tests.push({
+      name: 'Verify deletion',
+      passed: docsAfter.length === 0,
+      details: { remainingDocs: docsAfter.length }
+    });
+    
+  } catch (error) {
+    results.tests.push({
+      name: 'Error',
+      passed: false,
+      details: { error: error.message }
+    });
+  }
+  
+  // Cleanup any remaining test data
+  await pool.query(`DELETE FROM documents WHERE user_id = $1`, [testUserId]);
+  
+  results.passed = results.tests.every(t => t.passed);
+  results.summary = `${results.tests.filter(t => t.passed).length}/${results.tests.length} tests passed`;
+  
+  return res.json({
+    action: 'test-document-ingestion',
+    ...results
+  });
+}
+```
+
+### 2. `case 'backfill-doc-embeddings':`
+```javascript
+case 'backfill-doc-embeddings': {
+  const { backfillDocumentEmbeddings } = await import('../services/document-service.js');
+  
+  const result = await backfillDocumentEmbeddings({
+    userId: req.query.userId,
+    documentId: req.query.documentId ? parseInt(req.query.documentId) : null,
+    limit: parseInt(req.query.limit) || 50,
+    maxSeconds: parseInt(req.query.maxSeconds) || 25
+  });
+  
+  return res.json({
+    action: 'backfill-doc-embeddings',
+    ...result
+  });
+}
+```
+
+### 3. `case 'doc-status':`
+```javascript
+case 'doc-status': {
+  const { getDocumentStatus, getUserDocuments } = await import('../services/document-service.js');
+  
+  if (req.query.documentId) {
+    const status = await getDocumentStatus(parseInt(req.query.documentId));
+    return res.json({ action: 'doc-status', document: status });
+  }
+  
+  if (req.query.userId) {
+    const docs = await getUserDocuments(req.query.userId, req.query.mode);
+    return res.json({ action: 'doc-status', documents: docs });
+  }
+  
+  return res.status(400).json({ error: 'documentId or userId required' });
+}
+```
+
+## Also Check
+
+1. Verify `/api/services/document-service.js` was actually created
+2. Verify database tables `documents` and `document_chunks` exist
+3. Verify `cosineSimilarity` is exported from `embedding-service.js`
+
+## Acceptance Test
+```javascript
+fetch("https://sitemonkeys-ai-system-production.up.railway.app/api/test-semantic?action=test-document-ingestion", {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json()).then(d => {
+  console.log("Document Ingestion:", d.summary, d.passed ? "✅" : "❌");
+});
+// Expected: 6/6 tests passed ✅
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
