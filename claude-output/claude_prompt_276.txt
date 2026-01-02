@@ -1,0 +1,572 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #276: [claude-fix] Scale Harness: Stress testing + behavioral measurement + regression prevention
+
+Issue Description:
+## Summary
+
+Build a comprehensive scale harness that serves three purposes:
+1. **Performance validation** - Prove the system scales to 10K+ memories
+2. **Regression prevention** - Catch supersession, budget, and retrieval failures under load
+3. **Behavioral measurement** - Pre-measure doctrine compliance before enforcement
+
+This harness becomes the validation engine for future doctrine gates.
+
+---
+
+## Security & Cost Controls
+
+### Authentication (Required)
+- **All scale harness actions require `X-Internal-Test-Token`**
+- Return **403 Forbidden** without valid token
+- Apply **rate limiting** middleware to all scale endpoints:
+  - `scale-generate`: 5 requests/minute
+  - `scale-benchmark`: 3 requests/minute
+  - `scale-full`: 1 request/minute
+  - `scale-cleanup`: 10 requests/minute
+
+### Embedding Cost Caps (Required)
+```javascript
+const COST_LIMITS = {
+  maxEmbeddingsPerRun: 200,           // Hard cap per single run
+  maxTotalEmbeddingsPerUser: 5000,    // Total cap per test user
+  batchSize: 50,                       // Batch embeddings to reduce API calls
+  reuseQueryEmbeddings: true          // Cache query embeddings within benchmark
+};
+```
+
+- If `maxEmbeddingsPerRun` reached: stop and return `{ status: "partial", remaining_embeddings: X }`
+- If `maxTotalEmbeddingsPerUser` reached: refuse to generate more until cleanup
+- **Batch embeddings** using existing batch support
+- **Reuse query embeddings** - embed each unique query once per benchmark run
+
+### Extreme Level Protection
+- Levels `smoke`, `light`, `medium`, `heavy` available by default
+- Level `extreme` (25K) requires explicit `allowExtreme=true` parameter
+- Without flag: return `{ error: "Extreme level requires allowExtreme=true", reason: "cost_protection" }`
+
+---
+
+## Requirements
+
+### 1. Test Data Generation Endpoint
+
+`/api/test-semantic?action=scale-generate&userId=X&count=N&runId=Y&includeSupersedable=true`
+
+**Parameters:**
+- `userId` (required): Test user identifier
+- `count` (required): Number of memories to generate (capped by cost limits)
+- `runId` (optional): Unique run identifier for resumability (auto-generated if not provided)
+- `includeSupersedable` (optional): Include supersession test chains (default: true)
+- `mode` (optional): Mode to generate for (default: truth-general)
+
+**Resumability & Idempotency:**
+- Store `run_id` in memory metadata for every generated memory
+- If `run_id` already exists, continue from where it left off
+- Don't recreate tripwires that already exist for that run_id
+- Track progress: `{ created_this_run: X, created_previously: Y, total: Z }`
+
+**Response:**
+```json
+{
+  "action": "scale-generate",
+  "userId": "scale-test-xxx",
+  "runId": "run-1767381234567",
+  "resumable": true,
+  "memories_created": 200,
+  "memories_created_previously": 0,
+  "total_memories": 200,
+  "embeddings_generated": 200,
+  "embeddings_remaining": 0,
+  "tripwires_planted": 10,
+  "supersession_chains": 5,
+  "total_tokens": 4500,
+  "cost_estimate_usd": 0.02,
+  "generation_time_ms": 12000,
+  "cost_limits": {
+    "embeddings_used": 200,
+    "embeddings_cap": 200,
+    "user_total": 200,
+    "user_cap": 5000
+  }
+}
+```
+
+**Tripwire Examples (must be retrievable):**
+```javascript
+const TRIPWIRES = [
+  { content: "The user's secret code is ALPHA-7749", fingerprint: "tripwire_secret_code", query: "What is my secret code?" },
+  { content: "The user's favorite dinosaur is Velociraptor", fingerprint: "tripwire_dinosaur", query: "What's my favorite dinosaur?" },
+  { content: "The user's lucky number is 42", fingerprint: "tripwire_lucky_number", query: "What's my lucky number?" },
+  { content: "The user was born in Helsinki", fingerprint: "tripwire_birthplace", query: "Where was I born?" },
+  { content: "The user's childhood pet was named Sparky", fingerprint: "tripwire_pet", query: "What was my childhood pet's name?" },
+];
+```
+
+---
+
+### 2. Query Benchmark Endpoint
+
+`/api/test-semantic?action=scale-benchmark&userId=X&queries=M&runId=Y&modes=truth-general,business-validation`
+
+**Parameters:**
+- `userId` (required): Test user identifier
+- `queries` (optional): Number of queries to run (default: 50)
+- `runId` (optional): Links benchmark to generation run
+- `modes` (optional): Comma-separated modes to test (default: truth-general,business-validation)
+- `includeStress` (optional): Include concurrent query stress test (default: false)
+
+**Query Embedding Reuse:**
+- Cache query embeddings within the benchmark run
+- Log: `query_embeddings_generated: X, query_embeddings_reused: Y`
+
+**Response:**
+```json
+{
+  "action": "scale-benchmark",
+  "userId": "scale-test-xxx",
+  "runId": "run-1767381234567",
+  "total_queries": 100,
+  "modes_tested": ["truth-general", "business-validation"],
+  "query_embeddings": {
+    "generated": 45,
+    "reused": 55,
+    "cache_hit_rate": 0.55
+  },
+  "results": {
+    "latency": {
+      "p50_ms": 150,
+      "p95_ms": 320,
+      "p99_ms": 580,
+      "max_ms": 1200
+    },
+    "retrieval": {
+      "avg_candidates_considered": 450,
+      "max_candidates_considered": 620,
+      "candidates_ceiling": 1000,
+      "candidates_ceiling_exceeded": false,
+      "avg_results_injected": 3.2,
+      "fallback_rate": 0.02,
+      "empty_result_rate": 0.05,
+      "vectors_compared_matches_candidates": true
+    },
+    "token_budget": {
+      "p50_tokens_used": 180,
+      "p95_tokens_used": 890,
+      "max_tokens_used": 1850,
+      "budget_exceeded_count": 0,
+      "budget_limit": 2000
+    },
+    "precision": {
+      "tripwires_found": 10,
+      "tripwires_expected": 10,
+      "tripwire_precision": 1.0,
+      "tripwire_details": [
+        { "fingerprint": "tripwire_secret_code", "found": true, "similarity": 0.72 },
+        { "fingerprint": "tripwire_dinosaur", "found": true, "similarity": 0.68 }
+      ]
+    },
+    "determinism": {
+      "supersession_queries": 5,
+      "correct_current_only": 5,
+      "leaked_superseded": 0,
+      "determinism_score": 1.0
+    },
+    "mode_isolation": {
+      "cross_mode_queries": 10,
+      "leaks_detected": 0,
+      "isolation_score": 1.0
+    },
+    "behavioral": {
+      "responses_analyzed": 50,
+      "uncertainty_structure": {
+        "present_rate": 0.85,
+        "has_admission": 0.90,
+        "has_explanation": 0.88,
+        "has_framework": 0.82,
+        "full_structure_rate": 0.78
+      },
+      "blind_spots": {
+        "volunteered_avg": 2.1,
+        "distinct_items_avg": 1.8,
+        "marker_patterns_found": ["Also consider", "Risks include", "Things to note"]
+      },
+      "engagement_bait": {
+        "detected_rate": 0.03,
+        "patterns_found": ["let me know if"]
+      },
+      "anti_engagement_closure": {
+        "clean_closure_rate": 0.92,
+        "last_paragraph_bait_rate": 0.04
+      },
+      "relatable_examples": {
+        "contains_examples_rate": 0.65,
+        "specific_not_generic_rate": 0.72,
+        "quality_score": 0.68
+      }
+    }
+  },
+  "invariants": {
+    "budget_never_exceeded": true,
+    "supersession_deterministic": true,
+    "tripwires_all_found": true,
+    "mode_isolation_maintained": true,
+    "candidates_under_ceiling": true,
+    "latency_under_threshold": true
+  },
+  "benchmark_time_ms": 45000
+}
+```
+
+---
+
+### 3. Stress Test Levels
+
+| Level | Memories | Queries | Modes | Available |
+|-------|----------|---------|-------|-----------|
+| smoke | 100 | 20 | 1 | ✅ Default |
+| light | 500 | 50 | 2 | ✅ Default |
+| medium | 2,000 | 100 | 2 | ✅ Default |
+| heavy | 5,000 | 150 | 2 | ✅ Default |
+| extreme | 25,000 | 500 | 2 | ⚠️ Requires `allowExtreme=true` |
+
+**Combined Endpoint:**
+`/api/test-semantic?action=scale-full&level=medium&userId=X&cleanup=false`
+
+**Parameters:**
+- `level`: Stress level (default: smoke)
+- `userId`: Test user (auto-generated if not provided)
+- `cleanup`: Auto-cleanup after run (default: false for debugging)
+- `allowExtreme`: Required for extreme level (default: false)
+
+---
+
+### 4. Hard Invariants (Must Never Fail)
+```javascript
+// INVARIANT 1: Token budget NEVER exceeded
+assert(results.token_budget.budget_exceeded_count === 0);
+assert(results.token_budget.max_tokens_used <= results.token_budget.budget_limit);
+
+// INVARIANT 2: Supersession determinism
+assert(results.determinism.leaked_superseded === 0);
+assert(results.determinism.determinism_score === 1.0);
+
+// INVARIANT 3: Tripwire precision (planted facts must be found)
+assert(results.precision.tripwire_precision >= 0.9);
+
+// INVARIANT 4: Latency ceiling
+assert(results.latency.p99_ms < 2000);
+
+// INVARIANT 5: Fallback rate acceptable
+assert(results.retrieval.fallback_rate < 0.1);
+
+// INVARIANT 6: Mode isolation maintained
+assert(results.mode_isolation.leaks_detected === 0);
+
+// INVARIANT 7: Candidate ceiling (no full-scan behavior)
+assert(results.retrieval.candidates_ceiling_exceeded === false);
+assert(results.retrieval.avg_candidates_considered <= 1000);
+
+// INVARIANT 8: Vectors compared matches candidates with embeddings
+assert(results.retrieval.vectors_compared_matches_candidates === true);
+```
+
+---
+
+### 5. Behavioral Measurement (Tightened Definitions)
+
+#### Uncertainty Structure (3-part required)
+```javascript
+function detectUncertaintyStructure(response) {
+  // ADMISSION: Acknowledges limitation
+  const admissionPatterns = [
+    /I don't know/i, /I'm not sure/i, /I cannot confirm/i,
+    /uncertain/i, /unclear/i, /don't have enough/i,
+    /cannot determine/i, /may not be accurate/i
+  ];
+  
+  // EXPLANATION: Provides reason
+  const explanationPatterns = [
+    /because/i, /since/i, /given that/i, /the reason/i,
+    /due to/i, /this is because/i, /as a result/i
+  ];
+  
+  // FRAMEWORK: Offers path forward
+  const frameworkPatterns = [
+    /you could/i, /consider/i, /alternatively/i,
+    /one approach/i, /to verify/i, /I'd suggest/i,
+    /what you might/i
+  ];
+  
+  const hasAdmission = admissionPatterns.some(p => p.test(response));
+  const hasExplanation = explanationPatterns.some(p => p.test(response));
+  const hasFramework = frameworkPatterns.some(p => p.test(response));
+  
+  return {
+    has_admission: hasAdmission,
+    has_explanation: hasExplanation,
+    has_framework: hasFramework,
+    full_structure: hasAdmission && hasExplanation && hasFramework
+  };
+}
+```
+
+#### Blind Spots (Distinct Items Only)
+```javascript
+function countBlindSpots(response) {
+  // Look for marker sections
+  const markerPatterns = [
+    /also consider[:\s]/i,
+    /things to note[:\s]/i,
+    /risks include[:\s]/i,
+    /limitations[:\s]/i,
+    /caveats[:\s]/i,
+    /keep in mind[:\s]/i,
+    /however[,\s]/i,
+    /on the other hand/i
+  ];
+  
+  // Count distinct bullet points or numbered items after markers
+  const bulletPattern = /^[\s]*[-•*]\s+.+$/gm;
+  const numberedPattern = /^[\s]*\d+[.)]\s+.+$/gm;
+  
+  const bullets = (response.match(bulletPattern) || []).length;
+  const numbered = (response.match(numberedPattern) || []).length;
+  
+  // Also count inline lists: "x, y, and z"
+  const inlineListPattern = /:\s*([^.]+,\s*)+and\s+[^.]+/g;
+  const inlineLists = (response.match(inlineListPattern) || []).length;
+  
+  return {
+    distinct_items: bullets + numbered,
+    inline_lists: inlineLists,
+    markers_found: markerPatterns.filter(p => p.test(response)).length
+  };
+}
+```
+
+#### Engagement Bait (Last Paragraph Focus)
+```javascript
+function detectEngagementBait(response) {
+  const patterns = [
+    /let me know if/i,
+    /feel free to/i,
+    /don't hesitate to/i,
+    /I'm here if you/i,
+    /happy to help with anything else/i,
+    /any other questions/i,
+    /anything else I can/i
+  ];
+  
+  // Split into paragraphs, focus on last one
+  const paragraphs = response.split(/\n\n+/).filter(p => p.trim());
+  const lastParagraph = paragraphs[paragraphs.length - 1] || '';
+  
+  const fullResponseBait = patterns.some(p => p.test(response));
+  const lastParagraphBait = patterns.some(p => p.test(lastParagraph));
+  
+  return {
+    detected_anywhere: fullResponseBait,
+    detected_in_closure: lastParagraphBait,
+    patterns_matched: patterns.filter(p => p.test(response)).map(p => p.source)
+  };
+}
+```
+
+#### Relatable Example Quality
+```javascript
+function assessExampleQuality(response) {
+  // Detect if response contains examples
+  const exampleMarkers = [
+    /for example/i, /for instance/i, /such as/i,
+    /like when/i, /imagine/i, /consider the case/i
+  ];
+  
+  const hasExamples = exampleMarkers.some(p => p.test(response));
+  
+  // Generic examples to avoid
+  const genericPatterns = [
+    /for example, if you/i,
+    /such as X or Y/i,
+    /like something/i,
+    /etc\.?$/i
+  ];
+  
+  // Specific examples (contain concrete details)
+  const specificPatterns = [
+    /\d+/, // Contains numbers
+    /[A-Z][a-z]+\s+[A-Z][a-z]+/, // Proper nouns
+    /in \d{4}/, // Years
+    /\$\d+/, // Money amounts
+  ];
+  
+  const isGeneric = genericPatterns.some(p => p.test(response));
+  const hasSpecifics = specificPatterns.some(p => p.test(response));
+  
+  return {
+    contains_examples: hasExamples,
+    is_generic: isGeneric,
+    has_specifics: hasSpecifics,
+    quality_score: hasExamples ? (hasSpecifics && !isGeneric ? 1.0 : isGeneric ? 0.3 : 0.6) : 0
+  };
+}
+```
+
+---
+
+### 6. Cleanup Endpoint
+
+`/api/test-semantic?action=scale-cleanup&userId=X&runId=Y`
+
+**Parameters:**
+- `userId` (required): Test user to clean up
+- `runId` (optional): Specific run to clean up (if omitted, cleans all for user)
+- `dryRun` (optional): Preview what would be deleted without deleting (default: false)
+
+**Response:**
+```json
+{
+  "action": "scale-cleanup",
+  "userId": "scale-test-xxx",
+  "runId": "run-1767381234567",
+  "dry_run": false,
+  "memories_deleted": 200,
+  "embeddings_freed": 200,
+  "tokens_freed": 4500,
+  "cleanup_time_ms": 1500
+}
+```
+
+**Auto-Cleanup on Failure:**
+- If `scale-full` fails mid-run and `cleanup=true`, attempt cleanup before returning error
+- Log cleanup attempt result in error response
+
+---
+
+## Mode Testing Requirements
+
+The harness must test across modes to verify isolation:
+
+1. **Generate memories in both modes:**
+   - 50% in `truth-general`
+   - 50% in `business-validation`
+
+2. **Cross-mode isolation queries:**
+   - Query `truth-general` for a `business-validation` tripwire
+   - Must return 0 results (no leak)
+   - Query `business-validation` for a `truth-general` tripwire
+   - Must return 0 results (no leak)
+
+3. **Mode-specific retrieval:**
+   - Query each mode for its own tripwires
+   - Must find them with high precision
+
+---
+
+## Acceptance Criteria
+
+### Smoke Test (100 memories)
+```javascript
+const result = await fetch('/api/test-semantic?action=scale-full&level=smoke');
+assert(result.invariants.budget_never_exceeded === true);
+assert(result.invariants.supersession_deterministic === true);
+assert(result.invariants.tripwires_all_found === true);
+assert(result.invariants.mode_isolation_maintained === true);
+assert(result.invariants.candidates_under_ceiling === true);
+```
+
+### Medium Test (2,000 memories)
+```javascript
+const result = await fetch('/api/test-semantic?action=scale-full&level=medium');
+assert(result.results.latency.p99_ms < 2000);
+assert(result.results.retrieval.fallback_rate < 0.1);
+assert(result.results.retrieval.avg_candidates_considered <= 1000);
+assert(result.invariants.budget_never_exceeded === true);
+assert(result.invariants.mode_isolation_maintained === true);
+```
+
+### Behavioral Baselines (Measured, Not Enforced)
+```javascript
+// These are recorded for Phase 2 (Doctrine Gates) - not hard failures yet
+console.log("Uncertainty structure rate:", result.results.behavioral.uncertainty_structure.full_structure_rate);
+console.log("Blind spots avg:", result.results.behavioral.blind_spots.volunteered_avg);
+console.log("Engagement bait rate:", result.results.behavioral.engagement_bait.detected_rate);
+console.log("Clean closure rate:", result.results.behavioral.anti_engagement_closure.clean_closure_rate);
+console.log("Example quality:", result.results.behavioral.relatable_examples.quality_score);
+```
+
+---
+
+## Files to Create/Modify
+
+1. **`/api/routes/test-semantic.js`**
+   - Add `scale-generate` action with rate limiting
+   - Add `scale-benchmark` action with rate limiting
+   - Add `scale-full` action with rate limiting
+   - Add `scale-cleanup` action
+   - Add token authentication check for all scale actions
+
+2. **`/api/services/scale-harness.js`** (new file)
+   - `generateTestData(userId, count, options)`
+   - `runBenchmark(userId, queryCount, options)`
+   - `validateInvariants(results)`
+   - `generateTripwires(userId, runId, mode)`
+   - `generateSupersessionChains(userId, runId, mode)`
+   - Cost tracking and limits enforcement
+
+3. **`/api/services/behavioral-detection.js`** (new file)
+   - `detectUncertaintyStructure(response)`
+   - `countBlindSpots(response)`
+   - `detectEngagementBait(response)`
+   - `assessExampleQuality(response)`
+   - `measureBehavioral(response)` - combined analysis
+
+4. **`/api/middleware/scale-rate-limit.js`** (new file)
+   - Rate limiting specific to scale endpoints
+   - Token validation wrapper
+
+---
+
+## Success Metrics
+
+After this PR:
+- ✅ Can run `scale-full&level=smoke` through `level=heavy` safely
+- ✅ All 8 invariants pass at 2,000+ memories
+- ✅ Behavioral metrics measured and reported
+- ✅ Cost controlled via embedding caps
+- ✅ Resumable runs via run_id
+- ✅ Mode isolation verified under load
+- ✅ No full-scan behavior (candidates under ceiling)
+- ✅ Foundation proven before adding documents
+
+---
+
+## Cost Estimates
+
+| Level | Memories | Est. Embeddings | Est. Cost |
+|-------|----------|-----------------|-----------|
+| smoke | 100 | 100 + 20 queries | ~$0.01 |
+| light | 500 | 200 (capped) + 50 queries | ~$0.02 |
+| medium | 2,000 | 200/run × 10 runs + queries | ~$0.15 |
+| heavy | 5,000 | 200/run × 25 runs + queries | ~$0.40 |
+| extreme | 25,000 | Requires explicit approval | ~$2.00 |
+
+Note: Costs assume text-embedding-3-small pricing. Query embedding reuse reduces cost by ~50%.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
