@@ -261,6 +261,14 @@ class PersistentMemoryOrchestrator {
       this.coreSystem?.isInitialized && this.intelligenceSystem?.isInitialized
     );
   }
+
+  /**
+   * Get the database pool for direct access
+   * @returns {Pool} - PostgreSQL connection pool
+   */
+  get pool() {
+    return this.coreSystem?.pool || null;
+  }
 }
 
 // Export instance, not class - ready for immediate use
