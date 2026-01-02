@@ -1,0 +1,48 @@
+Good! The file doesn't import `fs`, which confirms it should not be using file system operations. The Buffer.from() is a built-in Node.js function that doesn't require an import. Now let me create a summary of the changes:
+
+---SUMMARY---
+
+## Fixed Issue #306: Document Ingestion Test - Removed File Dependency
+
+### Problem
+The `test-document-ingestion` endpoint was attempting to load a test PDF file that doesn't exist (`./test/data/05-versions-space.pdf`), causing an ENOENT error.
+
+### Solution
+Updated the test in `/api/routes/test-semantic.js` (lines 1445-1484) to use inline test data instead of relying on external files:
+
+#### Changes Made:
+
+1. **Replaced file-based test data with inline Buffer creation**:
+   - Changed from: `fs.readFileSync('./test/data/05-versions-space.pdf')`
+   - Changed to: `Buffer.from(...)` with comprehensive AI/ML test content
+
+2. **Updated test content** to match issue requirements:
+   - Used the AI and machine learning content exactly as specified in the issue
+   - Content covers: artificial intelligence, machine learning, data learning, pattern identification, deep learning, neural networks, and natural language processing
+
+3. **Updated all references**:
+   - Changed `testBuffer` to `testContent` for clarity
+   - Updated filename from `'test-document.txt'` to `'test-ai.txt'` throughout
+   - Maintained `'text/plain'` mimetype as required
+   - Created `testText` string variable for validation purposes
+
+4. **No external dependencies**:
+   - Test now runs completely self-contained
+   - No file system operations required
+   - All test data is created inline within the test function
+
+### Files Modified:
+- `/api/routes/test-semantic.js` - Lines 1445-1484 (test-document-ingestion case)
+
+### Verification:
+The test should now pass all 6 sub-tests:
+1. Text Extraction
+2. Text Chunking  
+3. Document Storage
+4. Embedding Generation
+5. Semantic Search
+6. Mode Isolation
+
+The changes ensure the test will work reliably without any external file dependencies, using inline Buffer data as specified in the acceptance criteria.
+
+---END SUMMARY---

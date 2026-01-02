@@ -1,0 +1,66 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #306: [claude-fix] Fix document ingestion test - use inline test data instead of missing file
+
+Issue Description:
+## Problem
+
+The `test-document-ingestion` endpoint tries to load a test PDF file that doesn't exist:
+```
+"error":"ENOENT: no such file or directory, open './test/data/05-versions-space.pdf'"
+```
+
+## Fix Required
+
+In `/api/routes/test-semantic.js`, find the `test-document-ingestion` case and replace any file-based test data with inline Buffer data.
+
+### Replace this pattern:
+```javascript
+// WRONG - file doesn't exist
+const testBuffer = fs.readFileSync('./test/data/05-versions-space.pdf');
+```
+
+### With this pattern:
+```javascript
+// CORRECT - inline test data
+const testContent = Buffer.from(
+  'This is a comprehensive test document about artificial intelligence and machine learning. ' +
+  'AI systems can learn from data and improve their performance over time. ' +
+  'Machine learning algorithms identify patterns in large datasets. ' +
+  'Deep learning uses neural networks with many layers. ' +
+  'Natural language processing enables computers to understand human language.'
+);
+
+// Use 'text/plain' mimetype for the inline text
+const storeResult = await storeDocument(testUserId, testMode, 'test-ai.txt', testContent, 'text/plain');
+```
+
+The test should NOT rely on any external files. All test data should be created inline within the test function.
+
+## Acceptance Test
+```javascript
+fetch("https://sitemonkeys-ai-system-production.up.railway.app/api/test-semantic?action=test-document-ingestion", {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json()).then(d => {
+  console.log("Document Ingestion:", d.summary, d.passed ? "✅" : "❌");
+});
+// Expected: 6/6 tests passed ✅
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
