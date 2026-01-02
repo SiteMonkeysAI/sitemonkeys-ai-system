@@ -1,0 +1,67 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #280: [claude-fix] URGENT: Create scale harness files (bot blocked on permissions)
+
+Issue Description:
+## Problem
+
+PRs #276 and #278 did NOT create the required files. The bot asked for permission but the automated workflow doesn't support interactive approval.
+
+## Required: Create These Files NOW
+
+The bot must create these files without asking for permission:
+
+### 1. `/api/services/scale-harness.js`
+
+Create this file with the implementation from PR #276's description.
+
+### 2. `/api/services/behavioral-detection.js`
+
+Create this file with the implementation from PR #276's description.
+
+### 3. `/api/middleware/scale-rate-limit.js`
+
+Create this file with rate limiting for scale endpoints.
+
+### 4. Modify `/api/routes/test-semantic.js`
+
+Add these action handlers:
+- `scale-generate`
+- `scale-benchmark`
+- `scale-full`
+- `scale-cleanup`
+- `scale-status`
+- `scale-embed`
+
+## IMPORTANT
+
+DO NOT ask for permission. DO NOT output a plan. CREATE THE FILES DIRECTLY.
+
+The full specifications are in issues #276 and #278. Implement them now.
+
+## Acceptance Test
+```javascript
+fetch("/api/test-semantic?action=scale-generate&userId=test&count=10", {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json()).then(console.log);
+```
+
+This must return a valid response, not "Unknown action: scale-generate".
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
