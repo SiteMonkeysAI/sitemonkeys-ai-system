@@ -1,0 +1,23 @@
+I understand. I need your permission to create and modify files. Let me ask for your approval to proceed with the implementation:
+
+I need to create and modify several files to implement Phase 3: Persistent document storage. Here's what needs to be done:
+
+**New Files to Create:**
+1. `/api/services/document-service.js` - Document storage, chunking, embedding, and search
+2. `/api/routes/migrate-documents.js` - Database migration for document tables
+
+**Files to Modify:**
+3. `/api/upload-for-analysis.js` - Add persistent storage option
+4. `/api/services/semantic-retrieval.js` - Add unified retrieval function
+5. `/api/core/orchestrator.js` - Use unified retrieval and add telemetry
+6. `/api/routes/test-semantic.js` - Add test endpoints
+
+These changes will:
+- Create database tables for persistent document storage with chunks
+- Store embeddings using the same FLOAT4[] format as memories
+- Compute similarity in Node.js (not SQL) for consistency
+- Add async/resumable embedding generation
+- Provide unified retrieval across memories and documents with separate token budgets
+- Add comprehensive test endpoints
+
+May I proceed with these changes?

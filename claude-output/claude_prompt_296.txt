@@ -1,0 +1,813 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #296: [claude-fix] Phase 3: Persistent document storage with chunking and semantic search
+
+Issue Description:
+## Summary
+
+Enhance the existing document upload system with persistent storage, chunking, and semantic search. The foundation exists - this connects and enhances existing pieces.
+
+**CRITICAL ARCHITECTURE NOTES:**
+- We are NOT using pgvector/ivfflat or `<=>` SQL operators
+- Embeddings are stored as FLOAT4[] and similarity is computed in Node (cosine), same as memory retrieval
+- Document chunks must include user_id + mode for isolation
+- Embedding generation must be async/resumable with backfill pattern
+- Unified retrieval must enforce separate doc/memory/vault token budgets with telemetry
+- persist=true must be gated (token/auth) to avoid anonymous cross-user storage
+
+---
+
+## Current State (from codebase analysis)
+
+### What EXISTS:
+- ✅ `/api/upload-for-analysis.js` - Document upload with DOCX extraction
+- ✅ `/api/upload-file.js` - General file upload
+- ✅ `mammoth` library - DOCX text extraction (working)
+- ✅ `pdf-parse` library - PDF extraction (installed, not integrated)
+- ✅ Embedding service - `/api/services/embedding-service.js` (FLOAT4[], Node cosine)
+- ✅ Semantic retrieval - `/api/services/semantic-retrieval.js` (app-level cosine similarity)
+- ✅ Token budgeting in orchestrator (Memory 2500, Docs 1500, Vault 3000)
+
+### What's MISSING:
+- ❌ Persistent document storage (currently 10-min TTL in Map)
+- ❌ Document chunking for large files
+- ❌ Document embeddings for semantic search
+- ❌ PDF text extraction integration
+- ❌ Unified search across memories + documents
+
+---
+
+## Implementation Plan
+
+### Step 1: Create Documents Tables
+```sql
+-- Documents table (metadata only, full_content optional)
+CREATE TABLE documents (
+  id SERIAL PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  mode VARCHAR(50) DEFAULT 'truth-general',
+  filename TEXT NOT NULL,
+  original_size INTEGER,
+  content_type TEXT,
+  full_content TEXT,  -- Optional, only stored if persist_full=true
+  store_full_content BOOLEAN DEFAULT false,
+  chunk_count INTEGER DEFAULT 0,
+  total_tokens INTEGER DEFAULT 0,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Document chunks table (includes user_id + mode for isolation)
+CREATE TABLE document_chunks (
+  id SERIAL PRIMARY KEY,
+  document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL,
+  mode VARCHAR(50) DEFAULT 'truth-general',
+  chunk_index INTEGER NOT NULL,
+  content TEXT NOT NULL,
+  token_count INTEGER,
+  embedding FLOAT4[],  -- Same format as persistent_memories
+  embedding_status TEXT DEFAULT 'pending',  -- pending, processing, ready, failed
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Indexes for performance (NO pgvector/ivfflat - we use app-level cosine)
+CREATE INDEX idx_documents_user_id ON documents(user_id);
+CREATE INDEX idx_documents_user_mode ON documents(user_id, mode);
+CREATE INDEX idx_document_chunks_user_mode ON document_chunks(user_id, mode);
+CREATE INDEX idx_document_chunks_document_id ON document_chunks(document_id, chunk_index);
+CREATE INDEX idx_document_chunks_embedding_status ON document_chunks(embedding_status);
+CREATE INDEX idx_document_chunks_user_mode_doc ON document_chunks(user_id, mode, document_id);
+```
+
+### Step 2: Create Document Service
+
+**File:** `/api/services/document-service.js`
+```javascript
+/**
+ * Document Service - Persistent storage with chunking and embeddings
+ * 
+ * ARCHITECTURE NOTES:
+ * - Embeddings stored as FLOAT4[] (same as persistent_memories)
+ * - Similarity computed in Node using cosine, NOT SQL operators
+ * - Chunks include user_id + mode for isolation
+ * - Embedding generation is async/resumable
+ */
+
+import { pool } from '../db.js';
+import { generateEmbedding, cosineSimilarity } from './embedding-service.js';
+import mammoth from 'mammoth';
+import pdf from 'pdf-parse';
+
+const CHUNK_CONFIG = {
+  targetTokens: 512,
+  maxTokens: 1024,
+  overlapTokens: 50
+};
+
+// Extract text based on file type
+export async function extractText(buffer, mimetype, filename) {
+  if (mimetype.includes('pdf')) {
+    const data = await pdf(buffer);
+    return data.text;
+  }
+  if (filename.endsWith('.docx') || mimetype.includes('wordprocessingml')) {
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value;
+  }
+  if (mimetype.includes('text') || filename.endsWith('.txt') || filename.endsWith('.md')) {
+    return buffer.toString('utf-8');
+  }
+  throw new Error(`Unsupported file type: ${mimetype}`);
+}
+
+// Chunk text into semantic segments
+export function chunkText(text, config = CHUNK_CONFIG) {
+  const chunks = [];
+  const sentences = text.split(/(?<=[.!?])\s+/);
+  
+  let currentChunk = '';
+  let currentTokens = 0;
+  
+  for (const sentence of sentences) {
+    const sentenceTokens = Math.ceil(sentence.length / 4); // Approximate
+    
+    if (currentTokens + sentenceTokens > config.maxTokens && currentChunk) {
+      chunks.push({ content: currentChunk.trim(), tokens: currentTokens });
+      
+      // Overlap: keep last portion
+      const words = currentChunk.split(' ');
+      const overlapWords = words.slice(-Math.floor(config.overlapTokens / 1.5));
+      currentChunk = overlapWords.join(' ') + ' ' + sentence;
+      currentTokens = Math.ceil(currentChunk.length / 4);
+    } else {
+      currentChunk += ' ' + sentence;
+      currentTokens += sentenceTokens;
+    }
+  }
+  
+  if (currentChunk.trim()) {
+    chunks.push({ content: currentChunk.trim(), tokens: currentTokens });
+  }
+  
+  return chunks;
+}
+
+// Store document with chunks (async embedding, doesn't block)
+export async function storeDocument(userId, mode, filename, buffer, mimetype, options = {}) {
+  const { persistFullContent = false } = options;
+  const client = await pool.connect();
+  
+  try {
+    await client.query('BEGIN');
+    
+    // Extract text
+    const fullContent = await extractText(buffer, mimetype, filename);
+    const chunks = chunkText(fullContent);
+    const totalTokens = chunks.reduce((sum, c) => sum + c.tokens, 0);
+    
+    // Store document (full_content only if requested)
+    const docResult = await client.query(`
+      INSERT INTO documents (user_id, mode, filename, original_size, content_type, full_content, store_full_content, chunk_count, total_tokens, metadata)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      RETURNING id
+    `, [
+      userId, 
+      mode,
+      filename, 
+      buffer.length, 
+      mimetype, 
+      persistFullContent ? fullContent : null,
+      persistFullContent,
+      chunks.length, 
+      totalTokens, 
+      JSON.stringify({ extractedAt: new Date().toISOString(), source: 'upload' })
+    ]);
+    
+    const documentId = docResult.rows[0].id;
+    
+    // Store chunks (with user_id + mode for isolation)
+    for (let i = 0; i < chunks.length; i++) {
+      await client.query(`
+        INSERT INTO document_chunks (document_id, user_id, mode, chunk_index, content, token_count, embedding_status, metadata)
+        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)
+      `, [documentId, userId, mode, i, chunks[i].content, chunks[i].tokens, JSON.stringify({ position: i })]);
+    }
+    
+    await client.query('COMMIT');
+    
+    // Generate embeddings asynchronously (don't block response)
+    embedDocumentChunks(documentId).catch(err => {
+      console.error(`[DOCUMENT] Failed to embed chunks for doc ${documentId}:`, err.message);
+    });
+    
+    return {
+      success: true,
+      documentId,
+      filename,
+      chunkCount: chunks.length,
+      totalTokens,
+      embeddingStatus: 'pending'
+    };
+    
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+// Generate embeddings for document chunks (async, resumable)
+export async function embedDocumentChunks(documentId, options = {}) {
+  const { limit = 50, maxSeconds = 25 } = options;
+  const startTime = Date.now();
+  
+  // Mark as processing
+  await pool.query(
+    `UPDATE document_chunks SET embedding_status = 'processing' 
+     WHERE document_id = $1 AND embedding_status = 'pending'
+     LIMIT $2`,
+    [documentId, limit]
+  );
+  
+  const chunks = await pool.query(
+    `SELECT id, content FROM document_chunks 
+     WHERE document_id = $1 AND embedding_status = 'processing'`,
+    [documentId]
+  );
+  
+  let processed = 0;
+  let failed = 0;
+  
+  for (const chunk of chunks.rows) {
+    // Check timeout
+    if ((Date.now() - startTime) > maxSeconds * 1000) {
+      // Reset remaining to pending for next run
+      await pool.query(
+        `UPDATE document_chunks SET embedding_status = 'pending' 
+         WHERE document_id = $1 AND embedding_status = 'processing'`,
+        [documentId]
+      );
+      return { processed, failed, timedOut: true, remaining: chunks.rows.length - processed };
+    }
+    
+    try {
+      const embedding = await generateEmbedding(chunk.content);
+      
+      // Store embedding as FLOAT4[] array directly (not JSON.stringify)
+      await pool.query(
+        `UPDATE document_chunks SET embedding = $1::FLOAT4[], embedding_status = 'ready' WHERE id = $2`,
+        [embedding, chunk.id]
+      );
+      processed++;
+    } catch (error) {
+      await pool.query(
+        `UPDATE document_chunks SET embedding_status = 'failed' WHERE id = $1`,
+        [chunk.id]
+      );
+      failed++;
+    }
+  }
+  
+  return { processed, failed, timedOut: false, remaining: 0 };
+}
+
+// Backfill embeddings for all pending chunks (resumable)
+export async function backfillDocumentEmbeddings(options = {}) {
+  const { userId, documentId, limit = 50, maxSeconds = 25 } = options;
+  const startTime = Date.now();
+  
+  let query = `SELECT id, content FROM document_chunks WHERE embedding_status = 'pending'`;
+  const params = [];
+  
+  if (userId) {
+    params.push(userId);
+    query += ` AND user_id = $${params.length}`;
+  }
+  if (documentId) {
+    params.push(documentId);
+    query += ` AND document_id = $${params.length}`;
+  }
+  
+  query += ` LIMIT $${params.length + 1}`;
+  params.push(limit);
+  
+  const chunks = await pool.query(query, params);
+  
+  let processed = 0;
+  let failed = 0;
+  
+  for (const chunk of chunks.rows) {
+    if ((Date.now() - startTime) > maxSeconds * 1000) {
+      return { processed, failed, timedOut: true, remaining: chunks.rows.length - processed };
+    }
+    
+    try {
+      const embedding = await generateEmbedding(chunk.content);
+      await pool.query(
+        `UPDATE document_chunks SET embedding = $1::FLOAT4[], embedding_status = 'ready' WHERE id = $2`,
+        [embedding, chunk.id]
+      );
+      processed++;
+    } catch (error) {
+      await pool.query(
+        `UPDATE document_chunks SET embedding_status = 'failed' WHERE id = $1`,
+        [chunk.id]
+      );
+      failed++;
+    }
+  }
+  
+  return { processed, failed, timedOut: false, remaining: 0 };
+}
+
+// Semantic search across documents (app-level cosine, NOT SQL)
+export async function searchDocuments(userId, mode, queryEmbedding, options = {}) {
+  const { limit = 10, minScore = 0.7, tokenBudget = 1500 } = options;
+  
+  // Fetch all ready chunks for user+mode (we compute similarity in Node)
+  const result = await pool.query(`
+    SELECT 
+      dc.id,
+      dc.content,
+      dc.chunk_index,
+      dc.token_count,
+      dc.embedding,
+      d.filename,
+      d.id as document_id
+    FROM document_chunks dc
+    JOIN documents d ON dc.document_id = d.id
+    WHERE dc.user_id = $1
+      AND dc.mode = $2
+      AND dc.embedding_status = 'ready'
+      AND dc.embedding IS NOT NULL
+  `, [userId, mode]);
+  
+  // Compute cosine similarity in Node (same pattern as memory retrieval)
+  const scored = result.rows.map(row => ({
+    ...row,
+    similarity: cosineSimilarity(queryEmbedding, row.embedding)
+  }));
+  
+  // Filter by minScore and sort by similarity
+  const filtered = scored
+    .filter(r => r.similarity >= minScore)
+    .sort((a, b) => b.similarity - a.similarity);
+  
+  // Apply token budget
+  const selected = [];
+  let tokensUsed = 0;
+  
+  for (const chunk of filtered) {
+    if (tokensUsed + chunk.token_count > tokenBudget) break;
+    if (selected.length >= limit) break;
+    
+    selected.push({
+      id: chunk.id,
+      content: chunk.content,
+      chunk_index: chunk.chunk_index,
+      filename: chunk.filename,
+      document_id: chunk.document_id,
+      similarity: chunk.similarity,
+      token_count: chunk.token_count
+    });
+    tokensUsed += chunk.token_count;
+  }
+  
+  return {
+    chunks: selected,
+    tokensUsed,
+    totalCandidates: result.rows.length,
+    aboveThreshold: filtered.length
+  };
+}
+
+// Get user's documents
+export async function getUserDocuments(userId, mode = null) {
+  let query = `
+    SELECT id, filename, content_type, chunk_count, total_tokens, created_at,
+           (SELECT COUNT(*) FROM document_chunks WHERE document_id = documents.id AND embedding_status = 'ready') as chunks_ready,
+           (SELECT COUNT(*) FROM document_chunks WHERE document_id = documents.id AND embedding_status = 'pending') as chunks_pending
+    FROM documents
+    WHERE user_id = $1
+  `;
+  const params = [userId];
+  
+  if (mode) {
+    params.push(mode);
+    query += ` AND mode = $${params.length}`;
+  }
+  
+  query += ` ORDER BY created_at DESC`;
+  
+  const result = await pool.query(query, params);
+  return result.rows;
+}
+
+// Delete document
+export async function deleteDocument(documentId, userId) {
+  const result = await pool.query(
+    `DELETE FROM documents WHERE id = $1 AND user_id = $2 RETURNING id`,
+    [documentId, userId]
+  );
+  return result.rowCount > 0;
+}
+
+// Get document embedding status
+export async function getDocumentStatus(documentId) {
+  const result = await pool.query(`
+    SELECT 
+      d.id,
+      d.filename,
+      d.chunk_count,
+      d.total_tokens,
+      COUNT(CASE WHEN dc.embedding_status = 'ready' THEN 1 END) as ready,
+      COUNT(CASE WHEN dc.embedding_status = 'pending' THEN 1 END) as pending,
+      COUNT(CASE WHEN dc.embedding_status = 'processing' THEN 1 END) as processing,
+      COUNT(CASE WHEN dc.embedding_status = 'failed' THEN 1 END) as failed
+    FROM documents d
+    LEFT JOIN document_chunks dc ON dc.document_id = d.id
+    WHERE d.id = $1
+    GROUP BY d.id
+  `, [documentId]);
+  
+  return result.rows[0] || null;
+}
+```
+
+### Step 3: Update Upload Endpoint
+
+**Modify:** `/api/upload-for-analysis.js`
+```javascript
+import { storeDocument } from './services/document-service.js';
+
+// In the upload handler, add persistent storage option:
+
+// SECURITY: Only allow persist=true with internal test token OR authenticated user
+const canPersist = req.headers['x-internal-test-token'] === process.env.INTERNAL_TEST_TOKEN;
+
+if (req.query.persist === 'true') {
+  if (!canPersist) {
+    return res.status(403).json({
+      success: false,
+      error: 'Persistent storage requires authentication'
+    });
+  }
+  
+  const userId = req.query.userId;
+  const mode = req.query.mode || 'truth-general';
+  
+  if (!userId) {
+    return res.status(400).json({
+      success: false,
+      error: 'userId required for persistent storage'
+    });
+  }
+  
+  const result = await storeDocument(
+    userId,
+    mode,
+    file.originalname,
+    file.buffer,
+    file.mimetype,
+    { persistFullContent: req.query.persistFull === 'true' }
+  );
+  
+  return res.json({
+    success: true,
+    persistent: true,
+    documentId: result.documentId,
+    chunkCount: result.chunkCount,
+    totalTokens: result.totalTokens,
+    embeddingStatus: result.embeddingStatus
+  });
+}
+
+// Otherwise, use existing temporary storage...
+```
+
+### Step 4: Integrate with Semantic Retrieval
+
+**Modify:** `/api/services/semantic-retrieval.js`
+
+Add unified retrieval function:
+```javascript
+import { searchDocuments } from './document-service.js';
+
+/**
+ * Unified retrieval across memories and documents
+ * Enforces SEPARATE token budgets for each source
+ */
+export async function retrieveUnified(pool, userId, mode, queryEmbedding, options = {}) {
+  const { 
+    includeDocuments = true, 
+    includeMemories = true,
+    memoryTokenBudget = 2500,
+    documentTokenBudget = 1500,
+    minScore = 0.7
+  } = options;
+  
+  const results = {
+    memories: [],
+    documents: [],
+    telemetry: {
+      memories_searched: 0,
+      memories_above_threshold: 0,
+      memories_injected: 0,
+      memory_tokens_used: 0,
+      documents_searched: 0,
+      doc_chunks_considered: 0,
+      doc_chunks_above_threshold: 0,
+      doc_chunks_injected: 0,
+      doc_tokens_used: 0,
+      doc_fallback_reason: null
+    }
+  };
+  
+  // Retrieve memories (with separate budget)
+  if (includeMemories) {
+    const memoryResult = await retrieveSemanticMemories(pool, userId, queryEmbedding, {
+      mode,
+      tokenBudget: memoryTokenBudget,
+      minScore
+    });
+    results.memories = memoryResult.memories || [];
+    results.telemetry.memories_searched = memoryResult.candidatesConsidered || 0;
+    results.telemetry.memories_above_threshold = memoryResult.aboveThreshold || 0;
+    results.telemetry.memories_injected = results.memories.length;
+    results.telemetry.memory_tokens_used = memoryResult.tokensUsed || 0;
+  }
+  
+  // Retrieve documents (with separate budget)
+  if (includeDocuments) {
+    try {
+      const docResult = await searchDocuments(userId, mode, queryEmbedding, {
+        tokenBudget: documentTokenBudget,
+        minScore
+      });
+      results.documents = docResult.chunks || [];
+      results.telemetry.doc_chunks_considered = docResult.totalCandidates || 0;
+      results.telemetry.doc_chunks_above_threshold = docResult.aboveThreshold || 0;
+      results.telemetry.doc_chunks_injected = results.documents.length;
+      results.telemetry.doc_tokens_used = docResult.tokensUsed || 0;
+    } catch (error) {
+      results.telemetry.doc_fallback_reason = error.message;
+    }
+  }
+  
+  return results;
+}
+```
+
+### Step 5: Update Orchestrator
+
+**Modify:** `/api/core/orchestrator.js`
+
+Use unified retrieval and add telemetry:
+```javascript
+import { retrieveUnified } from '../services/semantic-retrieval.js';
+
+// In context assembly section:
+const unifiedResults = await retrieveUnified(pool, userId, mode, queryEmbedding, {
+  includeDocuments: true,
+  includeMemories: true,
+  memoryTokenBudget: 2500,
+  documentTokenBudget: 1500
+});
+
+// Build context with separate sections
+let contextParts = [];
+
+if (unifiedResults.memories.length > 0) {
+  const memoryText = unifiedResults.memories.map(m => m.content).join('\n');
+  contextParts.push(`## Your Memory:\n${memoryText}`);
+}
+
+if (unifiedResults.documents.length > 0) {
+  const docText = unifiedResults.documents.map(d => `[${d.filename}]: ${d.content}`).join('\n\n');
+  contextParts.push(`## Document Context:\n${docText}`);
+}
+
+// Add to response metadata
+metadata.retrieval = {
+  ...metadata.retrieval,
+  ...unifiedResults.telemetry
+};
+```
+
+### Step 6: Add Test Endpoints
+
+**Modify:** `/api/routes/test-semantic.js`
+```javascript
+// Backfill document embeddings (resumable)
+case 'backfill-doc-embeddings': {
+  const { backfillDocumentEmbeddings } = await import('../services/document-service.js');
+  
+  const result = await backfillDocumentEmbeddings({
+    userId: req.query.userId,
+    documentId: req.query.documentId ? parseInt(req.query.documentId) : null,
+    limit: parseInt(req.query.limit) || 50,
+    maxSeconds: parseInt(req.query.maxSeconds) || 25
+  });
+  
+  return res.json({
+    action: 'backfill-doc-embeddings',
+    ...result
+  });
+}
+
+// Document status
+case 'doc-status': {
+  const { getDocumentStatus, getUserDocuments } = await import('../services/document-service.js');
+  
+  if (req.query.documentId) {
+    const status = await getDocumentStatus(parseInt(req.query.documentId));
+    return res.json({ action: 'doc-status', document: status });
+  }
+  
+  if (req.query.userId) {
+    const docs = await getUserDocuments(req.query.userId, req.query.mode);
+    return res.json({ action: 'doc-status', documents: docs });
+  }
+  
+  return res.status(400).json({ error: 'documentId or userId required' });
+}
+
+// End-to-end document ingestion test
+case 'test-document-ingestion': {
+  const { storeDocument, searchDocuments, getUserDocuments, deleteDocument, getDocumentStatus } = await import('../services/document-service.js');
+  const { generateEmbedding } = await import('../services/embedding-service.js');
+  
+  const testUserId = 'test-doc-' + Date.now();
+  const testMode = 'truth-general';
+  const results = { tests: [], passed: true };
+  
+  try {
+    // Test 1: Store a document
+    const testContent = Buffer.from(
+      'This is a comprehensive test document about artificial intelligence and machine learning. ' +
+      'AI systems can learn from data and improve their performance over time. ' +
+      'Machine learning algorithms identify patterns in large datasets. ' +
+      'Deep learning uses neural networks with many layers. ' +
+      'Natural language processing enables computers to understand human language.'
+    );
+    
+    const storeResult = await storeDocument(testUserId, testMode, 'test-ai.txt', testContent, 'text/plain');
+    results.tests.push({
+      name: 'Store document',
+      passed: storeResult.success && storeResult.documentId > 0,
+      details: storeResult
+    });
+    
+    // Wait for embeddings (poll with timeout)
+    let embeddingsReady = false;
+    for (let i = 0; i < 10; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const status = await getDocumentStatus(storeResult.documentId);
+      if (status && parseInt(status.ready) === parseInt(status.chunk_count)) {
+        embeddingsReady = true;
+        break;
+      }
+    }
+    
+    results.tests.push({
+      name: 'Embeddings generated',
+      passed: embeddingsReady,
+      details: { waited: embeddingsReady ? 'success' : 'timeout' }
+    });
+    
+    // Test 2: Search for document
+    const queryEmbedding = await generateEmbedding('machine learning neural networks');
+    const searchResult = await searchDocuments(testUserId, testMode, queryEmbedding, { minScore: 0.5 });
+    
+    results.tests.push({
+      name: 'Semantic search finds document',
+      passed: searchResult.chunks.length > 0,
+      details: {
+        chunksFound: searchResult.chunks.length,
+        topScore: searchResult.chunks[0]?.similarity
+      }
+    });
+    
+    // Test 3: List user documents
+    const docs = await getUserDocuments(testUserId);
+    results.tests.push({
+      name: 'List user documents',
+      passed: docs.length > 0,
+      details: { count: docs.length }
+    });
+    
+    // Test 4: Delete document
+    const deleted = await deleteDocument(storeResult.documentId, testUserId);
+    results.tests.push({
+      name: 'Delete document',
+      passed: deleted,
+      details: { deleted }
+    });
+    
+    // Verify deletion
+    const docsAfter = await getUserDocuments(testUserId);
+    results.tests.push({
+      name: 'Verify deletion',
+      passed: docsAfter.length === 0,
+      details: { remainingDocs: docsAfter.length }
+    });
+    
+  } catch (error) {
+    results.tests.push({
+      name: 'Error',
+      passed: false,
+      details: { error: error.message }
+    });
+  }
+  
+  // Cleanup any remaining test data
+  await pool.query(`DELETE FROM documents WHERE user_id = $1`, [testUserId]);
+  
+  results.passed = results.tests.every(t => t.passed);
+  results.summary = `${results.tests.filter(t => t.passed).length}/${results.tests.length} tests passed`;
+  
+  return res.json({
+    action: 'test-document-ingestion',
+    ...results
+  });
+}
+```
+
+---
+
+## Files to Create/Modify
+
+### New Files
+1. `/api/services/document-service.js` (~400 lines) - Document storage, chunking, embedding, search
+
+### Database Migration
+2. Create `documents` and `document_chunks` tables (run SQL above)
+
+### Modified Files
+3. `/api/upload-for-analysis.js` - Add `?persist=true` option with auth gate
+4. `/api/services/semantic-retrieval.js` - Add `retrieveUnified()` function
+5. `/api/core/orchestrator.js` - Use unified retrieval, add telemetry
+6. `/api/routes/test-semantic.js` - Add test endpoints
+
+---
+
+## Security Requirements
+
+1. **persist=true** requires `X-Internal-Test-Token` header (until real auth exists)
+2. **userId** must be explicit - no 'anonymous' fallback for persistent storage
+3. **Mode isolation** - documents scoped to user_id + mode
+4. **Cleanup** - test endpoints must clean up after themselves
+
+---
+
+## Acceptance Criteria
+```javascript
+// Test: Full end-to-end document ingestion
+fetch("https://sitemonkeys-ai-system-production.up.railway.app/api/test-semantic?action=test-document-ingestion", {
+  headers: { "X-Internal-Test-Token": "sitemonkeys-fullcheck-abc123" }
+}).then(r => r.json()).then(d => {
+  console.log("Document Ingestion:", d.summary, d.passed ? "✅" : "❌");
+});
+
+// Expected: 6/6 tests passed ✅
+```
+
+---
+
+## Token Budget Integration
+
+Existing budgets (enforced separately):
+- Memory: 2500 tokens
+- Documents: 1500 tokens  
+- Vault: 3000 tokens
+- Total: 7000 tokens
+
+Telemetry tracked:
+- `documents_searched`
+- `doc_chunks_considered`
+- `doc_chunks_above_threshold`
+- `doc_chunks_injected`
+- `doc_tokens_used`
+- `doc_fallback_reason`
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
