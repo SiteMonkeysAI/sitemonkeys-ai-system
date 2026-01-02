@@ -1,0 +1,328 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #290: [claude-fix] Comprehensive fix: Doctrine gates integration + hard fails + scale harness resumability
+
+Issue Description:
+## Summary
+
+Address all known issues from Phase 1-2 testing in one comprehensive PR.
+
+---
+
+## Issue 1: Doctrine Gates Metadata Not Returned in /api/chat
+
+### Symptom
+Response from /api/chat contains only: `success`, `response`, `metadata`, `error`
+Missing: `doctrine_gates`, `doctrine_enhanced`, `doctrine_enhancements`
+
+### Evidence
+```javascript
+const response = await fetch('/api/chat', {...});
+console.log(Object.keys(response)); // ['success', 'response', 'metadata', 'error']
+// doctrine_gates: undefined
+```
+
+### Root Cause
+The orchestrator integration from PR #288 is either:
+- Not executing (import error, path issue)
+- Failing silently (try/catch swallowing errors)
+- Not adding results to response object
+
+### Fix
+In `/api/core/orchestrator.js`:
+
+1. Add debug logging to confirm doctrine gates code path executes:
+```javascript
+console.log('[ORCHESTRATOR] Applying doctrine gates...');
+```
+
+2. Ensure the doctrine gates results are added to the response:
+```javascript
+// After calling #applyDoctrineGates()
+const doctrineResult = await this.#applyDoctrineGates(response, context, message);
+
+// Make sure these are returned in the final response
+return {
+  success: true,
+  response: doctrineResult.response,
+  metadata: { ...existingMetadata },
+  doctrine_gates: doctrineResult.gates,
+  doctrine_enhanced: doctrineResult.enhanced,
+  doctrine_enhancements: doctrineResult.enhancements
+};
+```
+
+3. Add error logging if doctrine gates fail to load:
+```javascript
+try {
+  const { enforceDoctrineGates } = await import('../services/doctrine-gates.js');
+} catch (err) {
+  console.error('[DOCTRINE GATES] Failed to load:', err.message);
+}
+```
+
+---
+
+## Issue 2: Doctrine Gates Test Cases - Hard Fail Logic
+
+### Symptom
+Tests 1-4 expect FAIL but get PASS because composite score (0.7-0.8) exceeds threshold (0.6) even when individual gates fail.
+
+### Evidence
+```json
+{
+  "test": "Test 1: Uncertainty Without Structure",
+  "expected": "FAIL",
+  "actual": "PASS",
+  "compositeScore": 0.7,
+  "gates": { "uncertainty": { "passed": false, "score": 0 } }
+}
+```
+
+### Fix
+Add "hard fail" conditions in `/api/services/doctrine-gates.js`:
+```javascript
+export function enforceDoctrineGates(response, context) {
+  const results = {
+    uncertainty: evaluateUncertaintyStructure(response, context),
+    blindSpots: evaluateBlindSpotVolunteering(response, context),
+    antiEngagement: evaluateAntiEngagementClosure(response),
+    exampleQuality: evaluateExampleQuality(response)
+  };
+  
+  results.compositeScore = calculateTruthFirstScore(results);
+  
+  // HARD FAIL CONDITIONS - these override composite score
+  const hardFailConditions = [];
+  
+  // Engagement bait in closure = automatic fail
+  if (results.antiEngagement.applicable && !results.antiEngagement.passed) {
+    hardFailConditions.push('Engagement bait in closure');
+  }
+  
+  // Uncertainty expressed without structure = automatic fail
+  if (results.uncertainty.applicable && results.uncertainty.score === 0) {
+    hardFailConditions.push('Uncertainty without explanation/framework');
+  }
+  
+  // High-stakes advice without ANY caveats = automatic fail
+  if (results.blindSpots.applicable && results.blindSpots.isHighStakes && results.blindSpots.score === 0) {
+    hardFailConditions.push('High-stakes advice without caveats');
+  }
+  
+  // Check for hard fails
+  if (hardFailConditions.length > 0) {
+    results.passed = false;
+    results.hardFail = true;
+    results.hardFailReasons = hardFailConditions;
+  } else {
+    results.passed = results.compositeScore >= getMinimumScore(context);
+    results.hardFail = false;
+  }
+  
+  results.feedback = generateFeedback(results);
+  return results;
+}
+```
+
+---
+
+## Issue 3: Scale Harness Timeouts on Light+ Tests
+
+### Symptom
+`scale-full&level=light` (500 memories) times out at 108s, never reaching benchmark phase.
+
+### Evidence
+```json
+{
+  "level": "light",
+  "timeout": true,
+  "elapsedSeconds": "108.66",
+  "steps": {
+    "generate": { "success": true, "generated": 500 },
+    // benchmark, invariants, cleanup never reached
+  }
+}
+```
+
+### Fix
+Make scale harness phase-based and resumable in `/api/services/scale-harness.js`:
+
+1. Add `maxSeconds` parameter (default: 25 to leave buffer for response)
+
+2. Check elapsed time between phases:
+```javascript
+async function runScaleFull(pool, level, options = {}) {
+  const startTime = Date.now();
+  const maxMs = (options.maxSeconds || 25) * 1000;
+  
+  const checkTimeout = () => {
+    if (Date.now() - startTime > maxMs) {
+      return true;
+    }
+    return false;
+  };
+  
+  // Phase 1: Generate
+  const generateResult = await generateTestData(pool, userId, config.memories, options);
+  if (checkTimeout()) {
+    return { status: 'partial', completedPhases: ['generate'], nextAction: 'scale-embed', ...generateResult };
+  }
+  
+  // Phase 2: Supersession chains
+  const supersessionResult = await generateSupersessionChains(pool, userId, runId, mode);
+  if (checkTimeout()) {
+    return { status: 'partial', completedPhases: ['generate', 'supersession'], nextAction: 'scale-benchmark', ... };
+  }
+  
+  // Continue for each phase...
+}
+```
+
+3. Add `scale-embed` endpoint for separate embedding phase:
+```javascript
+case 'scale-embed':
+  // Embed pending memories in batches
+  // Can be called multiple times until all embedded
+```
+
+---
+
+## Issue 4: Scale Status Not DB-Truth Based
+
+### Symptom
+`scale-status` returns `totalMemories: 0` even when rows exist in DB.
+
+### Fix
+Query DB directly in `/api/routes/test-semantic.js`:
+```javascript
+case 'scale-status': {
+  const userId = req.query.userId;
+  
+  // Get actual DB counts
+  const countResult = await pool.query(`
+    SELECT 
+      COUNT(*) as total,
+      COUNT(CASE WHEN embedding_status = 'ready' THEN 1 END) as embedded,
+      COUNT(CASE WHEN embedding_status = 'pending' THEN 1 END) as pending,
+      COUNT(CASE WHEN embedding_status = 'failed' THEN 1 END) as failed
+    FROM persistent_memories 
+    WHERE user_id = $1
+  `, [userId]);
+  
+  // Get run information from metadata
+  const runsResult = await pool.query(`
+    SELECT DISTINCT metadata->>'run_id' as run_id, 
+           COUNT(*) as count,
+           MIN(created_at) as started_at
+    FROM persistent_memories 
+    WHERE user_id = $1 AND metadata->>'run_id' IS NOT NULL
+    GROUP BY metadata->>'run_id'
+  `, [userId]);
+  
+  return res.json({
+    action: 'scale-status',
+    success: true,
+    userId,
+    totalMemories: parseInt(countResult.rows[0].total),
+    embeddingStatus: {
+      ready: parseInt(countResult.rows[0].embedded),
+      pending: parseInt(countResult.rows[0].pending),
+      failed: parseInt(countResult.rows[0].failed)
+    },
+    runs: runsResult.rows
+  });
+}
+```
+
+---
+
+## Issue 5: Cleanup Interference with Active Runs
+
+### Symptom
+Periodic cleanup may delete in-progress scale test data.
+
+### Fix
+In cleanup logic, skip test data with recent activity:
+```javascript
+// In periodic cleanup or scale-cleanup:
+const CLEANUP_SAFE_PATTERN = /^test-scale-|^scale-test-|^acceptance-test-/;
+
+// Only cleanup if:
+// 1. User ID matches test pattern AND
+// 2. No activity in last 10 minutes (for timeout recovery)
+const safeToCleanup = (userId, lastActivity) => {
+  if (!CLEANUP_SAFE_PATTERN.test(userId)) return false;
+  const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+  return lastActivity < tenMinutesAgo;
+};
+```
+
+---
+
+## Files to Modify
+
+1. **`/api/core/orchestrator.js`**
+   - Fix doctrine gates integration
+   - Ensure metadata returned in response
+   - Add debug logging
+
+2. **`/api/services/doctrine-gates.js`**
+   - Add hard fail logic
+   - Override composite for critical violations
+
+3. **`/api/services/scale-harness.js`**
+   - Add phase-based execution
+   - Add timeout checking
+   - Return partial results with nextAction
+
+4. **`/api/routes/test-semantic.js`**
+   - Fix scale-status to query DB directly
+   - Add scale-embed endpoint
+   - Update scale-full for resumability
+
+---
+
+## Acceptance Criteria
+
+### Doctrine Gates
+```javascript
+// 1. Metadata returned in chat response
+const chat = await fetch('/api/chat', {...}).then(r => r.json());
+assert(chat.doctrine_gates !== undefined);
+assert(typeof chat.doctrine_gates.compositeScore === 'number');
+
+// 2. Test cases pass with hard fail logic
+const tests = await fetch('/api/test-semantic?action=test-doctrine-gates').then(r => r.json());
+assert(tests.passed === true);
+assert(tests.passedTests === 5);
+```
+
+### Scale Harness
+```javascript
+// 3. Light test returns partial or completes
+const light = await fetch('/api/test-semantic?action=scale-full&level=light').then(r => r.json());
+assert(light.status === 'partial' || light.passed === true);
+
+// 4. Status shows DB truth
+const status = await fetch('/api/test-semantic?action=scale-status&userId=xxx').then(r => r.json());
+assert(status.totalMemories > 0); // If data exists
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

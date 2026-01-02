@@ -465,17 +465,59 @@ export function calculatePercentiles(values) {
 }
 
 /**
- * Cleanup test data
+ * Cleanup test data with safety checks to prevent interference with active runs
  *
  * @param {Object} pool - Database connection pool
  * @param {string} userId - Test user ID
  * @param {string} runId - Optional run ID to delete specific run
+ * @param {Object} options - Cleanup options
  * @returns {Promise<Object>} Cleanup result
  */
-export async function cleanup(pool, userId, runId = null) {
+export async function cleanup(pool, userId, runId = null, options = {}) {
+  const { force = false, minAgeMinutes = 10 } = options;
+
   console.log(`[SCALE-HARNESS] Cleaning up test data for ${userId}${runId ? ` (runId: ${runId})` : ''}`);
 
   try {
+    // Safety check: Verify user ID matches test pattern
+    const CLEANUP_SAFE_PATTERN = /^test-scale-|^scale-test-|^acceptance-test-/;
+    if (!CLEANUP_SAFE_PATTERN.test(userId)) {
+      console.log(`[SCALE-HARNESS] Safety check: userId "${userId}" does not match test pattern - skipping cleanup`);
+      return {
+        success: false,
+        error: 'User ID does not match test pattern (must start with test-scale-, scale-test-, or acceptance-test-)',
+        userId,
+        deleted: 0
+      };
+    }
+
+    // Safety check: Check for recent activity unless force is true
+    if (!force) {
+      const activityCheck = await pool.query(`
+        SELECT MAX(created_at) as last_activity
+        FROM persistent_memories
+        WHERE user_id = $1 ${runId ? "AND metadata->>'run_id' = $2" : ''}
+      `, runId ? [userId, runId] : [userId]);
+
+      if (activityCheck.rows.length > 0 && activityCheck.rows[0].last_activity) {
+        const lastActivity = new Date(activityCheck.rows[0].last_activity);
+        const ageMinutes = (Date.now() - lastActivity.getTime()) / (1000 * 60);
+
+        if (ageMinutes < minAgeMinutes) {
+          console.log(`[SCALE-HARNESS] Safety check: Test data has activity within ${minAgeMinutes} minutes (${ageMinutes.toFixed(1)}m ago) - skipping cleanup to avoid interfering with active runs`);
+          return {
+            success: false,
+            error: `Test data has recent activity (${ageMinutes.toFixed(1)} minutes ago). Wait ${minAgeMinutes} minutes or use force=true`,
+            userId,
+            runId,
+            deleted: 0,
+            lastActivity: activityCheck.rows[0].last_activity
+          };
+        }
+      }
+    }
+
+    // Proceed with cleanup
     let query, params;
 
     if (runId) {

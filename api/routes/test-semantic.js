@@ -1033,7 +1033,7 @@ export default async function handler(req, res) {
         const testUserId = `test-scale-${level}-${Date.now()}`;
         const runId = `run-${level}-${Date.now()}`;
         const mode = req.query.mode || 'truth-general';
-        const maxSeconds = parseInt(req.query.maxSeconds) || 30;
+        const maxSeconds = parseInt(req.query.maxSeconds) || 25; // Default 25s to leave buffer
 
         const startTime = Date.now();
         const results = {
@@ -1041,7 +1041,14 @@ export default async function handler(req, res) {
           config,
           testUserId,
           runId,
-          steps: {}
+          steps: {},
+          completedPhases: []
+        };
+
+        // Helper to check timeout
+        const checkTimeout = () => {
+          const elapsed = (Date.now() - startTime) / 1000;
+          return elapsed >= maxSeconds;
         };
 
         try {
@@ -1053,12 +1060,15 @@ export default async function handler(req, res) {
             skipEmbedding: false
           });
           results.steps.generate = generateResult;
+          results.completedPhases.push('generate');
 
-          // Check time budget
-          if ((Date.now() - startTime) / 1000 >= maxSeconds) {
-            results.timeout = true;
+          // Check time budget after generation
+          if (checkTimeout()) {
+            results.status = 'partial';
+            results.nextAction = `scale-embed&userId=${testUserId}`;
             results.elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(2);
-            await cleanup(pool, testUserId);
+            results.message = 'Timeout after generation phase. Use scale-embed to continue embedding, then resume with scale-benchmark.';
+            console.log(`[SCALE-FULL] Timeout after generate phase (${results.elapsedSeconds}s)`);
             return res.status(200).json(results);
           }
 
@@ -1066,27 +1076,53 @@ export default async function handler(req, res) {
           console.log(`[SCALE-FULL] Step 2: Generating supersession chains...`);
           const supersessionResult = await generateSupersessionChains(pool, testUserId, runId, mode);
           results.steps.supersession = supersessionResult;
+          results.completedPhases.push('supersession');
+
+          // Check time budget after supersession
+          if (checkTimeout()) {
+            results.status = 'partial';
+            results.nextAction = `scale-benchmark&userId=${testUserId}&queries=${config.queries}`;
+            results.elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(2);
+            results.message = 'Timeout after supersession phase. Resume with scale-benchmark.';
+            console.log(`[SCALE-FULL] Timeout after supersession phase (${results.elapsedSeconds}s)`);
+            return res.status(200).json(results);
+          }
 
           // Step 3: Run benchmark
           console.log(`[SCALE-FULL] Step 3: Running ${config.queries} queries...`);
           const benchmarkResult = await runBenchmark(pool, testUserId, config.queries, { mode });
           results.steps.benchmark = benchmarkResult;
+          results.completedPhases.push('benchmark');
+
+          // Check time budget after benchmark
+          if (checkTimeout()) {
+            results.status = 'partial';
+            results.nextAction = `scale-invariants&userId=${testUserId}`;
+            results.elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(2);
+            results.message = 'Timeout after benchmark phase. Resume with scale-invariants.';
+            console.log(`[SCALE-FULL] Timeout after benchmark phase (${results.elapsedSeconds}s)`);
+            return res.status(200).json(results);
+          }
 
           // Step 4: Validate invariants
           console.log(`[SCALE-FULL] Step 4: Validating invariants...`);
           const invariantResult = await validateInvariants(pool, testUserId, benchmarkResult);
           results.steps.invariants = invariantResult;
+          results.completedPhases.push('invariants');
 
           // Step 5: Measure behavioral (observational)
           console.log(`[SCALE-FULL] Step 5: Measuring behavioral patterns...`);
           const behavioral = measureBehavioral(JSON.stringify(benchmarkResult));
           results.steps.behavioral = behavioral;
+          results.completedPhases.push('behavioral');
 
           // Step 6: Cleanup
           console.log(`[SCALE-FULL] Step 6: Cleaning up test data...`);
-          const cleanupResult = await cleanup(pool, testUserId);
+          const cleanupResult = await cleanup(pool, testUserId, null, { force: true });
           results.steps.cleanup = cleanupResult;
+          results.completedPhases.push('cleanup');
 
+          results.status = 'complete';
           results.elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(2);
           results.passed = invariantResult.allPassed;
 
@@ -1097,8 +1133,8 @@ export default async function handler(req, res) {
         } catch (error) {
           console.error('[SCALE-FULL] Error:', error.message);
 
-          // Attempt cleanup on error
-          await cleanup(pool, testUserId).catch(() => {});
+          // Attempt cleanup on error (force=true to clean up immediately)
+          await cleanup(pool, testUserId, null, { force: true }).catch(() => {});
 
           return res.status(500).json({
             action: 'scale-full',
@@ -1120,12 +1156,15 @@ export default async function handler(req, res) {
         if (!testUserId) {
           return res.status(400).json({
             error: 'Missing userId parameter',
-            usage: '/api/test-semantic?action=scale-cleanup&userId=test-scale-xxx'
+            usage: '/api/test-semantic?action=scale-cleanup&userId=test-scale-xxx&force=true&minAgeMinutes=10'
           });
         }
 
         const runId = req.query.runId || null;
-        const result = await cleanup(pool, testUserId, runId);
+        const force = req.query.force === 'true';
+        const minAgeMinutes = parseInt(req.query.minAgeMinutes) || 10;
+
+        const result = await cleanup(pool, testUserId, runId, { force, minAgeMinutes });
 
         return res.status(200).json({
           action: 'scale-cleanup',
@@ -1137,8 +1176,6 @@ export default async function handler(req, res) {
       // SCALE: GET STATUS
       // ============================================
       case 'scale-status': {
-        const { getStatus } = await import('../services/scale-harness.js');
-
         const testUserId = req.query.userId;
         if (!testUserId) {
           return res.status(400).json({
@@ -1147,12 +1184,69 @@ export default async function handler(req, res) {
           });
         }
 
-        const result = await getStatus(pool, testUserId);
+        try {
+          // Get actual DB counts
+          const countResult = await pool.query(`
+            SELECT
+              COUNT(*) as total,
+              COUNT(CASE WHEN embedding_status = 'ready' THEN 1 END) as embedded,
+              COUNT(CASE WHEN embedding_status = 'pending' THEN 1 END) as pending,
+              COUNT(CASE WHEN embedding_status = 'failed' THEN 1 END) as failed,
+              COUNT(CASE WHEN embedding_status = 'skipped' THEN 1 END) as skipped
+            FROM persistent_memories
+            WHERE user_id = $1
+          `, [testUserId]);
 
-        return res.status(200).json({
-          action: 'scale-status',
-          ...result
-        });
+          // Get run information from metadata
+          const runsResult = await pool.query(`
+            SELECT
+              metadata->>'run_id' as run_id,
+              COUNT(*) as count,
+              MIN(created_at) as started_at,
+              MAX(created_at) as last_activity
+            FROM persistent_memories
+            WHERE user_id = $1 AND metadata->>'run_id' IS NOT NULL
+            GROUP BY metadata->>'run_id'
+            ORDER BY MAX(created_at) DESC
+          `, [testUserId]);
+
+          // Get tripwire count
+          const tripwireResult = await pool.query(`
+            SELECT COUNT(*) as count
+            FROM persistent_memories
+            WHERE user_id = $1 AND fact_fingerprint LIKE 'tripwire_%'
+          `, [testUserId]);
+
+          const counts = countResult.rows[0];
+
+          return res.status(200).json({
+            action: 'scale-status',
+            success: true,
+            userId: testUserId,
+            totalMemories: parseInt(counts.total),
+            embeddingStatus: {
+              ready: parseInt(counts.embedded),
+              pending: parseInt(counts.pending),
+              failed: parseInt(counts.failed),
+              skipped: parseInt(counts.skipped || 0)
+            },
+            tripwires: parseInt(tripwireResult.rows[0].count),
+            runs: runsResult.rows.map(r => ({
+              runId: r.run_id,
+              count: parseInt(r.count),
+              startedAt: r.started_at,
+              lastActivity: r.last_activity
+            }))
+          });
+        } catch (error) {
+          console.error('[SCALE-STATUS] Error:', error.message);
+          return res.status(500).json({
+            action: 'scale-status',
+            success: false,
+            error: error.message,
+            userId: testUserId
+          });
+        }
       }
 
       // ============================================

@@ -423,10 +423,37 @@ export function enforceDoctrineGates(response, context = {}) {
   // Calculate composite score
   results.compositeScore = calculateTruthFirstScore(results);
 
-  // Determine pass/fail
-  const minimumScore = getMinimumScore(context);
-  results.passed = results.compositeScore >= minimumScore;
-  results.minimumScore = minimumScore;
+  // HARD FAIL CONDITIONS - these override composite score
+  const hardFailConditions = [];
+
+  // Engagement bait in closure = automatic fail
+  if (results.antiEngagement.applicable && !results.antiEngagement.passed) {
+    hardFailConditions.push('Engagement bait in closure');
+  }
+
+  // Uncertainty expressed without structure = automatic fail
+  if (results.uncertainty.applicable && results.uncertainty.score === 0) {
+    hardFailConditions.push('Uncertainty without explanation/framework');
+  }
+
+  // High-stakes advice without ANY caveats = automatic fail
+  if (results.blindSpots.applicable && results.blindSpots.isHighStakes && results.blindSpots.score === 0) {
+    hardFailConditions.push('High-stakes advice without caveats');
+  }
+
+  // Check for hard fails
+  if (hardFailConditions.length > 0) {
+    results.passed = false;
+    results.hardFail = true;
+    results.hardFailReasons = hardFailConditions;
+  } else {
+    // Determine pass/fail based on composite score
+    const minimumScore = getMinimumScore(context);
+    results.passed = results.compositeScore >= minimumScore;
+    results.hardFail = false;
+  }
+
+  results.minimumScore = getMinimumScore(context);
 
   // Generate feedback
   results.feedback = generateFeedback(results);
