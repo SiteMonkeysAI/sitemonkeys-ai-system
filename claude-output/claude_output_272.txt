@@ -1,0 +1,20 @@
+Perfect! The fix has been applied. The change is minimal and surgical - I only modified line 802 to correctly access the `method` property from `retrievalResult.telemetry?.method` instead of `retrievalResult.method`.
+
+This fix ensures that the assertion checks the correct property path where the `method` value actually exists in the response structure.
+
+---SUMMARY---
+Fixed the live-proof assertion in `/api/routes/test-semantic.js` (line 802) to check the correct property path for the retrieval method.
+
+**Changed:**
+- Line 802: `retrievalResult.method` → `retrievalResult.telemetry?.method`
+
+**What was wrong:**
+The test was checking `result.method` at the top level, but the actual structure has `method` nested inside `result.telemetry.method`. The logs confirmed this structure, showing `method: undefined` at top level and `telemetry: { method: 'semantic' }` at the correct location.
+
+**Why this fixes it:**
+The assertion `method_is_semantic_or_hybrid` now correctly checks `retrievalResult.telemetry?.method` instead of the non-existent top-level property, allowing the test to properly validate that semantic retrieval was used. The optional chaining (`?.`) is maintained for safety.
+
+**Impact:**
+This is a one-line fix that corrects the assertion without changing any functionality. All other assertions remain unchanged, and the test will now properly pass when semantic retrieval is working correctly.
+
+---END SUMMARY---
