@@ -1,0 +1,61 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #338: [claude-fix] Issue: Complete external lookup injection - fetched data must reach AI prompt
+
+Issue Description:
+[claude-fix] Issue: Complete external lookup injection - fetched data must reach AI prompt
+Context: External lookup infrastructure works (triggers correctly, external_lookup: true, verified_at set), but fetched data never reaches the AI:
+
+sources_used: 0 on all responses
+AI responds from training data, not fetched content
+The lookup runs but results aren't used
+
+Task - Complete the data flow:
+1. Debug what lookup() actually returns
+In orchestrator.js where lookup() is called, add logging:
+javascriptconsole.log('[PHASE4] Lookup result:', JSON.stringify(lookupResult, null, 2));
+2. Capture the fetched content
+The lookupResult should contain data with fetched text. Store it:
+javascriptphase4Metadata.fetched_content = lookupResult.data?.sources?.map(s => s.text).join('\n\n') || null;
+phase4Metadata.sources_used = lookupResult.data?.sources?.length || 0;
+3. Inject into AI prompt context
+Before the AI generation call, if external data was fetched, prepend it to the context:
+javascriptif (phase4Metadata.fetched_content && phase4Metadata.sources_used > 0) {
+  const externalContext = `[CURRENT EXTERNAL INFORMATION - Use this to inform your response]\n${phase4Metadata.fetched_content}\n[END EXTERNAL INFORMATION]\n\n`;
+  // Prepend to whatever context/prompt is passed to AI
+  enhancedContext = externalContext + existingContext;
+  console.log('[PHASE4] Injected external content:', phase4Metadata.sources_used, 'sources');
+}
+4. Check if performLookup is actually fetching
+In /api/core/intelligence/externalLookupEngine.js, verify performLookup() makes real HTTP requests and returns content. Add logging:
+javascriptconsole.log('[externalLookupEngine] Fetched from', source.url, ':', text.length, 'chars');
+5. Check network allowlist
+Railway may be blocking external domains. Verify these are allowed:
+
+api.coingecko.com (or similar for crypto prices)
+Authoritative sources defined in DOMAIN_SOURCES
+
+Acceptance Criteria:
+
+Ask "What is the current price of Bitcoin?"
+sources_used > 0 in response
+AI response includes actual current price (not "I don't have real-time data")
+Railway logs show [PHASE4] Injected external content: X sources
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

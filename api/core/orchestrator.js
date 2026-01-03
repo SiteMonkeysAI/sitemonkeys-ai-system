@@ -565,6 +565,9 @@ export class Orchestrator {
             truthType: truthTypeResult.type,
           });
 
+          // Debug: Log what lookup returned
+          console.log('[PHASE4] Lookup result:', JSON.stringify(lookupResult, null, 2));
+
           if (lookupResult.success && lookupResult.data) {
             phase4Metadata.external_lookup = true;
             phase4Metadata.lookup_attempted = true;
@@ -572,6 +575,19 @@ export class Orchestrator {
             phase4Metadata.verified_at = new Date().toISOString();
             phase4Metadata.sources_used = lookupResult.data.sources?.length || 0;
             phase4Metadata.external_data = lookupResult.data;
+
+            // Extract fetched content from the lookup result
+            // lookupResult.data.sources is an array of {source, text, length}
+            if (lookupResult.data.sources && Array.isArray(lookupResult.data.sources)) {
+              phase4Metadata.fetched_content = lookupResult.data.sources
+                .map(s => `[Source: ${s.source}]\n${s.text}`)
+                .join('\n\n---\n\n');
+              phase4Metadata.sources_used = lookupResult.data.sources.length;
+            } else {
+              phase4Metadata.fetched_content = null;
+              // lookupResult.sources_used is an array of source objects
+              phase4Metadata.sources_used = Array.isArray(lookupResult.sources_used) ? lookupResult.sources_used.length : 0;
+            }
 
             // Update cache validity if provided
             if (lookupResult.cache_valid_until) {
@@ -587,11 +603,13 @@ export class Orchestrator {
             }
             this.log(`[PHASE4] 4. Stored in phase4Metadata: ${phase4Metadata.sources_used} sources, ${lookupResult.data.total_text_length} total chars`);
             this.log(
-              `✅ External lookup successful: ${phase4Metadata.sources_used} sources`,
+              `✅ External lookup successful: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content ? phase4Metadata.fetched_content.length : 0} chars`,
             );
           } else {
             phase4Metadata.external_lookup = false;
             phase4Metadata.lookup_attempted = true;
+            phase4Metadata.fetched_content = null;
+            phase4Metadata.sources_used = 0;
             this.log("⚠️ External lookup failed or returned no data");
           }
         }
@@ -2066,6 +2084,13 @@ export class Orchestrator {
 
       const systemPrompt = this.#buildSystemPrompt(mode, analysis);
 
+      // PHASE 4: Inject external content if fetched
+      let externalContext = "";
+      if (phase4Metadata.fetched_content && phase4Metadata.sources_used > 0) {
+        externalContext = `\n\n[CURRENT EXTERNAL INFORMATION - Use this to inform your response]\n${phase4Metadata.fetched_content}\n[END EXTERNAL INFORMATION]\n\n`;
+        console.log(`[PHASE4] Injected external content: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content.length} chars`);
+      }
+
       // VAULT-ONLY MODE: Pure vault queries bypass contamination
       const isVaultQuery =
         context.sources?.hasVault &&
@@ -2078,16 +2103,17 @@ export class Orchestrator {
       if (isVaultQuery) {
         console.log("[AI] 🔒 PURE VAULT MODE - Zero contamination");
         fullPrompt = `You are a vault content specialist. Search through the ENTIRE vault systematically.
-      
+
       VAULT CONTENT:
       ${context.vault}
-      
+
       USER QUESTION: ${message}
-      
+
       Instructions: Search thoroughly and quote directly from the vault. Reference document names when quoting.`;
         console.log(`[AI] Pure vault prompt: ${fullPrompt.length} chars`);
       } else {
-        fullPrompt = `${systemPrompt}\n\n${contextString}${historyString}\n\nUser query: ${message}`;
+        // Inject external context at the beginning of the context (before vault/memory)
+        fullPrompt = `${systemPrompt}\n\n${externalContext}${contextString}${historyString}\n\nUser query: ${message}`;
       }
 
       let response, inputTokens, outputTokens;
@@ -2111,7 +2137,7 @@ export class Orchestrator {
                 { role: "system", content: systemPrompt },
                 {
                   role: "user",
-                  content: `${contextString}${historyString}\n\n${message}`,
+                  content: `${externalContext}${contextString}${historyString}\n\n${message}`,
                 },
               ],
           temperature: 0.7,
