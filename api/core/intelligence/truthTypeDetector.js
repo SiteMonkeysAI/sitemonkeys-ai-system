@@ -58,8 +58,13 @@ const PERMANENT_PATTERNS = [
 export const HIGH_STAKES_DOMAINS = {
   MEDICAL: [
     /\b(symptom|diagnosis|treatment|medication|dosage|drug|prescription)\b/i,
+    /\bsymptoms? of\b/i,
+    /\bside effects?\b/i,
+    /\bdrug interactions?\b/i,
     /\b(disease|condition|syndrome|disorder)\b/i,
-    /\b(side effect|interaction|contraindication)\b/i
+    /\b(interaction|contraindications?)\b/i,
+    /\b(aspirin|ibuprofen|tylenol|advil|acetaminophen)\b/i,
+    /\b(overdose|prognosis)\b/i
   ],
   LEGAL: [
     /\b(legal|law|lawsuit|court|attorney|lawyer)\b/i,
