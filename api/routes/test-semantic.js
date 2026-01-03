@@ -14,6 +14,7 @@
 
 import { retrieveSemanticMemories, getRetrievalStats } from '../services/semantic-retrieval.js';
 import { generateEmbedding, backfillEmbeddings, embedMemory } from '../services/embedding-service.js';
+import { testRouting } from '../core/intelligence/hierarchyRouter.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -1752,10 +1753,26 @@ export default async function handler(req, res) {
         }
       }
 
+      // ============================================
+      // PHASE 4: HIERARCHY ROUTING
+      // ============================================
+      case 'hierarchy': {
+        const { q: query } = req.query;
+        const routingMode = req.query.mode || 'truth';
+
+        try {
+          const result = await testRouting(query, routingMode);
+          return res.json(result);
+        } catch (error) {
+          console.error('[hierarchyRouter] Test endpoint error:', error);
+          return res.status(500).json({ success: false, error: error.message });
+        }
+      }
+
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed', 'test-doctrine-gates', 'test-document-ingestion', 'backfill-doc-embeddings', 'doc-status', 'truth-type', 'cache'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed', 'test-doctrine-gates', 'test-document-ingestion', 'backfill-doc-embeddings', 'doc-status', 'truth-type', 'cache', 'hierarchy'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -1784,7 +1801,10 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=doc-status&documentId=123',
             '/api/test-semantic?action=truth-type&q=What%20is%20the%20current%20price%20of%20Bitcoin',
             '/api/test-semantic?action=cache&cacheAction=stats',
-            '/api/test-semantic?action=cache&cacheAction=set&q=Bitcoin%20price&data=50000&truthType=VOLATILE'
+            '/api/test-semantic?action=cache&cacheAction=set&q=Bitcoin%20price&data=50000&truthType=VOLATILE',
+            '/api/test-semantic?action=hierarchy&q=What%20is%20our%20minimum%20pricing',
+            '/api/test-semantic?action=hierarchy&q=What%20is%20the%20current%20price%20of%20Bitcoin',
+            '/api/test-semantic?action=hierarchy&q=What%20is%20our%20pricing&mode=site_monkeys'
           ]
         });
     }

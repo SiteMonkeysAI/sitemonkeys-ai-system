@@ -1,0 +1,36 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #316: [claude-fix] Issue: Add hierarchy action to test-semantic router
+
+Issue Description:
+Context: Phase 4 hierarchyRouter.js has been created at /api/core/intelligence/hierarchyRouter.js. Need to add it to the consolidated action router.
+Task:
+
+Add import for testRouting from hierarchyRouter.js
+Add action=hierarchy handler that calls testRouting with query and mode params
+
+Test after deploy:
+
+/api/test-semantic?action=hierarchy&q=What%20is%20our%20minimum%20pricing → BUSINESS_POLICY, VAULT_FIRST
+/api/test-semantic?action=hierarchy&q=What%20is%20the%20current%20price%20of%20Bitcoin → OBJECTIVE_FACTUAL, EXTERNAL_FIRST
+/api/test-semantic?action=hierarchy&q=What%20is%20our%20pricing&mode=site_monkeys → BUSINESS_POLICY, VAULT_FIRST
+
+Acceptance: Endpoint returns claim_type, hierarchy, and external_lookup_required for all test queries.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
