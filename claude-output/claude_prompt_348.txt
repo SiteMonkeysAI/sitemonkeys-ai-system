@@ -1,0 +1,69 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #348: [claude-fix] Issue: Orchestrator lookup trigger only matches exact single-word queries, not patterns within sentences
+
+Issue Description:
+Context: External lookup only triggers for single-word queries like "Venezuela", but NOT for:
+
+"attack Venezuela" ❌
+"Did the US attack Venezuela" ❌
+"Venezuela news" ❌
+"What is happening in Venezuela today" ❌
+
+The pattern matching in the orchestrator is checking for exact matches rather than using regex .test() or .match() to find patterns within the query.
+Diagnosis: The trigger logic is likely doing something like:
+javascript// BROKEN - only matches exact word
+if (newsKeywords.includes(query)) { ... }
+
+// Or checking word-by-word incorrectly
+Task: In /api/core/orchestrator.js, find the external lookup trigger logic and fix the pattern matching:
+javascript// CORRECT - matches patterns within query
+const newsPatterns = /venezuela|ukraine|russia|china|iran|israel|gaza|congress|senate|white house|attack|election|president|war|invasion|military|news|today|this morning|yesterday|breaking/i;
+
+if (newsPatterns.test(message)) {
+  shouldAttemptLookup = true;
+}
+The regex .test() method will return true if the pattern exists ANYWHERE in the message, not just as an exact match.
+Acceptance Criteria:
+
+"Venezuela" → lookup_attempted: true ✅ (already works)
+"attack Venezuela" → lookup_attempted: true
+"Did the US attack Venezuela" → lookup_attempted: true
+"Venezuela news" → lookup_attempted: true
+"What is happening in Venezuela today" → lookup_attempted: true
+
+Test after deploy:
+jsconst queries = [
+  "Venezuela",
+  "attack Venezuela",
+  "Did the US attack Venezuela",
+  "What is happening in Venezuela today",
+  "Venezuela news"
+];
+
+for (const q of queries) {
+  fetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, 
+    body:JSON.stringify({message: q, mode:"truth-general"})
+  }).then(r=>r.json()).then(d=>{
+    console.log(`"${q}" => lookup_attempted:`, d.phase4_metadata?.lookup_attempted);
+  });
+}
+// ALL should return lookup_attempted: true
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

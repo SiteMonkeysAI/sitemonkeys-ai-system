@@ -30,7 +30,8 @@ const VOLATILE_PATTERNS = [
   /\b(weather|forecast|temperature)\b/i,
   /\b(news|happening|update)\b/i,
   /\bwhat('s| is) .* (right now|today|currently)\b/i,
-  /\bhow much (is|does|are) .* (cost|worth)\b/i
+  /\bhow much (is|does|are) .* (cost|worth)\b/i,
+  /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|congress|senate|white house|attack|election|president|war|invasion|military|conflict|strike|bombing|sanctions|diplomatic|crisis|coup|protest|riot)\b/i
 ];
 
 const SEMI_STABLE_PATTERNS = [
