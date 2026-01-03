@@ -568,48 +568,69 @@ export class Orchestrator {
           // Debug: Log what lookup returned
           console.log('[PHASE4] Lookup result:', JSON.stringify(lookupResult, null, 2));
 
-          if (lookupResult.success && lookupResult.data) {
+          // Check if lookup was performed and has data
+          if (lookupResult.lookup_performed && lookupResult.data) {
+            // Successful lookup with data
             phase4Metadata.external_lookup = true;
             phase4Metadata.lookup_attempted = true;
             phase4Metadata.source_class = "external";
-            phase4Metadata.verified_at = new Date().toISOString();
-            phase4Metadata.sources_used = lookupResult.data.sources?.length || 0;
+            phase4Metadata.verified_at = lookupResult.verified_at || new Date().toISOString();
             phase4Metadata.external_data = lookupResult.data;
 
             // Extract fetched content from the lookup result
-            // lookupResult.data.sources is an array of {source, text, length}
-            if (lookupResult.data.sources && Array.isArray(lookupResult.data.sources)) {
+            // lookupResult.data.sources is an array of {source, text, length, type}
+            if (lookupResult.data.sources && Array.isArray(lookupResult.data.sources) && lookupResult.data.sources.length > 0) {
               phase4Metadata.fetched_content = lookupResult.data.sources
                 .map(s => `[Source: ${s.source}]\n${s.text}`)
                 .join('\n\n---\n\n');
               phase4Metadata.sources_used = lookupResult.data.sources.length;
             } else {
               phase4Metadata.fetched_content = null;
-              // lookupResult.sources_used is an array of source objects
-              phase4Metadata.sources_used = Array.isArray(lookupResult.sources_used) ? lookupResult.sources_used.length : 0;
+              // Count successful sources from sources_consulted
+              const successfulSources = lookupResult.sources_used?.filter(s => s.success === true) || [];
+              phase4Metadata.sources_used = successfulSources.length;
             }
 
-            // Update cache validity if provided
-            if (lookupResult.cache_valid_until) {
-              phase4Metadata.cache_valid_until = lookupResult.cache_valid_until;
-            }
+            // CRITICAL: If sources_used is 0 but external_lookup is true, this is inconsistent
+            // This means graceful degradation occurred - mark as failed lookup
+            if (phase4Metadata.sources_used === 0) {
+              phase4Metadata.external_lookup = false;
+              phase4Metadata.lookup_attempted = true;
+              phase4Metadata.failure_reason = lookupResult.failure_reason || 'No reliable parseable source available';
+              this.log(`⚠️ External lookup attempted but no sources succeeded (graceful degradation)`);
+            } else {
+              // Update cache validity if provided
+              if (lookupResult.cache_valid_until) {
+                phase4Metadata.cache_valid_until = lookupResult.cache_valid_until;
+              }
 
-            // Log complete lookup success with details
-            this.log(`[PHASE4] 2. Fetching completed`);
-            if (lookupResult.data.sources) {
-              lookupResult.data.sources.forEach((src, idx) => {
-                this.log(`[PHASE4] 3. Received: ${src.length} bytes from ${src.source}`);
-              });
+              // Log complete lookup success with details
+              this.log(`[PHASE4] 2. Fetching completed`);
+              if (lookupResult.data.sources) {
+                lookupResult.data.sources.forEach((src, idx) => {
+                  this.log(`[PHASE4] 3. Received: ${src.length} bytes from ${src.source}`);
+                });
+              }
+              this.log(`[PHASE4] 4. Stored in phase4Metadata: ${phase4Metadata.sources_used} sources, ${lookupResult.data.total_text_length} total chars`);
+              this.log(
+                `✅ External lookup successful: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content ? phase4Metadata.fetched_content.length : 0} chars`,
+              );
             }
-            this.log(`[PHASE4] 4. Stored in phase4Metadata: ${phase4Metadata.sources_used} sources, ${lookupResult.data.total_text_length} total chars`);
-            this.log(
-              `✅ External lookup successful: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content ? phase4Metadata.fetched_content.length : 0} chars`,
-            );
-          } else {
+          } else if (lookupResult.lookup_attempted && !lookupResult.lookup_performed) {
+            // Lookup was attempted but no reliable source available (graceful degradation)
             phase4Metadata.external_lookup = false;
             phase4Metadata.lookup_attempted = true;
             phase4Metadata.fetched_content = null;
             phase4Metadata.sources_used = 0;
+            phase4Metadata.failure_reason = lookupResult.failure_reason || 'No reliable parseable source available for this query type';
+            this.log(`⚠️ External lookup: ${phase4Metadata.failure_reason}`);
+          } else {
+            // Lookup failed or returned no data
+            phase4Metadata.external_lookup = false;
+            phase4Metadata.lookup_attempted = lookupResult.lookup_attempted || false;
+            phase4Metadata.fetched_content = null;
+            phase4Metadata.sources_used = 0;
+            phase4Metadata.failure_reason = lookupResult.error || 'External lookup failed or returned no data';
             this.log("⚠️ External lookup failed or returned no data");
           }
         }
@@ -856,18 +877,18 @@ export class Orchestrator {
             external_lookup: phase4Metadata.external_lookup,
             lookup_attempted: phase4Metadata.lookup_attempted,
             sources_used: phase4Metadata.sources_used,
+            failure_reason: phase4Metadata.failure_reason || null,
             claim_type: phase4Metadata.claim_type,
             hierarchy: phase4Metadata.hierarchy,
             confidence: phase4Metadata.confidence,
             high_stakes: phase4Metadata.high_stakes,
             phase4_error: phase4Metadata.phase4_error,
-            // Include fetched content summary for verification
-            fetched_content: phase4Metadata.external_data ? {
-              total_text_length: phase4Metadata.external_data.total_text_length,
-              sources_count: phase4Metadata.external_data.sources?.length || 0,
-              query: phase4Metadata.external_data.query,
-              timestamp: phase4Metadata.external_data.timestamp
-            } : null,
+            // Include sources summary (bounded, not full content)
+            sources: phase4Metadata.external_data?.sources?.map(s => ({
+              name: s.source,
+              type: s.type,
+              success: true
+            })) || null,
           },
 
           // PHASE 5: Enforcement Gate Results
