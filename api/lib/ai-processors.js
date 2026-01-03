@@ -269,13 +269,12 @@ export async function processWithEliAndRoxy({
 
       if (!phase5Enforcement.enforcement_passed) {
         console.log(
-          `⚠️ Phase 5 enforcement violations: ${phase5Enforcement.violations.join(", ")}`,
+          `⚠️ Phase 5 enforcement violations: ${phase5Enforcement.violations.map(v => v.gate).join(", ")}`,
         );
 
-        // Apply corrections if needed
-        if (phase5Enforcement.corrections.length > 0) {
-          const correctionNote = "\n\n" + phase5Enforcement.corrections.join("\n");
-          response.response += correctionNote;
+        // Apply corrected response if enforcement modified it
+        if (phase5Enforcement.corrected_response) {
+          response.response = phase5Enforcement.corrected_response;
           console.log("✏️ Applied enforcement corrections to response");
         }
       } else {
@@ -574,7 +573,8 @@ export async function processWithEliAndRoxy({
         enforcement_passed: phase5Enforcement.enforcement_passed,
         violations: phase5Enforcement.violations,
         gate_results: phase5Enforcement.gate_results,
-        total_gates_checked: phase5Enforcement.total_gates_checked,
+        gates_run: phase5Enforcement.gates_run,
+        original_response_modified: phase5Enforcement.original_response_modified,
         phase5_error: phase5Enforcement.phase5_error,
       },
 
