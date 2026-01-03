@@ -55,6 +55,9 @@ import rateLimit from "express-rate-limit";
 import { storeWithSupersession, generateFactFingerprint } from "./api/services/supersession.js";
 import { embedMemoryNonBlocking } from "./api/services/embedding-service.js";
 // ================================================
+// ========== PHASE 4: TRUTH TYPE DETECTOR ==========
+import { testDetection } from './api/core/intelligence/truthTypeDetector.js';
+// ================================================
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -847,6 +850,32 @@ app.use("/api/test", memoryFullCheckRoutes);
 app.get("/api/migrate-semantic", migrateSemanticRateLimiter, migrateSemanticHandler);
 app.get('/api/migrate-semantic-v2', migrateSemanticV2RateLimiter, migrateSemanticV2Handler);
 app.get('/api/test-semantic', testSemanticRateLimiter, testSemanticHandler);
+
+// Phase 4: Truth Type Detector test endpoint
+app.get('/api/test-semantic/truth-type', async (req, res) => {
+  try {
+    const query = req.query.q;
+
+    if (!query) {
+      return res.json({
+        success: true,
+        message: 'Truth Type Detector endpoint operational',
+        usage: 'Add ?q=your+query to test classification',
+        examples: [
+          '/api/test-semantic/truth-type?q=What%20is%20the%20current%20price%20of%20Bitcoin',
+          '/api/test-semantic/truth-type?q=Who%20is%20the%20CEO%20of%20Apple',
+          '/api/test-semantic/truth-type?q=What%20is%20the%20Pythagorean%20theorem'
+        ]
+      });
+    }
+
+    const result = await testDetection(query);
+    res.json(result);
+  } catch (error) {
+    console.error('[truthTypeDetector] Test endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);
