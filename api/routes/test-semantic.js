@@ -15,6 +15,7 @@
 import { retrieveSemanticMemories, getRetrievalStats } from '../services/semantic-retrieval.js';
 import { generateEmbedding, backfillEmbeddings, embedMemory } from '../services/embedding-service.js';
 import { testRouting } from '../core/intelligence/hierarchyRouter.js';
+import { testLookup } from '../core/intelligence/externalLookupEngine.js';
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -1769,10 +1770,30 @@ export default async function handler(req, res) {
         }
       }
 
+      // ============================================
+      // PHASE 4: EXTERNAL LOOKUP ENGINE
+      // ============================================
+      case 'external-lookup': {
+        const { q: query, internalConfidence, forceRefresh } = req.query;
+
+        try {
+          const options = {
+            internalConfidence: internalConfidence ? parseFloat(internalConfidence) : undefined,
+            forceRefresh: forceRefresh === 'true'
+          };
+
+          const result = await testLookup(query, options);
+          return res.json(result);
+        } catch (error) {
+          console.error('[externalLookupEngine] Test endpoint error:', error);
+          return res.status(500).json({ success: false, error: error.message });
+        }
+      }
+
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed', 'test-doctrine-gates', 'test-document-ingestion', 'backfill-doc-embeddings', 'doc-status', 'truth-type', 'cache', 'hierarchy'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed', 'test-doctrine-gates', 'test-document-ingestion', 'backfill-doc-embeddings', 'doc-status', 'truth-type', 'cache', 'hierarchy', 'external-lookup'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -1804,7 +1825,10 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=cache&cacheAction=set&q=Bitcoin%20price&data=50000&truthType=VOLATILE',
             '/api/test-semantic?action=hierarchy&q=What%20is%20our%20minimum%20pricing',
             '/api/test-semantic?action=hierarchy&q=What%20is%20the%20current%20price%20of%20Bitcoin',
-            '/api/test-semantic?action=hierarchy&q=What%20is%20our%20pricing&mode=site_monkeys'
+            '/api/test-semantic?action=hierarchy&q=What%20is%20our%20pricing&mode=site_monkeys',
+            '/api/test-semantic?action=external-lookup&q=What%20is%20the%20current%20price%20of%20Bitcoin',
+            '/api/test-semantic?action=external-lookup&q=What%20are%20the%20side%20effects%20of%20aspirin',
+            '/api/test-semantic?action=external-lookup&q=What%20is%20the%20Pythagorean%20theorem'
           ]
         });
     }

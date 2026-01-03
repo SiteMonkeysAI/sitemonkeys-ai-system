@@ -1,0 +1,44 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #318: [claude-fix] Issue: Add external-lookup action to test-semantic router and integrate Phase 4 components
+
+Issue Description:
+Context: All four Phase 4 files are now created:
+
+/api/core/intelligence/truthTypeDetector.js ✅
+/api/core/intelligence/ttlCacheManager.js ✅
+/api/core/intelligence/hierarchyRouter.js ✅
+/api/core/intelligence/externalLookupEngine.js ✅
+
+Need to add the external-lookup test endpoint and ensure all components are integrated.
+Task:
+
+Add import for testLookup from externalLookupEngine.js
+Add action=external-lookup handler that calls testLookup with query param
+Verify all Phase 4 actions are registered: truth-type, cache, hierarchy, external-lookup
+
+Test after deploy:
+
+/api/test-semantic?action=external-lookup&q=What%20is%20the%20current%20price%20of%20Bitcoin → lookup_performed: true, truth_type: VOLATILE
+/api/test-semantic?action=external-lookup&q=What%20are%20the%20side%20effects%20of%20aspirin → high_stakes: MEDICAL, lookup_performed: true
+/api/test-semantic?action=external-lookup&q=What%20is%20the%20Pythagorean%20theorem → lookup_performed: false (PERMANENT, no triggers)
+
+Acceptance: All four Phase 4 test actions work and return expected results.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -1,0 +1,65 @@
+Perfect! The `testLookup` function is included in both the named export and the default export object.
+
+Now let me verify the implementation is complete by reviewing what was accomplished:
+
+## Summary of Changes
+
+### 1. Added Import Statement (Line 18)
+Added the import for `testLookup` from `externalLookupEngine.js`:
+```javascript
+import { testLookup } from '../core/intelligence/externalLookupEngine.js';
+```
+
+### 2. Added External Lookup Action Handler (Lines 1773-1791)
+Created a new case handler for `external-lookup` action that:
+- Extracts query parameters (`q`, `internalConfidence`, `forceRefresh`)
+- Parses optional parameters (converts internalConfidence to float, forceRefresh to boolean)
+- Calls `testLookup` with query and options
+- Returns JSON response
+- Handles errors with proper logging and error response
+
+### 3. Updated Available Actions List (Line 1796)
+Added `'external-lookup'` to the end of the `availableActions` array.
+
+### 4. Added Test Examples (Lines 1829-1831)
+Added three test examples as specified in the issue:
+- Bitcoin price query (VOLATILE truth type, freshness markers)
+- Aspirin side effects query (MEDICAL high-stakes domain)
+- Pythagorean theorem query (PERMANENT truth type, no triggers)
+
+### Verification
+All four Phase 4 components are now properly integrated:
+1. ✅ `truth-type` - Truth Type Detection
+2. ✅ `cache` - TTL Cache Management
+3. ✅ `hierarchy` - Hierarchy Routing
+4. ✅ `external-lookup` - External Lookup Engine (newly added)
+
+---SUMMARY---
+Successfully integrated the external-lookup action into the test-semantic router (/api/routes/test-semantic.js). 
+
+**Changes Made:**
+1. **Added Import** (line 18): Imported `testLookup` function from `../core/intelligence/externalLookupEngine.js`
+
+2. **Added Action Handler** (lines 1773-1791): Created the `external-lookup` case handler that:
+   - Accepts query parameter `q` (required)
+   - Accepts optional parameters: `internalConfidence` (float) and `forceRefresh` (boolean)
+   - Calls `testLookup(query, options)` with parsed parameters
+   - Returns JSON response with lookup results
+   - Includes proper error handling and logging
+
+3. **Updated Available Actions** (line 1796): Added `'external-lookup'` to the `availableActions` array in the default case
+
+4. **Added Test Examples** (lines 1829-1831): Added three test URLs demonstrating expected behavior:
+   - `/api/test-semantic?action=external-lookup&q=What%20is%20the%20current%20price%20of%20Bitcoin` - Should perform lookup (VOLATILE + freshness markers)
+   - `/api/test-semantic?action=external-lookup&q=What%20are%20the%20side%20effects%20of%20aspirin` - Should perform lookup (MEDICAL high-stakes)
+   - `/api/test-semantic?action=external-lookup&q=What%20is%20the%20Pythagorean%20theorem` - Should NOT perform lookup (PERMANENT, no triggers)
+
+**Verification:**
+All four Phase 4 test actions are now properly registered and accessible:
+- ✅ `truth-type` (line 1689) - Tests truthTypeDetector.js
+- ✅ `cache` (line 1718) - Tests ttlCacheManager.js
+- ✅ `hierarchy` (line 1760) - Tests hierarchyRouter.js
+- ✅ `external-lookup` (line 1776) - Tests externalLookupEngine.js
+
+The implementation follows the existing patterns in the codebase and is ready for testing after deployment.
+---END SUMMARY---
