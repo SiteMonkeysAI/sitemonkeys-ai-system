@@ -1,0 +1,48 @@
+Perfect! All changes have been successfully implemented. Let me create a summary of the work completed:
+
+---SUMMARY---
+
+## Issue #316: Add hierarchy action to test-semantic router - COMPLETED
+
+### Changes Made:
+
+**File Modified:** `/api/routes/test-semantic.js`
+
+#### 1. Added Import Statement (Line 17)
+- Imported `testRouting` function from `../core/intelligence/hierarchyRouter.js`
+- This function handles the routing logic for determining claim types and source hierarchies
+
+#### 2. Added New Route Handler (Lines 1756-1770)
+- Created a new case `'hierarchy'` in the switch statement
+- Extracts `q` (query) parameter from request query string
+- Extracts `mode` parameter with default value of `'truth'`
+- Calls `testRouting(query, routingMode)` and returns the result as JSON
+- Includes proper error handling with try/catch block
+
+#### 3. Updated Available Actions List (Line 1775)
+- Added `'hierarchy'` to the availableActions array in the default error response
+- This ensures proper documentation when users query unknown actions
+
+#### 4. Added Usage Examples (Lines 1805-1807)
+- Added three example URLs demonstrating hierarchy endpoint usage:
+  - Business policy query: `?action=hierarchy&q=What%20is%20our%20minimum%20pricing`
+  - Objective factual query: `?action=hierarchy&q=What%20is%20the%20current%20price%20of%20Bitcoin`
+  - Site Monkeys mode query: `?action=hierarchy&q=What%20is%20our%20pricing&mode=site_monkeys`
+
+### Expected Behavior:
+
+The endpoint now supports:
+- `/api/test-semantic?action=hierarchy&q=What%20is%20our%20minimum%20pricing` → Returns BUSINESS_POLICY with VAULT_FIRST hierarchy
+- `/api/test-semantic?action=hierarchy&q=What%20is%20the%20current%20price%20of%20Bitcoin` → Returns OBJECTIVE_FACTUAL with EXTERNAL_FIRST hierarchy
+- `/api/test-semantic?action=hierarchy&q=What%20is%20our%20pricing&mode=site_monkeys` → Returns BUSINESS_POLICY with VAULT_FIRST hierarchy
+
+The response will include:
+- `claim_type`: BUSINESS_POLICY or OBJECTIVE_FACTUAL
+- `hierarchy`: Array showing source priority order
+- `hierarchy_name`: VAULT_FIRST or EXTERNAL_FIRST
+- `external_lookup_required`: Boolean flag indicating if external lookup is needed
+- Additional telemetry including truth_type, confidence scores, and timing information
+
+All changes align with the Phase 4 architecture for dual hierarchy truth validation as documented in CLAUDE.md.
+
+---END SUMMARY---
