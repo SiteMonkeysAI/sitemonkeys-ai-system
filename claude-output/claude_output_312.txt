@@ -1,0 +1,42 @@
+Let me create a summary of the changes:
+
+---SUMMARY---
+
+I successfully implemented the test endpoint for ttlCacheManager.js as requested in issue #312. Here's what was done:
+
+## Changes Made:
+
+### 1. Modified `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/server.js`
+
+**Added import statement (line 60-61):**
+- Imported `testCache` function from `./api/core/intelligence/ttlCacheManager.js`
+- Placed alongside the existing Phase 4 truthTypeDetector import
+
+**Added new endpoint (lines 882-915):**
+- Created GET endpoint at `/api/test-semantic/cache`
+- Accepts query parameters: `action`, `q`, `data`, `truthType`, `sources`, `confidence`
+- When no action is provided, returns helpful usage information with examples
+- Passes parameters to the `testCache` function from ttlCacheManager.js
+- Includes proper error handling with console logging
+- Follows the exact same pattern as the existing `/api/test-semantic/truth-type` endpoint
+
+## How It Works:
+
+The endpoint supports all the cache operations defined in ttlCacheManager.js:
+- **stats**: Returns cache statistics (hits, misses, entries by truth type, etc.)
+- **set**: Stores a cache entry with query, data, and truth type
+- **get**: Retrieves a cached entry by query
+- **fingerprint**: Shows the normalized semantic fingerprint for a query
+- **invalidate**: Removes a specific cache entry
+- **clear**: Clears all cache entries
+
+## Test URLs (as specified in acceptance criteria):
+
+1. `/api/test-semantic/cache?action=stats` → Returns cache statistics
+2. `/api/test-semantic/cache?action=set&q=Bitcoin%20price&data=50000&truthType=VOLATILE` → Stores entry
+3. `/api/test-semantic/cache?action=get&q=Bitcoin%20price` → Retrieves entry
+4. `/api/test-semantic/cache?action=fingerprint&q=current%20BTC%20price` → Shows normalized fingerprint
+
+The implementation is minimal and follows existing patterns in the codebase. The endpoint is ready to test after deployment.
+
+---END SUMMARY---

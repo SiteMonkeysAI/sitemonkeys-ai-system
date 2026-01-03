@@ -1,0 +1,37 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #312: [claude-fix] Issue: Add test endpoint for ttlCacheManager.js
+
+Issue Description:
+Context: Phase 4 ttlCacheManager.js has been created at /api/core/intelligence/ttlCacheManager.js. Need a test endpoint to verify it works.
+Task:
+
+Find the routes file (same one where truthTypeDetector endpoint was added)
+Add import for testCache from ttlCacheManager.js
+Add test endpoint at /api/test-semantic/cache
+
+Acceptance: Endpoint responds at /api/test-semantic/cache with cache operations working.
+Test after deploy:
+
+/api/test-semantic/cache?action=stats → returns cache statistics
+/api/test-semantic/cache?action=set&q=Bitcoin%20price&data=50000&truthType=VOLATILE → stores entry
+/api/test-semantic/cache?action=get&q=Bitcoin%20price → retrieves entry
+/api/test-semantic/cache?action=fingerprint&q=current%20BTC%20price → shows normalized fingerprint
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
