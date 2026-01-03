@@ -553,10 +553,29 @@ export class Orchestrator {
 
         // Step 3: External lookup if needed
         // Trigger conditions: VOLATILE truth type, high-stakes domains, or router requires external
+
+        // Additional news/geopolitical pattern check
+        const newsPatterns = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|attack|election|president|war|invasion|military|conflict|strike|bombing|sanctions|crisis|coup|protest|news|breaking)\b/i;
+        const matchesNewsPattern = newsPatterns.test(message);
+
         const shouldLookup =
           truthTypeResult.type === 'VOLATILE' ||
+          matchesNewsPattern ||
           (truthTypeResult.high_stakes && truthTypeResult.high_stakes.isHighStakes) ||
           (routeResult.requires_external && routeResult.hierarchy_name === "external_first" && phase4Metadata.confidence < 0.9);
+
+        // Debug logging for lookup decision
+        console.log('[ORCHESTRATOR] Lookup decision:', {
+          message: message.substring(0, 100),
+          truthType: truthTypeResult.type,
+          isVolatile: truthTypeResult.type === 'VOLATILE',
+          matchesNewsPattern: matchesNewsPattern,
+          highStakes: truthTypeResult.high_stakes?.isHighStakes || false,
+          routerRequiresLookup: routeResult.requires_external,
+          hierarchyName: routeResult.hierarchy_name,
+          confidence: phase4Metadata.confidence,
+          willAttemptLookup: shouldLookup
+        });
 
         if (shouldLookup) {
           this.log(`[PHASE4] 1. Lookup triggered for: ${message.substring(0, 50)}...`);

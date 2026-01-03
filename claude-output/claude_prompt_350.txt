@@ -1,0 +1,67 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #350: [claude-fix] Issue: External lookup trigger in orchestrator not using truth type or news patterns
+
+Issue Description:
+Context:
+
+truthTypeDetector.js correctly classifies "Did the US attack Venezuela" as VOLATILE
+externalLookupEngine.js correctly fetches data when called directly
+But orchestrator.js is NOT triggering the lookup for these queries
+
+The PR #348 fixed the VOLATILE pattern detection, but the orchestrator's decision to CALL the lookup engine is separate logic that wasn't updated.
+Evidence:
+
+"Venezuela" alone → lookup_attempted: true
+"attack Venezuela" → lookup_attempted: false
+"Did the US attack Venezuela" → lookup_attempted: false
+
+Single words trigger lookup, but sentences don't - even after the truthTypeDetector fix.
+Task: In /api/core/orchestrator.js, find where the external lookup decision is made and ensure it triggers when:
+
+truthTypeResult.type === 'VOLATILE' (already should work but verify)
+OR message matches news/geopolitical patterns directly:
+
+javascriptconst shouldTriggerNewsLookup = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|attack|election|president|war|invasion|military|conflict|strike|bombing|sanctions|crisis|coup|protest|news|breaking)\b/i.test(message);
+
+if (truthTypeResult.type === 'VOLATILE' || shouldTriggerNewsLookup || routingResult.external_lookup_required) {
+  // Trigger external lookup
+  const lookupResult = await lookup(message, { ... });
+}
+Debug: Add logging to see WHY lookup isn't triggering:
+javascriptconsole.log('[ORCHESTRATOR] Lookup decision:', {
+  truthType: truthTypeResult.type,
+  isVolatile: truthTypeResult.type === 'VOLATILE',
+  routerRequiresLookup: routingResult.external_lookup_required,
+  willAttemptLookup: ???
+});
+Acceptance:
+ALL of these must return lookup_attempted: true:
+
+"Venezuela"
+"attack Venezuela"
+"Did the US attack Venezuela"
+"What is happening in Venezuela today"
+"Venezuela news"
+"Ukraine war update"
+"Israel Gaza conflict"
+
+This is NOT just about Venezuela - the system must trigger external lookup for ANY volatile news/geopolitical query.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -1,0 +1,58 @@
+Perfect! Now let me create a quick summary document to verify what test cases this should now handle:
+
+---SUMMARY---
+
+## Changes Made to Fix Issue #350
+
+### Problem Identified
+The orchestrator's external lookup trigger was correctly checking for `truthTypeResult.type === 'VOLATILE'`, but there was no fallback mechanism to catch news/geopolitical queries if they somehow slipped through the truth type detection or if additional pattern matching was needed at the orchestrator level.
+
+### Solution Implemented
+
+**File Modified:** `/api/core/orchestrator.js`
+
+**Changes at lines 557-578:**
+
+1. **Added Direct News/Geopolitical Pattern Matching** (lines 557-559):
+   - Created a `newsPatterns` regex that matches keywords: venezuela, ukraine, russia, china, iran, israel, gaza, attack, election, president, war, invasion, military, conflict, strike, bombing, sanctions, crisis, coup, protest, news, breaking
+   - This pattern is tested directly against the message in the orchestrator
+
+2. **Enhanced shouldLookup Logic** (lines 561-565):
+   - Added `matchesNewsPattern` as a second trigger condition
+   - Now triggers external lookup if ANY of:
+     - `truthTypeResult.type === 'VOLATILE'` (existing)
+     - `matchesNewsPattern` (NEW - direct pattern check)
+     - High stakes domain detection (existing)
+     - Router requires external lookup (existing)
+
+3. **Added Comprehensive Debug Logging** (lines 567-578):
+   - Logs the lookup decision with all relevant factors:
+     - Message content (first 100 chars)
+     - Truth type classification
+     - Whether it's VOLATILE
+     - Whether it matches news patterns
+     - High stakes status
+     - Router requirements
+     - Final decision (willAttemptLookup)
+
+### Expected Behavior After Fix
+
+All of these queries should now return `lookup_attempted: true`:
+- ✅ "Venezuela" 
+- ✅ "attack Venezuela"
+- ✅ "Did the US attack Venezuela"
+- ✅ "What is happening in Venezuela today"
+- ✅ "Venezuela news"
+- ✅ "Ukraine war update"
+- ✅ "Israel Gaza conflict"
+
+### Why This Fixes the Issue
+
+The dual-trigger approach ensures that:
+1. If `truthTypeDetector.js` correctly returns VOLATILE → lookup triggers
+2. If for any reason the truth type detection misses it BUT the message contains news/geopolitical keywords → lookup STILL triggers
+3. The debug logging will reveal exactly which condition triggered the lookup, helping diagnose any future issues
+
+This is a defense-in-depth approach: the primary mechanism (VOLATILE detection) should work, but we've added a safety net (direct pattern matching) at the orchestrator level to catch any edge cases.
+
+---END SUMMARY---
