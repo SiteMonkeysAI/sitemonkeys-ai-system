@@ -1,0 +1,78 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #339: [claude-fix] Issue: COMPLETE all external lookup wiring - no placeholders, no TODOs
+
+Issue Description:
+Context: Multiple PRs have built Phase 4/5 "infrastructure" but left critical connections incomplete. This pattern must stop. This PR must complete ALL remaining wiring with ZERO placeholders.
+MANDATORY REQUIREMENTS - Every one must be verified working:
+1. External HTTP fetches must ACTUALLY FETCH
+
+performLookup() in externalLookupEngine.js must make real HTTP requests
+Log every fetch: URL, status code, bytes received
+If Railway blocks domains, document which ones and why
+
+2. Fetched data must be STORED in phase4Metadata
+
+phase4Metadata.fetched_content = actual text from sources
+phase4Metadata.sources_used = actual count (not 0)
+Log: [PHASE4] Stored X chars from Y sources
+
+3. Fetched data must be INJECTED into AI prompt
+
+Before AI generation, prepend external content to context
+Format clearly so AI knows to use it
+Log: [PHASE4] Injected external context: X chars
+
+4. AI must USE the injected data
+
+Response to "current price of Bitcoin" must include actual price
+Response must NOT say "I don't have real-time access"
+
+5. Verify by tracing the COMPLETE flow
+Add sequential logs that MUST all appear:
+[PHASE4] 1. Lookup triggered for: {query}
+[PHASE4] 2. Fetching from: {url}
+[PHASE4] 3. Received: {bytes} bytes from {source}
+[PHASE4] 4. Stored in phase4Metadata: {sources_used} sources
+[PHASE4] 5. Injecting into prompt: {chars} chars
+[PHASE4] 6. AI generation starting with external context
+6. NO PLACEHOLDERS ALLOWED
+
+No // TODO comments
+No return null stubs
+No "infrastructure ready, integration pending"
+If something can't be completed, explain WHY in the PR
+
+Acceptance Test:
+jsfetch("/api/chat", {
+  method: "POST",
+  headers: {"Content-Type": "application/json"},
+  body: JSON.stringify({
+    message: "What is the current price of Bitcoin?",
+    mode: "truth-general"
+  })
+})
+.then(r => r.json())
+.then(d => {
+  console.log("sources_used:", d.phase4_metadata?.sources_used); // MUST be > 0
+  console.log("Response mentions price:", d.response); // MUST have actual price
+});
+This PR is not complete until the test above passes with real data.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
