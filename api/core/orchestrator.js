@@ -565,6 +565,22 @@ export class Orchestrator {
           (routeResult.requires_external && routeResult.hierarchy_name === "external_first" && phase4Metadata.confidence < 0.9);
 
         // Debug logging for lookup decision
+        console.log('[LOOKUP-DEBUG] Message:', message);
+        console.log('[LOOKUP-DEBUG] Truth type:', truthTypeResult.type);
+        console.log('[LOOKUP-DEBUG] Truth type detection details:', {
+          type: truthTypeResult.type,
+          confidence: truthTypeResult.confidence,
+          stage: truthTypeResult.stage,
+          patterns_matched: truthTypeResult.patterns_matched,
+          reason: truthTypeResult.reason
+        });
+        console.log('[LOOKUP-DEBUG] Lookup trigger conditions:', {
+          isVolatile: truthTypeResult.type === 'VOLATILE',
+          matchesNewsPattern: matchesNewsPattern,
+          routerRequires: routeResult.external_lookup_required,
+          highStakes: truthTypeResult.high_stakes?.isHighStakes || false
+        });
+        console.log('[LOOKUP-DEBUG] Final decision: will attempt lookup?', shouldLookup);
         console.log('[ORCHESTRATOR] Lookup decision:', {
           message: message.substring(0, 100),
           truthType: truthTypeResult.type,

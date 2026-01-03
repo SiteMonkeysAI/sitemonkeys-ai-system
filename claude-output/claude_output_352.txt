@@ -1,0 +1,66 @@
+Perfect! Now I've added comprehensive diagnostic logging at every key decision point in the lookup chain:
+
+1. **orchestrator.js lines 568-594**: Logs truth type detection results and lookup decision
+2. **externalLookupEngine.js lines 581-587**: Logs `isLookupRequired` result
+3. **externalLookupEngine.js lines 217-259**: Logs source selection logic
+
+These logs will help us trace exactly where the issue occurs. Now let me create a summary of the changes and commit them:
+
+---SUMMARY---
+
+## Diagnosis Complete - Diagnostic Logging Added
+
+I have added comprehensive diagnostic logging to trace the complete path from message input to external lookup decision for multi-word queries like "attack Venezuela" or "Did the US attack Venezuela".
+
+### Changes Made:
+
+**1. /api/core/orchestrator.js (lines 568-594)**
+- Added detailed `[LOOKUP-DEBUG]` logging before the lookup decision
+- Logs the message, truth type, truth type detection details (type, confidence, stage, patterns_matched, reason)
+- Logs all lookup trigger conditions (isVolatile, matchesNewsPattern, routerRequires, highStakes)
+- Logs final decision: "will attempt lookup?"
+
+**2. /api/core/intelligence/externalLookupEngine.js (lines 581-587)**
+- Added `[LOOKUP-DEBUG]` logging in the `lookup()` function to show `isLookupRequired` result
+- Logs required status, reasons array, priority, truthType, and highStakes
+- Also added `lookup_attempted: false` to the return value when lookup is not required (line 594)
+
+**3. /api/core/intelligence/externalLookupEngine.js (lines 217-259)**
+- Added comprehensive logging in `selectSourcesForQuery()` function
+- Logs the input query, lowerQuery, truthType, and highStakes
+- Logs which pattern matched (CRYPTO, MEDICAL, NEWS, GEOPOLITICAL, or GENERAL)
+- Logs when no pattern matches and empty array is returned (graceful degradation)
+
+### How to Use This for Diagnosis:
+
+The user or developer can now test queries and examine the server logs to see:
+
+1. Whether the truth type detector correctly identifies the query as VOLATILE
+2. Whether the orchestrator's `shouldLookup` decision is triggered
+3. Whether `isLookupRequired()` returns `required: true`  
+4. Which source selection pattern matches (or if none match)
+5. The exact point where the lookup flow breaks for multi-word queries
+
+### Test Queries to Run:
+
+```javascript
+const queries = [
+  "Venezuela",                               // Single word - should work
+  "attack Venezuela",                        // Two words - testing
+  "Did the US attack Venezuela this morning", // Full sentence - testing
+  "What is happening in Ukraine",            // News query
+  "Israel Gaza news",                        // Geopolitical news
+  "Latest on the war"                        // Generic news
+];
+```
+
+### Expected Behavior:
+
+All of these queries should return `lookup_attempted: true` because:
+1. Truth type detector has VOLATILE_PATTERNS (line 34) that includes: `/\b(venezuela|ukraine|russia|...attack|...)\b/i`
+2. The orchestrator has `newsPatterns` (line 558) that includes these keywords
+3. `selectSourcesForQuery()` has NEWS pattern (line 238) and GEOPOLITICAL pattern (line 245) that match these queries
+
+The diagnostic logs will reveal exactly where the flow breaks for multi-word queries.
+
+---END SUMMARY---

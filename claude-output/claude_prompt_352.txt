@@ -1,0 +1,79 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #352: [claude-fix] Issue: DIAGNOSE AND FIX - External lookup not triggering for multi-word queries
+
+Issue Description:
+Context: Multiple PRs have attempted to fix external lookup triggering for news/geopolitical queries. Single-word queries work, multi-word queries don't.
+Working:
+
+"Venezuela" → lookup_attempted: true ✅
+"Bitcoin" → lookup_attempted: true ✅
+
+NOT working:
+
+"attack Venezuela" → lookup_attempted: false ❌
+"Did the US attack Venezuela" → lookup_attempted: false ❌
+"Venezuela news" → lookup_attempted: false ❌
+
+This is NOT about Venezuela specifically - this affects ALL multi-word news/geopolitical queries.
+Task:
+
+DIAGNOSE: Trace the COMPLETE path from message input to lookup decision:
+
+Where does the message enter?
+Where is VOLATILE determined?
+Where is the lookup decision made?
+What condition is failing for multi-word queries?
+
+
+ADD DIAGNOSTIC LOGGING:
+
+javascriptconsole.log('[LOOKUP-DEBUG] Message:', message);
+console.log('[LOOKUP-DEBUG] Truth type:', truthTypeResult?.type);
+console.log('[LOOKUP-DEBUG] Lookup trigger conditions:', {
+  isVolatile: truthTypeResult?.type === 'VOLATILE',
+  routerRequires: routingResult?.external_lookup_required,
+  highStakes: phase4Metadata?.high_stakes?.isHighStakes,
+  // Add whatever other conditions exist
+});
+console.log('[LOOKUP-DEBUG] Final decision: will attempt lookup?', ???);
+
+FIND THE ROOT CAUSE: The issue is likely ONE of:
+
+Pattern matching using .includes() instead of regex .test()
+Checking first word only instead of full message
+Condition ordering (early return before patterns checked)
+Variable not being passed correctly between functions
+
+
+FIX IT: Once identified, implement the fix. Do not just add another pattern - find WHY the existing patterns aren't being evaluated for multi-word queries.
+
+Acceptance:
+ALL of these return lookup_attempted: true:
+javascriptconst queries = [
+  "Venezuela",
+  "attack Venezuela",
+  "Did the US attack Venezuela this morning",
+  "What is happening in Ukraine",
+  "Israel Gaza news",
+  "Latest on the war"
+];
+This issue is not complete until multi-word queries trigger lookup.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

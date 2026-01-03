@@ -214,33 +214,48 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
 export function selectSourcesForQuery(query, truthType, highStakesResult) {
   const lowerQuery = query.toLowerCase();
 
+  console.log('[LOOKUP-DEBUG] selectSourcesForQuery called with:', {
+    query: query,
+    lowerQuery: lowerQuery,
+    truthType: truthType,
+    highStakes: highStakesResult
+  });
+
   // Crypto - use API
   if (lowerQuery.match(/bitcoin|btc|ethereum|eth|crypto|cryptocurrency/)) {
+    console.log('[LOOKUP-DEBUG] Matched CRYPTO pattern, returning API_SOURCES.CRYPTO');
     return API_SOURCES.CRYPTO;
   }
 
   // Medical drug queries - use FDA API with specific field extraction
   if (lowerQuery.match(/side effects?|dosage|drug interactions?/) &&
       lowerQuery.match(/aspirin|ibuprofen|acetaminophen|tylenol|advil/)) {
+    console.log('[LOOKUP-DEBUG] Matched MEDICAL pattern, returning API_SOURCES.MEDICAL');
     return API_SOURCES.MEDICAL;
   }
 
   // News/current events queries
-  if (lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military/i)) {
+  const newsMatch = lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military/i);
+  if (newsMatch) {
+    console.log('[LOOKUP-DEBUG] Matched NEWS pattern:', newsMatch[0], '- returning API_SOURCES.NEWS');
     return API_SOURCES.NEWS;
   }
 
   // Geopolitical queries
-  if (lowerQuery.match(/venezuela|ukraine|russia|china|iran|israel|gaza|congress|senate|white house/i)) {
+  const geoMatch = lowerQuery.match(/venezuela|ukraine|russia|china|iran|israel|gaza|congress|senate|white house/i);
+  if (geoMatch) {
+    console.log('[LOOKUP-DEBUG] Matched GEOPOLITICAL pattern:', geoMatch[0], '- returning API_SOURCES.NEWS');
     return API_SOURCES.NEWS;
   }
 
   // Wikipedia ONLY for PERMANENT definition/history queries, NOT high-stakes
   if (truthType === TRUTH_TYPES.PERMANENT && !highStakesResult?.isHighStakes) {
+    console.log('[LOOKUP-DEBUG] PERMANENT truthType without high stakes, returning AUTHORITATIVE_SOURCES.GENERAL');
     return AUTHORITATIVE_SOURCES.GENERAL;
   }
 
   // No reliable source available - return empty, trigger graceful degradation
+  console.log('[LOOKUP-DEBUG] No source pattern matched, returning empty array (graceful degradation)');
   return [];
 }
 
@@ -578,11 +593,20 @@ export async function lookup(query, options = {}) {
   // Check if lookup is required
   const lookupCheck = isLookupRequired(query, truthTypeResult, internalConfidence);
 
+  console.log('[LOOKUP-DEBUG] isLookupRequired result:', {
+    required: lookupCheck.required,
+    reasons: lookupCheck.reasons,
+    priority: lookupCheck.priority,
+    truthType: truthTypeResult.type,
+    highStakes: truthTypeResult.high_stakes
+  });
+
   if (!lookupCheck.required && !forceRefresh) {
     console.log(`[externalLookupEngine] Lookup not required: ${lookupCheck.reasons.length === 0 ? 'no triggers matched' : 'skipped'}`);
     return {
       success: true,
       lookup_performed: false,
+      lookup_attempted: false,
       reason: 'Lookup not required - no triggers matched',
       truth_type: truthTypeResult.type,
       internal_confidence: internalConfidence,
