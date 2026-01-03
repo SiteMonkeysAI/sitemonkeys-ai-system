@@ -57,6 +57,8 @@ import { embedMemoryNonBlocking } from "./api/services/embedding-service.js";
 // ================================================
 // ========== PHASE 4: TRUTH TYPE DETECTOR ==========
 import { testDetection } from './api/core/intelligence/truthTypeDetector.js';
+// ========== PHASE 4: TTL CACHE MANAGER ==========
+import { testCache } from './api/core/intelligence/ttlCacheManager.js';
 // ================================================
 
 console.log("[SERVER] ✅ Dependencies loaded");
@@ -873,6 +875,41 @@ app.get('/api/test-semantic/truth-type', async (req, res) => {
     res.json(result);
   } catch (error) {
     console.error('[truthTypeDetector] Test endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Phase 4: TTL Cache Manager test endpoint
+app.get('/api/test-semantic/cache', async (req, res) => {
+  try {
+    const { action, q, data, truthType, sources, confidence } = req.query;
+
+    if (!action) {
+      return res.json({
+        success: true,
+        message: 'TTL Cache Manager endpoint operational',
+        usage: 'Add ?action=stats to get cache statistics, or use other actions',
+        examples: [
+          '/api/test-semantic/cache?action=stats',
+          '/api/test-semantic/cache?action=set&q=Bitcoin%20price&data=50000&truthType=VOLATILE',
+          '/api/test-semantic/cache?action=get&q=Bitcoin%20price',
+          '/api/test-semantic/cache?action=fingerprint&q=current%20BTC%20price'
+        ]
+      });
+    }
+
+    const params = {
+      query: q,
+      data: data,
+      truthType: truthType,
+      sources: sources ? JSON.parse(sources) : undefined,
+      confidence: confidence ? parseFloat(confidence) : undefined
+    };
+
+    const result = testCache(action, params);
+    res.json(result);
+  } catch (error) {
+    console.error('[ttlCacheManager] Test endpoint error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
