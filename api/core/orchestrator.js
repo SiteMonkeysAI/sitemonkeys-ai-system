@@ -35,6 +35,11 @@ import { logMemoryOperation } from "../routes/debug.js";
 //import { validateCompliance as validateVaultCompliance } from '../lib/vault.js';
 // ========== SEMANTIC INTEGRATION ==========
 import { retrieveSemanticMemories } from "../services/semantic-retrieval.js";
+// ========== PHASE 4/5 INTEGRATION ==========
+import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
+import { route } from "../core/intelligence/hierarchyRouter.js";
+import { lookup } from "../core/intelligence/externalLookupEngine.js";
+import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
 // ================================================
 
 // ==================== ORCHESTRATOR CLASS ====================
@@ -508,6 +513,80 @@ export class Orchestrator {
       const confidence = await this.#calculateConfidence(analysis, context);
       this.log(`[CONFIDENCE] Score: ${confidence.toFixed(3)}`);
 
+      // STEP 6.5: PHASE 4 - Truth Type Detection and External Lookup (PRE-GENERATION)
+      this.log("🔍 PHASE 4: Truth type detection and external lookup");
+      let phase4Metadata = {
+        truth_type: null,
+        source_class: "internal",
+        verified_at: null,
+        cache_valid_until: null,
+        external_lookup: false,
+        lookup_attempted: false,
+        sources_used: 0,
+        claim_type: null,
+        hierarchy: null,
+        confidence: confidence,
+        phase4_error: null,
+      };
+
+      try {
+        // Step 1: Detect truth type
+        const truthTypeResult = await detectTruthType(message, {
+          conversationHistory,
+          mode,
+          vaultContext,
+        });
+        phase4Metadata.truth_type = truthTypeResult.type;
+        phase4Metadata.confidence = truthTypeResult.confidence || 0.8;
+
+        this.log(`[PHASE 4] Truth type: ${truthTypeResult.type}, confidence: ${phase4Metadata.confidence}`);
+
+        // Step 2: Route through hierarchy
+        const routeResult = await route(message, mode);
+        phase4Metadata.claim_type = routeResult.claim_type;
+        phase4Metadata.hierarchy = routeResult.hierarchy_name;
+
+        this.log(`[PHASE 4] Claim type: ${routeResult.claim_type}, hierarchy: ${routeResult.hierarchy_name}`);
+
+        // Step 3: External lookup if needed
+        if (
+          routeResult.requires_external &&
+          routeResult.hierarchy_name === "external_first" &&
+          phase4Metadata.confidence < 0.9
+        ) {
+          this.log("🌐 External lookup required, performing lookup...");
+          const lookupResult = await lookup(message, {
+            internalConfidence: phase4Metadata.confidence,
+            truthType: truthTypeResult.type,
+          });
+
+          if (lookupResult.success && lookupResult.data) {
+            phase4Metadata.external_lookup = true;
+            phase4Metadata.source_class = "external";
+            phase4Metadata.verified_at = new Date().toISOString();
+            phase4Metadata.sources_used = lookupResult.sources?.length || 0;
+            phase4Metadata.external_data = lookupResult.data;
+
+            // Update cache validity if provided
+            if (lookupResult.cache_valid_until) {
+              phase4Metadata.cache_valid_until = lookupResult.cache_valid_until;
+            }
+
+            this.log(
+              `✅ External lookup successful: ${phase4Metadata.sources_used} sources`,
+            );
+          } else {
+            phase4Metadata.external_lookup = false;
+            phase4Metadata.lookup_attempted = true;
+            this.log("⚠️ External lookup failed or returned no data");
+          }
+        }
+      } catch (phase4Error) {
+        this.error("⚠️ Phase 4 pipeline error:", phase4Error);
+        // Continue with internal processing even if Phase 4 fails
+        phase4Metadata.phase4_error = phase4Error.message;
+      }
+
       // STEP 7: Route to appropriate AI
       const aiResponse = await this.#routeToAI(
         message,
@@ -582,6 +661,49 @@ export class Orchestrator {
       );
       if (personalityResponse.modificationsCount > 0) {
         this.requestStats.personalityEnhancements++;
+      }
+
+      // STEP 8.5: PHASE 5 - Doctrine Enforcement Gates (POST-GENERATION)
+      this.log("🛡️ PHASE 5: Applying doctrine enforcement gates");
+      let phase5Enforcement = {
+        enforcement_passed: true,
+        violations: [],
+        gate_results: [],
+        gates_run: [],
+        original_response_modified: false,
+        phase5_error: null,
+      };
+
+      try {
+        const modeForEnforcement = mode === "site_monkeys"
+          ? "site_monkeys"
+          : mode === "business_validation"
+          ? "business_validation"
+          : "truth";
+
+        phase5Enforcement = enforceAll(
+          personalityResponse.response,
+          phase4Metadata,
+          modeForEnforcement,
+        );
+
+        if (!phase5Enforcement.enforcement_passed) {
+          this.log(
+            `⚠️ Phase 5 enforcement violations: ${phase5Enforcement.violations.map(v => v.gate).join(", ")}`,
+          );
+
+          // Apply corrected response if enforcement modified it
+          if (phase5Enforcement.corrected_response) {
+            personalityResponse.response = phase5Enforcement.corrected_response;
+            phase5Enforcement.original_response_modified = true;
+            this.log("✏️ Response corrected by Phase 5 enforcement");
+          }
+        } else {
+          this.log(`✅ Phase 5 enforcement passed: ${phase5Enforcement.gates_run.length} gates`);
+        }
+      } catch (phase5Error) {
+        this.error("⚠️ Phase 5 enforcement error:", phase5Error);
+        phase5Enforcement.phase5_error = phase5Error.message;
       }
 
       // STEP 9: Validate compliance (truth-first, mode enforcement)
@@ -682,6 +804,31 @@ export class Orchestrator {
           doctrine_gates: doctrineResult.gateResults,
           doctrine_enhanced: doctrineResult.enhanced || false,
           doctrine_enhancements: doctrineResult.enhancements || [],
+
+          // PHASE 4: Truth Validation Metadata
+          phase4_metadata: {
+            truth_type: phase4Metadata.truth_type,
+            source_class: phase4Metadata.source_class,
+            verified_at: phase4Metadata.verified_at,
+            cache_valid_until: phase4Metadata.cache_valid_until,
+            external_lookup: phase4Metadata.external_lookup,
+            lookup_attempted: phase4Metadata.lookup_attempted,
+            sources_used: phase4Metadata.sources_used,
+            claim_type: phase4Metadata.claim_type,
+            hierarchy: phase4Metadata.hierarchy,
+            confidence: phase4Metadata.confidence,
+            phase4_error: phase4Metadata.phase4_error,
+          },
+
+          // PHASE 5: Enforcement Gate Results
+          phase5_enforcement: {
+            enforcement_passed: phase5Enforcement.enforcement_passed,
+            violations: phase5Enforcement.violations,
+            gate_results: phase5Enforcement.gate_results,
+            gates_run: phase5Enforcement.gates_run,
+            original_response_modified: phase5Enforcement.original_response_modified,
+            phase5_error: phase5Enforcement.phase5_error,
+          },
 
           // NEW: Cost tracking
           cost_tracking: {

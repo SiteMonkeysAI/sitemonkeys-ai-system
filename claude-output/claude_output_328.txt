@@ -1,0 +1,94 @@
+Now let me create a detailed summary of what I found and fixed:
+
+---SUMMARY---
+
+## Issue Diagnosis
+
+I successfully diagnosed why Phase 4/5 metadata was undefined in chat responses:
+
+**Root Cause:** The Phase 4/5 code existed in `api/lib/ai-processors.js`, but the actual chat flow uses `api/core/orchestrator.js` instead. The orchestrator never imported or called the Phase 4/5 modules, so the metadata was never generated.
+
+**Evidence:**
+- `/api/chat` endpoint (server.js:273) calls `orchestrator.processRequest()` 
+- The orchestrator has its own AI routing logic and doesn't use ai-processors.js
+- The Phase 4/5 components existed in `api/core/intelligence/` but weren't integrated
+- Previous PRs added Phase 4/5 code to ai-processors.js, which is unused by the main chat flow
+
+## Changes Made
+
+### File Modified: `api/core/orchestrator.js`
+
+**1. Added Phase 4/5 Imports (lines 38-42):**
+```javascript
+// ========== PHASE 4/5 INTEGRATION ==========
+import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
+import { route } from "../core/intelligence/hierarchyRouter.js";
+import { lookup } from "../core/intelligence/externalLookupEngine.js";
+import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
+```
+
+**2. Added Phase 4 Execution (lines 516-588, between Step 6 and Step 7):**
+- Detects truth type (VOLATILE, SEMI_STABLE, PERMANENT)
+- Routes through hierarchy (business vs factual claims)
+- Performs external lookup if needed
+- Captures all metadata in `phase4Metadata` object
+- Includes proper error handling with graceful degradation
+- Logs: `🔍 PHASE 4: Truth type detection and external lookup`
+
+**3. Added Phase 5 Execution (lines 666-707, after personality application):**
+- Applies doctrine enforcement gates
+- Validates response against truth-first standards
+- Modifies response if violations detected
+- Captures enforcement results in `phase5Enforcement` object
+- Includes proper error handling
+- Logs: `🛡️ PHASE 5: Applying doctrine enforcement gates`
+
+**4. Added Metadata to Response (lines 808-831):**
+```javascript
+// PHASE 4: Truth Validation Metadata
+phase4_metadata: {
+  truth_type, source_class, verified_at, cache_valid_until,
+  external_lookup, lookup_attempted, sources_used,
+  claim_type, hierarchy, confidence, phase4_error
+},
+
+// PHASE 5: Enforcement Gate Results  
+phase5_enforcement: {
+  enforcement_passed, violations, gate_results, gates_run,
+  original_response_modified, phase5_error
+}
+```
+
+## Integration Flow
+
+The Phase 4/5 integration now follows the correct order in orchestrator:
+1. **Memory retrieval** (existing)
+2. **Document/vault loading** (existing)
+3. **Semantic analysis** (existing)
+4. **Confidence calculation** (existing)
+5. **🔍 PHASE 4** - Truth type detection & external lookup (NEW - PRE-GENERATION)
+6. **AI generation** (existing)
+7. **Enforcement chain** (existing)
+8. **Doctrine gates** (existing)
+9. **Personality application** (existing)
+10. **🛡️ PHASE 5** - Enforcement gates (NEW - POST-GENERATION)
+11. **Final validation** (existing)
+12. **Return with metadata** (now includes phase4_metadata & phase5_enforcement)
+
+## Expected Results
+
+✅ Chat responses now include `phase4_metadata` with actual values (not undefined)
+✅ Chat responses now include `phase5_enforcement` with actual values (not undefined)
+✅ Railway logs will show `🔍 PHASE 4` and `🛡️ PHASE 5` messages during chat requests
+✅ External lookups will trigger automatically when needed
+✅ Enforcement violations will be logged and responses corrected
+
+## Files Verified
+
+- ✅ `api/core/intelligence/truthTypeDetector.js` exists and exports `detectTruthType`
+- ✅ `api/core/intelligence/hierarchyRouter.js` exists and exports `route`
+- ✅ `api/core/intelligence/externalLookupEngine.js` exists and exports `lookup`
+- ✅ `api/core/intelligence/doctrineEnforcer.js` exists and exports `enforceAll`
+- ✅ All imports match the exported function signatures
+
+---END SUMMARY---
