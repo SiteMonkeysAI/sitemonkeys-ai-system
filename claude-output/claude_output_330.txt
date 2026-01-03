@@ -1,0 +1,44 @@
+Let me just do a final review of the changes I made:
+
+1. **In `api/core/orchestrator.js` (lines 871-892)**: Added `phase4_metadata` and `phase5_enforcement` at the top level of the return object, so they're accessible as `result.phase4_metadata` and `result.phase5_enforcement` when the client receives the response.
+
+2. **In `api/lib/chatProcessor.js` (lines 443-445)**: Added the same fields to the return object in chatProcessor (even though it doesn't appear to be currently used, it's good to keep it consistent for future use).
+
+Both changes ensure that when the orchestrator processes a request and returns the result, the Phase 4 and Phase 5 metadata are available at the top level of the response object, making them easily accessible to the client.
+
+---SUMMARY---
+I've successfully fixed Issue #330 by adding `phase4_metadata` and `phase5_enforcement` to the response objects returned to the client.
+
+## Changes Made:
+
+### 1. api/core/orchestrator.js (lines 871-892)
+Added `phase4_metadata` and `phase5_enforcement` at the top level of the return object in the `processRequest` method. These fields were already being populated and logged (as confirmed by the Railway logs), and they were already included in the `metadata` nested object. However, the client was looking for them at the top level of the response.
+
+The fix adds these fields right after the `metadata` and `error` fields:
+- `phase4_metadata`: Contains truth_type, source_class, verified_at, cache_valid_until, external_lookup, lookup_attempted, sources_used, claim_type, hierarchy, confidence, and phase4_error
+- `phase5_enforcement`: Contains enforcement_passed, violations, gate_results, gates_run, original_response_modified, and phase5_error
+
+### 2. api/lib/chatProcessor.js (lines 443-445)
+Also added the same fields to the chatProcessor's `processRequest` function for consistency, even though this module doesn't appear to be actively used. This ensures future compatibility if chatProcessor is re-enabled.
+
+## Result:
+The response object returned by the orchestrator now includes:
+```javascript
+{
+  success: true,
+  response: "...",
+  metadata: {
+    // ... existing metadata including nested phase4/phase5
+    phase4_metadata: {...},
+    phase5_enforcement: {...}
+  },
+  error: null,
+  phase4_metadata: {...},      // ← Now at top level for client access
+  phase5_enforcement: {...}     // ← Now at top level for client access
+}
+```
+
+When server.js calls `res.json(result)`, the client will now receive populated `phase4_metadata` and `phase5_enforcement` objects instead of `undefined`.
+
+The fix maintains backward compatibility by keeping the fields in both locations (top-level and nested in metadata).
+---END SUMMARY---
