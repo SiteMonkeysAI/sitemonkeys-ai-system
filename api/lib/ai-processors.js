@@ -186,6 +186,7 @@ export async function processWithEliAndRoxy({
 
         if (lookupResult.success && lookupResult.data) {
           phase4Metadata.external_lookup = true;
+          phase4Metadata.lookup_attempted = true;
           phase4Metadata.source_class = "external";
           phase4Metadata.verified_at = new Date().toISOString();
           phase4Metadata.sources_used = lookupResult.sources?.length || 0;
