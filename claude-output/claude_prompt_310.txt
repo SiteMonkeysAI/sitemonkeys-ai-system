@@ -1,0 +1,72 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #310: [claude-fix] Issue: Add test endpoint for truthTypeDetector.js
+
+Issue Description:
+Issue: Add test endpoint for truthTypeDetector.js
+File to modify: /api/routes.js (or your main routes file - verify location with grep -r "app.get\|router.get" /api/)
+Task: Add a test endpoint for Phase 4 truthTypeDetector
+Add this import at the top of the routes file:
+javascriptimport { testDetection } from './core/intelligence/truthTypeDetector.js';
+Add this route:
+javascript// Phase 4: Truth Type Detector test endpoint
+app.get('/api/test-semantic/truth-type', async (req, res) => {
+  try {
+    const query = req.query.q;
+    
+    if (!query) {
+      return res.json({
+        success: true,
+        message: 'Truth Type Detector endpoint operational',
+        usage: 'Add ?q=your+query to test classification',
+        examples: [
+          '/api/test-semantic/truth-type?q=What%20is%20the%20current%20price%20of%20Bitcoin',
+          '/api/test-semantic/truth-type?q=Who%20is%20the%20CEO%20of%20Apple',
+          '/api/test-semantic/truth-type?q=What%20is%20the%20Pythagorean%20theorem'
+        ]
+      });
+    }
+    
+    const result = await testDetection(query);
+    res.json(result);
+  } catch (error) {
+    console.error('[truthTypeDetector] Test endpoint error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+```
+
+**Acceptance criteria:**
+- [ ] Endpoint responds at `/api/test-semantic/truth-type`
+- [ ] Without query param: returns usage instructions
+- [ ] With `?q=` param: returns truth type classification
+- [ ] Response includes: `type`, `confidence`, `stage`, `high_stakes`, `ttl_ms`
+
+**Test after deploy:**
+```
+/api/test-semantic/truth-type?q=What%20is%20the%20current%20price%20of%20Bitcoin
+Expected: type: "VOLATILE"
+
+/api/test-semantic/truth-type?q=Who%20is%20the%20CEO%20of%20Apple
+Expected: type: "SEMI_STABLE"
+
+/api/test-semantic/truth-type?q=What%20is%20the%20Pythagorean%20theorem
+Expected: type: "PERMANENT"
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

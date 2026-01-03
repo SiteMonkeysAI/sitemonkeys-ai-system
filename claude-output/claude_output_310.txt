@@ -1,0 +1,52 @@
+Perfect! Now let me create a summary of the changes made:
+
+---SUMMARY---
+
+Successfully added the test endpoint for `truthTypeDetector.js` to the server.js file. The implementation includes:
+
+## Changes Made:
+
+### 1. Added Import Statement (server.js:58-60)
+- Imported the `testDetection` function from `/api/core/intelligence/truthTypeDetector.js`
+- Placed in a clearly marked Phase 4 section for easy identification
+
+### 2. Added Route Endpoint (server.js:854-878)
+- Created GET endpoint at `/api/test-semantic/truth-type`
+- Positioned correctly after other semantic routes and before catch-all routes
+- Implementation matches the exact specifications from the issue
+
+## Endpoint Features:
+
+**Without query parameter (`?q=`):**
+- Returns operational status message
+- Provides usage instructions
+- Lists 3 example queries
+
+**With query parameter (`?q=your+query`):**
+- Calls `testDetection(query)` function
+- Returns classification result with telemetry:
+  - `type`: VOLATILE, SEMI_STABLE, or PERMANENT
+  - `confidence`: 0.0-1.0 confidence score
+  - `stage`: 1 (deterministic) or 2 (AI classifier)
+  - `high_stakes`: boolean and domains array
+  - `ttl_ms`: time-to-live in milliseconds
+
+**Error Handling:**
+- Catches and logs errors with proper console output
+- Returns 500 status with error message on failure
+
+## Testing Ready:
+
+The endpoint is now ready to test with these example URLs:
+1. `/api/test-semantic/truth-type?q=What%20is%20the%20current%20price%20of%20Bitcoin` - Expected: VOLATILE
+2. `/api/test-semantic/truth-type?q=Who%20is%20the%20CEO%20of%20Apple` - Expected: SEMI_STABLE
+3. `/api/test-semantic/truth-type?q=What%20is%20the%20Pythagorean%20theorem` - Expected: PERMANENT
+
+## Files Modified:
+- `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/server.js`
+  - Added import at line 59
+  - Added route handler at lines 854-878
+
+The implementation follows all acceptance criteria and is ready for deployment and testing.
+
+---END SUMMARY---
