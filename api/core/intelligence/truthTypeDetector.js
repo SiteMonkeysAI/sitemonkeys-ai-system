@@ -228,23 +228,23 @@ export async function classifyAmbiguous(query, context = {}) {
     // TODO: Integrate with existing confidence engine
     // const confidenceEngine = await import('./confidenceEngine.js');
     // const result = await confidenceEngine.classifyTruthType(query, context);
-    
-    // Placeholder: Default to SEMI_STABLE for ambiguous queries
-    // This is the safest default (24hr cache, will refresh)
+
+    // Placeholder: Default to VOLATILE for ambiguous queries
+    // This is the most conservative default (5min cache, frequent refresh)
     return {
-      type: TRUTH_TYPES.SEMI_STABLE,
+      type: TRUTH_TYPES.VOLATILE,
       confidence: 0.5,
       stage: 2,
-      reasoning: 'Stage 2 classifier defaulting to SEMI_STABLE (integration pending)',
+      reasoning: 'Stage 2 classifier defaulting to VOLATILE (conservative default until AI classifier integrated)',
       tokens_used: 0 // Will be populated when AI classifier is integrated
     };
   } catch (error) {
     console.error('[truthTypeDetector] Stage 2 classification failed:', error);
     return {
-      type: TRUTH_TYPES.SEMI_STABLE,
+      type: TRUTH_TYPES.VOLATILE,
       confidence: 0.3,
       stage: 2,
-      reasoning: 'Stage 2 failed, defaulting to SEMI_STABLE',
+      reasoning: 'Stage 2 failed, defaulting to VOLATILE (conservative)',
       error: error.message
     };
   }
@@ -298,7 +298,7 @@ export function getTTL(truthType) {
 }
 
 /**
- * Test endpoint handler for /api/test-semantic/truth-type
+ * Test endpoint handler for /api/test-semantic?action=truth-type
  * @param {string} query - Query to test
  * @returns {Promise<object>} Detection result with telemetry
  */

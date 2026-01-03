@@ -1,0 +1,57 @@
+Perfect! All the changes have been successfully implemented. Let me create a summary of what was done:
+
+---SUMMARY---
+
+Successfully consolidated Phase 4 test endpoints into the existing action router pattern. Here's what was changed:
+
+## Files Modified:
+
+### 1. `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/server.js`
+- **Removed** separate route definitions for `/api/test-semantic/truth-type` (lines 857-880)
+- **Removed** separate route definition for `/api/test-semantic/cache` (lines 883-915)
+- **Removed** imports for `testDetection` and `testCache` functions (lines 59-62)
+- The main `/api/test-semantic` route with rate limiter remains as the single entry point
+
+### 2. `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/routes/test-semantic.js`
+- **Added** new action case `'truth-type'` (lines 1687-1711) that:
+  - Dynamically imports `testDetection` from truthTypeDetector.js
+  - Accepts query parameter `q` for the query to test
+  - Returns classification results with telemetry
+  - Usage: `/api/test-semantic?action=truth-type&q=What%20is%20the%20current%20price%20of%20Bitcoin`
+
+- **Added** new action case `'cache'` (lines 1716-1753) that:
+  - Dynamically imports `testCache` from ttlCacheManager.js
+  - Uses `cacheAction` parameter for sub-operations (stats, set, get, invalidate, clear, fingerprint)
+  - Accepts query parameters: `q`, `data`, `truthType`, `sources`, `confidence`
+  - Usage: `/api/test-semantic?action=cache&cacheAction=stats`
+
+- **Updated** `availableActions` array in default case to include 'truth-type' and 'cache'
+- **Updated** examples array to include Phase 4 endpoint examples with corrected parameter names
+
+### 3. `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/core/intelligence/truthTypeDetector.js`
+- **Changed** Stage 2 classifier default from `SEMI_STABLE` to `VOLATILE` (line 235)
+  - Reasoning updated: "conservative default until AI classifier integrated"
+- **Changed** Stage 2 error fallback default from `SEMI_STABLE` to `VOLATILE` (line 244)
+  - Reasoning updated: "defaulting to VOLATILE (conservative)"
+- **Updated** JSDoc comment for `testDetection` function (line 301) to reflect new route pattern: `/api/test-semantic?action=truth-type`
+
+### 4. `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/core/intelligence/ttlCacheManager.js`
+- **Updated** JSDoc comment for `testCache` function (line 294) to reflect new route pattern: `/api/test-semantic?action=cache`
+
+## Key Improvements:
+
+1. **Consolidated routing**: All Phase 4 tests now use the same pattern as existing test endpoints (`?action=...`)
+2. **Conservative defaults**: Ambiguous queries now default to VOLATILE (5-minute TTL) instead of SEMI_STABLE (24-hour TTL), ensuring fresher data when uncertainty exists
+3. **Clear parameter naming**: Cache operations use `cacheAction` parameter to avoid conflicts with the main `action` parameter
+4. **Consistent documentation**: All JSDoc comments updated to reflect the new consolidated route structure
+
+## Testing:
+
+The new endpoints can be tested with:
+- `/api/test-semantic?action=truth-type&q=What%20is%20the%20current%20price%20of%20Bitcoin`
+- `/api/test-semantic?action=cache&cacheAction=stats`
+- `/api/test-semantic?action=cache&cacheAction=set&q=Bitcoin%20price&data=50000&truthType=VOLATILE`
+
+All changes maintain backward compatibility with existing test endpoints while properly integrating Phase 4 functionality into the established pattern.
+
+---END SUMMARY---

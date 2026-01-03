@@ -1681,10 +1681,81 @@ export default async function handler(req, res) {
         }
       }
 
+      // ============================================
+      // PHASE 4: TRUTH TYPE DETECTION
+      // ============================================
+      case 'truth-type': {
+        const { testDetection } = await import('../core/intelligence/truthTypeDetector.js');
+        const query = req.query.q;
+
+        if (!query) {
+          return res.json({
+            success: true,
+            message: 'Truth Type Detector endpoint operational',
+            usage: 'Add ?q=your+query to test classification',
+            examples: [
+              '/api/test-semantic?action=truth-type&q=What%20is%20the%20current%20price%20of%20Bitcoin',
+              '/api/test-semantic?action=truth-type&q=Who%20is%20the%20CEO%20of%20Apple',
+              '/api/test-semantic?action=truth-type&q=What%20is%20the%20Pythagorean%20theorem'
+            ]
+          });
+        }
+
+        try {
+          const result = await testDetection(query);
+          return res.json(result);
+        } catch (error) {
+          console.error('[truthTypeDetector] Test endpoint error:', error);
+          return res.status(500).json({ success: false, error: error.message });
+        }
+      }
+
+      // ============================================
+      // PHASE 4: TTL CACHE MANAGEMENT
+      // ============================================
+      case 'cache': {
+        const { testCache } = await import('../core/intelligence/ttlCacheManager.js');
+        const { q, data, truthType, sources, confidence } = req.query;
+
+        // For cache action, we need a sub-action parameter
+        // Extract from query params - check common names
+        const cacheAction = req.query.cacheAction || req.query.op || req.query.operation;
+
+        if (!cacheAction) {
+          return res.json({
+            success: true,
+            message: 'TTL Cache Manager endpoint operational',
+            usage: 'Add cacheAction parameter to specify cache operation (stats, set, get, etc.)',
+            examples: [
+              '/api/test-semantic?action=cache&cacheAction=stats',
+              '/api/test-semantic?action=cache&cacheAction=set&q=Bitcoin%20price&data=50000&truthType=VOLATILE',
+              '/api/test-semantic?action=cache&cacheAction=get&q=Bitcoin%20price',
+              '/api/test-semantic?action=cache&cacheAction=fingerprint&q=current%20BTC%20price'
+            ]
+          });
+        }
+
+        try {
+          const params = {
+            query: q,
+            data: data,
+            truthType: truthType,
+            sources: sources ? JSON.parse(sources) : undefined,
+            confidence: confidence ? parseFloat(confidence) : undefined
+          };
+
+          const result = testCache(cacheAction, params);
+          return res.json(result);
+        } catch (error) {
+          console.error('[ttlCacheManager] Test endpoint error:', error);
+          return res.status(500).json({ success: false, error: error.message });
+        }
+      }
+
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed', 'test-doctrine-gates', 'test-document-ingestion', 'backfill-doc-embeddings', 'doc-status'],
+          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed', 'test-doctrine-gates', 'test-document-ingestion', 'backfill-doc-embeddings', 'doc-status', 'truth-type', 'cache'],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -1710,7 +1781,10 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=test-document-ingestion',
             '/api/test-semantic?action=backfill-doc-embeddings&batchSize=10&maxBatches=5',
             '/api/test-semantic?action=doc-status&userId=xxx',
-            '/api/test-semantic?action=doc-status&documentId=123'
+            '/api/test-semantic?action=doc-status&documentId=123',
+            '/api/test-semantic?action=truth-type&q=What%20is%20the%20current%20price%20of%20Bitcoin',
+            '/api/test-semantic?action=cache&cacheAction=stats',
+            '/api/test-semantic?action=cache&cacheAction=set&q=Bitcoin%20price&data=50000&truthType=VOLATILE'
           ]
         });
     }

@@ -291,7 +291,7 @@ export function getStats() {
 }
 
 /**
- * Test endpoint handler for /api/test-semantic/cache
+ * Test endpoint handler for /api/test-semantic?action=cache
  * @param {string} action - Action to perform (get, set, stats, clear)
  * @param {object} params - Parameters for the action
  * @returns {object} Result of the action
