@@ -55,11 +55,6 @@ import rateLimit from "express-rate-limit";
 import { storeWithSupersession, generateFactFingerprint } from "./api/services/supersession.js";
 import { embedMemoryNonBlocking } from "./api/services/embedding-service.js";
 // ================================================
-// ========== PHASE 4: TRUTH TYPE DETECTOR ==========
-import { testDetection } from './api/core/intelligence/truthTypeDetector.js';
-// ========== PHASE 4: TTL CACHE MANAGER ==========
-import { testCache } from './api/core/intelligence/ttlCacheManager.js';
-// ================================================
 
 console.log("[SERVER] ✅ Dependencies loaded");
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
@@ -852,67 +847,6 @@ app.use("/api/test", memoryFullCheckRoutes);
 app.get("/api/migrate-semantic", migrateSemanticRateLimiter, migrateSemanticHandler);
 app.get('/api/migrate-semantic-v2', migrateSemanticV2RateLimiter, migrateSemanticV2Handler);
 app.get('/api/test-semantic', testSemanticRateLimiter, testSemanticHandler);
-
-// Phase 4: Truth Type Detector test endpoint
-app.get('/api/test-semantic/truth-type', async (req, res) => {
-  try {
-    const query = req.query.q;
-
-    if (!query) {
-      return res.json({
-        success: true,
-        message: 'Truth Type Detector endpoint operational',
-        usage: 'Add ?q=your+query to test classification',
-        examples: [
-          '/api/test-semantic/truth-type?q=What%20is%20the%20current%20price%20of%20Bitcoin',
-          '/api/test-semantic/truth-type?q=Who%20is%20the%20CEO%20of%20Apple',
-          '/api/test-semantic/truth-type?q=What%20is%20the%20Pythagorean%20theorem'
-        ]
-      });
-    }
-
-    const result = await testDetection(query);
-    res.json(result);
-  } catch (error) {
-    console.error('[truthTypeDetector] Test endpoint error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Phase 4: TTL Cache Manager test endpoint
-app.get('/api/test-semantic/cache', async (req, res) => {
-  try {
-    const { action, q, data, truthType, sources, confidence } = req.query;
-
-    if (!action) {
-      return res.json({
-        success: true,
-        message: 'TTL Cache Manager endpoint operational',
-        usage: 'Add ?action=stats to get cache statistics, or use other actions',
-        examples: [
-          '/api/test-semantic/cache?action=stats',
-          '/api/test-semantic/cache?action=set&q=Bitcoin%20price&data=50000&truthType=VOLATILE',
-          '/api/test-semantic/cache?action=get&q=Bitcoin%20price',
-          '/api/test-semantic/cache?action=fingerprint&q=current%20BTC%20price'
-        ]
-      });
-    }
-
-    const params = {
-      query: q,
-      data: data,
-      truthType: truthType,
-      sources: sources ? JSON.parse(sources) : undefined,
-      confidence: confidence ? parseFloat(confidence) : undefined
-    };
-
-    const result = testCache(action, params);
-    res.json(result);
-  } catch (error) {
-    console.error('[ttlCacheManager] Test endpoint error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
 
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);

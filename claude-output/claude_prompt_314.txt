@@ -1,0 +1,49 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #314: [claude-fix] Issue: Consolidate Phase 4 test endpoints into existing action router
+
+Issue Description:
+Context: Phase 4 test endpoints were created as separate routes (/api/test-semantic/truth-type and /api/test-semantic/cache). This creates drift from the existing test harness pattern which uses /api/test-semantic?action=.... Need to consolidate.
+Task:
+
+Find where the Phase 4 test routes were added
+Remove the separate route patterns (/api/test-semantic/truth-type and /api/test-semantic/cache)
+Add them as actions in the existing /api/test-semantic?action=... router instead:
+
+action=truth-type&q=... for truth type detection
+action=cache&... for cache operations
+
+
+Update truthTypeDetector.js: Change Stage 2 default from SEMI_STABLE to VOLATILE (conservative default when AI classifier not integrated)
+
+The consolidated actions should be:
+
+/api/test-semantic?action=truth-type&q=What%20is%20the%20current%20price%20of%20Bitcoin
+/api/test-semantic?action=cache&action=stats
+/api/test-semantic?action=cache&q=Bitcoin%20price&data=50000&truthType=VOLATILE
+
+Critical fix in truthTypeDetector.js:
+In the classifyAmbiguous function, change the default return from SEMI_STABLE to VOLATILE (two places - the success return and the error catch return).
+Acceptance:
+
+No separate /api/test-semantic/truth-type or /api/test-semantic/cache routes exist
+All Phase 4 tests work via ?action=truth-type and ?action=cache
+Ambiguous queries default to VOLATILE, not SEMI_STABLE
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
