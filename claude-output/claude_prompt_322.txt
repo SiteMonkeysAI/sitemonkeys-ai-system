@@ -1,0 +1,46 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #322: [claude-fix] Issue: Fix Stage 2 default and verify route consolidation
+
+Issue Description:
+Context: Other AI review identified two corrections needed for Phase 4 to fully align with doctrine.
+Task 1: Fix Stage 2 default in truthTypeDetector.js
+In the classifyAmbiguous function, change BOTH return statements from SEMI_STABLE to VOLATILE:
+javascript// Change this:
+type: TRUTH_TYPES.SEMI_STABLE,
+
+// To this:
+type: TRUTH_TYPES.VOLATILE,
+This applies to both the success return AND the catch block return.
+Reason: Defaulting ambiguous queries to SEMI_STABLE (24hr cache) violates "no silent caching of volatile truth." If Stage 2 AI classification isn't fully integrated, the safest default is VOLATILE (5min cache) - conservative, not permissive.
+Task 2: Verify route consolidation
+Confirm all Phase 4 test actions use the unified pattern:
+
+/api/test-semantic?action=truth-type
+/api/test-semantic?action=cache
+/api/test-semantic?action=hierarchy
+/api/test-semantic?action=external-lookup
+
+No separate route families like /api/test-semantic/truth-type.
+Acceptance:
+
+Ambiguous queries default to VOLATILE
+All Phase 4 tests accessible only via ?action= pattern
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
