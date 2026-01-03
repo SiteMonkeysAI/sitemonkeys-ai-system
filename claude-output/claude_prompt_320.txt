@@ -1,0 +1,89 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #320: [claude-fix] Issue: Complete Phase 4 & 5 integration - full external lookup, chat flow integration, and doctrine enforcement
+
+Issue Description:
+Context: Phase 4 components are built and tested individually. Now integrate everything into production, connect real external APIs, and add Phase 5 doctrine enforcement gates. One complete implementation.
+Task - Part 1: Integrate Phase 4 into /api/chat flow
+
+Find the main chat orchestrator (grep for processWithEliAndRoxy or orchestrator)
+Import all Phase 4 components
+Add Phase 4 pipeline BEFORE AI generation:
+
+Call detectTruthType(userMessage)
+Call route(userMessage, currentMode) to get hierarchy
+If external_lookup_required, call lookup(userMessage)
+Check cache before external lookup
+Pass results to prompt builder
+
+
+
+Task - Part 2: Connect real external lookup
+In externalLookupEngine.js, replace the placeholder performLookup function with actual HTTP fetches:
+
+Use Node's native fetch (Node 18+)
+Implement timeout handling (5 second max)
+Parse responses and extract relevant text
+Truncate to MAX_FETCHED_TEXT (15000 chars)
+Handle errors gracefully
+
+Task - Part 3: Add Phase 5 Doctrine Enforcement Gates
+Create /api/core/intelligence/doctrineEnforcer.js with these gates:
+
+Truth Gate: Block response if confidence < 0.5 AND no external verification attempted
+Provenance Gate: Ensure all external claims have source_class, verified_at, confidence tags
+Volatility Gate: Block caching of VOLATILE data beyond TTL
+Business Policy Gate: Block external override of vault content in Site Monkeys mode
+Disclosure Gate: Force disclosure when lookup fails or confidence is low
+
+Each gate returns { passed: boolean, violation: string|null, correction: string|null }
+Task - Part 4: Add enforcement to response pipeline
+After AI generates response, BEFORE returning to user:
+
+Run all doctrine gates
+If any gate fails, apply correction or add disclosure
+Log all gate results for telemetry
+Never return response that fails Truth Gate without disclosure
+
+Task - Part 5: Add consolidated test endpoint
+Add action=phase4-status that returns status of entire pipeline:
+
+All component health checks
+Gate configuration
+Recent enforcement stats
+Cache stats
+
+Acceptance Criteria:
+
+ Phase 4 runs on every /api/chat request
+ External lookup actually fetches from real URLs
+ Cache prevents duplicate lookups within TTL
+ Doctrine gates enforce truth-first behavior
+ Failed lookups trigger graceful degradation with disclosure
+ Business policy claims never overridden by external in Site Monkeys mode
+ Telemetry logged for all operations
+
+Test after deploy:
+
+Ask "What is the current price of Bitcoin?" - should attempt real external lookup
+Ask "What is our minimum pricing?" in Site Monkeys mode - should use vault, not external
+Ask same question twice within TTL - second should hit cache
+Check /api/test-semantic?action=phase4-status for full system health
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -159,8 +159,7 @@ export function getSourcesForQuery(highStakesResult) {
 }
 
 /**
- * Perform external lookup (placeholder for actual implementation)
- * In production, this would make HTTP requests to external APIs
+ * Perform external lookup with real HTTP fetches
  * @param {string} query - The user's query
  * @param {array} sources - Sources to consult
  * @returns {Promise<object>} Lookup result
@@ -186,28 +185,128 @@ export async function performLookup(query, sources) {
     };
   }
 
-  // TODO: Implement actual external API calls
-  // For now, return a structured placeholder that indicates lookup was attempted
-  // This allows the system to be tested without making real external calls
+  // Perform actual external lookups
+  const results = [];
+  const sourcesUsed = [];
+  let totalTextFetched = 0;
 
   try {
-    // Simulate lookup delay
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Fetch from each source with timeout
+    for (const source of sources.slice(0, LOOKUP_CONFIG.MAX_SOURCES_PER_QUERY)) {
+      if (totalTextFetched >= LOOKUP_CONFIG.MAX_FETCHED_TEXT) {
+        console.log(`[externalLookupEngine] Reached max fetched text limit`);
+        break;
+      }
 
-    // Placeholder response structure
-    const result = {
-      success: true,
+      try {
+        console.log(`[externalLookupEngine] Fetching from ${source.name} (${source.url})`);
+
+        // Create abort controller for timeout
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), LOOKUP_CONFIG.TIMEOUT_MS);
+
+        // Perform fetch with timeout
+        const response = await fetch(source.url, {
+          signal: controller.signal,
+          headers: {
+            'User-Agent': 'SiteMonkeys-AI-System/1.0',
+            'Accept': 'text/html,application/json,text/plain'
+          }
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          console.log(`[externalLookupEngine] ${source.name} returned ${response.status}`);
+          sourcesUsed.push({
+            name: source.name,
+            url: source.url,
+            status: `error_${response.status}`
+          });
+          continue;
+        }
+
+        // Get response text
+        let text = await response.text();
+
+        // Truncate if needed
+        const remainingBudget = LOOKUP_CONFIG.MAX_FETCHED_TEXT - totalTextFetched;
+        if (text.length > remainingBudget) {
+          text = text.substring(0, remainingBudget);
+        }
+
+        totalTextFetched += text.length;
+
+        // Store result
+        results.push({
+          source: source.name,
+          text: text,
+          length: text.length
+        });
+
+        sourcesUsed.push({
+          name: source.name,
+          url: source.url,
+          status: 'success',
+          text_length: text.length
+        });
+
+        console.log(`[externalLookupEngine] ✓ ${source.name}: ${text.length} chars`);
+
+      } catch (fetchError) {
+        if (fetchError.name === 'AbortError') {
+          console.log(`[externalLookupEngine] ${source.name} timed out`);
+          sourcesUsed.push({
+            name: source.name,
+            url: source.url,
+            status: 'timeout'
+          });
+        } else {
+          console.log(`[externalLookupEngine] ${source.name} fetch error: ${fetchError.message}`);
+          sourcesUsed.push({
+            name: source.name,
+            url: source.url,
+            status: 'error',
+            error: fetchError.message
+          });
+        }
+      }
+    }
+
+    // If we got any results, consider it a success
+    if (results.length > 0) {
+      const combinedData = {
+        query: query,
+        sources: results,
+        total_text_length: totalTextFetched,
+        timestamp: new Date().toISOString()
+      };
+
+      return {
+        success: true,
+        from_cache: false,
+        lookup_attempted: true,
+        lookup_completed: true,
+        data: combinedData,
+        sources_consulted: sourcesUsed,
+        sources_succeeded: results.length,
+        total_text_fetched: totalTextFetched,
+        verified_at: new Date().toISOString(),
+        lookup_time_ms: Date.now() - startTime
+      };
+    }
+
+    // No results - all sources failed
+    return {
+      success: false,
       from_cache: false,
       lookup_attempted: true,
       lookup_completed: false,
-      message: 'External lookup infrastructure ready - API integration pending',
-      sources_consulted: sources.map(s => ({ name: s.name, url: s.url, status: 'pending_integration' })),
-      data: null,
+      error: 'All sources failed or returned no data',
+      sources_consulted: sourcesUsed,
       verified_at: new Date().toISOString(),
       lookup_time_ms: Date.now() - startTime
     };
-
-    return result;
 
   } catch (error) {
     console.error(`[externalLookupEngine] Lookup failed:`, error);
