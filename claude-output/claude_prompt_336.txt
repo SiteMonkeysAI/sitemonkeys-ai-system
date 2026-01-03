@@ -1,0 +1,37 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #336: [claude-fix] Issue: cache_valid_until not being set for VOLATILE external lookups
+
+Issue Description:
+Context: Comprehensive test shows VOLATILE Bitcoin query returns:
+
+external_lookup: true ✅
+verified_at: "2026-01-03T03:06:29.018Z" ✅
+cache_valid_until: null ❌
+
+For VOLATILE queries, cache_valid_until should be set to verified_at + 5 minutes (the VOLATILE TTL).
+Task: In /api/core/orchestrator.js, after performing external lookup for VOLATILE queries, calculate and set cache_valid_until:
+javascriptif (truthTypeResult.type === 'VOLATILE') {
+  const ttlMs = truthTypeResult.ttl_ms || 300000; // 5 minutes default
+  phase4Metadata.cache_valid_until = new Date(Date.now() + ttlMs).toISOString();
+}
+Or pull it from the cache manager when storing the result.
+Acceptance: Bitcoin query returns cache_valid_until with a timestamp ~5 minutes after verified_at.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
