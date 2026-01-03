@@ -1,0 +1,121 @@
+Now let me create a comprehensive summary of the changes:
+
+---SUMMARY---
+
+# Issue #342: Configure Authoritative Sources with Proper Parsing - No False Verification
+
+## Problem
+External lookup was fetching Wikipedia/FDA homepages instead of useful data, using HTML stripping that produced garbage. The system was claiming verification from sources it couldn't actually parse reliably.
+
+## Critical Principle Implemented
+**Only claim verification from sources we can actually parse reliably.**
+
+## Changes Made
+
+### 1. API-Based Sources Configuration (`api/core/intelligence/externalLookupEngine.js`)
+
+**Added `API_SOURCES` object** with properly configured API endpoints:
+
+- **CRYPTO**: CoinGecko API for Bitcoin/Ethereum prices
+  - URL: `https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd`
+  - Parser: JSON
+  - Extractor: Returns formatted price strings (e.g., "Bitcoin: $45000, Ethereum: $3000")
+
+- **MEDICAL**: FDA Drug Labels API
+  - Dynamic URL builder: Extracts drug name from query and builds FDA API URL
+  - Parser: JSON  
+  - Extractor: Returns warnings, adverse reactions, and indications (bounded to prevent token overflow)
+
+**Updated `AUTHORITATIVE_SOURCES`**:
+- Marked non-parseable sources with `parseable: false` flag
+- Added Wikipedia API endpoint with proper JSON parsing for PERMANENT truth type queries
+- Uses Wikipedia REST API summary endpoint instead of scraping HTML
+
+### 2. Query-to-Source Matching (`selectSourcesForQuery` function)
+
+Implemented specific pattern matching to route queries to appropriate sources:
+
+- **Crypto queries**: Matches `bitcoin|btc|ethereum|eth|crypto|cryptocurrency` → CoinGecko API
+- **Medical drug queries**: Matches side effects/dosage queries + specific drug names → FDA API
+- **Definition/history queries**: PERMANENT truth type + not high-stakes → Wikipedia API
+- **No match**: Returns empty array to trigger graceful degradation (no false verification)
+
+### 3. Enhanced `performLookup` Function
+
+**Key improvements**:
+- Dynamic URL building support (`buildUrl` function for parameterized queries)
+- JSON parser with proper extraction pipeline
+- HTML sources only processed if `parseable: true`
+- Extraction validation - marks source as failed if extractor returns null
+- Success tracking in source metadata (`success: true/false`)
+- Bounded text extraction (respects MAX_FETCHED_TEXT limit)
+
+### 4. Telemetry Consistency Fixes (`api/core/orchestrator.js`)
+
+**Critical fix**: Ensured `external_lookup: true` NEVER occurs with `sources_used: 0`
+
+Updated orchestrator logic:
+- If `sources_used === 0` after lookup, sets `external_lookup: false` and records `failure_reason`
+- Graceful degradation properly tracked with `lookup_attempted: true` but `lookup_performed: false`
+- Added `failure_reason` field to phase4_metadata for transparent error reporting
+- Changed `fetched_content` field in response to `sources` array (bounded metadata, not full content)
+
+### 5. Response Metadata Structure
+
+Updated `phase4_metadata` in response:
+- Added `failure_reason` field (null if successful)
+- Changed from unbounded `fetched_content` to bounded `sources` array
+- Sources array contains: `{ name, type, success }` for each source
+- Prevents dumping full fetched content into client responses
+
+## Testing
+
+The implementation can be tested using the existing test endpoint:
+
+```bash
+# Test Bitcoin price lookup (should use CoinGecko API)
+GET /api/test-semantic?action=external-lookup&q=What+is+the+current+price+of+Bitcoin
+
+# Test drug information (should use FDA API)
+GET /api/test-semantic?action=external-lookup&q=What+are+the+side+effects+of+aspirin
+
+# Test definition query (should use Wikipedia API)
+GET /api/test-semantic?action=external-lookup&q=What+is+the+Pythagorean+theorem
+
+# Test no reliable source (should trigger graceful degradation)
+GET /api/test-semantic?action=external-lookup&q=Latest+Supreme+Court+ruling
+```
+
+## Expected Behavior
+
+| Query Type | Source | Result |
+|------------|--------|--------|
+| "Current price of Bitcoin" | CoinGecko API | Actual USD price numbers |
+| "Side effects of aspirin" | FDA API (parsed) | Warnings/adverse reactions text |
+| "What is the Pythagorean theorem" | Wikipedia API | Definition extract |
+| "Latest Supreme Court ruling" | NONE | Graceful degradation + disclosure |
+
+## Acceptance Criteria Met
+
+✅ API-based sources configured with reliable parsers (CoinGecko, FDA, Wikipedia)  
+✅ Query-to-source matching for specific patterns only  
+✅ NO HTML scraping as "verification"  
+✅ NO generic URL appending (`?q=`) to search pages  
+✅ Graceful degradation when no reliable source available  
+✅ Telemetry consistency: `external_lookup: true` implies `sources_used >= 1`  
+✅ Response metadata bounded (no full content dumps)  
+✅ Failure reasons properly tracked and exposed
+
+## Files Modified
+
+1. `api/core/intelligence/externalLookupEngine.js` - Added API sources, query matching, enhanced parsing
+2. `api/core/orchestrator.js` - Fixed telemetry consistency, updated metadata structure
+
+## Key Principles Upheld
+
+- **Truth First**: Only claim verification from sources we can reliably parse
+- **No False Verification**: HTML scraping removed, API-based sources only
+- **Graceful Degradation**: Honest disclosure when no reliable source available
+- **Bounded Telemetry**: Server-side logging only, bounded client metadata
+
+---END SUMMARY---

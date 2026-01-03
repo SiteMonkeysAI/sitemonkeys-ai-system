@@ -22,37 +22,88 @@ export const LOOKUP_CONFIG = {
   CONFIDENCE_THRESHOLD: 0.70
 };
 
-// Domain-specific authoritative sources
+// API-based sources with proper parsing (returns structured data)
+export const API_SOURCES = {
+  CRYPTO: [
+    {
+      name: 'CoinGecko',
+      url: 'https://api.coingecko.com/api/v3/simple/price?ids=bitcoin,ethereum&vs_currencies=usd',
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        if (!json) return null;
+        const btc = json.bitcoin?.usd;
+        const eth = json.ethereum?.usd;
+        if (!btc && !eth) return null;
+        return `Bitcoin: $${btc || 'N/A'}, Ethereum: $${eth || 'N/A'}`;
+      }
+    }
+  ],
+  MEDICAL: [
+    {
+      name: 'FDA Drug Labels',
+      buildUrl: (query) => {
+        // Extract drug name from query
+        const drugMatch = query.match(/\b(aspirin|ibuprofen|acetaminophen|tylenol|advil)\b/i);
+        const drugName = drugMatch ? drugMatch[1].toLowerCase() : 'aspirin';
+        return `https://api.fda.gov/drug/label.json?search=openfda.generic_name:${encodeURIComponent(drugName)}&limit=1`;
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        const result = json.results?.[0];
+        if (!result) return null;
+        return [
+          result.warnings?.[0]?.substring(0, 1000),
+          result.adverse_reactions?.[0]?.substring(0, 1000),
+          result.indications_and_usage?.[0]?.substring(0, 500)
+        ].filter(Boolean).join('\n\n');
+      }
+    }
+  ]
+};
+
+// Domain-specific authoritative sources (non-API fallbacks)
 export const AUTHORITATIVE_SOURCES = {
   MEDICAL: [
-    { name: 'FDA', url: 'https://www.fda.gov', type: 'government' },
-    { name: 'NIH', url: 'https://www.nih.gov', type: 'government' },
-    { name: 'CDC', url: 'https://www.cdc.gov', type: 'government' },
-    { name: 'Mayo Clinic', url: 'https://www.mayoclinic.org', type: 'medical' },
-    { name: 'PubMed', url: 'https://pubmed.ncbi.nlm.nih.gov', type: 'research' }
+    { name: 'FDA', url: 'https://www.fda.gov', type: 'government', parseable: false },
+    { name: 'NIH', url: 'https://www.nih.gov', type: 'government', parseable: false },
+    { name: 'CDC', url: 'https://www.cdc.gov', type: 'government', parseable: false },
+    { name: 'Mayo Clinic', url: 'https://www.mayoclinic.org', type: 'medical', parseable: false },
+    { name: 'PubMed', url: 'https://pubmed.ncbi.nlm.nih.gov', type: 'research', parseable: false }
   ],
   LEGAL: [
-    { name: 'Congress.gov', url: 'https://www.congress.gov', type: 'government' },
-    { name: 'Supreme Court', url: 'https://www.supremecourt.gov', type: 'government' },
-    { name: 'Federal Register', url: 'https://www.federalregister.gov', type: 'government' },
-    { name: 'Cornell Law', url: 'https://www.law.cornell.edu', type: 'legal' }
+    { name: 'Congress.gov', url: 'https://www.congress.gov', type: 'government', parseable: false },
+    { name: 'Supreme Court', url: 'https://www.supremecourt.gov', type: 'government', parseable: false },
+    { name: 'Federal Register', url: 'https://www.federalregister.gov', type: 'government', parseable: false },
+    { name: 'Cornell Law', url: 'https://www.law.cornell.edu', type: 'legal', parseable: false }
   ],
   FINANCIAL: [
-    { name: 'SEC', url: 'https://www.sec.gov', type: 'government' },
-    { name: 'IRS', url: 'https://www.irs.gov', type: 'government' },
-    { name: 'Federal Reserve', url: 'https://www.federalreserve.gov', type: 'government' },
-    { name: 'Treasury', url: 'https://home.treasury.gov', type: 'government' }
+    { name: 'SEC', url: 'https://www.sec.gov', type: 'government', parseable: false },
+    { name: 'IRS', url: 'https://www.irs.gov', type: 'government', parseable: false },
+    { name: 'Federal Reserve', url: 'https://www.federalreserve.gov', type: 'government', parseable: false },
+    { name: 'Treasury', url: 'https://home.treasury.gov', type: 'government', parseable: false }
   ],
   SAFETY: [
-    { name: 'CPSC', url: 'https://www.cpsc.gov', type: 'government' },
-    { name: 'NHTSA', url: 'https://www.nhtsa.gov', type: 'government' },
-    { name: 'OSHA', url: 'https://www.osha.gov', type: 'government' },
-    { name: 'FDA Recalls', url: 'https://www.fda.gov/safety/recalls', type: 'government' }
+    { name: 'CPSC', url: 'https://www.cpsc.gov', type: 'government', parseable: false },
+    { name: 'NHTSA', url: 'https://www.nhtsa.gov', type: 'government', parseable: false },
+    { name: 'OSHA', url: 'https://www.osha.gov', type: 'government', parseable: false },
+    { name: 'FDA Recalls', url: 'https://www.fda.gov/safety/recalls', type: 'government', parseable: false }
   ],
   GENERAL: [
-    { name: 'Wikipedia', url: 'https://en.wikipedia.org', type: 'encyclopedia' },
-    { name: 'Reuters', url: 'https://www.reuters.com', type: 'news' },
-    { name: 'AP News', url: 'https://apnews.com', type: 'news' }
+    {
+      name: 'Wikipedia',
+      buildUrl: (query) => {
+        // Extract key term from query for Wikipedia lookup
+        const cleanQuery = query.replace(/\b(what is|define|definition of|meaning of|explain)\b/gi, '').trim();
+        const keyTerm = cleanQuery.split(' ').slice(0, 3).join(' ');
+        return `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(keyTerm)}`;
+      },
+      parser: 'json',
+      type: 'api',
+      parseable: true,
+      extract: (json) => json.extract?.substring(0, 2000) || null
+    }
   ]
 };
 
@@ -133,7 +184,37 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
 }
 
 /**
- * Get authoritative sources for a query based on detected domains
+ * Select sources for query - prioritize API-based sources with reliable parsers
+ * @param {string} query - The user's query
+ * @param {string} truthType - Truth type (VOLATILE, SEMI_STABLE, PERMANENT)
+ * @param {object} highStakesResult - Result from detectHighStakesDomain
+ * @returns {array} Array of source objects (empty if no reliable source)
+ */
+export function selectSourcesForQuery(query, truthType, highStakesResult) {
+  const lowerQuery = query.toLowerCase();
+
+  // Crypto - use API
+  if (lowerQuery.match(/bitcoin|btc|ethereum|eth|crypto|cryptocurrency/)) {
+    return API_SOURCES.CRYPTO;
+  }
+
+  // Medical drug queries - use FDA API with specific field extraction
+  if (lowerQuery.match(/side effects?|dosage|drug interactions?/) &&
+      lowerQuery.match(/aspirin|ibuprofen|acetaminophen|tylenol|advil/)) {
+    return API_SOURCES.MEDICAL;
+  }
+
+  // Wikipedia ONLY for PERMANENT definition/history queries, NOT high-stakes
+  if (truthType === TRUTH_TYPES.PERMANENT && !highStakesResult?.isHighStakes) {
+    return AUTHORITATIVE_SOURCES.GENERAL;
+  }
+
+  // No reliable source available - return empty, trigger graceful degradation
+  return [];
+}
+
+/**
+ * Get authoritative sources for a query based on detected domains (legacy)
  * @param {object} highStakesResult - Result from detectHighStakesDomain
  * @returns {array} Array of source objects
  */
@@ -159,7 +240,7 @@ export function getSourcesForQuery(highStakesResult) {
 }
 
 /**
- * Perform external lookup with real HTTP fetches
+ * Perform external lookup with real HTTP fetches and proper parsing
  * @param {string} query - The user's query
  * @param {array} sources - Sources to consult
  * @returns {Promise<object>} Lookup result
@@ -199,18 +280,20 @@ export async function performLookup(query, sources) {
       }
 
       try {
-        console.log(`[externalLookupEngine] Fetching from ${source.name} (${source.url})`);
+        // Build URL if function provided
+        const fetchUrl = source.buildUrl ? source.buildUrl(query) : source.url;
+        console.log(`[externalLookupEngine] Fetching from ${source.name} (${fetchUrl})`);
 
         // Create abort controller for timeout
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), LOOKUP_CONFIG.TIMEOUT_MS);
 
         // Perform fetch with timeout
-        const response = await fetch(source.url, {
+        const response = await fetch(fetchUrl, {
           signal: controller.signal,
           headers: {
             'User-Agent': 'SiteMonkeys-AI-System/1.0',
-            'Accept': 'text/html,application/json,text/plain'
+            'Accept': 'application/json,text/html,text/plain'
           }
         });
 
@@ -220,54 +303,131 @@ export async function performLookup(query, sources) {
           console.log(`[externalLookupEngine] ${source.name} returned ${response.status}`);
           sourcesUsed.push({
             name: source.name,
-            url: source.url,
-            status: `error_${response.status}`
+            type: source.type || 'unknown',
+            status: `error_${response.status}`,
+            success: false
           });
           continue;
         }
 
-        // Get response text
-        let text = await response.text();
+        // Parse response based on source parser type
+        let parsedData = null;
+        let extractedText = null;
 
-        // Truncate if needed
-        const remainingBudget = LOOKUP_CONFIG.MAX_FETCHED_TEXT - totalTextFetched;
-        if (text.length > remainingBudget) {
-          text = text.substring(0, remainingBudget);
+        if (source.parser === 'json') {
+          // JSON API response
+          const jsonData = await response.json();
+
+          // Apply extractor if provided
+          if (source.extract && typeof source.extract === 'function') {
+            extractedText = source.extract(jsonData);
+          } else {
+            extractedText = JSON.stringify(jsonData).substring(0, 1000);
+          }
+
+          // If extraction failed, mark as failed
+          if (!extractedText) {
+            console.log(`[externalLookupEngine] ${source.name} extraction returned null`);
+            sourcesUsed.push({
+              name: source.name,
+              type: source.type || 'api',
+              status: 'extraction_failed',
+              success: false
+            });
+            continue;
+          }
+
+          parsedData = extractedText;
+        } else {
+          // HTML or plain text - only if parseable flag is true
+          if (source.parseable === false) {
+            console.log(`[externalLookupEngine] ${source.name} marked as non-parseable, skipping`);
+            sourcesUsed.push({
+              name: source.name,
+              type: source.type || 'unknown',
+              status: 'non_parseable',
+              success: false
+            });
+            continue;
+          }
+
+          let text = await response.text();
+
+          // Apply extractor if provided
+          if (source.extract && typeof source.extract === 'function') {
+            try {
+              parsedData = source.extract({ text });
+            } catch (extractError) {
+              console.log(`[externalLookupEngine] ${source.name} extractor failed: ${extractError.message}`);
+              sourcesUsed.push({
+                name: source.name,
+                type: source.type || 'unknown',
+                status: 'extractor_error',
+                success: false
+              });
+              continue;
+            }
+          } else {
+            // No extractor - use raw text (bounded)
+            parsedData = text.substring(0, 2000);
+          }
         }
 
-        totalTextFetched += text.length;
+        if (!parsedData) {
+          console.log(`[externalLookupEngine] ${source.name} produced no usable data`);
+          sourcesUsed.push({
+            name: source.name,
+            type: source.type || 'unknown',
+            status: 'no_data',
+            success: false
+          });
+          continue;
+        }
+
+        // Track text length
+        const textLength = parsedData.length;
+        const remainingBudget = LOOKUP_CONFIG.MAX_FETCHED_TEXT - totalTextFetched;
+        if (textLength > remainingBudget) {
+          parsedData = parsedData.substring(0, remainingBudget);
+        }
+
+        totalTextFetched += parsedData.length;
 
         // Store result
         results.push({
           source: source.name,
-          text: text,
-          length: text.length
+          text: parsedData,
+          length: parsedData.length,
+          type: source.type || 'api'
         });
 
         sourcesUsed.push({
           name: source.name,
-          url: source.url,
+          type: source.type || 'api',
           status: 'success',
-          text_length: text.length
+          text_length: parsedData.length,
+          success: true
         });
 
-        console.log(`[externalLookupEngine] ✓ ${source.name}: ${text.length} chars`);
+        console.log(`[externalLookupEngine] ✓ ${source.name}: ${parsedData.length} chars extracted`);
 
       } catch (fetchError) {
         if (fetchError.name === 'AbortError') {
           console.log(`[externalLookupEngine] ${source.name} timed out`);
           sourcesUsed.push({
             name: source.name,
-            url: source.url,
-            status: 'timeout'
+            type: source.type || 'unknown',
+            status: 'timeout',
+            success: false
           });
         } else {
           console.log(`[externalLookupEngine] ${source.name} fetch error: ${fetchError.message}`);
           sourcesUsed.push({
             name: source.name,
-            url: source.url,
+            type: source.type || 'unknown',
             status: 'error',
-            error: fetchError.message
+            error: fetchError.message,
+            success: false
           });
         }
       }
@@ -382,8 +542,24 @@ export async function lookup(query, options = {}) {
     };
   }
 
-  // Get appropriate sources
-  const sources = getSourcesForQuery(truthTypeResult.high_stakes);
+  // Select appropriate sources using new query-to-source matching
+  const sources = selectSourcesForQuery(query, truthTypeResult.type, truthTypeResult.high_stakes);
+
+  // Handle no reliable source available
+  if (sources.length === 0) {
+    console.log(`[externalLookupEngine] No reliable parseable source available for this query type`);
+    const degraded = gracefulDegradation(query, { error: 'No reliable parseable source available for this query type' }, internalAnswer);
+    return {
+      ...degraded,
+      success: true,
+      lookup_performed: false,
+      lookup_attempted: true,
+      failure_reason: 'No reliable parseable source available for this query type',
+      truth_type: truthTypeResult.type,
+      lookup_reasons: lookupCheck.reasons,
+      total_time_ms: Date.now() - startTime
+    };
+  }
 
   // Perform lookup
   const lookupResult = await performLookup(query, sources);
@@ -471,9 +647,11 @@ export async function testLookup(query, options = {}) {
 // Default export
 export default {
   LOOKUP_CONFIG,
+  API_SOURCES,
   AUTHORITATIVE_SOURCES,
   checkFreshnessMarkers,
   isLookupRequired,
+  selectSourcesForQuery,
   getSourcesForQuery,
   performLookup,
   gracefulDegradation,
