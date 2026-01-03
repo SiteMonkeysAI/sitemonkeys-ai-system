@@ -1,0 +1,48 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #334: [claude-fix] Issue: High-stakes medical detection not matching "side effects" queries
+
+Issue Description:
+Context: Testing shows aspirin query returns high_stakes: {isHighStakes: false, domains: []} when it should detect as MEDICAL. The external lookup triggers correctly (because it's VOLATILE), but the high_stakes detection patterns need tuning.
+Task: In /api/core/intelligence/truthTypeDetector.js, find the high-stakes domain detection patterns and add medical patterns for:
+
+"side effects"
+"symptoms"
+"dosage"
+"drug interactions"
+"medication"
+"treatment"
+Drug/medication names (aspirin, ibuprofen, etc.)
+
+Current patterns likely only match explicit terms like "medical" or "health". Need to expand to catch common medical query patterns.
+Example patterns to add:
+javascriptconst MEDICAL_PATTERNS = [
+  /side effects?/i,
+  /symptoms? of/i,
+  /dosage/i,
+  /drug interactions?/i,
+  /medication/i,
+  /treatment for/i,
+  /aspirin|ibuprofen|tylenol|advil|acetaminophen/i,
+  /prescription|overdose|contraindications/i,
+  /diagnosis|prognosis/i
+];
+Acceptance: Query "What are the side effects of aspirin?" returns high_stakes: { isHighStakes: true, domains: ['MEDICAL'] }
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

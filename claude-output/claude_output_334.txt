@@ -1,0 +1,49 @@
+The changes have been successfully implemented. Let me provide a summary of what was done:
+
+---SUMMARY---
+
+## Fixed Issue #334: High-stakes medical detection not matching "side effects" queries
+
+### Problem
+The high-stakes domain detection in `truthTypeDetector.js` was not recognizing common medical query patterns like "side effects" and drug names (aspirin, ibuprofen, etc.). The query "What are the side effects of aspirin?" was returning `high_stakes: {isHighStakes: false, domains: []}` instead of correctly identifying it as a MEDICAL high-stakes query.
+
+### Solution
+Modified `/api/core/intelligence/truthTypeDetector.js` to expand the MEDICAL patterns in the `HIGH_STAKES_DOMAINS` constant (lines 59-68).
+
+### Changes Made
+**File: `/api/core/intelligence/truthTypeDetector.js`**
+
+Expanded the MEDICAL patterns array from 3 patterns to 8 patterns:
+
+**Added patterns:**
+1. `/\bsymptoms? of\b/i` - Matches "symptom of" and "symptoms of"
+2. `/\bside effects?\b/i` - Matches "side effect" and "side effects" (plural)
+3. `/\bdrug interactions?\b/i` - Matches "drug interaction" and "drug interactions" (plural)
+4. `/\b(interaction|contraindications?)\b/i` - Split from original pattern, added plural form
+5. `/\b(aspirin|ibuprofen|tylenol|advil|acetaminophen)\b/i` - Common drug names
+6. `/\b(overdose|prognosis)\b/i` - Additional medical terms
+
+**Retained original patterns:**
+- `/\b(symptom|diagnosis|treatment|medication|dosage|drug|prescription)\b/i`
+- `/\b(disease|condition|syndrome|disorder)\b/i`
+
+### Expected Result
+The query "What are the side effects of aspirin?" will now correctly return:
+```json
+{
+  "isHighStakes": true,
+  "domains": ["MEDICAL"]
+}
+```
+
+This triggers external lookup for medical queries regardless of truth type, ensuring accurate and safe medical information retrieval.
+
+### Testing
+The fix can be tested using the existing test endpoint:
+```
+/api/test-semantic?action=external-lookup&q=What%20are%20the%20side%20effects%20of%20aspirin
+```
+
+The high-stakes detection will now correctly identify this as a MEDICAL domain query and trigger appropriate external validation.
+
+---END SUMMARY---
