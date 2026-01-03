@@ -1,0 +1,54 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #356: [claude-fix] Issue: lookup_attempted fix applied to wrong file - needs to be in orchestrator.js
+
+Issue Description:
+Context: PR #354 correctly identified the bug (lookup_attempted not set on success), but fixed it in /api/lib/ai-processors.js. However, the actual chat flow uses /api/core/orchestrator.js, not ai-processors.js.
+Evidence: After PR #354 merged, multi-word queries still return lookup_attempted: false:
+
+"Venezuela" → true ✅
+"attack Venezuela" → false ❌
+"Did the US attack Venezuela this morning" → false ❌
+
+Task: Apply the SAME fix to /api/core/orchestrator.js:
+Find where lookupResult.success && lookupResult.data is handled and ensure BOTH branches set lookup_attempted: true:
+javascriptif (lookupResult.success && lookupResult.data) {
+  phase4Metadata.external_lookup = true;
+  phase4Metadata.lookup_attempted = true;  // ← ADD THIS LINE
+  phase4Metadata.source_class = "external";
+  // ... rest of success handling
+} else {
+  phase4Metadata.external_lookup = false;
+  phase4Metadata.lookup_attempted = true;  // Already exists
+  // ...
+}
+Also verify: Is the lookup even being CALLED for multi-word queries? Add logging:
+javascriptconsole.log('[ORCHESTRATOR] About to call lookup for:', message);
+If the lookup isn't being called at all, the trigger condition is the problem, not the metadata reporting.
+Acceptance:
+javascriptconst queries = [
+  "Venezuela",
+  "attack Venezuela", 
+  "Did the US attack Venezuela this morning",
+  "What is happening in Ukraine",
+  "Israel Gaza news"
+];
+// ALL must return lookup_attempted: true
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

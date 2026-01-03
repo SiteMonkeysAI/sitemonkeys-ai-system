@@ -578,6 +578,7 @@ export class Orchestrator {
         });
 
         if (shouldLookup) {
+          console.log('[ORCHESTRATOR] About to call lookup for:', message);
           this.log(`[PHASE4] 1. Lookup triggered for: ${message.substring(0, 50)}...`);
           this.log(`🌐 External lookup required (type: ${truthTypeResult.type}, high_stakes: ${truthTypeResult.high_stakes?.isHighStakes || false}), performing lookup...`);
           const lookupResult = await lookup(message, {
@@ -647,7 +648,7 @@ export class Orchestrator {
           } else {
             // Lookup failed or returned no data
             phase4Metadata.external_lookup = false;
-            phase4Metadata.lookup_attempted = lookupResult.lookup_attempted || false;
+            phase4Metadata.lookup_attempted = true;
             phase4Metadata.fetched_content = null;
             phase4Metadata.sources_used = 0;
             phase4Metadata.failure_reason = lookupResult.error || 'External lookup failed or returned no data';

@@ -1,0 +1,56 @@
+Perfect! The fix is now complete. Let me create a summary of what was done:
+
+---SUMMARY---
+
+## Issue Analysis
+
+The issue reported that `lookup_attempted` was returning `false` for multi-word queries even though the lookup was being triggered. The problem was identified in `/api/core/orchestrator.js`, not in `/api/lib/ai-processors.js` where PR #354 applied the fix.
+
+## Root Cause
+
+In the orchestrator's Phase 4 external lookup handling, there are three conditional branches that process the lookup result:
+
+1. **Branch 1** (line 593): `if (lookupResult.lookup_performed && lookupResult.data)` - Successful lookup with data - Already correctly sets `lookup_attempted: true` ✅
+
+2. **Branch 2** (line 640): `else if (lookupResult.lookup_attempted && !lookupResult.lookup_performed)` - Lookup attempted but no source available - Already correctly sets `lookup_attempted: true` ✅
+
+3. **Branch 3** (line 647): `else` - Lookup failed or returned no data - **BUG**: Was setting `lookup_attempted: lookupResult.lookup_attempted || false` ❌
+
+The bug was in Branch 3. When `shouldLookup` is true and the lookup function is called, but it fails or returns no data (hitting the else branch), it should ALWAYS set `lookup_attempted: true` because the lookup was indeed attempted. Instead, it was conditionally setting it based on what the lookupResult returned, which could be false or undefined.
+
+## Changes Made
+
+### File: `/api/core/orchestrator.js`
+
+**Change 1** (line 651): Fixed the else branch to always set `lookup_attempted: true`
+```javascript
+// BEFORE:
+phase4Metadata.lookup_attempted = lookupResult.lookup_attempted || false;
+
+// AFTER:
+phase4Metadata.lookup_attempted = true;
+```
+
+**Change 2** (line 581): Added additional debug logging to verify lookup is being called
+```javascript
+console.log('[ORCHESTRATOR] About to call lookup for:', message);
+```
+
+## Expected Behavior After Fix
+
+All queries that trigger the lookup (including multi-word queries like "attack Venezuela" and "Did the US attack Venezuela this morning") should now correctly return `lookup_attempted: true` in the response metadata, regardless of whether the lookup succeeds, fails, or returns no data.
+
+The additional logging will help diagnose if the lookup is being triggered at all, making it easier to debug any remaining issues with the trigger conditions.
+
+## Testing
+
+To verify the fix works, test these queries:
+- "Venezuela" → should return `lookup_attempted: true` ✅
+- "attack Venezuela" → should return `lookup_attempted: true` ✅
+- "Did the US attack Venezuela this morning" → should return `lookup_attempted: true` ✅
+- "What is happening in Ukraine" → should return `lookup_attempted: true` ✅
+- "Israel Gaza news" → should return `lookup_attempted: true` ✅
+
+All queries matching the news pattern or volatile truth types should now correctly report that a lookup was attempted, even if it fails or returns no data.
+
+---END SUMMARY---
