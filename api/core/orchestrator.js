@@ -558,6 +558,7 @@ export class Orchestrator {
           (routeResult.requires_external && routeResult.hierarchy_name === "external_first" && phase4Metadata.confidence < 0.9);
 
         if (shouldLookup) {
+          this.log(`[PHASE4] 1. Lookup triggered for: ${message.substring(0, 50)}...`);
           this.log(`🌐 External lookup required (type: ${truthTypeResult.type}, high_stakes: ${truthTypeResult.high_stakes?.isHighStakes || false}), performing lookup...`);
           const lookupResult = await lookup(message, {
             internalConfidence: phase4Metadata.confidence,
@@ -572,6 +573,7 @@ export class Orchestrator {
             phase4Metadata.lookup_attempted = true;
             phase4Metadata.source_class = "external";
             phase4Metadata.verified_at = new Date().toISOString();
+            phase4Metadata.sources_used = lookupResult.data.sources?.length || 0;
             phase4Metadata.external_data = lookupResult.data;
 
             // Extract fetched content from the lookup result
@@ -592,6 +594,14 @@ export class Orchestrator {
               phase4Metadata.cache_valid_until = lookupResult.cache_valid_until;
             }
 
+            // Log complete lookup success with details
+            this.log(`[PHASE4] 2. Fetching completed`);
+            if (lookupResult.data.sources) {
+              lookupResult.data.sources.forEach((src, idx) => {
+                this.log(`[PHASE4] 3. Received: ${src.length} bytes from ${src.source}`);
+              });
+            }
+            this.log(`[PHASE4] 4. Stored in phase4Metadata: ${phase4Metadata.sources_used} sources, ${lookupResult.data.total_text_length} total chars`);
             this.log(
               `✅ External lookup successful: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content ? phase4Metadata.fetched_content.length : 0} chars`,
             );
@@ -607,6 +617,15 @@ export class Orchestrator {
         this.error("⚠️ Phase 4 pipeline error:", phase4Error);
         // Continue with internal processing even if Phase 4 fails
         phase4Metadata.phase4_error = phase4Error.message;
+      }
+
+      // STEP 6.5: Inject external data into context if available
+      if (phase4Metadata.external_lookup && phase4Metadata.external_data) {
+        this.log(`[PHASE4] 5. Injecting external context: ${phase4Metadata.external_data.total_text_length} chars from ${phase4Metadata.sources_used} sources`);
+        // Add external data to context for AI injection
+        context.external = phase4Metadata.external_data;
+        context.sources = context.sources || {};
+        context.sources.hasExternal = true;
       }
 
       // STEP 7: Route to appropriate AI
@@ -842,6 +861,13 @@ export class Orchestrator {
             confidence: phase4Metadata.confidence,
             high_stakes: phase4Metadata.high_stakes,
             phase4_error: phase4Metadata.phase4_error,
+            // Include fetched content summary for verification
+            fetched_content: phase4Metadata.external_data ? {
+              total_text_length: phase4Metadata.external_data.total_text_length,
+              sources_count: phase4Metadata.external_data.sources?.length || 0,
+              query: phase4Metadata.external_data.query,
+              timestamp: phase4Metadata.external_data.timestamp
+            } : null,
           },
 
           // PHASE 5: Enforcement Gate Results
@@ -1961,7 +1987,7 @@ export class Orchestrator {
     confidence,
     mode,
     conversationHistory,
-    phase4Metadata = {},
+    phase4Metadata = null,
   ) {
     try {
       // ========== CRITICAL FIX: Check vault/tokens BEFORE confidence ==========
@@ -2041,6 +2067,11 @@ export class Orchestrator {
       }
 
       const contextString = this.#buildContextString(context, mode);
+
+      // Log if external context is being used
+      if (context.sources?.hasExternal && phase4Metadata) {
+        this.log(`[PHASE4] 6. AI generation starting with external context (${context.external?.total_text_length || 0} chars)`);
+      }
 
       const historyString =
         conversationHistory.length > 0
@@ -2396,6 +2427,53 @@ export class Orchestrator {
 
   #buildContextString(context, _mode) {
     let contextStr = "";
+
+    // ========== PHASE 4: INJECT EXTERNAL DATA FIRST (IF AVAILABLE) ==========
+    if (context.sources?.hasExternal && context.external) {
+      const externalData = context.external;
+      contextStr += `
+═══════════════════════════════════════════════════════════════
+🌐 EXTERNAL REAL-TIME DATA - VERIFIED FROM AUTHORITATIVE SOURCES
+═══════════════════════════════════════════════════════════════
+
+⚠️ CRITICAL: This data was JUST fetched from external authoritative sources.
+Use this information to provide accurate, up-to-date answers.
+
+Query: ${externalData.query}
+Retrieved: ${externalData.timestamp}
+Total sources: ${externalData.sources?.length || 0}
+Total text: ${externalData.total_text_length} characters
+
+`;
+
+      // Include text from each source
+      if (externalData.sources && externalData.sources.length > 0) {
+        externalData.sources.forEach((source, idx) => {
+          contextStr += `
+────────────────────────────────────────────────────────────────
+SOURCE ${idx + 1}: ${source.source}
+Length: ${source.length} characters
+────────────────────────────────────────────────────────────────
+
+${source.text}
+
+`;
+        });
+      }
+
+      contextStr += `
+═══════════════════════════════════════════════════════════════
+END OF EXTERNAL DATA
+═══════════════════════════════════════════════════════════════
+
+⚠️ IMPORTANT: You MUST use the above external data to answer the user's query.
+- This is REAL-TIME, VERIFIED data from authoritative sources
+- DO NOT say "I don't have real-time access" - you DO have it above
+- DO NOT say "I cannot provide current information" - you CAN using the data above
+- Extract relevant information from the sources and provide it to the user
+
+`;
+    }
 
     // ========== VAULT TAKES ABSOLUTE PRIORITY IN SITE MONKEYS MODE ==========
     if (context.sources?.hasVault && context.vault) {
