@@ -551,31 +551,31 @@ function enforceBoundedReasoning(response, phase4Metadata, context = {}, semanti
 }
 
 // ============================================
-// EXPORTS
+// EXPORTS (ES6 modules)
 // ============================================
 
-module.exports = {
+export {
   // Gates
   truthGate,
   materialImpactGate,
   proportionalityGate,
-  
+
   // Determination functions
   requiresBoundedReasoning,
   shouldVolunteer,
   shouldStop,
-  
+
   // Main enforcement
   enforceBoundedReasoning,
-  
+
   // Constants
   IMPACT_AXES,
   CREATIVITY_ALLOWED,
   CREATIVITY_FORBIDDEN,
   BOUNDED_REASONING_STRUCTURE,
-  
-  // Core principles (for documentation/reference)
-  PRINCIPLE: 'The system may reason beyond available facts, but it may never pretend that reasoning is fact.',
-  PRIMARY_OUTPUT: 'Decision quality, not response volume.',
-  SILENCE_PRINCIPLE: 'Silence is sometimes the highest-fidelity output.'
 };
+
+// Core principles (for documentation/reference)
+export const PRINCIPLE = 'The system may reason beyond available facts, but it may never pretend that reasoning is fact.';
+export const PRIMARY_OUTPUT = 'Decision quality, not response volume.';
+export const SILENCE_PRINCIPLE = 'Silence is sometimes the highest-fidelity output.';

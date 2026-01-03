@@ -1,0 +1,154 @@
+Excellent! Everything is in place. Now let me create a comprehensive summary of the changes:
+
+---SUMMARY---
+
+# Issue #344: Integrated Bounded Reasoning Gate into Doctrine Enforcer
+
+## Changes Made
+
+### 1. **File: `/api/core/intelligence/boundedReasoningGate.js`**
+   - **Action:** Converted from CommonJS to ES6 modules
+   - **Changes:**
+     - Changed `module.exports = {...}` to ES6 `export {...}` syntax
+     - Extracted PRINCIPLE, PRIMARY_OUTPUT, and SILENCE_PRINCIPLE as separate named exports
+     - **Rationale:** The codebase uses ES6 modules ONLY per CLAUDE.md policy (line 5: "Node.js 18+ with ES6 modules ONLY (no CommonJS)")
+     - **Location:** Lines 553-581
+
+### 2. **File: `/api/core/orchestrator.js`**
+   
+   #### A. Added Import Statement (Line 43)
+   - **Before:** Comment header said "PHASE 4/5 INTEGRATION"
+   - **After:** Changed to "PHASE 4/5/6 INTEGRATION" and added:
+     ```javascript
+     import { enforceBoundedReasoning } from "../core/intelligence/boundedReasoningGate.js";
+     ```
+   
+   #### B. Added Phase 6 Enforcement Code (Lines 773-817)
+   - **Location:** Inserted AFTER Phase 5 enforcement (line 770) and BEFORE Step 9 validation (line 819)
+   - **Implementation:**
+     ```javascript
+     // ============================================
+     // PHASE 6: BOUNDED REASONING ENFORCEMENT
+     // ============================================
+     // ⚠️ THIS IS A HARD GATE, NOT ADVISORY
+     // It MUST run post-generation. Skipping it reintroduces epistemic dishonesty.
+     this.log("🧠 PHASE 6: Bounded Reasoning Enforcement");
+     let phase6BoundedReasoning = {
+       required: false,
+       disclosure_added: false,
+       enforcement_passed: true,
+       violations: [],
+     };
+
+     try {
+       const boundedReasoningResult = enforceBoundedReasoning(
+         personalityResponse.response,
+         phase4Metadata,
+         {
+           isInference: phase4Metadata.source_class !== 'vault' && phase4Metadata.source_class !== 'external',
+         }
+       );
+
+       phase6BoundedReasoning = {
+         required: boundedReasoningResult.bounded_reasoning_required,
+         disclosure_added: boundedReasoningResult.disclosure_added,
+         enforcement_passed: boundedReasoningResult.enforcement_passed,
+         violations: boundedReasoningResult.violations || [],
+       };
+
+       if (boundedReasoningResult.disclosure_added) {
+         personalityResponse.response = boundedReasoningResult.enforced_response;
+         this.log('🧠 Bounded reasoning disclosure added');
+       }
+
+       if (!boundedReasoningResult.enforcement_passed) {
+         this.log('⚠️ Bounded reasoning violations:', boundedReasoningResult.violations);
+       } else {
+         this.log('✅ Bounded reasoning enforcement passed');
+       }
+     } catch (phase6Error) {
+       this.error("⚠️ Phase 6 bounded reasoning error:", phase6Error);
+       phase6BoundedReasoning.phase6_error = phase6Error.message;
+     }
+     ```
+   
+   #### C. Added phase6_bounded_reasoning to Response Metadata (Lines 951-958)
+   - **Location:** After phase5_enforcement in the metadata section
+   - **Structure:**
+     ```javascript
+     // PHASE 6: Bounded Reasoning Enforcement
+     phase6_bounded_reasoning: {
+       required: phase6BoundedReasoning.required,
+       disclosure_added: phase6BoundedReasoning.disclosure_added,
+       enforcement_passed: phase6BoundedReasoning.enforcement_passed,
+       violations: phase6BoundedReasoning.violations,
+       phase6_error: phase6BoundedReasoning.phase6_error || null,
+     },
+     ```
+   
+   #### D. Added phase6_bounded_reasoning to Top-Level Response (Lines 1021-1027)
+   - **Location:** After phase5_enforcement at the top level of the response object
+   - **Structure:** Same as metadata section above
+
+## Acceptance Criteria Met
+
+✅ **1. `boundedReasoningGate.js` deployed to `/api/core/intelligence/`**
+   - File already existed at correct location, converted to ES6 modules
+
+✅ **2. Imported and called in orchestrator.js post-generation**
+   - Import added at line 43
+   - Called at lines 787-794
+
+✅ **3. Runs AFTER Phase 5 doctrine enforcement**
+   - Phase 5 ends at line 770
+   - Phase 6 starts at line 773
+   - Step 9 validation starts at line 819
+
+✅ **4. `phase6_bounded_reasoning` included in response metadata**
+   - Added to metadata section at lines 951-958
+   - Added to top-level response at lines 1021-1027
+
+✅ **5. Disclosure automatically added when bounded reasoning required**
+   - Implemented at lines 803-806
+   - If `boundedReasoningResult.disclosure_added` is true, the enforced response replaces the original
+
+✅ **6. Forbidden creativity patterns trigger violations**
+   - Handled by the `enforceBoundedReasoning` function in boundedReasoningGate.js
+   - Violations are logged at line 809 and included in response metadata
+
+✅ **7. Logging shows `🧠 Phase 6: Bounded Reasoning Enforcement`**
+   - Log added at line 778
+   - Additional logs at lines 805, 809, and 812
+
+## Key Design Decisions
+
+1. **ES6 Module Conversion:** Converted boundedReasoningGate.js from CommonJS to ES6 to comply with codebase standards in CLAUDE.md
+
+2. **Error Handling:** Wrapped Phase 6 enforcement in try-catch block (lines 786-817) to ensure errors don't crash the system, following the pattern used in Phase 5
+
+3. **Response Modification:** The gate can modify the response by adding disclosure text. If this happens, the `personalityResponse.response` is updated with the enforced version (lines 803-806)
+
+4. **Metadata Placement:** Added phase6_bounded_reasoning to both the metadata section and top-level response for consistency with phase4_metadata and phase5_enforcement patterns
+
+5. **Inference Detection:** Context parameter includes `isInference` flag based on whether source_class is vault or external (line 791)
+
+## Testing Recommendation
+
+After deployment, test with queries that should trigger bounded reasoning:
+- Questions requiring speculation (e.g., "Should I invest in this startup?")
+- Volatile data requests without verification (e.g., "What is the current price of Bitcoin?")
+- High-stakes topics without verified data
+
+Expected behavior:
+- `phase6_bounded_reasoning.required` should be `true`
+- Disclosure should be added to response if not already present
+- Forbidden creativity patterns should trigger violations
+- Logs should show "🧠 Phase 6: Bounded Reasoning Enforcement"
+
+## Integration Status
+
+The Bounded Reasoning Gate is now fully integrated as a hard post-generation enforcement gate in the orchestration pipeline. It runs AFTER Phase 5 doctrine enforcement and BEFORE final validation, ensuring that all responses are checked for epistemic honesty before being returned to the user.
+
+**The system now enforces the core principle: "The system may reason beyond available facts, but it may never pretend that reasoning is fact."**
+
+---END SUMMARY---

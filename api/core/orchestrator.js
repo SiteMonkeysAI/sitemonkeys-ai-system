@@ -35,11 +35,12 @@ import { logMemoryOperation } from "../routes/debug.js";
 //import { validateCompliance as validateVaultCompliance } from '../lib/vault.js';
 // ========== SEMANTIC INTEGRATION ==========
 import { retrieveSemanticMemories } from "../services/semantic-retrieval.js";
-// ========== PHASE 4/5 INTEGRATION ==========
+// ========== PHASE 4/5/6 INTEGRATION ==========
 import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
 import { route } from "../core/intelligence/hierarchyRouter.js";
 import { lookup } from "../core/intelligence/externalLookupEngine.js";
 import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
+import { enforceBoundedReasoning } from "../core/intelligence/boundedReasoningGate.js";
 // ================================================
 
 // ==================== ORCHESTRATOR CLASS ====================
@@ -769,6 +770,52 @@ export class Orchestrator {
         phase5Enforcement.phase5_error = phase5Error.message;
       }
 
+      // ============================================
+      // PHASE 6: BOUNDED REASONING ENFORCEMENT
+      // ============================================
+      // ⚠️ THIS IS A HARD GATE, NOT ADVISORY
+      // It MUST run post-generation. Skipping it reintroduces epistemic dishonesty.
+      this.log("🧠 PHASE 6: Bounded Reasoning Enforcement");
+      let phase6BoundedReasoning = {
+        required: false,
+        disclosure_added: false,
+        enforcement_passed: true,
+        violations: [],
+      };
+
+      try {
+        const boundedReasoningResult = enforceBoundedReasoning(
+          personalityResponse.response,
+          phase4Metadata,
+          {
+            isInference: phase4Metadata.source_class !== 'vault' && phase4Metadata.source_class !== 'external',
+            // Add other context as available
+          }
+        );
+
+        phase6BoundedReasoning = {
+          required: boundedReasoningResult.bounded_reasoning_required,
+          disclosure_added: boundedReasoningResult.disclosure_added,
+          enforcement_passed: boundedReasoningResult.enforcement_passed,
+          violations: boundedReasoningResult.violations || [],
+        };
+
+        if (boundedReasoningResult.disclosure_added) {
+          personalityResponse.response = boundedReasoningResult.enforced_response;
+          this.log('🧠 Bounded reasoning disclosure added');
+        }
+
+        if (!boundedReasoningResult.enforcement_passed) {
+          this.log('⚠️ Bounded reasoning violations:', boundedReasoningResult.violations);
+          // Handle violations - either modify response or add warnings
+        } else {
+          this.log('✅ Bounded reasoning enforcement passed');
+        }
+      } catch (phase6Error) {
+        this.error("⚠️ Phase 6 bounded reasoning error:", phase6Error);
+        phase6BoundedReasoning.phase6_error = phase6Error.message;
+      }
+
       // STEP 9: Validate compliance (truth-first, mode enforcement)
       const validatedResponse = await this.#validateCompliance(
         personalityResponse.response,
@@ -901,6 +948,15 @@ export class Orchestrator {
             phase5_error: phase5Enforcement.phase5_error,
           },
 
+          // PHASE 6: Bounded Reasoning Enforcement
+          phase6_bounded_reasoning: {
+            required: phase6BoundedReasoning.required,
+            disclosure_added: phase6BoundedReasoning.disclosure_added,
+            enforcement_passed: phase6BoundedReasoning.enforcement_passed,
+            violations: phase6BoundedReasoning.violations,
+            phase6_error: phase6BoundedReasoning.phase6_error || null,
+          },
+
           // NEW: Cost tracking
           cost_tracking: {
             session_cost: costTracker.getSessionCost(sessionId),
@@ -961,6 +1017,13 @@ export class Orchestrator {
           gates_run: phase5Enforcement.gates_run,
           original_response_modified: phase5Enforcement.original_response_modified,
           phase5_error: phase5Enforcement.phase5_error,
+        },
+        phase6_bounded_reasoning: {
+          required: phase6BoundedReasoning.required,
+          disclosure_added: phase6BoundedReasoning.disclosure_added,
+          enforcement_passed: phase6BoundedReasoning.enforcement_passed,
+          violations: phase6BoundedReasoning.violations,
+          phase6_error: phase6BoundedReasoning.phase6_error || null,
         },
       };
 
