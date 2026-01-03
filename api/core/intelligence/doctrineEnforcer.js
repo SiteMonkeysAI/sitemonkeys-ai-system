@@ -185,7 +185,8 @@ export function businessPolicyGate(response, phase4Data, mode) {
 export function disclosureGate(response, phase4Data) {
   const confidence = phase4Data.confidence || 0.5;
   const degraded = phase4Data.degraded || false;
-  const lookupFailed = phase4Data.lookup_performed && !phase4Data.data;
+  // Check if lookup was attempted but failed (lookup_attempted=true but external_lookup=false)
+  const lookupFailed = phase4Data.lookup_attempted && !phase4Data.external_lookup;
   const responseText = response.response || response;
 
   // Check if disclosure is needed
@@ -217,17 +218,20 @@ export function disclosureGate(response, phase4Data) {
 
   // Build appropriate disclosure
   let disclosure = '';
-  
+
   if (lookupFailed || degraded) {
     disclosure = "\n\n**Note:** I was unable to verify this information against current external sources. This response is based on my training data and may not reflect the most recent information.";
   } else if (confidence < GATE_CONFIG.DISCLOSURE_GATE.confidence_threshold) {
     disclosure = `\n\n**Note:** My confidence in this response is ${Math.round(confidence * 100)}%. I recommend verifying this information from authoritative sources.`;
   }
 
+  // Graceful degradation: Pass with correction rather than failing
+  // This adds disclosure without blocking the response
   return {
-    passed: false,
-    violation: `Response needs disclosure (confidence: ${confidence}, degraded: ${degraded}, lookupFailed: ${lookupFailed})`,
-    correction: disclosure
+    passed: true,
+    violation: null,
+    correction: disclosure,
+    disclosure_added: true
   };
 }
 
@@ -280,12 +284,13 @@ export function enforceAll(response, phase4Data, mode = 'truth') {
 
   // Run Disclosure Gate (run last as it may append to response)
   gateResults.disclosure = disclosureGate({ response: correctedResponse }, phase4Data);
+  // Disclosure gate uses graceful degradation - it passes but may add disclosure
+  if (gateResults.disclosure.correction) {
+    correctedResponse += gateResults.disclosure.correction;
+    modified = true;
+  }
   if (!gateResults.disclosure.passed) {
     violations.push({ gate: 'disclosure', ...gateResults.disclosure });
-    if (gateResults.disclosure.correction) {
-      correctedResponse += gateResults.disclosure.correction;
-      modified = true;
-    }
   }
 
   const enforcementPassed = violations.length === 0;
