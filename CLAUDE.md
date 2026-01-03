@@ -590,3 +590,92 @@ Search for these terms to locate components:
 **Remember: You are not just an AI assistant helping with code. You are a steward of a system built on the principle that truth matters more than helpfulness. Honor that.**
 
 **And remember: This document is policy. If you find errors, report them - don't fix them.**
+
+# PHASE 4 ADDENDUM — Dual Hierarchy Truth Validation
+
+**Add this section to the existing CLAUDE.md after Part 4 (Critical Rules)**
+
+---
+
+## PART 4.5: PHASE 4 — EXTERNAL TRUTH VALIDATION
+
+### The Dual Hierarchy Breakthrough
+
+**Two claim types require fundamentally different source hierarchies:**
+
+| Claim Type | Hierarchy | Rationale |
+|------------|-----------|-----------|
+| **Business Policy** (Site Monkeys) | Vault → Memory → Docs → External | Your curated truth wins. External corroborates only. |
+| **Objective Factual** (Reality) | External → Vault → Docs → Memory | Reality wins when freshness matters. |
+
+**External sources CANNOT override founder-defined business rules.** This is non-negotiable.
+
+### Truth Type Classification (Mandatory)
+
+Every claim must be classified before retrieval/caching:
+
+| Type | TTL | When to Use |
+|------|-----|-------------|
+| **VOLATILE** | 5 min | Prices, weather, breaking news, "current", "latest", "today" |
+| **SEMI_STABLE** | 24 hr | Regulations, policies, "who is the CEO", product specs |
+| **PERMANENT** | 30 days | Definitions, history, math, science, established facts |
+
+**Two-stage detection:**
+1. Stage 1: Deterministic pattern matching (zero tokens)
+2. Stage 2: AI classifier (only if Stage 1 = AMBIGUOUS)
+
+### External Lookup Triggers (Automatic, No User Opt-Out)
+
+System triggers external lookup when ANY condition met:
+- Freshness markers: `current`, `latest`, `today`, `price`, `availability`
+- High-stakes domain: medical, legal, financial, safety
+- Low confidence (< 0.70) AND wrong answer would cause harm
+
+### Cost Constraints (Absolute Caps)
+
+| Parameter | Limit |
+|-----------|-------|
+| Max external sources per query | 3 |
+| Max fetched text per query | 15,000 chars |
+| Max external lookups per request | 1 (2 only for conflicts/high-stakes) |
+| Stage 1 detection | 0 tokens (deterministic only) |
+
+### Provenance Tags (Required)
+
+Every externally-supported claim must carry:
+- `source_class`: external | vault | memory | docs
+- `verified_at`: ISO timestamp
+- `cache_valid_until`: ISO timestamp
+- `truth_type`: VOLATILE | SEMI_STABLE | PERMANENT
+- `confidence`: 0.0–1.0
+
+### Failure Handling (Graceful Degradation)
+
+When external lookup fails:
+1. **DISCLOSE:** "I couldn't verify current information from external sources."
+2. **PROVIDE:** Best internal answer WITH explicit labels
+3. **PATH:** "You can verify at [authoritative source URL]"
+
+**Never bluff. Never hide lookup failure.**
+
+### Phase 4 Implementation Files
+
+All files go in `/api/core/intelligence/`:
+1. `truthTypeDetector.js` — Foundation (implement first)
+2. `ttlCacheManager.js` — Needed before external lookups
+3. `hierarchyRouter.js` — Connects to existing vault selection
+4. `externalLookupEngine.js` — Final piece
+
+### Phase 4 Test Requirements
+
+- Every component ships with console-testable endpoint under `/api/test-semantic`
+- No merge without proof outputs
+- Telemetry required: `truth_type`, `source_class`, `verified_at`, `cache_valid_until`, `conflict_detected`, `cost_tokens`
+
+### Critical Phase 4 Rule
+
+**Measured ≠ Enforced.** Phase 4 measures truth behavior. Phase 5 enforces it. Do not collapse these phases.
+
+---
+
+*End of Phase 4 Addendum*
