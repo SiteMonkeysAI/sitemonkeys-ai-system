@@ -401,8 +401,9 @@ export async function lookup(query, options = {}) {
   }
 
   // Cache successful result if we have data
+  let cacheEntry = null;
   if (lookupResult.data && !lookupResult.from_cache) {
-    cacheSet(
+    cacheEntry = cacheSet(
       query,
       lookupResult.data,
       truthTypeResult.type,
@@ -418,6 +419,7 @@ export async function lookup(query, options = {}) {
     data: lookupResult.data,
     sources_used: lookupResult.sources_consulted || sources,
     verified_at: lookupResult.verified_at,
+    cache_valid_until: cacheEntry?.cache_valid_until || lookupResult.cache_valid_until || null,
     truth_type: truthTypeResult.type,
     truth_ttl_ms: truthTypeResult.ttl_ms,
     lookup_reasons: lookupCheck.reasons,

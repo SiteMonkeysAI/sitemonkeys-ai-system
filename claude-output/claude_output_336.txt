@@ -1,0 +1,42 @@
+Perfect! The TTL_CONFIG confirms that VOLATILE has a 5-minute (300,000ms) TTL as expected.
+
+Let me trace through the complete flow one more time to confirm the fix:
+
+1. **External lookup triggered** for VOLATILE query (like Bitcoin price)
+2. **externalLookupEngine.lookup()** is called
+3. **performLookup()** fetches fresh data from external sources
+4. **cacheSet()** is called with truthType='VOLATILE', which:
+   - Creates a cache entry with `cache_valid_until` = current time + 5 minutes (line 69, 80 in ttlCacheManager.js)
+   - Returns the complete cache entry (line 142)
+5. **Now with my fix**: The returned cache entry is captured in `cacheEntry` variable
+6. **Return object** includes `cache_valid_until: cacheEntry?.cache_valid_until` (line 422)
+7. **orchestrator.js** receives the lookup result with `cache_valid_until`
+8. **orchestrator** sets `phase4Metadata.cache_valid_until` (line 577)
+9. **Final response** includes the `cache_valid_until` timestamp
+
+The fix is complete and minimal. It only captures the return value from `cacheSet` and includes the `cache_valid_until` field in the return object.
+
+---SUMMARY---
+
+## Issue Fixed: cache_valid_until Not Being Set for VOLATILE External Lookups
+
+**Problem**: When performing external lookups for VOLATILE queries (like Bitcoin price), the `cache_valid_until` field was being returned as `null` instead of a timestamp representing 5 minutes after `verified_at`.
+
+**Root Cause**: In `/api/core/intelligence/externalLookupEngine.js`, the `lookup()` function was calling `cacheSet()` but not capturing its return value. The `cacheSet()` function creates and returns a complete cache entry with `cache_valid_until` calculated based on the truth type's TTL, but this value was being discarded.
+
+**Fix Applied**: Modified `/api/core/intelligence/externalLookupEngine.js` (lines 403-429):
+1. Captured the return value from `cacheSet()` in a `cacheEntry` variable
+2. Added `cache_valid_until` field to the return object with proper fallback logic:
+   - Uses the newly created cache entry's `cache_valid_until` for fresh lookups
+   - Falls back to `lookupResult.cache_valid_until` for cached results
+   - Falls back to `null` if neither is available
+
+**Expected Behavior After Fix**: 
+- Bitcoin queries (and all VOLATILE queries) will now return `cache_valid_until` with a timestamp approximately 5 minutes after `verified_at`
+- SEMI_STABLE queries will have 24-hour cache validity
+- PERMANENT queries will have 30-day cache validity
+
+**Files Modified**: 
+- `/api/core/intelligence/externalLookupEngine.js` (1 function, 4 lines changed)
+
+---END SUMMARY---
