@@ -60,6 +60,27 @@ export const API_SOURCES = {
         ].filter(Boolean).join('\n\n');
       }
     }
+  ],
+  NEWS: [
+    {
+      name: 'Wikipedia Current Events',
+      url: 'https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events',
+      parser: 'json',
+      type: 'api',
+      extract: (json) => json.extract?.substring(0, 3000) || null
+    },
+    {
+      name: 'Wikipedia Topic Search',
+      buildUrl: (query) => {
+        // Extract key terms from query for Wikipedia lookup
+        const cleanQuery = query.replace(/\b(did|does|do|is|are|was|were|the|this morning|yesterday|today)\b/gi, '').trim();
+        const keyTerm = cleanQuery.split(' ').slice(0, 3).join(' ');
+        return `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(keyTerm)}`;
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json) => json.extract?.substring(0, 2000) || null
+    }
   ]
 };
 
@@ -202,6 +223,16 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   if (lowerQuery.match(/side effects?|dosage|drug interactions?/) &&
       lowerQuery.match(/aspirin|ibuprofen|acetaminophen|tylenol|advil/)) {
     return API_SOURCES.MEDICAL;
+  }
+
+  // News/current events queries
+  if (lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military/i)) {
+    return API_SOURCES.NEWS;
+  }
+
+  // Geopolitical queries
+  if (lowerQuery.match(/venezuela|ukraine|russia|china|iran|israel|gaza|congress|senate|white house/i)) {
+    return API_SOURCES.NEWS;
   }
 
   // Wikipedia ONLY for PERMANENT definition/history queries, NOT high-stakes
@@ -487,12 +518,29 @@ export async function performLookup(query, sources) {
  * @returns {object} Degraded response with proper disclosure
  */
 export function gracefulDegradation(query, lookupResult, internalAnswer = null) {
-  const sources = getSourcesForQuery({ isHighStakes: false, domains: [] });
+  const lowerQuery = query.toLowerCase();
+  let sources = [];
+  let disclosure = "I couldn't verify current information from external sources.";
+
+  // Determine if this is a news query for specialized disclosure
+  const isNewsQuery = lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military|venezuela|ukraine|russia|china|iran|israel|gaza|congress|senate|white house/i);
+
+  if (isNewsQuery) {
+    disclosure = "I cannot verify current news from available sources.";
+    sources = [
+      { name: 'Reuters', url: 'https://www.reuters.com' },
+      { name: 'Associated Press', url: 'https://apnews.com' },
+      { name: 'BBC News', url: 'https://www.bbc.com/news' }
+    ];
+  } else {
+    sources = getSourcesForQuery({ isHighStakes: false, domains: [] });
+    sources = sources.slice(0, 3).map(s => ({ name: s.name, url: s.url }));
+  }
 
   return {
     success: true,
     degraded: true,
-    disclosure: "I couldn't verify current information from external sources.",
+    disclosure: disclosure,
     internal_answer: internalAnswer,
     internal_answer_labeled: internalAnswer ? {
       data: internalAnswer,
@@ -501,7 +549,7 @@ export function gracefulDegradation(query, lookupResult, internalAnswer = null) 
     } : null,
     verification_path: {
       message: 'You can verify this information at:',
-      sources: sources.slice(0, 3).map(s => ({ name: s.name, url: s.url }))
+      sources: sources
     },
     lookup_error: lookupResult.error || 'Lookup did not complete',
     timestamp: new Date().toISOString()

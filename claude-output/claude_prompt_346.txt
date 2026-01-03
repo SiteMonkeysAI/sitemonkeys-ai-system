@@ -1,0 +1,117 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #346: [claude-fix] Issue: Add news/current events sources to external lookup engine
+
+Issue Description:
+Context: External lookup works for crypto (CoinGecko) and medical (FDA), but news/current events queries return "I don't have access to real-time news" instead of attempting to fetch from news sources.
+Example: "Did the US attack Venezuela this morning?" - system correctly identifies this needs current information but has no news sources configured to fetch from.
+Task:
+1. Add NEWS sources to API_SOURCES in /api/core/intelligence/externalLookupEngine.js:
+javascriptNEWS: [
+  {
+    name: 'Wikipedia Current Events',
+    url: 'https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events',
+    parser: 'json',
+    extract: (json) => json.extract?.substring(0, 3000) || null
+  },
+  {
+    name: 'Associated Press',
+    buildUrl: (query) => `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(query)}`,
+    parser: 'json',
+    extract: (json) => json.extract?.substring(0, 2000) || null
+  }
+]
+Note: If a proper news API is available (NewsAPI, etc.), use that instead. The above uses Wikipedia as a fallback since it's freely accessible without API keys.
+2. Add news pattern matching to selectSourcesForQuery():
+javascript// News/current events queries
+if (lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military/i)) {
+  return API_SOURCES.NEWS;
+}
+
+// Geopolitical queries
+if (lowerQuery.match(/venezuela|ukraine|russia|china|iran|israel|gaza|congress|senate|white house/i)) {
+  return API_SOURCES.NEWS;
+}
+3. Ensure VOLATILE truth type triggers news lookup:
+In the lookup trigger logic, if truth_type === 'VOLATILE' AND query matches news patterns, attempt news source fetch.
+4. Graceful degradation for news:
+If news sources fail or return nothing relevant:
+javascript{
+  external_lookup: false,
+  lookup_attempted: true,
+  failure_reason: 'Unable to verify current events from available sources',
+  disclosure: 'I cannot verify current news. Please check Reuters, AP, or BBC for the latest information.'
+}
+Acceptance Criteria:
+
+"Did the US attack Venezuela this morning?" attempts external lookup
+lookup_attempted: true in response
+Either returns fetched news data OR graceful degradation with disclosure
+No more "I don't have access to real-time news" without attempting lookup
+
+Test after deploy:
+jsfetch("/api/chat", {
+  method: "POST",
+  headers: {"Content-Type": "application/json"},
+  body: JSON.stringify({
+    message: "What major news happened today?",
+    mode: "truth-general"
+  })
+})
+.then(r => r.json())
+.then(d => {
+  console.log("lookup_attempted:", d.phase4_metadata?.lookup_attempted);
+  console.log("sources_used:", d.phase4_metadata?.sources_used);
+  console.log("failure_reason:", d.phase4_metadata?.failure_reason);
+});
+
+And here's a quick test for the Bounded Reasoning Gate once it deploys:
+js// Test 1: Should trigger bounded reasoning (unverified territory)
+fetch("/api/chat", {
+  method: "POST",
+  headers: {"Content-Type": "application/json"},
+  body: JSON.stringify({
+    message: "Should I quit my job to start a business?",
+    mode: "truth-general"
+  })
+})
+.then(r => r.json())
+.then(d => {
+  console.log("=== BOUNDED REASONING TEST ===");
+  console.log("phase6_bounded_reasoning:", d.phase6_bounded_reasoning);
+  console.log("Response starts with disclosure:", d.response?.substring(0, 100));
+});
+
+// Test 2: Should NOT trigger bounded reasoning (verified external data)
+fetch("/api/chat", {
+  method: "POST",
+  headers: {"Content-Type": "application/json"},
+  body: JSON.stringify({
+    message: "What is the current price of Bitcoin?",
+    mode: "truth-general"
+  })
+})
+.then(r => r.json())
+.then(d => {
+  console.log("=== VERIFIED DATA TEST ===");
+  console.log("phase6_bounded_reasoning:", d.phase6_bounded_reasoning);
+  console.log("Should NOT require bounded reasoning");
+});
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
