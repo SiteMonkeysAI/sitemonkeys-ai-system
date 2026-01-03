@@ -1,0 +1,37 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #326: [claude-fix] Issue: Phase 4/5 chat flow integration code missing from ai-processors.js
+
+Issue Description:
+Context: All Phase 4/5 components are operational (phase4-status shows all green), but chat_flow_integration: 'pending'. The actual code to CALL these components from processWithEliAndRoxy was never inserted.
+Task: In /api/lib/ai-processors.js, inside the processWithEliAndRoxy function, add the Phase 4 pipeline BEFORE AI generation and Phase 5 enforcement AFTER AI generation. Import the four Phase 4 modules at top. Attach phase4_metadata and phase5_enforcement to the return object.
+The imports needed:
+
+detectTruthType from ../core/intelligence/truthTypeDetector.js
+route from ../core/intelligence/hierarchyRouter.js
+lookup from ../core/intelligence/externalLookupEngine.js
+enforceAll from ../core/intelligence/doctrineEnforcer.js
+
+Phase 4 (BEFORE AI call): Call detectTruthType, then route, then lookup if external_lookup_required. Store results in phase4Data object.
+Phase 5 (AFTER AI response): Call enforceAll with the response and phase4Data. If response was modified by gates, use the corrected version.
+Add to return object: phase4_metadata: phase4Data and phase5_enforcement: phase5Enforcement
+Log markers: Use [PHASE4] 🔍 and [PHASE5] 🛡️ so we can see it in Railway logs.
+Acceptance: Chat response includes populated phase4_metadata with truth_type, source_class, verified_at, and phase5_enforcement with enforcement_passed and gate_results.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
