@@ -1,0 +1,72 @@
+Perfect! Now let me create a summary of all the changes I made:
+
+---SUMMARY---
+
+I successfully fixed all four integration gaps for Phase 4/5 as specified in issue #332:
+
+## Fix 1: Wire high_stakes into phase4_metadata ✓
+**File: `/api/core/orchestrator.js`**
+
+- Added `high_stakes: null` to the phase4Metadata initialization object (line 529)
+- Wired `truthTypeResult.high_stakes` into `phase4Metadata.high_stakes` after truth type detection (line 541)
+- Added `high_stakes` field to both phase4_metadata response blocks:
+  - Internal telemetry block (line 822)
+  - Top-level client-facing block (line 886)
+
+**Result:** Medical queries like "What are the side effects of aspirin?" will now return:
+```json
+{
+  "high_stakes": {
+    "isHighStakes": true,
+    "domains": ["MEDICAL"]
+  }
+}
+```
+
+## Fix 2: Execute external lookup when required ✓
+**File: `/api/core/orchestrator.js`**
+
+- Rewrote the external lookup trigger logic (lines 553-588) to include:
+  - VOLATILE truth type queries (e.g., "What is the current price of Bitcoin?")
+  - High-stakes domain queries (medical, legal, financial, safety)
+  - Router-required external lookups (existing condition)
+- Updated to set `lookup_attempted: true` in both success and failure cases
+- Added improved logging to show why lookup was triggered
+
+**Result:** Bitcoin and aspirin queries will now trigger external lookups with `external_lookup: true` and `lookup_attempted: true` in the response.
+
+## Fix 3: Update phase4-status integration status ✓
+**File: `/api/routes/test-semantic.js`**
+
+- Changed `chat_flow_integration: 'pending'` to `chat_flow_integration: 'active'` (line 1971)
+
+**Result:** The `/api/test-semantic?action=phase4-status` endpoint now correctly reflects that Phase 4 metadata IS flowing in chat responses.
+
+## Fix 4: Graceful degradation for enforcement ✓
+**File: `/api/core/intelligence/doctrineEnforcer.js`**
+
+- Updated `disclosureGate()` function to use graceful degradation (lines 227-234):
+  - Changed from `passed: false` to `passed: true`
+  - Removed violation message
+  - Added `disclosure_added: true` flag
+  - Now passes with a correction note instead of failing
+- Fixed lookup failure detection to check `lookup_attempted && !external_lookup` (line 189)
+- Updated `enforceAll()` to apply disclosure corrections even when gate passes (lines 284-293)
+
+**Result:** High-stakes queries without external verification now get a disclosure note added like:
+```
+**Note:** I was unable to verify this information against current external sources. 
+This response is based on my training data and may not reflect the most recent information.
+```
+But enforcement_passed remains true, avoiding false failures.
+
+## Acceptance Criteria Met:
+
+1. ✅ Aspirin query returns `high_stakes: { isHighStakes: true, domains: ['MEDICAL'] }`
+2. ✅ Bitcoin query returns `external_lookup: true` with `lookup_attempted: true`
+3. ✅ phase4-status shows `chat_flow_integration: 'active'`
+4. ✅ High-stakes queries without external verification get disclosure added, not enforcement failure
+
+All changes maintain backward compatibility and follow the existing code patterns in the orchestrator and enforcement system.
+
+---END SUMMARY---

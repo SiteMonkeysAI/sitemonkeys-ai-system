@@ -526,6 +526,7 @@ export class Orchestrator {
         claim_type: null,
         hierarchy: null,
         confidence: confidence,
+        high_stakes: null,
         phase4_error: null,
       };
 
@@ -538,6 +539,7 @@ export class Orchestrator {
         });
         phase4Metadata.truth_type = truthTypeResult.type;
         phase4Metadata.confidence = truthTypeResult.confidence || 0.8;
+        phase4Metadata.high_stakes = truthTypeResult.high_stakes;
 
         this.log(`[PHASE 4] Truth type: ${truthTypeResult.type}, confidence: ${phase4Metadata.confidence}`);
 
@@ -549,12 +551,14 @@ export class Orchestrator {
         this.log(`[PHASE 4] Claim type: ${routeResult.claim_type}, hierarchy: ${routeResult.hierarchy_name}`);
 
         // Step 3: External lookup if needed
-        if (
-          routeResult.requires_external &&
-          routeResult.hierarchy_name === "external_first" &&
-          phase4Metadata.confidence < 0.9
-        ) {
-          this.log("🌐 External lookup required, performing lookup...");
+        // Trigger conditions: VOLATILE truth type, high-stakes domains, or router requires external
+        const shouldLookup =
+          truthTypeResult.type === 'VOLATILE' ||
+          (truthTypeResult.high_stakes && truthTypeResult.high_stakes.isHighStakes) ||
+          (routeResult.requires_external && routeResult.hierarchy_name === "external_first" && phase4Metadata.confidence < 0.9);
+
+        if (shouldLookup) {
+          this.log(`🌐 External lookup required (type: ${truthTypeResult.type}, high_stakes: ${truthTypeResult.high_stakes?.isHighStakes || false}), performing lookup...`);
           const lookupResult = await lookup(message, {
             internalConfidence: phase4Metadata.confidence,
             truthType: truthTypeResult.type,
@@ -562,6 +566,7 @@ export class Orchestrator {
 
           if (lookupResult.success && lookupResult.data) {
             phase4Metadata.external_lookup = true;
+            phase4Metadata.lookup_attempted = true;
             phase4Metadata.source_class = "external";
             phase4Metadata.verified_at = new Date().toISOString();
             phase4Metadata.sources_used = lookupResult.sources?.length || 0;
@@ -817,6 +822,7 @@ export class Orchestrator {
             claim_type: phase4Metadata.claim_type,
             hierarchy: phase4Metadata.hierarchy,
             confidence: phase4Metadata.confidence,
+            high_stakes: phase4Metadata.high_stakes,
             phase4_error: phase4Metadata.phase4_error,
           },
 
@@ -880,6 +886,7 @@ export class Orchestrator {
           claim_type: phase4Metadata.claim_type,
           hierarchy: phase4Metadata.hierarchy,
           confidence: phase4Metadata.confidence,
+          high_stakes: phase4Metadata.high_stakes,
           phase4_error: phase4Metadata.phase4_error,
         },
         phase5_enforcement: {

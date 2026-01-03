@@ -1,0 +1,53 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #332: [claude-fix] Issue: Complete Phase 4/5 integration - high_stakes wiring, external lookup execution, and status consistency
+
+Issue Description:
+Context: Phase 4/5 metadata is now appearing in chat responses, but testing reveals three gaps:
+
+high_stakes: undefined for medical queries (detection exists but not wired to response)
+external_lookup: false even for VOLATILE EXTERNAL_FIRST queries (engine exists but not triggering)
+chat_flow_integration: 'pending' in status while metadata IS flowing (inconsistent)
+
+Task - Fix 1: Wire high_stakes into phase4_metadata
+In orchestrator.js, when building phase4Metadata, include the high_stakes result from truthTypeDetector:
+javascripthigh_stakes: truthTypeResult.high_stakes
+Currently detectTruthType() returns high_stakes: { isHighStakes: true, domains: ['MEDICAL'] } but it's not being added to phase4_metadata.
+Task - Fix 2: Execute external lookup when required
+In the Phase 4 pipeline in orchestrator.js, after checking routingResult.external_lookup_required, actually call the lookup:
+javascriptif (routingResult.external_lookup_required || truthTypeResult.type === 'VOLATILE') {
+  const lookupResult = await lookup(message, { internalConfidence: confidence });
+  phase4Metadata.external_lookup = true;
+  phase4Metadata.lookup_attempted = true;
+  phase4Metadata.verified_at = lookupResult.verified_at;
+  phase4Metadata.sources_used = lookupResult.sources_used?.length || 0;
+  // ... rest of lookup result handling
+}
+Task - Fix 3: Update phase4-status to reflect reality
+In test-semantic.js, change chat_flow_integration: 'pending' to 'active' since phase4_metadata IS flowing in chat responses.
+Task - Fix 4: Graceful degradation for enforcement
+If external lookup fails or isn't performed, Phase 5 gates should degrade with disclosure rather than fail. The disclosure gate should add a note like "I was unable to verify this against current external sources" rather than marking enforcement_passed: false.
+Acceptance:
+
+Aspirin query returns high_stakes: { isHighStakes: true, domains: ['MEDICAL'] }
+Bitcoin query returns external_lookup: true with lookup_attempted: true
+phase4-status shows chat_flow_integration: 'active'
+High-stakes queries without external verification get disclosure added, not enforcement failure
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

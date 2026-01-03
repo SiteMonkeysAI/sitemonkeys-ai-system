@@ -1968,7 +1968,7 @@ export default async function handler(req, res) {
             integration_status: {
               phase_4_complete: true,
               phase_5_ready: doctrineModule !== null,
-              chat_flow_integration: 'pending',
+              chat_flow_integration: 'active',
               external_http_enabled: true,
               cache_operational: true
             },
