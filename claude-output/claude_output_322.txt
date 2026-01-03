@@ -1,0 +1,43 @@
+Perfect! The routes all use the unified `?action=` pattern.
+
+## Summary
+
+Both tasks in issue #322 have **already been completed**:
+
+### Task 1: Fix Stage 2 default in truthTypeDetector.js ✓
+- Line 235: `type: TRUTH_TYPES.VOLATILE` ✓
+- Line 244: `type: TRUTH_TYPES.VOLATILE` ✓
+- Both the success return and the catch block return now use `VOLATILE` instead of `SEMI_STABLE`
+- The reasoning strings have also been updated to reflect the conservative default
+
+### Task 2: Verify route consolidation ✓
+- All Phase 4 test actions use the unified pattern:
+  - `/api/test-semantic?action=truth-type`
+  - `/api/test-semantic?action=cache`
+  - `/api/test-semantic?action=hierarchy`
+  - `/api/test-semantic?action=external-lookup`
+- No separate route families like `/api/test-semantic/truth-type` exist
+- All routes are properly consolidated in `api/routes/test-semantic.js`
+
+The changes described in the issue have already been applied in a previous commit (likely between commit `1e675f1` and the current HEAD).
+
+---SUMMARY---
+Issue #322 requested two corrections for Phase 4 alignment:
+
+**Task 1: Fix Stage 2 default in truthTypeDetector.js** - ALREADY COMPLETE
+- The `classifyAmbiguous` function in `api/core/intelligence/truthTypeDetector.js` already returns `TRUTH_TYPES.VOLATILE` in both return statements (lines 235 and 244)
+- The original code used `TRUTH_TYPES.SEMI_STABLE`, but this was already changed to `TRUTH_TYPES.VOLATILE` in a previous commit
+- This ensures ambiguous queries default to VOLATILE (5min cache) rather than SEMI_STABLE (24hr cache), which is the safer, more conservative approach per the doctrine of "no silent caching of volatile truth"
+
+**Task 2: Verify route consolidation** - ALREADY COMPLETE
+- All Phase 4 test actions are properly consolidated using the unified `?action=` pattern:
+  - `/api/test-semantic?action=truth-type`
+  - `/api/test-semantic?action=cache`
+  - `/api/test-semantic?action=hierarchy`
+  - `/api/test-semantic?action=external-lookup`
+- No separate route families exist (e.g., `/api/test-semantic/truth-type`)
+- All routes are properly defined as switch cases within `api/routes/test-semantic.js`
+- No separate route files exist for Phase 4 components in the `api/routes/` directory
+
+**No changes were needed** - both corrections described in issue #322 have already been applied to the codebase in previous commits. The code is currently in compliance with the requirements specified in the issue.
+---END SUMMARY---
