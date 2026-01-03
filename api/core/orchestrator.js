@@ -867,6 +867,29 @@ export class Orchestrator {
           personalityAnalysis: personalityResponse.analysisApplied || {},
         },
         error: null,
+
+        // PHASE 4 & 5 at top level for client access
+        phase4_metadata: {
+          truth_type: phase4Metadata.truth_type,
+          source_class: phase4Metadata.source_class,
+          verified_at: phase4Metadata.verified_at,
+          cache_valid_until: phase4Metadata.cache_valid_until,
+          external_lookup: phase4Metadata.external_lookup,
+          lookup_attempted: phase4Metadata.lookup_attempted,
+          sources_used: phase4Metadata.sources_used,
+          claim_type: phase4Metadata.claim_type,
+          hierarchy: phase4Metadata.hierarchy,
+          confidence: phase4Metadata.confidence,
+          phase4_error: phase4Metadata.phase4_error,
+        },
+        phase5_enforcement: {
+          enforcement_passed: phase5Enforcement.enforcement_passed,
+          violations: phase5Enforcement.violations,
+          gate_results: phase5Enforcement.gate_results,
+          gates_run: phase5Enforcement.gates_run,
+          original_response_modified: phase5Enforcement.original_response_modified,
+          phase5_error: phase5Enforcement.phase5_error,
+        },
       };
 
       // Add debug info in private/debug mode

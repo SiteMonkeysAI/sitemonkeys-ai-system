@@ -439,6 +439,10 @@ export async function processRequest(requestBody) {
       },
       mode_fingerprint: fingerprint,
       session_id: session_id,
+
+      // Phase 4 & 5 metadata from orchestrator
+      phase4_metadata: result.phase4_metadata,
+      phase5_enforcement: result.phase5_enforcement,
     };
   } catch (error) {
     console.error("🔥 Cognitive firewall error:", error);
