@@ -1,0 +1,99 @@
+Perfect! Now let me create a comprehensive summary of all the changes made:
+
+---SUMMARY---
+
+## Issue Analysis
+The external lookup infrastructure was working (triggers, metadata tracking) but the fetched data never reached the AI model. The lookup was being performed and stored in `phase4Metadata.external_data`, but this data was never injected into the AI prompt, causing the AI to respond from training data instead of using the fresh external content.
+
+## Root Cause
+The data flow was incomplete:
+1. External lookup was triggered correctly ✓
+2. Data was fetched and stored in metadata ✓  
+3. **Data was never extracted from the result structure** ✗
+4. **Data was never injected into the AI prompt** ✗
+
+## Files Modified
+
+### 1. `/api/core/orchestrator.js`
+
+#### Change 1: Added debug logging for lookup results (line 567-568)
+- Added `console.log('[PHASE4] Lookup result:', JSON.stringify(lookupResult, null, 2))` to debug what the lookup function returns
+
+#### Change 2: Extract fetched content from lookup result (lines 577-588)
+- Added logic to extract text from `lookupResult.data.sources` array
+- Each source contains `{source, text, length}` structure
+- Concatenates all source texts with headers: `[Source: name]\n{text}`
+- Stores in `phase4Metadata.fetched_content` for injection
+- Properly counts `sources_used` from the data structure
+- Added fallback handling for edge cases
+
+#### Change 3: Enhanced logging for extraction (line 595)
+- Updated success log to show both source count AND character count of fetched content
+- Format: `✅ External lookup successful: X sources, Y chars`
+
+#### Change 4: Updated #routeToAI signature (line 1963)
+- Added `phase4Metadata = {}` parameter to receive Phase 4 data
+- This was previously missing, preventing any Phase 4 data from reaching the AI generation
+
+#### Change 5: Updated #routeToAI call (line 619)
+- Pass `phase4Metadata` as the 7th argument to `#routeToAI()`
+
+#### Change 6: Inject external content into AI prompt (lines 2055-2060)
+- Check if `phase4Metadata.fetched_content` exists and has sources
+- If yes, prepend external context section to the prompt:
+  ```
+  [CURRENT EXTERNAL INFORMATION - Use this to inform your response]
+  {fetched content}
+  [END EXTERNAL INFORMATION]
+  ```
+- Log injection with source count and character count
+
+#### Change 7: Include external context in prompt construction (lines 2083-2084, 2108)
+- For Claude: Inject into `fullPrompt` before contextString
+- For GPT-4: Inject into user message content before contextString
+- Format: `${externalContext}${contextString}${historyString}\n\n${message}`
+
+## Data Flow (Now Complete)
+
+1. **Trigger Detection** → External lookup needed (VOLATILE, high-stakes, freshness markers)
+2. **Lookup Execution** → `externalLookupEngine.lookup()` fetches from authoritative sources
+3. **Result Structure** → Returns `{success, data: {sources: [{source, text, length}]}, sources_used, verified_at}`
+4. **Content Extraction** → Extract text from `data.sources[]` and concatenate with headers
+5. **Storage** → Store in `phase4Metadata.fetched_content` (NEW)
+6. **Propagation** → Pass `phase4Metadata` to `#routeToAI()` (NEW)
+7. **Injection** → Prepend external content to AI prompt with clear markers (NEW)
+8. **AI Generation** → AI now sees current external data and can use it
+
+## Testing Instructions
+
+To test the fix, ask: **"What is the current price of Bitcoin?"**
+
+Expected behavior:
+- Railway logs show: `[PHASE4] Lookup result: {...}` with full result
+- Railway logs show: `[PHASE4] Injected external content: X sources, Y chars`
+- Response metadata includes `sources_used > 0`
+- AI response uses actual fetched data (not "I don't have real-time data")
+
+## Acceptance Criteria Met
+
+✓ Lookup() return value is logged for debugging
+✓ Fetched content is extracted from lookupResult.data.sources
+✓ Content is stored in phase4Metadata.fetched_content
+✓ sources_used count is accurate
+✓ phase4Metadata is passed to #routeToAI
+✓ External content is injected into AI prompt with clear markers
+✓ Injection is logged to Railway logs
+✓ Both Claude and GPT-4 code paths receive external context
+✓ Existing logging in externalLookupEngine.js verified (already present)
+
+## Key Implementation Details
+
+- **Preservation of enforcement order**: External data is retrieved → extracted → injected → passed to AI → validated (Phase 5)
+- **Clear markers**: External content is wrapped in `[CURRENT EXTERNAL INFORMATION]` tags so AI knows to use it
+- **Dual model support**: Both Claude and GPT-4 code paths updated
+- **Graceful fallback**: If data structure is unexpected, falls back to counting sources_used array
+- **Telemetry**: All operations logged for Railway debugging
+
+The data flow is now complete. External lookup results will reach the AI and be used to inform responses with current, verified information.
+
+---END SUMMARY---
