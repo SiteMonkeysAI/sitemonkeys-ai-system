@@ -52,7 +52,23 @@ const PERMANENT_PATTERNS = [
   /\b(math|mathematics|calculation|formula)\b/i,
   /\b(science|scientific|physics|chemistry|biology)\b/i,
   /\b(invented|discovered|founded|established|created)\b/i,
-  /\b(capital of|located in|born in|died in)\b/i
+  /\b(capital of|located in|born in|died in)\b/i,
+
+  // Stable procedural facts (cooking, crafts, basic skills)
+  /\bhow (do|to) (i |you |we )?(boil|cook|make|bake|fry|roast|grill|steam|poach|blanch|sauté|simmer|braise)\b/i,
+  /\bhow (do|to) (i |you |we )?(tie|fold|cut|slice|chop|dice|mince|grate|peel|core)\b/i,
+  /\bhow (do|to) (i |you |we )?(write|spell|pronounce|say|read)\b/i,
+  /\bhow (do|to) (i |you |we )?(clean|wash|dry|iron|sew|knit|crochet)\b/i,
+  /\bhow (do|to) (i |you |we )?(build|fix|repair|assemble|install)\b/i,
+  /\bhow (do|to) (i |you |we )?(grow|plant|prune|water|harvest)\b/i,
+
+  // Recipe and ingredient questions
+  /\bwhat is (a |an |the )?(recipe|ingredient|step|process|method|technique)\b/i,
+  /\bwhat (is|are) .* (made of|composed of|consist of)\b/i,
+
+  // Mathematical/scientific constants and facts
+  /\b(pythagorean|fibonacci|newton|einstein|archimedes|euclid)\b/i,
+  /\b(speed of light|gravity|pi|golden ratio|periodic table)\b/i
 ];
 
 // High-stakes domains that trigger external lookup regardless of truth type
@@ -92,16 +108,28 @@ export const HIGH_STAKES_DOMAINS = {
 };
 
 /**
+ * Helper: Check if query is a stable procedural fact
+ * These are "how to" questions about unchanging processes, not current events
+ * @param {string} query - The user's query
+ * @returns {boolean}
+ */
+function isStableProcedural(query) {
+  const proceduralPatterns = /\bhow (do|to|can|should) (i |you |we )?(make|cook|boil|bake|tie|fold|write|create|build|fix|clean|wash|open|close|start|stop|grow|plant|cut|slice|chop|spell|pronounce)\b/i;
+  const notCurrentEvents = !/\b(today|now|current|latest|recent|this morning|yesterday|right now)\b/i.test(query);
+  return proceduralPatterns.test(query) && notCurrentEvents;
+}
+
+/**
  * Stage 1: Deterministic pattern matching (zero token cost)
  * @param {string} query - The user's query
  * @returns {object} { type: string, confidence: number, stage: 1, patterns_matched: array }
  */
 export function detectByPattern(query) {
   if (!query || typeof query !== 'string') {
-    return { 
-      type: TRUTH_TYPES.AMBIGUOUS, 
-      confidence: 0, 
-      stage: 1, 
+    return {
+      type: TRUTH_TYPES.AMBIGUOUS,
+      confidence: 0,
+      stage: 1,
       patterns_matched: [],
       reason: 'Invalid or empty query'
     };
@@ -109,6 +137,25 @@ export function detectByPattern(query) {
 
   const normalizedQuery = query.toLowerCase().trim();
   const matchedPatterns = [];
+
+  // Early detection: Stable procedural facts (high confidence)
+  if (isStableProcedural(normalizedQuery)) {
+    return {
+      type: TRUTH_TYPES.PERMANENT,
+      confidence: 0.9,
+      stage: 1,
+      patterns_matched: [{ type: TRUTH_TYPES.PERMANENT, pattern: 'stable_procedural_fact' }],
+      conflict_detected: false,
+      reason: 'Stable procedural fact (unchanging process)'
+    };
+  }
+
+  // Check PERMANENT patterns first (stable facts should win over volatility)
+  for (const pattern of PERMANENT_PATTERNS) {
+    if (pattern.test(normalizedQuery)) {
+      matchedPatterns.push({ type: TRUTH_TYPES.PERMANENT, pattern: pattern.toString() });
+    }
+  }
 
   // Check VOLATILE patterns
   for (const pattern of VOLATILE_PATTERNS) {
@@ -121,13 +168,6 @@ export function detectByPattern(query) {
   for (const pattern of SEMI_STABLE_PATTERNS) {
     if (pattern.test(normalizedQuery)) {
       matchedPatterns.push({ type: TRUTH_TYPES.SEMI_STABLE, pattern: pattern.toString() });
-    }
-  }
-
-  // Check PERMANENT patterns
-  for (const pattern of PERMANENT_PATTERNS) {
-    if (pattern.test(normalizedQuery)) {
-      matchedPatterns.push({ type: TRUTH_TYPES.PERMANENT, pattern: pattern.toString() });
     }
   }
 
@@ -154,32 +194,46 @@ export function detectByPattern(query) {
   }
 
   // Determine winning type
-  // Priority: VOLATILE > SEMI_STABLE > PERMANENT (freshness wins ties)
+  // NEW PRIORITY: PERMANENT wins if no VOLATILE markers present
+  // Only VOLATILE beats PERMANENT (when time-sensitivity is explicit)
   let winningType = TRUTH_TYPES.AMBIGUOUS;
   let maxCount = 0;
 
   if (typeCounts[TRUTH_TYPES.VOLATILE] > 0) {
+    // Explicit time-sensitivity markers win
     winningType = TRUTH_TYPES.VOLATILE;
     maxCount = typeCounts[TRUTH_TYPES.VOLATILE];
+  } else if (typeCounts[TRUTH_TYPES.PERMANENT] > 0) {
+    // Stable facts win over semi-stable when no volatility present
+    winningType = TRUTH_TYPES.PERMANENT;
+    maxCount = typeCounts[TRUTH_TYPES.PERMANENT];
   } else if (typeCounts[TRUTH_TYPES.SEMI_STABLE] > 0) {
     winningType = TRUTH_TYPES.SEMI_STABLE;
     maxCount = typeCounts[TRUTH_TYPES.SEMI_STABLE];
-  } else if (typeCounts[TRUTH_TYPES.PERMANENT] > 0) {
-    winningType = TRUTH_TYPES.PERMANENT;
-    maxCount = typeCounts[TRUTH_TYPES.PERMANENT];
   }
 
   // Check for conflicting types (multiple types matched)
   const typesMatched = Object.values(typeCounts).filter(c => c > 0).length;
   if (typesMatched > 1) {
-    // Multiple types matched - VOLATILE wins but note the conflict
+    // Multiple types matched - VOLATILE wins over all, PERMANENT wins over SEMI_STABLE
+    let conflictWinner = winningType;
+    let conflictReason = 'Multiple truth types detected';
+
+    if (typeCounts[TRUTH_TYPES.VOLATILE] > 0) {
+      conflictWinner = TRUTH_TYPES.VOLATILE;
+      conflictReason = 'Multiple truth types detected, VOLATILE markers take precedence';
+    } else if (typeCounts[TRUTH_TYPES.PERMANENT] > 0) {
+      conflictWinner = TRUTH_TYPES.PERMANENT;
+      conflictReason = 'Multiple truth types detected, PERMANENT wins without VOLATILE markers';
+    }
+
     return {
-      type: typeCounts[TRUTH_TYPES.VOLATILE] > 0 ? TRUTH_TYPES.VOLATILE : winningType,
+      type: conflictWinner,
       confidence: 0.6, // Lower confidence due to conflict
       stage: 1,
       patterns_matched: matchedPatterns,
       conflict_detected: true,
-      reason: 'Multiple truth types detected, defaulting to most volatile'
+      reason: conflictReason
     };
   }
 
@@ -234,30 +288,31 @@ export function detectHighStakesDomain(query) {
 export async function classifyAmbiguous(query, context = {}) {
   // This integrates with the existing Reasoning-Based Confidence Engine
   // For now, return a structured response that can be filled in when integrated
-  
+
   console.log('[truthTypeDetector] Stage 2 classifier invoked for ambiguous query');
-  
+
   try {
     // TODO: Integrate with existing confidence engine
     // const confidenceEngine = await import('./confidenceEngine.js');
     // const result = await confidenceEngine.classifyTruthType(query, context);
 
-    // Placeholder: Default to VOLATILE for ambiguous queries
-    // This is the most conservative default (5min cache, frequent refresh)
+    // Placeholder: Default to SEMI_STABLE for ambiguous queries
+    // This is safer than VOLATILE (which should only be for explicit time-sensitive queries)
+    // SEMI_STABLE gives 24hr cache, balancing freshness with efficiency
     return {
-      type: TRUTH_TYPES.VOLATILE,
+      type: TRUTH_TYPES.SEMI_STABLE,
       confidence: 0.5,
       stage: 2,
-      reasoning: 'Stage 2 classifier defaulting to VOLATILE (conservative default until AI classifier integrated)',
+      reasoning: 'Stage 2 classifier defaulting to SEMI_STABLE (balanced default until AI classifier integrated)',
       tokens_used: 0 // Will be populated when AI classifier is integrated
     };
   } catch (error) {
     console.error('[truthTypeDetector] Stage 2 classification failed:', error);
     return {
-      type: TRUTH_TYPES.VOLATILE,
+      type: TRUTH_TYPES.SEMI_STABLE,
       confidence: 0.3,
       stage: 2,
-      reasoning: 'Stage 2 failed, defaulting to VOLATILE (conservative)',
+      reasoning: 'Stage 2 failed, defaulting to SEMI_STABLE (safe fallback)',
       error: error.message
     };
   }
