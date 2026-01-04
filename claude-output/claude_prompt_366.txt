@@ -1,0 +1,140 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #366: [claude-fix] Issue: Implement Response Contract Gate in existing placeholder file
+
+Issue Description:
+Context: PR #364 completed fixes A, C, D, E, F but could not create the Response Contract Gate file. The placeholder file /api/core/intelligence/responseContractGate.js now exists and needs implementation.
+Task: Implement the Response Contract Gate in the existing file and wire it into the orchestrator.
+File 1: /api/core/intelligence/responseContractGate.js (replace placeholder content)
+javascript/**
+ * responseContractGate.js
+ * 
+ * RUNS LAST - After all other processing
+ * Enforces user format constraints by stripping non-essential additions
+ * 
+ * ⚠️ THIS IS THE FINAL ARBITER - Nothing runs after this
+ */
+
+const FORMAT_CONSTRAINTS = [
+  { pattern: /answer only|only (the |a )?(number|answer|result)/i, style: 'answer_only' },
+  { pattern: /one (paragraph|sentence) (max|only|maximum)/i, style: 'single_block' },
+  { pattern: /keep it short|be brief|briefly/i, style: 'minimal' },
+  { pattern: /no disclaimers|without disclaimers/i, style: 'no_disclaimers' },
+  { pattern: /reply with only|respond with only/i, style: 'strict_format' }
+];
+
+const STRIPPABLE_SECTIONS = [
+  /\[Note: Evaluate this recommendation.*?\]/gs,
+  /\[FOUNDER PROTECTION:.*?\]/gs,
+  /Simpler Paths Forward:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nPractical|$)/gi,
+  /Practical Next Steps:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nDo More|$)/gi,
+  /Do More With Less:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nOpportunities|$)/gi,
+  /Opportunities I See:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nSimpler|$)/gi,
+  /I want to be honest with you—I'm not as confident.*?perspectives\./gs,
+  /To verify this information, you could:[\s\S]*?(?=\n\n[A-Z]|$)/gi,
+  /I'm reasoning from general knowledge here, not verified specifics\.\n\n/g,
+  /I'm reasoning about future possibilities, not verified facts\.\n\n/g,
+  /🍌 \*\*(?:Eli|Roxy):\*\* \((?:Analytical|Empathetic) framework applied - \d+ enhancements\)\n\n/g
+];
+
+function detectFormatConstraint(query) {
+  for (const constraint of FORMAT_CONSTRAINTS) {
+    if (constraint.pattern.test(query)) {
+      return constraint.style;
+    }
+  }
+  return null;
+}
+
+function enforceResponseContract(response, query, phase4Metadata = {}) {
+  const constraint = detectFormatConstraint(query);
+  const result = {
+    triggered: constraint !== null,
+    style: constraint,
+    stripped_sections_count: 0,
+    stripped_sections: [],
+    original_length: response.length
+  };
+  
+  if (!constraint) {
+    return { response, contract: result };
+  }
+  
+  let cleanedResponse = response;
+  
+  // Strip all non-essential sections
+  for (const pattern of STRIPPABLE_SECTIONS) {
+    const matches = cleanedResponse.match(pattern);
+    if (matches) {
+      result.stripped_sections.push(...matches.map(m => m.substring(0, 50) + '...'));
+      result.stripped_sections_count += matches.length;
+      cleanedResponse = cleanedResponse.replace(pattern, '');
+    }
+  }
+  
+  // For 'answer_only', try to extract just the core answer
+  if (constraint === 'answer_only') {
+    // Try to find just a number
+    const numberMatch = cleanedResponse.match(/\b(\d[\d,\.]*)\b/);
+    if (numberMatch) {
+      cleanedResponse = numberMatch[1];
+    }
+  }
+  
+  // Clean up extra whitespace
+  cleanedResponse = cleanedResponse.replace(/\n{3,}/g, '\n\n').trim();
+  
+  result.final_length = cleanedResponse.length;
+  
+  console.log('[RESPONSE-CONTRACT] Constraint:', constraint, '| Stripped:', result.stripped_sections_count, 'sections');
+  
+  return { response: cleanedResponse, contract: result };
+}
+
+module.exports = {
+  detectFormatConstraint,
+  enforceResponseContract,
+  FORMAT_CONSTRAINTS,
+  STRIPPABLE_SECTIONS
+};
+File 2: /api/core/orchestrator.js (add after Phase 6, before final response)
+Find the location after Phase 6 enforcement and add:
+javascript// ============================================
+// PHASE 7: RESPONSE FORMAT CONTRACT (RUNS LAST)
+// ============================================
+const { enforceResponseContract } = require('./intelligence/responseContractGate');
+
+const contractResult = enforceResponseContract(finalResponse, message, phase4Metadata);
+finalResponse = contractResult.response;
+
+// Add to response metadata
+const response_contract = contractResult.contract;
+Include response_contract in the final response object returned to client.
+Acceptance Criteria:
+javascript// Test: Answer-only math
+fetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, 
+  body:JSON.stringify({message:"What's 17×23? Answer only the number.", mode:"truth-general"})
+}).then(r=>r.json()).then(d=>{
+  console.log("Response:", d.response);
+  console.log("Contract triggered:", d.response_contract?.triggered);
+  console.log("PASS:", d.response?.trim() === '391' || (d.response?.includes('391') && d.response?.length < 50));
+});
+This completes the comprehensive fix from Issue #364.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
