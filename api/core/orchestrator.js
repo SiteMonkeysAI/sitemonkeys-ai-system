@@ -35,12 +35,13 @@ import { logMemoryOperation } from "../routes/debug.js";
 //import { validateCompliance as validateVaultCompliance } from '../lib/vault.js';
 // ========== SEMANTIC INTEGRATION ==========
 import { retrieveSemanticMemories } from "../services/semantic-retrieval.js";
-// ========== PHASE 4/5/6 INTEGRATION ==========
+// ========== PHASE 4/5/6/7 INTEGRATION ==========
 import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
 import { route } from "../core/intelligence/hierarchyRouter.js";
 import { lookup } from "../core/intelligence/externalLookupEngine.js";
 import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
 import { enforceBoundedReasoning } from "../core/intelligence/boundedReasoningGate.js";
+import { enforceResponseContract } from "../core/intelligence/responseContractGate.js";
 // ================================================
 
 // ==================== ORCHESTRATOR CLASS ====================
@@ -843,6 +844,37 @@ export class Orchestrator {
         phase6BoundedReasoning.phase6_error = phase6Error.message;
       }
 
+      // ============================================
+      // PHASE 7: RESPONSE FORMAT CONTRACT (RUNS LAST)
+      // ============================================
+      this.log("📋 PHASE 7: Response Contract Gate");
+      let response_contract = {
+        triggered: false,
+        style: null,
+        stripped_sections_count: 0,
+        original_length: personalityResponse.response.length,
+        final_length: personalityResponse.response.length
+      };
+
+      try {
+        const contractResult = enforceResponseContract(
+          personalityResponse.response,
+          message,
+          phase4Metadata
+        );
+        personalityResponse.response = contractResult.response;
+        response_contract = contractResult.contract;
+
+        if (response_contract.triggered) {
+          this.log(`📋 Response contract enforced: ${response_contract.style} | Stripped ${response_contract.stripped_sections_count} sections`);
+        } else {
+          this.log('✅ No response contract constraints detected');
+        }
+      } catch (phase7Error) {
+        this.error("⚠️ Phase 7 response contract error:", phase7Error);
+        response_contract.phase7_error = phase7Error.message;
+      }
+
       // STEP 9: Validate compliance (truth-first, mode enforcement)
       const validatedResponse = await this.#validateCompliance(
         personalityResponse.response,
@@ -984,6 +1016,9 @@ export class Orchestrator {
             phase6_error: phase6BoundedReasoning.phase6_error || null,
           },
 
+          // PHASE 7: Response Contract Gate
+          response_contract: response_contract,
+
           // NEW: Cost tracking
           cost_tracking: {
             session_cost: costTracker.getSessionCost(sessionId),
@@ -1052,6 +1087,7 @@ export class Orchestrator {
           violations: phase6BoundedReasoning.violations,
           phase6_error: phase6BoundedReasoning.phase6_error || null,
         },
+        response_contract: response_contract,
       };
 
       // Add debug info in private/debug mode
