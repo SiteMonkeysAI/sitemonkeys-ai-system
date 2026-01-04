@@ -1,0 +1,92 @@
+Excellent! All fixes have been completed. Now let me create a comprehensive summary of the changes:
+
+---SUMMARY---
+
+## Comprehensive Fix for Issue #360: Truth Type Routing, Bounded Reasoning Triggers, and Disclaimer Logic
+
+I have successfully implemented all five fixes to resolve the critical system-wide issues with truth type routing, bounded reasoning triggers, and inappropriate disclaimers on PERMANENT facts.
+
+### Files Modified:
+
+#### 1. `/api/core/intelligence/boundedReasoningGate.js`
+**Changes:**
+- Added `SPECULATIVE_PATTERNS` constant to detect predictive/future queries
+- Updated `requiresBoundedReasoning()` function to:
+  - **Exit immediately if truth_type is PERMANENT** (line 278-280) - PERMANENT facts NEVER need bounded reasoning
+  - Accept `queryText` parameter to enable speculative detection
+  - Check for speculative/predictive language patterns (lines 284-290) - queries about the future trigger bounded reasoning
+- Updated `enforceBoundedReasoning()` function to:
+  - Accept queryText via context parameter
+  - Pass queryText to `requiresBoundedReasoning()` for speculative detection
+
+**Impact:** 
+- PERMANENT facts like "How do I boil an egg?" will no longer get uncertainty disclaimers
+- Speculative queries like "Will AI replace developers in 5 years?" will now correctly trigger bounded reasoning
+
+#### 2. `/api/core/intelligence/truthTypeDetector.js`
+**Changes:**
+- Expanded HIGH_STAKES_DOMAINS.MEDICAL patterns to include:
+  - `/\bcan i take .+ with\b/i` - catches "Can I take ibuprofen with..."
+  - `/\bmixing .+ (and|with)\b/i` - catches drug mixing queries
+  - `/\bcombine .+ medication\b/i` - catches medication combination queries
+  - `/\bblood pressure\b/i` - specific medical condition
+  - `/\bdiabetes\b/i`, `/\bheart\b/i`, `/\bcholesterol\b/i` - other critical conditions
+
+**Impact:**
+- Queries like "Can I take ibuprofen with blood pressure medication?" will now correctly be flagged as high-stakes MEDICAL
+
+#### 3. `/api/core/orchestrator.js`
+**Changes:**
+- Replaced single news pattern with two separate pattern constants (lines 558-561):
+  - `NEWS_TRIGGER_PATTERNS` - what/when questions about current events
+  - `GEOPOLITICAL_PATTERNS` - specific countries/conflicts
+- Updated lookup trigger logic to use OR condition between both patterns (line 563)
+- Added `context.phase4Metadata = phase4Metadata` before calling personality framework (line 740)
+- Updated `enforceBoundedReasoning()` call to pass `queryText: message` in context (line 815)
+
+**Impact:**
+- "What happened in Venezuela today?" will now trigger external lookup (has both news trigger "what happened" + "today" AND geopolitical trigger "Venezuela")
+- Personalities and validators now have access to truth_type via context
+
+#### 4. `/api/core/personalities/roxy_framework.js`
+**Changes:**
+- Added truth type check from `context.phase4Metadata.truth_type` (line 27)
+- Modified low-confidence disclaimer logic to:
+  - Only add disclaimer if `truthType !== 'PERMANENT'` (line 31)
+  - Skip disclaimer for PERMANENT facts even with low confidence (lines 49-54)
+  - Log when PERMANENT fact skips disclaimer
+
+**Impact:**
+- Roxy will no longer add "I'm not as confident about this answer as I'd like to be" to PERMANENT facts like boiling an egg
+
+#### 5. `/api/lib/productValidation.js`
+**Changes:**
+- Added PERMANENT truth type check before adding product recommendation disclaimer (lines 393-401)
+- Check `context?.phase4Metadata?.truth_type`
+- Skip adding "[Note: Evaluate this recommendation...]" disclaimer if truth_type is PERMANENT
+- Log when PERMANENT fact skips disclaimer
+
+**Impact:**
+- Product validation will no longer add value/risk disclaimers to PERMANENT factual queries
+
+### Core Principle Enforced:
+
+**PERMANENT facts get direct answers. VOLATILE/uncertain content gets appropriate disclosure.**
+
+The system now correctly calibrates uncertainty disclosure based on truth type:
+- **PERMANENT** (unchanging facts) = NO disclaimers, direct answers
+- **VOLATILE** (current events) = External lookup + disclosure if unverified
+- **SEMI_STABLE** (policies, regulations) = Appropriate disclosure
+- **Speculative** (predictions) = Bounded reasoning disclosure
+
+### Expected Test Results:
+
+1. ✅ **"How do I boil an egg?"** → truth_type: PERMANENT, bounded_reasoning: false, NO disclaimers
+2. ✅ **"What happened in Venezuela today?"** → external_lookup: true, sources_used >= 1
+3. ✅ **"Can I take ibuprofen with blood pressure medication?"** → high_stakes: true, domains: ['MEDICAL']
+4. ✅ **"Will AI replace developers in 5 years?"** → bounded_reasoning: true (speculative pattern)
+5. ✅ **"What is the Pythagorean theorem?"** → truth_type: PERMANENT, bounded_reasoning: false, NO disclaimers
+
+The system's credibility now depends on this calibration being correct - never adding uncertainty to certainty, never removing uncertainty from uncertainty.
+
+---END SUMMARY---

@@ -1,0 +1,11 @@
+Starting issue-fix mode at Sun Jan  4 00:47:26 UTC 2026
+Fetching issue #360 details
+Using repository: SiteMonkeysAI/sitemonkeys-ai-system
+Creating a new branch: fix-issue-360-20260104004726
+From https://github.com/SiteMonkeysAI/sitemonkeys-ai-system
+ * branch            main       -> FETCH_HEAD
+Switched to a new branch 'fix-issue-360-20260104004726'
+branch 'fix-issue-360-20260104004726' set up to track 'origin/main'.
+Prompt saved to ./claude-output/claude_prompt_360.txt for debugging
+Running Claude to fix the issue...
+Committing changes...

@@ -65,7 +65,14 @@ export const HIGH_STAKES_DOMAINS = {
     /\b(disease|condition|syndrome|disorder)\b/i,
     /\b(interaction|contraindications?)\b/i,
     /\b(aspirin|ibuprofen|tylenol|advil|acetaminophen)\b/i,
-    /\b(overdose|prognosis)\b/i
+    /\b(overdose|prognosis)\b/i,
+    /\bcan i take .+ with\b/i,
+    /\bmixing .+ (and|with)\b/i,
+    /\bcombine .+ medication\b/i,
+    /\bblood pressure\b/i,
+    /\bdiabetes\b/i,
+    /\bheart\b/i,
+    /\bcholesterol\b/i
   ],
   LEGAL: [
     /\b(legal|law|lawsuit|court|attorney|lawyer)\b/i,
