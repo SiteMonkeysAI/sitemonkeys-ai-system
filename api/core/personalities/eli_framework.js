@@ -21,6 +21,39 @@ function isSimpleFactualQuery(query) {
   return simplePatterns.some(p => p.test(query.trim()));
 }
 
+/**
+ * Helper: Check if query requires decision-support analysis (risks, blind spots, etc.)
+ * Only decision-making, high-stakes, or complex business queries need full analytical framework
+ * @param {string} query - The user's query
+ * @param {object} analysis - Semantic analysis results
+ * @param {object} context - Full context including metadata
+ * @returns {boolean}
+ */
+function requiresDecisionSupport(query, analysis, context) {
+  const queryLower = query.toLowerCase();
+
+  // Decision-making markers
+  const decisionMarkers = [
+    'should i', 'should we', 'which', 'better to', 'worth it',
+    'help me decide', 'make a decision', 'choose between',
+    'is it worth', 'would you recommend', 'advice on'
+  ];
+
+  // High-stakes domains that always get analysis
+  const isHighStakes = context?.phase4Metadata?.high_stakes?.isHighStakes || false;
+
+  // Explicit decision-making intent
+  const isDecisionIntent = analysis.intent === 'decision_making';
+
+  // Complex business queries
+  const isComplexBusiness = analysis.domain === 'business' && analysis.complexity > 0.6;
+
+  // Check for decision markers in query
+  const hasDecisionMarker = decisionMarkers.some(marker => queryLower.includes(marker));
+
+  return isHighStakes || isDecisionIntent || isComplexBusiness || hasDecisionMarker;
+}
+
 export class EliFramework {
   constructor() {
     this.personality = "eli";
@@ -89,8 +122,12 @@ export class EliFramework {
       // Gate analytical blocks for PERMANENT low-stakes facts
       const shouldAddAnalyticalBlocks = truthType !== 'PERMANENT' || isHighStakes;
 
+      // Gate decision-support sections (risks, blind spots) for queries that need them
+      const needsDecisionSupport = requiresDecisionSupport(query, analysis, context);
+
       // STEP 1: Identify risks not mentioned in response
-      if (shouldAddAnalyticalBlocks) {
+      // ONLY add risk analysis if query involves decision-making or high-stakes domains
+      if (shouldAddAnalyticalBlocks && needsDecisionSupport) {
         const risks = this.#identifyRisks(response, analysis, context);
         if (risks.length > 0) {
           analysisApplied.risksIdentified = risks;
@@ -101,12 +138,15 @@ export class EliFramework {
           modificationsCount++;
           this.logger.log(`Identified ${risks.length} unmentioned risks`);
         }
+      } else if (!needsDecisionSupport) {
+        this.logger.log('Skipping risk analysis - query does not require decision support');
       } else {
         this.logger.log('Skipping analytical blocks for PERMANENT low-stakes fact');
       }
 
       // STEP 2: Extract and challenge assumptions
-      if (shouldAddAnalyticalBlocks) {
+      // ONLY for decision-support queries
+      if (shouldAddAnalyticalBlocks && needsDecisionSupport) {
         const assumptions = this.#extractAssumptions(response, analysis);
         if (assumptions.length > 0) {
           analysisApplied.assumptionsChallenged = assumptions;
@@ -162,7 +202,8 @@ export class EliFramework {
       }
 
       // STEP 5: Identify blind spots (what user hasn't considered)
-      if (shouldAddAnalyticalBlocks) {
+      // ONLY for decision-support queries
+      if (shouldAddAnalyticalBlocks && needsDecisionSupport) {
         const blindSpots = this.#findBlindSpots(response, analysis, context);
         if (blindSpots.length > 0) {
           analysisApplied.blindSpotsFound = blindSpots;

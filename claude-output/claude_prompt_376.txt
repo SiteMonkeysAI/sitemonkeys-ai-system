@@ -1,0 +1,105 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #376: [claude-fix] Issue: Phase 6.5 Reasoning Escalation - Three Critical Failures (Context Blindness, Empty Templates, Unconditional Boilerplate)
+
+Issue Description:
+Summary
+Phase 6.5 Reasoning Escalation Enforcer has three critical failures identified during live testing that break the truth-first behavioral contract.
+Evidence Source
+
+Railway logs from 2026-01-04T19:53 - 2026-01-04T20:52
+Live test transcript showing system failures
+User provided system briefing, system failed to see it 2 messages later
+
+Bug 1: Context Blindness
+Symptom:
+System responded "I don't see any system description, features, or characteristics in our conversation" when the user had provided a 7-part system briefing just 2 messages earlier.
+Log Evidence:
+[SEMANTIC RETRIEVAL] No candidates found for user user_493f5c3f507d4cc4 in mode business_validation
+[ORCHESTRATOR] [MEMORY] ✗ No memory to inject (first conversation or no relevant context)
+Hypothesis:
+Conversation history array is not being passed to the AI model. Semantic retrieval searches persistent memory but the actual conversationHistory from the current session isn't included in the messages payload.
+Files to Investigate:
+
+/api/core/orchestrator.js - message assembly logic
+Check how conversationHistory is built and passed to AI call
+
+
+Bug 2: Empty Template Injection
+Symptom:
+Raw placeholder text appearing in responses:
+What is known: [State established facts, constraints, historical patterns, principles that apply]
+What is unknown: [Name specific unknowns and whether they materially change the outcome]
+Log Evidence:
+[REASONING-ESCALATION] {
+  enforced: true,
+  passed: false,
+  steps: '1/5',
+  violations: 1,
+  correction: true
+}
+Hypothesis:
+generateEscalationAppend() function outputs template structure without filling in the bracketed placeholders. The correction is being applied but with empty/template content.
+Files to Investigate:
+
+/api/core/intelligence/reasoningEscalationEnforcer.js - generateEscalationAppend() function
+Check if AI is supposed to fill templates or if code should pre-populate
+
+
+Bug 3: Unconditional Boilerplate
+Symptom:
+Every response includes "⚠️ Critical Risks I See:" section even for simple questions that don't warrant risk analysis.
+Log Evidence:
+[ELI] Applying Eli analytical framework...
+[ELI] Identified 2 unmentioned risks
+[ELI] Challenged 1 assumptions
+[ELI] Found 1 potential blind spots
+[ELI] Eli analysis complete: 3 enhancements applied
+Hypothesis:
+Eli personality framework fires unconditionally without checking query type. Risk identification should be gated by query complexity or decision-support classification.
+Files to Investigate:
+
+/api/personalities/eli.js - risk identification logic
+Check for missing conditional gates before adding risk sections
+
+
+Expected Behavior (Per System Specification)
+
+Context: System MUST see and reference conversation history within the same session
+Templates: Reasoning escalation MUST output filled content, never raw placeholders
+Risk Analysis: ONLY add risk sections when query involves decisions, uncertainty, or high-stakes domains
+
+Priority
+CRITICAL - These bugs violate core truth-first principles:
+
+Context blindness = system appears to lie about what it can see
+Empty templates = system outputs meaningless boilerplate (padding)
+Unconditional boilerplate = engagement theater, not value
+
+Acceptance Criteria
+
+ User can reference content from earlier in same conversation
+ No raw [bracketed placeholders] appear in any response
+ Risk/blind spot sections only appear on decision-support queries
+ All three bugs verified fixed via console testing
+
+Labels
+claude-fix, phase-6.5, critical, truth-first-violation
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
