@@ -4,6 +4,22 @@
 
 const MIN_CONFIDENCE_FOR_SIMPLIFICATION = 0.6;
 
+/**
+ * Helper: Check if query is a simple factual question that doesn't need confidence assessments
+ * @param {string} query - The user's query
+ * @returns {boolean}
+ */
+function isSimpleFactualQuery(query) {
+  const simplePatterns = [
+    /^what (is|are) \d+\s*[\+\-\*×÷\/x]\s*\d+/i,  // Math
+    /^how many \w+ (in|per|are in)/i,              // Unit conversion
+    /^what is the (capital|formula|chemical)/i,    // Simple facts
+    /^what does ['"]?\w+['"]? mean/i,              // Definitions
+    /^define /i,                                    // Definitions
+  ];
+  return simplePatterns.some(p => p.test(query.trim()));
+}
+
 export class RoxyFramework {
   constructor() {
     this.personality = "roxy";
@@ -25,6 +41,7 @@ export class RoxyFramework {
 
       // Check truth type from Phase 4 metadata
       const truthType = context?.phase4Metadata?.truth_type;
+      const query = context?.message || '';
 
       // ========== TRUTH-FIRST FALLBACK (NEW) ==========
       // PERMANENT facts NEVER get disclaimers - they are established truth

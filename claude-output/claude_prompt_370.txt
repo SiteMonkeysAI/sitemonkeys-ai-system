@@ -1,0 +1,242 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #370: [claude-fix] Issue: Final calibration - PERMANENT patterns, format contract triggers, and high-stakes emergency detection
+
+Issue Description:
+Context: System is at 84% pass rate with correct BEHAVIOR but metadata flags slightly miscalibrated. This fix addresses the final 5 edge cases to achieve truth-first perfection.
+
+PROBLEMS IDENTIFIED
+Problem 1: Word definitions classified as SEMI_STABLE instead of PERMANENT
+Test: "What does 'ubiquitous' mean?"
+Actual: truth_type: SEMI_STABLE, bounded reasoning triggered
+Expected: truth_type: PERMANENT, no disclaimer
+Word definitions don't change. "Ubiquitous" meant the same thing 100 years ago.
+
+Problem 2: "Keep it brief" not triggering format contract
+Test: "How do I make toast? Keep it brief."
+Actual: response_contract.triggered: false
+Expected: response_contract.triggered: true, style: 'minimal'
+The pattern /keep it short|be brief|briefly/i doesn't catch "keep it brief".
+
+Problem 3: Life-threatening emergency symptoms not flagged as high_stakes
+Test: "I'm having trouble breathing and my lips are turning blue"
+Actual: high_stakes: false
+Expected: high_stakes: true
+Blue lips + breathing difficulty = cyanosis = medical emergency. The response correctly said "Call 911" but the metadata should reflect this is high-stakes.
+
+Problem 4: Math results with formatting not matching tests
+Test: "What is 456 times 789?"
+Response: "359,784" (with comma formatting)
+Test expected: "359784"
+Not a bug - the response is correct. But we should ensure simple math without "answer only" doesn't get confidence assessments added.
+
+Problem 5: Chemical formulas with subscripts
+Test: "What is the chemical formula for water?"
+Response: "H₂O" (with subscript)
+Test expected: "H2O"
+Not a bug - subscript is actually better. But the response had extra explanation that could be trimmed for simple factual questions.
+
+IMPLEMENTATION
+Fix 1: Add word definition patterns to PERMANENT
+File: /api/core/intelligence/truthTypeDetector.js
+Add to PERMANENT_PATTERNS:
+javascript// Word definitions - language doesn't change
+/\bwhat does ['"]?\w+['"]? mean\b/i,
+/\bdefine ['"]?\w+['"]?\b/i,
+/\bdefinition of ['"]?\w+['"]?\b/i,
+/\bmeaning of ['"]?\w+['"]?\b/i,
+/\bwhat is the meaning of\b/i,
+/\bwhat does the word ['"]?\w+['"]? mean\b/i,
+
+Fix 2: Expand format contract "brief" pattern
+File: /api/core/intelligence/responseContractGate.js
+Change:
+javascript{ pattern: /keep it short|be brief|briefly/i, style: 'minimal' }
+To:
+javascript{ pattern: /keep it (short|brief)|be (brief|concise|short)|briefly|make it (short|brief|concise)/i, style: 'minimal' }
+
+Fix 3: Add life-threatening emergency patterns to HIGH_STAKES
+File: /api/core/intelligence/truthTypeDetector.js
+Add to HIGH_STAKES_DOMAINS.MEDICAL patterns:
+javascript// Life-threatening emergencies - cyanosis, respiratory distress
+/\b(lips|fingers|skin|face) (turning|are|is|look|looks) (blue|purple|gray|grey)\b/i,
+/\b(blue|purple) (lips|fingers|skin|face)\b/i,
+/\bcyanosis\b/i,
+/\b(trouble|difficulty|struggling|can't|cannot|hard to) breath(e|ing)\b/i,
+/\b(short|shortness) of breath\b/i,
+/\bchok(e|ing|ed)\b/i,
+/\b(severe|intense|crushing|sharp) (chest |abdominal |stomach |head )?(pain|ache)\b/i,
+/\bcan't (breathe|breath|stop bleeding)\b/i,
+/\b(passing|passed|blacking|blacked) out\b/i,
+/\bunconscious\b/i,
+/\bseizure\b/i,
+/\bstroke symptoms?\b/i,
+/\bheart attack\b/i,
+/\bsuicid(e|al)\b/i,
+/\boverdose\b/i,
+/\bsevere (bleeding|burn|allergic reaction)\b/i,
+/\banaphyla(xis|ctic)\b/i,
+
+Fix 4: Simple factual questions shouldn't get confidence assessments
+File: /api/core/personalities/eli_framework.js and /api/core/personalities/roxy_framework.js
+When truth_type === 'PERMANENT' AND query is a simple factual question (math, definitions, conversions), skip adding:
+
+Confidence Assessment blocks
+"Why:" explanations for confidence
+
+Add check:
+javascriptfunction isSimpleFactualQuery(query) {
+  const simplePatterns = [
+    /^what (is|are) \d+\s*[\+\-\*×÷\/x]\s*\d+/i,  // Math
+    /^how many \w+ (in|per|are in)/i,              // Unit conversion
+    /^what is the (capital|formula|chemical)/i,    // Simple facts
+    /^what does ['"]?\w+['"]? mean/i,              // Definitions
+    /^define /i,                                    // Definitions
+  ];
+  return simplePatterns.some(p => p.test(query.trim()));
+}
+
+// In enhancement logic:
+if (truthType === 'PERMANENT' && isSimpleFactualQuery(query)) {
+  // Skip confidence assessment blocks
+  // Skip "Why:" explanations
+  // Just return the direct answer
+}
+
+Fix 5: Ensure minimal style actually strips content
+File: /api/core/intelligence/responseContractGate.js
+For minimal style, add length enforcement after stripping:
+javascript// For 'minimal', enforce brevity
+if (constraint === 'minimal') {
+  // Strip all coaching/enhancement blocks
+  cleanedResponse = cleanedResponse
+    .replace(/🎯 \*\*Confidence Assessment:\*\*[\s\S]*?(?=\n\n[^🎯]|$)/gi, '')
+    .replace(/\*\*Why:\*\*.*?\n/gi, '')
+    .replace(/🍌 \*\*(?:Eli|Roxy):\*\*.*?\n+/gi, '')
+    .replace(/\((?:Analytical|Empathetic) framework applied.*?\)\n*/gi, '');
+  
+  // If still too long, keep only first substantive section
+  if (cleanedResponse.length > 600) {
+    const paragraphs = cleanedResponse.split(/\n\s*\n/).filter(p => p.trim());
+    cleanedResponse = paragraphs.slice(0, 2).join('\n\n');
+  }
+}
+
+ACCEPTANCE TESTS
+javascriptconst tests = [
+  // Fix 1: Word definitions are PERMANENT
+  {
+    q: "What does 'ubiquitous' mean?",
+    pass: d => d.phase4_metadata?.truth_type === 'PERMANENT' && 
+               d.phase6_bounded_reasoning?.required === false
+  },
+  
+  // Fix 2: "Keep it brief" triggers format contract
+  {
+    q: "How do I make toast? Keep it brief.",
+    pass: d => d.response_contract?.triggered === true &&
+               d.response_contract?.style === 'minimal'
+  },
+  
+  // Fix 3: Life-threatening symptoms are high_stakes
+  {
+    q: "I'm having trouble breathing and my lips are turning blue",
+    pass: d => d.phase4_metadata?.high_stakes?.isHighStakes === true
+  },
+  
+  // Fix 4: Simple math no confidence blocks
+  {
+    q: "What is 456 times 789?",
+    pass: d => d.phase4_metadata?.truth_type === 'PERMANENT' &&
+               !d.response?.includes("Confidence Assessment")
+  },
+  
+  // Fix 5: Science fact clean
+  {
+    q: "What is the chemical formula for water?",
+    pass: d => d.phase4_metadata?.truth_type === 'PERMANENT' &&
+               (d.response?.includes("H2O") || d.response?.includes("H₂O"))
+  },
+  
+  // Regression: Previous passes still work
+  {
+    q: "What's 17×23? Answer only the number.",
+    pass: d => d.response?.trim() === "391"
+  },
+  {
+    q: "How do I boil an egg?",
+    pass: d => d.phase4_metadata?.truth_type === 'PERMANENT' &&
+               !d.response?.includes("FOUNDER PROTECTION")
+  },
+  {
+    q: "What happened in Venezuela today?",
+    pass: d => d.phase4_metadata?.truth_type === 'VOLATILE' &&
+               d.phase4_metadata?.lookup_attempted === true
+  }
+];
+
+// Run tests
+(async () => {
+  let passed = 0, failed = 0;
+  for (const t of tests) {
+    const r = await fetch("/api/chat", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({message: t.q, mode: "truth-general"})
+    });
+    const d = await r.json();
+    const ok = t.pass(d);
+    console.log(ok ? "✅" : "❌", t.q.substring(0, 50));
+    if (ok) passed++; else failed++;
+  }
+  console.log(`\nPASSED: ${passed}/${passed+failed}`);
+})();
+
+FILES TO MODIFY
+
+/api/core/intelligence/truthTypeDetector.js - PERMANENT word definition patterns, HIGH_STAKES emergency patterns
+/api/core/intelligence/responseContractGate.js - Expand "brief" pattern, add minimal enforcement
+/api/core/personalities/eli_framework.js - Skip confidence blocks for simple PERMANENT facts
+/api/core/personalities/roxy_framework.js - Skip confidence blocks for simple PERMANENT facts
+
+
+CORE PRINCIPLE
+Simple questions deserve simple answers.
+
+"What does ubiquitous mean?" → Definition. Done.
+"What is 456 times 789?" → 359,784. Done.
+"Keep it brief" → Keep it brief.
+"Blue lips, can't breathe" → CALL 911 NOW.
+
+No padding. No hedging on certainty. No confidence assessments for 2+2.
+
+SUCCESS CRITERIA
+All 8 acceptance tests pass. Pass rate goes from 84% to 100%.
+
+This is the final calibration. After this, the system will:
+
+✅ Give direct answers to direct questions
+✅ Respect ALL format constraints
+✅ Detect ALL life-threatening emergencies
+✅ Never add uncertainty to certainty
+✅ Never pretend certainty about uncertainty
+
+Truth-first, perfectly calibrated.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
