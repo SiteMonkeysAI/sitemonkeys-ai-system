@@ -1,15 +1,15 @@
 /**
  * SEMANTIC RETRIEVAL SERVICE
- * 
+ *
  * Retrieves memories using semantic similarity with mode-aware prefiltering.
- * 
+ *
  * Pipeline:
  * 1. Embed query (single API call)
  * 2. Prefilter candidates via SQL (mode, category, is_current, recency)
  * 3. Score candidates with cosine similarity in Node
  * 4. Hybrid ranking (semantic + recency + confidence)
  * 5. Return top results with telemetry
- * 
+ *
  * @module api/services/semantic-retrieval
  */
 
@@ -20,13 +20,13 @@ import { generateEmbedding, cosineSimilarity, rankBySimilarity } from './embeddi
 // ============================================
 
 const RETRIEVAL_CONFIG = {
-  maxCandidates: 500,           // Max memories to pull from DB for scoring
-  defaultTopK: 10,              // Default number of results to return
-  minSimilarity: 0.25,          // Minimum similarity threshold
-  recencyBoostDays: 7,          // Boost memories from last N days
-  recencyBoostWeight: 0.1,      // How much to boost recent memories
-  confidenceWeight: 0.05,       // Weight for fingerprint confidence
-  embeddingTimeout: 5000        // Timeout for query embedding
+  maxCandidates: 500, // Max memories to pull from DB for scoring
+  defaultTopK: 10, // Default number of results to return
+  minSimilarity: 0.25, // Minimum similarity threshold
+  recencyBoostDays: 7, // Boost memories from last N days
+  recencyBoostWeight: 0.1, // How much to boost recent memories
+  confidenceWeight: 0.05, // Weight for fingerprint confidence
+  embeddingTimeout: 5000, // Timeout for query embedding
 };
 
 // ============================================
@@ -36,7 +36,7 @@ const RETRIEVAL_CONFIG = {
 /**
  * Build SQL prefilter query based on retrieval options
  * Mode-aware, respects vault boundaries, handles pinned memories
- * 
+ *
  * @param {object} options - Filter options
  * @returns {{sql: string, params: any[]}} Query and parameters
  */
@@ -46,17 +46,13 @@ function buildPrefilterQuery(options) {
     mode = 'truth-general',
     categories = null,
     includeAllModes = false,
-    limit = RETRIEVAL_CONFIG.maxCandidates
+    limit = RETRIEVAL_CONFIG.maxCandidates,
   } = options;
 
   const params = [userId];
   let paramIndex = 2;
 
-  const conditions = [
-    'user_id = $1',
-    'embedding IS NOT NULL',
-    "embedding_status = 'ready'"
-  ];
+  const conditions = ['user_id = $1', 'embedding IS NOT NULL', "embedding_status = 'ready'"];
 
   // Filter by is_current=true by default (only show current facts)
   // Include history only if explicitly requested
@@ -113,7 +109,7 @@ function buildPrefilterQuery(options) {
 
 /**
  * Calculate hybrid score combining semantic similarity, recency, and confidence
- * 
+ *
  * @param {object} memory - Memory with similarity score
  * @param {object} options - Scoring weights
  * @returns {number} Final hybrid score
@@ -122,14 +118,14 @@ function calculateHybridScore(memory, options = {}) {
   const {
     recencyBoostDays = RETRIEVAL_CONFIG.recencyBoostDays,
     recencyBoostWeight = RETRIEVAL_CONFIG.recencyBoostWeight,
-    confidenceWeight = RETRIEVAL_CONFIG.confidenceWeight
+    confidenceWeight = RETRIEVAL_CONFIG.confidenceWeight,
   } = options;
 
   let score = memory.similarity;
 
   // Recency boost (memories from last N days get a boost)
   if (memory.days_ago !== undefined && memory.days_ago < recencyBoostDays) {
-    const recencyFactor = 1 - (memory.days_ago / recencyBoostDays);
+    const recencyFactor = 1 - memory.days_ago / recencyBoostDays;
     score += recencyFactor * recencyBoostWeight;
   }
 
@@ -147,7 +143,7 @@ function calculateHybridScore(memory, options = {}) {
 
 /**
  * Retrieve semantically relevant memories for a query
- * 
+ *
  * @param {object} pool - PostgreSQL connection pool
  * @param {string} query - User query text
  * @param {object} options - Retrieval options
@@ -161,7 +157,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     categories = null,
     topK = RETRIEVAL_CONFIG.defaultTopK,
     minSimilarity = RETRIEVAL_CONFIG.minSimilarity,
-    includeAllModes = false
+    includeAllModes = false,
   } = options;
 
   // Initialize comprehensive telemetry
@@ -191,7 +187,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     query_embedding_ms: 0,
     db_fetch_ms: 0,
     scoring_ms: 0,
-    total_ms: 0
+    total_ms: 0,
   };
 
   // Validate inputs
@@ -200,7 +196,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       success: false,
       error: 'userId is required',
       memories: [],
-      telemetry
+      telemetry,
     };
   }
 
@@ -209,7 +205,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       success: false,
       error: 'Query is required',
       memories: [],
-      telemetry
+      telemetry,
     };
   }
 
@@ -217,7 +213,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // STEP 1: Generate query embedding
     const embedStart = Date.now();
     const queryEmbeddingResult = await generateEmbedding(query, {
-      timeout: RETRIEVAL_CONFIG.embeddingTimeout
+      timeout: RETRIEVAL_CONFIG.embeddingTimeout,
     });
     telemetry.query_embedding_ms = Date.now() - embedStart;
 
@@ -227,7 +223,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         success: false,
         error: `Could not embed query: ${queryEmbeddingResult.error}`,
         memories: [],
-        telemetry
+        telemetry,
       };
     }
 
@@ -240,7 +236,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       mode,
       categories,
       includeAllModes,
-      limit: RETRIEVAL_CONFIG.maxCandidates
+      limit: RETRIEVAL_CONFIG.maxCandidates,
     });
 
     const { rows: candidates } = await pool.query(sql, params);
@@ -250,7 +246,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // Count how many superseded facts were filtered out (if not including history)
     if (!options.includeHistory) {
-      const { rows: [countRow] } = await pool.query(`
+      const {
+        rows: [countRow],
+      } = await pool.query(
+        `
         SELECT COUNT(*) as superseded_count
         FROM persistent_memories
         WHERE user_id = $1
@@ -258,7 +257,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           AND is_current = false
           AND embedding IS NOT NULL
           AND embedding_status = 'ready'
-      `, [userId, mode]);
+      `,
+        [userId, mode],
+      );
       telemetry.filtered_superseded_count = parseInt(countRow.superseded_count || 0);
     }
 
@@ -269,35 +270,35 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       return {
         success: true,
         memories: [],
-        telemetry
+        telemetry,
       };
     }
 
     // STEP 3: Score candidates with cosine similarity
     const scoringStart = Date.now();
-    
+
     // Filter to only those with valid embeddings
-    const withEmbeddings = candidates.filter(c =>
-      c.embedding && Array.isArray(c.embedding) && c.embedding.length > 0
+    const withEmbeddings = candidates.filter(
+      (c) => c.embedding && Array.isArray(c.embedding) && c.embedding.length > 0,
     );
     telemetry.candidates_with_embeddings = withEmbeddings.length;
     telemetry.vectors_compared = withEmbeddings.length;
 
     // Calculate similarity scores
-    const scored = withEmbeddings.map(candidate => ({
+    const scored = withEmbeddings.map((candidate) => ({
       ...candidate,
-      similarity: cosineSimilarity(queryEmbedding, candidate.embedding)
+      similarity: cosineSimilarity(queryEmbedding, candidate.embedding),
     }));
 
     // Apply hybrid scoring
-    const hybridScored = scored.map(memory => ({
+    const hybridScored = scored.map((memory) => ({
       ...memory,
-      hybrid_score: calculateHybridScore(memory)
+      hybrid_score: calculateHybridScore(memory),
     }));
 
     // Filter by minimum similarity and sort
     const filtered = hybridScored
-      .filter(m => m.similarity >= minSimilarity)
+      .filter((m) => m.similarity >= minSimilarity)
       .sort((a, b) => b.hybrid_score - a.hybrid_score);
 
     telemetry.candidates_above_threshold = filtered.length;
@@ -314,8 +315,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
       // Check if adding this memory would exceed budget
       if (usedTokens + memoryTokens > tokenBudget) {
-        console.log(`[SEMANTIC RETRIEVAL] Token budget reached: ${usedTokens}/${tokenBudget} tokens used`);
-        break;  // Stop before exceeding budget
+        console.log(
+          `[SEMANTIC RETRIEVAL] Token budget reached: ${usedTokens}/${tokenBudget} tokens used`,
+        );
+        break; // Stop before exceeding budget
       }
 
       results.push(memory);
@@ -329,11 +332,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     telemetry.results_returned = results.length;
     telemetry.results_injected = results.length;
-    telemetry.tokens_used = usedTokens;  // Actual tokens used (within budget)
+    telemetry.tokens_used = usedTokens; // Actual tokens used (within budget)
 
     // Collect memory IDs and scores
-    telemetry.injected_memory_ids = results.map(r => r.id);
-    telemetry.top_scores = results.slice(0, 10).map(r => parseFloat(r.similarity.toFixed(3)));
+    telemetry.injected_memory_ids = results.map((r) => r.id);
+    telemetry.top_scores = results.slice(0, 10).map((r) => parseFloat(r.similarity.toFixed(3)));
 
     // Calculate telemetry stats
     if (results.length > 0) {
@@ -348,17 +351,18 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const cleanResults = results.map(({ embedding, ...rest }) => ({
       ...rest,
       similarity: Math.round(rest.similarity * 1000) / 1000,
-      hybrid_score: Math.round(rest.hybrid_score * 1000) / 1000
+      hybrid_score: Math.round(rest.hybrid_score * 1000) / 1000,
     }));
 
-    console.log(`[SEMANTIC RETRIEVAL] ✅ Found ${results.length} memories for "${query.substring(0, 50)}..." (${telemetry.total_ms}ms)`);
+    console.log(
+      `[SEMANTIC RETRIEVAL] ✅ Found ${results.length} memories for "${query.substring(0, 50)}..." (${telemetry.total_ms}ms)`,
+    );
 
     return {
       success: true,
       memories: cleanResults,
-      telemetry
+      telemetry,
     };
-
   } catch (error) {
     telemetry.total_ms = Date.now() - startTime;
     console.error(`[SEMANTIC RETRIEVAL] ❌ Error: ${error.message}`);
@@ -366,7 +370,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       success: false,
       error: error.message,
       memories: [],
-      telemetry
+      telemetry,
     };
   }
 }
@@ -378,7 +382,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 /**
  * Find memories with matching or similar fingerprint
  * Used for fact supersession detection
- * 
+ *
  * @param {object} pool - PostgreSQL connection pool
  * @param {string} userId - User ID
  * @param {string} fingerprint - Fact fingerprint to match
@@ -386,7 +390,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
  */
 export async function findByFingerprint(pool, userId, fingerprint) {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await pool.query(
+      `
       SELECT id, content, fact_fingerprint, fingerprint_confidence, created_at
       FROM persistent_memories
       WHERE user_id = $1 
@@ -394,18 +399,20 @@ export async function findByFingerprint(pool, userId, fingerprint) {
         AND fact_fingerprint = $2
       ORDER BY created_at DESC
       LIMIT 10
-    `, [userId, fingerprint]);
+    `,
+      [userId, fingerprint],
+    );
 
     return {
       success: true,
       matches: rows,
-      count: rows.length
+      count: rows.length,
     };
   } catch (error) {
     return {
       success: false,
       error: error.message,
-      matches: []
+      matches: [],
     };
   }
 }
@@ -417,14 +424,17 @@ export async function findByFingerprint(pool, userId, fingerprint) {
 /**
  * Get retrieval statistics for a user
  * Useful for debugging and optimization
- * 
+ *
  * @param {object} pool - PostgreSQL connection pool
  * @param {string} userId - User ID
  * @returns {Promise<object>} Statistics object
  */
 export async function getRetrievalStats(pool, userId) {
   try {
-    const { rows: [stats] } = await pool.query(`
+    const {
+      rows: [stats],
+    } = await pool.query(
+      `
       SELECT
         COUNT(*) as total_memories,
         COUNT(*) FILTER (WHERE is_current = true) as current_memories,
@@ -438,7 +448,9 @@ export async function getRetrievalStats(pool, userId) {
         MAX(created_at) as newest_memory
       FROM persistent_memories
       WHERE user_id = $1
-    `, [userId]);
+    `,
+      [userId],
+    );
 
     return {
       success: true,
@@ -453,15 +465,16 @@ export async function getRetrievalStats(pool, userId) {
         unique_modes: parseInt(stats.unique_modes),
         oldest_memory: stats.oldest_memory,
         newest_memory: stats.newest_memory,
-        embedding_coverage: stats.total_memories > 0 
-          ? Math.round(stats.with_embeddings / stats.total_memories * 100) + '%'
-          : 'N/A'
-      }
+        embedding_coverage:
+          stats.total_memories > 0
+            ? Math.round((stats.with_embeddings / stats.total_memories) * 100) + '%'
+            : 'N/A',
+      },
     };
   } catch (error) {
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -474,5 +487,5 @@ export default {
   retrieveSemanticMemories,
   findByFingerprint,
   getRetrievalStats,
-  config: RETRIEVAL_CONFIG
+  config: RETRIEVAL_CONFIG,
 };

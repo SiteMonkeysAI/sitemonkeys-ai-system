@@ -3,10 +3,10 @@
 // Primary entry point and orchestration hub for Site Monkeys Memory System
 // ================================================================
 
-import coreSystem from "./core.js";
-import intelligenceSystem from "./intelligence.js";
-import { logMemoryOperation } from "../../../routes/debug.js";
-import { embedMemoryNonBlocking } from "../../../services/embedding-service.js";
+import coreSystem from './core.js';
+import intelligenceSystem from './intelligence.js';
+import { logMemoryOperation } from '../../../routes/debug.js';
+import { embedMemoryNonBlocking } from '../../../services/embedding-service.js';
 
 class PersistentMemoryOrchestrator {
   constructor() {
@@ -34,19 +34,11 @@ class PersistentMemoryOrchestrator {
     };
 
     this.logger = {
-      log: (message) =>
-        console.log(
-          `[PERSISTENT_MEMORY] ${new Date().toISOString()} ${message}`,
-        ),
+      log: (message) => console.log(`[PERSISTENT_MEMORY] ${new Date().toISOString()} ${message}`),
       error: (message, error) =>
-        console.error(
-          `[PERSISTENT_MEMORY ERROR] ${new Date().toISOString()} ${message}`,
-          error,
-        ),
+        console.error(`[PERSISTENT_MEMORY ERROR] ${new Date().toISOString()} ${message}`, error),
       warn: (message) =>
-        console.warn(
-          `[PERSISTENT_MEMORY WARN] ${new Date().toISOString()} ${message}`,
-        ),
+        console.warn(`[PERSISTENT_MEMORY WARN] ${new Date().toISOString()} ${message}`),
     };
 
     // Set up global interface immediately for compatibility
@@ -70,10 +62,7 @@ class PersistentMemoryOrchestrator {
       );
 
       // Use intelligenceSystem to route and extract memories
-      const routing = await this.intelligenceSystem.analyzeAndRoute(
-        query,
-        userId,
-      );
+      const routing = await this.intelligenceSystem.analyzeAndRoute(query, userId);
       const memories = await this.intelligenceSystem.extractRelevantMemories(
         userId,
         query,
@@ -81,10 +70,10 @@ class PersistentMemoryOrchestrator {
       );
 
       if (!memories || memories.length === 0) {
-        this.logger.log("No relevant memories found");
+        this.logger.log('No relevant memories found');
         return {
           success: false,
-          memories: "",
+          memories: '',
           count: 0,
           memory_ids: [],
         };
@@ -93,26 +82,26 @@ class PersistentMemoryOrchestrator {
       // Format memories as a readable string
       const memoryText = memories
         .map((m, idx) => {
-          const category = m.category_name || "general";
-          const subcategory = m.subcategory_name || "";
-          const content = m.content || "";
-          return `[Memory ${idx + 1}] (${category}${subcategory ? "/" + subcategory : ""}): ${content}`;
+          const category = m.category_name || 'general';
+          const subcategory = m.subcategory_name || '';
+          const content = m.content || '';
+          return `[Memory ${idx + 1}] (${category}${subcategory ? '/' + subcategory : ''}): ${content}`;
         })
-        .join("\n\n");
+        .join('\n\n');
 
       this.logger.log(
         `Successfully retrieved ${memories.length} memories, ${memoryText.length} characters`,
       );
 
       // Extract memory IDs for telemetry
-      const memoryIds = memories.map(m => m.id).filter(id => id != null);
+      const memoryIds = memories.map((m) => m.id).filter((id) => id != null);
 
       // Debug logging hook for test harness
       logMemoryOperation(userId, 'retrieve', {
         memory_ids: memoryIds,
         query: query.substring(0, 100),
         category_searched: routing.primaryCategory,
-        results_count: memories.length
+        results_count: memories.length,
       });
 
       return {
@@ -123,10 +112,10 @@ class PersistentMemoryOrchestrator {
         routing: routing,
       };
     } catch (error) {
-      this.logger.error("Memory retrieval failed:", error);
+      this.logger.error('Memory retrieval failed:', error);
       return {
         success: false,
-        memories: "",
+        memories: '',
         count: 0,
         error: error.message,
       };
@@ -161,19 +150,15 @@ class PersistentMemoryOrchestrator {
 
       // Route to determine category
       console.log('[TRACE-STORE] A5. About to call analyzeAndRoute...');
-      const routing = await this.intelligenceSystem.analyzeAndRoute(
-        userMessage,
-        userId,
-      );
+      const routing = await this.intelligenceSystem.analyzeAndRoute(userMessage, userId);
       console.log('[TRACE-STORE] A6. Routing complete, category:', routing.primaryCategory);
 
       // Calculate relevance score
       console.log('[TRACE-STORE] A7. About to calculate relevance score...');
-      const relevanceScore =
-        await this.intelligenceSystem.calculateRelevanceScore(
-          conversationContent,
-          metadata,
-        );
+      const relevanceScore = await this.intelligenceSystem.calculateRelevanceScore(
+        conversationContent,
+        metadata,
+      );
       console.log('[TRACE-STORE] A8. Relevance score calculated:', relevanceScore);
 
       // Calculate token count (approximate: 1 token ≈ 4 characters)
@@ -216,11 +201,14 @@ class PersistentMemoryOrchestrator {
       const memoryId = result.rows[0]?.id;
 
       // TRACE LOGGING - Insert complete
-      console.log('[TRACE-STORE] C. Insert complete! Result:', JSON.stringify({
-        memoryId: memoryId,
-        rowCount: result.rowCount,
-        success: !!memoryId
-      }));
+      console.log(
+        '[TRACE-STORE] C. Insert complete! Result:',
+        JSON.stringify({
+          memoryId: memoryId,
+          rowCount: result.rowCount,
+          success: !!memoryId,
+        }),
+      );
 
       this.logger.log(
         `Successfully stored memory ID: ${memoryId} in category: ${routing.primaryCategory}`,
@@ -231,16 +219,24 @@ class PersistentMemoryOrchestrator {
       if (memoryId && this.coreSystem.pool) {
         console.log(`[EMBEDDING] Generating embedding for memory ${memoryId}...`);
         // Use non-blocking embedding to avoid delaying the response
-        embedMemoryNonBlocking(this.coreSystem.pool, memoryId, conversationContent, { timeout: 3000 })
-          .then(embedResult => {
+        embedMemoryNonBlocking(this.coreSystem.pool, memoryId, conversationContent, {
+          timeout: 3000,
+        })
+          .then((embedResult) => {
             if (embedResult.success) {
-              console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+              console.log(
+                `[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`,
+              );
             } else {
-              console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+              console.log(
+                `[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`,
+              );
             }
           })
-          .catch(error => {
-            console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
+          .catch((error) => {
+            console.error(
+              `[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`,
+            );
           });
       }
 
@@ -251,7 +247,7 @@ class PersistentMemoryOrchestrator {
         category: routing.primaryCategory,
         dedup_triggered: false,
         dedup_merged_with: null,
-        stored: true
+        stored: true,
       });
 
       return {
@@ -263,7 +259,7 @@ class PersistentMemoryOrchestrator {
         relevanceScore: relevanceScore,
       };
     } catch (error) {
-      this.logger.error("Memory storage failed:", error);
+      this.logger.error('Memory storage failed:', error);
       return {
         success: false,
         error: error.message,
@@ -276,9 +272,7 @@ class PersistentMemoryOrchestrator {
    * @returns {boolean} - True if system is ready
    */
   isReady() {
-    return (
-      this.coreSystem?.isInitialized && this.intelligenceSystem?.isInitialized
-    );
+    return this.coreSystem?.isInitialized && this.intelligenceSystem?.isInitialized;
   }
 
   /**

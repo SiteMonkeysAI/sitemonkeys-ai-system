@@ -9,19 +9,19 @@ const COST_CEILINGS = {
 };
 
 const MODEL_COSTS = {
-  "gpt-4": {
+  'gpt-4': {
     input: 0.03 / 1000,
     output: 0.06 / 1000,
   },
-  "gpt-4o": {
+  'gpt-4o': {
     input: 0.005 / 1000,
     output: 0.015 / 1000,
   },
-  "claude-sonnet-4.5": {
+  'claude-sonnet-4.5': {
     input: 0.003 / 1000,
     output: 0.015 / 1000,
   },
-  "text-embedding-3-small": {
+  'text-embedding-3-small': {
     input: 0.00002 / 1000,
     output: 0,
   },
@@ -64,7 +64,7 @@ class CostTracker {
       const inputTokens = queryTokens + contextTokens;
       const outputTokens = Math.min(1200, inputTokens * 1.5);
 
-      const model = "claude-sonnet-4.5";
+      const model = 'claude-sonnet-4.5';
       const costs = MODEL_COSTS[model];
 
       const inputCost = inputTokens * costs.input;
@@ -72,7 +72,7 @@ class CostTracker {
 
       return inputCost + outputCost;
     } catch (error) {
-      console.error("[COST-TRACKER] Estimation error:", error);
+      console.error('[COST-TRACKER] Estimation error:', error);
       return 0.05;
     }
   }
@@ -83,7 +83,7 @@ class CostTracker {
         this.sessionCosts.set(sessionId, {
           total: 0,
           breakdown: [],
-          mode: metadata.mode || "unknown",
+          mode: metadata.mode || 'unknown',
           startTime: Date.now(),
         });
       }
@@ -111,7 +111,7 @@ class CostTracker {
 
       return session.total;
     } catch (error) {
-      console.error("[COST-TRACKER] Record error:", error);
+      console.error('[COST-TRACKER] Record error:', error);
       return 0;
     }
   }
@@ -124,14 +124,12 @@ class CostTracker {
         return 0;
       }
 
-      const inputCost =
-        (usage.prompt_tokens || usage.input_tokens || 0) * costs.input;
-      const outputCost =
-        (usage.completion_tokens || usage.output_tokens || 0) * costs.output;
+      const inputCost = (usage.prompt_tokens || usage.input_tokens || 0) * costs.input;
+      const outputCost = (usage.completion_tokens || usage.output_tokens || 0) * costs.output;
 
       return inputCost + outputCost;
     } catch (error) {
-      console.error("[COST-TRACKER] Calculation error:", error);
+      console.error('[COST-TRACKER] Calculation error:', error);
       return 0;
     }
   }
@@ -185,16 +183,11 @@ class CostTracker {
       activeSessions: sessions.length,
       totalCost: sessions.reduce((sum, s) => sum + s.total, 0),
       averageCost:
-        sessions.length > 0
-          ? sessions.reduce((sum, s) => sum + s.total, 0) / sessions.length
-          : 0,
+        sessions.length > 0 ? sessions.reduce((sum, s) => sum + s.total, 0) / sessions.length : 0,
       byMode: {
-        truth_general: sessions.filter((s) => s.mode === "truth_general")
-          .length,
-        business_validation: sessions.filter(
-          (s) => s.mode === "business_validation",
-        ).length,
-        site_monkeys: sessions.filter((s) => s.mode === "site_monkeys").length,
+        truth_general: sessions.filter((s) => s.mode === 'truth_general').length,
+        business_validation: sessions.filter((s) => s.mode === 'business_validation').length,
+        site_monkeys: sessions.filter((s) => s.mode === 'site_monkeys').length,
       },
       totalRecords: this.costHistory.length,
     };

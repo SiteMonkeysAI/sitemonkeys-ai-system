@@ -21,7 +21,7 @@ const BOILERPLATE_PATTERNS = [
   /I should clarify/i,
   /founder protection/i,
   /I cannot access previous conversations/i,
-  /I don't have access to/i
+  /I don't have access to/i,
 ];
 
 /**
@@ -51,7 +51,10 @@ export class IntelligentMemoryStorage {
       this.encoder = encoding_for_model('gpt-4');
       console.log('[INTELLIGENT-STORAGE] ✅ Tiktoken encoder initialized');
     } catch (error) {
-      console.error('[INTELLIGENT-STORAGE] ⚠️ Tiktoken encoder initialization failed:', error.message);
+      console.error(
+        '[INTELLIGENT-STORAGE] ⚠️ Tiktoken encoder initialization failed:',
+        error.message,
+      );
       console.log('[INTELLIGENT-STORAGE] Will use fallback token counting');
     }
   }
@@ -132,15 +135,19 @@ export class IntelligentMemoryStorage {
       const compressedTokens = this.countTokens(facts);
       const ratio = originalTokens > 0 ? (originalTokens / compressedTokens).toFixed(1) : 1;
 
-      console.log(`[INTELLIGENT-STORAGE] 📊 Compression: ${originalTokens} → ${compressedTokens} tokens (${ratio}:1)`);
-      
+      console.log(
+        `[INTELLIGENT-STORAGE] 📊 Compression: ${originalTokens} → ${compressedTokens} tokens (${ratio}:1)`,
+      );
+
       // Step 2: Check for duplicates
       console.log('[INTELLIGENT-STORAGE] 🔍 Checking for similar memories...');
       const existing = await this.findSimilarMemories(userId, category, facts);
-      
+
       // Step 3: Update existing OR create new
       if (existing) {
-        console.log(`[DEDUP] ♻️ Found similar memory (id=${existing.id}), boosting instead of duplicating`);
+        console.log(
+          `[DEDUP] ♻️ Found similar memory (id=${existing.id}), boosting instead of duplicating`,
+        );
         const boostResult = await this.boostExistingMemory(existing.id);
 
         // Debug logging hook for dedup case
@@ -150,22 +157,28 @@ export class IntelligentMemoryStorage {
           category: category,
           dedup_triggered: true,
           dedup_merged_with: existing.id,
-          stored: false
+          stored: false,
         });
 
         return boostResult;
       } else {
         console.log('[INTELLIGENT-STORAGE] ✨ Storing new compressed memory');
-        return await this.storeCompressedMemory(userId, category, facts, {
-          original_tokens: originalTokens,
-          compressed_tokens: compressedTokens,
-          compression_ratio: parseFloat(ratio)
-        }, mode);
+        return await this.storeCompressedMemory(
+          userId,
+          category,
+          facts,
+          {
+            original_tokens: originalTokens,
+            compressed_tokens: compressedTokens,
+            compression_ratio: parseFloat(ratio),
+          },
+          mode,
+        );
       }
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Error:', error.message);
       console.error('[INTELLIGENT-STORAGE] Stack:', error.stack?.substring(0, 200));
-      
+
       // Fallback: store uncompressed to prevent data loss
       console.warn('[INTELLIGENT-STORAGE] ⚠️ Falling back to uncompressed storage');
       return await this.storeUncompressed(userId, userMessage, aiResponse, category);
@@ -216,7 +229,7 @@ Facts (preserve all identifiers):`;
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 100  // Increased to allow room for identifiers
+        max_tokens: 100, // Increased to allow room for identifiers
       });
 
       let facts = response.choices[0].message.content.trim();
@@ -227,7 +240,9 @@ Facts (preserve all identifiers):`;
       // AGGRESSIVE POST-PROCESSING: Guarantee 10-20:1 compression
       const processedFacts = this.aggressivePostProcessing(facts);
 
-      console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${processedFacts.split('\n').filter(l => l.trim()).length} facts`);
+      console.log(
+        `[INTELLIGENT-STORAGE] ✅ Extracted ${processedFacts.split('\n').filter((l) => l.trim()).length} facts`,
+      );
       return processedFacts;
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Fact extraction failed:', error.message);
@@ -250,7 +265,8 @@ Facts (preserve all identifiers):`;
     // - ECHO-123-9K7X (license plates)
     // - Dr. FOXTROT-123 (names with identifiers)
     // - Any long alphanumeric strings
-    const tokenPattern = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/gi;
+    const tokenPattern =
+      /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/gi;
     const originalTokens = originalMessage.match(tokenPattern) || [];
 
     if (originalTokens.length === 0) {
@@ -258,20 +274,25 @@ Facts (preserve all identifiers):`;
     }
 
     // Check which tokens are missing from facts
-    const missingTokens = originalTokens.filter(token => {
+    const missingTokens = originalTokens.filter((token) => {
       // Case-insensitive check if token appears in facts
       return !facts.toLowerCase().includes(token.toLowerCase());
     });
 
     if (missingTokens.length > 0) {
-      console.log(`[INTELLIGENT-STORAGE] 🛡️ Protecting ${missingTokens.length} high-entropy tokens:`, missingTokens);
+      console.log(
+        `[INTELLIGENT-STORAGE] 🛡️ Protecting ${missingTokens.length} high-entropy tokens:`,
+        missingTokens,
+      );
 
       // Append missing tokens to facts
       for (const token of missingTokens) {
         // Try to preserve context by finding surrounding words
         // Allow 1-3 words before the token (handles "My doctor's name is Dr. X" or "license plate number is Y")
         const escapedToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const contextMatch = originalMessage.match(new RegExp(`([\\w.']+\\s+){0,3}${escapedToken}`, 'i'));
+        const contextMatch = originalMessage.match(
+          new RegExp(`([\\w.']+\\s+){0,3}${escapedToken}`, 'i'),
+        );
         if (contextMatch) {
           facts += `\n${contextMatch[0]}.`;
         } else {
@@ -292,19 +313,21 @@ Facts (preserve all identifiers):`;
    */
   aggressivePostProcessing(facts) {
     // Split into lines and clean
-    let lines = facts.split(/\n|\.(?=\s|[A-Z]|$)/)
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
+    let lines = facts
+      .split(/\n|\.(?=\s|[A-Z]|$)/)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
       // Remove bullet points, numbers, and other formatting
-      .map(line => line.replace(/^[-•*\d.)\]]+\s*/, '').trim())
-      .filter(line => line.length > 0);
+      .map((line) => line.replace(/^[-•*\d.)\]]+\s*/, '').trim())
+      .filter((line) => line.length > 0);
 
     // Pattern to detect high-entropy identifiers
-    const HIGH_ENTROPY_PATTERN = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/i;
+    const HIGH_ENTROPY_PATTERN =
+      /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/i;
 
     // Separate lines with identifiers from regular lines
-    const identifierLines = lines.filter(line => HIGH_ENTROPY_PATTERN.test(line));
-    const regularLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line));
+    const identifierLines = lines.filter((line) => HIGH_ENTROPY_PATTERN.test(line));
+    const regularLines = lines.filter((line) => !HIGH_ENTROPY_PATTERN.test(line));
 
     // ADAPTIVE LIMIT: Allow more facts if they contain identifiers
     const maxFacts = identifierLines.length > 0 ? 5 : 3;
@@ -313,7 +336,7 @@ Facts (preserve all identifiers):`;
     let processedRegularLines = regularLines.slice(0, maxFacts - identifierLines.length);
 
     // ADAPTIVE WORD LIMIT: Don't truncate lines with identifiers
-    processedRegularLines = processedRegularLines.map(line => {
+    processedRegularLines = processedRegularLines.map((line) => {
       const words = line.split(/\s+/);
       if (words.length > 5) {
         return words.slice(0, 5).join(' ');
@@ -322,7 +345,7 @@ Facts (preserve all identifiers):`;
     });
 
     // Identifier lines: Allow up to 8 words to preserve context
-    const processedIdentifierLines = identifierLines.map(line => {
+    const processedIdentifierLines = identifierLines.map((line) => {
       const words = line.split(/\s+/);
       if (words.length > 8) {
         // Keep identifier intact, trim other words
@@ -330,7 +353,16 @@ Facts (preserve all identifiers):`;
         if (identifierMatch) {
           // Preserve the identifier and a few context words
           const identifier = identifierMatch[0];
-          const contextWords = line.split(/\s+/).filter(w => w.includes(identifier.split('-')[0]) || w === identifier || w.toLowerCase() === 'dr.' || ['license', 'plate', 'doctor', 'name'].includes(w.toLowerCase())).slice(0, 8);
+          const contextWords = line
+            .split(/\s+/)
+            .filter(
+              (w) =>
+                w.includes(identifier.split('-')[0]) ||
+                w === identifier ||
+                w.toLowerCase() === 'dr.' ||
+                ['license', 'plate', 'doctor', 'name'].includes(w.toLowerCase()),
+            )
+            .slice(0, 8);
           return contextWords.join(' ');
         }
       }
@@ -342,7 +374,7 @@ Facts (preserve all identifiers):`;
 
     // Remove duplicates (case-insensitive)
     const seen = new Set();
-    lines = lines.filter(line => {
+    lines = lines.filter((line) => {
       const normalized = line.toLowerCase();
       if (seen.has(normalized)) {
         return false;
@@ -352,7 +384,7 @@ Facts (preserve all identifiers):`;
     });
 
     // Remove very short facts (< 3 words), UNLESS they contain identifiers
-    lines = lines.filter(line => {
+    lines = lines.filter((line) => {
       if (HIGH_ENTROPY_PATTERN.test(line)) {
         return true; // Always keep lines with identifiers
       }
@@ -360,8 +392,23 @@ Facts (preserve all identifiers):`;
     });
 
     // Ultra-aggressive compression: remove ALL filler words (but not from identifier lines)
-    const fillerWords = ['the', 'a', 'an', 'this', 'that', 'these', 'those', 'is', 'are', 'was', 'were', 'has', 'have', 'had'];
-    lines = lines.map(line => {
+    const fillerWords = [
+      'the',
+      'a',
+      'an',
+      'this',
+      'that',
+      'these',
+      'those',
+      'is',
+      'are',
+      'was',
+      'were',
+      'has',
+      'have',
+      'had',
+    ];
+    lines = lines.map((line) => {
       // Don't remove filler words from identifier lines - preserve full context
       if (HIGH_ENTROPY_PATTERN.test(line)) {
         return line;
@@ -369,15 +416,15 @@ Facts (preserve all identifiers):`;
 
       let words = line.split(/\s+/);
       // Remove filler words except first word (to preserve meaning)
-      words = [words[0], ...words.slice(1).filter(w => !fillerWords.includes(w.toLowerCase()))];
+      words = [words[0], ...words.slice(1).filter((w) => !fillerWords.includes(w.toLowerCase()))];
       return words.join(' ');
     });
 
     // Final cleanup: ensure no empty lines
-    lines = lines.filter(line => line.length > 0);
+    lines = lines.filter((line) => line.length > 0);
 
     // Ensure each fact ends with a period
-    lines = lines.map(line => {
+    lines = lines.map((line) => {
       if (!/[.!?]$/.test(line)) {
         return line + '.';
       }
@@ -404,20 +451,25 @@ Facts (preserve all identifiers):`;
     // - \b[A-Z]+-\d{10,}\b : Matches ABC-1234567890 format (10+ digits)
     // - \bDr\.\s*[A-Z]+-\d+\b : Matches Dr. ABC-123 format
     // - \b[A-Z0-9]{12,}\b : Matches long alphanumeric codes
-    const HIGH_ENTROPY_PATTERN = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/gi;
+    const HIGH_ENTROPY_PATTERN =
+      /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/gi;
 
     // Extract tokens from BOTH existing and new content
     const existingTokens = existingContent.match(HIGH_ENTROPY_PATTERN) || [];
     const newTokens = newContent.match(HIGH_ENTROPY_PATTERN) || [];
 
     // Normalize tokens to uppercase for case-insensitive comparison
-    const normalizedExisting = existingTokens.map(t => t.toUpperCase());
-    const normalizedNew = newTokens.map(t => t.toUpperCase());
+    const normalizedExisting = existingTokens.map((t) => t.toUpperCase());
+    const normalizedNew = newTokens.map((t) => t.toUpperCase());
 
     // Validation: Ensure we got the parameters in the right order
     console.log(`[DEDUP-VALIDATE] shouldPreventMerge called with:`);
-    console.log(`[DEDUP-VALIDATE]   existingContent (first param): "${existingContent.substring(0, 100)}..."`);
-    console.log(`[DEDUP-VALIDATE]   newContent (second param): "${newContent.substring(0, 100)}..."`);
+    console.log(
+      `[DEDUP-VALIDATE]   existingContent (first param): "${existingContent.substring(0, 100)}..."`,
+    );
+    console.log(
+      `[DEDUP-VALIDATE]   newContent (second param): "${newContent.substring(0, 100)}..."`,
+    );
     console.log(`[DEDUP-VALIDATE]   Extracted EXISTING tokens: [${normalizedExisting.join(', ')}]`);
     console.log(`[DEDUP-VALIDATE]   Extracted NEW tokens: [${normalizedNew.join(', ')}]`);
 
@@ -436,8 +488,8 @@ Facts (preserve all identifiers):`;
     // Example: NEW=[DELTA,ALPHA,CHARLIE] vs EXISTING=[CHARLIE,ALPHA] → hasUniqueNewToken=TRUE (DELTA is unique) → block merge
     // Example: NEW=[ALPHA] vs EXISTING=[ALPHA,BRAVO] → hasUniqueNewToken=FALSE → allow merge
     // Example: NEW=[ALPHA,CHARLIE] vs EXISTING=[ALPHA,BRAVO,CHARLIE] → hasUniqueNewToken=FALSE → allow merge
-    const hasUniqueNewToken = normalizedNew.some(newToken =>
-      !normalizedExisting.includes(newToken)
+    const hasUniqueNewToken = normalizedNew.some(
+      (newToken) => !normalizedExisting.includes(newToken),
     );
 
     // DEBUG: Log what we're comparing to catch any logic errors
@@ -448,12 +500,16 @@ Facts (preserve all identifiers):`;
 
     if (hasUniqueNewToken) {
       // New content has a unique identifier - store separately
-      const uniqueTokens = normalizedNew.filter(t => !normalizedExisting.includes(t));
-      console.log(`[DEDUP] 🛡️ Unique new token detected: new=[${normalizedNew.join(',')}] vs existing=[${normalizedExisting.join(',')}] - BLOCKING merge (unique: ${uniqueTokens.join(',')})`);
+      const uniqueTokens = normalizedNew.filter((t) => !normalizedExisting.includes(t));
+      console.log(
+        `[DEDUP] 🛡️ Unique new token detected: new=[${normalizedNew.join(',')}] vs existing=[${normalizedExisting.join(',')}] - BLOCKING merge (unique: ${uniqueTokens.join(',')})`,
+      );
       return true; // PREVENT merge - new identifier must be stored separately
     } else {
       // All new tokens already exist in memory - safe to merge
-      console.log(`[DEDUP] ✓ All tokens exist in memory: [${normalizedNew.join(',')}] - merge allowed`);
+      console.log(
+        `[DEDUP] ✓ All tokens exist in memory: [${normalizedNew.join(',')}] - merge allowed`,
+      );
       return false; // Allow merge - no new unique identifiers
     }
   }
@@ -468,7 +524,8 @@ Facts (preserve all identifiers):`;
    */
   async findSimilarMemories(userId, category, facts) {
     try {
-      const result = await this.db.query(`
+      const result = await this.db.query(
+        `
         SELECT
           id,
           content,
@@ -482,18 +539,24 @@ Facts (preserve all identifiers):`;
           AND created_at > NOW() - INTERVAL '30 days'
         ORDER BY similarity DESC
         LIMIT 5
-      `, [userId, category, facts]);
+      `,
+        [userId, category, facts],
+      );
 
       // Check each potential match for high-entropy token conflicts
       for (const row of result.rows) {
         if (row.similarity > 0.3) {
           // Apply high-entropy guard before merging
           if (this.shouldPreventMerge(row.content, facts)) {
-            console.log(`[DEDUP] ⏭️ Skipping similar memory (id=${row.id}) due to high-entropy mismatch`);
+            console.log(
+              `[DEDUP] ⏭️ Skipping similar memory (id=${row.id}) due to high-entropy mismatch`,
+            );
             continue; // Skip this match, check next one
           }
 
-          console.log(`[DEDUP] 📊 Found similar memory with similarity score: ${row.similarity.toFixed(3)}`);
+          console.log(
+            `[DEDUP] 📊 Found similar memory with similarity score: ${row.similarity.toFixed(3)}`,
+          );
           return row;
         }
       }
@@ -514,15 +577,18 @@ Facts (preserve all identifiers):`;
    */
   async boostExistingMemory(memoryId) {
     try {
-      await this.db.query(`
+      await this.db.query(
+        `
         UPDATE persistent_memories
         SET 
           usage_frequency = usage_frequency + 1,
           relevance_score = LEAST(relevance_score + 0.05, 1.0),
           last_accessed = CURRENT_TIMESTAMP
         WHERE id = $1
-      `, [memoryId]);
-      
+      `,
+        [memoryId],
+      );
+
       console.log(`[DEDUP] ✅ Boosted memory ${memoryId}`);
       return { action: 'boosted', memoryId };
     } catch (error) {
@@ -560,11 +626,15 @@ Facts (preserve all identifiers):`;
       // CRITICAL: Detect fingerprints on extracted facts (not raw user message)
       console.log('[INTELLIGENT-STORAGE] 🔍 Detecting fact fingerprint...');
       const fingerprintResult = await generateFactFingerprint(facts, { skipModel: false });
-      console.log(`[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`);
+      console.log(
+        `[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`,
+      );
 
       // If fingerprint detected, route through supersession
       if (fingerprintResult.fingerprint && fingerprintResult.confidence >= 0.7) {
-        console.log(`[INTELLIGENT-STORAGE] ✨ Routing through supersession for fingerprint: ${fingerprintResult.fingerprint}`);
+        console.log(
+          `[INTELLIGENT-STORAGE] ✨ Routing through supersession for fingerprint: ${fingerprintResult.fingerprint}`,
+        );
 
         const supersessionResult = await storeWithSupersession(this.db, {
           userId,
@@ -573,7 +643,7 @@ Facts (preserve all identifiers):`;
           fingerprintConfidence: fingerprintResult.confidence,
           mode,
           categoryName: category,
-          tokenCount
+          tokenCount,
         });
 
         if (supersessionResult.success) {
@@ -583,15 +653,21 @@ Facts (preserve all identifiers):`;
           if (memoryId && this.db) {
             console.log(`[EMBEDDING] Generating embedding for memory ${memoryId}...`);
             embedMemoryNonBlocking(this.db, memoryId, facts, { timeout: 3000 })
-              .then(embedResult => {
+              .then((embedResult) => {
                 if (embedResult.success) {
-                  console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+                  console.log(
+                    `[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`,
+                  );
                 } else {
-                  console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+                  console.log(
+                    `[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`,
+                  );
                 }
               })
-              .catch(error => {
-                console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
+              .catch((error) => {
+                console.error(
+                  `[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`,
+                );
               });
           }
 
@@ -604,14 +680,14 @@ Facts (preserve all identifiers):`;
             dedup_merged_with: null,
             stored: true,
             fingerprint: fingerprintResult.fingerprint,
-            superseded_count: supersessionResult.supersededCount
+            superseded_count: supersessionResult.supersededCount,
           });
 
           return {
             action: 'created',
             memoryId,
             superseded: supersessionResult.supersededCount,
-            fingerprint: fingerprintResult.fingerprint
+            fingerprint: fingerprintResult.fingerprint,
           };
         }
       }
@@ -619,7 +695,8 @@ Facts (preserve all identifiers):`;
       // No fingerprint or confidence too low - use normal storage
 
       console.log('[TRACE-INTELLIGENT] I14. About to execute INSERT query...');
-      const result = await this.db.query(`
+      const result = await this.db.query(
+        `
         INSERT INTO persistent_memories (
           user_id,
           category_name,
@@ -633,26 +710,30 @@ Facts (preserve all identifiers):`;
           last_accessed
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP)
         RETURNING id
-      `, [
-        userId,
-        category,
-        'general', // Default subcategory
-        facts,
-        tokenCount,
-        0.70, // Base relevance for new compressed memories
-        JSON.stringify({
-          ...metadata,
-          compressed: true,
-          dedup_checked: true,
-          storage_version: 'intelligent_v1'
-        })
-      ]);
+      `,
+        [
+          userId,
+          category,
+          'general', // Default subcategory
+          facts,
+          tokenCount,
+          0.7, // Base relevance for new compressed memories
+          JSON.stringify({
+            ...metadata,
+            compressed: true,
+            dedup_checked: true,
+            storage_version: 'intelligent_v1',
+          }),
+        ],
+      );
 
       console.log('[TRACE-INTELLIGENT] I15. INSERT query completed');
 
       const memoryId = result.rows[0].id;
       console.log('[TRACE-INTELLIGENT] I16. Stored memory ID:', memoryId);
-      console.log(`[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=${memoryId}, tokens=${tokenCount}`);
+      console.log(
+        `[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=${memoryId}, tokens=${tokenCount}`,
+      );
 
       // DIAGNOSTIC LOGGING: Track exact storage details
       console.log('[STORAGE-DEBUG] Memory stored:', {
@@ -661,7 +742,7 @@ Facts (preserve all identifiers):`;
         category: category,
         content: facts.substring(0, 100),
         table: 'persistent_memories',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       // CRITICAL: Generate embedding for the newly stored memory
@@ -670,15 +751,21 @@ Facts (preserve all identifiers):`;
         console.log(`[EMBEDDING] Generating embedding for memory ${memoryId}...`);
         // Use non-blocking embedding to avoid delaying the response
         embedMemoryNonBlocking(this.db, memoryId, facts, { timeout: 3000 })
-          .then(embedResult => {
+          .then((embedResult) => {
             if (embedResult.success) {
-              console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+              console.log(
+                `[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`,
+              );
             } else {
-              console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+              console.log(
+                `[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`,
+              );
             }
           })
-          .catch(error => {
-            console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
+          .catch((error) => {
+            console.error(
+              `[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`,
+            );
           });
       }
 
@@ -689,7 +776,7 @@ Facts (preserve all identifiers):`;
         category: category,
         dedup_triggered: false,
         dedup_merged_with: null,
-        stored: true
+        stored: true,
       });
 
       return { action: 'created', memoryId };
@@ -719,7 +806,8 @@ Facts (preserve all identifiers):`;
       console.log('[TRACE-INTELLIGENT] I20. Uncompressed content length:', content.length);
       console.log('[TRACE-INTELLIGENT] I21. About to execute INSERT query (fallback)...');
 
-      const result = await this.db.query(`
+      const result = await this.db.query(
+        `
         INSERT INTO persistent_memories (
           user_id,
           category_name,
@@ -733,22 +821,26 @@ Facts (preserve all identifiers):`;
           last_accessed
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP)
         RETURNING id
-      `, [
-        userId,
-        category,
-        'general',
-        content,
-        tokenCount,
-        0.50,
-        JSON.stringify({
-          compressed: false,
-          fallback: true,
-          storage_version: 'uncompressed_fallback'
-        })
-      ]);
-      
+      `,
+        [
+          userId,
+          category,
+          'general',
+          content,
+          tokenCount,
+          0.5,
+          JSON.stringify({
+            compressed: false,
+            fallback: true,
+            storage_version: 'uncompressed_fallback',
+          }),
+        ],
+      );
+
       const memoryId = result.rows[0].id;
-      console.log(`[INTELLIGENT-STORAGE] ⚠️ Stored uncompressed fallback: ID=${memoryId}, tokens=${tokenCount}`);
+      console.log(
+        `[INTELLIGENT-STORAGE] ⚠️ Stored uncompressed fallback: ID=${memoryId}, tokens=${tokenCount}`,
+      );
 
       // DIAGNOSTIC LOGGING: Track exact storage details
       console.log('[STORAGE-DEBUG] Memory stored (fallback):', {
@@ -757,7 +849,7 @@ Facts (preserve all identifiers):`;
         category: category,
         content: content.substring(0, 100),
         table: 'persistent_memories',
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       // CRITICAL: Generate embedding for the newly stored memory
@@ -766,15 +858,21 @@ Facts (preserve all identifiers):`;
         console.log(`[EMBEDDING] Generating embedding for memory ${memoryId}...`);
         // Use non-blocking embedding to avoid delaying the response
         embedMemoryNonBlocking(this.db, memoryId, content, { timeout: 3000 })
-          .then(embedResult => {
+          .then((embedResult) => {
             if (embedResult.success) {
-              console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+              console.log(
+                `[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`,
+              );
             } else {
-              console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+              console.log(
+                `[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`,
+              );
             }
           })
-          .catch(error => {
-            console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
+          .catch((error) => {
+            console.error(
+              `[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`,
+            );
           });
       }
 
@@ -793,7 +891,7 @@ Facts (preserve all identifiers):`;
    */
   countTokens(text) {
     if (!text) return 0;
-    
+
     try {
       if (this.encoder) {
         return this.encoder.encode(text).length;
@@ -801,7 +899,7 @@ Facts (preserve all identifiers):`;
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ⚠️ Tiktoken encoding failed:', error.message);
     }
-    
+
     // Fallback to character-based estimation (1 token ≈ 4 characters)
     return Math.ceil(text.length / 4);
   }

@@ -1,6 +1,6 @@
 /**
  * responseContractGate.js
- * 
+ *
  * RUNS LAST - After all other processing
  * Enforces user format constraints by stripping non-essential additions
  */
@@ -8,9 +8,13 @@
 const FORMAT_CONSTRAINTS = [
   { pattern: /answer only|only (the |a )?(number|answer|result)/i, style: 'answer_only' },
   { pattern: /one (paragraph|sentence) (max|only|maximum)/i, style: 'single_block' },
-  { pattern: /keep it (short|brief)|be (brief|concise|short)|briefly|make it (short|brief|concise)/i, style: 'minimal' },
+  {
+    pattern:
+      /keep it (short|brief)|be (brief|concise|short)|briefly|make it (short|brief|concise)/i,
+    style: 'minimal',
+  },
   { pattern: /no disclaimers|without disclaimers/i, style: 'no_disclaimers' },
-  { pattern: /reply with only|respond with only/i, style: 'strict_format' }
+  { pattern: /reply with only|respond with only/i, style: 'strict_format' },
 ];
 
 const STRIPPABLE_SECTIONS = [
@@ -23,7 +27,7 @@ const STRIPPABLE_SECTIONS = [
   /I want to be honest with you—I'm not as confident.*?perspectives\./gs,
   /To verify this information, you could:[\s\S]*?(?=\n\n[A-Z]|$)/gi,
   /I'm reasoning from general knowledge here, not verified specifics\.\n\n/g,
-  /I'm reasoning about future possibilities, not verified facts\.\n\n/g
+  /I'm reasoning about future possibilities, not verified facts\.\n\n/g,
 ];
 
 function detectFormatConstraint(query) {
@@ -42,19 +46,19 @@ function enforceResponseContract(response, query, phase4Metadata = {}) {
     style: constraint,
     stripped_sections_count: 0,
     stripped_sections: [],
-    original_length: response.length
+    original_length: response.length,
   };
-  
+
   if (!constraint) {
     return { response, contract: result };
   }
-  
+
   let cleanedResponse = response;
-  
+
   for (const pattern of STRIPPABLE_SECTIONS) {
     const matches = cleanedResponse.match(pattern);
     if (matches) {
-      result.stripped_sections.push(...matches.map(m => m.substring(0, 50) + '...'));
+      result.stripped_sections.push(...matches.map((m) => m.substring(0, 50) + '...'));
       result.stripped_sections_count += matches.length;
       cleanedResponse = cleanedResponse.replace(pattern, '');
     }
@@ -63,11 +67,11 @@ function enforceResponseContract(response, query, phase4Metadata = {}) {
   // For 'single_block', keep only the first paragraph
   if (constraint === 'single_block') {
     // Split by double newlines (paragraph breaks)
-    const paragraphs = cleanedResponse.split(/\n\s*\n/).filter(p => p.trim());
+    const paragraphs = cleanedResponse.split(/\n\s*\n/).filter((p) => p.trim());
     if (paragraphs.length > 0) {
       // Keep just the first substantial paragraph
       // Skip any that are just emoji headers like "🍌 **Roxy:**"
-      let firstReal = paragraphs.find(p => p.trim().length > 50) || paragraphs[0];
+      let firstReal = paragraphs.find((p) => p.trim().length > 50) || paragraphs[0];
       // Remove personality headers if present
       firstReal = firstReal.replace(/^🍌 \*\*(?:Eli|Roxy):\*\*.*?\n+/i, '').trim();
       cleanedResponse = firstReal;
@@ -92,22 +96,22 @@ function enforceResponseContract(response, query, phase4Metadata = {}) {
 
     // If still too long, keep only first substantive sections
     if (cleanedResponse.length > 600) {
-      const paragraphs = cleanedResponse.split(/\n\s*\n/).filter(p => p.trim());
+      const paragraphs = cleanedResponse.split(/\n\s*\n/).filter((p) => p.trim());
       cleanedResponse = paragraphs.slice(0, 2).join('\n\n');
     }
   }
 
   cleanedResponse = cleanedResponse.replace(/\n{3,}/g, '\n\n').trim();
   result.final_length = cleanedResponse.length;
-  
-  console.log('[RESPONSE-CONTRACT] Constraint:', constraint, '| Stripped:', result.stripped_sections_count);
-  
+
+  console.log(
+    '[RESPONSE-CONTRACT] Constraint:',
+    constraint,
+    '| Stripped:',
+    result.stripped_sections_count,
+  );
+
   return { response: cleanedResponse, contract: result };
 }
 
-export {
-  detectFormatConstraint,
-  enforceResponseContract,
-  FORMAT_CONSTRAINTS,
-  STRIPPABLE_SECTIONS
-};
+export { detectFormatConstraint, enforceResponseContract, FORMAT_CONSTRAINTS, STRIPPABLE_SECTIONS };
