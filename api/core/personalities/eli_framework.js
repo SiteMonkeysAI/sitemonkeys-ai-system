@@ -4,6 +4,22 @@
 
 const MIN_CONFIDENCE_FOR_ENHANCEMENTS = 0.65;
 
+/**
+ * Helper: Check if query is a simple factual question that doesn't need confidence assessments
+ * @param {string} query - The user's query
+ * @returns {boolean}
+ */
+function isSimpleFactualQuery(query) {
+  const simplePatterns = [
+    /^what (is|are) \d+\s*[\+\-\*×÷\/x]\s*\d+/i,  // Math
+    /^how many \w+ (in|per|are in)/i,              // Unit conversion
+    /^what is the (capital|formula|chemical)/i,    // Simple facts
+    /^what does ['"]?\w+['"]? mean/i,              // Definitions
+    /^define /i,                                    // Definitions
+  ];
+  return simplePatterns.some(p => p.test(query.trim()));
+}
+
 export class EliFramework {
   constructor() {
     this.personality = "eli";
@@ -26,6 +42,7 @@ export class EliFramework {
       // Check truth type from Phase 4 metadata
       const truthType = context?.phase4Metadata?.truth_type;
       const isHighStakes = context?.phase4Metadata?.high_stakes?.isHighStakes || false;
+      const query = context?.message || '';
 
       // ========== CONFIDENCE GATING (NEW) ==========
       // PERMANENT facts NEVER get disclaimers - they are established truth
@@ -173,7 +190,9 @@ export class EliFramework {
       }
 
       // STEP 7: Add confidence scoring (if not present)
-      if (!response.toLowerCase().includes("confidence")) {
+      // Skip confidence assessment for simple PERMANENT factual queries
+      const isSimpleFact = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
+      if (!response.toLowerCase().includes("confidence") && !isSimpleFact) {
         const confidenceAssessment = this.#enhanceWithConfidenceScoring(
           enhancedResponse,
           analysis,
@@ -182,6 +201,8 @@ export class EliFramework {
         enhancedResponse = confidenceAssessment.enhanced;
         modificationsCount++;
         this.logger.log("Added confidence assessment");
+      } else if (isSimpleFact) {
+        this.logger.log('Skipping confidence assessment for simple PERMANENT fact');
       }
 
       // STEP 8: Apply Eli's protective intelligence signature

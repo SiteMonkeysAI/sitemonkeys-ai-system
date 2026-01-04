@@ -54,6 +54,14 @@ const PERMANENT_PATTERNS = [
   /\b(invented|discovered|founded|established|created)\b/i,
   /\b(capital of|located in|born in|died in)\b/i,
 
+  // Word definitions - language doesn't change
+  /\bwhat does ['"]?\w+['"]? mean\b/i,
+  /\bdefine ['"]?\w+['"]?\b/i,
+  /\bdefinition of ['"]?\w+['"]?\b/i,
+  /\bmeaning of ['"]?\w+['"]?\b/i,
+  /\bwhat is the meaning of\b/i,
+  /\bwhat does the word ['"]?\w+['"]? mean\b/i,
+
   // Stable procedural facts (cooking, crafts, basic skills)
   /\bhow (do|to) (i |you |we )?(boil|cook|make|bake|fry|roast|grill|steam|poach|blanch|sauté|simmer|braise)\b/i,
   /\bhow (do|to) (i |you |we )?(tie|fold|cut|slice|chop|dice|mince|grate|peel|core)\b/i,
@@ -102,6 +110,25 @@ export const HIGH_STAKES_DOMAINS = {
 
     // Emergency symptoms
     /\b(chest (pain|hurts?)|arm (tingling|numb)|difficulty breathing|can't breathe|heart (racing|attack)|severe headache|numbness|dizz(y|iness)|faint|unconscious|bleeding heavily|allergic reaction|throat (closing|swelling))\b/i,
+
+    // Life-threatening emergencies - cyanosis, respiratory distress
+    /\b(lips|fingers|skin|face) (turning|are|is|look|looks) (blue|purple|gray|grey)\b/i,
+    /\b(blue|purple) (lips|fingers|skin|face)\b/i,
+    /\bcyanosis\b/i,
+    /\b(trouble|difficulty|struggling|can't|cannot|hard to) breath(e|ing)\b/i,
+    /\b(short|shortness) of breath\b/i,
+    /\bchok(e|ing|ed)\b/i,
+    /\b(severe|intense|crushing|sharp) (chest |abdominal |stomach |head )?(pain|ache)\b/i,
+    /\bcan't (breathe|breath|stop bleeding)\b/i,
+    /\b(passing|passed|blacking|blacked) out\b/i,
+    /\bunconscious\b/i,
+    /\bseizure\b/i,
+    /\bstroke symptoms?\b/i,
+    /\bheart attack\b/i,
+    /\bsuicid(e|al)\b/i,
+    /\boverdose\b/i,
+    /\bsevere (bleeding|burn|allergic reaction)\b/i,
+    /\banaphyla(xis|ctic)\b/i,
 
     // Substance combination safety
     /\bis it safe to (mix|combine|take|drink|use)\b/i,
