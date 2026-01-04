@@ -77,32 +77,42 @@ export class RoxyFramework {
         this.logger.log("Added emotional support");
       }
 
+      // Gate coaching blocks for PERMANENT low-stakes facts
+      const isHighStakes = context?.phase4Metadata?.high_stakes?.isHighStakes || false;
+      const shouldAddCoachingBlocks = truthType !== 'PERMANENT' || isHighStakes;
+
       // STEP 2: Identify opportunities (what's possible)
-      const opportunities = this.#identifyOpportunities(
-        response,
-        analysis,
-        context,
-      );
-      if (opportunities.length > 0) {
-        analysisApplied.opportunitiesIdentified = opportunities;
-        enhancedResponse = this.#enhanceWithOpportunities(
-          enhancedResponse,
-          opportunities,
+      if (shouldAddCoachingBlocks) {
+        const opportunities = this.#identifyOpportunities(
+          response,
+          analysis,
+          context,
         );
-        modificationsCount++;
-        this.logger.log(`Identified ${opportunities.length} opportunities`);
+        if (opportunities.length > 0) {
+          analysisApplied.opportunitiesIdentified = opportunities;
+          enhancedResponse = this.#enhanceWithOpportunities(
+            enhancedResponse,
+            opportunities,
+          );
+          modificationsCount++;
+          this.logger.log(`Identified ${opportunities.length} opportunities`);
+        }
+      } else {
+        this.logger.log('Skipping coaching blocks for PERMANENT low-stakes fact');
       }
 
       // STEP 3: Find simplifications (easier paths)
-      const simplifications = this.#findSimplifications(response, analysis);
-      if (simplifications.length > 0) {
-        analysisApplied.simplificationsFound = simplifications;
-        enhancedResponse = this.#enhanceWithSimplifications(
-          enhancedResponse,
-          simplifications,
-        );
-        modificationsCount++;
-        this.logger.log(`Found ${simplifications.length} simpler approaches`);
+      if (shouldAddCoachingBlocks) {
+        const simplifications = this.#findSimplifications(response, analysis);
+        if (simplifications.length > 0) {
+          analysisApplied.simplificationsFound = simplifications;
+          enhancedResponse = this.#enhanceWithSimplifications(
+            enhancedResponse,
+            simplifications,
+          );
+          modificationsCount++;
+          this.logger.log(`Found ${simplifications.length} simpler approaches`);
+        }
       }
 
       // STEP 4: Extract underlying motivations
@@ -113,7 +123,7 @@ export class RoxyFramework {
       }
 
       // STEP 5: Make it actionable with practical steps
-      if (analysis.intent === "problem_solving" || analysis.complexity > 0.6) {
+      if (shouldAddCoachingBlocks && (analysis.intent === "problem_solving" || analysis.complexity > 0.6)) {
         const practical = this.#enhanceWithPracticalSteps(
           enhancedResponse,
           analysis,
@@ -127,15 +137,17 @@ export class RoxyFramework {
       }
 
       // STEP 6: Resource optimization (do more with less)
-      const optimizations = this.#enhanceWithResourceOptimization(
-        enhancedResponse,
-        analysis,
-      );
-      if (optimizations.added) {
-        analysisApplied.resourceOptimizations = optimizations.optimizations;
-        enhancedResponse = optimizations.enhanced;
-        modificationsCount++;
-        this.logger.log("Added resource optimizations");
+      if (shouldAddCoachingBlocks) {
+        const optimizations = this.#enhanceWithResourceOptimization(
+          enhancedResponse,
+          analysis,
+        );
+        if (optimizations.added) {
+          analysisApplied.resourceOptimizations = optimizations.optimizations;
+          enhancedResponse = optimizations.enhanced;
+          modificationsCount++;
+          this.logger.log("Added resource optimizations");
+        }
       }
 
       // STEP 7: Validate empowerment (never controlling)

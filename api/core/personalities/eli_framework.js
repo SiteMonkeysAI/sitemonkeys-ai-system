@@ -23,8 +23,13 @@ export class EliFramework {
         analysis?.intentConfidence || analysis?.domainConfidence || 0.5;
       let enhancedResponse = response;
 
+      // Check truth type from Phase 4 metadata
+      const truthType = context?.phase4Metadata?.truth_type;
+      const isHighStakes = context?.phase4Metadata?.high_stakes?.isHighStakes || false;
+
       // ========== CONFIDENCE GATING (NEW) ==========
-      if (confidence < MIN_CONFIDENCE_FOR_ENHANCEMENTS) {
+      // PERMANENT facts NEVER get disclaimers - they are established truth
+      if (confidence < MIN_CONFIDENCE_FOR_ENHANCEMENTS && truthType !== 'PERMANENT') {
         this.logger.log(
           `Eli: Confidence too low (${confidence.toFixed(2)}), limiting enhancements`,
         );
@@ -42,6 +47,11 @@ export class EliFramework {
           confidenceLimited: true,
           reason: "Added uncertainty note due to low confidence",
         };
+      } else if (confidence < MIN_CONFIDENCE_FOR_ENHANCEMENTS && truthType === 'PERMANENT') {
+        this.logger.log(
+          `Eli: Low confidence (${confidence.toFixed(2)}) but PERMANENT truth type - no disclaimer needed`,
+        );
+        // Skip adding disclaimer for PERMANENT facts
       }
 
       // ========== PROCEED WITH NORMAL ANALYSIS ==========
@@ -58,35 +68,45 @@ export class EliFramework {
       };
       let modificationsCount = 0;
 
+      // Gate analytical blocks for PERMANENT low-stakes facts
+      const shouldAddAnalyticalBlocks = truthType !== 'PERMANENT' || isHighStakes;
+
       // STEP 1: Identify risks not mentioned in response
-      const risks = this.#identifyRisks(response, analysis, context);
-      if (risks.length > 0) {
-        analysisApplied.risksIdentified = risks;
-        enhancedResponse = this.#enhanceWithRiskAnalysis(
-          enhancedResponse,
-          risks,
-        );
-        modificationsCount++;
-        this.logger.log(`Identified ${risks.length} unmentioned risks`);
+      if (shouldAddAnalyticalBlocks) {
+        const risks = this.#identifyRisks(response, analysis, context);
+        if (risks.length > 0) {
+          analysisApplied.risksIdentified = risks;
+          enhancedResponse = this.#enhanceWithRiskAnalysis(
+            enhancedResponse,
+            risks,
+          );
+          modificationsCount++;
+          this.logger.log(`Identified ${risks.length} unmentioned risks`);
+        }
+      } else {
+        this.logger.log('Skipping analytical blocks for PERMANENT low-stakes fact');
       }
 
       // STEP 2: Extract and challenge assumptions
-      const assumptions = this.#extractAssumptions(response, analysis);
-      if (assumptions.length > 0) {
-        analysisApplied.assumptionsChallenged = assumptions;
-        enhancedResponse = this.#enhanceWithAssumptionChallenges(
-          enhancedResponse,
-          assumptions,
-        );
-        modificationsCount++;
-        this.logger.log(`Challenged ${assumptions.length} assumptions`);
+      if (shouldAddAnalyticalBlocks) {
+        const assumptions = this.#extractAssumptions(response, analysis);
+        if (assumptions.length > 0) {
+          analysisApplied.assumptionsChallenged = assumptions;
+          enhancedResponse = this.#enhanceWithAssumptionChallenges(
+            enhancedResponse,
+            assumptions,
+          );
+          modificationsCount++;
+          this.logger.log(`Challenged ${assumptions.length} assumptions`);
+        }
       }
 
       // STEP 3: Model downside scenarios (especially for business/decision queries)
       if (
-        analysis.intent === "decision_making" ||
+        shouldAddAnalyticalBlocks &&
+        (analysis.intent === "decision_making" ||
         analysis.domain === "business" ||
-        mode === "business_validation"
+        mode === "business_validation")
       ) {
         const downsides = this.#modelDownsideScenarios(
           response,
@@ -105,7 +125,7 @@ export class EliFramework {
       }
 
       // STEP 4: Calculate survival metrics (business validation mode)
-      if (mode === "business_validation" || mode === "site_monkeys") {
+      if (shouldAddAnalyticalBlocks && (mode === "business_validation" || mode === "site_monkeys")) {
         const survivalCheck = this.#validateBusinessSurvival(response, mode);
         if (!survivalCheck.compliant) {
           const metrics = this.#calculateSurvivalMetrics(
@@ -124,19 +144,21 @@ export class EliFramework {
       }
 
       // STEP 5: Identify blind spots (what user hasn't considered)
-      const blindSpots = this.#findBlindSpots(response, analysis, context);
-      if (blindSpots.length > 0) {
-        analysisApplied.blindSpotsFound = blindSpots;
-        enhancedResponse = this.#enhanceWithBlindSpots(
-          enhancedResponse,
-          blindSpots,
-        );
-        modificationsCount++;
-        this.logger.log(`Found ${blindSpots.length} potential blind spots`);
+      if (shouldAddAnalyticalBlocks) {
+        const blindSpots = this.#findBlindSpots(response, analysis, context);
+        if (blindSpots.length > 0) {
+          analysisApplied.blindSpotsFound = blindSpots;
+          enhancedResponse = this.#enhanceWithBlindSpots(
+            enhancedResponse,
+            blindSpots,
+          );
+          modificationsCount++;
+          this.logger.log(`Found ${blindSpots.length} potential blind spots`);
+        }
       }
 
       // STEP 6: Provide alternatives (if appropriate)
-      if (analysis.complexity > 0.7 || analysis.intent === "problem_solving") {
+      if (shouldAddAnalyticalBlocks && (analysis.complexity > 0.7 || analysis.intent === "problem_solving")) {
         const alternatives = this.#enhanceWithAlternatives(
           enhancedResponse,
           analysis,

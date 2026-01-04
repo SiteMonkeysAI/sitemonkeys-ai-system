@@ -1,7 +1,34 @@
 // politicalGuardrails.js - Automatic Political Content Detection and Neutralization
 
+// Technical ZIP context patterns (file compression, not voting)
+const TECHNICAL_ZIP_PATTERNS = /\b(zip file|zip archive|\.zip|unzip|zipfile|compress|decompress|archive format|extract.*zip|zip.*extract|file compression|compressed file|archive file)\b/i;
+
 export class PoliticalGuardrails {
+  /**
+   * Check if query should bypass political guardrails due to technical context
+   * @param {string} query - The user's query
+   * @returns {object} { bypass: boolean, reason: string|null }
+   */
+  static shouldBypassPoliticalGuardrails(query) {
+    // Technical ZIP context - not about voting/zip codes
+    if (TECHNICAL_ZIP_PATTERNS.test(query)) {
+      return { bypass: true, reason: 'technical_file_compression_context' };
+    }
+    return { bypass: false, reason: null };
+  }
+
   static guardPoliticalContent(response, originalMessage) {
+    // Check for technical context bypass FIRST
+    const bypassCheck = this.shouldBypassPoliticalGuardrails(originalMessage);
+    if (bypassCheck.bypass) {
+      return {
+        guarded_response: response,
+        political_intervention: false,
+        bypass_reason: bypassCheck.reason,
+        analysis: { political_risk_level: "NONE", detected_categories: [] },
+      };
+    }
+
     const analysis = this.analyzePoliticalContent(response, originalMessage);
 
     if (analysis.political_risk_level === "NONE") {
@@ -278,6 +305,16 @@ Would you like me to provide factual information about this topic from a neutral
 
   static async check({ response, context }) {
     try {
+      // Check for technical context bypass FIRST
+      const bypassCheck = this.shouldBypassPoliticalGuardrails(context.message || "");
+      if (bypassCheck.bypass) {
+        return {
+          politicalContentDetected: false,
+          neutralizedResponse: response,
+          bypass_reason: bypassCheck.reason,
+        };
+      }
+
       const analysis = this.analyzePoliticalContent(
         response,
         context.message || "",
