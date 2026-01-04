@@ -467,8 +467,17 @@ export {
   containsGuessing,
 };
 
-export async function checkFounderProtection({ response, mode, _context }) {
+export async function checkFounderProtection({ response, mode, context }) {
   try {
+    // Founder protection ONLY applies in site_monkeys mode
+    if (mode !== 'site_monkeys' && mode !== 'site-monkeys') {
+      return {
+        violationDetected: false,
+        skipped: true,
+        reason: 'Founder protection only applies in site_monkeys mode',
+      };
+    }
+
     const violations = [];
 
     // Rule 1: Minimum pricing check ($697)

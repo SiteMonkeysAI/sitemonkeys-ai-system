@@ -68,7 +68,17 @@ const PERMANENT_PATTERNS = [
 
   // Mathematical/scientific constants and facts
   /\b(pythagorean|fibonacci|newton|einstein|archimedes|euclid)\b/i,
-  /\b(speed of light|gravity|pi|golden ratio|periodic table)\b/i
+  /\b(speed of light|gravity|pi|golden ratio|periodic table)\b/i,
+
+  // Unit conversions - mathematical constants
+  /\bhow many (feet|inches|meters|miles|kilometers|pounds|ounces|grams|kilograms|liters|gallons|cups|tablespoons|teaspoons) (in|per|are in) (a |an |one )?\w+/i,
+
+  // Simple math calculations
+  /\bwhat('s| is| are)? \d+\s*[×x\*\+\-\/÷]\s*\d+/i,
+  /\b\d+\s*[×x\*\+\-\/÷]\s*\d+\s*[=\?]/i,
+
+  // File format definitions
+  /\bwhat is (a |an )?(zip|pdf|jpg|png|gif|mp3|mp4|csv|json|xml|html|css|javascript) file\b/i
 ];
 
 // High-stakes domains that trigger external lookup regardless of truth type
@@ -88,7 +98,15 @@ export const HIGH_STAKES_DOMAINS = {
     /\bblood pressure\b/i,
     /\bdiabetes\b/i,
     /\bheart\b/i,
-    /\bcholesterol\b/i
+    /\bcholesterol\b/i,
+
+    // Emergency symptoms
+    /\b(chest (pain|hurts?)|arm (tingling|numb)|difficulty breathing|can't breathe|heart (racing|attack)|severe headache|numbness|dizz(y|iness)|faint|unconscious|bleeding heavily|allergic reaction|throat (closing|swelling))\b/i,
+
+    // Substance combination safety
+    /\bis it safe to (mix|combine|take|drink|use)\b/i,
+    /\b(alcohol|drinking).*(with|and).*(medication|antibiotics|medicine|pills|drugs)\b/i,
+    /\bcan i (take|mix|combine|drink).*(with|and|while)\b/i
   ],
   LEGAL: [
     /\b(legal|law|lawsuit|court|attorney|lawyer)\b/i,

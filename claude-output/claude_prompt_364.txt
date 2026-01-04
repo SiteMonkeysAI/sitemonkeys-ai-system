@@ -1,0 +1,396 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #364: [claude-fix] Issue: Comprehensive fix - News routing, response format contract, ZIP disambiguation, and irrelevant disclaimer suppression
+
+Issue Description:
+**⚠️ THIS IS A CRITICAL SYSTEM-WIDE FIX - FOUR INTERCONNECTED ISSUES**
+
+---
+
+## SUMMARY
+
+Testing revealed four critical correctness gaps that undermine the truth-first doctrine:
+
+1. **News queries inconsistently trigger external lookup** - "What happened in Venezuela today?" fails while "Did the US attack Venezuela?" succeeds
+2. **User format constraints ignored** - "Answer only the number" still gets coaching blocks and disclaimers appended
+3. **ZIP file triggers voting guardrails** - Catastrophic misclassification breaks trust
+4. **Irrelevant disclaimers on simple facts** - "Risk tolerance" and "Simpler Paths Forward" appearing on math and cooking questions
+
+---
+
+## ROOT CAUSES IDENTIFIED
+
+### Root Cause A: News intent not detected separately from attack/strike keywords
+The external lookup triggers on specific violence keywords but not on general news intent patterns like "what happened" + location + time marker.
+
+### Root Cause B: No final gate to enforce user format constraints
+Post-processing modules (coaching blocks, disclaimers, founder protection) run unconditionally. Nothing strips them when user explicitly requests minimal output.
+
+### Root Cause C: Political guardrails trigger on "ZIP" without disambiguation
+"ZIP file" → "ZIP code" → voting template. No technical context override.
+
+### Root Cause D: Disclaimer injection not gated by truth_type or stakes
+Generic disclaimers append regardless of whether the query is PERMANENT, low-stakes, or explicitly constrained.
+
+---
+
+## IMPLEMENTATION REQUIREMENTS
+
+### FIX A: Add NEWS_INTENT detection to external lookup trigger
+
+**File:** `/api/core/intelligence/externalLookupEngine.js`
+
+```javascript
+const NEWS_INTENT_PATTERNS = /\b(what happened|what's happening|what is going on|news|update on|latest on|current events|breaking|this morning|today|yesterday)\b/i;
+
+const LOCATION_PATTERNS = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|congress|senate|white house|president|election)\b/i;
+
+function hasNewsIntent(query) {
+  const hasNewsPattern = NEWS_INTENT_PATTERNS.test(query);
+  const hasLocation = LOCATION_PATTERNS.test(query);
+  const hasTimeMarker = /\b(today|this morning|yesterday|right now|currently|latest)\b/i.test(query);
+  
+  // News intent if: explicit news pattern OR (location + time marker)
+  return hasNewsPattern || (hasLocation && hasTimeMarker);
+}
+```
+
+**In lookup trigger logic:**
+```javascript
+if (truthType === 'VOLATILE' && hasNewsIntent(query)) {
+  shouldAttemptLookup = true;
+  lookupReason = 'news_intent';
+}
+```
+
+**Add to phase4_metadata:**
+```javascript
+news_intent: boolean,
+lookup_attempted: boolean,
+lookup_failure_reason: string | null
+```
+
+---
+
+### FIX B: Create Response Format Contract Gate (NEW FILE)
+
+**File:** `/api/core/intelligence/responseContractGate.js`
+
+```javascript
+/**
+ * responseContractGate.js
+ * 
+ * RUNS LAST - After all other processing
+ * Enforces user format constraints by stripping non-essential additions
+ */
+
+const FORMAT_CONSTRAINTS = [
+  { pattern: /answer only|only (the |a )?(number|answer|result)/i, style: 'answer_only' },
+  { pattern: /one (paragraph|sentence) (max|only|maximum)/i, style: 'single_block' },
+  { pattern: /keep it short|be brief|briefly/i, style: 'minimal' },
+  { pattern: /no disclaimers|without disclaimers/i, style: 'no_disclaimers' },
+  { pattern: /reply with only|respond with only/i, style: 'strict_format' }
+];
+
+const STRIPPABLE_SECTIONS = [
+  /\[Note: Evaluate this recommendation.*?\]/gs,
+  /\[FOUNDER PROTECTION:.*?\]/gs,
+  /Simpler Paths Forward:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nPractical|$)/gi,
+  /Practical Next Steps:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nDo More|$)/gi,
+  /Do More With Less:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nOpportunities|$)/gi,
+  /Opportunities I See:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nSimpler|$)/gi,
+  /I want to be honest with you—I'm not as confident.*?perspectives\./gs,
+  /To verify this information, you could:[\s\S]*?(?=\n\n[A-Z]|$)/gi,
+  /I'm reasoning from general knowledge here, not verified specifics\.\n\n/g,
+  /I'm reasoning about future possibilities, not verified facts\.\n\n/g
+];
+
+function detectFormatConstraint(query) {
+  for (const constraint of FORMAT_CONSTRAINTS) {
+    if (constraint.pattern.test(query)) {
+      return constraint.style;
+    }
+  }
+  return null;
+}
+
+function enforceResponseContract(response, query, phase4Metadata) {
+  const constraint = detectFormatConstraint(query);
+  const result = {
+    triggered: constraint !== null,
+    style: constraint,
+    stripped_sections_count: 0,
+    stripped_sections: [],
+    original_length: response.length
+  };
+  
+  if (!constraint) {
+    return { response, contract: result };
+  }
+  
+  let cleanedResponse = response;
+  
+  // Strip all non-essential sections
+  for (const pattern of STRIPPABLE_SECTIONS) {
+    const matches = cleanedResponse.match(pattern);
+    if (matches) {
+      result.stripped_sections.push(...matches.map(m => m.substring(0, 50) + '...'));
+      result.stripped_sections_count += matches.length;
+      cleanedResponse = cleanedResponse.replace(pattern, '');
+    }
+  }
+  
+  // For 'answer_only', extract just the core answer
+  if (constraint === 'answer_only') {
+    // Try to find just the number or direct answer
+    const numberMatch = cleanedResponse.match(/^\s*(\d[\d,\.]*)\s*$/m);
+    if (numberMatch) {
+      cleanedResponse = numberMatch[1];
+    }
+  }
+  
+  // Clean up extra whitespace
+  cleanedResponse = cleanedResponse.replace(/\n{3,}/g, '\n\n').trim();
+  
+  result.final_length = cleanedResponse.length;
+  
+  return { response: cleanedResponse, contract: result };
+}
+
+module.exports = {
+  detectFormatConstraint,
+  enforceResponseContract,
+  FORMAT_CONSTRAINTS,
+  STRIPPABLE_SECTIONS
+};
+```
+
+**Integrate in orchestrator.js AFTER Phase 6:**
+```javascript
+// Phase 7: Response Format Contract (runs LAST)
+const { enforceResponseContract } = require('./intelligence/responseContractGate');
+const contractResult = enforceResponseContract(finalResponse, message, phase4Metadata);
+finalResponse = contractResult.response;
+
+// Add to response metadata
+response_contract: contractResult.contract
+```
+
+---
+
+### FIX C: ZIP file disambiguation BEFORE political guardrails
+
+**File:** Political guardrails module (find where voting template triggers)
+
+```javascript
+const TECHNICAL_ZIP_PATTERNS = /\b(zip file|zip archive|\.zip|unzip|zipfile|compress|decompress|archive format|extract.*zip|zip.*extract)\b/i;
+
+function shouldBypassPoliticalGuardrails(query) {
+  // Technical ZIP context - not about voting/zip codes
+  if (TECHNICAL_ZIP_PATTERNS.test(query)) {
+    return { bypass: true, reason: 'technical_file_compression_context' };
+  }
+  return { bypass: false };
+}
+
+// In political guardrails check:
+const bypassCheck = shouldBypassPoliticalGuardrails(query);
+if (bypassCheck.bypass) {
+  // Skip political guardrails, proceed with normal response
+  return;
+}
+```
+
+---
+
+### FIX D: Gate disclaimer injection by truth_type and stakes
+
+**Files to check:** 
+- `/api/core/personalities/roxy_framework.js`
+- `/api/core/personalities/eli_framework.js`
+- `/api/lib/productValidation.js`
+- Any other disclaimer injection points
+
+**Rule:**
+```javascript
+function shouldAddDisclaimer(phase4Metadata, disclaimerType) {
+  // NEVER add generic disclaimers to PERMANENT low-stakes facts
+  if (phase4Metadata.truth_type === 'PERMANENT' && !phase4Metadata.high_stakes?.isHighStakes) {
+    return false;
+  }
+  
+  // Founder protection ONLY in site_monkeys mode
+  if (disclaimerType === 'founder_protection' && mode !== 'site-monkeys') {
+    return false;
+  }
+  
+  // Risk tolerance ONLY for VOLATILE or high_stakes
+  if (disclaimerType === 'risk_tolerance') {
+    return phase4Metadata.truth_type === 'VOLATILE' || phase4Metadata.high_stakes?.isHighStakes;
+  }
+  
+  // Coaching blocks ONLY for complex decision queries, NOT facts
+  if (disclaimerType === 'coaching_blocks') {
+    return phase4Metadata.truth_type !== 'PERMANENT';
+  }
+  
+  return true;
+}
+```
+
+---
+
+### FIX E: Add missing PERMANENT patterns
+
+**File:** `/api/core/intelligence/truthTypeDetector.js`
+
+```javascript
+// Unit conversions - mathematical constants
+/\bhow many (feet|inches|meters|miles|kilometers|pounds|ounces|grams|kilograms|liters|gallons|cups|tablespoons|teaspoons) (in|per|are in) (a |an |one )?\w+/i,
+
+// Simple math calculations
+/\bwhat('s| is| are)? \d+\s*[×x\*\+\-\/÷]\s*\d+/i,
+/\b\d+\s*[×x\*\+\-\/÷]\s*\d+\s*[=\?]/i,
+
+// File format definitions
+/\bwhat is (a |an )?(zip|pdf|jpg|png|gif|mp3|mp4|csv|json|xml|html|css|javascript) file\b/i,
+```
+
+---
+
+### FIX F: Add missing HIGH_STAKES medical patterns
+
+**File:** `/api/core/intelligence/truthTypeDetector.js`
+
+```javascript
+// Emergency symptoms
+/\b(chest (pain|hurts?)|arm (tingling|numb)|difficulty breathing|can't breathe|heart (racing|attack)|severe headache|numbness|dizz(y|iness)|faint|unconscious|bleeding heavily|allergic reaction|throat (closing|swelling))\b/i,
+
+// Substance combination safety
+/\bis it safe to (mix|combine|take|drink|use)\b/i,
+/\b(alcohol|drinking).*(with|and).*(medication|antibiotics|medicine|pills|drugs)\b/i,
+/\bcan i (take|mix|combine|drink).*(with|and|while)\b/i
+```
+
+---
+
+## ACCEPTANCE TESTS
+
+```javascript
+const tests = [
+  // Test 1: News intent triggers lookup
+  {
+    q: "What happened in Venezuela today?",
+    pass: (d) => d.phase4_metadata?.truth_type === 'VOLATILE' && 
+                 d.phase4_metadata?.lookup_attempted === true
+  },
+  
+  // Test 2: Answer-only math
+  {
+    q: "What's 17×23? Answer only the number.",
+    pass: (d) => d.response?.trim() === '391' || d.response?.includes('391') && d.response?.length < 20
+  },
+  
+  // Test 3: ZIP file disambiguation
+  {
+    q: "What is a ZIP file? One paragraph max.",
+    pass: (d) => d.response?.toLowerCase().includes('compress') && 
+                 !d.response?.toLowerCase().includes('voting') &&
+                 !d.response?.toLowerCase().includes('election')
+  },
+  
+  // Test 4: No disclaimers on permanent facts
+  {
+    q: "How do I boil an egg? Keep it short.",
+    pass: (d) => !d.response?.includes('risk tolerance') && 
+                 !d.response?.includes('Simpler Paths Forward') &&
+                 !d.response?.includes('FOUNDER PROTECTION')
+  },
+  
+  // Test 5: Unit conversion is PERMANENT
+  {
+    q: "How many feet in a mile?",
+    pass: (d) => d.phase4_metadata?.truth_type === 'PERMANENT' &&
+                 d.phase6_bounded_reasoning?.required === false
+  },
+  
+  // Test 6: Medical emergency is high_stakes
+  {
+    q: "My chest hurts and my arm is tingling",
+    pass: (d) => d.phase4_metadata?.high_stakes?.isHighStakes === true
+  },
+  
+  // Test 7: Substance safety is high_stakes
+  {
+    q: "Is it safe to mix alcohol and antibiotics?",
+    pass: (d) => d.phase4_metadata?.high_stakes?.isHighStakes === true
+  }
+];
+
+// Run all tests
+for (const t of tests) {
+  fetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, 
+    body:JSON.stringify({message: t.q, mode:"truth-general"})
+  }).then(r=>r.json()).then(d=>{
+    const passed = t.pass(d);
+    console.log(passed ? "✅" : "❌", `"${t.q.substring(0,50)}..."`);
+    if (!passed) console.log("   Result:", {
+      truth_type: d.phase4_metadata?.truth_type,
+      bounded: d.phase6_bounded_reasoning?.required,
+      high_stakes: d.phase4_metadata?.high_stakes?.isHighStakes,
+      lookup_attempted: d.phase4_metadata?.lookup_attempted,
+      response_preview: d.response?.substring(0, 100)
+    });
+  });
+}
+```
+
+---
+
+## FILES TO MODIFY
+
+1. `/api/core/intelligence/externalLookupEngine.js` - News intent detection + lookup trigger
+2. `/api/core/intelligence/responseContractGate.js` - **NEW FILE** - Format enforcement
+3. `/api/core/intelligence/truthTypeDetector.js` - PERMANENT patterns, HIGH_STAKES patterns
+4. `/api/core/orchestrator.js` - Wire response contract gate LAST, pass news_intent
+5. `/api/core/personalities/roxy_framework.js` - Gate disclaimer injection
+6. `/api/core/personalities/eli_framework.js` - Gate disclaimer injection
+7. `/api/lib/productValidation.js` - Gate founder protection by mode
+8. Political guardrails module - ZIP disambiguation
+
+---
+
+## CORE PRINCIPLES (DO NOT VIOLATE)
+
+1. **PERMANENT facts get direct answers** - No disclaimers, no coaching blocks
+2. **User format constraints are sacred** - "Answer only" means ONLY the answer
+3. **Technical context overrides ambiguous triggers** - ZIP file ≠ ZIP code
+4. **Disclaimers must earn their existence** - Only for VOLATILE, high_stakes, or enforcement failures
+
+---
+
+**This issue is not complete until ALL 7 acceptance tests pass.**
+
+---
+
+This synthesizes both analyses. The key addition from the other AI is the **Response Format Contract Gate** - a centralized final arbiter that strips inappropriate additions. This prevents future regressions when new modules are added.
+
+Submit this when ready.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

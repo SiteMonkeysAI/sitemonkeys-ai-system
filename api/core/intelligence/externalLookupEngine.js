@@ -159,8 +159,33 @@ const FRESHNESS_MARKERS = [
 // High-stakes news markers that require corroboration
 const HIGH_STAKES_NEWS_MARKERS = /attack|bombing|invasion|coup|killed|missile|war|strike|assassination|military action|troops|casualties/i;
 
+// News intent patterns - detect general news queries
+const NEWS_INTENT_PATTERNS = /\b(what happened|what's happening|what is going on|news|update on|latest on|current events|breaking|this morning|today|yesterday)\b/i;
+
+// Location patterns - geopolitical entities
+const LOCATION_PATTERNS = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|congo|syria|yemen|afghanistan|iraq|lebanon|taiwan|north korea|south korea|japan|india|pakistan|brazil|argentina|mexico|cuba|nicaragua|myanmar|ethiopia|sudan|somalia|libya|egypt|turkey|saudi arabia|uae|qatar|congress|senate|white house|pentagon|state department|president|prime minister|chancellor|election)\b/i;
+
 // Reputable news sources for corroboration
 const REPUTABLE_SOURCES = /reuters|associated press|ap news|bbc|afp|npr|guardian|new york times|nytimes|washington post|wall street journal|wsj|cnn|abc news|cbs news|nbc news/i;
+
+/**
+ * Check if query has news intent (general news query)
+ * @param {string} query - The user's query
+ * @returns {boolean} True if news intent detected
+ */
+export function hasNewsIntent(query) {
+  if (!query || typeof query !== 'string') {
+    return false;
+  }
+
+  const normalizedQuery = query.toLowerCase().trim();
+  const hasNewsPattern = NEWS_INTENT_PATTERNS.test(normalizedQuery);
+  const hasLocation = LOCATION_PATTERNS.test(normalizedQuery);
+  const hasTimeMarker = /\b(today|this morning|yesterday|right now|currently|latest)\b/i.test(normalizedQuery);
+
+  // News intent if: explicit news pattern OR (location + time marker)
+  return hasNewsPattern || (hasLocation && hasTimeMarker);
+}
 
 /**
  * Check if query contains freshness markers
@@ -222,6 +247,12 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
   const freshnessCheck = checkFreshnessMarkers(query);
   if (freshnessCheck.hasFreshnessMarkers) {
     reasons.push('freshness_markers_detected');
+  }
+
+  // Check news intent (NEW)
+  if (hasNewsIntent(query)) {
+    reasons.push('news_intent_detected');
+    priority = 'high';
   }
 
   // Check truth type
@@ -800,6 +831,7 @@ export default {
   LOOKUP_CONFIG,
   API_SOURCES,
   AUTHORITATIVE_SOURCES,
+  hasNewsIntent,
   checkFreshnessMarkers,
   requiresCorroboration,
   hasReputableSource,
