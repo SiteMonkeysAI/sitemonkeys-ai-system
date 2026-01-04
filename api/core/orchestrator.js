@@ -42,6 +42,7 @@ import { lookup } from "../core/intelligence/externalLookupEngine.js";
 import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
 import { enforceBoundedReasoning } from "../core/intelligence/boundedReasoningGate.js";
 import { enforceResponseContract } from "../core/intelligence/responseContractGate.js";
+import { enforceReasoningEscalation } from "./intelligence/reasoningEscalationEnforcer.js";
 // ================================================
 
 // ==================== ORCHESTRATOR CLASS ====================
@@ -845,6 +846,36 @@ export class Orchestrator {
       }
 
       // ============================================
+      // PHASE 6.5: REASONING ESCALATION ENFORCEMENT
+      // ============================================
+      // Uncertainty is a trigger for deeper reasoning, not permission to stop.
+      // This gate ensures the system does not ship responses that quit early.
+      this.log("🔬 PHASE 6.5: Reasoning Escalation Enforcement");
+      let reasoningEscalationResult = { enforced: false, passed: true };
+
+      if (phase6BoundedReasoning.required) {
+        reasoningEscalationResult = enforceReasoningEscalation(
+          personalityResponse.response,
+          phase6BoundedReasoning,
+          { message, phase4Metadata, mode }
+        );
+
+        // If correction was applied, use the corrected response
+        if (reasoningEscalationResult.correction_applied && reasoningEscalationResult.corrected_response) {
+          personalityResponse.response = reasoningEscalationResult.corrected_response;
+          this.log('🔬 Reasoning escalation correction applied');
+        }
+
+        // Log violations for monitoring
+        if (!reasoningEscalationResult.passed) {
+          this.log('⚠️ Reasoning escalation violations:',
+            reasoningEscalationResult.violations.map(v => v.type).join(', '));
+        } else {
+          this.log('✅ Reasoning escalation enforcement passed');
+        }
+      }
+
+      // ============================================
       // PHASE 7: RESPONSE FORMAT CONTRACT (RUNS LAST)
       // ============================================
       this.log("📋 PHASE 7: Response Contract Gate");
@@ -1016,6 +1047,9 @@ export class Orchestrator {
             phase6_error: phase6BoundedReasoning.phase6_error || null,
           },
 
+          // PHASE 6.5: Reasoning Escalation Enforcement
+          reasoning_escalation: reasoningEscalationResult,
+
           // PHASE 7: Response Contract Gate
           response_contract: response_contract,
 
@@ -1087,6 +1121,7 @@ export class Orchestrator {
           violations: phase6BoundedReasoning.violations,
           phase6_error: phase6BoundedReasoning.phase6_error || null,
         },
+        reasoning_escalation: reasoningEscalationResult,
         response_contract: response_contract,
       };
 

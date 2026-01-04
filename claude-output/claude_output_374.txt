@@ -1,0 +1,74 @@
+Perfect! All changes have been successfully implemented. Let me create a summary of the changes:
+
+---SUMMARY---
+
+Successfully integrated the Reasoning Escalation Enforcer into the orchestrator enforcement chain as Phase 6.5, implementing Issue #374.
+
+## Files Modified:
+
+### `/api/core/orchestrator.js`
+
+**1. Added Import Statement (Line 45):**
+- Imported `enforceReasoningEscalation` from `./intelligence/reasoningEscalationEnforcer.js`
+- Placed alongside other Phase 4/5/6/7 enforcement imports
+
+**2. Added Phase 6.5 Enforcement Logic (Lines 848-876):**
+- Inserted between Phase 6 (Bounded Reasoning) and Phase 7 (Response Contract)
+- Enforcement only triggers when `phase6BoundedReasoning.required` is true
+- Passes the response, phase6 metadata, and context to the enforcer
+- Applies corrections if the enforcer generates improved response
+- Logs violations and enforcement status
+- Follows the same pattern as other enforcement phases
+
+**3. Added Metadata Tracking - First Location (Line 1051):**
+- Added `reasoning_escalation: reasoningEscalationResult` to the metadata object
+- Placed after `phase6_bounded_reasoning` and before `response_contract`
+- Provides internal metadata tracking for the enforcement results
+
+**4. Added Metadata Tracking - Second Location (Line 1124):**
+- Added `reasoning_escalation: reasoningEscalationResult` to the top-level response object
+- Enables client-side access to reasoning escalation enforcement data
+- Consistent with how other phase results are exposed
+
+## Implementation Details:
+
+The integration enforces the core invariant:
+```
+IF uncertainty exists AND truthful reasoning paths exist
+THEN the system MUST attempt them before stopping
+```
+
+**Enforcement Flow:**
+1. Phase 6 detects bounded reasoning requirement
+2. Phase 6.5 checks if response contains escalation steps (known facts, unknowns, parallels, scenarios, confidence paths)
+3. Detects premature termination markers ("I can't help", "consult a professional", etc.)
+4. Validates minimum 3 of 5 reasoning steps were attempted
+5. Applies deterministic corrections by appending missing reasoning templates if violations found
+6. Logs all violations and corrections for monitoring
+
+**Response Metadata Structure:**
+```javascript
+reasoning_escalation: {
+  enforced: boolean,
+  bounded_reasoning_required: boolean,
+  escalation_check: {
+    results: { /* which steps were found */ },
+    attempted: string[],
+    missing: object[],
+    completedCount: number,
+    totalSteps: number
+  },
+  termination_check: {
+    detected: boolean,
+    marker?: string
+  },
+  passed: boolean,
+  violations: array,
+  correction_applied: boolean,
+  corrected_response: string|null
+}
+```
+
+All changes follow the existing architectural patterns, maintain ES6 module syntax, preserve error handling patterns, and integrate seamlessly into the enforcement chain without disrupting existing phases.
+
+---END SUMMARY---
