@@ -103,20 +103,14 @@ function detectPrematureTermination(response) {
 }
 
 // Generate deterministic escalation append for missing steps
+// NOTE: This function is intentionally disabled to prevent empty template injection
+// Post-generation enforcement should flag violations, not append empty boilerplate
 function generateEscalationAppend(missingSteps, context = {}) {
-  if (missingSteps.length === 0) return null;
-  
-  const sections = [];
-  
-  // Add header
-  sections.push("\n\n---\n**Reasoning through uncertainty:**\n");
-  
-  // Add templates for missing steps (to be filled by regeneration or manual review)
-  for (const step of missingSteps) {
-    sections.push(`\n${step.template}\n`);
-  }
-  
-  return sections.join('');
+  // DISABLED: Do not inject empty templates
+  // The enforcer's job is to detect violations, not to add meaningless placeholders
+  // If reasoning steps are missing, that should trigger regeneration or human review,
+  // not automatic injection of "[bracketed placeholders]"
+  return null;
 }
 
 // Main enforcement function

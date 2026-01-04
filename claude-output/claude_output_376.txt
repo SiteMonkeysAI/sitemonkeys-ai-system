@@ -1,0 +1,67 @@
+Excellent! All three bugs are now fixed. Let me create a summary of the changes:
+
+---SUMMARY---
+
+## Fixed Three Critical Failures in Phase 6.5 Reasoning Escalation
+
+### Bug 1: Context Blindness - FIXED ✓
+**File Modified:** `/api/core/orchestrator.js` (lines 2258-2368)
+
+**Problem:** Conversation history was being converted to a string and concatenated into prompts rather than passed as proper message objects to the AI APIs. This caused the AI to not properly "see" previous conversation context.
+
+**Solution:** Refactored message assembly for both Claude and GPT-4 to build proper message arrays:
+- For Claude: Build `messages` array with conversation history as proper role/content objects
+- For GPT-4: Build `messages` array with system message first, then conversation history, then current message
+- Both now properly include last 5 conversation exchanges as structured message objects
+- Maintains proper role mapping (user/assistant) for API compatibility
+
+**Impact:** System can now reference and understand conversation context from earlier in the same session.
+
+---
+
+### Bug 2: Empty Template Injection - FIXED ✓
+**File Modified:** `/api/core/intelligence/reasoningEscalationEnforcer.js` (lines 105-114)
+
+**Problem:** The `generateEscalationAppend()` function was injecting raw template placeholders like `"**What is known:** [State established facts...]"` into responses when reasoning steps were missing. This created meaningless boilerplate with empty brackets.
+
+**Solution:** Disabled the template injection entirely:
+- Modified `generateEscalationAppend()` to always return `null`
+- Added clear documentation explaining that post-generation enforcement should flag violations, not inject empty placeholders
+- The enforcer's job is detection, not correction with boilerplate
+
+**Impact:** No more raw `[bracketed placeholders]` appearing in responses. Violations are logged but not "fixed" with empty templates.
+
+---
+
+### Bug 3: Unconditional Boilerplate - FIXED ✓
+**File Modified:** `/api/core/personalities/eli_framework.js` (lines 24-55, 125-217)
+
+**Problem:** Eli personality framework was adding "⚠️ Critical Risks I See:" sections to EVERY response, even simple factual queries like "what is 2+2?" This violated truth-first principles by adding engagement theater instead of value.
+
+**Solution:** Added decision-support gating:
+1. Created new helper function `requiresDecisionSupport()` that checks:
+   - Decision-making markers in query ("should I", "which", "better to", etc.)
+   - High-stakes domain classification from Phase 4
+   - Explicit decision-making intent from semantic analysis
+   - Complex business queries (domain=business + complexity>0.6)
+
+2. Gated three sections with `needsDecisionSupport` check:
+   - Risk analysis (STEP 1)
+   - Assumption challenges (STEP 2)
+   - Blind spot identification (STEP 5)
+
+3. Added logging to show when sections are skipped: `"Skipping risk analysis - query does not require decision support"`
+
+**Impact:** Risk/blind spot sections only appear on decision-support queries, not on simple factual questions.
+
+---
+
+## Testing Recommendations
+
+1. **Bug 1 (Context Blindness):** Test multi-turn conversations where AI should reference earlier messages
+2. **Bug 2 (Empty Templates):** Verify no `[bracketed text]` appears in responses when reasoning steps are incomplete
+3. **Bug 3 (Unconditional Boilerplate):** Test simple queries (e.g., "what is the capital of France?") to confirm no risk sections appear
+
+All changes maintain backward compatibility and follow existing code patterns. No response JSON schema changes were made.
+
+---END SUMMARY---

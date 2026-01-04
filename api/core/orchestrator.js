@@ -2255,15 +2255,6 @@ export class Orchestrator {
         this.log(`[PHASE4] 6. AI generation starting with external context (${context.external?.total_text_length || 0} chars)`);
       }
 
-      const historyString =
-        conversationHistory.length > 0
-          ? "\n\nRecent conversation:\n" +
-            conversationHistory
-              .slice(-5)
-              .map((msg) => `${msg.role}: ${msg.content}`)
-              .join("\n")
-          : "";
-
       const systemPrompt = this.#buildSystemPrompt(mode, analysis);
 
       // PHASE 4: Inject external content if fetched
@@ -2281,10 +2272,26 @@ export class Orchestrator {
           message.toLowerCase().includes("directive") ||
           mode === "site_monkeys");
 
-      let fullPrompt;
-      if (isVaultQuery) {
-        console.log("[AI] 🔒 PURE VAULT MODE - Zero contamination");
-        fullPrompt = `You are a vault content specialist. Search through the ENTIRE vault systematically.
+      let response, inputTokens, outputTokens;
+
+      if (useClaude) {
+        // Build messages array for Claude with proper conversation history
+        const messages = [];
+
+        // Add recent conversation history (last 5 exchanges)
+        if (conversationHistory.length > 0) {
+          conversationHistory.slice(-5).forEach((msg) => {
+            messages.push({
+              role: msg.role === 'assistant' ? 'assistant' : 'user',
+              content: msg.content
+            });
+          });
+        }
+
+        // Add current message with all context
+        if (isVaultQuery) {
+          console.log("[AI] 🔒 PURE VAULT MODE - Zero contamination");
+          const vaultPrompt = `You are a vault content specialist. Search through the ENTIRE vault systematically.
 
       VAULT CONTENT:
       ${context.vault}
@@ -2292,36 +2299,65 @@ export class Orchestrator {
       USER QUESTION: ${message}
 
       Instructions: Search thoroughly and quote directly from the vault. Reference document names when quoting.`;
-        console.log(`[AI] Pure vault prompt: ${fullPrompt.length} chars`);
-      } else {
-        // Inject external context at the beginning of the context (before vault/memory)
-        fullPrompt = `${systemPrompt}\n\n${externalContext}${contextString}${historyString}\n\nUser query: ${message}`;
-      }
+          messages.push({ role: "user", content: vaultPrompt });
+          console.log(`[AI] Pure vault prompt: ${vaultPrompt.length} chars`);
+        } else {
+          messages.push({
+            role: "user",
+            content: `${systemPrompt}\n\n${externalContext}${contextString}\n\nUser query: ${message}`
+          });
+        }
 
-      let response, inputTokens, outputTokens;
-
-      if (useClaude) {
         const claudeResponse = await this.anthropic.messages.create({
           model: "claude-sonnet-4-20250514",
           max_tokens: 2000,
-          messages: [{ role: "user", content: fullPrompt }],
+          messages: messages,
         });
 
         response = claudeResponse.content[0].text;
         inputTokens = claudeResponse.usage.input_tokens;
         outputTokens = claudeResponse.usage.output_tokens;
       } else {
+        // Build messages array for GPT-4 with proper conversation history
+        const messages = [];
+
+        if (!isVaultQuery) {
+          messages.push({ role: "system", content: systemPrompt });
+        }
+
+        // Add recent conversation history (last 5 exchanges)
+        if (conversationHistory.length > 0) {
+          conversationHistory.slice(-5).forEach((msg) => {
+            messages.push({
+              role: msg.role === 'assistant' ? 'assistant' : 'user',
+              content: msg.content
+            });
+          });
+        }
+
+        // Add current message with context
+        if (isVaultQuery) {
+          console.log("[AI] 🔒 PURE VAULT MODE - Zero contamination");
+          const vaultPrompt = `You are a vault content specialist. Search through the ENTIRE vault systematically.
+
+      VAULT CONTENT:
+      ${context.vault}
+
+      USER QUESTION: ${message}
+
+      Instructions: Search thoroughly and quote directly from the vault. Reference document names when quoting.`;
+          messages.push({ role: "user", content: vaultPrompt });
+          console.log(`[AI] Pure vault prompt: ${vaultPrompt.length} chars`);
+        } else {
+          messages.push({
+            role: "user",
+            content: `${externalContext}${contextString}\n\n${message}`,
+          });
+        }
+
         const gptResponse = await this.openai.chat.completions.create({
           model: "gpt-4",
-          messages: isVaultQuery
-            ? [{ role: "user", content: fullPrompt }]
-            : [
-                { role: "system", content: systemPrompt },
-                {
-                  role: "user",
-                  content: `${externalContext}${contextString}${historyString}\n\n${message}`,
-                },
-              ],
+          messages: messages,
           temperature: 0.7,
           max_tokens: 2000,
         });
