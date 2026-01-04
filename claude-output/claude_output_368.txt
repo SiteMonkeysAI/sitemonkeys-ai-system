@@ -1,0 +1,85 @@
+Perfect! The fix has been successfully implemented. The file now includes the paragraph consolidation logic for the `single_block` style constraint. 
+
+Let me create a summary of the changes:
+
+---SUMMARY---
+
+## Fixed Issue #368: Response Contract Gate Single Block Style Paragraph Consolidation
+
+### Problem
+The Response Contract Gate was detecting format constraints like "one paragraph max" and identifying them as `single_block` style, but it was only stripping boilerplate sections without actually consolidating multiple paragraphs into a single paragraph. This resulted in responses with 3+ paragraphs when the user explicitly requested one paragraph max.
+
+### Solution Implemented
+Added paragraph consolidation logic to `/api/core/intelligence/responseContractGate.js` at lines 63-75, positioned after the stripping loop and before the `answer_only` check.
+
+### Changes Made
+
+**File Modified:** `/api/core/intelligence/responseContractGate.js`
+
+**Location:** Lines 63-75 (inserted between the stripping loop and the `answer_only` check)
+
+**Code Added:**
+```javascript
+// For 'single_block', keep only the first paragraph
+if (constraint === 'single_block') {
+  // Split by double newlines (paragraph breaks)
+  const paragraphs = cleanedResponse.split(/\n\s*\n/).filter(p => p.trim());
+  if (paragraphs.length > 0) {
+    // Keep just the first substantial paragraph
+    // Skip any that are just emoji headers like "🍌 **Roxy:**"
+    let firstReal = paragraphs.find(p => p.trim().length > 50) || paragraphs[0];
+    // Remove personality headers if present
+    firstReal = firstReal.replace(/^🍌 \*\*(?:Eli|Roxy):\*\*.*?\n+/i, '').trim();
+    cleanedResponse = firstReal;
+  }
+}
+```
+
+### How It Works
+
+1. **Detection:** When a query contains "one paragraph max" or similar phrases, the system detects it as `single_block` style (already working)
+
+2. **Stripping:** Existing logic strips boilerplate sections (already working)
+
+3. **NEW - Consolidation:** 
+   - Splits the response by double newlines (paragraph breaks)
+   - Filters out empty paragraphs
+   - Finds the first substantial paragraph (>50 characters) to skip emoji headers
+   - Removes personality headers like "🍌 **Roxy:**" if present
+   - Returns only that single paragraph
+
+4. **Result:** The final response contains exactly one paragraph
+
+### Acceptance Criteria Met
+
+The implementation matches the exact specification from the issue:
+- ✅ Added after the stripping loop (line 63)
+- ✅ Added before the answer_only check (line 77)
+- ✅ Splits by double newlines to identify paragraphs
+- ✅ Keeps only the first substantial paragraph
+- ✅ Skips emoji headers (>50 character check)
+- ✅ Removes personality headers if present
+
+### Expected Test Results
+
+When running the acceptance test:
+```javascript
+fetch("/api/chat", {
+  method:"POST", 
+  headers:{"Content-Type":"application/json"}, 
+  body:JSON.stringify({
+    message:"What is a ZIP file? One paragraph max.", 
+    mode:"truth-general"
+  })
+}).then(r=>r.json()).then(d=>{
+  const paraCount = d.response.split(/\n\s*\n/).filter(p => p.trim()).length;
+  console.log("Paragraphs:", paraCount); // Expected: 1
+  console.log("Contract triggered:", d.response_contract?.triggered); // Expected: true
+  console.log("Style:", d.response_contract?.style); // Expected: 'single_block'
+  console.log("PASS:", paraCount <= 1 && d.response_contract?.triggered); // Expected: true
+});
+```
+
+The fix is minimal, targeted, and follows the existing code patterns in the file. It preserves all existing functionality while adding the missing paragraph consolidation enforcement for the `single_block` style.
+
+---END SUMMARY---
