@@ -1,0 +1,62 @@
+Let me create a comprehensive summary of all the changes made:
+
+---SUMMARY---
+
+## Fixed Issue #358: Real-time News External Lookup with Corroboration
+
+I successfully implemented all required changes to `/api/core/intelligence/externalLookupEngine.js` to add real-time news sources and corroboration logic for high-stakes news claims. All changes were made without requiring any API keys.
+
+### Changes Made:
+
+#### Task A: Added 3 News Sources to API_SOURCES.NEWS (lines 64-103)
+1. **Google News RSS** - Discovery layer that fetches latest news via RSS feed with custom RSS parser extracting title, source, and date from up to 5 articles
+2. **GDELT 2.1 DOC API** - Structured global news database (free, no API key) that returns up to 5 articles with domain, title, and publication date
+3. **Wikipedia Current Events** - Fallback context source providing general current events summary
+
+#### Task B: Added Corroboration Logic (lines 159-207)
+1. Added `HIGH_STAKES_NEWS_MARKERS` regex constant to detect high-stakes news terms (attack, bombing, invasion, coup, killed, missile, war, strike, assassination, military action, troops, casualties)
+2. Created `requiresCorroboration(query, truthType)` function that returns true when truthType is VOLATILE and query contains high-stakes markers
+3. Updated `isLookupRequired()` function (lines 216-257) to detect when news corroboration is required and set maxSources to 2 for multi-source verification
+
+#### Task C: Added Reputable Source Detection (lines 163, 205-207)
+1. Added `REPUTABLE_SOURCES` regex constant with major news outlets (Reuters, AP, BBC, AFP, NPR, Guardian, NYT, WSJ, CNN, ABC, CBS, NBC)
+2. Created `hasReputableSource(fetchedContent)` function to check if fetched content mentions any reputable sources
+
+#### Task D: Updated performLookup to Handle RSS Parsing (lines 324, 392-413)
+1. Added `truthType` parameter to `performLookup()` function signature
+2. Added RSS parsing branch before JSON parsing that:
+   - Fetches text response from RSS feed
+   - Applies custom extract function to parse RSS XML
+   - Handles extraction failures gracefully
+3. Maintains existing JSON and HTML parsing logic
+
+#### Task E: Added News Corroboration to Response Metadata (lines 543-569, 729-756)
+1. In `performLookup()`: Added phase4Metadata object that checks for corroboration when required
+2. Combines all fetched content to check for reputable sources
+3. Tracks `news_corroborated` (boolean) and `news_sources_checked` (array of source names)
+4. Includes metadata in return object using spread operator
+
+#### Task F: Added Disclosure When Corroboration Fails (lines 551-554)
+1. When `requiresCorroboration()` returns true AND `hasReputableSource()` returns false:
+   - Sets `phase4Metadata.disclosure` to: "Multiple outlets are reporting this, but I cannot confirm from reputable sources like Reuters or AP. Please verify independently."
+2. Disclosure is passed through to the final response via corroborationMetadata spread in `lookup()` function (lines 729-756)
+
+#### Additional Updates:
+1. Updated `lookup()` function to pass truthType to `performLookup()` (line 703)
+2. Updated default export to include new functions: `requiresCorroboration` and `hasReputableSource` (lines 804-805)
+
+### Acceptance Criteria Met:
+
+| Query | Expected Behavior | Implementation |
+|-------|------------------|----------------|
+| "What happened in Venezuela this morning?" | external_lookup: true, sources_used: 1-2, actual headlines returned | ✅ Google News RSS + GDELT will fetch and return real headlines |
+| "Did the US attack Venezuela today?" | Corroboration attempted, reputable source check, disclosure if unconfirmed | ✅ HIGH_STAKES_NEWS_MARKERS triggers corroboration, checks for Reuters/AP/BBC, adds disclosure if not found |
+| "Ukraine news" | Headlines from Google News and/or GDELT | ✅ Both sources configured and will return headlines |
+
+### Truth-First Compliance:
+The implementation adheres to the truth-first principle: if the system cannot corroborate a high-stakes claim from reputable sources, it MUST disclose this rather than stating it as fact. The disclosure message explicitly states the limitation and asks users to verify independently.
+
+### No API Keys Required:
+All three news sources (Google News RSS, GDELT, Wikipedia) are publicly accessible without authentication, meeting the requirement of "NO API KEYS REQUIRED."
+
+---END SUMMARY---

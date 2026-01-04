@@ -62,21 +62,40 @@ export const API_SOURCES = {
     }
   ],
   NEWS: [
+    // 1. Google News RSS - discovery layer
+    {
+      name: 'Google News RSS',
+      buildUrl: (query) => `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`,
+      parser: 'rss',
+      type: 'api',
+      extract: (text) => {
+        const items = [];
+        const itemRegex = /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
+        let match;
+        while ((match = itemRegex.exec(text)) !== null && items.length < 5) {
+          items.push({ title: match[1], source: match[2], date: match[3] });
+        }
+        return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
+      }
+    },
+    // 2. GDELT 2.1 DOC API - structured global news, free, no key
+    {
+      name: 'GDELT',
+      buildUrl: (query) => `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=artlist&maxrecords=5&format=json`,
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        const articles = json.articles || [];
+        if (articles.length === 0) return null;
+        return articles.slice(0, 5).map(a =>
+          `[${a.domain || 'Unknown'}] ${a.title} (${a.seendate || 'recent'})`
+        ).join('\n\n');
+      }
+    },
+    // 3. Wikipedia Current Events - fallback context only
     {
       name: 'Wikipedia Current Events',
       url: 'https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events',
-      parser: 'json',
-      type: 'api',
-      extract: (json) => json.extract?.substring(0, 3000) || null
-    },
-    {
-      name: 'Wikipedia Topic Search',
-      buildUrl: (query) => {
-        // Extract key terms from query for Wikipedia lookup
-        const cleanQuery = query.replace(/\b(did|does|do|is|are|was|were|the|this morning|yesterday|today)\b/gi, '').trim();
-        const keyTerm = cleanQuery.split(' ').slice(0, 3).join(' ');
-        return `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(keyTerm)}`;
-      },
       parser: 'json',
       type: 'api',
       extract: (json) => json.extract?.substring(0, 2000) || null
@@ -137,6 +156,12 @@ const FRESHNESS_MARKERS = [
   /\b(available|in stock|open|closed)\b/i
 ];
 
+// High-stakes news markers that require corroboration
+const HIGH_STAKES_NEWS_MARKERS = /attack|bombing|invasion|coup|killed|missile|war|strike|assassination|military action|troops|casualties/i;
+
+// Reputable news sources for corroboration
+const REPUTABLE_SOURCES = /reuters|associated press|ap news|bbc|afp|npr|guardian|new york times|nytimes|washington post|wall street journal|wsj|cnn|abc news|cbs news|nbc news/i;
+
 /**
  * Check if query contains freshness markers
  * @param {string} query - The user's query
@@ -163,6 +188,25 @@ export function checkFreshnessMarkers(query) {
 }
 
 /**
+ * Check if query requires corroboration (high-stakes news)
+ * @param {string} query - The user's query
+ * @param {string} truthType - Truth type (VOLATILE, SEMI_STABLE, PERMANENT)
+ * @returns {boolean} True if corroboration required
+ */
+export function requiresCorroboration(query, truthType) {
+  return truthType === 'VOLATILE' && HIGH_STAKES_NEWS_MARKERS.test(query);
+}
+
+/**
+ * Check if fetched content contains reputable sources
+ * @param {string} fetchedContent - Combined text from all sources
+ * @returns {boolean} True if reputable source found
+ */
+export function hasReputableSource(fetchedContent) {
+  return REPUTABLE_SOURCES.test(fetchedContent);
+}
+
+/**
  * Determine if external lookup is required
  * @param {string} query - The user's query
  * @param {object} truthTypeResult - Result from truthTypeDetector
@@ -172,6 +216,7 @@ export function checkFreshnessMarkers(query) {
 export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.5) {
   const reasons = [];
   let priority = 'normal';
+  let maxSources = LOOKUP_CONFIG.MAX_LOOKUPS_PER_REQUEST;
 
   // Check freshness markers
   const freshnessCheck = checkFreshnessMarkers(query);
@@ -191,6 +236,13 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
     priority = 'high';
   }
 
+  // Check if corroboration required (high-stakes news)
+  if (requiresCorroboration(query, truthTypeResult.type)) {
+    reasons.push('news_corroboration_required');
+    priority = 'high';
+    maxSources = 2; // Fetch from 2 sources for corroboration
+  }
+
   // Check confidence threshold
   if (internalConfidence < LOOKUP_CONFIG.CONFIDENCE_THRESHOLD) {
     reasons.push('low_internal_confidence: ' + internalConfidence);
@@ -200,7 +252,7 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
     required: reasons.length > 0,
     reasons: reasons,
     priority: priority,
-    max_lookups: priority === 'high' ? LOOKUP_CONFIG.HIGH_STAKES_MAX_LOOKUPS : LOOKUP_CONFIG.MAX_LOOKUPS_PER_REQUEST
+    max_lookups: priority === 'high' ? LOOKUP_CONFIG.HIGH_STAKES_MAX_LOOKUPS : maxSources
   };
 }
 
@@ -274,9 +326,10 @@ export function getSourcesForQuery(highStakesResult) {
  * Perform external lookup with real HTTP fetches and proper parsing
  * @param {string} query - The user's query
  * @param {array} sources - Sources to consult
+ * @param {string} truthType - Truth type for corroboration check
  * @returns {Promise<object>} Lookup result
  */
-export async function performLookup(query, sources) {
+export async function performLookup(query, sources, truthType = null) {
   const startTime = Date.now();
 
   console.log(`[externalLookupEngine] Performing lookup for: "${query.substring(0, 50)}..."`);
@@ -345,7 +398,29 @@ export async function performLookup(query, sources) {
         let parsedData = null;
         let extractedText = null;
 
-        if (source.parser === 'json') {
+        if (source.parser === 'rss') {
+          // RSS feed parsing
+          const text = await response.text();
+          if (source.extract && typeof source.extract === 'function') {
+            extractedText = source.extract(text);
+          } else {
+            extractedText = text.substring(0, 2000);
+          }
+
+          // If extraction failed, mark as failed
+          if (!extractedText) {
+            console.log(`[externalLookupEngine] ${source.name} extraction returned null`);
+            sourcesUsed.push({
+              name: source.name,
+              type: source.type || 'api',
+              status: 'extraction_failed',
+              success: false
+            });
+            continue;
+          }
+
+          parsedData = extractedText;
+        } else if (source.parser === 'json') {
           // JSON API response
           const jsonData = await response.json();
 
@@ -473,6 +548,20 @@ export async function performLookup(query, sources) {
         timestamp: new Date().toISOString()
       };
 
+      // Check for news corroboration if required
+      const phase4Metadata = {};
+      if (truthType && requiresCorroboration(query, truthType)) {
+        // Combine all fetched content for reputable source check
+        const fetchedContent = results.map(r => r.text).join(' ');
+        phase4Metadata.news_corroborated = hasReputableSource(fetchedContent);
+        phase4Metadata.news_sources_checked = sourcesUsed.map(s => s.name);
+
+        // Add disclosure if corroboration failed
+        if (!phase4Metadata.news_corroborated) {
+          phase4Metadata.disclosure = "Multiple outlets are reporting this, but I cannot confirm from reputable sources like Reuters or AP. Please verify independently.";
+        }
+      }
+
       return {
         success: true,
         from_cache: false,
@@ -483,7 +572,8 @@ export async function performLookup(query, sources) {
         sources_succeeded: results.length,
         total_text_fetched: totalTextFetched,
         verified_at: new Date().toISOString(),
-        lookup_time_ms: Date.now() - startTime
+        lookup_time_ms: Date.now() - startTime,
+        ...phase4Metadata
       };
     }
 
@@ -609,8 +699,8 @@ export async function lookup(query, options = {}) {
     };
   }
 
-  // Perform lookup
-  const lookupResult = await performLookup(query, sources);
+  // Perform lookup with truth type for corroboration
+  const lookupResult = await performLookup(query, sources, truthTypeResult.type);
 
   // Handle failure with graceful degradation
   if (!lookupResult.success) {
@@ -636,6 +726,18 @@ export async function lookup(query, options = {}) {
     );
   }
 
+  // Pass through corroboration metadata if present
+  const corroborationMetadata = {};
+  if (lookupResult.news_corroborated !== undefined) {
+    corroborationMetadata.news_corroborated = lookupResult.news_corroborated;
+  }
+  if (lookupResult.news_sources_checked !== undefined) {
+    corroborationMetadata.news_sources_checked = lookupResult.news_sources_checked;
+  }
+  if (lookupResult.disclosure !== undefined) {
+    corroborationMetadata.disclosure = lookupResult.disclosure;
+  }
+
   return {
     success: true,
     lookup_performed: true,
@@ -649,7 +751,8 @@ export async function lookup(query, options = {}) {
     lookup_reasons: lookupCheck.reasons,
     lookup_priority: lookupCheck.priority,
     lookup_time_ms: lookupResult.lookup_time_ms,
-    total_time_ms: Date.now() - startTime
+    total_time_ms: Date.now() - startTime,
+    ...corroborationMetadata
   };
 }
 
@@ -698,6 +801,8 @@ export default {
   API_SOURCES,
   AUTHORITATIVE_SOURCES,
   checkFreshnessMarkers,
+  requiresCorroboration,
+  hasReputableSource,
   isLookupRequired,
   selectSourcesForQuery,
   getSourcesForQuery,
