@@ -59,7 +59,21 @@ function enforceResponseContract(response, query, phase4Metadata = {}) {
       cleanedResponse = cleanedResponse.replace(pattern, '');
     }
   }
-  
+
+  // For 'single_block', keep only the first paragraph
+  if (constraint === 'single_block') {
+    // Split by double newlines (paragraph breaks)
+    const paragraphs = cleanedResponse.split(/\n\s*\n/).filter(p => p.trim());
+    if (paragraphs.length > 0) {
+      // Keep just the first substantial paragraph
+      // Skip any that are just emoji headers like "🍌 **Roxy:**"
+      let firstReal = paragraphs.find(p => p.trim().length > 50) || paragraphs[0];
+      // Remove personality headers if present
+      firstReal = firstReal.replace(/^🍌 \*\*(?:Eli|Roxy):\*\*.*?\n+/i, '').trim();
+      cleanedResponse = firstReal;
+    }
+  }
+
   if (constraint === 'answer_only') {
     const numberMatch = cleanedResponse.match(/^\s*(\d[\d,\.]*)\s*$/m);
     if (numberMatch) {

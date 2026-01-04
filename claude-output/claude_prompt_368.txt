@@ -1,0 +1,52 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #368: [claude-fix] Issue: Response Contract Gate single_block style doesn't consolidate to one paragraph
+
+Issue Description:
+Context: "What is a ZIP file? One paragraph max." returns 3 paragraphs. The contract gate detects format constraints but single_block style only strips boilerplate - it doesn't actually enforce single paragraph output.
+File: /api/core/intelligence/responseContractGate.js
+Task: Add paragraph consolidation logic for single_block style. After stripping sections, if style is single_block, keep only the first meaningful paragraph.
+Add this after the stripping loop, before the answer_only check:
+javascript// For 'single_block', keep only the first paragraph
+if (constraint === 'single_block') {
+  // Split by double newlines (paragraph breaks)
+  const paragraphs = cleanedResponse.split(/\n\s*\n/).filter(p => p.trim());
+  if (paragraphs.length > 0) {
+    // Keep just the first substantial paragraph
+    // Skip any that are just emoji headers like "🍌 **Roxy:**"
+    let firstReal = paragraphs.find(p => p.trim().length > 50) || paragraphs[0];
+    // Remove personality headers if present
+    firstReal = firstReal.replace(/^🍌 \*\*(?:Eli|Roxy):\*\*.*?\n+/i, '').trim();
+    cleanedResponse = firstReal;
+  }
+}
+Acceptance test:
+javascriptfetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, 
+  body:JSON.stringify({message:"What is a ZIP file? One paragraph max.", mode:"truth-general"})
+}).then(r=>r.json()).then(d=>{
+  const paraCount = d.response.split(/\n\s*\n/).filter(p => p.trim()).length;
+  console.log("Paragraphs:", paraCount);
+  console.log("Contract triggered:", d.response_contract?.triggered);
+  console.log("Style:", d.response_contract?.style);
+  console.log("Response:", d.response);
+  console.log("PASS:", paraCount <= 1 && d.response_contract?.triggered);
+});
+Expected: paraCount: 1, contract_triggered: true, style: 'single_block'
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
