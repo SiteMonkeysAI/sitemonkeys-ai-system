@@ -1,0 +1,92 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #362: [claude-fix] Issue: Truth type detector incorrectly classifying stable procedural facts as VOLATILE
+
+Issue Description:
+Context: "How do I boil an egg?" returns truth_type: VOLATILE when it should be PERMANENT. This causes cascading problems - bounded reasoning triggers, disclaimers appear, when none should.
+Evidence:
+"How do I boil an egg?" => {truth_type: 'VOLATILE', bounded: true, has_disclaimer: true}
+"What is the Pythagorean theorem?" => {truth_type: 'PERMANENT', bounded: false, has_disclaimer: false}
+Both are stable, unchanging facts. Both should be PERMANENT.
+Root Cause: The truth type detector in /api/core/intelligence/truthTypeDetector.js is likely:
+
+Defaulting to VOLATILE when no pattern matches, OR
+Has patterns that incorrectly catch procedural "how to" questions as VOLATILE
+
+Task:
+1. Add PERMANENT patterns for stable procedural facts:
+javascriptconst PERMANENT_PATTERNS = [
+  // Existing patterns...
+  
+  // Stable procedural facts
+  /\bhow (do|to) (i |you )?(boil|cook|make|bake|fry|roast|grill|steam)/i,
+  /\bhow (do|to) (i |you )?(tie|fold|cut|slice|chop)/i,
+  /\bhow (do|to) (i |you )?(write|spell|pronounce)/i,
+  /\bwhat is (a |the )?(definition|meaning) of\b/i,
+  /\bwhat (is|are) (a |the )?\w+ (made of|composed of)\b/i,
+  
+  // Mathematical/scientific constants
+  /\b(pythagorean|theorem|formula|equation|law of)\b/i,
+  
+  // Basic factual "what is" that aren't current events
+  /\bwhat is (a |an |the )?(recipe|ingredient|step|process|method|technique)\b/i
+];
+2. Ensure PERMANENT check runs BEFORE VOLATILE:
+The detection order should be:
+
+Check PERMANENT patterns first
+Check VOLATILE patterns second
+Default to SEMI_STABLE (not VOLATILE) if no match
+
+3. Add explicit "how-to procedural" classifier:
+javascriptfunction isStableProcedural(query) {
+  const proceduralPatterns = /\bhow (do|to|can|should) (i |you |we )?(make|cook|boil|bake|tie|fold|write|create|build|fix|clean|wash|open|close|start|stop)\b/i;
+  const notCurrentEvents = !/\b(today|now|current|latest|recent|this morning|yesterday)\b/i.test(query);
+  return proceduralPatterns.test(query) && notCurrentEvents;
+}
+
+// In detectTruthType():
+if (isStableProcedural(query)) {
+  return { type: 'PERMANENT', reason: 'Stable procedural fact', confidence: 0.9 };
+}
+4. Default should be SEMI_STABLE, not VOLATILE:
+If no patterns match, the safest default is SEMI_STABLE (24hr TTL), not VOLATILE (5min TTL). VOLATILE should only be for things we KNOW are time-sensitive.
+Acceptance Criteria:
+javascriptconst tests = [
+  {q: "How do I boil an egg?", expect: "PERMANENT"},
+  {q: "How do I tie a tie?", expect: "PERMANENT"},
+  {q: "What is the Pythagorean theorem?", expect: "PERMANENT"},
+  {q: "How do I make pasta?", expect: "PERMANENT"},
+  {q: "What happened in Venezuela today?", expect: "VOLATILE"},
+  {q: "What is the price of Bitcoin?", expect: "VOLATILE"},
+  {q: "Who is the current president?", expect: "VOLATILE"}
+];
+
+for (const t of tests) {
+  fetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, 
+    body:JSON.stringify({message: t.q, mode:"truth-general"})
+  }).then(r=>r.json()).then(d=>{
+    const pass = d.phase4_metadata?.truth_type === t.expect;
+    console.log(pass ? "✅" : "❌", `"${t.q}" => ${d.phase4_metadata?.truth_type} (expected ${t.expect})`);
+  });
+}
+ALL must show ✅
+Core Principle: Stable procedural facts that haven't changed in decades should NEVER be classified as VOLATILE. The truth type determines everything downstream - get this wrong and the whole system misbehaves.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
