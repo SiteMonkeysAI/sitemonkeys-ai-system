@@ -554,9 +554,13 @@ export class Orchestrator {
         // Step 3: External lookup if needed
         // Trigger conditions: VOLATILE truth type, high-stakes domains, or router requires external
 
-        // Additional news/geopolitical pattern check
-        const newsPatterns = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|attack|election|president|war|invasion|military|conflict|strike|bombing|sanctions|crisis|coup|protest|news|breaking)\b/i;
-        const matchesNewsPattern = newsPatterns.test(message);
+        // News trigger patterns - what/when questions about current events
+        const NEWS_TRIGGER_PATTERNS = /\b(what happened|what's happening|news|today|this morning|yesterday|current events|latest|breaking|update on)\b/i;
+
+        // Geopolitical patterns - specific countries/conflicts
+        const GEOPOLITICAL_PATTERNS = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|war|attack|invasion|military|troops|sanctions|election|president|congress|senate)\b/i;
+
+        const matchesNewsPattern = NEWS_TRIGGER_PATTERNS.test(message) || GEOPOLITICAL_PATTERNS.test(message);
 
         const shouldLookup =
           truthTypeResult.type === 'VOLATILE' ||
@@ -732,6 +736,8 @@ export class Orchestrator {
 
       // STEP 8: Apply personality reasoning framework (AFTER ENFORCEMENT AND DOCTRINE GATES)
       // Personality enhances the already-compliant response
+      // Add phase4Metadata to context so personalities can check truth_type
+      context.phase4Metadata = phase4Metadata;
       const personalityStartTime = Date.now();
       const personalityResponse = await this.#applyPersonality(
         doctrineResult.response,
@@ -808,6 +814,7 @@ export class Orchestrator {
           personalityResponse.response,
           phase4Metadata,
           {
+            queryText: message, // Pass the original user query for speculative detection
             isInference: phase4Metadata.source_class !== 'vault' && phase4Metadata.source_class !== 'external',
             // Add other context as available
           }

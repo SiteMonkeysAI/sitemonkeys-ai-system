@@ -262,50 +262,70 @@ function proportionalityGate(content, mainAnswer, semanticSimilarityFn = null) {
 // BOUNDED REASONING DETERMINATION
 // ============================================
 
+// Patterns that indicate speculative/predictive queries
+const SPECULATIVE_PATTERNS = /\b(will .+ in the (next|future)|predict|forecast|going to happen|what will|years from now|by 20\d\d|in \d+ years)\b/i;
+
 /**
  * Determine if we're operating in bounded reasoning territory
- * 
+ *
  * This is not a "mode" - it is a constraint set that TIGHTENS.
  * The system becomes MORE careful, not less.
+ *
+ * @param {object} phase4Metadata - Phase 4 metadata
+ * @param {string} queryText - Original user query (optional)
  */
-function requiresBoundedReasoning(phase4Metadata) {
+function requiresBoundedReasoning(phase4Metadata, queryText = '') {
+  // PERMANENT facts NEVER need bounded reasoning - exit immediately
+  if (phase4Metadata.truth_type === 'PERMANENT') {
+    return { required: false, reason: 'Permanent fact - no uncertainty disclosure needed' };
+  }
+
+  // Speculative future queries always need bounded reasoning
+  if (queryText && SPECULATIVE_PATTERNS.test(queryText)) {
+    return {
+      required: true,
+      reason: 'Speculative/predictive query - future is inherently uncertain',
+      disclosure: 'I\'m reasoning about future possibilities, not verified facts.'
+    };
+  }
+
   // Verified external data available = no bounded reasoning needed
   if (phase4Metadata.external_lookup && phase4Metadata.sources_used > 0) {
     return { required: false, reason: 'Verified external data available' };
   }
-  
-  // Internal verified fact (vault, documents) = no bounded reasoning needed  
+
+  // Internal verified fact (vault, documents) = no bounded reasoning needed
   if (phase4Metadata.source_class === 'vault' || phase4Metadata.source_class === 'document') {
     return { required: false, reason: 'Verified internal data available' };
   }
-  
+
   // VOLATILE without verification = bounded reasoning required
   if (phase4Metadata.truth_type === 'VOLATILE' && !phase4Metadata.verified_at) {
-    return { 
-      required: true, 
+    return {
+      required: true,
       reason: 'Volatile claim without external verification',
       disclosure: 'I don\'t have verified current data on this specific situation.'
     };
   }
-  
+
   // High stakes without verification = bounded reasoning required
   if (phase4Metadata.high_stakes?.isHighStakes && !phase4Metadata.verified_at) {
-    return { 
-      required: true, 
+    return {
+      required: true,
       reason: 'High-stakes claim without external verification',
       disclosure: 'This is a high-stakes topic and I don\'t have verified data specific to your situation.'
     };
   }
-  
+
   // Low confidence = bounded reasoning required
   if (phase4Metadata.confidence < 0.6) {
-    return { 
-      required: true, 
+    return {
+      required: true,
       reason: 'Low confidence without verification',
       disclosure: 'I\'m reasoning from general knowledge here, not verified specifics.'
     };
   }
-  
+
   return { required: false, reason: 'Sufficient verified data available' };
 }
 
@@ -476,12 +496,17 @@ const BOUNDED_REASONING_STRUCTURE = {
 
 /**
  * Apply bounded reasoning enforcement to a response
- * 
+ *
  * ⚠️ WARNING: THIS IS A HARD ENFORCEMENT GATE
- * 
+ *
  * This function MUST be called post-generation.
  * It is not advisory. It is not optional.
  * Skipping this gate reintroduces epistemic dishonesty.
+ *
+ * @param {string} response - The AI response
+ * @param {object} phase4Metadata - Phase 4 metadata
+ * @param {object} context - Context including queryText
+ * @param {function} semanticSimilarityFn - Optional similarity function
  */
 function enforceBoundedReasoning(response, phase4Metadata, context = {}, semanticSimilarityFn = null) {
   const enforcement = {
@@ -500,11 +525,11 @@ function enforceBoundedReasoning(response, phase4Metadata, context = {}, semanti
       forbidden_blocked: []
     }
   };
-  
+
   let enforcedResponse = response;
-  
-  // Check if bounded reasoning is required
-  const boundedCheck = requiresBoundedReasoning(phase4Metadata);
+
+  // Check if bounded reasoning is required, pass queryText from context
+  const boundedCheck = requiresBoundedReasoning(phase4Metadata, context.queryText || '');
   enforcement.bounded_reasoning_required = boundedCheck.required;
   
   if (boundedCheck.required) {

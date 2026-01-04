@@ -389,6 +389,17 @@ export class ProductValidator {
         };
       }
 
+      // Check if this is a PERMANENT fact - don't add disclaimers to established truth
+      const truthType = context?.phase4Metadata?.truth_type;
+      if (truthType === 'PERMANENT') {
+        console.log('[PRODUCT-VALIDATION] PERMANENT truth type - no disclaimer added');
+        return {
+          needsDisclosure: false,
+          responseWithDisclosure: response,
+          reason: 'PERMANENT truth type - no disclaimer needed',
+        };
+      }
+
       const disclosure =
         "\n\n[Note: Evaluate this recommendation against your specific needs, budget, and risk tolerance. No solution is perfect for every situation.]";
 

@@ -23,8 +23,12 @@ export class RoxyFramework {
         analysis?.intentConfidence || analysis?.domainConfidence || 0.5;
       let enhancedResponse = response;
 
+      // Check truth type from Phase 4 metadata
+      const truthType = context?.phase4Metadata?.truth_type;
+
       // ========== TRUTH-FIRST FALLBACK (NEW) ==========
-      if (confidence < MIN_CONFIDENCE_FOR_SIMPLIFICATION) {
+      // PERMANENT facts NEVER get disclaimers - they are established truth
+      if (confidence < MIN_CONFIDENCE_FOR_SIMPLIFICATION && truthType !== 'PERMANENT') {
         this.logger.log(
           `Roxy: Confidence too low (${confidence.toFixed(2)}), prioritizing truth over empathy`,
         );
@@ -42,6 +46,11 @@ export class RoxyFramework {
           truthPrioritized: true,
           reason: "Prioritized truth over empathy due to low confidence",
         };
+      } else if (confidence < MIN_CONFIDENCE_FOR_SIMPLIFICATION && truthType === 'PERMANENT') {
+        this.logger.log(
+          `Roxy: Low confidence (${confidence.toFixed(2)}) but PERMANENT truth type - no disclaimer needed`,
+        );
+        // Skip adding disclaimer for PERMANENT facts
       }
       this.logger.log("Applying Roxy empathetic framework...");
 

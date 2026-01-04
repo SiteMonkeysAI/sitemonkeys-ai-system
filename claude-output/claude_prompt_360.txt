@@ -1,0 +1,230 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #360: [claude-fix] Issue: Comprehensive fix for truth type routing, bounded reasoning triggers, and disclaimer logic
+
+Issue Description:
+⚠️ THIS IS A CRITICAL SYSTEM-WIDE FIX - READ CAREFULLY
+Context: Testing revealed multiple interconnected issues where the system is applying incorrect logic based on truth type, adding unnecessary disclaimers to simple facts, and failing to trigger external lookup consistently.
+
+PROBLEMS IDENTIFIED
+Problem 1: PERMANENT facts getting uncertainty disclaimers
+Test: "How do I boil an egg?"
+Actual Response:
+"I don't have verified current data on this specific situation."
+"I'm not as confident about this answer as I'd like to be."
+"[Note: Evaluate this recommendation against your specific needs...]"
+Expected: Clean, direct answer with NO disclaimers. Boiling an egg is a PERMANENT fact that hasn't changed.
+Root Cause: Bounded reasoning gate is triggering for PERMANENT truth types when it should only trigger for VOLATILE or unverified content.
+
+Problem 2: External lookup inconsistent for news queries
+Test 1: "What happened in Venezuela today?" → external_lookup: false ❌
+Test 2: "Did the US attack Venezuela today?" → external_lookup: true ✅
+Both are VOLATILE news queries. Both should trigger external lookup. The pattern matching or trigger logic is inconsistent.
+Root Cause: The lookup trigger conditions are not consistently evaluating news/current events patterns.
+
+Problem 3: High-stakes detection missing medical queries
+Test: "Can I take ibuprofen with blood pressure medication?"
+Actual: high_stakes: {isHighStakes: false, domains: []}
+Expected: high_stakes: {isHighStakes: true, domains: ['MEDICAL']}
+Drug interactions are clearly high-stakes medical territory.
+Root Cause: High-stakes pattern matching in truthTypeDetector.js not catching drug interaction queries.
+
+Problem 4: Speculative future not triggering bounded reasoning
+Test: "Will AI replace software developers in the next 5 years?"
+Actual: bounded_reasoning: false
+Expected: bounded_reasoning: true
+Predictions about the future are inherently uncertain and should trigger bounded reasoning.
+Root Cause: Bounded reasoning gate doesn't check for speculative/predictive language patterns.
+
+REQUIRED FIXES
+Fix 1: boundedReasoningGate.js - Exempt PERMANENT truth types
+In /api/core/intelligence/boundedReasoningGate.js, update requiresBoundedReasoning():
+javascriptfunction requiresBoundedReasoning(phase4Metadata) {
+  // PERMANENT facts NEVER need bounded reasoning - exit immediately
+  if (phase4Metadata.truth_type === 'PERMANENT') {
+    return { required: false, reason: 'Permanent fact - no uncertainty disclosure needed' };
+  }
+  
+  // Verified external data available = no bounded reasoning needed
+  if (phase4Metadata.external_lookup && phase4Metadata.sources_used > 0) {
+    return { required: false, reason: 'Verified external data available' };
+  }
+  
+  // Internal verified fact (vault, documents) = no bounded reasoning needed  
+  if (phase4Metadata.source_class === 'vault' || phase4Metadata.source_class === 'document') {
+    return { required: false, reason: 'Verified internal data available' };
+  }
+  
+  // VOLATILE without verification = bounded reasoning required
+  if (phase4Metadata.truth_type === 'VOLATILE' && !phase4Metadata.verified_at) {
+    return { 
+      required: true, 
+      reason: 'Volatile claim without external verification',
+      disclosure: 'I don\'t have verified current data on this specific situation.'
+    };
+  }
+  
+  // High stakes without verification = bounded reasoning required
+  if (phase4Metadata.high_stakes?.isHighStakes && !phase4Metadata.verified_at) {
+    return { 
+      required: true, 
+      reason: 'High-stakes claim without external verification',
+      disclosure: 'This is a high-stakes topic and I don\'t have verified data specific to your situation.'
+    };
+  }
+  
+  // Low confidence = bounded reasoning required
+  if (phase4Metadata.confidence < 0.6) {
+    return { 
+      required: true, 
+      reason: 'Low confidence without verification',
+      disclosure: 'I\'m reasoning from general knowledge here, not verified specifics.'
+    };
+  }
+  
+  // SPECULATIVE/FUTURE queries = bounded reasoning required
+  // (This is checked via the query content, not just metadata)
+  
+  return { required: false, reason: 'Sufficient verified data available' };
+}
+
+Fix 2: boundedReasoningGate.js - Add speculative future detection
+Add a check for predictive/speculative language that should trigger bounded reasoning even if other conditions don't catch it:
+javascriptconst SPECULATIVE_PATTERNS = /\b(will .+ in the (next|future)|predict|forecast|going to happen|what will|years from now|by 20\d\d|in \d+ years)\b/i;
+
+function requiresBoundedReasoning(phase4Metadata, queryText = '') {
+  // ... existing PERMANENT check first ...
+  
+  // Speculative future queries always need bounded reasoning
+  if (queryText && SPECULATIVE_PATTERNS.test(queryText)) {
+    return {
+      required: true,
+      reason: 'Speculative/predictive query - future is inherently uncertain',
+      disclosure: 'I\'m reasoning about future possibilities, not verified facts.'
+    };
+  }
+  
+  // ... rest of existing logic ...
+}
+Also update the orchestrator to pass the query text to the bounded reasoning gate.
+
+Fix 3: truthTypeDetector.js - Improve high-stakes medical detection
+In /api/core/intelligence/truthTypeDetector.js, expand the medical high-stakes patterns:
+javascriptconst HIGH_STAKES_MEDICAL_PATTERNS = /\b(side effects?|dosage|drug interactions?|medication|symptoms?|treatment|diagnosis|aspirin|ibuprofen|tylenol|advil|acetaminophen|prescription|overdose|contraindications|blood pressure|diabetes|heart|cholesterol|can i take .+ with|mixing .+ and|combine .+ medication)\b/i;
+Ensure "Can I take X with Y" pattern is caught as MEDICAL high-stakes.
+
+Fix 4: orchestrator.js - Consistent news lookup triggering
+In /api/core/orchestrator.js, ensure ALL news-related queries trigger external lookup. The condition should be:
+javascriptconst NEWS_TRIGGER_PATTERNS = /\b(what happened|what's happening|news|today|this morning|yesterday|current events|latest|breaking|update on)\b/i;
+
+const GEOPOLITICAL_PATTERNS = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|war|attack|invasion|military|troops|sanctions|election|president|congress|senate)\b/i;
+
+// In the lookup decision logic:
+const shouldTriggerNewsLookup = NEWS_TRIGGER_PATTERNS.test(message) || GEOPOLITICAL_PATTERNS.test(message);
+
+if (truthTypeResult.type === 'VOLATILE' || shouldTriggerNewsLookup || routingResult.external_lookup_required) {
+  // Trigger external lookup
+}
+```
+
+The key fix: "What happened in Venezuela today" contains BOTH news triggers ("what happened", "today") AND geopolitical triggers ("Venezuela"). It must trigger lookup.
+
+---
+
+### Fix 5: Remove inappropriate disclaimers from simple facts
+
+The following disclaimers should NEVER appear on PERMANENT truth type responses:
+```
+❌ "I don't have verified current data on this specific situation."
+❌ "[Note: Evaluate this recommendation against your specific needs, budget, and risk tolerance...]"
+❌ "I want to be honest with you—I'm not as confident about this answer as I'd like to be."
+These are being added somewhere in the response chain even for simple factual queries. Find where these are injected and add a condition:
+javascript// Only add disclaimers if NOT a permanent fact
+if (phase4Metadata.truth_type !== 'PERMANENT') {
+  // Add appropriate disclaimers
+}
+Check these files for disclaimer injection:
+
+/api/core/orchestrator.js
+/api/core/intelligence/doctrineEnforcer.js
+/api/core/intelligence/boundedReasoningGate.js
+Any personality/response formatting code
+
+
+ACCEPTANCE CRITERIA
+Test 1: Permanent fact - NO disclaimers
+javascriptfetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, 
+  body:JSON.stringify({message:"How do I boil an egg?", mode:"truth-general"})
+}).then(r=>r.json()).then(d=>{
+  console.log("truth_type:", d.phase4_metadata?.truth_type); // Should be PERMANENT
+  console.log("bounded_reasoning:", d.phase6_bounded_reasoning?.required); // Should be false
+  console.log("Has disclaimer:", d.response?.includes("not as confident")); // Should be false
+});
+PASS if: truth_type: PERMANENT, bounded_reasoning: false, response has NO uncertainty disclaimers
+
+Test 2: News query - External lookup triggers
+javascriptfetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, 
+  body:JSON.stringify({message:"What happened in Venezuela today?", mode:"truth-general"})
+}).then(r=>r.json()).then(d=>{
+  console.log("external_lookup:", d.phase4_metadata?.external_lookup); // Should be true
+  console.log("sources_used:", d.phase4_metadata?.sources_used); // Should be >= 1
+});
+PASS if: external_lookup: true, sources_used >= 1
+
+Test 3: Medical high-stakes detection
+javascriptfetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, 
+  body:JSON.stringify({message:"Can I take ibuprofen with blood pressure medication?", mode:"truth-general"})
+}).then(r=>r.json()).then(d=>{
+  console.log("high_stakes:", d.phase4_metadata?.high_stakes); // Should be {isHighStakes: true, domains: ['MEDICAL']}
+});
+PASS if: high_stakes.isHighStakes: true, domains includes MEDICAL
+
+Test 4: Speculative future - Bounded reasoning triggers
+javascriptfetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"}, 
+  body:JSON.stringify({message:"Will AI replace software developers in the next 5 years?", mode:"truth-general"})
+}).then(r=>r.json()).then(d=>{
+  console.log("bounded_reasoning:", d.phase6_bounded_reasoning?.required); // Should be true
+});
+PASS if: bounded_reasoning: true
+
+Test 5: All queries in suite
+javascriptconst tests = [
+  {q: "How do I boil an egg?", expect: {bounded: false, disclaimers: false}},
+  {q: "What happened in Venezuela today?", expect: {external_lookup: true}},
+  {q: "Can I take ibuprofen with blood pressure medication?", expect: {high_stakes: true}},
+  {q: "Will AI replace developers in 5 years?", expect: {bounded: true}},
+  {q: "What is the Pythagorean theorem?", expect: {bounded: false, disclaimers: false}}
+];
+// ALL must pass
+
+FILES TO MODIFY
+
+/api/core/intelligence/boundedReasoningGate.js - PERMANENT exemption, speculative detection
+/api/core/intelligence/truthTypeDetector.js - Medical high-stakes patterns
+/api/core/orchestrator.js - News lookup trigger consistency, pass query to bounded reasoning
+/api/core/intelligence/doctrineEnforcer.js - Check for inappropriate disclaimer injection
+
+
+CORE PRINCIPLE (DO NOT VIOLATE)
+
+PERMANENT facts get direct answers. VOLATILE/uncertain content gets appropriate disclosure. Never add uncertainty to certainty. Never remove uncertainty from uncertainty.
+
+The system's credibility depends on this calibration being correct.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
