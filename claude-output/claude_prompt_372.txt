@@ -1,0 +1,51 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #372: [claude-fix] Issue: Simple math pattern not catching word operators like "times"
+
+Issue Description:
+Context: "What is 456 times 789?" still gets personality framework header because isSimpleFactualQuery() pattern only matches math symbols (×, *, +) not words ("times", "plus", "minus", "divided by").
+File: /api/core/personalities/eli_framework.js AND /api/core/personalities/roxy_framework.js
+Current pattern:
+javascript/^what (is|are) \d+\s*[\+\-\*×÷\/x]\s*\d+/i
+Fix - expand to include word operators:
+javascript/^what (is|are) \d+\s*([\+\-\*×÷\/x]|times|plus|minus|divided by|multiplied by)\s*\d+/i
+Also add standalone pattern for "X times Y" format:
+javascript/^\d+\s*(times|plus|minus|divided by|multiplied by)\s*\d+/i
+Full updated function:
+javascriptfunction isSimpleFactualQuery(query) {
+  const simplePatterns = [
+    /^what (is|are) \d+\s*([\+\-\*×÷\/x]|times|plus|minus|divided by|multiplied by)\s*\d+/i,
+    /^\d+\s*(times|plus|minus|divided by|multiplied by|[\+\-\*×÷\/x])\s*\d+/i,
+    /^how many \w+ (in|per|are in)/i,
+    /^what is the (capital|formula|chemical)/i,
+    /^what does ['"]?\w+['"]? mean/i,
+    /^define /i,
+  ];
+  return simplePatterns.some(p => p.test(query.trim()));
+}
+Acceptance test:
+javascriptfetch("/api/chat", {method:"POST", headers:{"Content-Type":"application/json"},
+  body:JSON.stringify({message:"What is 456 times 789?", mode:"truth-general"})
+}).then(r=>r.json()).then(d=>{
+  console.log("Has framework header:", d.response?.includes("framework applied"));
+  console.log("PASS:", !d.response?.includes("framework applied") && d.response?.includes("359,784"));
+});
+Expected: No "Analytical framework applied" header, just the answer.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
