@@ -11,7 +11,8 @@ const MIN_CONFIDENCE_FOR_SIMPLIFICATION = 0.6;
  */
 function isSimpleFactualQuery(query) {
   const simplePatterns = [
-    /^what (is|are) \d+\s*[\+\-\*×÷\/x]\s*\d+/i,  // Math
+    /^what (is|are) \d+\s*([\+\-\*×÷\/x]|times|plus|minus|divided by|multiplied by)\s*\d+/i,  // Math with operators
+    /^\d+\s*(times|plus|minus|divided by|multiplied by|[\+\-\*×÷\/x])\s*\d+/i,  // Standalone math
     /^how many \w+ (in|per|are in)/i,              // Unit conversion
     /^what is the (capital|formula|chemical)/i,    // Simple facts
     /^what does ['"]?\w+['"]? mean/i,              // Definitions
