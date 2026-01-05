@@ -9,7 +9,9 @@
  * Location: /api/core/intelligence/externalLookupEngine.js
  */
 
-import { detectTruthType, TRUTH_TYPES, HIGH_STAKES_DOMAINS } from './truthTypeDetector.js';
+/* global fetch, AbortController */
+
+import { detectTruthType, TRUTH_TYPES } from './truthTypeDetector.js';
 import { get as cacheGet, set as cacheSet } from './ttlCacheManager.js';
 
 // External lookup configuration
@@ -239,6 +241,39 @@ export function hasReputableSource(fetchedContent) {
  * @returns {object} { required: boolean, reasons: array, priority: string }
  */
 export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.5) {
+  // Ensure query is a string to avoid type confusion (arrays, objects, etc.)
+  if (typeof query !== 'string') {
+    console.warn('[externalLookupEngine] isLookupRequired called with non-string query, skipping lookup check');
+    return {
+      required: false,
+      reasons: ['Invalid query type for lookup; expected string'],
+      priority: 'none',
+      max_lookups: 0
+    };
+  }
+
+  // HARD BLOCK: Never lookup for document reviews (Issue #380 Fix 2)
+  if (truthTypeResult.type === 'DOCUMENT_REVIEW') {
+    console.log('[externalLookupEngine] Skipping lookup for document review');
+    return {
+      required: false,
+      reasons: ['Document review requests do not require external lookup'],
+      priority: 'none',
+      max_lookups: 0
+    };
+  }
+
+  // HARD BLOCK: Never lookup for queries > 10K characters (Issue #380 Fix 2)
+  if (query.length > 10000) {
+    console.log('[externalLookupEngine] Skipping lookup for long input');
+    return {
+      required: false,
+      reasons: ['Long-form inputs are not lookup candidates'],
+      priority: 'none',
+      max_lookups: 0
+    };
+  }
+
   const reasons = [];
   let priority = 'normal';
   let maxSources = LOOKUP_CONFIG.MAX_LOOKUPS_PER_REQUEST;
@@ -691,6 +726,18 @@ export async function lookup(query, options = {}) {
     forceRefresh = false
   } = options;
 
+  // Ensure query is a string to avoid type confusion (for example, when multiple query parameters are provided)
+  if (typeof query !== 'string') {
+    return {
+      success: false,
+      lookup_performed: false,
+      reason: 'Invalid query type; expected string',
+      truth_type: null,
+      internal_confidence: internalConfidence,
+      total_time_ms: Date.now() - startTime
+    };
+  }
+
   console.log(`[externalLookupEngine] Lookup requested for: "${query.substring(0, 50)}..."`);
 
   // Get truth type for the query
@@ -807,6 +854,15 @@ export async function testLookup(query, options = {}) {
         '?action=external-lookup&q=What%20is%20the%20Pythagorean%20theorem'
       ],
       config: LOOKUP_CONFIG
+    };
+  }
+
+  // Ensure query is a string before passing to lookup to avoid type confusion
+  if (typeof query !== 'string') {
+    return {
+      success: false,
+      message: 'Invalid query type; expected string parameter "q"',
+      received_type: typeof query
     };
   }
 

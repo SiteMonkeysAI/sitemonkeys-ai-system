@@ -52,6 +52,88 @@ const ALWAYS_STRIP_SECTIONS = [
 
 const STRIPPABLE_SECTIONS = [...ALWAYS_STRIP_SECTIONS, ...ENGAGEMENT_PADDING_SECTIONS];
 
+/**
+ * Extract technical/unique terms from document (Issue #380 Fix 6)
+ * @param {string} text - Text to extract terms from
+ * @returns {array} Array of unique terms
+ */
+function extractDocumentTerms(text) {
+  // SECURITY: Sanitize input to prevent ReDoS
+  const safeText = typeof text === 'string' ? text.slice(0, 50000) : '';
+  if (!safeText) return [];
+  
+  const terms = [];
+
+  // CamelCase terms - bounded to prevent ReDoS
+  // Allow optional lowercase after uppercase to catch patterns like 'XMLHttpRequest'
+  const camelCase = safeText.match(/\b[A-Z][a-z]{0,30}(?:[A-Z][a-z]{0,30})+\b/g) || [];
+  terms.push(...camelCase);
+
+  // ACRONYMS - bounded to prevent ReDoS
+  const acronyms = safeText.match(/\b[A-Z]{2,20}\b/g) || [];
+  terms.push(...acronyms);
+
+  // snake_case - bounded to prevent ReDoS, supports multiple segments
+  const snakeCase = safeText.match(/[a-z]{1,50}(?:_[a-z]{1,50})+/gi) || [];
+  terms.push(...snakeCase);
+
+  // Unique set, lowercased
+  return [...new Set(terms.map(t => t.toLowerCase()))];
+}
+
+/**
+ * Validate response relevance to query (Issue #380 Fix 6)
+ * @param {string} userQuery - The user's query
+ * @param {string} aiResponse - The AI response
+ * @param {object} _context - Context including phase4Metadata (unused)
+ * @returns {object} { valid: boolean, reason: string, recommendation: string }
+ */
+function validateResponseRelevance(userQuery, aiResponse, _context) {
+  // For long documents, check that response addresses the document
+  if (userQuery.length > 10000) {
+    // Response should reference document content
+    const documentTerms = extractDocumentTerms(userQuery);
+    const responseTerms = extractDocumentTerms(aiResponse);
+
+    const termOverlap = documentTerms.filter(t => responseTerms.includes(t)).length;
+    const relevanceRatio = termOverlap / Math.max(documentTerms.length, 1);
+
+    if (relevanceRatio < 0.1) {
+      console.log('[RESPONSE-CONTRACT] Response does not address document content');
+      return {
+        valid: false,
+        reason: 'Response does not address document content',
+        recommendation: 'REGENERATE_RESPONSE',
+        relevanceScore: relevanceRatio
+      };
+    }
+  }
+
+  // Check for obvious misroutes
+  const misrouteIndicators = [
+    { pattern: /voting is a sacred/i, mismatch: 'political_redirect' },
+    { pattern: /Bitcoin.*Ethereum.*price/i, mismatch: 'crypto_injection' },
+    { pattern: /focus on the 20%.*80%/i, mismatch: 'generic_productivity' },
+    { pattern: /combine approaches in novel ways/i, mismatch: 'template_injection' }
+  ];
+
+  for (const indicator of misrouteIndicators) {
+    if (indicator.pattern.test(aiResponse)) {
+      // Check if user actually asked about this
+      if (!indicator.pattern.test(userQuery)) {
+        console.log(`[RESPONSE-CONTRACT] Detected misroute: ${indicator.mismatch}`);
+        return {
+          valid: false,
+          reason: `Detected misroute: ${indicator.mismatch}`,
+          recommendation: 'REGENERATE_RESPONSE'
+        };
+      }
+    }
+  }
+
+  return { valid: true };
+}
+
 function detectFormatConstraint(query) {
   for (const constraint of FORMAT_CONSTRAINTS) {
     if (constraint.pattern.test(query)) {
@@ -74,6 +156,22 @@ function enforceResponseContract(response, query, phase4Metadata = {}) {
     original_length: response.length,
     user_requested_guidance: userRequestedGuidance
   };
+
+  // Issue #380 Fix 6: Validate response relevance
+  const relevanceValidation = validateResponseRelevance(query, response, { phase4Metadata });
+  if (!relevanceValidation.valid) {
+    console.log(`[RESPONSE-CONTRACT] Relevance validation failed: ${relevanceValidation.reason}`);
+    result.relevance_valid = false;
+    result.relevance_reason = relevanceValidation.reason;
+    result.relevance_recommendation = relevanceValidation.recommendation;
+    if (relevanceValidation.relevanceScore !== undefined) {
+      result.relevance_score = relevanceValidation.relevanceScore;
+    }
+    // Note: We log the failure but still return the cleaned response
+    // The orchestrator can decide whether to regenerate based on this
+  } else {
+    result.relevance_valid = true;
+  }
 
   let cleanedResponse = response;
 
