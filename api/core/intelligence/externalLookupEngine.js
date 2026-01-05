@@ -9,7 +9,9 @@
  * Location: /api/core/intelligence/externalLookupEngine.js
  */
 
-import { detectTruthType, TRUTH_TYPES, HIGH_STAKES_DOMAINS } from './truthTypeDetector.js';
+/* global fetch, AbortController */
+
+import { detectTruthType, TRUTH_TYPES } from './truthTypeDetector.js';
 import { get as cacheGet, set as cacheSet } from './ttlCacheManager.js';
 
 // External lookup configuration

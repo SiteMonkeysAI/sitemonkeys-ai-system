@@ -58,18 +58,23 @@ const STRIPPABLE_SECTIONS = [...ALWAYS_STRIP_SECTIONS, ...ENGAGEMENT_PADDING_SEC
  * @returns {array} Array of unique terms
  */
 function extractDocumentTerms(text) {
+  // SECURITY: Sanitize input to prevent ReDoS
+  const safeText = typeof text === 'string' ? text.slice(0, 50000) : '';
+  if (!safeText) return [];
+  
   const terms = [];
 
-  // CamelCase terms
-  const camelCase = text.match(/\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b/g) || [];
+  // CamelCase terms - bounded to prevent ReDoS
+  // Allow optional lowercase after uppercase to catch patterns like 'XMLHttpRequest'
+  const camelCase = safeText.match(/\b[A-Z][a-z]{0,30}(?:[A-Z][a-z]{0,30})+\b/g) || [];
   terms.push(...camelCase);
 
-  // ACRONYMS
-  const acronyms = text.match(/\b[A-Z]{2,}\b/g) || [];
+  // ACRONYMS - bounded to prevent ReDoS
+  const acronyms = safeText.match(/\b[A-Z]{2,20}\b/g) || [];
   terms.push(...acronyms);
 
-  // snake_case
-  const snakeCase = text.match(/[a-z]+_[a-z]+/gi) || [];
+  // snake_case - bounded to prevent ReDoS, supports multiple segments
+  const snakeCase = safeText.match(/[a-z]{1,50}(?:_[a-z]{1,50})+/gi) || [];
   terms.push(...snakeCase);
 
   // Unique set, lowercased

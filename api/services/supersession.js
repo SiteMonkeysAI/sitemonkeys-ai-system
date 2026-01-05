@@ -21,6 +21,8 @@
  * superseded_by from UUID to INTEGER before using supersession features.
  */
 
+/* global fetch, AbortController */
+
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
