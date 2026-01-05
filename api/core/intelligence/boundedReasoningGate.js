@@ -290,7 +290,13 @@ function requiresBoundedReasoning(phase4Metadata, queryText = '') {
   }
 
   // Verified external data available = no bounded reasoning needed
-  if (phase4Metadata.external_lookup && phase4Metadata.sources_used > 0) {
+  // Check both external_lookup flag AND sources_succeeded count
+  if (phase4Metadata.external_lookup === true && phase4Metadata.sources_used > 0) {
+    return { required: false, reason: 'Verified external data available' };
+  }
+
+  // Also check sources_succeeded field (alternate naming)
+  if (phase4Metadata.sources_succeeded > 0) {
     return { required: false, reason: 'Verified external data available' };
   }
 

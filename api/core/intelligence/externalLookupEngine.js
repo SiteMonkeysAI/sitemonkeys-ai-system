@@ -641,13 +641,13 @@ export async function performLookup(query, sources, truthType = null) {
 export function gracefulDegradation(query, lookupResult, internalAnswer = null) {
   const lowerQuery = query.toLowerCase();
   let sources = [];
-  let disclosure = "I couldn't verify current information from external sources.";
+  let disclosure = "External lookup returned no results.";
 
   // Determine if this is a news query for specialized disclosure
   const isNewsQuery = lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military|venezuela|ukraine|russia|china|iran|israel|gaza|congress|senate|white house/i);
 
   if (isNewsQuery) {
-    disclosure = "I cannot verify current news from available sources.";
+    disclosure = "External news lookup returned no results. This may indicate breaking news not yet indexed or a topic with limited coverage.";
     sources = [
       { name: 'Reuters', url: 'https://www.reuters.com' },
       { name: 'Associated Press', url: 'https://apnews.com' },

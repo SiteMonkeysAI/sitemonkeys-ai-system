@@ -43,10 +43,12 @@ export class RoxyFramework {
       // Check truth type from Phase 4 metadata
       const truthType = context?.phase4Metadata?.truth_type;
       const query = context?.message || '';
+      const externalLookupSucceeded = (context?.phase4Metadata?.sources_used > 0) || (context?.phase4Metadata?.sources_succeeded > 0);
 
       // ========== TRUTH-FIRST FALLBACK (NEW) ==========
       // PERMANENT facts NEVER get disclaimers - they are established truth
-      if (confidence < MIN_CONFIDENCE_FOR_SIMPLIFICATION && truthType !== 'PERMANENT') {
+      // External lookups that succeeded NEVER get disclaimers - data is verified
+      if (confidence < MIN_CONFIDENCE_FOR_SIMPLIFICATION && truthType !== 'PERMANENT' && !externalLookupSucceeded) {
         this.logger.log(
           `Roxy: Confidence too low (${confidence.toFixed(2)}), prioritizing truth over empathy`,
         );
@@ -64,11 +66,11 @@ export class RoxyFramework {
           truthPrioritized: true,
           reason: "Prioritized truth over empathy due to low confidence",
         };
-      } else if (confidence < MIN_CONFIDENCE_FOR_SIMPLIFICATION && truthType === 'PERMANENT') {
+      } else if ((confidence < MIN_CONFIDENCE_FOR_SIMPLIFICATION && truthType === 'PERMANENT') || externalLookupSucceeded) {
         this.logger.log(
-          `Roxy: Low confidence (${confidence.toFixed(2)}) but PERMANENT truth type - no disclaimer needed`,
+          `Roxy: Low confidence (${confidence.toFixed(2)}) but ${truthType === 'PERMANENT' ? 'PERMANENT truth type' : 'external lookup succeeded'} - no disclaimer needed`,
         );
-        // Skip adding disclaimer for PERMANENT facts
+        // Skip adding disclaimer for PERMANENT facts or successful external lookups
       }
       this.logger.log("Applying Roxy empathetic framework...");
 
