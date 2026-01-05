@@ -85,7 +85,7 @@ function extractDocumentTerms(text) {
  * Validate response relevance to query (Issue #380 Fix 6)
  * @param {string} userQuery - The user's query
  * @param {string} aiResponse - The AI response
- * @param {object} context - Context including phase4Metadata
+ * @param {object} _context - Context including phase4Metadata (unused)
  * @returns {object} { valid: boolean, reason: string, recommendation: string }
  */
 function validateResponseRelevance(userQuery, aiResponse, _context) {
