@@ -1,8 +1,11 @@
 /**
  * responseContractGate.js
- * 
+ *
  * RUNS LAST - After all other processing
- * Enforces user format constraints by stripping non-essential additions
+ * Enforces user format constraints AND response hygiene (Issue #378)
+ *
+ * HYGIENE PRINCIPLE: Engagement padding = lying through theater
+ * Strip phrases that add no value unless explicitly requested
  */
 
 const FORMAT_CONSTRAINTS = [
@@ -13,18 +16,41 @@ const FORMAT_CONSTRAINTS = [
   { pattern: /reply with only|respond with only/i, style: 'strict_format' }
 ];
 
-const STRIPPABLE_SECTIONS = [
+// User patterns that indicate they WANT guidance/steps (keep these sections)
+const GUIDANCE_REQUEST_PATTERNS = [
+  /give me (some |a )?step/i,
+  /what (should|can) i do/i,
+  /how (do|can) i/i,
+  /what are my options/i,
+  /show me alternatives/i,
+  /what else could/i,
+];
+
+// HYGIENE BAD: Engagement padding sections (Issue #378)
+// Strip by default UNLESS user explicitly requested guidance
+const ENGAGEMENT_PADDING_SECTIONS = [
+  /\*\*Simpler Paths Forward:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+  /\*\*Practical Next Steps:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+  /\*\*Do More With Less:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+  /\*\*Opportunities I See:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+];
+
+// HYGIENE BAD: False claims and theater phrases (ALWAYS strip)
+const ALWAYS_STRIP_SECTIONS = [
   /\[Note: Evaluate this recommendation.*?\]/gs,
   /\[FOUNDER PROTECTION:.*?\]/gs,
-  /Simpler Paths Forward:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nPractical|$)/gi,
-  /Practical Next Steps:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nDo More|$)/gi,
-  /Do More With Less:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nOpportunities|$)/gi,
-  /Opportunities I See:[\s\S]*?(?=\n\n[A-Z]|\n\n---|\n\nSimpler|$)/gi,
   /I want to be honest with you—I'm not as confident.*?perspectives\./gs,
+  /My confidence in this analysis is lower than ideal.*?expert input\./gs,
   /To verify this information, you could:[\s\S]*?(?=\n\n[A-Z]|$)/gi,
   /I'm reasoning from general knowledge here, not verified specifics\.\n\n/g,
-  /I'm reasoning about future possibilities, not verified facts\.\n\n/g
+  /I'm reasoning about future possibilities, not verified facts\.\n\n/g,
+  // False capability denials (Issue #378 Problem 2)
+  /I don't have access to real-time information or current news feeds\.?\n*/gi,
+  /I cannot access real-time information\.?\n*/gi,
+  /I don't have the ability to access real-time data\.?\n*/gi,
 ];
+
+const STRIPPABLE_SECTIONS = [...ALWAYS_STRIP_SECTIONS, ...ENGAGEMENT_PADDING_SECTIONS];
 
 function detectFormatConstraint(query) {
   for (const constraint of FORMAT_CONSTRAINTS) {
@@ -37,26 +63,53 @@ function detectFormatConstraint(query) {
 
 function enforceResponseContract(response, query, phase4Metadata = {}) {
   const constraint = detectFormatConstraint(query);
+  const userRequestedGuidance = GUIDANCE_REQUEST_PATTERNS.some(p => p.test(query));
+
   const result = {
     triggered: constraint !== null,
+    hygiene_enforced: true, // Always enforce hygiene (Issue #378)
     style: constraint,
     stripped_sections_count: 0,
     stripped_sections: [],
-    original_length: response.length
+    original_length: response.length,
+    user_requested_guidance: userRequestedGuidance
   };
-  
-  if (!constraint) {
-    return { response, contract: result };
-  }
-  
+
   let cleanedResponse = response;
-  
-  for (const pattern of STRIPPABLE_SECTIONS) {
+
+  // ALWAYS strip these (false claims, theater)
+  for (const pattern of ALWAYS_STRIP_SECTIONS) {
     const matches = cleanedResponse.match(pattern);
     if (matches) {
       result.stripped_sections.push(...matches.map(m => m.substring(0, 50) + '...'));
       result.stripped_sections_count += matches.length;
       cleanedResponse = cleanedResponse.replace(pattern, '');
+    }
+  }
+
+  // Strip engagement padding UNLESS user explicitly requested guidance
+  if (!userRequestedGuidance) {
+    for (const pattern of ENGAGEMENT_PADDING_SECTIONS) {
+      const matches = cleanedResponse.match(pattern);
+      if (matches) {
+        result.stripped_sections.push(...matches.map(m => m.substring(0, 50) + '...'));
+        result.stripped_sections_count += matches.length;
+        cleanedResponse = cleanedResponse.replace(pattern, '');
+      }
+    }
+  } else {
+    console.log('[RESPONSE-CONTRACT] User requested guidance - keeping engagement sections');
+  }
+
+  // If format constraint detected, apply additional stripping
+  if (constraint) {
+    for (const pattern of STRIPPABLE_SECTIONS) {
+      const matches = cleanedResponse.match(pattern);
+      if (matches) {
+        result.stripped_sections.push(...matches.map(m => m.substring(0, 50) + '...'));
+        result.stripped_sections_count += matches.length;
+        cleanedResponse = cleanedResponse.replace(pattern, '');
+      }
     }
   }
 
@@ -99,9 +152,15 @@ function enforceResponseContract(response, query, phase4Metadata = {}) {
 
   cleanedResponse = cleanedResponse.replace(/\n{3,}/g, '\n\n').trim();
   result.final_length = cleanedResponse.length;
-  
-  console.log('[RESPONSE-CONTRACT] Constraint:', constraint, '| Stripped:', result.stripped_sections_count);
-  
+  result.hygiene_bad = result.stripped_sections_count > 0; // Issue #378
+
+  console.log('[RESPONSE-CONTRACT]', {
+    constraint: constraint || 'none',
+    hygiene_stripped: result.stripped_sections_count,
+    user_requested_guidance: userRequestedGuidance,
+    hygiene_bad: result.hygiene_bad
+  });
+
   return { response: cleanedResponse, contract: result };
 }
 

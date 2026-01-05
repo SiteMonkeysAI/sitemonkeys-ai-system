@@ -1,0 +1,101 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #378: [claude-fix] Issue: Response Hygiene Violations - Confidence disclaimers on successful lookups, false capability claims, and engagement padding phrases
+
+Issue Description:
+Summary:
+Vibe run testing reveals multiple response hygiene violations where the system adds disclaimers, padding, and false statements that contradict its actual behavior. These violate the core truth-first principle: the system should never lie about what it did or add engagement theater.
+Evidence Source:
+
+Vibe run test executed 2026-01-05
+5 of 8 responses triggered hygiene violations
+Test user: vibe-run-1767647632342
+
+
+Problem 1: Confidence Disclaimers on Successful External Lookups
+When external lookup succeeds (external_lookup: true, sources_used: 1), the system still adds:
+
+"I want to be honest with you—I'm not as confident about this answer as I'd like to be. Please double-check this information independently"
+
+This is a lie. The system successfully retrieved verified data from CoinGecko. Adding confidence warnings contradicts what actually happened.
+Test case: "What is the current price of Bitcoin right now?"
+Result: Got $94,084 from CoinGecko, then added unnecessary confidence disclaimer
+Expected: If lookup succeeded and sources > 0, NO confidence disclaimers should be added about the retrieved data.
+
+Problem 2: False Claims About System Capabilities
+Venezuela news query response:
+
+"I don't have access to real-time information or current news feeds"
+
+This is false. The system DOES have external lookup - it worked for BTC in the same session. The lookup was attempted (lookup_attempted: true) but returned 0 sources.
+Test case: "What happened in Venezuela today?"
+Result: lookup_attempted: true, sources_used: 0, then falsely claimed no capability
+Expected: If lookup was attempted but returned nothing, say "lookup returned no results" NOT "I don't have access." Never lie about capabilities.
+
+Problem 3: Engagement Padding Phrases
+The following phrases are appearing in responses and violate truth-first hygiene:
+
+"I'm not as confident"
+"practical next steps"
+"simpler paths forward"
+"do more with less"
+"previous conversations" / "previous interaction"
+"I notice"
+"risk tolerance"
+"founder protection"
+"confidence assessment"
+
+These are engagement theater, not value-adding content.
+Expected: These phrases should be blocked or stripped from responses unless explicitly requested by the user.
+
+Problem 4: News External Lookup Returning Empty
+For news queries, external lookup attempts but returns nothing:
+external_lookup: false | lookup_attempted: true | sources_used: 0
+The BTC query worked (sources_used: 1), so the lookup infrastructure works. News-specific sources (Google News RSS, GDELT) may be failing silently.
+Expected: Diagnose why news lookups return empty. If sources fail, log the failure reason. Don't silently return 0.
+
+Problem 5: Reasoning Escalation Detection Without Correction
+Multiple responses show:
+escalation_enforced: true | escalation_passed: false | correction: false
+The enforcer detects violations but doesn't correct them. This may be intentional per the earlier fix (enforcer detects, doesn't inject templates), but the passed: false responses still contain problems.
+Expected: Clarify the enforcement strategy. If correction is disabled, what IS the remediation path for failed escalation checks?
+
+Files to Investigate:
+
+/api/core/intelligence/boundedReasoningGate.js - confidence disclaimer injection
+/api/core/intelligence/externalLookupEngine.js - news source failures, capability claims
+/api/core/personalities/eli_framework.js - padding phrases
+/api/core/personalities/roxy_framework.js - padding phrases
+/api/core/enforcement/ - post-processing that adds disclaimers
+Anywhere that generates "I don't have access" or "I'm not confident" language
+
+
+Acceptance Criteria:
+
+ Successful external lookups (sources_used > 0) have NO confidence disclaimers about retrieved data
+ System never claims "I don't have access to X" when it does have that capability
+ None of the hygiene-bad phrases appear in responses unless explicitly requested
+ News lookups either return sources OR log specific failure reason
+ Vibe run hygiene_bad count: 0 out of 8 (currently 5 out of 8)
+
+
+Test Command:
+Run the vibe run script and verify hygiene_bad: false on all responses.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

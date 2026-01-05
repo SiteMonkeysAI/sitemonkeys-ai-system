@@ -77,10 +77,12 @@ export class EliFramework {
       const truthType = context?.phase4Metadata?.truth_type;
       const isHighStakes = context?.phase4Metadata?.high_stakes?.isHighStakes || false;
       const query = context?.message || '';
+      const externalLookupSucceeded = (context?.phase4Metadata?.sources_used > 0) || (context?.phase4Metadata?.sources_succeeded > 0);
 
       // ========== CONFIDENCE GATING (NEW) ==========
       // PERMANENT facts NEVER get disclaimers - they are established truth
-      if (confidence < MIN_CONFIDENCE_FOR_ENHANCEMENTS && truthType !== 'PERMANENT') {
+      // External lookups that succeeded NEVER get disclaimers - data is verified
+      if (confidence < MIN_CONFIDENCE_FOR_ENHANCEMENTS && truthType !== 'PERMANENT' && !externalLookupSucceeded) {
         this.logger.log(
           `Eli: Confidence too low (${confidence.toFixed(2)}), limiting enhancements`,
         );
@@ -98,11 +100,11 @@ export class EliFramework {
           confidenceLimited: true,
           reason: "Added uncertainty note due to low confidence",
         };
-      } else if (confidence < MIN_CONFIDENCE_FOR_ENHANCEMENTS && truthType === 'PERMANENT') {
+      } else if ((confidence < MIN_CONFIDENCE_FOR_ENHANCEMENTS && truthType === 'PERMANENT') || externalLookupSucceeded) {
         this.logger.log(
-          `Eli: Low confidence (${confidence.toFixed(2)}) but PERMANENT truth type - no disclaimer needed`,
+          `Eli: Low confidence (${confidence.toFixed(2)}) but ${truthType === 'PERMANENT' ? 'PERMANENT truth type' : 'external lookup succeeded'} - no disclaimer needed`,
         );
-        // Skip adding disclaimer for PERMANENT facts
+        // Skip adding disclaimer for PERMANENT facts or successful external lookups
       }
 
       // ========== PROCEED WITH NORMAL ANALYSIS ==========

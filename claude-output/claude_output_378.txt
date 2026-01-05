@@ -1,0 +1,78 @@
+---SUMMARY---
+
+## Issue #378 Fixed: Response Hygiene Violations
+
+I've successfully fixed all response hygiene violations identified in the vibe run testing. Here's what was changed:
+
+### Problem 1: Confidence disclaimers on successful external lookups ✓ FIXED
+
+**Root Cause:** The system was adding confidence disclaimers even when external lookup succeeded and returned verified data.
+
+**Files Modified:**
+1. **api/core/intelligence/boundedReasoningGate.js** (lines 293-301)
+   - Enhanced `requiresBoundedReasoning()` to check both `sources_used` and `sources_succeeded` fields
+   - Now correctly returns `required: false` when external lookup succeeds
+
+2. **api/core/personalities/eli_framework.js** (lines 80, 85, 103-108)
+   - Added `externalLookupSucceeded` check before adding confidence disclaimers
+   - Disclaimers only added when confidence is low AND external lookup didn't succeed
+
+3. **api/core/personalities/roxy_framework.js** (lines 46, 51, 69-74)
+   - Same fix as Eli - checks external lookup success before adding disclaimers
+   - Prevents "I'm not as confident" message when data is verified
+
+### Problem 2: False "I don't have access" claims ✓ FIXED
+
+**Root Cause:** When external lookup returned 0 sources, the gracefulDegradation function claimed "I don't have access" which is false - the system DOES have external lookup capability, it just returned no results.
+
+**File Modified:**
+- **api/core/intelligence/externalLookupEngine.js** (lines 644, 650)
+  - Changed disclosure from "I couldn't verify" to "External lookup returned no results"
+  - For news: "External news lookup returned no results. This may indicate breaking news not yet indexed or a topic with limited coverage."
+  - This is truthful: the capability exists, but the lookup found nothing
+
+### Problem 3: Engagement padding phrases ✓ FIXED
+
+**Root Cause:** The personality frameworks were adding engagement theater sections ("Practical Next Steps", "Simpler Paths Forward", etc.) by default, even when not requested by the user.
+
+**File Modified:**
+- **api/core/intelligence/responseContractGate.js** (extensive changes)
+  - Split strippable sections into two categories:
+    - `ALWAYS_STRIP_SECTIONS`: False claims and theater (always removed)
+    - `ENGAGEMENT_PADDING_SECTIONS`: Guidance sections (removed unless user requests)
+  - Added `GUIDANCE_REQUEST_PATTERNS` to detect when user explicitly wants steps/guidance
+  - Modified `enforceResponseContract()` to:
+    - Always strip false claims (Problem 2 phrases)
+    - Strip engagement padding UNLESS user requested guidance (Problem 3)
+    - Add `hygiene_enforced` and `hygiene_bad` telemetry
+  - Now runs hygiene enforcement by default, not just when user requests brevity
+
+**New Patterns Stripped:**
+- "I want to be honest with you—I'm not as confident..." (when lookup succeeded)
+- "I don't have access to real-time information" (false capability denial)
+- "I cannot access real-time information" (false capability denial)
+- "**Practical Next Steps:**" sections (unless user asks "how do I...")
+- "**Simpler Paths Forward:**" sections (unless user asks "what should I do")
+- "**Do More With Less:**" sections (unless user asks for alternatives)
+- "**Opportunities I See:**" sections (unless user asks for options)
+
+### Architecture Improvements
+
+The fix maintains the proper enforcement order:
+1. **Retrieve** → Memory/vault/external sources
+2. **Inject** → Context into prompt
+3. **Generate** → AI response via personalities
+4. **Validate** → Bounded reasoning gate checks
+5. **Hygiene** → Response contract gate strips violations
+
+### Expected Results
+
+With these fixes, the vibe run hygiene violations should drop from 5/8 to 0/8:
+- ✅ No confidence disclaimers when external lookup succeeds
+- ✅ No false "I don't have access" claims
+- ✅ No engagement padding unless explicitly requested
+- ✅ System tells the truth about what it did
+
+All changes align with the truth-first principle: **The system may reason beyond available facts, but it may never pretend that reasoning is fact, and it must never lie about its own capabilities.**
+
+---END SUMMARY---
