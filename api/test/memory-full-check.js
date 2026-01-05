@@ -1,3 +1,5 @@
+/* global fetch */
+
 import { Router } from 'express';
 
 const router = Router();
@@ -124,6 +126,8 @@ router.get('/memory-full-check', async (req, res) => {
       tripwire1
     );
 
+    let recall1; // Declare at function scope for later use in TEST 7
+
     if (!store1.success) {
       results.push({
         test: '1. Basic Store + Recall',
@@ -132,7 +136,7 @@ router.get('/memory-full-check', async (req, res) => {
         error: store1.error
       });
     } else {
-      const recall1 = await chatViaHTTP('What is my test identifier?');
+      recall1 = await chatViaHTTP('What is my test identifier?');
 
       const hasExactToken1 = recall1.response?.includes(tripwire1) || false;
       const hasHallucination1 = recall1.response?.match(/evolved|changed|updated|previous|earlier/i);
@@ -344,10 +348,10 @@ router.get('/memory-full-check', async (req, res) => {
     // ===== TEST 7: Token Budget =====
     // Check metadata from previous responses for token counts
     // The orchestrator returns memoryTokens (not memory_tokens or injected_tokens)
-    const injectedTokens = recall1.metadata?.memoryTokens ||
-                          recall1.metadata?.memory_tokens ||
-                          recall1.metadata?.token_usage?.memory ||
-                          recall1.metadata?.token_usage?.injected ||
+    const injectedTokens = recall1?.metadata?.memoryTokens ||
+                          recall1?.metadata?.memory_tokens ||
+                          recall1?.metadata?.token_usage?.memory ||
+                          recall1?.metadata?.token_usage?.injected ||
                           'unknown';
 
     results.push({
@@ -359,7 +363,7 @@ router.get('/memory-full-check', async (req, res) => {
         ? 'WARNING: Token count not in response metadata - check Railway logs'
         : (injectedTokens <= 2400 ? 'PASS: Within budget' : 'FAIL: Exceeded budget'),
       metadata_available: typeof injectedTokens === 'number',
-      available_metadata_keys: Object.keys(recall1.metadata || {})
+      available_metadata_keys: Object.keys(recall1?.metadata || {})
     });
 
     // ===== TEST 8: Cross-Request Persistence =====
@@ -417,14 +421,14 @@ router.get('/memory-full-check', async (req, res) => {
     }
 
     // ===== TEST 10: Memory Injection Telemetry =====
-    const hasTelemetry = recall1.metadata?.memory_ids || recall1.metadata?.memories_injected;
+    const hasTelemetry = recall1?.metadata?.memory_ids || recall1?.metadata?.memories_injected;
 
     results.push({
       test: '10. Memory Injection Telemetry',
       passed: !!hasTelemetry,
-      has_memory_ids: !!recall1.metadata?.memory_ids,
-      has_token_counts: !!recall1.metadata?.memory_tokens,
-      available_metadata_keys: Object.keys(recall1.metadata || {}),
+      has_memory_ids: !!recall1?.metadata?.memory_ids,
+      has_token_counts: !!recall1?.metadata?.memory_tokens,
+      available_metadata_keys: Object.keys(recall1?.metadata || {}),
       note: hasTelemetry
         ? 'PASS: Response includes memory injection details'
         : 'NEEDS IMPROVEMENT: Add memory_ids, previews, token counts to response metadata'

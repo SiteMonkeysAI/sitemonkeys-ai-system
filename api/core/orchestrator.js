@@ -1124,18 +1124,6 @@ export class Orchestrator {
         reasoning_escalation: reasoningEscalationResult,
         response_contract: response_contract,
       };
-
-      // Add debug info in private/debug mode
-      if (process.env.DEPLOYMENT_TYPE === 'private' || process.env.DEBUG_MODE === 'true') {
-        result._debug = {
-          memory_injected: memoryContext.hasMemory,
-          memory_count: memoryContext.count,
-          memory_ids: [], // IDs are logged separately in debug endpoint
-          category: routing?.primaryCategory || 'unknown'
-        };
-      }
-
-      return result;
     } catch (error) {
       this.error(`Request failed: ${error.message}`, error);
       this.#trackPerformance(startTime, false, true);
