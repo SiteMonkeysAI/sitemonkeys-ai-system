@@ -88,7 +88,7 @@ function extractDocumentTerms(text) {
  * @param {object} context - Context including phase4Metadata
  * @returns {object} { valid: boolean, reason: string, recommendation: string }
  */
-function validateResponseRelevance(userQuery, aiResponse, context) {
+function validateResponseRelevance(userQuery, aiResponse, _context) {
   // For long documents, check that response addresses the document
   if (userQuery.length > 10000) {
     // Response should reference document content

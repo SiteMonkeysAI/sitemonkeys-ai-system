@@ -397,7 +397,7 @@ export function detectHighStakesDomain(query) {
  * @param {object} context - Additional context (mode, conversation history)
  * @returns {Promise<object>} { type: string, confidence: number, stage: 2, reasoning: string }
  */
-export async function classifyAmbiguous(query, context = {}) {
+export async function classifyAmbiguous(query, _context = {}) {
   // This integrates with the existing Reasoning-Based Confidence Engine
   // For now, return a structured response that can be filled in when integrated
 
