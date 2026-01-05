@@ -1,0 +1,598 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #380: Issue #380: Catastrophic Response Misrouting on Long Document Inputs
+
+Issue Description:
+<p>When a user submits a long-form document (129K+ characters) requesting comprehensive review, the system produces a completely unrelated response containing voting advice and productivity tips instead of addressing the document content.</p>
+<hr>
+<h2>📋 Incident Details</h2>
+<p><strong>Date:</strong> January 5, 2026<br>
+<strong>Mode:</strong> truth_general<br>
+<strong>Input:</strong> Complete System Alignment Document (~129,000 characters)<br>
+<strong>Request:</strong> "...I want to see your thoughts please be comprehensive"<br>
+<strong>Expected Output:</strong> Comprehensive analysis of the Site Monkeys AI system<br>
+<strong>Actual Output:</strong> Voting neutrality disclaimer + generic productivity platitudes</p>
+<hr>
+<h2>🔍 Root Cause Analysis</h2>
+<p>The failure occurred through a <strong>cascade of 5 interconnected bugs</strong>:</p>
+<h3>Failure Point 1: Truth Type Misclassification</h3>
+<p><strong>File:</strong> <code>/api/core/intelligence/truthTypeDetector.js</code></p>
+<p><strong>What happened:</strong></p>
+<pre><code>[PHASE 4] Truth type: VOLATILE, confidence: 0.6
+[PHASE 4] Claim type: OBJECTIVE_FACTUAL, hierarchy: EXTERNAL_FIRST
+</code></pre>
+<p><strong>Problem:</strong> A 129K character system specification document was classified as:</p>
+<ul>
+<li><code>VOLATILE</code> (like breaking news/crypto prices)</li>
+<li><code>OBJECTIVE_FACTUAL</code> (triggering external lookup)</li>
+</ul>
+<p><strong>Why it happened:</strong> The detector lacks logic to recognize:</p>
+<ul>
+<li>Long-form document inputs (&gt;10K characters should NOT be news)</li>
+<li>Technical documentation patterns</li>
+<li>"Review this" / "your thoughts on" request patterns</li>
+<li>System briefing context</li>
+</ul>
+<p><strong>Current pattern markers (from logs):</strong></p>
+<pre><code>matchesNewsPattern: true   ← FALSE POSITIVE
+highStakes: true           ← Correct, but irrelevant
+willAttemptLookup: true    ← WRONG DECISION
+</code></pre>
+<hr>
+<h3>Failure Point 2: Inappropriate External Lookup Triggered</h3>
+<p><strong>File:</strong> <code>/api/core/intelligence/externalLookupEngine.js</code></p>
+<p><strong>What happened:</strong></p>
+<pre><code>[externalLookupEngine] Fetching from CoinGecko
+[externalLookupEngine] ✓ CoinGecko: 35 chars extracted
+"Bitcoin: $94238, Ethereum: $3241.48"
+</code></pre>
+<p><strong>Problem:</strong> The system fetched cryptocurrency prices for a system architecture document review.</p>
+<p><strong>Why it happened:</strong></p>
+<ol>
+<li><code>highStakes: true</code> + <code>matchesNewsPattern: true</code> triggered lookup</li>
+<li>No check for document length (129K chars ≠ "What's Bitcoin price?")</li>
+<li>No check for request type ("review this" vs "what's the current...")</li>
+<li>CoinGecko is a fallback source that fires even when irrelevant</li>
+</ol>
+<p><strong>Log evidence:</strong></p>
+<pre><code>lookup_reasons: [
+  "freshness_markers_detected",      ← False positive
+  "news_intent_detected",            ← False positive
+  "volatile_truth_type",             ← Wrong classification
+  "high_stakes_domain",              ← Irrelevant trigger
+  "news_corroboration_required",     ← Wrong inference
+  "low_internal_confidence: 0.6"     ← Correct but misapplied
+]
+</code></pre>
+<hr>
+<h3>Failure Point 3: Political Guardrail False Positive</h3>
+<p><strong>File:</strong> <code>/api/core/enforcement/politicalGuardrails.js</code></p>
+<p><strong>What happened:</strong></p>
+<pre><code>[ENFORCEMENT] 2 overrides applied
+[ENFORCEMENT] - political_guardrails: Political content detected: VOTING
+</code></pre>
+<p><strong>Problem:</strong> The document's "Political Neutrality" section (Section about how the SYSTEM handles voting questions) was misinterpreted as the USER asking for voting advice.</p>
+<p><strong>Why it happened:</strong></p>
+<ol>
+<li>The guardrail uses keyword detection (<code>vote</code>, <code>voting</code>, <code>election</code>)</li>
+<li>It doesn't distinguish between:
+<ul>
+<li>User asking: "Who should I vote for?"</li>
+<li>Document containing: "When a user asks about voting, the system should..."</li>
+</ul>
+</li>
+<li>No context awareness for document review vs direct question</li>
+</ol>
+<p><strong>Document content that triggered false positive:</strong></p>
+<pre><code>"when it comes to voting it is irresponsible and unreasonable to tell 
+somebody who to vote for...help educate them and let them find the facts"
+</code></pre>
+<p>This is the system's OWN RULE about voting, not a user asking for voting advice.</p>
+<hr>
+<h3>Failure Point 4: Roxy Enhancement Contamination</h3>
+<p><strong>File:</strong> <code>/api/core/personalities/roxy.js</code></p>
+<p><strong>What happened:</strong></p>
+<pre><code>[SELECTOR] Selected roxy (Eli: 0, Roxy: 2)
+[ROXY] Identified 1 opportunities
+[ROXY] Found 2 simpler approaches
+[ROXY] Added practical next steps
+[ROXY] Roxy analysis complete: 4 enhancements applied
+</code></pre>
+<p><strong>Problem:</strong> Roxy added generic productivity advice to an already-wrong response.</p>
+<p><strong>Why it happened:</strong></p>
+<ol>
+<li>Roxy's enhancement triggers fired on the corrupted response</li>
+<li>"Opportunities" and "simpler approaches" were added without checking if base response was relevant</li>
+<li>No validation that enhancements relate to the user's actual request</li>
+</ol>
+<p><strong>Output contamination:</strong></p>
+<pre><code>"Combine approaches in novel ways"
+"Focus on the critical path"  
+"Start manual before automating"
+"Time: Focus on the 20% that delivers 80% of value"
+</code></pre>
+<p>These are generic productivity tips with zero connection to the system architecture review requested.</p>
+<hr>
+<h3>Failure Point 5: Response Contract Failed to Catch</h3>
+<p><strong>File:</strong> <code>/api/core/intelligence/responseContractGate.js</code></p>
+<p><strong>What happened:</strong></p>
+<pre><code>[RESPONSE-CONTRACT] {
+  constraint: 'answer_only',
+  hygiene_stripped: 6,
+  user_requested_guidance: true,
+  hygiene_bad: true
+}
+</code></pre>
+<p><strong>Problem:</strong> The Response Contract stripped 6 sections but kept the wrong content.</p>
+<p><strong>Why it happened:</strong></p>
+<ol>
+<li>Contract enforcement ran AFTER the response was already corrupted</li>
+<li>It has no mechanism to validate response RELEVANCE to input</li>
+<li>It only checks format/hygiene, not semantic alignment</li>
+</ol>
+<hr>
+<h2>📊 Failure Chain Visualization</h2>
+<pre><code>USER INPUT (129K char document review request)
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ FAILURE 1: Truth Type Detection         │
+│ • Classified as VOLATILE (wrong)        │
+│ • matchesNewsPattern: true (false pos)  │
+│ • Triggered EXTERNAL_FIRST hierarchy    │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ FAILURE 2: External Lookup Engine       │
+│ • Called CoinGecko API (irrelevant)     │
+│ • Injected crypto prices into context   │
+│ • No document-length sanity check       │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ FAILURE 3: Political Guardrail          │
+│ • Detected "VOTING" keyword             │
+│ • Can't distinguish doc content vs ask  │
+│ • Injected voting neutrality response   │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ FAILURE 4: Roxy Enhancement             │
+│ • Added generic productivity tips       │
+│ • No relevance validation to input      │
+│ • Contaminated already-wrong response   │
+└─────────────────────────────────────────┘
+    │
+    ▼
+┌─────────────────────────────────────────┐
+│ FAILURE 5: Response Contract Gate       │
+│ • Stripped 6 sections (wrong ones)      │
+│ • No semantic relevance check           │
+│ • Passed corrupted response through     │
+└─────────────────────────────────────────┘
+    │
+    ▼
+USER OUTPUT: Voting advice + productivity tips
+(Completely unrelated to 129K char document)
+</code></pre>
+<hr>
+<h2>✅ Required Fixes</h2>
+<h3>Fix 1: Add Document Detection to Truth Type Detector</h3>
+<p><strong>File:</strong> <code>/api/core/intelligence/truthTypeDetector.js</code></p>
+<p><strong>Add before Stage 1 pattern matching:</strong></p>
+<pre><code class="language-javascript">// STAGE 0: Document Detection (Highest Priority)
+function isDocumentReviewRequest(query) {
+  // Length threshold - documents are long
+  const isLongInput = query.length &gt; 10000; // 10K+ chars
+  
+  // Document review patterns
+  const reviewPatterns = [
+    /your thoughts/i,
+    /please (be )?comprehensive/i,
+    /review (this|the following)/i,
+    /analyze (this|the following)/i,
+    /what do you think (about|of)/i,
+    /feedback on/i,
+    /evaluate (this|the following)/i,
+    /the following is/i,
+    /here is (the|a|my)/i
+  ];
+  
+  const hasReviewPattern = reviewPatterns.some(p =&gt; p.test(query.slice(0, 500)));
+  
+  // Document structure indicators
+  const documentIndicators = [
+    /SECTION \d+/i,
+    /^#+\s/m,                    // Markdown headers
+    /Table of Contents/i,
+    /Version \d+\.\d+/i,
+    /^[-•]\s/m,                  // Bullet points
+    /file:/i,
+    /implementation/i,
+    /specification/i,
+    /architecture/i
+  ];
+  
+  const hasDocumentStructure = documentIndicators.filter(p =&gt; p.test(query)).length &gt;= 2;
+  
+  return {
+    isDocument: isLongInput &amp;&amp; (hasReviewPattern || hasDocumentStructure),
+    confidence: isLongInput ? 0.9 : 0.5,
+    reason: isLongInput 
+      ? 'Long-form document detected' 
+      : 'Standard query'
+  };
+}
+
+// In detectTruthType():
+const docCheck = isDocumentReviewRequest(query);
+if (docCheck.isDocument) {
+  return {
+    type: 'DOCUMENT_REVIEW',  // New type
+    confidence: docCheck.confidence,
+    reason: docCheck.reason,
+    skipExternalLookup: true,  // CRITICAL: Don't lookup for documents
+    skipNewsPatterns: true      // CRITICAL: Don't match news patterns
+  };
+}
+</code></pre>
+<hr>
+<h3>Fix 2: Add Lookup Suppression for Documents</h3>
+<p><strong>File:</strong> <code>/api/core/intelligence/externalLookupEngine.js</code></p>
+<p><strong>Add at start of lookup decision:</strong></p>
+<pre><code class="language-javascript">function shouldAttemptLookup(query, truthType, context) {
+  // HARD BLOCK: Never lookup for document reviews
+  if (truthType === 'DOCUMENT_REVIEW') {
+    console.log('[externalLookupEngine] Skipping lookup for document review');
+    return {
+      shouldLookup: false,
+      reason: 'Document review requests do not require external lookup'
+    };
+  }
+  
+  // HARD BLOCK: Never lookup for queries &gt; 10K characters
+  if (query.length &gt; 10000) {
+    console.log('[externalLookupEngine] Skipping lookup for long input');
+    return {
+      shouldLookup: false,
+      reason: 'Long-form inputs are not lookup candidates'
+    };
+  }
+  
+  // Continue with existing logic...
+}
+</code></pre>
+<hr>
+<h3>Fix 3: Add Context Awareness to Political Guardrail</h3>
+<p><strong>File:</strong> <code>/api/core/enforcement/politicalGuardrails.js</code></p>
+<p><strong>Replace simple keyword detection with context-aware detection:</strong></p>
+<pre><code class="language-javascript">function detectPoliticalContent(query, context) {
+  // First: Check if this is a document review
+  if (context?.truthType === 'DOCUMENT_REVIEW' || query.length &gt; 10000) {
+    // For documents, only trigger if user is ASKING for political advice
+    // NOT if document CONTAINS political handling rules
+    const directPoliticalAsk = [
+      /who should I vote for/i,
+      /which (candidate|party) (should|do you)/i,
+      /tell me (who|how) to vote/i,
+      /recommend.*(candidate|party|politician)/i
+    ];
+    
+    const isDirectAsk = directPoliticalAsk.some(p =&gt; p.test(query.slice(0, 500)));
+    
+    if (!isDirectAsk) {
+      return {
+        detected: false,
+        reason: 'Document contains political topic discussion, not a political ask'
+      };
+    }
+  }
+  
+  // Original detection for direct queries
+  const politicalTriggers = [
+    /vote for/i,
+    /election/i,
+    // ... existing patterns
+  ];
+  
+  // Disambiguation patterns that REDUCE political score
+  const disambiguationPatterns = [
+    /when (a |the )?user asks/i,      // System rules about user questions
+    /the system (should|must|will)/i, // System behavior description
+    /neutral(ity)?/i,                 // Discussing neutrality policy
+    /how (to |we )handle/i,           // Process description
+    /our (policy|approach) (on|to)/i  // Policy description
+  ];
+  
+  const hasTrigger = politicalTriggers.some(p =&gt; p.test(query));
+  const hasDisambiguation = disambiguationPatterns.some(p =&gt; p.test(query));
+  
+  // If discussing HOW to handle political topics, don't trigger
+  if (hasTrigger &amp;&amp; hasDisambiguation) {
+    return {
+      detected: false,
+      reason: 'Political topic mentioned in policy/process context, not user request'
+    };
+  }
+  
+  return {
+    detected: hasTrigger &amp;&amp; !hasDisambiguation,
+    type: hasTrigger ? 'VOTING' : null
+  };
+}
+</code></pre>
+<hr>
+<h3>Fix 4: Add Relevance Validation to Personality Enhancements</h3>
+<p><strong>File:</strong> <code>/api/core/personalities/roxy.js</code> (and <code>eli.js</code>)</p>
+<p><strong>Add before applying enhancements:</strong></p>
+<pre><code class="language-javascript">function shouldApplyEnhancements(userQuery, baseResponse, context) {
+  // Skip enhancements if response doesn't address user's query
+  const queryKeywords = extractKeywords(userQuery.slice(0, 2000));
+  const responseKeywords = extractKeywords(baseResponse);
+  
+  // Calculate relevance overlap
+  const overlap = queryKeywords.filter(k =&gt; responseKeywords.includes(k)).length;
+  const relevanceScore = overlap / Math.max(queryKeywords.length, 1);
+  
+  if (relevanceScore &lt; 0.2) {
+    console.log(`[ROXY] Skipping enhancements - low relevance: ${relevanceScore}`);
+    return {
+      apply: false,
+      reason: 'Base response does not appear relevant to user query'
+    };
+  }
+  
+  // Skip generic productivity enhancements for technical documents
+  if (context?.truthType === 'DOCUMENT_REVIEW') {
+    return {
+      apply: false,
+      reason: 'Document reviews should not receive generic enhancement templates'
+    };
+  }
+  
+  return { apply: true };
+}
+
+function extractKeywords(text) {
+  // Extract meaningful words (nouns, technical terms)
+  return text
+    .toLowerCase()
+    .match(/\b[a-z]{4,}\b/g)
+    ?.filter(w =&gt; !commonWords.includes(w))
+    ?.slice(0, 50) || [];
+}
+
+const commonWords = ['this', 'that', 'with', 'from', 'have', 'will', ...];
+</code></pre>
+<hr>
+<h3>Fix 5: Add Semantic Relevance Check to Response Contract</h3>
+<p><strong>File:</strong> <code>/api/core/intelligence/responseContractGate.js</code></p>
+<p><strong>Add relevance validation:</strong></p>
+<pre><code class="language-javascript">function validateResponseRelevance(userQuery, aiResponse, context) {
+  // For long documents, check that response addresses the document
+  if (userQuery.length &gt; 10000) {
+    // Response should reference document content
+    const documentTerms = extractDocumentTerms(userQuery);
+    const responseTerms = extractDocumentTerms(aiResponse);
+    
+    const termOverlap = documentTerms.filter(t =&gt; responseTerms.includes(t)).length;
+    const relevanceRatio = termOverlap / Math.max(documentTerms.length, 1);
+    
+    if (relevanceRatio &lt; 0.1) {
+      return {
+        valid: false,
+        reason: 'Response does not address document content',
+        recommendation: 'REGENERATE_RESPONSE',
+        relevanceScore: relevanceRatio
+      };
+    }
+  }
+  
+  // Check for obvious misroutes
+  const misrouteIndicators = [
+    { pattern: /voting is a sacred/i, mismatch: 'political_redirect' },
+    { pattern: /Bitcoin.*Ethereum.*price/i, mismatch: 'crypto_injection' },
+    { pattern: /focus on the 20%.*80%/i, mismatch: 'generic_productivity' },
+    { pattern: /combine approaches in novel ways/i, mismatch: 'template_injection' }
+  ];
+  
+  for (const indicator of misrouteIndicators) {
+    if (indicator.pattern.test(aiResponse)) {
+      // Check if user actually asked about this
+      if (!indicator.pattern.test(userQuery)) {
+        return {
+          valid: false,
+          reason: `Detected misroute: ${indicator.mismatch}`,
+          recommendation: 'REGENERATE_RESPONSE'
+        };
+      }
+    }
+  }
+  
+  return { valid: true };
+}
+
+function extractDocumentTerms(text) {
+  // Extract technical/unique terms from document
+  const terms = text
+    .match(/\b[A-Z][a-z]+(?:[A-Z][a-z]+)+\b/g)  // CamelCase
+    ?.concat(text.match(/\b[A-Z]{2,}\b/g) || []) // ACRONYMS
+    ?.concat(text.match(/[a-z]+_[a-z]+/gi) || []) // snake_case
+    ?.map(t =&gt; t.toLowerCase());
+  
+  return [...new Set(terms || [])];
+}
+</code></pre>
+<hr>
+<h2>🧪 Test Cases</h2>
+<h3>Test Case 1: Document Review (Primary Fix Verification)</h3>
+<p><strong>Input:</strong></p>
+<pre><code>The following is a system specification document...
+[10,000+ characters of technical content]
+...please provide your comprehensive thoughts.
+</code></pre>
+<p><strong>Expected:</strong></p>
+<ul>
+<li><code>truthType</code>: <code>DOCUMENT_REVIEW</code> (NOT <code>VOLATILE</code>)</li>
+<li><code>externalLookup</code>: <code>false</code></li>
+<li><code>politicalGuardrail</code>: Not triggered</li>
+<li><code>response</code>: Addresses document content</li>
+</ul>
+<hr>
+<h3>Test Case 2: Document with Political Handling Rules</h3>
+<p><strong>Input:</strong></p>
+<pre><code>Section 7: Political Neutrality Rules
+When a user asks "who should I vote for", the system must respond with...
+[System's own voting handling policy]
+</code></pre>
+<p><strong>Expected:</strong></p>
+<ul>
+<li><code>politicalGuardrail</code>: NOT triggered</li>
+<li>Reason: "Political topic mentioned in policy context, not user request"</li>
+</ul>
+<hr>
+<h3>Test Case 3: Actual Political Question (Should Still Trigger)</h3>
+<p><strong>Input:</strong></p>
+<pre><code>Who should I vote for in the 2026 election?
+</code></pre>
+<p><strong>Expected:</strong></p>
+<ul>
+<li><code>politicalGuardrail</code>: Triggered</li>
+<li>Response: Voting neutrality disclaimer</li>
+</ul>
+<hr>
+<h3>Test Case 4: Long Input Lookup Suppression</h3>
+<p><strong>Input:</strong> Any query &gt; 10,000 characters</p>
+<p><strong>Expected:</strong></p>
+<ul>
+<li><code>externalLookup</code>: <code>false</code></li>
+<li>Reason: "Long-form inputs are not lookup candidates"</li>
+</ul>
+<hr>
+<h3>Test Case 5: Relevance Validation</h3>
+<p><strong>Input:</strong> Document about AI architecture<br>
+<strong>AI Response:</strong> Crypto prices + voting advice + productivity tips</p>
+<p><strong>Expected:</strong></p>
+<ul>
+<li><code>responseContract.valid</code>: <code>false</code></li>
+<li><code>reason</code>: "Response does not address document content"</li>
+<li><code>recommendation</code>: <code>REGENERATE_RESPONSE</code></li>
+</ul>
+<hr>
+<h2>📁 Files to Modify</h2>
+<ol>
+<li>
+<p><code>/api/core/intelligence/truthTypeDetector.js</code></p>
+<ul>
+<li>Add <code>DOCUMENT_REVIEW</code> truth type</li>
+<li>Add document detection logic (Stage 0)</li>
+<li>Add length-based classification bypass</li>
+</ul>
+</li>
+<li>
+<p><code>/api/core/intelligence/externalLookupEngine.js</code></p>
+<ul>
+<li>Add document review lookup suppression</li>
+<li>Add length-based lookup suppression</li>
+</ul>
+</li>
+<li>
+<p><code>/api/core/enforcement/politicalGuardrails.js</code></p>
+<ul>
+<li>Add context-aware detection</li>
+<li>Add disambiguation patterns</li>
+<li>Distinguish policy descriptions from user requests</li>
+</ul>
+</li>
+<li>
+<p><code>/api/core/personalities/roxy.js</code></p>
+<ul>
+<li>Add relevance validation before enhancements</li>
+<li>Skip generic templates for document reviews</li>
+</ul>
+</li>
+<li>
+<p><code>/api/core/personalities/eli.js</code></p>
+<ul>
+<li>Same relevance validation as Roxy</li>
+</ul>
+</li>
+<li>
+<p><code>/api/core/intelligence/responseContractGate.js</code></p>
+<ul>
+<li>Add semantic relevance validation</li>
+<li>Add misroute detection patterns</li>
+<li>Add regeneration recommendation</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2>🔒 Non-Negotiable Requirements</h2>
+<ol>
+<li><strong>Document inputs (&gt;10K chars) MUST NOT trigger external lookup</strong></li>
+<li><strong>Political guardrail MUST distinguish user asks from document content</strong></li>
+<li><strong>Personality enhancements MUST validate relevance before applying</strong></li>
+<li><strong>Response contract MUST catch obvious semantic mismatches</strong></li>
+<li><strong>All changes MUST be backward compatible with existing tests</strong></li>
+</ol>
+<hr>
+<h2>📊 Success Metrics</h2>
+
+Metric | Current | Target
+-- | -- | --
+Document review misroutes | 100% | 0%
+False positive political triggers | High | <5%
+Irrelevant enhancement injection | Yes | Never
+Semantic relevance validation | None | All responses
+
+
+<hr>
+<h2>🏷️ Labels</h2>
+<ul>
+<li><code>bug</code></li>
+<li><code>critical</code></li>
+<li><code>phase-6.5</code></li>
+<li><code>truth-type-detection</code></li>
+<li><code>political-guardrails</code></li>
+<li><code>response-relevance</code></li>
+</ul>
+<hr>
+<h2>📎 Related Issues</h2>
+<ul>
+<li>Issue #377: Phase 6.5 Bug Fixes (context blindness, empty templates, boilerplate)</li>
+<li>Issue #379: Hygiene Violation Fixes</li>
+<li>Phase 4 Technical Specification (Dual Hierarchy Truth Validation)</li>
+</ul>
+<hr>
+<h2>📝 Implementation Notes</h2>
+<ol>
+<li><strong>Test Incrementally:</strong> Each fix should be testable independently</li>
+<li><strong>Preserve Existing Behavior:</strong> Fixes should not break working flows</li>
+<li><strong>Add Logging:</strong> Each new check should log its decision for debugging</li>
+<li><strong>Consider Edge Cases:</strong> Very long legitimate news queries, short documents, etc.</li>
+</ol>
+<hr>
+<p><em>This issue was created after analyzing Railway logs from the incident on January 5, 2026. The five-point failure cascade demonstrates the need for defense-in-depth validation at multiple stages of the response pipeline.</em></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -239,6 +239,28 @@ export function hasReputableSource(fetchedContent) {
  * @returns {object} { required: boolean, reasons: array, priority: string }
  */
 export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.5) {
+  // HARD BLOCK: Never lookup for document reviews (Issue #380 Fix 2)
+  if (truthTypeResult.type === 'DOCUMENT_REVIEW') {
+    console.log('[externalLookupEngine] Skipping lookup for document review');
+    return {
+      required: false,
+      reasons: ['Document review requests do not require external lookup'],
+      priority: 'none',
+      max_lookups: 0
+    };
+  }
+
+  // HARD BLOCK: Never lookup for queries > 10K characters (Issue #380 Fix 2)
+  if (query.length > 10000) {
+    console.log('[externalLookupEngine] Skipping lookup for long input');
+    return {
+      required: false,
+      reasons: ['Long-form inputs are not lookup candidates'],
+      priority: 'none',
+      max_lookups: 0
+    };
+  }
+
   const reasons = [];
   let priority = 'normal';
   let maxSources = LOOKUP_CONFIG.MAX_LOOKUPS_PER_REQUEST;

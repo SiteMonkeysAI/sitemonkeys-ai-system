@@ -13,6 +13,7 @@ export const TRUTH_TYPES = {
   VOLATILE: 'VOLATILE',       // TTL: 5 minutes
   SEMI_STABLE: 'SEMI_STABLE', // TTL: 24 hours
   PERMANENT: 'PERMANENT',     // TTL: 30 days
+  DOCUMENT_REVIEW: 'DOCUMENT_REVIEW', // Document review/analysis - no external lookup
   AMBIGUOUS: 'AMBIGUOUS'      // Requires Stage 2 AI classification
 };
 
@@ -20,7 +21,8 @@ export const TRUTH_TYPES = {
 export const TTL_CONFIG = {
   VOLATILE: 5 * 60 * 1000,           // 5 minutes
   SEMI_STABLE: 24 * 60 * 60 * 1000,  // 24 hours
-  PERMANENT: 30 * 24 * 60 * 60 * 1000 // 30 days
+  PERMANENT: 30 * 24 * 60 * 60 * 1000, // 30 days
+  DOCUMENT_REVIEW: 0                   // No caching for document reviews
 };
 
 // Stage 1: Deterministic pattern markers (zero token cost)
@@ -165,6 +167,55 @@ function isStableProcedural(query) {
 }
 
 /**
+ * STAGE 0: Document Detection (Highest Priority - Issue #380)
+ * Detect document review requests to prevent misclassification as news/volatile content
+ * @param {string} query - The user's query
+ * @returns {object} { isDocument: boolean, confidence: number, reason: string }
+ */
+function isDocumentReviewRequest(query) {
+  // Length threshold - documents are long
+  const isLongInput = query.length > 10000; // 10K+ chars
+
+  // Document review patterns
+  const reviewPatterns = [
+    /your thoughts/i,
+    /please (be )?comprehensive/i,
+    /review (this|the following)/i,
+    /analyze (this|the following)/i,
+    /what do you think (about|of)/i,
+    /feedback on/i,
+    /evaluate (this|the following)/i,
+    /the following is/i,
+    /here is (the|a|my)/i
+  ];
+
+  const hasReviewPattern = reviewPatterns.some(p => p.test(query.slice(0, 500)));
+
+  // Document structure indicators
+  const documentIndicators = [
+    /SECTION \d+/i,
+    /^#+\s/m,                    // Markdown headers
+    /Table of Contents/i,
+    /Version \d+\.\d+/i,
+    /^[-•]\s/m,                  // Bullet points
+    /file:/i,
+    /implementation/i,
+    /specification/i,
+    /architecture/i
+  ];
+
+  const hasDocumentStructure = documentIndicators.filter(p => p.test(query)).length >= 2;
+
+  return {
+    isDocument: isLongInput && (hasReviewPattern || hasDocumentStructure),
+    confidence: isLongInput ? 0.9 : 0.5,
+    reason: isLongInput
+      ? 'Long-form document detected'
+      : 'Standard query'
+  };
+}
+
+/**
  * Stage 1: Deterministic pattern matching (zero token cost)
  * @param {string} query - The user's query
  * @returns {object} { type: string, confidence: number, stage: 1, patterns_matched: array }
@@ -182,6 +233,22 @@ export function detectByPattern(query) {
 
   const normalizedQuery = query.toLowerCase().trim();
   const matchedPatterns = [];
+
+  // STAGE 0: Document Detection (Highest Priority - Issue #380)
+  const docCheck = isDocumentReviewRequest(query);
+  if (docCheck.isDocument) {
+    console.log('[truthTypeDetector] Document review detected, skipping news/volatile patterns');
+    return {
+      type: TRUTH_TYPES.DOCUMENT_REVIEW,
+      confidence: docCheck.confidence,
+      stage: 0,
+      patterns_matched: [{ type: TRUTH_TYPES.DOCUMENT_REVIEW, pattern: 'document_review_request' }],
+      conflict_detected: false,
+      reason: docCheck.reason,
+      skipExternalLookup: true,  // CRITICAL: Don't lookup for documents
+      skipNewsPatterns: true      // CRITICAL: Don't match news patterns
+    };
+  }
 
   // Early detection: Stable procedural facts (high confidence)
   if (isStableProcedural(normalizedQuery)) {

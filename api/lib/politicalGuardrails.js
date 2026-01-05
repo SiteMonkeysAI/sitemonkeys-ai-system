@@ -57,6 +57,25 @@ export class PoliticalGuardrails {
       confidence: 0,
     };
 
+    // Issue #380 Fix 3: Check if this is a document review
+    if (originalMessage.length > 10000) {
+      // For documents, only trigger if user is ASKING for political advice
+      // NOT if document CONTAINS political handling rules
+      const directPoliticalAsk = [
+        /who should I vote for/i,
+        /which (candidate|party) (should|do you)/i,
+        /tell me (who|how) to vote/i,
+        /recommend.*(candidate|party|politician)/i
+      ];
+
+      const isDirectAsk = directPoliticalAsk.some(p => p.test(originalMessage.slice(0, 500)));
+
+      if (!isDirectAsk) {
+        console.log('[POLITICAL-GUARDRAILS] Document contains political topic discussion, not a political ask');
+        return analysis; // Return NONE
+      }
+    }
+
     const votingPatterns = [
       /vote for/i,
       /don't vote for/i,
@@ -68,10 +87,26 @@ export class PoliticalGuardrails {
       /polling/i,
     ];
 
-    if (
-      this.matchesPatterns(response, votingPatterns) ||
-      this.matchesPatterns(originalMessage, votingPatterns)
-    ) {
+    // Issue #380 Fix 3: Disambiguation patterns that REDUCE political score
+    const disambiguationPatterns = [
+      /when (a |the )?user asks/i,      // System rules about user questions
+      /the system (should|must|will)/i, // System behavior description
+      /neutral(ity)?/i,                 // Discussing neutrality policy
+      /how (to |we )handle/i,           // Process description
+      /our (policy|approach) (on|to)/i  // Policy description
+    ];
+
+    const hasTrigger = this.matchesPatterns(response, votingPatterns) ||
+                       this.matchesPatterns(originalMessage, votingPatterns);
+    const hasDisambiguation = disambiguationPatterns.some(p => p.test(originalMessage) || p.test(response));
+
+    // If discussing HOW to handle political topics, don't trigger
+    if (hasTrigger && hasDisambiguation) {
+      console.log('[POLITICAL-GUARDRAILS] Political topic mentioned in policy/process context, not user request');
+      return analysis; // Return NONE
+    }
+
+    if (hasTrigger && !hasDisambiguation) {
       analysis.detected_categories.push("VOTING");
       analysis.political_risk_level = "HIGH";
       analysis.intervention_type = "VOTING_TEMPLATE";

@@ -22,6 +22,67 @@ function isSimpleFactualQuery(query) {
 }
 
 /**
+ * Helper: Extract meaningful keywords from text (Issue #380 Fix 5)
+ * @param {string} text - Text to extract keywords from
+ * @returns {array} Array of keywords
+ */
+function extractKeywords(text) {
+  // Common words to filter out
+  const commonWords = ['this', 'that', 'with', 'from', 'have', 'will', 'been', 'were', 'they', 'their',
+                       'what', 'when', 'where', 'which', 'would', 'could', 'should', 'about', 'into',
+                       'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under',
+                       'again', 'further', 'then', 'once', 'here', 'there', 'when', 'where', 'while'];
+
+  // Extract meaningful words (nouns, technical terms)
+  const words = text.toLowerCase()
+    .match(/\b[a-z]{4,}\b/g) || [];
+
+  return words
+    .filter(w => !commonWords.includes(w))
+    .slice(0, 50);
+}
+
+/**
+ * Helper: Check if enhancements should be applied (Issue #380 Fix 5)
+ * Skip enhancements if response doesn't address user's query
+ * @param {string} userQuery - The user's query
+ * @param {string} baseResponse - The base AI response
+ * @param {object} context - Context including truthType
+ * @returns {object} { apply: boolean, reason: string }
+ */
+function shouldApplyEnhancements(userQuery, baseResponse, context) {
+  // Skip enhancements for document reviews - they should get direct analysis
+  if (context?.phase4Metadata?.truth_type === 'DOCUMENT_REVIEW') {
+    return {
+      apply: false,
+      reason: 'Document reviews should not receive generic enhancement templates'
+    };
+  }
+
+  // Check relevance overlap between query and response
+  const queryKeywords = extractKeywords(userQuery.slice(0, 2000));
+  const responseKeywords = extractKeywords(baseResponse);
+
+  if (queryKeywords.length === 0) {
+    return { apply: true }; // Can't assess, allow enhancements
+  }
+
+  // Calculate relevance overlap
+  const overlap = queryKeywords.filter(k => responseKeywords.includes(k)).length;
+  const relevanceScore = overlap / Math.max(queryKeywords.length, 1);
+
+  if (relevanceScore < 0.2) {
+    console.log(`[ELI] Skipping enhancements - low relevance: ${relevanceScore.toFixed(2)}`);
+    return {
+      apply: false,
+      reason: 'Base response does not appear relevant to user query'
+    };
+  }
+
+  return { apply: true };
+}
+
+/**
  * Helper: Check if query requires decision-support analysis (risks, blind spots, etc.)
  * Only decision-making, high-stakes, or complex business queries need full analytical framework
  * @param {string} query - The user's query
@@ -78,6 +139,21 @@ export class EliFramework {
       const isHighStakes = context?.phase4Metadata?.high_stakes?.isHighStakes || false;
       const query = context?.message || '';
       const externalLookupSucceeded = (context?.phase4Metadata?.sources_used > 0) || (context?.phase4Metadata?.sources_succeeded > 0);
+
+      // Issue #380 Fix 5: Check if enhancements should be applied
+      const relevanceCheck = shouldApplyEnhancements(query, response, context);
+      if (!relevanceCheck.apply) {
+        this.logger.log(`Skipping all enhancements: ${relevanceCheck.reason}`);
+        return {
+          enhancedResponse: response,
+          personality: "eli",
+          analysisApplied: {},
+          modificationsCount: 0,
+          reasoningApplied: false,
+          skipped: true,
+          skipReason: relevanceCheck.reason
+        };
+      }
 
       // ========== CONFIDENCE GATING (NEW) ==========
       // PERMANENT facts NEVER get disclaimers - they are established truth
