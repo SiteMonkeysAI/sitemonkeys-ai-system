@@ -394,10 +394,10 @@ export function detectHighStakesDomain(query) {
  * Stage 2: AI Classifier (only called if Stage 1 returns AMBIGUOUS)
  * Uses existing Confidence Engine (Innovation #14)
  * @param {string} query - The user's query
- * @param {object} context - Additional context (mode, conversation history)
+ * @param {object} _context - Additional context (mode, conversation history) (unused)
  * @returns {Promise<object>} { type: string, confidence: number, stage: 2, reasoning: string }
  */
-export async function classifyAmbiguous(query, context = {}) {
+export async function classifyAmbiguous(query, _context = {}) {
   // This integrates with the existing Reasoning-Based Confidence Engine
   // For now, return a structured response that can be filled in when integrated
 
