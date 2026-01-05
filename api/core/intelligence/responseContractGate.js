@@ -65,15 +65,16 @@ function extractDocumentTerms(text) {
   const terms = [];
 
   // CamelCase terms - bounded to prevent ReDoS
-  const camelCase = safeText.match(/\b[A-Z][a-z]{1,30}(?:[A-Z][a-z]{1,30})+\b/g) || [];
+  // Allow optional lowercase after uppercase to catch patterns like 'XMLHttpRequest'
+  const camelCase = safeText.match(/\b[A-Z][a-z]{0,30}(?:[A-Z][a-z]{0,30})+\b/g) || [];
   terms.push(...camelCase);
 
   // ACRONYMS - bounded to prevent ReDoS
   const acronyms = safeText.match(/\b[A-Z]{2,20}\b/g) || [];
   terms.push(...acronyms);
 
-  // snake_case - bounded to prevent ReDoS
-  const snakeCase = safeText.match(/[a-z]{1,50}_[a-z]{1,50}/gi) || [];
+  // snake_case - bounded to prevent ReDoS, supports multiple segments
+  const snakeCase = safeText.match(/[a-z]{1,50}(?:_[a-z]{1,50})+/gi) || [];
   terms.push(...snakeCase);
 
   // Unique set, lowercased
