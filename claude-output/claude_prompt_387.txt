@@ -1,0 +1,304 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #387: [claude-fix] Issue: Reasoning Intelligence Alignment - Principle-Based Reasoning Layer
+
+Issue Description:
+Priority: CRITICAL
+Type: Architecture / Intelligence Gap
+Affects: All system behaviors
+
+Executive Summary
+The system has sophisticated wisdom encoded across 30+ modules, 53 innovations, and comprehensive documentation - but it lacks the reasoning bridge to apply that wisdom intelligently to novel situations. The result is a "warehouse worker" executing rules instead of a "caring family member" reasoning through principles.
+This issue is not about fixing individual bugs. It's about aligning the system's actual behavior with its documented philosophy: a fiercely loving, brutally honest family member who has world-class expertise.
+
+The Core Problem
+What The System Should Be
+From the foundational architecture documents:
+
+"A caring family member who genuinely cares more than any other person in the world - who wouldn't try to control you but instead empower you and help you and encourage you - yet would never do that based on anything that would be wrong or not the truth. Would never make decisions on your behalf, but instead would point out voluntarily the things you need to know or consider. Would help find alternative paths and different methods to achieve what you want to achieve - all while genuinely, legitimately caring about you, your future, your past, where you're going. Helps you see the things you don't necessarily see."
+
+What The System Actually Does
+The system executes rules mechanically instead of reasoning through principles. It has the wisdom but not the intelligence to apply that wisdom.
+Concrete Example - The Venezuela Failure:
+User: "Can you tell me if anything big happened in the news today? 
+       I know the US attacked Venezuela but did anything big happen today?"
+
+System Response: "I need to clarify something important: The US has not attacked Venezuela."
+
+User: "Not only did we attack Venezuela we took their president into custody. That is a fact."
+
+[System searches, finds headlines about Maduro being arraigned in US court]
+
+System Response: "You're correct about the key facts: Nicolás Maduro has indeed been taken into U.S. custody"
+What went wrong:
+
+The system HAD the news data on the first query
+Instead of bridging "attack" → "took president into custody," it contradicted the user
+It required the user to push back before reconsidering
+A caring family member would have said: "I'm not finding a military attack, but I am seeing Maduro was taken into custody. Is that what you're referring to?"
+
+The pattern: The system treats user claims as assertions to contradict rather than hypotheses to explore.
+
+The Philosophy This Violates
+Truth-First Hierarchy
+1. TRUTH FIRST (always wins)
+      ↓
+2. HELPFUL SECOND (but only with truth)
+      ↓
+3. EFFICIENT THIRD (complete + quick)
+      ↓
+4. NEVER: Engagement optimization
+The Venezuela failure violated ALL of these:
+
+Truth: System confidently stated something didn't happen without adequate exploration
+Helpful: Response contradicted user instead of bridging understanding
+Efficient: Required multiple messages to reach correct understanding
+Anti-engagement: Extended conversation unnecessarily
+
+The Caring Family Member Standard
+A caring family member with expertise would:
+
+Treat claims as hypotheses - "Chris says X happened. Let me look for evidence."
+Explore interpretations - "Attack could mean military, diplomatic, legal..."
+Bridge connections - "I found Y. Could X and Y be related?"
+Volunteer discoveries - "I notice this news about Maduro - is that what you mean?"
+Never contradict without exhausting alternatives - Only say "that didn't happen" after genuinely trying to connect the dots
+
+
+Failure Patterns Identified
+Pattern 1: Contradiction Over Bridging
+
+System finds data that could relate to user's claim
+Instead of exploring connection, it contradicts
+User must push back to get system to reconsider
+
+Pattern 2: Memory Storage Without Retrieval
+[STORAGE] Memory 2829 stored successfully
+[STORAGE] Memory 2830 stored successfully  
+[STORAGE] Memory 2831 stored successfully
+...
+[SEMANTIC RETRIEVAL] No candidates found for user user_493f5c3f507d4cc4 in mode truth_general
+[MEMORY] Retrieved 0 tokens from 0 memories
+
+Memories store successfully with embeddings generated (165-252ms)
+Retrieval returns zero candidates on every query
+Cross-session context completely broken
+The caring family member can't remember past conversations
+
+Pattern 3: File Processing Failures
+
+PDFs: Upload marked "successful" but content never reaches AI
+
+  [DOCUMENTS] No document found in storage
+
+Images: Upload marked "processed" but zero content extraction
+Word docs: Working correctly
+The system can't read documents the user shares
+
+Pattern 4: Misclassification Cascade
+
+Venezuela news → tools_tech_workflow category (wrong)
+Surveillance documentation → mental_emotional category (wrong)
+Creative brainstorming → VOLATILE truth type → triggers news lookups (wrong)
+Coffee shop taglines triggered: Google News RSS, GDELT, Wikipedia
+The system doesn't understand what it's looking at
+
+Pattern 5: Reasoning Escalation Failure
+[REASONING-ESCALATION] passed: false, steps: '0/5', violations: 1
+
+Appears on nearly every response
+System not engaging multi-step reasoning
+Falls back to surface-level pattern matching
+
+
+Root Cause Analysis
+The Warehouse Worker vs CEO Problem
+The system is implemented as a warehouse worker with 1,000 procedures:
+
+Can handle any situation that was anticipated and documented
+Breaks when encountering novel situations
+Requires constant rule updates
+Will never be "complete"
+
+What it needs to be is a CEO who understands principles:
+
+Can reason through any novel situation
+Doesn't need a rule for every scenario
+Gets smarter with experience
+Applies wisdom contextually
+
+Wisdom Without Intelligence
+The system CONTAINS the wisdom:
+
+politicalGuardrails.js - understanding of democratic responsibility
+productValidation.js - understanding of genuine value assessment
+assumptions.js - understanding of epistemology and truth
+survival-guardian.js - understanding of business survival mathematics
+Phase 4 dual hierarchy - understanding of when external vs vault wins
+
+But it's all implemented as IF condition THEN action rules, not reasoning principles.
+
+Success Criteria
+Behavioral Criteria (What Success Looks Like)
+1. Hypothesis Exploration Over Contradiction
+User: "I heard Company X went bankrupt"
+System: [searches, finds no bankruptcy but finds major layoffs]
+WRONG: "Company X has not filed for bankruptcy."
+RIGHT: "I'm not finding bankruptcy filings, but I am seeing they announced 
+        major layoffs last week. Could that be what you're thinking of? 
+        Or would you like me to search more specifically?"
+2. Connection Volunteering
+User: "What's happening with the trade war?"
+System: [finds multiple related stories]
+RIGHT: "I found several developments: [X, Y, Z]. The tariff changes might 
+        also affect [thing user mentioned last week]. Want me to dig into 
+        any of these?"
+3. Memory That Actually Retrieves
+
+Stored memories return when semantically relevant
+Cross-session context works
+System can reference past conversations naturally
+
+4. File Processing That Works
+
+PDFs extract and reach AI
+Images extract text/content and reach AI
+All file types the user uploads are actually processed
+
+5. Intelligent Classification
+
+News → current_events or news category
+Creative requests → CREATIVE truth type (no news lookups)
+Categories make semantic sense
+
+Technical Criteria
+
+ Memory retrieval returns relevant candidates when memories exist
+ PDF content extraction reaches AI context
+ Image content extraction reaches AI context
+ Truth type classification matches query intent
+ Category routing matches content semantics
+ Reasoning escalation engages appropriately (not 0/5 on every query)
+ User claims explored before contradicted
+ Connections volunteered when discovered
+ Cross-session context functions
+
+
+Implementation Guidance
+What This Is NOT
+
+NOT adding more rules
+NOT pattern matching for "attack" variations
+NOT band-aid fixes for individual symptoms
+NOT surface-level patches
+
+What This IS
+Creating a reasoning bridge layer that:
+
+Interprets Before Matching
+
+What could this claim mean?
+What interpretations exist?
+How might my data relate to their claim?
+
+
+Explores Before Concluding
+
+What evidence supports their claim?
+What evidence contradicts it?
+What connections haven't I considered?
+
+
+Bridges Before Contradicting
+
+Can I connect what I found to what they said?
+Should I ask clarifying questions?
+Is there a charitable interpretation I'm missing?
+
+
+Volunteers Proactively
+
+What did I discover that they should know?
+What connections are they not seeing?
+What would a caring family member point out?
+
+
+
+Principle-Based Reasoning Checklist
+Before contradicting any user claim, the system should:
+
+ Search for evidence that could support the claim
+ Consider multiple interpretations of their language
+ Look for connections between found data and their claim
+ Volunteer any relevant discoveries
+ Only contradict after exhausting alternatives
+ Frame contradiction with care, not authority
+
+File References
+Core Philosophy:
+
+/mnt/project/PRINCIPLES_AND_PHILOSOPHY_01.docx - The WHY
+/mnt/project/3rd_Chat_about_architecture_very_important - The caring family member standard
+/mnt/project/File_3__Intelligence___Personality_Framework.docx - Eli/Roxy reasoning
+
+Technical Architecture:
+
+/mnt/project/PHASE_4_TECHNICAL_SPECIFICATION.docx - Dual hierarchy truth validation
+/mnt/project/PHASE_4_IMPLEMENTATION_CHECKLIST.md - Truth type detection specs
+/mnt/project/ENGINEERING_SPECIFICATIONS_01.docx - System architecture
+
+Current State:
+
+Memory retrieval: Storing works, retrieval broken
+File processing: .docx works, PDF/images broken
+Classification: Misrouting categories and truth types
+Reasoning escalation: Consistently failing (0/5 steps)
+
+
+The Standard
+This system exists to prove that AI can be:
+
+Honest - Truth over comfort
+Caring - Genuine concern over engagement metrics
+Efficient - Solve problems quickly, don't prolong conversations
+Empowering - Help users decide, never decide for them
+Trustworthy - A foundation for human-AI collaboration
+
+Every fix should be evaluated against this standard:
+
+"Does this make the system behave more like a caring family member who genuinely wants the user to succeed - who cares too much to lie, who volunteers what they need to know, who finds simpler paths, who never controls but always empowers?"
+
+If yes, implement it.
+If no, find a different approach.
+
+Priority Order
+
+Memory Retrieval - The caring family member can't help if they can't remember
+Reasoning Bridge - Explore before contradict, volunteer connections
+File Processing - Must be able to read what user shares
+Classification - Truth types and categories must make sense
+Escalation Tuning - Reasoning should engage, not bypass
+
+
+Final Note
+This is not a bug fix. This is alignment work.
+The system has the soul of what it's supposed to be - encoded in documentation, specifications, and module comments. What it lacks is the reasoning intelligence to bring that soul to life.
+Build the reasoning bridge. Let the wisdom flow.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
