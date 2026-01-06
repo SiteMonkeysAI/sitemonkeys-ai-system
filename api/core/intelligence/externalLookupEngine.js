@@ -149,11 +149,37 @@ const FRESHNESS_MARKERS = [
 // High-stakes news markers that require corroboration
 const HIGH_STAKES_NEWS_MARKERS = /attack|bombing|invasion|coup|killed|missile|war|strike|assassination|military action|troops|casualties/i;
 
-// News intent patterns - detect general news queries
-const NEWS_INTENT_PATTERNS = /\b(what happened|what's happening|what is going on|what's the situation|what is the situation|situation with|news|update on|latest on|current events|breaking|this morning|today|yesterday)\b/i;
+// News intent structural patterns - detect news queries by STRUCTURE, not specific names
+// PRINCIPLE: News intent = question structure + proper nouns, NOT hardcoded name lists
+const NEWS_STRUCTURE_PATTERNS = [
+  // "What's the situation with X" patterns
+  /\bwhat'?s\s+(the\s+)?(situation|happening|going\s+on|news|latest|update)\s+(with|about|regarding|on|in)\b/i,
+  /\bwhat\s+is\s+(the\s+)?(situation|happening|going\s+on|news|latest|update)\s+(with|about|regarding|on|in)\b/i,
 
-// Location patterns - geopolitical entities and political figures
-const LOCATION_PATTERNS = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|congo|syria|yemen|afghanistan|iraq|lebanon|taiwan|north korea|south korea|japan|india|pakistan|brazil|argentina|mexico|cuba|nicaragua|myanmar|ethiopia|sudan|somalia|libya|egypt|turkey|saudi arabia|uae|qatar|greenland|denmark|congress|senate|white house|pentagon|state department|president|prime minister|chancellor|election|trump|biden|harris|putin|xi jinping|netanyahu)\b/i;
+  // "Tell me about X" patterns
+  /\btell\s+me\s+(about|regarding)\b/i,
+
+  // "Any news about X" patterns
+  /\bany\s+(news|updates?|developments?)\s+(about|on|regarding)\b/i,
+
+  // "What's happening with X" variants
+  /\b(news|situation|update|happening|development)\s+(with|about|regarding|on|in)\b/i,
+
+  // Current event queries
+  /\b(current\s+events?|breaking|this\s+morning|today|yesterday|just\s+now)\b/i,
+
+  // Direct "what happened" patterns
+  /\bwhat\s+happened\s+(with|to|in)\b/i,
+  /\bwhat'?s\s+going\s+on\s+(with|in)\b/i
+];
+
+// Geopolitical context markers (not entity names, but CONTEXT indicators)
+// These indicate geopolitical context without hardcoding specific names
+const GEOPOLITICAL_CONTEXT_MARKERS = [
+  /\b(election|diplomatic|military|conflict|treaty|summit|sanctions|trade\s+war)\b/i,
+  /\b(president|prime\s+minister|chancellor|leader|government|parliament|congress|senate)\b/i,
+  /\b(country|nation|state|territory|border|international)\b/i
+];
 
 // Reputable news sources for corroboration
 const REPUTABLE_SOURCES = /reuters|associated press|ap news|bbc|afp|npr|guardian|new york times|nytimes|washington post|wall street journal|wsj|cnn|abc news|cbs news|nbc news/i;
@@ -205,7 +231,52 @@ export function extractSearchQuery(query) {
 }
 
 /**
+ * Detect proper nouns in query (capitalized words that likely represent named entities)
+ * PRINCIPLE: Proper nouns + news structure = news query (CEO approach, not warehouse worker)
+ * @param {string} query - The user's query
+ * @returns {boolean} True if proper nouns detected
+ */
+export function hasProperNouns(query) {
+  if (!query || typeof query !== 'string') {
+    return false;
+  }
+
+  // Look for capitalized words that aren't at sentence start
+  // Pattern: word boundary, capital letter, lowercase letters
+  // Exclude common sentence starters and question words
+  const excludeWords = /^(What|Where|When|Who|Why|How|Is|Are|Does|Do|Can|Could|Would|Should|Tell|Please|The|A|An|I|You|We|They|He|She|It)$/;
+
+  const words = query.split(/\s+/);
+
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].replace(/[^\w]/g, ''); // Remove punctuation
+
+    // Skip if empty or too short
+    if (!word || word.length < 2) continue;
+
+    // Check if word starts with capital and has lowercase letters
+    if (/^[A-Z][a-z]+/.test(word)) {
+      // If it's the first word, check if it's a common sentence starter
+      if (i === 0 && excludeWords.test(word)) {
+        continue;
+      }
+
+      // Found a proper noun
+      return true;
+    }
+
+    // Also check for all-caps acronyms (UK, USA, CEO, etc.)
+    if (/^[A-Z]{2,}$/.test(word)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+/**
  * Check if query has news intent (general news query)
+ * PRINCIPLE-BASED: Detects news intent through STRUCTURE + PROPER NOUNS, not hardcoded name lists
  * @param {string} query - The user's query
  * @returns {boolean} True if news intent detected
  */
@@ -215,12 +286,31 @@ export function hasNewsIntent(query) {
   }
 
   const normalizedQuery = query.toLowerCase().trim();
-  const hasNewsPattern = NEWS_INTENT_PATTERNS.test(normalizedQuery);
-  const hasLocation = LOCATION_PATTERNS.test(normalizedQuery);
-  const hasTimeMarker = /\b(today|this morning|yesterday|right now|currently|latest)\b/i.test(normalizedQuery);
 
-  // News intent if: explicit news pattern OR (location + time marker)
-  return hasNewsPattern || (hasLocation && hasTimeMarker);
+  // Check for news structural patterns
+  const hasNewsStructure = NEWS_STRUCTURE_PATTERNS.some(pattern => pattern.test(normalizedQuery));
+
+  // Check for proper nouns (named entities)
+  const hasNamedEntity = hasProperNouns(query);
+
+  // Check for geopolitical context markers
+  const hasGeopoliticalContext = GEOPOLITICAL_CONTEXT_MARKERS.some(pattern => pattern.test(normalizedQuery));
+
+  // Check for time markers indicating current events
+  const hasTimeMarker = /\b(today|this morning|yesterday|right now|currently|latest|recent|just now)\b/i.test(normalizedQuery);
+
+  // NEWS INTENT LOGIC (Principle-Based):
+  // 1. News structure + proper noun = news query (e.g., "What's the situation with Starmer")
+  // 2. News structure + geopolitical context = news query (e.g., "What's happening with the election")
+  // 3. Proper noun + time marker = likely news (e.g., "Scholz today")
+  // 4. Explicit news structure alone = news (e.g., "breaking news", "current events")
+
+  return (
+    (hasNewsStructure && hasNamedEntity) ||
+    (hasNewsStructure && hasGeopoliticalContext) ||
+    (hasNamedEntity && hasTimeMarker && hasGeopoliticalContext) ||
+    (hasNewsStructure && /\b(breaking|current\s+events?)\b/i.test(normalizedQuery))
+  );
 }
 
 /**
@@ -358,6 +448,7 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
 
 /**
  * Select sources for query - prioritize API-based sources with reliable parsers
+ * PRINCIPLE-BASED: Uses news intent detection, not hardcoded name lists
  * @param {string} query - The user's query
  * @param {string} truthType - Truth type (VOLATILE, SEMI_STABLE, PERMANENT)
  * @param {object} highStakesResult - Result from detectHighStakesDomain
@@ -377,13 +468,14 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return API_SOURCES.MEDICAL;
   }
 
-  // News/current events queries - expanded patterns
-  if (lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military|situation|happening|what happened|what's going on|update/i)) {
+  // News/current events queries - PRINCIPLE-BASED DETECTION
+  // Use hasNewsIntent() which detects structure + proper nouns, not hardcoded names
+  if (hasNewsIntent(query)) {
     return API_SOURCES.NEWS;
   }
 
-  // Geopolitical queries - political figures and locations
-  if (lowerQuery.match(/venezuela|ukraine|russia|china|iran|israel|gaza|palestine|greenland|denmark|congress|senate|white house|trump|biden|harris|putin|netanyahu|xi jinping/i)) {
+  // Additional news patterns (attacks, breaking events, etc.)
+  if (lowerQuery.match(/attack|breaking|killed|died|war|invasion|military|bombing|coup|strike/i)) {
     return API_SOURCES.NEWS;
   }
 
@@ -710,18 +802,18 @@ export async function performLookup(query, sources, truthType = null) {
 
 /**
  * Execute graceful degradation when lookup fails
+ * PRINCIPLE-BASED: Uses hasNewsIntent() instead of hardcoded name lists
  * @param {string} query - The user's query
  * @param {object} lookupResult - Failed lookup result
  * @param {object} internalAnswer - Best internal answer available
  * @returns {object} Degraded response with proper disclosure
  */
 export function gracefulDegradation(query, lookupResult, internalAnswer = null) {
-  const lowerQuery = query.toLowerCase();
   let sources = [];
   let disclosure = "External lookup returned no results.";
 
-  // Determine if this is a news query for specialized disclosure
-  const isNewsQuery = lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military|situation|happening|what happened|venezuela|ukraine|russia|china|iran|israel|gaza|palestine|greenland|denmark|congress|senate|white house|trump|biden|harris|putin|netanyahu/i);
+  // Determine if this is a news query using principle-based detection
+  const isNewsQuery = hasNewsIntent(query);
 
   if (isNewsQuery) {
     disclosure = "External news lookup returned no results. This may indicate breaking news not yet indexed or a topic with limited coverage.";
@@ -930,6 +1022,7 @@ export default {
   API_SOURCES,
   AUTHORITATIVE_SOURCES,
   extractSearchQuery,
+  hasProperNouns,
   hasNewsIntent,
   checkFreshnessMarkers,
   requiresCorroboration,
