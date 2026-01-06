@@ -316,6 +316,17 @@ app.post("/api/chat", async (req, res) => {
       sessionManager.updateActivity(sessionId);
     }
 
+    // Get conversation history from session (Issue #391: Conversation Context Continuity)
+    let effectiveConversationHistory = conversationHistory;
+    if (sessionId) {
+      const sessionHistory = sessionManager.getConversationHistory(sessionId);
+      // Use session history if available, otherwise use provided history
+      if (sessionHistory && sessionHistory.length > 0) {
+        effectiveConversationHistory = sessionHistory;
+        console.log(`[CHAT] Using session conversation history: ${sessionHistory.length} turns`);
+      }
+    }
+
     // FIX: Transform vault_content to vaultContext structure for orchestrator
     let finalVaultContext = vaultContext;
     if (!finalVaultContext && vault_content && vault_content.length > 500) {
@@ -353,7 +364,7 @@ app.post("/api/chat", async (req, res) => {
       documentContext,
       vaultEnabled,
       vaultContext: finalVaultContext,
-      conversationHistory,
+      conversationHistory: effectiveConversationHistory,
     });
 
     // TRACE LOGGING - Step 4 & 5 & 6
@@ -369,6 +380,18 @@ app.post("/api/chat", async (req, res) => {
       "[TRACE] 6. storeMemory exists:",
       !!global.memorySystem?.storeMemory,
     );
+
+    // Store conversation turn in session (Issue #391: Conversation Context Continuity)
+    if (sessionId && result.success) {
+      try {
+        sessionManager.addConversationTurn(sessionId, 'user', message);
+        sessionManager.addConversationTurn(sessionId, 'assistant', result.response);
+        console.log(`[CHAT] Conversation turns stored in session ${sessionId}`);
+      } catch (turnError) {
+        console.error('[CHAT] Failed to store conversation turn:', turnError.message);
+        // Non-fatal - continue processing
+      }
+    }
 
     if (
       result.success &&

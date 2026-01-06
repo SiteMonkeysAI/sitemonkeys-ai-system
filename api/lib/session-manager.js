@@ -115,7 +115,7 @@ class SessionManager {
   updateContext(sessionId, contextUpdates) {
     try {
       const context = this.getContext(sessionId);
-      
+
       // Merge updates
       if (contextUpdates.conversationHistory) {
         context.conversationHistory = contextUpdates.conversationHistory;
@@ -132,18 +132,63 @@ class SessionManager {
           ...contextUpdates.userPreferences
         };
       }
-      
+
       this.sessionContexts.set(sessionId, context);
-      
+
       // Update session stats
       const session = this.activeSessions.get(sessionId);
       if (session) {
         session.contextSize = this._calculateContextSize(context);
       }
-      
+
     } catch (error) {
       this.error("Failed to update context for session %s", sessionId, error);
     }
+  }
+
+  /**
+   * Add a conversation turn to session history
+   * Manages conversation context for follow-up questions (Issue #391)
+   */
+  addConversationTurn(sessionId, role, content) {
+    try {
+      const context = this.getContext(sessionId);
+      const MAX_TURNS = 5; // Keep last 5 user-assistant pairs (10 messages)
+      const MAX_AGE_MS = 30 * 60 * 1000; // 30 minutes
+
+      // Add new turn with timestamp
+      context.conversationHistory.push({
+        role,
+        content,
+        timestamp: Date.now()
+      });
+
+      // Remove old turns (by age)
+      const now = Date.now();
+      context.conversationHistory = context.conversationHistory.filter(turn =>
+        now - turn.timestamp < MAX_AGE_MS
+      );
+
+      // Keep only recent turns (by count)
+      if (context.conversationHistory.length > MAX_TURNS * 2) {
+        context.conversationHistory = context.conversationHistory.slice(-MAX_TURNS * 2);
+      }
+
+      this.sessionContexts.set(sessionId, context);
+
+      this.log("Added %s turn to session %s (total: %d turns)", role, sessionId, context.conversationHistory.length);
+
+    } catch (error) {
+      this.error("Failed to add conversation turn to session %s", sessionId, error);
+    }
+  }
+
+  /**
+   * Get recent conversation history for session
+   */
+  getConversationHistory(sessionId) {
+    const context = this.getContext(sessionId);
+    return context.conversationHistory || [];
   }
 
   /**

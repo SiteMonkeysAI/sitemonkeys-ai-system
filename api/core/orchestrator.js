@@ -598,10 +598,32 @@ export class Orchestrator {
           console.log('[ORCHESTRATOR] About to call lookup for:', message);
           this.log(`[PHASE4] 1. Lookup triggered for: ${message.substring(0, 50)}...`);
           this.log(`🌐 External lookup required (type: ${truthTypeResult.type}, high_stakes: ${truthTypeResult.high_stakes?.isHighStakes || false}), performing lookup...`);
-          const lookupResult = await lookup(message, {
+
+          // Issue #391: Enrich query with conversation context if it's a follow-up
+          let enrichedMessage = message;
+          let queryEnrichment = null;
+          if (conversationHistory && conversationHistory.length > 0) {
+            const enrichmentResult = this.#enrichQueryWithConversationContext(message, conversationHistory);
+            if (enrichmentResult.contextAdded) {
+              enrichedMessage = enrichmentResult.enrichedQuery;
+              queryEnrichment = {
+                original: message,
+                enriched: enrichedMessage,
+                contextUsed: enrichmentResult.contextUsed
+              };
+              this.log(`[CONTEXT] Query enriched: "${message}" → "${enrichedMessage}"`);
+            }
+          }
+
+          const lookupResult = await lookup(enrichedMessage, {
             internalConfidence: phase4Metadata.confidence,
             truthType: truthTypeResult.type,
           });
+
+          // Add enrichment info to metadata
+          if (queryEnrichment) {
+            phase4Metadata.query_enrichment = queryEnrichment;
+          }
 
           // Debug: Log what lookup returned
           console.log('[PHASE4] Lookup result:', JSON.stringify(lookupResult, null, 2));
@@ -1181,6 +1203,139 @@ export class Orchestrator {
 
       return await this.#handleEmergencyFallback(error, requestData);
     }
+  }
+
+  // ==================== CONVERSATION CONTEXT HELPERS (Issue #391) ====================
+
+  /**
+   * Detect if a message is a follow-up question based on linguistic patterns
+   * @private
+   */
+  #detectFollowUp(message, conversationHistory = []) {
+    if (!message || !conversationHistory || conversationHistory.length === 0) {
+      return { isFollowUp: false, confidence: 0, reasons: [] };
+    }
+
+    const reasons = [];
+    let confidence = 0;
+
+    // Pronouns without clear antecedent
+    if (/\b(it|that|this|they|them|their|these|those|he|she|him|her)\b/i.test(message)) {
+      reasons.push('pronoun_reference');
+      confidence += 0.3;
+    }
+
+    // Time references without topic
+    if (/\b(recently|lately|today|yesterday|last (week|month|year|night)|this (morning|afternoon|evening)|currently|now|in the last)\b/i.test(message)) {
+      reasons.push('time_reference');
+      confidence += 0.25;
+    }
+
+    // Continuation phrases
+    if (/\b(what about|how about|and also|but what (if|about)|also|too)\b/i.test(message)) {
+      reasons.push('continuation');
+      confidence += 0.4;
+    }
+
+    // Very short queries
+    if (message.trim().length <= 15) {
+      reasons.push('short_query');
+      confidence += 0.2;
+    }
+
+    // Context-free questions
+    if (/^(why|how|when|where|who)\??\s*$/i.test(message.trim())) {
+      reasons.push('context_free_question');
+      confidence += 0.35;
+    }
+
+    // Clarifying questions
+    if (/\b(what happened|any (news|updates|changes)|tell me more|explain|elaborate)\b/i.test(message)) {
+      reasons.push('clarifying');
+      confidence += 0.3;
+    }
+
+    confidence = Math.min(1.0, confidence);
+    const isFollowUp = confidence >= 0.25;
+
+    return { isFollowUp, confidence, reasons };
+  }
+
+  /**
+   * Extract topics and entities from conversation history
+   * @private
+   */
+  #extractConversationTopics(conversationHistory, maxTurns = 3) {
+    if (!conversationHistory || conversationHistory.length === 0) {
+      return { entities: [], keywords: [] };
+    }
+
+    const entities = new Set();
+    const keywords = new Set();
+
+    // Get recent user messages
+    const recentTurns = conversationHistory
+      .filter(turn => turn.role === 'user')
+      .slice(-maxTurns);
+
+    for (const turn of recentTurns) {
+      const text = turn.content || '';
+
+      // Extract proper nouns (capitalized words)
+      const properNouns = text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g) || [];
+      properNouns.forEach(noun => {
+        if (noun.length > 2) entities.add(noun);
+      });
+
+      // Extract specific entities
+      const countries = text.match(/\b(Venezuela|Ukraine|Russia|China|Iran|Israel|Gaza|Palestine|Greenland|Denmark|USA|America|Britain|France|Germany)\b/gi) || [];
+      countries.forEach(country => entities.add(country));
+
+      const people = text.match(/\b(Trump|Biden|Putin|Maduro|Netanyahu)\b/gi) || [];
+      people.forEach(person => entities.add(person));
+
+      // Extract key topics
+      const topics = text.match(/\b(election|war|conflict|invasion|arrest|situation|crisis|deal|agreement|policy|announcement)\b/gi) || [];
+      topics.forEach(topic => keywords.add(topic.toLowerCase()));
+    }
+
+    return {
+      entities: Array.from(entities),
+      keywords: Array.from(keywords)
+    };
+  }
+
+  /**
+   * Enrich query with conversation context for follow-up questions
+   * @private
+   */
+  #enrichQueryWithConversationContext(query, conversationHistory) {
+    const followUpDetection = this.#detectFollowUp(query, conversationHistory);
+
+    if (!followUpDetection.isFollowUp) {
+      return { enrichedQuery: query, originalQuery: query, contextAdded: false };
+    }
+
+    const extracted = this.#extractConversationTopics(conversationHistory);
+
+    if (extracted.entities.length === 0 && extracted.keywords.length === 0) {
+      return { enrichedQuery: query, originalQuery: query, contextAdded: false };
+    }
+
+    // Build enriched query with top entities and keywords
+    const contextParts = [
+      ...extracted.entities.slice(0, 3),
+      ...extracted.keywords.slice(0, 2)
+    ];
+
+    const enrichedQuery = `${contextParts.join(' ')} ${query}`.trim();
+
+    return {
+      enrichedQuery,
+      originalQuery: query,
+      contextAdded: true,
+      contextUsed: contextParts
+    };
   }
 
   // ==================== STEP 1: RETRIEVE MEMORY CONTEXT ====================
