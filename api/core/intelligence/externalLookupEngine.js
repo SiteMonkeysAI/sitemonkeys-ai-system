@@ -364,35 +364,56 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
  * @returns {array} Array of source objects (empty if no reliable source)
  */
 export function selectSourcesForQuery(query, truthType, highStakesResult) {
+  // DIAGNOSTIC LOGGING (Issue #392 Criterion 2): Trace source selection
+  console.log('[selectSourcesForQuery] DIAGNOSTIC:', {
+    queryType: typeof query,
+    queryLength: query?.length || 0,
+    queryPreview: typeof query === 'string' ? query.substring(0, 50) : 'NOT_A_STRING',
+    truthType: truthType,
+    highStakesIsHighStakes: highStakesResult?.isHighStakes || false
+  });
+
+  // Type check: ensure query is a string
+  if (typeof query !== 'string') {
+    console.log('[selectSourcesForQuery] ERROR: Query is not a string, returning empty array');
+    return [];
+  }
+
   const lowerQuery = query.toLowerCase();
 
   // Crypto - use API
   if (lowerQuery.match(/bitcoin|btc|ethereum|eth|crypto|cryptocurrency/)) {
+    console.log('[selectSourcesForQuery] Matched: CRYPTO sources');
     return API_SOURCES.CRYPTO;
   }
 
   // Medical drug queries - use FDA API with specific field extraction
   if (lowerQuery.match(/side effects?|dosage|drug interactions?/) &&
       lowerQuery.match(/aspirin|ibuprofen|acetaminophen|tylenol|advil/)) {
+    console.log('[selectSourcesForQuery] Matched: MEDICAL sources');
     return API_SOURCES.MEDICAL;
   }
 
   // News/current events queries
   if (lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military/i)) {
+    console.log('[selectSourcesForQuery] Matched: NEWS sources (news pattern)');
     return API_SOURCES.NEWS;
   }
 
   // Geopolitical queries
   if (lowerQuery.match(/venezuela|ukraine|russia|china|iran|israel|gaza|congress|senate|white house/i)) {
+    console.log('[selectSourcesForQuery] Matched: NEWS sources (geopolitical pattern)');
     return API_SOURCES.NEWS;
   }
 
   // Wikipedia ONLY for PERMANENT definition/history queries, NOT high-stakes
   if (truthType === TRUTH_TYPES.PERMANENT && !highStakesResult?.isHighStakes) {
+    console.log('[selectSourcesForQuery] Matched: GENERAL sources (Wikipedia)');
     return AUTHORITATIVE_SOURCES.GENERAL;
   }
 
   // No reliable source available - return empty, trigger graceful degradation
+  console.log('[selectSourcesForQuery] NO MATCH: Returning empty array');
   return [];
 }
 
@@ -801,7 +822,21 @@ export async function lookup(query, options = {}) {
   }
 
   // Select appropriate sources using new query-to-source matching
+  // DIAGNOSTIC LOGGING (Issue #392 Criterion 2): Show what's being passed to selectSourcesForQuery
+  console.log('[externalLookupEngine] Calling selectSourcesForQuery with:', {
+    queryType: typeof query,
+    queryPreview: query.substring(0, 50),
+    truthType: truthTypeResult.type,
+    lookupReasons: lookupCheck.reasons
+  });
+  
   const sources = selectSourcesForQuery(query, truthTypeResult.type, truthTypeResult.high_stakes);
+
+  // DIAGNOSTIC LOGGING (Issue #392 Criterion 2): Show what sources were returned
+  console.log('[externalLookupEngine] selectSourcesForQuery returned:', {
+    sourcesCount: sources.length,
+    sourceNames: sources.map(s => s.name).join(', ') || 'NONE'
+  });
 
   // Handle no reliable source available
   if (sources.length === 0) {
