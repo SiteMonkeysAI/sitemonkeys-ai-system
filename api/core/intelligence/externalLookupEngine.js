@@ -142,7 +142,7 @@ const FRESHNESS_MARKERS = [
   /\b(current|latest|today|now|live|real-?time)\b/i,
   /\b(price|stock|rate|value|cost)\b/i,
   /\b(weather|forecast|temperature)\b/i,
-  /\b(news|update|announcement|breaking)\b/i,
+  /\b(news|update|announcement|breaking|situation|happening)\b/i,
   /\b(available|in stock|open|closed)\b/i
 ];
 
@@ -150,10 +150,10 @@ const FRESHNESS_MARKERS = [
 const HIGH_STAKES_NEWS_MARKERS = /attack|bombing|invasion|coup|killed|missile|war|strike|assassination|military action|troops|casualties/i;
 
 // News intent patterns - detect general news queries
-const NEWS_INTENT_PATTERNS = /\b(what happened|what's happening|what is going on|news|update on|latest on|current events|breaking|this morning|today|yesterday)\b/i;
+const NEWS_INTENT_PATTERNS = /\b(what happened|what's happening|what is going on|what's the situation|what is the situation|situation with|news|update on|latest on|current events|breaking|this morning|today|yesterday)\b/i;
 
-// Location patterns - geopolitical entities
-const LOCATION_PATTERNS = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|congo|syria|yemen|afghanistan|iraq|lebanon|taiwan|north korea|south korea|japan|india|pakistan|brazil|argentina|mexico|cuba|nicaragua|myanmar|ethiopia|sudan|somalia|libya|egypt|turkey|saudi arabia|uae|qatar|congress|senate|white house|pentagon|state department|president|prime minister|chancellor|election)\b/i;
+// Location patterns - geopolitical entities and political figures
+const LOCATION_PATTERNS = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|congo|syria|yemen|afghanistan|iraq|lebanon|taiwan|north korea|south korea|japan|india|pakistan|brazil|argentina|mexico|cuba|nicaragua|myanmar|ethiopia|sudan|somalia|libya|egypt|turkey|saudi arabia|uae|qatar|greenland|denmark|congress|senate|white house|pentagon|state department|president|prime minister|chancellor|election|trump|biden|harris|putin|xi jinping|netanyahu)\b/i;
 
 // Reputable news sources for corroboration
 const REPUTABLE_SOURCES = /reuters|associated press|ap news|bbc|afp|npr|guardian|new york times|nytimes|washington post|wall street journal|wsj|cnn|abc news|cbs news|nbc news/i;
@@ -377,13 +377,13 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return API_SOURCES.MEDICAL;
   }
 
-  // News/current events queries
-  if (lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military/i)) {
+  // News/current events queries - expanded patterns
+  if (lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military|situation|happening|what happened|what's going on|update/i)) {
     return API_SOURCES.NEWS;
   }
 
-  // Geopolitical queries
-  if (lowerQuery.match(/venezuela|ukraine|russia|china|iran|israel|gaza|congress|senate|white house/i)) {
+  // Geopolitical queries - political figures and locations
+  if (lowerQuery.match(/venezuela|ukraine|russia|china|iran|israel|gaza|palestine|greenland|denmark|congress|senate|white house|trump|biden|harris|putin|netanyahu|xi jinping/i)) {
     return API_SOURCES.NEWS;
   }
 
@@ -721,7 +721,7 @@ export function gracefulDegradation(query, lookupResult, internalAnswer = null) 
   let disclosure = "External lookup returned no results.";
 
   // Determine if this is a news query for specialized disclosure
-  const isNewsQuery = lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military|venezuela|ukraine|russia|china|iran|israel|gaza|congress|senate|white house/i);
+  const isNewsQuery = lowerQuery.match(/news|today|this morning|yesterday|attack|election|president|announced|breaking|killed|died|war|invasion|military|situation|happening|what happened|venezuela|ukraine|russia|china|iran|israel|gaza|palestine|greenland|denmark|congress|senate|white house|trump|biden|harris|putin|netanyahu/i);
 
   if (isNewsQuery) {
     disclosure = "External news lookup returned no results. This may indicate breaking news not yet indexed or a topic with limited coverage.";

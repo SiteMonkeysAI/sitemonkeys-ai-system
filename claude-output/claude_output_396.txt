@@ -1,0 +1,52 @@
+Perfect! Let me now create a summary of the changes:
+
+---SUMMARY---
+
+## Issue #396 Fix: External Lookup Pattern Matching Too Narrow - News Queries Failing
+
+**Problem**: Queries about current political events without explicit freshness markers like "today" or "current" were failing to trigger external lookups. Specifically:
+- ✅ "what's happening today with Venezuela" → lookup performed
+- ❌ "green situation with Trump" → "No reliable parseable source"
+- ❌ "What's the situation with Trump and Greenland" → no lookup
+
+**Root Cause**: The pattern matching arrays in both `truthTypeDetector.js` and `externalLookupEngine.js` were missing key indicators:
+1. "situation" was not recognized as a freshness/news marker
+2. Political figure names (Trump, Biden, etc.) were not in geopolitical patterns
+3. Greenland (the actual location being discussed) was missing
+
+**Files Modified**:
+
+### 1. `/api/core/intelligence/truthTypeDetector.js`
+- **Line 33**: Added "situation" to VOLATILE_PATTERNS news markers: `/\b(news|happening|update|situation)\b/i`
+- **Line 36**: Added political figures and Greenland to VOLATILE_PATTERNS geopolitical markers: Added `greenland|denmark|trump|biden|harris|putin|netanyahu|xi jinping` to the existing pattern
+
+### 2. `/api/core/intelligence/externalLookupEngine.js`
+- **Line 145**: Added "situation" and "happening" to FRESHNESS_MARKERS: `/\b(news|update|announcement|breaking|situation|happening)\b/i`
+- **Line 153**: Added "situation" variants to NEWS_INTENT_PATTERNS: Added `what's the situation|what is the situation|situation with` to detect situation-based queries
+- **Line 156**: Renamed LOCATION_PATTERNS comment and expanded to include political figures: Added `greenland|denmark|trump|biden|harris|putin|xi jinping|netanyahu` 
+- **Line 381**: Updated selectSourcesForQuery() news matching to include "situation|happening|what happened|what's going on|update"
+- **Line 386**: Updated selectSourcesForQuery() geopolitical matching to include "greenland|denmark|trump|biden|harris|putin|netanyahu|xi jinping"
+- **Line 724**: Updated gracefulDegradation() news query detection to include all new patterns: "situation|happening|what happened|greenland|denmark|trump|biden|harris|putin|netanyahu"
+
+**Impact**: 
+Now queries like "What's the situation with Trump and Greenland" will:
+1. Be classified as VOLATILE by truthTypeDetector (matches "situation", "trump", "greenland")
+2. Trigger external lookup via multiple paths:
+   - checkFreshnessMarkers() matches "situation"
+   - hasNewsIntent() matches "situation with"
+   - selectSourcesForQuery() matches both news patterns and geopolitical patterns
+3. Return Google News RSS results as the primary source
+
+**Test Path**:
+The fix can be tested via: `/api/test-semantic?action=external-lookup&q=What's the situation with Trump and Greenland`
+
+Expected logs:
+```
+[externalLookupEngine] Lookup requested for: "What's the situation with Trump and Greenland"
+[truthTypeDetector] Matched VOLATILE pattern(s)
+[externalLookupEngine] Performing lookup...
+[externalLookupEngine] Sources: Google News RSS
+[externalLookupEngine] ✓ Google News RSS: [N] chars extracted
+```
+
+---END SUMMARY---
