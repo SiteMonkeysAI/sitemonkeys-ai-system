@@ -43,6 +43,7 @@ import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
 import { enforceBoundedReasoning } from "../core/intelligence/boundedReasoningGate.js";
 import { enforceResponseContract } from "../core/intelligence/responseContractGate.js";
 import { enforceReasoningEscalation } from "./intelligence/reasoningEscalationEnforcer.js";
+import { applyPrincipleBasedReasoning } from "./intelligence/principleBasedReasoning.js";
 // ================================================
 
 // ==================== ORCHESTRATOR CLASS ====================
@@ -684,6 +685,40 @@ export class Orchestrator {
         context.sources.hasExternal = true;
       }
 
+      // STEP 6.8: PRINCIPLE-BASED REASONING LAYER
+      // Analyze query and determine reasoning strategy/depth
+      // This transforms the system from "warehouse worker" to "caring family member"
+      this.log("🧠 Applying principle-based reasoning layer...");
+      let reasoningResult = null;
+      try {
+        reasoningResult = await applyPrincipleBasedReasoning(message, {
+          analysis,
+          phase4Metadata,
+          memoryContext,
+          conversationHistory
+        });
+
+        this.log(`[REASONING] Strategy: ${reasoningResult.metadata.strategy}, Depth: ${reasoningResult.metadata.depth}`);
+        if (reasoningResult.metadata.requirements.hypothesisTesting) {
+          this.log('[REASONING] ⚠️  Hypothesis testing required - explore claim before contradicting');
+        }
+        if (reasoningResult.metadata.requirements.connectionVolunteering) {
+          this.log('[REASONING] 🔗 Connection volunteering - reference past context proactively');
+        }
+        if (reasoningResult.metadata.requirements.proactiveDisclosure) {
+          this.log('[REASONING] 💡 Proactive disclosure - volunteer critical considerations');
+        }
+
+        // Store reasoning guidance in context for prompt injection
+        context.reasoningGuidance = reasoningResult.promptInjection;
+        context.reasoningMetadata = reasoningResult.metadata;
+      } catch (reasoningError) {
+        this.error("⚠️ Reasoning layer error:", reasoningError);
+        // Continue without reasoning guidance if it fails
+        context.reasoningGuidance = null;
+        context.reasoningMetadata = null;
+      }
+
       // STEP 7: Route to appropriate AI
       const aiResponse = await this.#routeToAI(
         message,
@@ -1060,6 +1095,12 @@ export class Orchestrator {
 
           // PHASE 7: Response Contract Gate
           response_contract: response_contract,
+
+          // PRINCIPLE-BASED REASONING: Strategy and Depth (Issue #387)
+          reasoning_strategy: context.reasoningMetadata?.strategy || null,
+          reasoning_depth: context.reasoningMetadata?.depth || null,
+          reasoning_requirements: context.reasoningMetadata?.requirements || null,
+          reasoning_stakes: context.reasoningMetadata?.stakes || null,
 
           // NEW: Cost tracking
           cost_tracking: {
@@ -2268,7 +2309,8 @@ export class Orchestrator {
         this.log(`[PHASE4] 6. AI generation starting with external context (${context.external?.total_text_length || 0} chars)`);
       }
 
-      const systemPrompt = this.#buildSystemPrompt(mode, analysis);
+      // Build system prompt with reasoning guidance if available
+      const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance);
 
       // PHASE 4: Inject external content if fetched
       let externalContext = "";
@@ -2792,7 +2834,7 @@ END OF EXTERNAL DATA
     return contextStr;
   }
 
-  #buildSystemPrompt(mode, _analysis) {
+  #buildSystemPrompt(mode, _analysis, reasoningGuidance = null) {
     const modeConfig = MODES[mode];
 
     let prompt = `You are a truth-first AI assistant. Your priorities are: Truth > Helpfulness > Engagement.
@@ -2823,6 +2865,12 @@ Mode: ${modeConfig?.display_name || mode}
 - Focus on operational integrity and quality
 - Apply business-specific frameworks and constraints
 `;
+    }
+
+    // INJECT PRINCIPLE-BASED REASONING GUIDANCE
+    // This is the key innovation that transforms rule-based execution into principle-based reasoning
+    if (reasoningGuidance) {
+      prompt += reasoningGuidance;
     }
 
     return prompt;
