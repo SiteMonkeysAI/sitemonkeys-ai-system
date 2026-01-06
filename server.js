@@ -355,6 +355,15 @@ app.post("/api/chat", async (req, res) => {
       userId,
     );
 
+    // HANDOFF LOGGING (Issue #392): server → orchestrator
+    console.log('[HANDOFF] server → orchestrator:', {
+      hasConversationHistory: Array.isArray(effectiveConversationHistory),
+      historyLength: effectiveConversationHistory?.length || 0,
+      sessionId: sessionId ? 'present' : 'missing',
+      hasMessage: !!message,
+      messageLength: message?.length || 0
+    });
+
     // Process request through orchestrator
     const result = await orchestrator.processRequest({
       message,
