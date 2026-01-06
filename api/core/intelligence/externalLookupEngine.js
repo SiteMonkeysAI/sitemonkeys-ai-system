@@ -364,11 +364,10 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
  * @returns {array} Array of source objects (empty if no reliable source)
  */
 export function selectSourcesForQuery(query, truthType, highStakesResult) {
-  // DIAGNOSTIC LOGGING (Issue #392 Criterion 2): Trace source selection
+  // DIAGNOSTIC LOGGING (Issue #392 Criterion 2): Trace source selection without logging user data
   console.log('[selectSourcesForQuery] DIAGNOSTIC:', {
     queryType: typeof query,
     queryLength: query?.length || 0,
-    queryPreview: typeof query === 'string' ? query.substring(0, 50) : 'NOT_A_STRING',
     truthType: truthType,
     highStakesIsHighStakes: highStakesResult?.isHighStakes || false
   });
@@ -825,7 +824,7 @@ export async function lookup(query, options = {}) {
   // DIAGNOSTIC LOGGING (Issue #392 Criterion 2): Show what's being passed to selectSourcesForQuery
   console.log('[externalLookupEngine] Calling selectSourcesForQuery with:', {
     queryType: typeof query,
-    queryPreview: query.substring(0, 50),
+    queryLength: typeof query === 'string' ? query.length : 0,
     truthType: truthTypeResult.type,
     lookupReasons: lookupCheck.reasons
   });
