@@ -1,0 +1,153 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #398: [claude-fix] Title: External Lookup Pattern Detection Must Be Principle-Based, Not Hardcoded Name Lists
+
+Issue Description:
+Doctrine Reference
+
+Phase 4 Technical Specification - Automatic Lookup Triggers (Non-Negotiable):
+"Freshness markers detected: 'current', 'latest', 'today', 'price'"
+
+
+3rd Architectural Chat - Warehouse Worker vs CEO Problem:
+"System is like warehouse worker with 1,000 detailed procedures (breaks on novel situations) when it needs to be like CEO who understands principles"
+
+
+Master Alignment Document - Core Behavioral Shift:
+"Encoding wisdom as rules instead of building reasoning intelligence"
+
+
+Problem
+PR #397 fixed the immediate symptom (Trump/Greenland queries failing) by adding hardcoded names to regex patterns:
+javascript/greenland|denmark|trump|biden|harris|putin|netanyahu|xi jinping/i
+This is a rule-based fix that violates the system's core philosophy. It will fail for:
+
+Any world leader not in the list (Starmer, Milei, Macron, Scholz, Modi, etc.)
+Any country not in the list (UK, Argentina, France, Germany, India, etc.)
+Any company/organization experiencing news events
+Any emerging situation with new proper nouns
+
+This is exactly the "warehouse worker" anti-pattern the architecture documents warn against.
+
+Evidence
+Queries that WILL work (in the hardcoded list):
+
+"What's the situation with Trump and Greenland" ✅
+
+Queries that WILL FAIL (not in list):
+
+"What's the situation with Starmer and the UK" ❌
+"What's happening with Milei in Argentina" ❌
+"Any news about Macron's policies" ❌
+"What's the latest on the Samsung scandal" ❌
+"Tell me about the Scholz coalition collapse" ❌
+
+All of these are structurally identical news queries that should trigger external lookup.
+
+Required Behavior (Principle-Based)
+The system should detect news intent through query structure and patterns, not name matching:
+
+Structural patterns that indicate news intent:
+
+"What's the situation with [X]"
+"What's happening with [X]"
+"Any news about [X]"
+"What's the latest on [X]"
+"Tell me about the [X] situation"
+"[X] news/update/development"
+
+
+Proper noun detection:
+
+Capitalized words in query context suggest named entities
+Named entities + news-intent structure = trigger lookup
+
+
+Leverage existing semantic analysis:
+
+If intent: information_sharing or intent: question AND query contains proper nouns AND query structure matches news patterns → trigger lookup
+The semantic analyzer already runs - use its output
+
+
+
+
+Implementation Guidance
+DO NOT:
+
+Add more names to regex lists
+Create larger hardcoded arrays of countries/leaders/companies
+Solve this with more rules
+
+DO:
+
+Detect query STRUCTURE patterns independent of specific nouns
+Use capitalization as a signal for proper nouns
+Combine structural detection with existing semantic analysis
+Apply the "CEO principle": understand WHY certain queries need lookup, not just WHICH specific queries
+
+Suggested Approach:
+javascript// PRINCIPLE: News intent + proper noun = lookup trigger
+function hasNewsIntentWithEntity(query) {
+  const newsStructures = [
+    /what'?s\s+(the\s+)?(situation|happening|going\s+on|news|latest|update)/i,
+    /any\s+(news|updates?|developments?)\s+(about|on|regarding)/i,
+    /tell\s+me\s+about\s+(the\s+)?\S+\s+(situation|news|crisis)/i,
+    /(news|situation|update|happening|development)\s+(with|about|regarding|on)/i
+  ];
+  
+  const hasNewsStructure = newsStructures.some(pattern => pattern.test(query));
+  const hasProperNoun = /[A-Z][a-z]+/.test(query); // Basic proper noun detection
+  
+  return hasNewsStructure && hasProperNoun;
+}
+```
+
+This detects the PATTERN, not specific names. "What's the situation with Starmer" triggers just like "What's the situation with Trump" because the STRUCTURE is identical.
+
+---
+
+### Test Criteria
+
+After fix, ALL of these queries must trigger external lookup:
+
+| Query | Expected Result |
+|-------|-----------------|
+| "What's the situation with Trump and Greenland" | ✅ Lookup performed |
+| "What's the situation with Starmer and the UK" | ✅ Lookup performed |
+| "What's happening with Milei in Argentina" | ✅ Lookup performed |
+| "Any news about Macron" | ✅ Lookup performed |
+| "What's the latest on the Samsung scandal" | ✅ Lookup performed |
+| "Tell me about the Scholz situation" | ✅ Lookup performed |
+
+**Expected log pattern for ALL above:**
+```
+[externalLookupEngine] Performing lookup for: "..."
+[externalLookupEngine] Sources: Google News RSS
+[externalLookupEngine] ✓ Google News RSS: [N] chars extracted
+
+Anti-Pattern Check
+If the PR adds ANY of these, it is NOT acceptable:
+
+New names to existing regex patterns
+New hardcoded arrays of leaders/countries/companies
+Special-case handling for specific entities
+
+The fix must be structural/pattern-based to be doctrine-compliant.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

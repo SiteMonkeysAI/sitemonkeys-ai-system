@@ -26,6 +26,7 @@ export const TTL_CONFIG = {
 };
 
 // Stage 1: Deterministic pattern markers (zero token cost)
+// PRINCIPLE-BASED: Detect VOLATILE content by time-sensitivity and event markers, NOT hardcoded entity names
 const VOLATILE_PATTERNS = [
   /\b(current|latest|today|now|live|breaking|real-?time)\b/i,
   /\b(price|stock|market|trading|exchange rate)\b/i,
@@ -33,7 +34,8 @@ const VOLATILE_PATTERNS = [
   /\b(news|happening|update|situation)\b/i,
   /\bwhat('s| is) .* (right now|today|currently)\b/i,
   /\bhow much (is|does|are) .* (cost|worth)\b/i,
-  /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|greenland|denmark|congress|senate|white house|attack|election|president|war|invasion|military|conflict|strike|bombing|sanctions|diplomatic|crisis|coup|protest|riot|trump|biden|harris|putin|netanyahu|xi jinping)\b/i
+  // Event markers (not entity names) - these indicate current/breaking events
+  /\b(attack|election|war|invasion|military|conflict|strike|bombing|sanctions|diplomatic|crisis|coup|protest|riot)\b/i
 ];
 
 const SEMI_STABLE_PATTERNS = [
