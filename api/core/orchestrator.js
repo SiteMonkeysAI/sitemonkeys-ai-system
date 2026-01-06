@@ -729,7 +729,7 @@ export class Orchestrator {
       console.log('[HANDOFF] orchestrator → reasoning:', {
         memoriesIsArray: Array.isArray(memoryContext?.memories),
         memoriesLength: memoryContext?.memories?.length || 0,
-        hasLookupResult: !!lookupResult,
+        hasLookupResult: !!phase4Metadata?.external_lookup,
         truthType: phase4Metadata?.truth_type || 'unknown',
         hasAnalysis: !!analysis,
         conversationHistoryLength: conversationHistory?.length || 0
