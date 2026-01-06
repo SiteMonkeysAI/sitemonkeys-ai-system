@@ -1,0 +1,11 @@
+Starting issue-fix mode at Tue Jan  6 23:24:19 UTC 2026
+Fetching issue #400 details
+Using repository: SiteMonkeysAI/sitemonkeys-ai-system
+Creating a new branch: fix-issue-400-20260106232419
+From https://github.com/SiteMonkeysAI/sitemonkeys-ai-system
+ * branch            main       -> FETCH_HEAD
+Switched to a new branch 'fix-issue-400-20260106232419'
+branch 'fix-issue-400-20260106232419' set up to track 'origin/main'.
+Prompt saved to ./claude-output/claude_prompt_400.txt for debugging
+Running Claude to fix the issue...
+Committing changes...

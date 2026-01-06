@@ -1,0 +1,434 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #400: [claude-fix] Title: AUDIT: System-Wide Identification of Rule-Based Logic Requiring Principle-Based Refactoring
+
+Issue Description:
+**Title:** AUDIT: System-Wide Identification of Rule-Based Logic Requiring Principle-Based Refactoring
+
+**Labels:** `audit`, `architecture`, `doctrine-enforcement`, `priority-critical`
+
+---
+
+### Executive Summary
+
+The system contains scattered "warehouse worker" logic - hardcoded rules, keyword matching, and static lists that break on novel situations. Recent debugging revealed this pattern across multiple subsystems:
+
+- External lookup failed for political figures not in hardcoded lists
+- Enforcement modules blocked legitimate news queries based on keyword detection
+- Truth was fetched successfully then discarded by over-broad guardrails
+
+**This audit will identify EVERY instance of this anti-pattern across the codebase, producing a prioritized remediation roadmap.**
+
+---
+
+### Doctrine Foundation
+
+> **3rd Architectural Chat - The Core Problem:**
+> "System is like warehouse worker with 1,000 detailed procedures (breaks on novel situations) when it needs to be like CEO who understands principles and can handle ANY situation"
+
+> **Master Alignment Document - Behavioral Shift Required:**
+> "Stop encoding wisdom as rules. Start building reasoning intelligence."
+
+> **Phase 4 Technical Specification - Truth Hierarchy:**
+> "Truth > Helpfulness > Engagement. When the system HAS truth, it must DELIVER truth."
+
+---
+
+### Audit Scope
+
+**Directories to scan:**
+```
+/api/core/
+/api/core/intelligence/
+/api/core/enforcement/
+/api/core/routing/
+/api/core/memory/
+/api/utils/
+/api/middleware/
+```
+
+**Exclude from audit:**
+```
+/node_modules/
+/tests/ (unless tests encode anti-patterns as expected behavior)
+```
+
+---
+
+### Anti-Pattern Definitions
+
+#### **ANTI-PATTERN 1: Hardcoded Entity Lists**
+
+**What it looks like:**
+```javascript
+const POLITICAL_FIGURES = ['trump', 'biden', 'harris', 'putin'];
+const COUNTRIES = ['venezuela', 'ukraine', 'russia', 'greenland'];
+const PRODUCTS = ['iphone', 'tesla', 'google'];
+
+if (POLITICAL_FIGURES.some(name => query.includes(name))) {
+  // do something
+}
+```
+
+**Why it's wrong:**
+- Fails for any entity not in the list
+- Requires constant maintenance
+- Can never be complete
+
+**What it should be:**
+- Pattern-based detection (proper noun detection, query structure analysis)
+- Semantic classification using existing analyzer
+- Principle: "Detect the PATTERN, not the specific instance"
+
+**Search patterns:**
+```
+const [A-Z_]+ = \[.*'[a-z]+.*'\]
+\.includes\(.*name\)
+\.some\(.*=>.*includes
+new RegExp.*\|.*\|.*\|
+```
+
+---
+
+#### **ANTI-PATTERN 2: Keyword-Only Enforcement**
+
+**What it looks like:**
+```javascript
+if (response.toLowerCase().includes('vote') || 
+    response.toLowerCase().includes('election') ||
+    response.toLowerCase().includes('political')) {
+  return VOTING_DISCLAIMER;
+}
+
+if (contentFlags.includes('political_figure')) {
+  applyPoliticalGuardrails();
+}
+```
+
+**Why it's wrong:**
+- Triggers on CONTENT without checking INTENT
+- "What's the news about Biden?" triggers voting disclaimer
+- Suppresses truth the system already obtained
+
+**What it should be:**
+```javascript
+const userIntent = classifyIntent(userQuery);
+const contentType = analyzeContent(response);
+
+// Only restrict when intent MATCHES the restriction purpose
+if (userIntent === 'voting_recommendation' && contentType.hasPolitical) {
+  return VOTING_DISCLAIMER;
+}
+// News queries about political figures should PASS
+```
+
+**Search patterns:**
+```
+\.includes\(.*'vote
+\.includes\(.*'politic
+\.includes\(.*'election
+if.*content.*includes
+detectContentFlags.*applyGuardrail
+```
+
+---
+
+#### **ANTI-PATTERN 3: Static Routing Without Semantic Context**
+
+**What it looks like:**
+```javascript
+if (query.match(/price|cost|expensive/)) {
+  return 'financial_route';
+}
+
+if (query.match(/sick|pain|doctor/)) {
+  return 'medical_route';
+}
+
+const FRESHNESS_KEYWORDS = ['today', 'current', 'latest', 'now'];
+if (FRESHNESS_KEYWORDS.some(kw => query.includes(kw))) {
+  triggerLookup();
+}
+```
+
+**Why it's wrong:**
+- Misses queries that don't use magic keywords
+- "What's happening with Starmer" has news intent but no freshness keyword
+- Routing based on surface form, not meaning
+
+**What it should be:**
+- Use semantic analyzer output (already computed)
+- Route based on classified intent + domain
+- Principle: "The meaning determines the route, not the words"
+
+**Search patterns:**
+```
+query\.match\(\/.*\|.*\/
+\.some\(.*=>.*query\.includes
+KEYWORDS.*=.*\[
+if.*query.*match.*route
+```
+
+---
+
+#### **ANTI-PATTERN 4: Canned Response Substitution**
+
+**What it looks like:**
+```javascript
+const VOTING_DISCLAIMER = "Voting is a sacred personal right...";
+const MEDICAL_DISCLAIMER = "I cannot provide medical advice...";
+const FINANCIAL_DISCLAIMER = "This is not financial advice...";
+
+// Later in code:
+if (triggerCondition) {
+  response = VOTING_DISCLAIMER; // Original response discarded
+}
+```
+
+**Why it's wrong:**
+- Replaces potentially truthful, helpful responses with generic templates
+- User asked specific question, gets canned non-answer
+- Violates Truth > Helpfulness hierarchy
+
+**What it should be:**
+- Disclaimers should AUGMENT responses, not REPLACE them
+- Only full replacement when intent genuinely requires it (actual voting advice request)
+- Principle: "Add guardrails to truth, don't substitute templates for truth"
+
+**Search patterns:**
+```
+const [A-Z_]+DISCLAIMER
+response\s*=\s*[A-Z_]+DISCLAIMER
+return.*DISCLAIMER
+originalResponse.*=.*canned
+```
+
+---
+
+#### **ANTI-PATTERN 5: Decision Logic Bypassing Reasoning Layer**
+
+**What it looks like:**
+```javascript
+// Direct decision without consulting reasoning infrastructure
+if (someCondition) {
+  doAction();
+}
+
+// No reference to:
+// - principleBasedReasoning.js
+// - semantic analysis results
+// - intent classification
+// - truth type detection
+```
+
+**Why it's wrong:**
+- Reasoning infrastructure exists but isn't used
+- Decisions made in isolation without system-wide context
+- Leads to inconsistent behavior across modules
+
+**What it should be:**
+- All significant decisions should reference reasoning layer
+- Use classified intent, truth type, confidence scores
+- Principle: "Consult the brain before acting"
+
+**Search patterns:**
+```
+Files in /enforcement/ that don't import from /intelligence/
+Functions that take (query) but not (query, analysis)
+Decision branches without confidence/intent checks
+```
+
+---
+
+#### **ANTI-PATTERN 6: Confidence Thresholds Without Fallback Reasoning**
+
+**What it looks like:**
+```javascript
+if (confidence < 0.6) {
+  return DEFAULT_RESPONSE;
+}
+
+if (similarity < THRESHOLD) {
+  skip();
+}
+```
+
+**Why it's wrong:**
+- Low confidence should trigger MORE reasoning, not less
+- Arbitrary thresholds without justification
+- Fails silently instead of escalating
+
+**What it should be:**
+```javascript
+if (confidence < 0.6) {
+  // Escalate to deeper analysis
+  const escalatedResult = escalateReasoning(query, context);
+  // Or explicitly acknowledge uncertainty in response
+}
+```
+
+**Search patterns:**
+```
+if.*confidence.*<.*return
+if.*score.*<.*skip
+< 0\.[0-9].*return
+threshold.*default
+```
+
+---
+
+### Audit Output Requirements
+
+For EACH finding, provide:
+
+```markdown
+## Finding [NUMBER]
+
+**File:** /api/core/[path]/[filename].js
+**Lines:** [start]-[end]
+**Anti-Pattern Type:** [1-6 from above]
+**Severity:** [Critical/High/Medium/Low]
+
+**Current Code:**
+```javascript
+[exact code snippet]
+```
+
+**Problem:**
+[Why this violates doctrine - specific explanation]
+
+**Evidence of Failure:**
+[If known - actual user query that failed due to this, or theoretical failure case]
+
+**Recommended Fix:**
+[Specific guidance on principle-based replacement]
+
+**Dependencies:**
+[Other files/modules that would need updating]
+
+**Doctrine Reference:**
+[Which specification document this violates]
+```
+
+---
+
+### Severity Classification
+
+**Critical:**
+- Actively suppresses truth (fetched data discarded)
+- Causes incorrect responses to common queries
+- Violates Truth > Helpfulness hierarchy directly
+
+**High:**
+- Fails on reasonable queries not in hardcoded lists
+- Requires maintenance to stay functional
+- Causes user-visible incorrect behavior
+
+**Medium:**
+- Over-triggers guardrails (adds unnecessary disclaimers)
+- Suboptimal routing (works but inefficient)
+- Inconsistent with principle-based modules elsewhere
+
+**Low:**
+- Technical debt without immediate user impact
+- Could cause future issues as system scales
+- Style/consistency issues
+
+---
+
+### Prioritized Remediation Approach
+
+After audit completion, findings should be grouped into:
+
+**Phase 1: Truth Suppression (Critical)**
+- Any code that discards fetched external data
+- Any enforcement that replaces real answers with templates
+- Fix immediately - these directly harm users
+
+**Phase 2: Hardcoded Lists (High)**
+- All entity lists that should be pattern-based
+- All keyword arrays that should be semantic
+- Fix to prevent ongoing whack-a-mole
+
+**Phase 3: Missing Intent Integration (High)**
+- Enforcement modules not checking intent
+- Routers not using semantic analysis
+- Fix to make guardrails intelligent
+
+**Phase 4: Threshold Hardening (Medium)**
+- Arbitrary confidence cutoffs
+- Silent failures on low scores
+- Fix to improve edge case handling
+
+**Phase 5: Consistency Pass (Low)**
+- Align all modules with principle-based pattern
+- Remove dead code and unused lists
+- Technical debt cleanup
+
+---
+
+### Validation Criteria
+
+The audit is complete when:
+
+1. Every file in scope has been reviewed
+2. All instances of anti-patterns 1-6 have been documented
+3. Each finding has severity, fix recommendation, and doctrine reference
+4. Findings are grouped into remediation phases
+5. No anti-pattern type has zero findings (if truly none exist, explicitly confirm)
+
+---
+
+### Success Metrics (Post-Remediation)
+
+After fixes are implemented:
+
+| Test Case | Current | Expected |
+|-----------|---------|----------|
+| "What's the situation with [ANY world leader]" | Fails if not in list | Works for any proper noun |
+| "News about [ANY political figure]" | Voting disclaimer | Actual news |
+| "Tell me about [ANY company] scandal" | Product disclaimer | Scandal information |
+| Query with no freshness keywords but news intent | No lookup | Lookup triggered |
+| Low confidence query | Silent default | Escalated reasoning or explicit uncertainty |
+
+---
+
+### Reference Documents
+
+The auditor should read these before beginning:
+
+1. **3rd Architectural Chat** - Defines warehouse worker vs CEO problem
+2. **Master Alignment Document** - Core behavioral principles
+3. **Phase 4 Technical Specification** - Truth hierarchy and lookup triggers
+4. **principleBasedReasoning.js** - Example of correct pattern to follow
+5. **Recent PR #397, #399** - Examples of anti-patterns that were fixed
+
+---
+
+### Output Deliverable
+
+A single comprehensive document or structured issue containing:
+
+1. **Executive Summary:** Total findings by severity
+2. **Findings List:** All instances in specified format
+3. **Remediation Roadmap:** Phased fix plan
+4. **Dependency Map:** Which fixes must happen together
+5. **Estimated Scope:** Rough sizing per phase
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
