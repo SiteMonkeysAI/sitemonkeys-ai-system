@@ -575,18 +575,20 @@ export class Orchestrator {
 
         const shouldLookup =
           truthTypeResult.type === 'VOLATILE' ||
+          (truthTypeResult.type === 'SEMI_STABLE' && matchesNewsPattern) ||
           matchesNewsPattern ||
           (truthTypeResult.high_stakes && truthTypeResult.high_stakes.isHighStakes) ||
-          (routeResult.requires_external && routeResult.hierarchy_name === "external_first" && phase4Metadata.confidence < 0.9);
+          (routeResult.external_lookup_required && routeResult.hierarchy_name === "EXTERNAL_FIRST");
 
         // Debug logging for lookup decision
         console.log('[ORCHESTRATOR] Lookup decision:', {
           message: message.substring(0, 100),
           truthType: truthTypeResult.type,
           isVolatile: truthTypeResult.type === 'VOLATILE',
+          isSemiStable: truthTypeResult.type === 'SEMI_STABLE',
           matchesNewsPattern: matchesNewsPattern,
           highStakes: truthTypeResult.high_stakes?.isHighStakes || false,
-          routerRequiresLookup: routeResult.requires_external,
+          routerRequiresLookup: routeResult.external_lookup_required,
           hierarchyName: routeResult.hierarchy_name,
           confidence: phase4Metadata.confidence,
           willAttemptLookup: shouldLookup

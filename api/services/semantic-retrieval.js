@@ -157,12 +157,15 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
   const startTime = Date.now();
   const {
     userId,
-    mode = 'truth-general',
+    mode: rawMode = 'truth-general',
     categories = null,
     topK = RETRIEVAL_CONFIG.defaultTopK,
     minSimilarity = RETRIEVAL_CONFIG.minSimilarity,
     includeAllModes = false
   } = options;
+
+  // Normalize mode: convert underscore to hyphen for consistency
+  const mode = rawMode.replace(/_/g, '-');
 
   // Initialize comprehensive telemetry
   const telemetry = {
