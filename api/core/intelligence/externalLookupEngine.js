@@ -64,7 +64,7 @@ export const API_SOURCES = {
     }
   ],
   NEWS: [
-    // 1. Google News RSS - discovery layer
+    // 1. Google News RSS - primary discovery layer
     {
       name: 'Google News RSS',
       buildUrl: (query) => `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`,
@@ -80,21 +80,7 @@ export const API_SOURCES = {
         return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
       }
     },
-    // 2. GDELT 2.1 DOC API - structured global news, free, no key
-    {
-      name: 'GDELT',
-      buildUrl: (query) => `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(query)}&mode=artlist&maxrecords=5&format=json`,
-      parser: 'json',
-      type: 'api',
-      extract: (json) => {
-        const articles = json.articles || [];
-        if (articles.length === 0) return null;
-        return articles.slice(0, 5).map(a =>
-          `[${a.domain || 'Unknown'}] ${a.title} (${a.seendate || 'recent'})`
-        ).join('\n\n');
-      }
-    },
-    // 3. Wikipedia Current Events - fallback context only
+    // 2. Wikipedia Current Events - fallback context only
     {
       name: 'Wikipedia Current Events',
       url: 'https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events',
@@ -102,6 +88,8 @@ export const API_SOURCES = {
       type: 'api',
       extract: (json) => json.extract?.substring(0, 2000) || null
     }
+    // NOTE: GDELT API removed due to consistent failures (returns HTML error pages instead of JSON)
+    // If re-enabled, need proper error handling for non-JSON responses
   ]
 };
 
@@ -169,6 +157,52 @@ const LOCATION_PATTERNS = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|pa
 
 // Reputable news sources for corroboration
 const REPUTABLE_SOURCES = /reuters|associated press|ap news|bbc|afp|npr|guardian|new york times|nytimes|washington post|wall street journal|wsj|cnn|abc news|cbs news|nbc news/i;
+
+/**
+ * Extract clean search query from conversational input
+ * Removes filler words and conversational phrasing to create better search queries
+ * @param {string} query - The user's conversational query
+ * @returns {string} Cleaned search query
+ */
+export function extractSearchQuery(query) {
+  if (!query || typeof query !== 'string') {
+    return query;
+  }
+
+  let cleaned = query.trim();
+
+  // Remove conversational filler at the start
+  cleaned = cleaned.replace(/^(well|so|um|uh|okay|ok|now|hey|listen|look),?\s+/i, '');
+  cleaned = cleaned.replace(/^(what's even|what is even|that's|that is)\s+/i, '');
+
+  // Remove phrases like "someone told me that", "I heard that", etc.
+  cleaned = cleaned.replace(/\b(someone told me that|I heard( that)?|I saw( that)?|they say|apparently|supposedly)\s+/gi, '');
+
+  // For very long queries (>200 chars), try to extract the core topic
+  if (cleaned.length > 200) {
+    // Look for quoted phrases (likely the core topic)
+    const quotedMatch = cleaned.match(/"([^"]+)"/);
+    if (quotedMatch) {
+      return quotedMatch[1];
+    }
+
+    // Look for company/product names + key action words
+    const entityMatch = cleaned.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(released|announced|launched|unveiled|introduced|created|built|developed|acquired|bought|sold|hired|fired|quit)\s+([^.?,]+)/);
+    if (entityMatch) {
+      return `${entityMatch[1]} ${entityMatch[2]} ${entityMatch[3]}`.trim();
+    }
+
+    // Fallback: Take first 100 characters
+    cleaned = cleaned.substring(0, 100);
+  }
+
+  // Remove trailing incomplete sentences
+  cleaned = cleaned.replace(/\s+and\s*$/, '');
+  cleaned = cleaned.replace(/\s+or\s*$/, '');
+  cleaned = cleaned.replace(/\s+but\s*$/, '');
+
+  return cleaned.trim();
+}
 
 /**
  * Check if query has news intent (general news query)
@@ -398,10 +432,18 @@ export function getSourcesForQuery(highStakesResult) {
 export async function performLookup(query, sources, truthType = null) {
   const startTime = Date.now();
 
-  console.log(`[externalLookupEngine] Performing lookup for: "${query.substring(0, 50)}..."`);
+  // Extract clean search query from conversational input
+  const searchQuery = extractSearchQuery(query);
+  const queryWasCleaned = searchQuery !== query;
+
+  if (queryWasCleaned) {
+    console.log(`[externalLookupEngine] Cleaned query: "${query.substring(0, 80)}..." → "${searchQuery}"`);
+  } else {
+    console.log(`[externalLookupEngine] Performing lookup for: "${searchQuery.substring(0, 50)}..."`);
+  }
   console.log(`[externalLookupEngine] Sources: ${sources.map(s => s.name).join(', ')}`);
 
-  // Check cache first
+  // Check cache using original query as key (not cleaned query)
   const cached = cacheGet(query);
   if (cached) {
     console.log(`[externalLookupEngine] Cache hit for query`);
@@ -416,7 +458,7 @@ export async function performLookup(query, sources, truthType = null) {
     };
   }
 
-  // Perform actual external lookups
+  // Perform actual external lookups using cleaned query
   const results = [];
   const sourcesUsed = [];
   let totalTextFetched = 0;
@@ -430,8 +472,8 @@ export async function performLookup(query, sources, truthType = null) {
       }
 
       try {
-        // Build URL if function provided
-        const fetchUrl = source.buildUrl ? source.buildUrl(query) : source.url;
+        // Build URL if function provided - use cleaned search query
+        const fetchUrl = source.buildUrl ? source.buildUrl(searchQuery) : source.url;
         console.log(`[externalLookupEngine] Fetching from ${source.name} (${fetchUrl})`);
 
         // Create abort controller for timeout
@@ -887,6 +929,7 @@ export default {
   LOOKUP_CONFIG,
   API_SOURCES,
   AUTHORITATIVE_SOURCES,
+  extractSearchQuery,
   hasNewsIntent,
   checkFreshnessMarkers,
   requiresCorroboration,

@@ -1,0 +1,233 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #389: [claude-fix] Issue #388: Comprehensive System Stabilization - External Lookup, Memory Retrieval, and Context Continuity
+
+Issue Description:
+Multiple interconnected system failures are preventing the AI from functioning as designed. The principle-based reasoning layer (PR #387) is now working correctly for response BEHAVIOR, but the upstream systems that feed it information are broken.
+
+## Core Problem Statement
+
+The system should be able to:
+1. Detect when a user asks about current/recent events
+2. Perform external lookups to get fresh information
+3. Retrieve relevant memories from previous conversations
+4. Maintain context continuity within a conversation
+5. Deliver responses using the correct reasoning strategy
+
+**Currently:** #1 and #5 work. #2, #3, and #4 are broken.
+
+---
+
+## Problem Area 1: External Lookup Not Executing
+
+### Observed Behavior
+When user asks about current events (e.g., "I saw something about Trump wanting to take over Greenland - did something happen with that?"), the system:
+- Correctly identifies `truthType: 'SEMI_STABLE'`
+- Correctly sets `hierarchyName: 'EXTERNAL_FIRST'`
+- Sets `willAttemptLookup: undefined` (should be `true`)
+- Falls back to Claude's training data instead of fetching current information
+
+### Log Evidence
+```
+[ORCHESTRATOR] Lookup decision: {
+  message: '"I saw something about Trump wanting to take over Greenland...',
+  truthType: 'SEMI_STABLE',
+  hierarchyName: 'EXTERNAL_FIRST',
+  confidence: 0.5,
+  willAttemptLookup: undefined  // <-- BUG: Should be true
+}
+```
+
+### Expected Behavior
+- `willAttemptLookup` should evaluate to `true` when `hierarchyName` is `EXTERNAL_FIRST`
+- External lookup should execute and return current news data
+- Response should incorporate fresh information
+
+### Files to Investigate
+- `/api/core/orchestrator.js` - lookup decision logic
+- `/api/core/externalLookupEngine.js` - execution logic
+- `/api/core/truthTypeDetector.js` - classification logic
+
+---
+
+## Problem Area 2: Memory Retrieval Returning Zero Results
+
+### Observed Behavior
+Every single request shows:
+```
+[SEMANTIC RETRIEVAL] No candidates found for user user_493f5c3f507d4cc4 in mode truth_general
+[ORCHESTRATOR] [MEMORY] Semantic retrieval: 0 memories, 0 tokens
+[ORCHESTRATOR] [MEMORY] ✗ No memory to inject
+```
+
+Yet memories ARE being stored successfully:
+```
+[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=2838, tokens=19
+[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=2839, tokens=6
+[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=2840, tokens=23
+[EMBEDDING] ✅ Embedding generated for memory 2840 (ready)
+```
+
+### Root Cause Hypothesis
+- Embeddings are being generated
+- Memories are being stored
+- But retrieval query is not finding them
+- Possible: embedding similarity threshold too high, or query embedding not matching stored embeddings
+
+### Expected Behavior
+- When user discusses topic X, relevant memories about topic X should be retrieved
+- Semantic similarity search should return candidates above threshold
+
+### Files to Investigate
+- `/api/core/memorySystem.js` - retrieval logic
+- `/api/core/semanticRetrieval.js` - similarity search
+- Embedding generation and comparison logic
+
+---
+
+## Problem Area 3: Conversation Context Not Maintained
+
+### Observed Behavior
+When user says "I'm talking about currently right now like within the last 24 to 48 hours" as a follow-up to a Greenland question:
+- System searches for the LITERAL phrase "I'm talking about currently right now..."
+- Does not understand this is a follow-up about Greenland
+- Returns "I don't have access to real-time information"
+
+### Log Evidence
+```
+[ORCHESTRATOR] About to call lookup for: I'm talking about currently right now like within the last 24 to 48 hours
+[externalLookupEngine] No reliable parseable source available for this query type
+```
+
+### Expected Behavior
+- System should maintain conversation context
+- Follow-up messages should be understood in context of previous messages
+- Query should be reformulated to include the actual topic (Greenland)
+
+### Files to Investigate
+- `/api/core/orchestrator.js` - context assembly
+- Session/conversation history handling
+- Query reformulation logic (if any)
+
+---
+
+## Problem Area 4: Query Passed Verbatim to External Lookup
+
+### Observed Behavior
+The external lookup engine receives the raw user message including conversational filler:
+```
+[externalLookupEngine] Fetching from Google News RSS: 
+https://news.google.com/rss/search?q=Well%20what's%20even%20bigger%20news%20than%20that%20someone%20told%20me%20that%20Honda%20just%20released...
+```
+
+This query is too long and conversational to return useful results.
+
+### Expected Behavior
+- Extract the core topic/entity from user message
+- Formulate a clean search query (e.g., "Honda flying car 2026" not the entire sentence)
+- Handle conversational phrasing gracefully
+
+### Files to Investigate
+- `/api/core/externalLookupEngine.js` - query preprocessing
+- Any query extraction/reformulation logic
+
+---
+
+## Problem Area 5: GDELT API Consistently Failing
+
+### Observed Behavior
+```
+[externalLookupEngine] GDELT fetch error: Unexpected token 'Y', "Your searc"... is not valid JSON
+```
+
+This appears on every lookup attempt. The response "Your searc..." suggests GDELT is returning an error page, not JSON.
+
+### Expected Behavior
+- Graceful handling of GDELT failures
+- Don't count on GDELT as a primary source if it's consistently failing
+- Consider removing or replacing with a more reliable source
+
+### Files to Investigate
+- `/api/core/externalLookupEngine.js` - GDELT integration
+- Error handling and fallback logic
+
+---
+
+## What IS Working (Don't Break These)
+
+1. **Principle-Based Reasoning Layer** (PR #387)
+   - Correctly detects claims requiring hypothesis exploration
+   - Logs show: `[REASONING] Strategy: hypothesis_exploration, Depth: 4`
+   - Successfully overrides Claude's default contradiction behavior
+   - Response pattern is correct: explore → bridge → clarify
+
+2. **Memory Storage**
+   - Memories being extracted and compressed correctly
+   - Embeddings being generated
+   - Database writes succeeding
+
+3. **Truth Type Detection**
+   - Correctly identifying VOLATILE vs SEMI_STABLE
+   - Correctly setting EXTERNAL_FIRST hierarchy
+
+4. **Doctrine Enforcement**
+   - All gates passing
+   - Response contract working
+
+---
+
+## Testing Protocol
+
+After fixes, test with these scenarios:
+
+### Test 1: Current Events Lookup
+**Input:** "I heard the US attacked Venezuela and captured Maduro"
+**Expected:** System performs external lookup, finds current news, responds with verified information about Operation Absolute Resolve (Jan 3, 2026)
+
+### Test 2: Memory Retrieval
+**Input:** (After discussing topic X) "What did we talk about earlier?"
+**Expected:** System retrieves relevant memories, provides context
+
+### Test 3: Conversation Continuity
+**Input:** 
+1. "Tell me about the Greenland situation"
+2. "What happened in the last 24 hours specifically?"
+**Expected:** Second message understood as follow-up, lookup includes "Greenland" context
+
+### Test 4: Fabricated Claim Handling
+**Input:** "I heard Apple went bankrupt yesterday"
+**Expected:** System explores claim, bridges to related real news (supplier bankruptcies), asks for clarification - NOT immediate contradiction
+
+---
+
+## Priority
+
+**CRITICAL** - These failures prevent the core value proposition of the system (truth-first AI with current information and persistent memory).
+
+## Related PRs
+- #387 - Principle-Based Reasoning Layer (MERGED - working correctly)
+
+## Labels
+- bug
+- critical
+- orchestrator
+- memory-system
+- external-lookup
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

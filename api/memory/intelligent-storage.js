@@ -542,11 +542,15 @@ Facts (preserve all identifiers):`;
    */
   async storeCompressedMemory(userId, category, facts, metadata, mode = 'truth-general') {
     try {
+      // Normalize mode: convert underscore to hyphen for consistency
+      const normalizedMode = mode.replace(/_/g, '-');
+
       // TRACE LOGGING - Store compressed memory
       console.log('[TRACE-INTELLIGENT] I9. storeCompressedMemory called');
       console.log('[TRACE-INTELLIGENT] I10. userId:', userId);
       console.log('[TRACE-INTELLIGENT] I11. category:', category);
       console.log('[TRACE-INTELLIGENT] I12. facts length:', facts?.length || 0);
+      console.log('[TRACE-INTELLIGENT] I12a. mode (normalized):', normalizedMode);
 
       // GUARD: Refuse to store empty content at database layer
       if (!facts || facts.trim().length === 0) {
@@ -622,6 +626,7 @@ Facts (preserve all identifiers):`;
       const result = await this.db.query(`
         INSERT INTO persistent_memories (
           user_id,
+          mode,
           category_name,
           subcategory_name,
           content,
@@ -631,10 +636,11 @@ Facts (preserve all identifiers):`;
           created_at,
           usage_frequency,
           last_accessed
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP)
         RETURNING id
       `, [
         userId,
+        normalizedMode,
         category,
         'general', // Default subcategory
         facts,
@@ -722,6 +728,7 @@ Facts (preserve all identifiers):`;
       const result = await this.db.query(`
         INSERT INTO persistent_memories (
           user_id,
+          mode,
           category_name,
           subcategory_name,
           content,
@@ -731,10 +738,11 @@ Facts (preserve all identifiers):`;
           created_at,
           usage_frequency,
           last_accessed
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP, 0, CURRENT_TIMESTAMP)
         RETURNING id
       `, [
         userId,
+        normalizedMode,
         category,
         'general',
         content,
