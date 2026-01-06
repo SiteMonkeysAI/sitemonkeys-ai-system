@@ -602,6 +602,13 @@ export class Orchestrator {
           // Issue #391: Enrich query with conversation context if it's a follow-up
           let enrichedMessage = message;
           let queryEnrichment = null;
+
+          // HANDOFF LOGGING (Issue #392): Check conversation history before enrichment
+          console.log('[CONTEXT] Enrichment check:', {
+            historyLength: conversationHistory?.length || 0,
+            hasHistory: conversationHistory && conversationHistory.length > 0
+          });
+
           if (conversationHistory && conversationHistory.length > 0) {
             const enrichmentResult = this.#enrichQueryWithConversationContext(message, conversationHistory);
             if (enrichmentResult.contextAdded) {
@@ -611,8 +618,12 @@ export class Orchestrator {
                 enriched: enrichedMessage,
                 contextUsed: enrichmentResult.contextUsed
               };
-              this.log(`[CONTEXT] Query enriched: "${message}" → "${enrichedMessage}"`);
+              this.log(`[CONTEXT] Query enriched: "${message.substring(0, 50)}..." → "${enrichedMessage.substring(0, 50)}..."`);
+            } else {
+              this.log('[CONTEXT] Enrichment not needed for this query');
             }
+          } else {
+            this.log('[CONTEXT] No conversation history available for enrichment');
           }
 
           const lookupResult = await lookup(enrichedMessage, {
@@ -713,6 +724,17 @@ export class Orchestrator {
       // Analyze query and determine reasoning strategy/depth
       // This transforms the system from "warehouse worker" to "caring family member"
       this.log("🧠 Applying principle-based reasoning layer...");
+
+      // HANDOFF LOGGING (Issue #392): orchestrator → reasoning
+      console.log('[HANDOFF] orchestrator → reasoning:', {
+        memoriesIsArray: Array.isArray(memoryContext?.memories),
+        memoriesLength: memoryContext?.memories?.length || 0,
+        hasLookupResult: !!lookupResult,
+        truthType: phase4Metadata?.truth_type || 'unknown',
+        hasAnalysis: !!analysis,
+        conversationHistoryLength: conversationHistory?.length || 0
+      });
+
       let reasoningResult = null;
       try {
         reasoningResult = await applyPrincipleBasedReasoning(message, {
@@ -722,25 +744,49 @@ export class Orchestrator {
           conversationHistory
         });
 
-        this.log(`[REASONING] Strategy: ${reasoningResult.metadata.strategy}, Depth: ${reasoningResult.metadata.depth}`);
-        if (reasoningResult.metadata.requirements.hypothesisTesting) {
-          this.log('[REASONING] ⚠️  Hypothesis testing required - explore claim before contradicting');
-        }
-        if (reasoningResult.metadata.requirements.connectionVolunteering) {
-          this.log('[REASONING] 🔗 Connection volunteering - reference past context proactively');
-        }
-        if (reasoningResult.metadata.requirements.proactiveDisclosure) {
-          this.log('[REASONING] 💡 Proactive disclosure - volunteer critical considerations');
+        // CRITICAL FIX (Issue #392): Check reasoningResult is valid before accessing properties
+        if (!reasoningResult || !reasoningResult.metadata) {
+          this.log('[REASONING] ⚠️ Reasoning returned invalid result, using fallback');
+          context.reasoningGuidance = null;
+          context.reasoningMetadata = null;
+        } else {
+          this.log(`[REASONING] Strategy: ${reasoningResult.metadata.strategy}, Depth: ${reasoningResult.metadata.depth}`);
+          if (reasoningResult.metadata.requirements?.hypothesisTesting) {
+            this.log('[REASONING] ⚠️  Hypothesis testing required - explore claim before contradicting');
+          }
+          if (reasoningResult.metadata.requirements?.connectionVolunteering) {
+            this.log('[REASONING] 🔗 Connection volunteering - reference past context proactively');
+          }
+          if (reasoningResult.metadata.requirements?.proactiveDisclosure) {
+            this.log('[REASONING] 💡 Proactive disclosure - volunteer critical considerations');
+          }
+
+          // Store reasoning guidance in context for prompt injection
+          context.reasoningGuidance = reasoningResult.promptInjection;
+          context.reasoningMetadata = reasoningResult.metadata;
         }
 
-        // Store reasoning guidance in context for prompt injection
-        context.reasoningGuidance = reasoningResult.promptInjection;
-        context.reasoningMetadata = reasoningResult.metadata;
+        // HANDOFF LOGGING (Issue #392): reasoning → enforcement
+        console.log('[HANDOFF] reasoning → enforcement:', {
+          reasoningOk: reasoningResult?.success !== false,
+          strategy: reasoningResult?.metadata?.strategy || 'none',
+          hasError: !!reasoningResult?.error,
+          hasPromptInjection: !!reasoningResult?.promptInjection
+        });
+
       } catch (reasoningError) {
         this.error("⚠️ Reasoning layer error:", reasoningError);
         // Continue without reasoning guidance if it fails
         context.reasoningGuidance = null;
         context.reasoningMetadata = null;
+
+        // HANDOFF LOGGING (Issue #392): reasoning error path
+        console.log('[HANDOFF] reasoning → enforcement:', {
+          reasoningOk: false,
+          strategy: 'error',
+          hasError: true,
+          errorMessage: reasoningError.message
+        });
       }
 
       // STEP 7: Route to appropriate AI

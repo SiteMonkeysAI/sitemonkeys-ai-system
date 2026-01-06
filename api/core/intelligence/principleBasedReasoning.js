@@ -323,13 +323,16 @@ function analyzeMemoryContext(memoryContext = {}) {
   const memoryCount = memoryContext.count || 0;
   const memoryTokens = memoryContext.tokens || 0;
   const memories = memoryContext.memories || [];
-  
+
+  // CRITICAL FIX (Issue #392): Ensure memories is an array before calling .map()
+  const safeMemories = Array.isArray(memories) ? memories : [];
+
   return {
     hasMemory: memoryCount > 0,
     count: memoryCount,
     tokens: memoryTokens,
-    categories: [...new Set(memories.map(m => m.category).filter(Boolean))],
-    recentMemories: memories.filter(m => {
+    categories: [...new Set(safeMemories.map(m => m.category).filter(Boolean))],
+    recentMemories: safeMemories.filter(m => {
       if (!m.created_at) return false;
       const dayAgo = Date.now() - (24 * 60 * 60 * 1000);
       return new Date(m.created_at).getTime() > dayAgo;

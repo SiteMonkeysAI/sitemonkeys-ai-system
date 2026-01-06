@@ -1,0 +1,235 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #393: [claude-fix] Issue #392: CRITICAL - Complete Pipeline Handoff Repair (One-and-Done)
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>Issue #392: CRITICAL - Complete Pipeline Handoff Repair (One-and-Done)</h1>
+<h2>Context</h2>
+<p>The system has been in a fix-one-discover-another cycle. Each PR fixes a symptom while missing related handoff failures. This issue requires a COMPLETE pipeline trace with ALL broken handoffs fixed in ONE coordinated PR.</p>
+<p><strong>Do not fix individual symptoms. Fix the pipeline.</strong></p>
+<hr>
+<h2>Step 1: Identify Entry Points (Use Code as Truth)</h2>
+<p>Search the repo for these files and confirm they exist:</p>
+
+Component | Expected Path | Purpose
+-- | -- | --
+Server chat endpoint | server.js | Entry point, /api/chat route
+Orchestrator | api/core/orchestrator.js | Main pipeline coordinator
+Session manager | api/lib/session-manager.js | Conversation history storage
+Semantic retrieval | api/services/semantic-retrieval.js | Memory retrieval
+Reasoning layer | api/core/intelligence/principleBasedReasoning.js | Principle-based reasoning
+External lookup | api/core/intelligence/externalLookupEngine.js | News/data fetching
+Truth detector | api/core/truthTypeDetector.js | VOLATILE/SEMI_STABLE classification
+
+
+<p>If any file is missing or at a different path, log it and proceed with what exists.</p>
+<hr>
+<h2>Step 2: Trace Each Handoff</h2>
+<p>For each transition in the pipeline, verify data types match:</p>
+<h3>Handoff A: server.js → orchestrator.processRequest()</h3>
+<ul>
+<li>[ ] <code>conversationHistory</code> is retrieved from session BEFORE calling processRequest</li>
+<li>[ ] <code>conversationHistory</code> is passed as parameter to processRequest</li>
+<li>[ ] Type check: must be Array or empty array, never undefined</li>
+</ul>
+<h3>Handoff B: orchestrator → principleBasedReasoning</h3>
+<ul>
+<li>[ ] <code>memories</code> parameter is an Array (not object, not string, not undefined)</li>
+<li>[ ] If memories come from semantic retrieval, verify the return type</li>
+<li>[ ] Null safety: if memories is null/undefined, convert to empty array before passing</li>
+</ul>
+<h3>Handoff C: orchestrator → externalLookupEngine</h3>
+<ul>
+<li>[ ] Query enrichment runs BEFORE lookup (check for conversation context)</li>
+<li>[ ] <code>getSourcesForQuery()</code> returns at least one parseable source for news queries</li>
+<li>[ ] Enriched query is passed to <code>performLookup()</code>, not original query</li>
+</ul>
+<h3>Handoff D: orchestrator → AI generation</h3>
+<ul>
+<li>[ ] <code>reasoningResult</code> is checked for null before accessing <code>.hypothesisTesting</code></li>
+<li>[ ] If reasoning layer fails, fallback is graceful (not safety spam)</li>
+</ul>
+<hr>
+<h2>Step 3: Fix ALL Broken Handoffs</h2>
+<p>Based on current logs, these specific failures MUST be fixed:</p>
+<h3>Failure 1: memories.map is not a function</h3>
+<p><strong>Location:</strong> <code>principleBasedReasoning.js:331</code>
+<strong>Root cause:</strong> <code>memories</code> parameter is not an array
+<strong>Fix required:</strong></p>
+<pre><code class="language-javascript">// At the START of any function receiving memories:
+const safeMemories = Array.isArray(memories) ? memories : [];
+</code></pre>
+<h3>Failure 2: Cannot read properties of null (reading 'hypothesisTesting')</h3>
+<p><strong>Location:</strong> <code>orchestrator.js:726</code>
+<strong>Root cause:</strong> <code>reasoningResult</code> is null when reasoning layer throws
+<strong>Fix required:</strong></p>
+<pre><code class="language-javascript">// Before accessing reasoningResult properties:
+if (!reasoningResult || reasoningResult.error) {
+  // Use default/fallback strategy, don't crash
+}
+</code></pre>
+<h3>Failure 3: No reliable parseable source available</h3>
+<p><strong>Location:</strong> <code>externalLookupEngine.js</code> - <code>getSourcesForQuery()</code>
+<strong>Root cause:</strong> Source selection returns empty for valid news queries
+<strong>Fix required:</strong></p>
+<ul>
+<li>For VOLATILE or SEMI_STABLE truth types with news patterns, MUST return Google News RSS as a source</li>
+<li>"No parseable source" should only occur for non-news queries (math, definitions, etc.)</li>
+</ul>
+<h3>Failure 4: Conversation context not enriching queries</h3>
+<p><strong>Location:</strong> <code>orchestrator.js</code> - enrichment section added in PR #391
+<strong>Root cause:</strong> Either conversationHistory not passed, or enrichment not called
+<strong>Fix required:</strong></p>
+<ul>
+<li>Verify <code>sessionManager.getConversationHistory(sessionId)</code> is called in server.js</li>
+<li>Verify result is passed to orchestrator</li>
+<li>Verify <code>#enrichQueryWithConversationContext()</code> is called when history exists</li>
+<li>Add log: <code>[CONTEXT] Enrichment check: historyLength=${conversationHistory?.length || 0}</code></li>
+</ul>
+<hr>
+<h2>Hard Acceptance Criteria (ALL must pass)</h2>
+<p>This PR is <strong>not mergeable</strong> unless ALL of the following are true:</p>
+<h3>Criterion 1: No Runtime Crashes</h3>
+<p>After the fix, these errors must NEVER appear in logs:</p>
+<ul>
+<li>[ ] <code>TypeError: memories.map is not a function</code></li>
+<li>[ ] <code>Cannot read properties of null (reading 'hypothesisTesting')</code></li>
+<li>[ ] Any <code>TypeError</code> inside <code>principleBasedReasoning.js</code></li>
+</ul>
+<h3>Criterion 2: External Lookup Returns Parseable Sources for News</h3>
+<p>For query "What happened in Venezuela today?":</p>
+<ul>
+<li>[ ] <code>willAttemptLookup: true</code></li>
+<li>[ ] At least ONE source from <code>getSourcesForQuery()</code> (Google News RSS minimum)</li>
+<li>[ ] <code>lookup_performed: true</code> (not just attempted)</li>
+<li>[ ] If zero results, <code>verification_path.sources</code> contains multiple options (not just Wikipedia)</li>
+</ul>
+<h3>Criterion 3: Conversation History Flows End-to-End</h3>
+<p>For a follow-up query after establishing topic:</p>
+<ul>
+<li>[ ] Log shows: <code>[CHAT] Using session conversation history: N turns</code> (N &gt;= 1)</li>
+<li>[ ] Log shows: <code>[CONTEXT] Query enriched: "..." → "..."</code></li>
+<li>[ ] Enriched query contains topic from previous message</li>
+</ul>
+<h3>Criterion 4: Reasoning Layer Never Hard-Fails</h3>
+<ul>
+<li>[ ] If inputs are null/undefined/wrong-type, reasoning returns <code>{ ok: false, reason: 'invalid_input' }</code></li>
+<li>[ ] System continues with fallback strategy (not safety spam)</li>
+<li>[ ] No unhandled exceptions propagate</li>
+</ul>
+<hr>
+<h2>Defensive Logging Requirements</h2>
+<p>Add validation logging at each handoff. <strong>Constraints:</strong></p>
+<ul>
+<li>Log ONLY: types, lengths, booleans, keys present</li>
+<li>Do NOT log: full message content, full memory content, full conversation history</li>
+<li>Max payload size: 200 characters per log line</li>
+</ul>
+<h3>Required Logs (add these):</h3>
+<pre><code class="language-javascript">// In server.js before calling orchestrator:
+console.log('[HANDOFF] server → orchestrator:', {
+  hasConversationHistory: Array.isArray(conversationHistory),
+  historyLength: conversationHistory?.length || 0,
+  sessionId: sessionId ? 'present' : 'missing'
+});
+
+// In orchestrator before calling reasoning layer:
+console.log('[HANDOFF] orchestrator → reasoning:', {
+  memoriesIsArray: Array.isArray(memories),
+  memoriesLength: memories?.length || 0,
+  hasLookupResult: !!lookupResult,
+  truthType: truthTypeResult?.type || 'unknown'
+});
+
+// In orchestrator after reasoning layer:
+console.log('[HANDOFF] reasoning → enforcement:', {
+  reasoningOk: reasoningResult?.ok !== false,
+  strategy: reasoningResult?.strategy || 'none',
+  hasError: !!reasoningResult?.error
+});
+</code></pre>
+<hr>
+<h2>External Lookup Source Requirements</h2>
+<p>For VOLATILE or SEMI_STABLE queries with news/geopolitics patterns:</p>
+<ol>
+<li><code>getSourcesForQuery()</code> MUST return at least Google News RSS</li>
+<li>Google News RSS is parseable (RSS/XML → headlines + timestamps)</li>
+<li>Wikipedia is "background only" - never the ONLY source for volatile news</li>
+<li>If all sources fail, <code>failure_reason</code> must be specific (not generic "no reliable source")</li>
+</ol>
+<hr>
+<h2>Test Protocol</h2>
+<p>After ALL fixes are applied, run this test sequence:</p>
+<h3>Test 1: Fresh Topic</h3>
+<pre><code>User: "What's happening with the Greenland situation?"
+</code></pre>
+<p><strong>Expected logs:</strong></p>
+<ul>
+<li><code>willAttemptLookup: true</code></li>
+<li><code>[externalLookupEngine] Fetching from Google News RSS</code></li>
+<li>Response contains current information (not "I cannot access real-time")</li>
+</ul>
+<h3>Test 2: Follow-up Query</h3>
+<pre><code>User: "What happened in the last 24 hours?"
+</code></pre>
+<p><strong>Expected logs:</strong></p>
+<ul>
+<li><code>[CHAT] Using session conversation history: 2 turns</code></li>
+<li><code>[CONTEXT] Query enriched: "What happened in the last 24 hours?" → "Greenland ... What happened in the last 24 hours?"</code></li>
+<li>External lookup uses enriched query</li>
+</ul>
+<h3>Test 3: Reasoning Layer Stress Test</h3>
+<p>Manually pass <code>null</code> as memories to <code>applyPrincipleBasedReasoning()</code>:</p>
+<ul>
+<li>Must NOT throw</li>
+<li>Must return <code>{ ok: false, reason: 'invalid_input' }</code> or similar</li>
+<li>System must continue without crashing</li>
+</ul>
+<hr>
+<h2>Do NOT</h2>
+<ul>
+<li>Submit a PR that fixes only SOME of the failures</li>
+<li>Skip adding the defensive logging</li>
+<li>Leave any handoff with potential null/undefined crashes</li>
+<li>Assume previous PRs work correctly (verify each handoff)</li>
+</ul>
+<h2>Do</h2>
+<ul>
+<li>Trace the complete pipeline before writing fixes</li>
+<li>Fix ALL four known failures plus any others discovered</li>
+<li>Add ALL required defensive logs</li>
+<li>Test with the exact protocol above</li>
+<li>Verify ALL acceptance criteria before submitting</li>
+</ul>
+<hr>
+<h2>Priority</h2>
+<p><strong>CRITICAL</strong> - This cycle of partial fixes ends with this PR.</p>
+<h2>Labels</h2>
+<ul>
+<li>critical</li>
+<li>architecture</li>
+<li>pipeline-audit</li>
+<li>one-and-done</li>
+</ul></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
