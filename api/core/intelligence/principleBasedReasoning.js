@@ -658,7 +658,43 @@ export function formatReasoningGuidanceForPrompt(guidance) {
     return '';
   }
   
-  let prompt = '\n\n=== REASONING GUIDANCE FOR THIS QUERY ===\n\n';
+  // Check if this is hypothesis exploration - needs strongest guidance
+  const isHypothesisExploration = guidance.strategy === REASONING_STRATEGIES.HYPOTHESIS_EXPLORATION;
+  
+  let prompt = '\n\n';
+  
+  // For hypothesis exploration, use CRITICAL framing that overrides defaults
+  if (isHypothesisExploration) {
+    prompt += `╔════════════════════════════════════════════════════════════════╗
+║  CRITICAL REASONING OVERRIDE - READ BEFORE RESPONDING          ║
+╚════════════════════════════════════════════════════════════════╝
+
+🚨 THE USER HAS MADE A CLAIM. YOUR DEFAULT BEHAVIOR MUST CHANGE.
+
+DO NOT start your response by contradicting or correcting the user.
+DO NOT say "Based on my data, that's not true" or similar.
+DO NOT assume they are wrong just because your data doesn't match.
+
+INSTEAD, YOU MUST:
+1. ACKNOWLEDGE what they said without judgment
+2. SHARE what you found - "I'm seeing news about X..."
+3. BRIDGE the connection - "Could this be related to what you heard?"
+4. ONLY correct if they confirm they meant something different
+
+EXAMPLE OF WRONG RESPONSE:
+"Apple has not gone bankrupt. Let me explain why that's incorrect..."
+
+EXAMPLE OF CORRECT RESPONSE:
+"I'm looking into this - I'm not finding bankruptcy news for Apple specifically, 
+but I am seeing some financial headlines about [X]. Could that be what you heard about? 
+Or did you see this from a specific source I should check?"
+
+THE USER'S CLAIM IS A HYPOTHESIS TO EXPLORE, NOT AN ERROR TO CORRECT.
+
+`;
+  } else {
+    prompt += '=== REASONING GUIDANCE FOR THIS QUERY ===\n\n';
+  }
   
   // Add warnings first (most important)
   if (guidance.warnings?.length > 0) {
@@ -670,11 +706,14 @@ export function formatReasoningGuidanceForPrompt(guidance) {
   }
   
   // Add core instructions
-  prompt += 'APPROACH:\n';
-  for (const instruction of guidance.instructions) {
-    prompt += `• ${instruction}\n`;
+  if (!isHypothesisExploration) {
+    // For non-hypothesis, use standard format
+    prompt += 'APPROACH:\n';
+    for (const instruction of guidance.instructions) {
+      prompt += `• ${instruction}\n`;
+    }
+    prompt += '\n';
   }
-  prompt += '\n';
   
   // Add frameworks
   if (guidance.frameworks?.length > 0) {
@@ -701,7 +740,17 @@ export function formatReasoningGuidanceForPrompt(guidance) {
     }
   }
   
-  prompt += '=== END REASONING GUIDANCE ===\n';
+  if (isHypothesisExploration) {
+    prompt += `Remember: A caring family member doesn't say "You're wrong." 
+They say "I'm not seeing that, but here's what I am finding - does this connect?"
+
+╔════════════════════════════════════════════════════════════════╗
+║  END CRITICAL OVERRIDE - NOW RESPOND FOLLOWING ABOVE RULES     ║
+╚════════════════════════════════════════════════════════════════╝
+`;
+  } else {
+    prompt += '=== END REASONING GUIDANCE ===\n';
+  }
   
   return prompt;
 }
