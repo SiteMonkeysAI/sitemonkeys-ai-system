@@ -1,0 +1,315 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #385: [claude-fix] COMPREHENSIVE SYSTEM AUDIT - Issue #382
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>🔬 COMPREHENSIVE SYSTEM AUDIT - Issue #382</h1>
+<h2>Priority: CRITICAL</h2>
+<h2>Type: Full System Audit &amp; Remediation</h2>
+<h2>Scope: ALL 81+ files, ALL 53 innovations, ALL data flows</h2>
+<hr>
+<h2>EXECUTIVE SUMMARY</h2>
+<p>This issue requires a COMPLETE audit of the entire Site Monkeys AI system against all specifications. The goal is to identify EVERY issue - known and unknown - and propose fixes for ALL of them in a single comprehensive PR.</p>
+<p><strong>CRITICAL INSTRUCTION: Do not fix things piecemeal. Audit EVERYTHING first, document ALL findings, then propose ALL fixes together in one comprehensive solution.</strong></p>
+<hr>
+<h2>PART 1: KNOWN CRITICAL BUGS TO VERIFY AND FIX</h2>
+<h3>Bug 1.1: Context Blindness (Document Content Not Reaching AI Model)</h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>User uploads/pastes large document (e.g., 129K characters)</li>
+<li>System correctly classifies as <code>DOCUMENT_REVIEW</code> (verified working)</li>
+<li>All six Issue #380 security layers work correctly</li>
+<li>BUT: AI responds with "I need more context" because it cannot see the document content</li>
+</ul>
+<p><strong>Evidence from Railway logs (2026-01-06):</strong></p>
+<pre><code>[ORCHESTRATOR] [MEMORY] ✗ No memory to inject
+[ORCHESTRATOR] [DOCUMENTS] No document found in storage  
+[ORCHESTRATOR] [CONTEXT] Total: 0 tokens
+[RESPONSE-CONTRACT] Response does not address document content
+[RESPONSE-CONTRACT] Relevance validation failed
+</code></pre>
+<p><strong>Root Cause Hypothesis:</strong>
+The user's message content is being received by the system but NOT being injected into the context that gets sent to the AI model. The orchestrator shows "0 tokens" of context being assembled.</p>
+<p><strong>Files to audit for this bug:</strong></p>
+<ol>
+<li><code>server.js</code> - How is the incoming message received? Is the full content preserved?</li>
+<li><code>api/chat.js</code> - How is the message passed to the orchestrator?</li>
+<li>Any orchestrator files - How is the system prompt/context assembled?</li>
+<li><code>api/lib/ai-processors.js</code> - What actually gets sent to OpenAI/Claude?</li>
+</ol>
+<p><strong>What to find:</strong></p>
+<ul>
+<li>Where does the user's message content get lost?</li>
+<li>Is there a truncation happening?</li>
+<li>Is the message being stored somewhere but not retrieved?</li>
+<li>Is there a field mapping issue (e.g., <code>message</code> vs <code>enhancedMessage</code> vs <code>content</code>)?</li>
+</ul>
+<hr>
+<h3>Bug 1.2: Empty Template Injection</h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>Responses contain raw placeholder text like:
+<ul>
+<li>"Combine approaches in novel ways: The best solutions often merge existing ideas differently"</li>
+<li>"Energy: Work with your natural rhythms"</li>
+</ul>
+</li>
+<li>These appear even when Roxy enhancements should be skipped</li>
+</ul>
+<p><strong>Files to audit:</strong></p>
+<ul>
+<li><code>api/lib/personalities.js</code> - Where are these templates defined? What triggers injection?</li>
+<li>Any file containing the literal strings "Combine approaches" or "Work with your natural rhythms"</li>
+</ul>
+<p><strong>What to find:</strong></p>
+<ul>
+<li>All locations where these templates are defined</li>
+<li>All conditions that should PREVENT their injection</li>
+<li>Why they're appearing when conditions say they shouldn't</li>
+</ul>
+<hr>
+<h3>Bug 1.3: Unconditional Boilerplate on Simple Questions</h3>
+<p><strong>Symptoms:</strong></p>
+<ul>
+<li>User asks simple factual question like "What is 2+2?"</li>
+<li>System responds with answer PLUS unnecessary boilerplate about consulting professionals</li>
+</ul>
+<p><strong>What to find:</strong></p>
+<ul>
+<li>All locations where professional consultation disclaimers are added</li>
+<li>What conditions trigger these additions</li>
+<li>Why simple factual questions aren't being exempted</li>
+</ul>
+<hr>
+<h2>PART 2: DATA FLOW TRACE - FIND ALL GAPS</h2>
+<p>Trace the COMPLETE path of a user message through the system. For EACH step, verify data is correctly passed.</p>
+<h3>2.1 Frontend to Server</h3>
+<pre><code>User types message → public/js/app.js → fetch to /api/chat → server.js
+</code></pre>
+<p><strong>Verify:</strong></p>
+<ul>
+<li>[ ] Full message content is sent in request body</li>
+<li>[ ] No truncation in frontend</li>
+<li>[ ] Content-Type headers correct</li>
+<li>[ ] Large messages (100K+) handled correctly</li>
+</ul>
+<h3>2.2 Server to Chat Handler</h3>
+<pre><code>server.js receives request → routes to api/chat.js or inline handler
+</code></pre>
+<p><strong>Verify:</strong></p>
+<ul>
+<li>[ ] Full message extracted from <code>req.body</code></li>
+<li>[ ] Message stored in correct field name</li>
+<li>[ ] No silent truncation</li>
+<li>[ ] Session/user ID correctly associated</li>
+</ul>
+<h3>2.3 Chat Handler to Orchestration</h3>
+<pre><code>chat.js → orchestrator/intelligence layer
+</code></pre>
+<p><strong>Verify:</strong></p>
+<ul>
+<li>[ ] Message passed with correct field name</li>
+<li>[ ] Document context assembled correctly</li>
+<li>[ ] Memory context retrieved and included</li>
+<li>[ ] Vault content loaded if applicable</li>
+<li>[ ] Token counts calculated correctly</li>
+</ul>
+<h3>2.4 Context Assembly to AI Model</h3>
+<pre><code>Orchestrator builds system prompt + user message → sends to OpenAI/Claude
+</code></pre>
+<p><strong>Verify:</strong></p>
+<ul>
+<li>[ ] System prompt includes all relevant context</li>
+<li>[ ] User message content ACTUALLY INCLUDED (not just metadata)</li>
+<li>[ ] Token limits respected but not over-aggressive</li>
+<li>[ ] Correct model selected (GPT-4 primary, Claude for escalation)</li>
+</ul>
+<h3>2.5 AI Response Back to User</h3>
+<pre><code>AI response → post-processing → personality enhancement → response validation → user
+</code></pre>
+<p><strong>Verify:</strong></p>
+<ul>
+<li>[ ] Response not corrupted by post-processing</li>
+<li>[ ] Personality enhancements applied correctly (or skipped when appropriate)</li>
+<li>[ ] Response contract validation working</li>
+<li>[ ] Final response matches what AI actually said</li>
+</ul>
+<hr>
+<h2>PART 3: SPECIFICATION COMPLIANCE AUDIT</h2>
+<p>Check implementation against ALL 53 innovations from the Master Completion Ledger.</p>
+<h3>Category A: Memory Architecture (Innovations 1-7)</h3>
+
+# | Innovation | Check
+-- | -- | --
+1 | Persistent Long-Term Memory (3-6M Tokens) | Verify storage persists, retrieval works, memory USED in context
+2 | Semantic De-Duplication Engine | Verify duplicate detection runs on every store
+3 | Age + Relevance Weighted Overwrite Logic | Verify scoring, old content overwritten
+4 | Meaning-Preserving Compression Layer | Verify 300-600:1 ratio, meaning preserved
+5 | Cross-Session Reconstruction Protocol | Verify context rebuilds on new session
+6 | Pinned Memory Control | Verify pinning mechanism accessible
+7 | Memory Importance Scoring | Verify scoring affects retrieval ranking
+
+
+<hr>
+<h2>PART 4: CODE QUALITY AUDIT</h2>
+<h3>4.1 Find All TODO/FIXME/HACK Comments</h3>
+<pre><code class="language-bash">grep -rn "TODO\|FIXME\|HACK\|XXX\|TEMP\|TEMPORARY" --include="*.js" .
+</code></pre>
+<h3>4.2 Find All Console.log (Should Use Logger)</h3>
+<pre><code class="language-bash">grep -rn "console.log\|console.error\|console.warn" --include="*.js" .
+</code></pre>
+<h3>4.3 Find All Hardcoded Values</h3>
+<ul>
+<li>Hardcoded API URLs</li>
+<li>Hardcoded token limits</li>
+<li>Hardcoded thresholds</li>
+<li>Magic numbers</li>
+</ul>
+<h3>4.4 Find All Empty Catch Blocks</h3>
+<pre><code class="language-bash">grep -rn "catch.*{" --include="*.js" .
+</code></pre>
+<h3>4.5 Find All Async Functions Without Try/Catch</h3>
+<h3>4.6 Find All Duplicate Code</h3>
+<h3>4.7 Find All Dead Code</h3>
+<ul>
+<li>Unused functions</li>
+<li>Unreachable code</li>
+<li>Files never imported</li>
+</ul>
+<h3>4.8 Find All Schema Mismatches</h3>
+<p>Compare UnifiedRequestSchema against actual usage.</p>
+<hr>
+<h2>PART 5: SECURITY AUDIT</h2>
+<ul>
+<li>[ ] No API keys in code</li>
+<li>[ ] All user input validated</li>
+<li>[ ] No SQL/XSS/command injection</li>
+<li>[ ] Auth on all protected endpoints</li>
+<li>[ ] Rate limiting implemented</li>
+</ul>
+<hr>
+<h2>PART 6: MAJOR FILE AUDIT</h2>
+<h3>server.js (2177 lines)</h3>
+<ul>
+<li>[ ] All routes defined</li>
+<li>[ ] Error handling complete</li>
+<li>[ ] Middleware ordered correctly</li>
+<li>[ ] Graceful shutdown</li>
+</ul>
+<h3>api/chat.js (1473 lines)</h3>
+<ul>
+<li>[ ] Message handling complete</li>
+<li>[ ] Context assembly correct</li>
+<li>[ ] Edge cases handled</li>
+</ul>
+<h3>memory_system/intelligence.js (2263 lines)</h3>
+<ul>
+<li>[ ] All methods implemented</li>
+<li>[ ] Memory retrieval working</li>
+<li>[ ] No performance issues</li>
+</ul>
+<h3>memory_system/persistent_memory.js (1037 lines)</h3>
+<ul>
+<li>[ ] Storage working</li>
+<li>[ ] Retrieval working</li>
+<li>[ ] Cross-session persistence verified</li>
+</ul>
+<h3>api/lib/personalities.js (957 lines)</h3>
+<ul>
+<li>[ ] Both personalities complete</li>
+<li>[ ] Selection logic correct</li>
+<li>[ ] Skip conditions working</li>
+</ul>
+<h3>api/lib/ai-processors.js (1063 lines)</h3>
+<ul>
+<li>[ ] API calls correct</li>
+<li>[ ] Response parsing correct</li>
+<li>[ ] Token counting accurate</li>
+</ul>
+<hr>
+<h2>PART 7: DELIVERABLES</h2>
+<h3>7.1 Audit Report</h3>
+<ul>
+<li>Every issue found (CRITICAL/HIGH/MEDIUM/LOW)</li>
+<li>File and line number</li>
+<li>Problem description</li>
+<li>Proposed fix</li>
+</ul>
+<h3>7.2 Comprehensive Fix PR</h3>
+<ul>
+<li>One commit per category</li>
+<li>Complete test coverage</li>
+<li>No breaking changes</li>
+</ul>
+<h3>7.3 Verification Plan</h3>
+<ul>
+<li>Test cases</li>
+<li>Expected outcomes</li>
+<li>Regression tests</li>
+</ul>
+<hr>
+<h2>EXECUTION INSTRUCTIONS</h2>
+<ol>
+<li><strong>AUDIT EVERYTHING FIRST</strong> - Don't start fixing until audit complete</li>
+<li>Read every file systematically</li>
+<li>Document every issue, even small ones</li>
+<li>Pay special attention to data flow gaps</li>
+<li>Cross-reference against 53 innovations</li>
+<li>Look for issues not explicitly mentioned here</li>
+<li>Propose complete fixes, not patches</li>
+<li>Test thoroughly before proposing</li>
+</ol>
+<hr>
+<h2>CONTEXT</h2>
+<h3>Issue #380 (RESOLVED)</h3>
+<p>Six-layer defense working:</p>
+<ul>
+<li>✅ DOCUMENT_REVIEW classification</li>
+<li>✅ External lookup suppression</li>
+<li>✅ Political guardrail context awareness</li>
+<li>✅ Personality enhancement skipping</li>
+<li>✅ Response contract validation</li>
+<li>✅ Defense-in-depth architecture</li>
+</ul>
+<h3>Remaining Problem</h3>
+<p>Context blindness - document content not reaching AI model despite correct classification.</p>
+<h3>Phase 4 Status</h3>
+<p>Dual Hierarchy Truth Validation implemented:</p>
+<ul>
+<li>Business claims: Vault → Memory → Docs → External</li>
+<li>Factual claims: External → Vault → Docs → Memory</li>
+</ul>
+<hr>
+<h2>SUCCESS CRITERIA</h2>
+<ul>
+<li>[ ] Every file reviewed</li>
+<li>[ ] All 53 innovations verified</li>
+<li>[ ] Complete data flow traced</li>
+<li>[ ] All bugs identified with root causes</li>
+<li>[ ] All code quality issues documented</li>
+<li>[ ] Comprehensive fix PR ready</li>
+<li>[ ] Zero known issues after fixes</li>
+</ul>
+<p><strong>This audit should result in a FULLY WORKING system.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
