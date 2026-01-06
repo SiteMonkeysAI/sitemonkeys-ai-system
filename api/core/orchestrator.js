@@ -453,9 +453,17 @@ export class Orchestrator {
         this.log(`[MEMORY] ✗ No memory to inject (first conversation or no relevant context)`);
       }
 
+      // STEP 1.5: CRITICAL FIX (Issue #385, Bug 1.1) - Detect if message itself contains a large document
+      // If message is very large (>10K chars), treat it as document context
+      let effectiveDocumentContext = documentContext;
+      if (!effectiveDocumentContext && message && message.length > 10000) {
+        this.log(`[DOCUMENTS] Large message detected (${message.length} chars), treating as pasted document`);
+        effectiveDocumentContext = message;
+      }
+
       // STEP 2: Load document context (always check if document available)
       // Check extractedDocuments Map first, then use documentContext if provided
-      const documentData = await this.#loadDocumentContext(documentContext, sessionId);
+      const documentData = await this.#loadDocumentContext(effectiveDocumentContext, sessionId);
       if (documentData) {
         this.log(
           `[DOCUMENTS] Loaded ${documentData.tokens} tokens from ${documentData.filename}`,
@@ -1358,22 +1366,37 @@ export class Orchestrator {
 
   async #loadDocumentContext(documentContext, sessionId) {
     try {
-      // Access extractedDocuments Map correctly (stored with .set("latest", {...}))
-      const latestDoc = extractedDocuments.get("latest");
-      
-      if (!latestDoc) {
+      // CRITICAL FIX (Issue #385, Bug 1.1): Handle documents from THREE sources:
+      // 1. documentContext parameter (pasted content from frontend)
+      // 2. extractedDocuments Map (uploaded files)
+      // 3. Message field itself (inline pasted documents)
+
+      let documentContent = null;
+      let filename = "pasted_document.txt";
+      let source = null;
+
+      // Priority 1: Check if documentContext was passed (frontend sends pasted content here)
+      if (documentContext && typeof documentContext === 'string' && documentContext.length > 1000) {
+        documentContent = documentContext;
+        source = "documentContext_parameter";
+        this.log("[DOCUMENTS] Found document in documentContext parameter");
+      }
+      // Priority 2: Check extractedDocuments Map (uploaded files)
+      else {
+        const latestDoc = extractedDocuments.get("latest");
+        if (latestDoc) {
+          documentContent = latestDoc.fullContent || latestDoc.content;
+          filename = latestDoc.filename || filename;
+          source = "uploaded_file";
+          this.log("[DOCUMENTS] Found document in extractedDocuments Map");
+        }
+      }
+
+      if (!documentContent || documentContent.length === 0) {
         this.log("[DOCUMENTS] No document found in storage");
         return null;
       }
 
-      // Use fullContent if available, otherwise fall back to preview content
-      const documentContent = latestDoc.fullContent || latestDoc.content;
-      
-      if (!documentContent || documentContent.length === 0) {
-        this.log("[DOCUMENTS] Document has no content");
-        return null;
-      }
-      
       const tokens = Math.ceil(documentContent.length / 4);
 
       // FEATURE FLAG: ENABLE_STRICT_DOC_BUDGET
@@ -1384,24 +1407,26 @@ export class Orchestrator {
       if (tokens > docBudget) {
         // 1 token ≈ 4 chars, so multiply by 4
         const truncated = documentContent.substring(0, docBudget * 4);
-        this.log(`[DOCUMENTS] Truncated from ${tokens} to ~${docBudget} tokens`);
+        this.log(`[DOCUMENTS] Truncated from ${tokens} to ~${docBudget} tokens (source: ${source})`);
 
         return {
           content: truncated,
           tokens: docBudget,
-          filename: latestDoc.filename,
+          filename: filename,
           processed: true,
           truncated: true,
+          source: source,
         };
       }
 
-      this.log(`[DOCUMENTS] Loaded: ${latestDoc.filename} (${tokens} tokens)`);
+      this.log(`[DOCUMENTS] Loaded: ${filename} (${tokens} tokens, source: ${source})`);
       return {
         content: documentContent,
         tokens: tokens,
-        filename: latestDoc.filename,
+        filename: filename,
         processed: true,
         truncated: false,
+        source: source,
       };
     } catch (error) {
       this.error(

@@ -1,0 +1,11 @@
+Starting issue-fix mode at Tue Jan  6 00:22:20 UTC 2026
+Fetching issue #385 details
+Using repository: SiteMonkeysAI/sitemonkeys-ai-system
+Creating a new branch: fix-issue-385-20260106002220
+From https://github.com/SiteMonkeysAI/sitemonkeys-ai-system
+ * branch            main       -> FETCH_HEAD
+Switched to a new branch 'fix-issue-385-20260106002220'
+branch 'fix-issue-385-20260106002220' set up to track 'origin/main'.
+Prompt saved to ./claude-output/claude_prompt_385.txt for debugging
+Running Claude to fix the issue...
+Committing changes...

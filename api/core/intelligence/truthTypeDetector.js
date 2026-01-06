@@ -56,6 +56,13 @@ const PERMANENT_PATTERNS = [
   /\b(invented|discovered|founded|established|created)\b/i,
   /\b(capital of|located in|born in|died in)\b/i,
 
+  // CRITICAL FIX (Issue #385, Bug 1.3): Simple arithmetic and factual questions
+  // These should NEVER trigger uncertainty disclaimers
+  /^what is \d+[\+\-\*\/\%]\d+/i,  // "what is 2+2", "what is 5*3"
+  /^\d+[\+\-\*\/\%]\d+/,            // "2+2", "5*3"
+  /^calculate \d+/i,                // "calculate 10*5"
+  /\bsimple (math|arithmetic|calculation)\b/i,
+
   // Word definitions - language doesn't change
   /\bwhat does ['"]?\w+['"]? mean\b/i,
   /\bdefine ['"]?\w+['"]?\b/i,

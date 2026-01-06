@@ -385,7 +385,11 @@ export class RoxyFramework {
         });
       }
 
-      if (analysis.domain === "creative" || analysis.requiresCreativity) {
+      // CRITICAL FIX (Issue #385, Bug 1.2): Only add creative opportunities if
+      // the query is actually asking for creative help, not for simple factual answers
+      if ((analysis.domain === "creative" || analysis.requiresCreativity) &&
+          analysis.complexity > 0.5 &&
+          analysis.intent !== "factual_question") {
         opportunities.push({
           type: "creative_synthesis",
           opportunity: "Combine approaches in novel ways",
@@ -630,7 +634,9 @@ export class RoxyFramework {
       });
     }
 
-    if (analysis.requiresCreativity) {
+    // CRITICAL FIX (Issue #385, Bug 1.2): Only add energy optimizations for
+    // complex creative work, not simple questions
+    if (analysis.requiresCreativity && analysis.complexity > 0.5) {
       optimizations.push({
         resource: "Energy",
         optimization: "Work with your natural rhythms",
