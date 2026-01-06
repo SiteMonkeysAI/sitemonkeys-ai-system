@@ -1,0 +1,194 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #391: [claude-fix] Issue #390: Conversation Context Continuity - System Cannot Track What User Is Talking About
+
+Issue Description:
+
+The system has no short-term conversational memory. When a user asks a follow-up question, the system treats it as a completely new, standalone query with no awareness of what was just discussed. This is a fundamental failure of conversational competence.
+
+## The Problem
+
+**Conversation Example:**
+```
+User: "Tell me about the Greenland situation"
+AI: [Responds about Trump/Greenland/Denmark tensions]
+
+User: "What happened in the last 24 hours?"
+AI: "I don't have access to real-time information" 
+     [Searches for literal phrase "last 24 hours" - finds nothing]
+```
+
+**What Should Happen:**
+```
+User: "Tell me about the Greenland situation"
+AI: [Responds about Trump/Greenland/Denmark tensions]
+
+User: "What happened in the last 24 hours?"
+AI: [Understands this means "Greenland in the last 24 hours"]
+    [Searches for "Greenland Trump Denmark January 2026"]
+    [Returns current information]
+```
+
+## Why This Is Critical
+
+This system is designed to be "a caring family member with CEO-level expertise." A family member doesn't forget what you were talking about 10 seconds ago. This isn't a nice-to-have feature - it's **basic conversational competence**.
+
+Without this:
+- Users have to repeat context constantly
+- Follow-up questions fail completely
+- The AI appears broken or unintelligent
+- Trust is destroyed
+
+## Technical Analysis
+
+### Current State
+- Each message is processed in isolation
+- No conversation history is passed to the orchestrator
+- External lookup receives only the current message
+- Query reformulation has no access to previous context
+
+### What's Needed
+
+**1. Conversation History Tracking**
+- Store recent messages (last 3-5 turns) in session
+- Pass conversation history to orchestrator
+- Available for context assembly
+
+**2. Follow-Up Detection**
+Detect when current message is a follow-up by looking for:
+- Pronouns without antecedent: "it", "that", "this", "they"
+- Time references without topic: "recently", "last week", "currently"
+- Continuation phrases: "what about", "and also", "but what if"
+- Very short queries after longer ones: "Why?" "How?" "When?"
+
+**3. Query Reformulation**
+When follow-up is detected:
+- Extract topic from previous message(s)
+- Inject topic into current query for external lookup
+- Example: "What happened recently?" + previous topic "Greenland" → search "Greenland recent news January 2026"
+
+**4. Context Injection for AI Generation**
+- Include relevant previous turns in the prompt
+- AI can reference what was just discussed
+- Responses feel continuous, not fragmented
+
+## Implementation Approach
+
+### Option A: Simple Context Window (Recommended First Step)
+```javascript
+// In orchestrator.processRequest
+const conversationContext = {
+  previousTurns: session.getRecentTurns(3), // Last 3 exchanges
+  currentMessage: message,
+  detectedTopic: extractTopicFromHistory(previousTurns)
+};
+
+// When building external lookup query
+if (isFollowUpQuery(message)) {
+  const enrichedQuery = `${detectedTopic} ${message}`;
+  // Search for "Greenland What happened in the last 24 hours"
+}
+```
+
+### Option B: LLM-Assisted Reformulation (More Accurate, Higher Cost)
+```javascript
+// Use a fast/cheap model to reformulate
+const reformulatedQuery = await reformulateWithContext({
+  currentQuery: "What happened in the last 24 hours?",
+  previousContext: "User was asking about Trump wanting to take over Greenland",
+  task: "Create a search query that captures what the user is actually asking about"
+});
+// Returns: "Trump Greenland Denmark news January 2026"
+```
+
+### Option C: Hybrid (Best Balance)
+- Use simple heuristics for obvious follow-ups
+- Fall back to LLM reformulation for ambiguous cases
+- Cache reformulation patterns for efficiency
+
+## Files to Modify
+
+1. **`/api/routes/chat.js`** - Pass conversation history to orchestrator
+2. **`/api/core/orchestrator.js`** - Accept and use conversation context
+3. **`/api/core/intelligence/externalLookupEngine.js`** - Use enriched queries
+4. **`/api/core/intelligence/principleBasedReasoning.js`** - Consider conversation context in strategy selection
+5. **Session management** - Store recent turns per session
+
+## Testing Protocol
+
+### Test 1: Direct Follow-Up
+```
+1. "Tell me about the Venezuela situation"
+2. "When did this happen?"
+Expected: Second query understood as "When did Venezuela situation happen"
+```
+
+### Test 2: Pronoun Reference
+```
+1. "Is Apple doing well financially?"
+2. "What about their stock price?"
+Expected: "their" understood as Apple
+```
+
+### Test 3: Topic Continuation
+```
+1. "I heard Trump wants to buy Greenland"
+2. "What's Denmark saying about it?"
+Expected: "it" understood as Greenland/Trump situation
+```
+
+### Test 4: Time-Based Follow-Up
+```
+1. "What's happening with the Maduro arrest?"
+2. "Any updates from today?"
+Expected: Search for "Maduro arrest January 6 2026"
+```
+
+### Test 5: Multi-Turn Context
+```
+1. "Tell me about CES 2026"
+2. "Any interesting AI announcements?"
+3. "What about from Samsung specifically?"
+Expected: Each builds on previous context
+```
+
+## Priority
+
+**CRITICAL** - This is not a feature request. This is a fundamental gap that makes the system feel broken. A conversational AI that can't maintain conversation context is not conversational.
+
+## Relationship to Other Issues
+
+- **PR #387** (Principle-Based Reasoning) - Working, but would benefit from conversation context for better strategy selection
+- **PR #389** (System Stabilization) - Fixed external lookup and memory, but explicitly noted conversation context as "partially addressed"
+
+## Success Criteria
+
+1. Follow-up questions work naturally without repeating context
+2. External lookups include relevant topic from conversation history
+3. AI responses feel continuous, not fragmented
+4. No regression in standalone query handling
+
+## Labels
+- critical
+- feature
+- orchestrator
+- conversation-context
+- user-experience
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -1,0 +1,7 @@
+ISSUE #391 FIX: Conversation Context Continuity - COMPLETED
+
+FILES MODIFIED:
+1. api/lib/session-manager.js - Added conversation history tracking
+2. server.js - Retrieve and store conversation turns
+3. api/core/orchestrator.js - Follow-up detection and query enrichment
+Committing changes...
