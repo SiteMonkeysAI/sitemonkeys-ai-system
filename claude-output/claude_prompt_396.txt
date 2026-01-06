@@ -1,0 +1,40 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #396: [claude-fix]  Title: External Lookup Pattern Matching Too Narrow - News Queries Failing
+
+Issue Description:
+Doctrine Reference: Phase 4 Technical Specification - "Automatic Lookup Triggers (Non-Negotiable)"
+Problem: Queries about current political events fail to trigger external lookup unless they contain explicit freshness markers like "today" or "current". The pattern matcher should recognize:
+
+Political figure names as news triggers
+Words like "situation", "happening", "news" as freshness indicators
+Geopolitical context (countries + political topics)
+
+Evidence:
+
+✅ "what's happening today with Venezuela" → lookup performed
+❌ "green situation with Trump" → "No reliable parseable source"
+
+Required behavior: Both queries should trigger external lookup and return Google News RSS results.
+Test criteria:
+Query: "What's the situation with Trump and Greenland"
+Expected log: [externalLookupEngine] Performing lookup...
+Expected log: [externalLookupEngine] Sources: Google New
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
