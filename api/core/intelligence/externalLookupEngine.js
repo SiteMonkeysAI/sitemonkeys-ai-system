@@ -502,11 +502,16 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return API_SOURCES.MEDICAL;
   }
 
-  // ISSUE #406 FIX: Weather queries - no API source available, return empty for graceful degradation
+  // ISSUE #406 FIX: Weather queries - no API source available
+  // Return empty for graceful degradation OR return news for context
   if (lowerQuery.match(/weather|temperature|forecast|rain|snow|storm/i)) {
-    // No weather API configured - return empty to trigger graceful degradation with disclosure
-    console.log('[externalLookupEngine] Weather query detected - no weather API configured');
-    return [];
+    // OPTION A: Return empty to trigger graceful degradation with disclosure
+    // console.log('[externalLookupEngine] Weather query detected - no weather API configured');
+    // return [];
+    
+    // OPTION B: Return news sources for general weather context
+    console.log('[externalLookupEngine] Weather query detected - using news sources for context');
+    return API_SOURCES.NEWS;
   }
 
   // News/current events queries - PRINCIPLE-BASED DETECTION
