@@ -2090,6 +2090,7 @@
             // Display confirmation prompt
             const confirmBubble = document.createElement("div");
             confirmBubble.className = "bubble ai confirmation-prompt";
+            window.pendingClaudeText = text;
             confirmBubble.innerHTML = `
               <img src="boy-mascot.png" class="avatar" alt="Eli">
               <div class="bubble-content">
@@ -2102,11 +2103,11 @@
                   <li>GPT-4: <strong>${data.estimatedCost?.gpt4 || '$0.01-0.03'}</strong> (faster)</li>
                 </ul>
                 <div style="margin-top: 12px; display: flex; gap: 10px;">
-                  <button onclick="handleClaudeConfirmation(true, '${text.replace(/'/g, "\\'")}');" 
+                  <button onclick="handleClaudeConfirmation(true, window.pendingClaudeText);" 
                           style="padding: 8px 16px; background: #00ff41; color: #1a1a1a; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
                     ✓ Use Claude
                   </button>
-                  <button onclick="handleClaudeConfirmation(false, '${text.replace(/'/g, "\\'")}');" 
+                  <button onclick="handleClaudeConfirmation(false, window.pendingClaudeText);" 
                           style="padding: 8px 16px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">
                     Use GPT-4
                   </button>
