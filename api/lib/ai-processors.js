@@ -13,6 +13,13 @@ import { route } from "../core/intelligence/hierarchyRouter.js";
 import { lookup } from "../core/intelligence/externalLookupEngine.js";
 import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
 
+// STEP 5: Response quality consolidation
+import {
+  removeEngagementBait,
+  addBlindSpots,
+  addUncertaintyStructure,
+} from "../services/response-enhancer.js";
+
 // Helper function to generate secure IDs with timestamp
 function generateId(prefix = "") {
   let randomPart;
@@ -77,6 +84,7 @@ export async function processWithEliAndRoxy({
   openai,
   driftTracker,
   _overrideLog,
+  memoryContext = null, // STEP 2: Accept memory context from chatProcessor
 }) {
   try {
     console.log("🧠 COGNITIVE FIREWALL: Full enforcement processing initiated");
@@ -223,6 +231,7 @@ export async function processWithEliAndRoxy({
         mode,
         vaultContext,
         conversationHistory,
+        memoryContext, // STEP 2: Pass memory context
       );
       trackTokenUsage("claude", response.tokens_used || 800);
       aiUsed = "Claude";
@@ -234,6 +243,7 @@ export async function processWithEliAndRoxy({
         vaultContext,
         conversationHistory,
         openai,
+        memoryContext, // STEP 2: Pass memory context
       );
       trackTokenUsage("eli", response.tokens_used || 600);
       aiUsed = "Eli";
@@ -245,6 +255,7 @@ export async function processWithEliAndRoxy({
         vaultContext,
         conversationHistory,
         openai,
+        memoryContext, // STEP 2: Pass memory context
       );
       trackTokenUsage("roxy", response.tokens_used || 600);
       aiUsed = "Roxy";
@@ -365,10 +376,15 @@ export async function processWithEliAndRoxy({
         "🔍 Product recommendations validated, violations found:",
         productValidation.violations,
       );
-      response.response = injectProductValidationWarnings(
-        response.response,
-        productValidation.violations,
-      );
+      // STEP 5: Use enhanced response if available (with blind spots added)
+      if (productValidation.enhanced) {
+        response.response = productValidation.enhanced;
+      } else {
+        response.response = injectProductValidationWarnings(
+          response.response,
+          productValidation.violations,
+        );
+      }
       trackOverride(
         "PRODUCT_RECOMMENDATION_VALIDATION",
         productValidation.violations,
@@ -412,10 +428,15 @@ export async function processWithEliAndRoxy({
         "🔍 Assumptions detected and flagged:",
         assumptionDetection.assumptions,
       );
-      response.response = injectAssumptionChallenges(
-        response.response,
-        assumptionDetection.assumptions,
-      );
+      // STEP 5: Use enhanced response if available (with uncertainty structure added)
+      if (assumptionDetection.enhanced) {
+        response.response = assumptionDetection.enhanced;
+      } else {
+        response.response = injectAssumptionChallenges(
+          response.response,
+          assumptionDetection.assumptions,
+        );
+      }
       overridePatterns.assumption_challenges++;
       trackOverride(
         "ASSUMPTION_DETECTION",
@@ -468,6 +489,15 @@ export async function processWithEliAndRoxy({
           "vault_rule_violation_blocked",
         );
       }
+    }
+
+    // STEP 6: FINAL QUALITY PASS - Remove engagement bait
+    console.log("🎯 Applying final quality pass - removing engagement bait");
+    const cleanedResponse = removeEngagementBait(response.response);
+    if (cleanedResponse !== response.response) {
+      console.log("✅ Engagement bait removed from response");
+      response.response = cleanedResponse;
+      overridePatterns.engagement_bait_removed = (overridePatterns.engagement_bait_removed || 0) + 1;
     }
 
     // TIER 2: RESPONSE OPTIMIZATION AND ENHANCEMENT
@@ -668,17 +698,20 @@ async function generateEliResponse(
   vaultContext,
   history,
   openai,
+  memoryContext = null, // STEP 2: Accept memory context
 ) {
-  const systemPrompt = `You are Eli, a business validation specialist with extensive startup experience. 
+  const systemPrompt = `You are Eli, a business validation specialist with extensive startup experience.
 
 BUSINESS VALIDATION MODE ENFORCEMENT:
 - Model worst-case scenarios first
-- Calculate cash flow impact  
+- Calculate cash flow impact
 - Assess business survival risk
 - Conservative market assumptions
 - Focus on actionable business metrics
 
 ${vaultContext}
+
+${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nUSE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant to show continuity and understanding of the user's situation.\n` : ''}
 
 Respond with practical business analysis, always considering survival implications.`;
 
@@ -716,6 +749,7 @@ async function generateRoxyResponse(
   vaultContext,
   history,
   openai,
+  memoryContext = null, // STEP 2: Accept memory context
 ) {
   const systemPrompt = `You are Roxy, a truth-first analysis specialist committed to accuracy.
 
@@ -727,6 +761,8 @@ TRUTH-FIRST MODE ENFORCEMENT:
 - Evidence-based reasoning only
 
 ${vaultContext}
+
+${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nUSE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant to show continuity and understanding of the user's situation.\n` : ''}
 
 Provide honest, accurate analysis with clear confidence indicators.`;
 
@@ -758,7 +794,7 @@ Provide honest, accurate analysis with clear confidence indicators.`;
   }
 }
 
-async function generateClaudeResponse(prompt, mode, vaultContext, _history) {
+async function generateClaudeResponse(prompt, mode, vaultContext, _history, memoryContext = null) {
   // For Claude responses, we need to use a different approach since we're Claude
   // This would typically call the Anthropic API, but for now return structured response
 
@@ -766,6 +802,8 @@ async function generateClaudeResponse(prompt, mode, vaultContext, _history) {
     response: `🤖 **Complex Analysis:** This query requires advanced reasoning capabilities. The analysis suggests multiple factors need consideration with high confidence requirements.
 
 ${vaultContext ? "🍌 **Vault Context Applied:** Site Monkeys operational frameworks active." : ""}
+
+${memoryContext ? `\n\n📝 **Context Awareness:** Referencing previous conversations to provide personalized analysis.` : ''}
 
 **Confidence Level:** 85% (based on available context)
 **Recommendation:** Proceed with structured analysis approach.`,
@@ -788,16 +826,42 @@ function determineAIRouting(message, mode, claudeRequested, userPreference) {
   }
 
   if (mode === "truth_general") {
+    // STEP 3: Route based on content type - emotional/wellness → Roxy, analytical/technical → Eli
+    const emotionalIndicators = /\b(feel|feeling|emotion|stress|anxiety|depression|mental health|wellness|relationship|personal|support|cope|coping|struggle|worried|scared|sad|happy|angry|overwhelmed|burnt out|exhausted emotionally)\b/i;
+    const analyticalIndicators = /\b(analyze|data|logic|reason|calculate|evidence|proof|research|study|statistics|science|technical|system|process|algorithm|database|index|session token|API|code|programming)\b/i;
+
+    const isEmotional = emotionalIndicators.test(message);
+    const isAnalytical = analyticalIndicators.test(message);
     const complexityScore = analyzeComplexity(message);
+
+    // Route based on content type, not just complexity
+    if (isEmotional && !isAnalytical) {
+      return {
+        usesClaude: false,
+        usesEli: false,
+        reason: "Emotional/wellness content routed to Roxy's empathetic approach",
+        confidence: 0.9,
+        aiUsed: "Roxy",
+      };
+    } else if (isAnalytical || complexityScore > 0.7) {
+      return {
+        usesClaude: complexityScore > 0.8,
+        usesEli: complexityScore <= 0.8,
+        reason: complexityScore > 0.8
+          ? "High complexity analytical requires Claude"
+          : "Analytical content routed to Eli",
+        confidence: 0.9,
+        aiUsed: complexityScore > 0.8 ? "Claude" : "Eli",
+      };
+    }
+
+    // Default: Roxy for general truth-seeking
     return {
-      usesClaude: complexityScore > 0.8,
+      usesClaude: false,
       usesEli: false,
-      reason:
-        complexityScore > 0.8
-          ? "High complexity truth analysis requires Claude"
-          : "Standard truth analysis via Roxy",
-      confidence: 0.9,
-      aiUsed: complexityScore > 0.8 ? "Claude" : "Roxy",
+      reason: "General truth-seeking via Roxy",
+      confidence: 0.8,
+      aiUsed: "Roxy",
     };
   }
 
@@ -1094,6 +1158,7 @@ function applyPoliticalGuardrails(response, _originalMessage) {
 }
 
 function validateProductRecommendations(response) {
+  // STEP 5: Use response-enhancer to add blind spots
   const violations = [];
   const recommendationPatterns = [
     /i recommend/i,
@@ -1102,17 +1167,27 @@ function validateProductRecommendations(response) {
     /consider using/i,
   ];
 
-  recommendationPatterns.forEach((pattern) => {
-    if (pattern.test(response)) {
-      if (
-        !response.includes("because") &&
-        !response.includes("evidence") &&
-        !response.includes("data")
-      ) {
-        violations.push("unsupported_recommendation");
-      }
+  const hasRecommendation = recommendationPatterns.some(pattern => pattern.test(response));
+
+  if (hasRecommendation) {
+    // Check if recommendation has proper support
+    const hasSupport = response.includes("because") ||
+                       response.includes("evidence") ||
+                       response.includes("data") ||
+                       response.includes("based on");
+
+    if (!hasSupport) {
+      violations.push("unsupported_recommendation");
     }
-  });
+
+    // Use response-enhancer to add blind spots and caveats
+    const enhanced = addBlindSpots(response, { hasRecommendation: true });
+    if (enhanced !== response) {
+      violations.push("recommendation_needed_caveats");
+    }
+
+    return { violations, modifications: violations.length, enhanced };
+  }
 
   return { violations, modifications: violations.length };
 }
@@ -1121,30 +1196,76 @@ function validateModeCompliance(response, mode, vaultLoaded) {
   const violations = [];
 
   if (mode === "truth_general") {
+    // STEP 4: REQUIRED STRUCTURE - Confidence assessment + Uncertainty handling
+
+    // Check for confidence indicators
     if (
       !response.includes("confidence") &&
-      !response.includes("I don't know")
+      !response.includes("I don't know") &&
+      !response.includes("uncertain") &&
+      !response.includes("I'm not sure")
     ) {
       violations.push("missing_confidence_indicators");
     }
+
+    // Check for uncertainty with explanation
+    const hasUncertainty = /uncertain|unclear|I don't know|I'm not sure|cannot determine/i.test(response);
+    const hasExplanation = /because|since|the reason|due to|given that/i.test(response);
+    if (hasUncertainty && !hasExplanation) {
+      violations.push("uncertainty_without_explanation");
+    }
+
+    // Avoid speculative language
     if (response.includes("probably") || response.includes("likely")) {
       violations.push("speculative_language_detected");
     }
   }
 
   if (mode === "business_validation") {
-    if (
-      !response.includes("cash") &&
-      !response.includes("survival") &&
-      !response.includes("risk")
-    ) {
-      violations.push("missing_business_survival_analysis");
+    // STEP 4: REQUIRED STRUCTURE - [SURVIVAL IMPACT] | [CASH FLOW] | [TOP 3 RISKS]
+
+    // Check for survival/runway analysis
+    const hasSurvival = /survival|runway|cash flow|burn rate|staying alive|business continuity/i.test(response);
+    if (!hasSurvival) {
+      violations.push("missing_survival_impact_analysis");
+    }
+
+    // Check for risk assessment
+    const hasRiskAssessment = /risk|downside|worst case|threat|danger|vulnerability/i.test(response);
+    if (!hasRiskAssessment) {
+      violations.push("missing_risk_assessment");
+    }
+
+    // Check for cash flow impact
+    const hasCashFlowAnalysis = /cash|revenue|cost|expense|profit|money|financial impact/i.test(response);
+    if (!hasCashFlowAnalysis) {
+      violations.push("missing_cash_flow_analysis");
     }
   }
 
   if (mode === "site_monkeys" && vaultLoaded) {
+    // STEP 4: REQUIRED STRUCTURE - Vault compliance + Business validation + Protocol references
+
+    // Site Monkeys branding
     if (!response.includes("🍌")) {
       violations.push("missing_site_monkeys_branding");
+    }
+
+    // Vault rule references
+    const hasVaultReference = /vault|protocol|policy|framework|Site Monkeys|operational/i.test(response);
+    if (!hasVaultReference) {
+      violations.push("missing_vault_context_tie_in");
+    }
+
+    // Inherit business_validation checks (survival + cash flow + risk)
+    const hasSurvival = /survival|runway|cash flow|burn rate/i.test(response);
+    if (!hasSurvival) {
+      violations.push("missing_business_survival_analysis");
+    }
+
+    const hasRiskAssessment = /risk|downside|worst case/i.test(response);
+    if (!hasRiskAssessment) {
+      violations.push("missing_risk_assessment_in_site_monkeys");
     }
   }
 
@@ -1152,10 +1273,12 @@ function validateModeCompliance(response, mode, vaultLoaded) {
     compliant: violations.length === 0,
     violations,
     scaffolds_added: violations.length,
+    mode_requirements_met: violations.length === 0,
   };
 }
 
 function detectAndFlagAssumptions(response, _mode) {
+  // STEP 5: Use response-enhancer to add uncertainty structure
   const assumptionPatterns = [
     /obviously/i,
     /everyone knows/i,
@@ -1164,16 +1287,18 @@ function detectAndFlagAssumptions(response, _mode) {
     /certainly/i,
   ];
 
-  const assumptions = [];
-  assumptionPatterns.forEach((pattern) => {
-    if (pattern.test(response)) {
-      assumptions.push(pattern.toString());
-    }
-  });
+  const assumptions = assumptionPatterns.filter(pattern => pattern.test(response));
+
+  // If assumptions detected, add uncertainty structure
+  let enhanced = response;
+  if (assumptions.length > 0) {
+    enhanced = addUncertaintyStructure(response, ['explanation', 'framework']);
+  }
 
   return {
-    assumptions,
+    assumptions: assumptions.map(p => p.toString()),
     challenges_added: assumptions.length,
+    enhanced,
   };
 }
 

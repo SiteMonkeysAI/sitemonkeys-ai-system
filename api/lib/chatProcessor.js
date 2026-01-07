@@ -1,6 +1,7 @@
 import { processWithEliAndRoxy } from "./ai-processors.js";
 import OpenAI from "openai";
 import crypto from "crypto";
+import { persistentMemory } from "../categories/memory/index.js";
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -385,6 +386,27 @@ export async function processRequest(requestBody) {
       }
     }
 
+    // MEMORY RETRIEVAL - STEP 1: RETRIEVE BEFORE PROCESSING
+    console.log(`🧠 [MEMORY] Retrieving persistent memory for session: ${session_id}`);
+    let memoryContext = null;
+    try {
+      const memoryResult = await persistentMemory.retrieveMemory(
+        session_id, // Use session_id as userId
+        message
+      );
+
+      if (memoryResult.success && memoryResult.memories) {
+        memoryContext = memoryResult.memories;
+        console.log(`✅ [MEMORY] Retrieved ${memoryContext.length} characters of memory context`);
+      } else {
+        console.log(`ℹ️ [MEMORY] No relevant memories found or retrieval failed`);
+      }
+    } catch (memoryError) {
+      console.error(`⚠️ [MEMORY] Memory retrieval error:`, memoryError);
+      // Graceful degradation - continue without memory
+      memoryContext = null;
+    }
+
     // PROCESS REQUEST WITH FULL ENFORCEMENT
     const vaultVerification = {
       allowed: vault_loaded && mode === "site_monkeys",
@@ -397,6 +419,7 @@ export async function processRequest(requestBody) {
       conversationHistory: conversation_history || [],
       userPreference: user_preference,
       openai,
+      memoryContext, // STEP 1: Pass memory context to AI processor
     });
 
     // GENERATE MODE FINGERPRINT
