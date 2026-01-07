@@ -11,6 +11,16 @@ class IntelligenceSystem {
     this.isInitialized = false;
 
     // ================================================================
+    // ISSUE #406 FIX: Module-level constants for content detection
+    // ================================================================
+    
+    // Financial content keywords (lowercase for case-insensitive matching)
+    this.FINANCIAL_KEYWORDS = ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'cryptocurrency', 'stock', 'stocks', 'market', 'price', 'trading', 'investment'];
+    
+    // News/general content keywords (lowercase for case-insensitive matching)
+    this.NEWS_KEYWORDS = ['news', 'stories', 'headlines', 'weather', 'forecast', 'temperature', 'current events', 'breaking'];
+
+    // ================================================================
     // UNIFIED SEMANTIC ANALYSIS ENGINE
     // ================================================================
 
@@ -850,6 +860,7 @@ class IntelligenceSystem {
       }
 
       // Topic entity extraction - ENHANCED for content-based routing
+      // ISSUE #406 FIX: Added financial and news/general topics
       const topicPatterns = [
         [
           "health",
@@ -862,11 +873,15 @@ class IntelligenceSystem {
         ],
         [
           "money",
-          /\b(money|financial|budget|income|debt|investment|savings)\b/gi,
+          /\b(money|financial|budget|income|debt|investment|savings|bitcoin|btc|ethereum|eth|crypto|cryptocurrency|stock|stocks|market|trading|price)\b/gi,
         ],
         [
           "home",
           /\b(home|house|apartment|living|lifestyle|vehicle|car|truck|pet|dog|cat|hobby|interest)\b/gi,
+        ],
+        [
+          "news",
+          /\b(news|stories|headlines|current events|breaking|update|latest|weather|forecast|temperature|gossip|celebrity|entertainment)\b/gi,
         ],
       ];
 
@@ -903,8 +918,24 @@ class IntelligenceSystem {
   async calculateAdvancedCategoryScores(query, semanticAnalysis, _userId) {
     const scores = new Map();
 
+    // ISSUE #406 FIX: Use module-level constants with case-insensitive matching
+    const queryLower = query.toLowerCase();
+    const hasFinancialContent = this.FINANCIAL_KEYWORDS.some(keyword => queryLower.includes(keyword));
+    const hasNewsContent = this.NEWS_KEYWORDS.some(keyword => queryLower.includes(keyword));
+
     for (const [categoryName, config] of this.categoryMappings) {
       let score = 0;
+
+      // ISSUE #406 FIX: Direct content-based boosting BEFORE semantic analysis
+      // Financial queries → money_spending_goals or money_income_debt
+      if (hasFinancialContent && (categoryName === 'money_spending_goals' || categoryName === 'money_income_debt')) {
+        score += 15.0; // High boost for financial content
+      }
+      
+      // News/weather queries → personal_life_interests (general category fallback)
+      if (hasNewsContent && categoryName === 'personal_life_interests') {
+        score += 10.0; // Boost for general/news content
+      }
 
       // SEMANTIC-FIRST: Calculate primary semantic score based on CONTENT
       const semanticScore = this.calculateSemanticBoost(
@@ -1040,6 +1071,7 @@ class IntelligenceSystem {
     // CONTENT-BASED SEMANTIC ROUTING: Match query content against category topic entities
     // This replaces intent-based routing with true semantic content matching
     // Example: "vehicles" → personal_life_interests (not relationships_social)
+    // ISSUE #406 FIX: Added 'news' and enhanced 'money' mappings
     const categoryConfig = this.categoryMappings.get(categoryName);
     if (categoryConfig && semanticAnalysis.topicEntities.size > 0) {
       // Check if query topics align with category topics
@@ -1051,6 +1083,7 @@ class IntelligenceSystem {
           family: ['relationships_social', 'personal_life_interests'],
           money: ['money_income_debt', 'money_spending_goals', 'work_career'],
           home: ['personal_life_interests', 'daily_routines_habits'],
+          news: ['personal_life_interests'], // News/general queries default to personal_life_interests
         };
         
         if (topicToCategoryMap[topicEntity]?.includes(categoryName)) {
@@ -1146,7 +1179,11 @@ class IntelligenceSystem {
     const [secondCategory, secondScore] = sortedCategories[1] || ["", 0];
 
     // Advanced confidence calculation
-    let confidence = Math.min(bestScore / 12.0, 0.6);
+    // ISSUE #406 FIX: Increased divisor and ceiling to allow higher confidence scores
+    // Changed from: Math.min(bestScore / 12.0, 0.6) 
+    // To: Math.min(bestScore / 15.0, 0.7)
+    // This allows scores >= 10.5 to reach confidence > 0.7
+    let confidence = Math.min(bestScore / 15.0, 0.7);
 
     // Score separation bonus
     const separation = bestScore - secondScore;
@@ -1165,9 +1202,14 @@ class IntelligenceSystem {
       confidence += Math.min(semanticAnalysis.topicEntities.size * 0.05, 0.1);
     }
 
+    // ISSUE #406 FIX: Lower the confidence floor from 0.2 to allow detection of truly uncertain routing
+    // However, boost confidence when we have strong topic entities
+    const hasStrongSignals = semanticAnalysis.topicEntities.size > 0 && bestScore > 5.0;
+    const confidenceFloor = hasStrongSignals ? 0.3 : 0.2;
+
     return {
       primaryCategory: bestCategory,
-      confidence: Math.max(0.2, Math.min(confidence, 1.0)),
+      confidence: Math.max(confidenceFloor, Math.min(confidence, 1.0)),
       alternativeCategory: secondCategory,
       scores: {
         primary: bestScore,
