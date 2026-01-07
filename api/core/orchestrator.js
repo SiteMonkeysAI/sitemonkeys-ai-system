@@ -83,19 +83,29 @@ export class Orchestrator {
       personalityEnhancements: 0,
     };
 
-    // Logging with timestamp for Railway visibility
-    this.log = (message) => {
+    // Tiered Logging (Issue #407) - Prevent Railway rate limiting
+    const LOG_LEVEL = process.env.LOG_LEVEL || 'info'; // debug, info, warn, error
+    const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
+    const currentLevel = LOG_LEVELS[LOG_LEVEL] || LOG_LEVELS.info;
+
+    this.log = (message, level = 'info') => {
+      if (LOG_LEVELS[level] < currentLevel) return;
+
       const timestamp = new Date().toISOString();
       console.log(`[${timestamp}] [ORCHESTRATOR] ${message}`);
-      // Force flush for Railway
+
       if (process.stdout && process.stdout.write) {
         process.stdout.write("");
       }
     };
+
+    this.debug = (message) => this.log(message, 'debug');
+    this.warn = (message) => this.log(message, 'warn');
+
     this.error = (message, error) => {
       const timestamp = new Date().toISOString();
       console.error(`[${timestamp}] [ORCHESTRATOR ERROR] ${message}`, error || "");
-      // Force flush for Railway
+
       if (process.stderr && process.stderr.write) {
         process.stderr.write("");
       }
@@ -1643,23 +1653,30 @@ export class Orchestrator {
 
       const tokens = Math.ceil(documentContent.length / 4);
 
-      // FEATURE FLAG: ENABLE_STRICT_DOC_BUDGET
-      // Spec calls for ≤1,000 tokens, current is 10,000
-      // Default to 10K for backward compatibility
-      const docBudget = process.env.ENABLE_STRICT_DOC_BUDGET === 'true' ? 1000 : 10000;
+      // INTELLIGENT DOCUMENT PREPROCESSING - Issue #407 Fix
+      // Classify query type to determine appropriate token budget
+      const queryType = this.#classifyQueryComplexity(message);
+      const TOKEN_BUDGETS = {
+        simple: 10000,
+        medium: 30000,
+        complex: 80000
+      };
+      const docBudget = TOKEN_BUDGETS[queryType] || 10000;
 
       if (tokens > docBudget) {
-        // 1 token ≈ 4 chars, so multiply by 4
-        const truncated = documentContent.substring(0, docBudget * 4);
-        this.log(`[DOCUMENTS] Truncated from ${tokens} to ~${docBudget} tokens (source: ${source})`);
+        // Use intelligent extraction rather than hard truncation
+        const truncated = this.#intelligentDocumentExtraction(documentContent, docBudget * 4);
+        const actualTokens = Math.ceil(truncated.length / 4);
+        this.log(`[COST-CONTROL] Document preprocessed: ${tokens} → ${actualTokens} tokens (${queryType} query, source: ${source})`);
 
         return {
           content: truncated,
-          tokens: docBudget,
+          tokens: actualTokens,
           filename: filename,
           processed: true,
           truncated: true,
           source: source,
+          truncationNote: `Document summarized from ~${tokens} to ~${actualTokens} tokens for cost efficiency while preserving key content.`
         };
       }
 
@@ -3028,10 +3045,28 @@ END OF EXTERNAL DATA
       contextStr += `\n\n**📝 MEMORY STATUS:** This appears to be our first conversation, or no relevant previous context was found. I'll provide the best response based on your current query.\n`;
     }
 
+    // ========== DOCUMENT CONTEXT (Issue #407 Fix) ==========
     if (context.sources?.hasDocuments && context.documents) {
-      contextStr += `\n\n**📄 UPLOADED DOCUMENT CONTEXT:**\n`;
-      contextStr += `I have access to the uploaded document and will reference it in my response.\n\n`;
-      contextStr += `${context.documents}\n`;
+      contextStr += `
+═══════════════════════════════════════════════════════════════
+📄 CURRENT DOCUMENT (uploaded just now)
+═══════════════════════════════════════════════════════════════
+
+⚠️ CRITICAL: When the user asks about "this document", "the document",
+"this file", or "what I just uploaded", they are referring to the
+CURRENT DOCUMENT below. Do NOT reference previous documents from memory
+unless explicitly asked.
+
+${context.documents}
+
+═══════════════════════════════════════════════════════════════
+END OF CURRENT DOCUMENT
+═══════════════════════════════════════════════════════════════
+
+INSTRUCTION: Address the user's question about THIS specific document.
+Do NOT confuse it with previous documents mentioned in memory.
+
+`;
     }
 
     return contextStr;
@@ -3048,6 +3083,28 @@ Core Principles:
 - Never use engagement bait phrases like "Would you like me to elaborate?"
 - Challenge assumptions and surface risks
 - Be honest about limitations
+
+UNCERTAINTY HANDLING - MANDATORY PATTERN:
+When you lack sufficient information to give a definitive answer, you MUST:
+
+1. HONEST ADMISSION (required first)
+   Say directly: "I don't have enough information about [specific aspect] to give you a definitive answer, and being honest with you matters more than appearing knowledgeable."
+
+2. EXPLAIN WHY UNCERTAIN (required second)
+   State clearly:
+   - What I know: [List actual facts you have]
+   - What I don't know: [List specific gaps]
+   - Why this matters: [Explain impact of not knowing]
+
+3. PROVIDE ALTERNATIVES (required third)
+   Offer comparable scenarios:
+   - "If your situation is like [Scenario A]: [specific guidance] (Confidence: 0.X)"
+   - "If your situation is like [Scenario B]: [alternative path] (Confidence: 0.X)"
+
+4. EMPOWER USER (required fourth)
+   State what would help: "To give you a definitive answer, I would need [specific information]. Or you could [alternative action]."
+
+CRITICAL: Fill in ALL brackets with actual content. Never output placeholder text or template markers. Each section must contain real, specific information based on the query.
 
 Mode: ${modeConfig?.display_name || mode}
 `;
@@ -3130,6 +3187,104 @@ Mode: ${modeConfig?.display_name || mode}
         this.requestStats.fallbackUsed / this.requestStats.totalRequests,
       timestamp: new Date().toISOString(),
     };
+  }
+
+  // ==================== DOCUMENT COST CONTROL HELPERS (Issue #407) ====================
+
+  /**
+   * Classify query complexity to determine token budget
+   * @param {string} message - User's query
+   * @returns {string} - 'simple', 'medium', or 'complex'
+   */
+  #classifyQueryComplexity(message) {
+    const lowerMessage = message.toLowerCase();
+
+    // Simple queries
+    const simplePatterns = [
+      /^what (is|are|does)/,
+      /^define/,
+      /^explain briefly/,
+      /^how many/,
+      /^summarize/
+    ];
+
+    if (simplePatterns.some(pattern => pattern.test(lowerMessage))) {
+      return 'simple';
+    }
+
+    // Complex queries
+    const complexIndicators = [
+      'analyze',
+      'compare',
+      'evaluate',
+      'assess',
+      'research',
+      'investigate',
+      'detailed',
+      'comprehensive',
+      'thorough',
+      'breakdown'
+    ];
+
+    const complexCount = complexIndicators.filter(
+      indicator => lowerMessage.includes(indicator)
+    ).length;
+
+    if (complexCount >= 2) {
+      return 'complex';
+    }
+
+    // Default to medium
+    return 'medium';
+  }
+
+  /**
+   * Intelligently extract content from document within budget
+   * Preserves structure and key content rather than hard truncation
+   * @param {string} content - Full document content
+   * @param {number} maxChars - Maximum characters allowed
+   * @returns {string} - Extracted content
+   */
+  #intelligentDocumentExtraction(content, maxChars) {
+    // Strategy 1: If structured document, extract sections
+    const sections = content.split(/\n#{1,3}\s+/);
+
+    if (sections.length > 1) {
+      let result = '';
+      for (const section of sections) {
+        if (result.length + section.length > maxChars) break;
+        result += section + '\n\n';
+      }
+      if (result.trim().length > 0) {
+        return result.trim();
+      }
+    }
+
+    // Strategy 2: Extract by paragraphs, keeping complete paragraphs
+    const paragraphs = content.split(/\n\n+/);
+    let result = '';
+
+    for (const paragraph of paragraphs) {
+      const testLength = result.length + paragraph.length + 2;
+      if (testLength > maxChars) {
+        break;
+      }
+      result += (result ? '\n\n' : '') + paragraph;
+    }
+
+    if (result.trim().length > 0) {
+      return result.trim();
+    }
+
+    // Strategy 3: Hard truncate at paragraph boundary
+    const truncated = content.substring(0, maxChars);
+    const lastParagraph = truncated.lastIndexOf('\n\n');
+
+    if (lastParagraph > maxChars * 0.8) {
+      return truncated.substring(0, lastParagraph).trim();
+    }
+
+    return truncated.trim();
   }
 }
 
