@@ -1,7 +1,15 @@
 // modeLinter.js - Mode Fingerprint Validation and Drift Detection
+//
+// PRINCIPLE (Issue #402 Findings #7, #8): Use semantic analysis, not keyword counting
+// - Consult reasoning layer and semantic analyzer for context understanding
+// - Detect mode drift based on semantic similarity, not keyword matches
 
 export class ModeLinter {
-  static validateModeCompliance(response, expectedMode, modeFingerprint) {
+  /**
+   * Validate mode compliance with optional semantic context
+   * PRINCIPLE (Issue #402 Finding #7): Use semantic understanding, not just patterns
+   */
+  static validateModeCompliance(response, expectedMode, modeFingerprint, semanticAnalysis = null) {
     const validation = {
       mode_compliance: "UNKNOWN",
       fingerprint_valid: false,
@@ -26,7 +34,8 @@ export class ModeLinter {
     validation.missing_elements = structureValidation.missing_elements;
     validation.compliance_score = structureValidation.compliance_score;
 
-    validation.drift_detected = this.detectModeDrift(response, expectedMode);
+    // Pass semantic analysis to drift detection
+    validation.drift_detected = this.detectModeDrift(response, expectedMode, semanticAnalysis);
 
     validation.mode_compliance = this.determineCompliance(validation);
 
@@ -179,7 +188,49 @@ export class ModeLinter {
     };
   }
 
-  static detectModeDrift(response, expectedMode) {
+  /**
+   * Detect mode drift using semantic context, not keyword counting
+   * PRINCIPLE (Issue #402 Findings #7, #8): Semantic analysis over pattern matching
+   */
+  static detectModeDrift(response, expectedMode, semanticAnalysis = null) {
+    // If semantic analysis available, use it for drift detection
+    if (semanticAnalysis) {
+      const domain = semanticAnalysis.domain;
+      const intent = semanticAnalysis.intent;
+      
+      // Map modes to expected semantic patterns
+      const modeExpectations = {
+        business_validation: {
+          expectedDomains: ['business', 'financial'],
+          expectedIntents: ['decision_making', 'problem_solving'],
+        },
+        truth_general: {
+          expectedDomains: ['general', 'technical', 'health', 'personal'],
+          expectedIntents: ['question', 'information_sharing'],
+        },
+        site_monkeys: {
+          expectedDomains: ['business', 'technical'],
+          expectedIntents: ['command', 'decision_making'],
+        },
+      };
+      
+      const expectations = modeExpectations[expectedMode];
+      if (expectations) {
+        const domainMismatch = domain && !expectations.expectedDomains.includes(domain);
+        const intentMismatch = intent && !expectations.expectedIntents.includes(intent);
+        
+        // Drift detected if both domain and intent don't match expectations
+        if (domainMismatch && intentMismatch) {
+          console.log(`[MODE-LINTER] Semantic drift detected: domain=${domain}, intent=${intent}, expected mode=${expectedMode}`);
+          return true;
+        }
+      }
+      
+      return false;
+    }
+    
+    // FALLBACK: Legacy keyword-based detection (when semantic analysis unavailable)
+    // This is kept for backward compatibility but should rarely be used
     const modeSignatures = {
       business_validation: [/roi/i, /cash/i, /revenue/i, /cost/i, /survival/i],
       truth_general: [/evidence/i, /fact/i, /research/i, /study/i, /data/i],
@@ -196,7 +247,9 @@ export class ModeLinter {
         pattern.test(response),
       ).length;
 
-      if (matchCount > 2) {
+      // Increased threshold to reduce false positives
+      if (matchCount > 3) {
+        console.log(`[MODE-LINTER] Legacy keyword drift detected: matched ${matchCount} signatures for ${otherMode}`);
         return true;
       }
     }

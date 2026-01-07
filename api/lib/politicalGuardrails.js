@@ -461,28 +461,32 @@ Instead, I can help you:
 Would you like me to provide factual information about this topic from a neutral, analytical perspective?`;
   }
 
+  /**
+   * Extract policy topic using pattern-based detection, not hardcoded lists
+   * PRINCIPLE (Issue #402 Finding #4): CEO approach - detect structure, not entities
+   */
   static extractPolicyTopic(response) {
-    const topics = [
-      "healthcare",
-      "immigration",
-      "taxation",
-      "education",
-      "environment",
-      "defense",
-      "trade",
-      "energy",
-      "infrastructure",
-      "social security",
-      "criminal justice",
-      "gun policy",
-      "abortion",
-      "climate change",
+    // Look for policy discussion patterns instead of hardcoded topic names
+    const policyPatterns = [
+      // Pattern: "policy on X" or "X policy"
+      /(?:policy on|policy regarding|policy about)\s+([a-z\s]{3,30})/i,
+      /([a-z\s]{3,30})\s+policy/i,
+      // Pattern: "issue of X" or "topic of X"
+      /(?:issue|topic|matter|subject)\s+of\s+([a-z\s]{3,30})/i,
+      // Pattern: legislative/regulatory context
+      /(?:legislation|regulation|law|bill)\s+(?:on|regarding|about)\s+([a-z\s]{3,30})/i,
     ];
 
-    const lowerResponse = response.toLowerCase();
-    const foundTopic = topics.find((topic) => lowerResponse.includes(topic));
+    for (const pattern of policyPatterns) {
+      const match = response.match(pattern);
+      if (match && match[1]) {
+        // Clean and return the extracted topic
+        return match[1].trim().toLowerCase();
+      }
+    }
 
-    return foundTopic || "this policy area";
+    // If no specific topic found, use generic term
+    return "this policy area";
   }
 
   static generatePoliticalReport(analysis) {
