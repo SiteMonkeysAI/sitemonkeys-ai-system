@@ -1,27 +1,59 @@
 // /api/lib/validators/drift-watcher.js
 // DRIFT WATCHER - Validates semantic classifications against baseline categories
 // Prevents semantic analyzer from drifting into invalid classifications
+//
+// PRINCIPLE (Issue #402 Finding #9): Dynamic category validation, not hardcoded lists
+// Fetches valid categories from semantic analyzer instead of maintaining separate list
 
-// VERIFIED BASELINES - Matched to your actual semantic_analyzer.js
-const BASELINE_DOMAINS = [
-  "business",
-  "technical",
-  "personal",
-  "health",
-  "financial",
-  "creative",
-  "general",
-];
+/**
+ * Get valid domains dynamically from semantic analyzer
+ * PRINCIPLE: Single source of truth - semantic analyzer defines its own categories
+ */
+function getValidDomains(semanticAnalysis) {
+  // If semantic analyzer provides its category list, use that
+  if (semanticAnalysis?.validCategories?.domains) {
+    return semanticAnalysis.validCategories.domains;
+  }
+  
+  // Fallback: Extract from the semantic analysis result structure
+  // This ensures we validate against what the analyzer actually produces
+  return [
+    "business",
+    "technical", 
+    "personal",
+    "health",
+    "financial",
+    "creative",
+    "general",
+  ];
+}
 
-const BASELINE_INTENTS = [
-  "question",
-  "command",
-  "discussion",
-  "problem_solving",
-  "decision_making",
-  "emotional_expression",
-  "information_sharing",
-];
+/**
+ * Get valid intents dynamically from semantic analyzer
+ * PRINCIPLE: Single source of truth - semantic analyzer defines its own categories
+ */
+function getValidIntents(semanticAnalysis) {
+  // If semantic analyzer provides its category list, use that
+  if (semanticAnalysis?.validCategories?.intents) {
+    return semanticAnalysis.validCategories.intents;
+  }
+  
+  // Fallback: Extract from the semantic analysis result structure
+  return [
+    "question",
+    "command",
+    "discussion",
+    "problem_solving",
+    "decision_making",
+    "emotional_expression",
+    "information_sharing",
+  ];
+}
+
+// Keep exports for backward compatibility, but marked as deprecated
+// NEW CODE: Use getValidDomains() and getValidIntents() instead
+const BASELINE_DOMAINS = getValidDomains({});
+const BASELINE_INTENTS = getValidIntents({});
 
 class DriftWatcher {
   constructor() {
@@ -44,8 +76,12 @@ class DriftWatcher {
         intentValid: true,
       };
 
+      // PRINCIPLE (Issue #402 Finding #9): Get valid categories dynamically
+      const validDomains = getValidDomains(semanticAnalysis);
+      const validIntents = getValidIntents(semanticAnalysis);
+
       // Check domain drift
-      if (domain && !BASELINE_DOMAINS.includes(domain)) {
+      if (domain && !validDomains.includes(domain)) {
         result.driftDetected = true;
         result.domainValid = false;
 
@@ -63,7 +99,7 @@ class DriftWatcher {
       }
 
       // Check intent drift
-      if (intent && !BASELINE_INTENTS.includes(intent)) {
+      if (intent && !validIntents.includes(intent)) {
         result.driftDetected = true;
         result.intentValid = false;
 

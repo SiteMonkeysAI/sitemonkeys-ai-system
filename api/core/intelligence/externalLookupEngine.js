@@ -45,9 +45,29 @@ export const API_SOURCES = {
     {
       name: 'FDA Drug Labels',
       buildUrl: (query) => {
-        // Extract drug name from query
-        const drugMatch = query.match(/\b(aspirin|ibuprofen|acetaminophen|tylenol|advil)\b/i);
-        const drugName = drugMatch ? drugMatch[1].toLowerCase() : 'aspirin';
+        // PRINCIPLE (Issue #402 Finding #11): Extract drug name from query dynamically
+        // Use pattern matching, not hardcoded drug lists (CEO approach)
+        
+        // Pattern 1: "What is X used for?" or "Side effects of X"
+        let drugMatch = query.match(/(?:what is|about|regarding|side effects of|information on)\s+([a-z]{3,20})\b/i);
+        
+        // Pattern 2: Drug name followed by medical terms
+        if (!drugMatch) {
+          drugMatch = query.match(/\b([a-z]{3,20})\s+(?:drug|medication|medicine|pill|tablet|capsule|dosage|prescription)\b/i);
+        }
+        
+        // Pattern 3: Medical context followed by drug name  
+        if (!drugMatch) {
+          drugMatch = query.match(/(?:drug|medication|medicine)\s+(?:called|named)\s+([a-z]{3,20})\b/i);
+        }
+        
+        const drugName = drugMatch ? drugMatch[1].toLowerCase() : null;
+        
+        if (!drugName) {
+          // If we can't extract a drug name, return null to skip this source
+          return null;
+        }
+        
         return `https://api.fda.gov/drug/label.json?search=openfda.generic_name:${encodeURIComponent(drugName)}&limit=1`;
       },
       parser: 'json',
