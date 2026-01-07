@@ -1,0 +1,492 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #418: [claude-fix] Full System Validation: Audit All Flows Against Bible Documents
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>[claude-fix] Full System Validation: Audit All Flows Against Bible Documents</h1>
+<h2>Objective</h2>
+<p>Perform a <strong>comprehensive system validation audit</strong>. Do NOT assume anything works. Trace actual code paths, compare to Bible requirements, document every gap, and fix all critical issues in priority order.</p>
+<p>This is diagnostic surgery, not guesswork.</p>
+<hr>
+<h2>BIBLE REQUIREMENTS REFERENCE</h2>
+<p>The following requirements are extracted directly from the Bible documents. These are the standards to audit against.</p>
+<hr>
+<h3>SECTION A: TOKEN LIMITS &amp; COST CONTROL</h3>
+<p><strong>Source: MASTER_SPECIFICATION_01.docx (lines 1117-1131)</strong></p>
+<pre><code class="language-javascript">const SESSION_LIMITS = {
+  maxUploadedTokens: 10000,      // Documents per session
+  maxMemoryTokens: 2500,         // Memory retrieval limit
+  maxConversationTokens: 20000,  // Conversation history
+  totalSessionLimit: 35000,      // Total without vault
+  withVaultLimit: 50000          // Total with vault loaded
+};
+</code></pre>
+<p><strong>Source: TECHNICAL_STANDARDS_01.docx (lines 279-395)</strong></p>
+<p>Token budgets by query complexity:</p>
+<ul>
+<li><strong>Simple queries</strong>: 10,000 tokens max ($0.10)</li>
+<li><strong>Medium queries</strong>: 30,000 tokens max ($0.30)</li>
+<li><strong>Complex queries</strong>: 80,000 tokens max ($0.80)</li>
+<li><strong>Maximum limit</strong>: 110,000 tokens (GPT-4 with buffer)</li>
+</ul>
+<p>Progressive Context Escalation:</p>
+<ol>
+<li>Initial attempt: 10K tokens, escalate if confidence &lt; 0.7</li>
+<li>Second attempt: 30K tokens, escalate if confidence &lt; 0.5</li>
+<li>Final attempt: 80K tokens for critical queries</li>
+</ol>
+<p>Memory Loading Strategy:</p>
+<ul>
+<li>Never load all 16 categories simultaneously</li>
+<li>Maximum 3 most relevant categories per query</li>
+<li>~5,000 tokens per category budget</li>
+</ul>
+<p><strong>AUDIT CHECKLIST:</strong></p>
+<ul>
+<li>[ ] SESSION_LIMITS enforced (10K docs, 2.5K memory, 20K conversation, 35K total)</li>
+<li>[ ] Query complexity classification working (simple/medium/complex)</li>
+<li>[ ] Progressive escalation implemented</li>
+<li>[ ] Memory category selection limited to 3 max</li>
+<li>[ ] Costs tracked per session</li>
+<li>[ ] Target cost per interaction: $0.10-$0.35</li>
+</ul>
+<hr>
+<h3>SECTION B: MEMORY SYSTEM</h3>
+<p><strong>Source: MASTER_SPECIFICATION_01.docx (lines 243-316)</strong></p>
+<p>Architecture Requirements:</p>
+<ul>
+<li>Storage: PostgreSQL persistent_memories table</li>
+<li>Categories: 11 predefined + 5 AI-managed dynamic</li>
+<li>Token Limits: 50,000 tokens per category</li>
+<li>Extraction: Up to 2,500 tokens per query</li>
+<li>Routing: Intelligent categorization based on content</li>
+</ul>
+<p><strong>11 Predefined Categories:</strong></p>
+<ol>
+<li>mental_emotional</li>
+<li>health_wellness</li>
+<li>relationships_social</li>
+<li>work_career</li>
+<li>money_income_debt</li>
+<li>money_spending_goals</li>
+<li>goals_active_current</li>
+<li>goals_future_dreams</li>
+<li>tools_tech_workflow</li>
+<li>daily_routines_habits</li>
+<li>personal_life_interests</li>
+</ol>
+<p><strong>Source: ENGINEERING_SPECIFICATIONS_01.docx (lines 334-425)</strong></p>
+<p>Categorization must use semantic analysis, not just keyword matching:</p>
+<pre><code class="language-javascript">// Example patterns (but should be semantic, not just regex)
+mental_emotional: /feel|emotion|mental|anxiety|stress|mood/
+health_wellness: /health|medical|doctor|pain|exercise/
+work_career: /work|job|career|professional|colleague/
+money_income_debt: /money|income|debt|salary|payment/
+// etc.
+</code></pre>
+<p>Retrieval Pattern:</p>
+<pre><code class="language-javascript">async function retrieveMemory(userId, query, maxTokens = 2500) {
+  // Route to relevant categories
+  // Score by relevance + recency
+  // Extract up to maxTokens
+  // Return formatted context
+}
+</code></pre>
+<p><strong>AUDIT CHECKLIST:</strong></p>
+<ul>
+<li>[ ] Semantic routing works (queries go to correct categories)</li>
+<li>[ ] Confidence scores meaningful (not always 0.200)</li>
+<li>[ ] Cross-category queries handled</li>
+<li>[ ] Embedding-based similarity search functional</li>
+<li>[ ] Retrieved memories actually match query intent</li>
+<li>[ ] Token budgets respected (2,500 max per query)</li>
+<li>[ ] 50K per category limit enforced</li>
+</ul>
+<hr>
+<h3>SECTION C: DOCUMENT HANDLING</h3>
+<p><strong>Source: MASTER_SPECIFICATION_01.docx (lines 317-390)</strong></p>
+<p>Two Systems:</p>
+<ol>
+<li><strong>Analysis (Primary)</strong>: Session cache only, 10,000 max tokens</li>
+<li><strong>Memory Storage (Optional)</strong>: Permanent PostgreSQL storage</li>
+</ol>
+<p>Supported Formats: .txt, .pdf, .docx (required), .md, .csv, .json (nice to have)</p>
+<p>File Limits:</p>
+<ul>
+<li>Max file size: 10MB per file</li>
+<li>Max files per session: 5</li>
+<li>Max total per session: 25MB</li>
+<li>Max tokens from uploads: 10,000</li>
+</ul>
+<p><strong>Source: Recent PRs #409, #411, #412</strong></p>
+<p>Intelligent Extraction Requirements:</p>
+<ul>
+<li>When document exceeds budget, extract best content (not block)</li>
+<li>Three strategies: query-relevant, key-sections, structured</li>
+<li>Truth-first disclosure: Tell user what percentage they're seeing</li>
+<li><code>extracted: true</code> flag must flow to validators</li>
+</ul>
+<p><strong>AUDIT CHECKLIST:</strong></p>
+<ul>
+<li>[ ] Documents extracted (not blocked) when over limit</li>
+<li>[ ] Intelligent extraction strategies working</li>
+<li>[ ] Truth-first disclosure shows coverage percentage</li>
+<li>[ ] <code>extracted</code> flag set and flows to RESPONSE-CONTRACT</li>
+<li>[ ] Document content actually included in AI prompt</li>
+<li>[ ] Current document distinguished from memory documents</li>
+</ul>
+<hr>
+<h3>SECTION D: AI ROUTING &amp; ESCALATION</h3>
+<p><strong>Source: MASTER_SPECIFICATION_01.docx (lines 390-456)</strong></p>
+<p>Two-Tier Architecture:</p>
+<ul>
+<li><strong>Tier 1: GPT-4 (Primary)</strong>: 80-90% of queries, ~$0.01-0.03 per response</li>
+<li><strong>Tier 2: Claude Sonnet 4.5 (Escalation)</strong>: 10-20% of queries, ~$0.05-0.15 per response</li>
+</ul>
+<p>Automatic Escalation Triggers:</p>
+<ol>
+<li>GPT-4 response shows uncertainty (confidence &lt; 0.85)</li>
+<li>Query matches complexity markers</li>
+<li>Critical domains (medical, legal, financial decisions)</li>
+<li>Truth-first validation needed</li>
+</ol>
+<p>User-Requested Escalation:</p>
+<ul>
+<li>"Validate this", "double-check", "are you sure" triggers</li>
+</ul>
+<p>Cost Limits:</p>
+<pre><code class="language-javascript">const COST_LIMITS = {
+  sessionMax: 2.50,        // Private system
+  warningThreshold: 2.00,  // Alert at 80%
+  publicSessionMax: 1.00   // Future public version
+};
+</code></pre>
+<p><strong>AUDIT CHECKLIST:</strong></p>
+<ul>
+<li>[ ] GPT-4 used as primary (80-90%)</li>
+<li>[ ] Claude escalation triggers correctly</li>
+<li>[ ] Confidence threshold (0.85) triggers escalation</li>
+<li>[ ] Critical domains trigger escalation</li>
+<li>[ ] User confirmation required before Claude (except safety-critical)</li>
+<li>[ ] Costs tracked and limits enforced</li>
+</ul>
+<hr>
+<h3>SECTION E: TRUTH-FIRST BEHAVIORS</h3>
+<p><strong>Source: MASTER_SPECIFICATION_01.docx (lines 457-542)</strong></p>
+<p>Uncertainty Handling Structure:</p>
+<pre><code>1. HONEST ADMISSION
+   "There really isn't enough information to make that
+   determination, and being truthful with you is too
+   important for me to mislead you."
+
+2. EXPLAIN WHY UNCERTAIN
+   "What I know: [Facts]
+   What I don't know: [Gaps]
+   Why this matters: [Impact]"
+
+3. PROVIDE ALTERNATIVES
+   "SCENARIO A (if context X):
+   - Approach: [Details]
+   - Confidence: 0.65
+
+   SCENARIO B (if context Y):
+   - Approach: [Details]
+   - Confidence: 0.55"
+
+4. EMPOWER USER
+   "To give you definitive answer, I need: [Specific information]
+   Or you could: [Alternative path]"
+</code></pre>
+<p>Confidence Scoring:</p>
+<ul>
+<li>Always include when providing analysis</li>
+<li>Scale: 0.0 (no confidence) to 1.0 (certain)</li>
+<li>Explain basis for confidence level</li>
+<li>Higher threshold for critical decisions</li>
+</ul>
+<p>Speculation Detection - Flag these patterns:</p>
+<pre><code class="language-javascript">const speculationIndicators = [
+  'probably', 'likely', 'might', 'could be',
+  'I think', 'possibly', 'maybe', 'presumably'
+];
+// Require rewrite with proper uncertainty framing
+</code></pre>
+<p><strong>Source: PRINCIPLES_AND_PHILOSOPHY_01.docx (lines 44-123)</strong></p>
+<p>Priority Hierarchy: <strong>TRUTH &gt; HELPFULNESS &gt; ENGAGEMENT</strong></p>
+<p>Non-Negotiable:</p>
+<ul>
+<li>Never fabricate information to appear knowledgeable</li>
+<li>Admit uncertainty openly and without apology</li>
+<li>Say "I don't know" when you don't know</li>
+<li>Explain WHY you're uncertain</li>
+<li>Provide honest alternatives instead of false certainty</li>
+</ul>
+<p><strong>AUDIT CHECKLIST:</strong></p>
+<ul>
+<li>[ ] System admits uncertainty (not speculation as fact)</li>
+<li>[ ] Confidence scores provided and meaningful</li>
+<li>[ ] Bounded reasoning template filled in (not placeholders)</li>
+<li>[ ] Speculation words trigger uncertainty framing</li>
+<li>[ ] "I don't know" responses when appropriate</li>
+<li>[ ] No fabrication detected</li>
+</ul>
+<hr>
+<h3>SECTION F: ANTI-ENGAGEMENT BEHAVIORS</h3>
+<p><strong>Source: MASTER_SPECIFICATION_01.docx (lines 543-636)</strong></p>
+<p>Every Response MUST:</p>
+<ul>
+<li>✅ Front-load the answer (no background first)</li>
+<li>✅ Give complete framework (not just first step)</li>
+<li>✅ Include decision paths (IF/THEN scenarios)</li>
+<li>✅ Specify actionable next steps</li>
+<li>✅ State confidence level</li>
+<li>✅ END decisively (no follow-up bait)</li>
+</ul>
+<p>Every Response MUST NOT:</p>
+<ul>
+<li>❌ Ask what they want to explore</li>
+<li>❌ Offer to elaborate on any point</li>
+<li>❌ Suggest related topics</li>
+<li>❌ Request unnecessary information</li>
+<li>❌ Drip information across messages</li>
+<li>❌ Create dependency for next question</li>
+</ul>
+<p>Banned Phrases:</p>
+<pre><code class="language-javascript">const bannedPhrases = [
+  'Would you like me to elaborate',
+  'What would you like to explore',
+  'Which aspect interests you',
+  'Should I explain more about',
+  'Would you like to know',
+  'What else can I help'
+];
+</code></pre>
+<p>Completion Signals (Required):</p>
+<pre><code class="language-javascript">const completionPhrases = [
+  "This should give you what you need to move forward.",
+  "That covers the complete approach.",
+  "You now have the framework to decide.",
+  "This addresses your question fully.",
+  "Done."
+];
+</code></pre>
+<p><strong>Source: PRINCIPLES_AND_PHILOSOPHY_01.docx (lines 218-294)</strong></p>
+<p>Success Metrics:</p>
+<ul>
+<li>Messages to resolution: 1-2 (target: 80%)</li>
+<li>User satisfaction: &gt;4.5/5</li>
+<li>Problem solved: First response sufficient</li>
+<li>Action taken: Did user do something?</li>
+</ul>
+<p>NOT Measured (wrong metrics):</p>
+<ul>
+<li>Messages per session (lower is better for us)</li>
+<li>Time on site (shorter is better for us)</li>
+<li>Return visits for same problem (should be zero)</li>
+</ul>
+<p><strong>AUDIT CHECKLIST:</strong></p>
+<ul>
+<li>[ ] Responses front-load the answer</li>
+<li>[ ] Complete frameworks provided</li>
+<li>[ ] Decision paths included</li>
+<li>[ ] Completion signals present</li>
+<li>[ ] No banned phrases in responses</li>
+<li>[ ] No engagement bait detected</li>
+</ul>
+<hr>
+<h3>SECTION G: PHASE 4 - TRUTH TYPE DETECTION</h3>
+<p><strong>Source: PHASE_4_TECHNICAL_SPECIFICATION.docx (lines 75-168)</strong></p>
+<p>Two-Stage Classification:</p>
+<p><strong>Stage 1: Deterministic Rules (Zero Cost)</strong></p>
+
+Truth Type | Pattern Markers | Examples
+-- | -- | --
+VOLATILE | price, stock, weather, "current", "latest", "today", "now" | "What's the current price of Bitcoin?"
+SEMI-STABLE | regulations, policies, "current CEO", "who is the" | "Who is the current CEO?"
+PERMANENT | definitions, history, math, science, "what is" | "What is photosynthesis?"
+
+
+<p><strong>Stage 2: AI Classifier (Only If Ambiguous)</strong>
+Only invoke when Stage 1 cannot determine - costs tokens.</p>
+<p>TTL Cache Durations:</p>
+<ul>
+<li>VOLATILE: 0-5 minutes</li>
+<li>SEMI-STABLE: 24 hours</li>
+<li>PERMANENT: 30 days</li>
+</ul>
+<p>Automatic Lookup Triggers (Non-Negotiable):</p>
+<ol>
+<li>Freshness markers detected</li>
+<li>High-stakes domain (medical, legal, financial, safety)</li>
+<li>Low internal confidence (&lt;0.70) AND high stakes</li>
+</ol>
+<p><strong>AUDIT CHECKLIST:</strong></p>
+<ul>
+<li>[ ] Truth type detection working (VOLATILE/SEMI-STABLE/PERMANENT)</li>
+<li>[ ] Stage 1 deterministic rules catching obvious cases</li>
+<li>[ ] Stage 2 AI classifier only for ambiguous</li>
+<li>[ ] TTL caching implemented correctly</li>
+<li>[ ] External lookup triggers firing appropriately</li>
+</ul>
+<hr>
+<h3>SECTION H: ENFORCEMENT GATES</h3>
+<p><strong>Source: TECHNICAL_STANDARDS_01.docx (lines 843-933)</strong></p>
+<p>Truth-First Compliance Check:</p>
+<pre><code class="language-javascript">function validateTruthFirst(response) {
+  // Check for speculation without framing
+  // Check for engagement bait
+  // Return { valid: boolean, issues: [] }
+}
+</code></pre>
+<p>Required Validations:</p>
+<ol>
+<li>Speculation detection → require uncertainty framing</li>
+<li>Engagement bait detection → require rewrite</li>
+<li>Confidence levels present when needed</li>
+<li>No absolute claims without evidence</li>
+</ol>
+<p><strong>AUDIT CHECKLIST:</strong></p>
+<ul>
+<li>[ ] Doctrine gates running in correct order</li>
+<li>[ ] Truth-first validation passing/failing appropriately</li>
+<li>[ ] Engagement bait stripped from responses</li>
+<li>[ ] Speculation rewritten with uncertainty framing</li>
+<li>[ ] Response contract enforced</li>
+</ul>
+<hr>
+<h3>SECTION I: PERFORMANCE REQUIREMENTS</h3>
+<p><strong>Source: MASTER_SPECIFICATION_01.docx (lines 1185-1212)</strong></p>
+<p>Response Times:</p>
+<ul>
+<li>Simple query: &lt;2 seconds</li>
+<li>With memory: &lt;3 seconds</li>
+<li>With document: &lt;5 seconds</li>
+<li>With vault: &lt;4 seconds</li>
+</ul>
+<p>Database Queries:</p>
+<ul>
+<li>Memory retrieval: &lt;500ms</li>
+<li>Category routing: &lt;200ms</li>
+<li>Storage operation: &lt;300ms</li>
+</ul>
+<p>Session Operations:</p>
+<ul>
+<li>Session creation: &lt;100ms</li>
+<li>Cache retrieval: &lt;50ms</li>
+<li>Cost calculation: &lt;10ms</li>
+</ul>
+<p><strong>AUDIT CHECKLIST:</strong></p>
+<ul>
+<li>[ ] Response times within targets</li>
+<li>[ ] Database queries optimized</li>
+<li>[ ] No timeout issues</li>
+<li>[ ] Logging not causing rate limits</li>
+</ul>
+<hr>
+<h2>DELIVERABLES</h2>
+<h3>Part 1: Audit Report</h3>
+<p>For each section (A through I), provide:</p>
+<pre><code>### Section X: [Name]
+**Status**: WORKING / BROKEN / PARTIAL
+
+**Evidence**:
+- File: [path], Line: [number]
+- Log output: [example]
+- Code behavior: [description]
+
+**Gap**:
+- Bible requires: [specific requirement]
+- Code does: [actual behavior]
+- Impact: [how this affects users]
+
+**Priority**: BLOCKING / CRITICAL / IMPORTANT / MINOR
+</code></pre>
+<h3>Part 2: Prioritized Fix List</h3>
+<p>Rank ALL identified gaps:</p>
+<ol>
+<li><strong>BLOCKING</strong> - System unusable without this</li>
+<li><strong>CRITICAL</strong> - Major functionality broken</li>
+<li><strong>IMPORTANT</strong> - Degraded experience</li>
+<li><strong>MINOR</strong> - Polish items</li>
+</ol>
+<h3>Part 3: Comprehensive Fixes</h3>
+<p>For ALL BLOCKING and CRITICAL issues:</p>
+<ul>
+<li>Implement complete production-ready fixes</li>
+<li>Include all affected files (frontend AND backend)</li>
+<li>Surgical precision - no unnecessary changes</li>
+<li>Verify fixes don't break other flows</li>
+</ul>
+<hr>
+<h2>QUALITY REQUIREMENTS</h2>
+<ol>
+<li><strong>Trace ACTUAL code paths</strong> - not assumptions</li>
+<li><strong>Reference specific files and line numbers</strong></li>
+<li><strong>Compare to specific Bible document requirements</strong> (cited above)</li>
+<li><strong>No placeholder fixes</strong> - production-ready only</li>
+<li><strong>Verify fixes don't break other flows</strong></li>
+<li><strong>Test each fix can be verified in Railway logs</strong></li>
+</ol>
+<hr>
+<h2>FILES TO EXAMINE</h2>
+<p>Start with these core files:</p>
+<p><strong>Backend:</strong></p>
+<ul>
+<li><code>api/core/orchestrator.js</code> - Main request processing</li>
+<li><code>api/core/memory/*.js</code> - Memory storage/retrieval</li>
+<li><code>api/core/intelligence/*.js</code> - Reasoning, truth validation</li>
+<li><code>api/ai/*.js</code> - AI routing, model selection</li>
+<li><code>server.js</code> - Entry point, routes</li>
+</ul>
+<p><strong>Frontend:</strong></p>
+<ul>
+<li><code>public/index.html</code> or <code>locked-ui/index.html</code></li>
+<li><code>public/js/app.js</code> - Frontend logic</li>
+</ul>
+<p><strong>But do NOT limit to these</strong> - trace wherever the code leads.</p>
+<hr>
+<h2>SUCCESS CRITERIA</h2>
+<p>After this audit and fixes:</p>
+<ol>
+<li>✅ Documents extracted intelligently (not blocked)</li>
+<li>✅ Memory retrieval finds relevant content (not wrong categories)</li>
+<li>✅ Truth-first behaviors enforced (no speculation as fact)</li>
+<li>✅ Anti-engagement behaviors enforced (no banned phrases)</li>
+<li>✅ Token costs within targets ($0.10-$0.35 per interaction)</li>
+<li>✅ Confidence scores meaningful (not always 0.200)</li>
+<li>✅ Response times within performance targets</li>
+<li>✅ All enforcement gates passing/failing correctly</li>
+</ol>
+<hr>
+<h2>ALIGNMENT VERIFICATION</h2>
+<p>After implementing fixes, verify against the core principle from PRINCIPLES_AND_PHILOSOPHY_01.docx:</p>
+<blockquote>
+<p><strong>TRUTH &gt; HELPFULNESS &gt; ENGAGEMENT</strong></p>
+<p>Never fabricate information to appear knowledgeable.
+Admit uncertainty openly and without apology.
+Give complete answers that respect users' time.
+End decisively with completion signals.</p>
+</blockquote>
+<p>If any fix violates this hierarchy, it's wrong.</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
