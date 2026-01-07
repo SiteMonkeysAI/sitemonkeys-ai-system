@@ -1,4 +1,10 @@
 // productValidation.js - Evidence-Based Recommendation Validation
+//
+// PRINCIPLE (Issue #402 Findings #5, #15): Consult reasoning layer before restrictions
+// - Integrate with principle-based reasoning to understand user intent
+// - Use context-based validation, not just keyword matching
+
+import { applyPrincipleBasedReasoning } from '../core/intelligence/principleBasedReasoning.js';
 
 export class ProductValidator {
   // Fix validateRecommendation method (lines 27-31)
@@ -66,40 +72,80 @@ export class ProductValidator {
     return validation;
   }
 
+  /**
+   * Analyze evidence strength based on CITATIONS, not phrases
+   * PRINCIPLE (Issue #402 Finding #6): Count actual sources/citations, not generic phrases
+   */
   static analyzeEvidenceStrength(response) {
     let evidenceScore = 0;
 
-    const strongEvidence = [
-      /based on data/i,
-      /research shows/i,
-      /studies indicate/i,
-      /proven track record/i,
-      /verified results/i,
-      /documented success/i,
+    // CITATIONS: Look for actual references, sources, studies, URLs
+    const citationPatterns = [
+      // Academic citations: "According to X (2023)", "Smith et al.", "Journal of X"
+      /(?:according to|per|from)\s+[\w\s]+\s*\(\d{4}\)/i,
+      /\b[A-Z][a-z]+\s+et al\./,
+      /\bjournal of\b/i,
+      // News/media citations: "[Source]", "via X", "reported by"
+      /\[([^\]]+)\]/,
+      /\bvia\s+[\w\s]+:/i,
+      /\breported by\b/i,
+      // URLs as sources
+      /https?:\/\/[^\s]+/,
+      // Specific studies or research: "study by", "research from"
+      /\bstudy\s+(?:by|from|conducted by)\s+[\w\s]+/i,
+      /\bresearch\s+(?:by|from|conducted by)\s+[\w\s]+/i,
+      // Data sources: "data from X", "statistics from Y"
+      /\bdata\s+from\s+[\w\s]+/i,
+      /\bstatistics\s+from\s+[\w\s]+/i,
     ];
 
-    const weakEvidence = [
-      /i think/i,
-      /probably/i,
-      /might work/i,
-      /should be good/i,
-      /popular choice/i,
-      /everyone uses/i,
+    // Count distinct citations (not just pattern matches)
+    const citationMatches = new Set();
+    citationPatterns.forEach((pattern) => {
+      const matches = response.match(new RegExp(pattern, 'gi'));
+      if (matches) {
+        matches.forEach(match => citationMatches.add(match.toLowerCase()));
+      }
+    });
+
+    const citationCount = citationMatches.size;
+    
+    // Score based on citation count
+    if (citationCount >= 3) {
+      evidenceScore += 75; // Multiple sources = strong evidence
+    } else if (citationCount >= 2) {
+      evidenceScore += 50; // Two sources = moderate evidence
+    } else if (citationCount >= 1) {
+      evidenceScore += 30; // One source = some evidence
+    }
+
+    // QUANTITATIVE DATA: Specific numbers strengthen claims
+    const quantitativePatterns = [
+      /\d+%\s+(?:improvement|increase|success|reduction|growth)/i,
+      /\$[\d,]+(?:\.\d{2})?\s+(?:saved|gained|increased|revenue)/i,
+      /\d+x\s+(?:faster|better|more efficient)/i,
+    ];
+    
+    quantitativePatterns.forEach((pattern) => {
+      if (pattern.test(response)) evidenceScore += 10;
+    });
+
+    // COMPARISON WITH ALTERNATIVES: Demonstrates thorough analysis
+    if (/\bcompared to\b/i.test(response)) evidenceScore += 15;
+    if (/\bcase study\b/i.test(response)) evidenceScore += 15;
+
+    // WEAK SIGNALS: Speculation, opinion without evidence
+    const weakSignals = [
+      /\b(?:i think|probably|might work|should be good|seems like)\b/i,
+      /\b(?:everyone uses|popular choice)\b/i,
+      /\b(?:in my opinion|personally)\b/i,
     ];
 
-    strongEvidence.forEach((pattern) => {
-      if (pattern.test(response)) evidenceScore += 25;
+    weakSignals.forEach((pattern) => {
+      if (pattern.test(response)) evidenceScore -= 20;
     });
 
-    weakEvidence.forEach((pattern) => {
-      if (pattern.test(response)) evidenceScore -= 15;
-    });
-
-    if (/\d+% (improvement|increase|success)/i.test(response))
-      evidenceScore += 20;
-    if (/compared to/i.test(response)) evidenceScore += 15;
-    if (/case study/i.test(response)) evidenceScore += 20;
-
+    // Cap score between 0 and 100
     return Math.max(0, Math.min(100, evidenceScore));
   }
 
@@ -363,8 +409,54 @@ export class ProductValidator {
     return null;
   }
 
+  /**
+   * Detect if response is information vs recommendation
+   * PRINCIPLE (Issue #402 Findings #5, #15): Intent-based validation
+   * Only apply strict validation to actual recommendations, not factual information
+   */
+  static async detectResponseIntent(response, context) {
+    // Get reasoning if available in context
+    let reasoning = context.reasoning || context.reasoningMetadata;
+    
+    if (!reasoning || !reasoning.detections) {
+      // Apply reasoning to understand intent
+      reasoning = await applyPrincipleBasedReasoning(response, context);
+    }
+    
+    // Check if this is informational content
+    const isInformational = reasoning.detections?.informational_query || 
+                           reasoning.detections?.fact_seeking ||
+                           context?.phase4Metadata?.truth_type === 'PERMANENT';
+    
+    // Check if user explicitly asked for recommendations
+    const isRecommendationRequest = reasoning.detections?.decision_making ||
+                                    /(?:recommend|suggest|which.*should|what.*better|help me choose)/i.test(context.message || '');
+    
+    return {
+      type: isInformational ? 'INFORMATION' : (isRecommendationRequest ? 'RECOMMENDATION' : 'MIXED'),
+      confidence: reasoning.confidence || 0.7,
+      reasoning: reasoning
+    };
+  }
+
   static async validate({ response, context }) {
     try {
+      // PRINCIPLE (Issue #402 Findings #5, #15): Check intent before applying restrictions
+      const intentAnalysis = await this.detectResponseIntent(response, context);
+      
+      console.log(`[PRODUCT-VALIDATION] Response intent: ${intentAnalysis.type}`);
+      
+      // If this is pure information delivery, bypass validation
+      if (intentAnalysis.type === 'INFORMATION') {
+        console.log('[PRODUCT-VALIDATION] Information request - delivering truth per caring family member principle');
+        return {
+          needsDisclosure: false,
+          responseWithDisclosure: response,
+          reason: 'Information request - no validation needed',
+          intentAnalysis: intentAnalysis
+        };
+      }
+      
       const validation = this.validateRecommendation(
         response,
         context.mode || "truth_general",
@@ -400,6 +492,7 @@ export class ProductValidator {
         };
       }
 
+      // For RECOMMENDATION intent, augment (don't replace) with disclaimer
       const disclosure =
         "\n\n[Note: Evaluate this recommendation against your specific needs, budget, and risk tolerance. No solution is perfect for every situation.]";
 
@@ -408,6 +501,7 @@ export class ProductValidator {
         responseWithDisclosure: response + disclosure,
         reason: "Added value/risk disclosure to product recommendation",
         validationIssues: validation.enforcement_actions,
+        intentAnalysis: intentAnalysis
       };
     } catch (error) {
       console.error("[PRODUCT-VALIDATION] Validation error:", error);
