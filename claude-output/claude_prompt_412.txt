@@ -1,0 +1,167 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #412: [claude-fix] Title: [claude-fix] Document Flow Bug: Blocking + Validation Mismatch
+
+Issue Description:
+## Summary
+
+The document handling flow has TWO interconnected bugs that must be fixed together:
+
+1. **SESSION_LIMITS blocks documents instead of extracting** - Documents over 10K tokens are rejected entirely instead of intelligently extracted
+2. **RESPONSE-CONTRACT validates against blocked documents** - The validator checks if AI addressed document content, but fails when document was blocked
+
+## Evidence from Railway Logs
+```
+[SESSION-LIMIT] Document would exceed session limit (0 + 12587 > 10000)
+[DOCUMENTS] Loaded 0 tokens from pasted_document.txt
+...
+[RESPONSE-CONTRACT] Response does not address document content
+[RESPONSE-CONTRACT] Relevance validation failed: Response does not address document content
+```
+
+## Bug #1: Blocking Instead of Extracting
+
+**Location:** `api/core/orchestrator.js` lines ~1678-1691
+
+**Current (broken):**
+```javascript
+if (tokens > remainingDocBudget) {
+  this.warn(`[SESSION-LIMIT] Document would exceed session limit...`);
+  return {
+    blocked: true,
+    reason: `Document would exceed session limit...`
+  };
+}
+```
+
+**Fix:** Remove the early return. Let it fall through to intelligent extraction:
+```javascript
+if (tokens > remainingDocBudget) {
+  this.warn(`[SESSION-LIMIT] Document (${tokens} tokens) exceeds remaining budget (${remainingDocBudget}), will extract within limit`);
+  // Continue to extraction logic below - effectiveBudget will limit it
+}
+```
+
+The existing code at line ~1704 already handles this:
+```javascript
+const effectiveBudget = Math.min(TOKEN_BUDGETS[queryType] || 10000, remainingDocBudget);
+```
+
+## Bug #2: RESPONSE-CONTRACT Validation Mismatch
+
+**Location:** `api/core/orchestrator.js` - RESPONSE-CONTRACT section (search for `Response does not address document content`)
+
+**Problem:** The validator checks if the AI response addresses document content, but:
+- If document was blocked (0 tokens), there's nothing to address
+- If document was partially extracted, validator doesn't know about partial content
+- Validator treats "no document mention" as failure even when document wasn't provided
+
+**Fix:** Make RESPONSE-CONTRACT aware of document state:
+```javascript
+// In RESPONSE-CONTRACT validation section
+const documentWasProvided = context.sources?.hasDocuments && 
+                            context.documents && 
+                            context.documents.length > 0;
+const documentWasExtracted = context.extractionMetadata?.extracted === true;
+const documentWasBlocked = documentData?.blocked === true;
+
+// Only validate document relevance if document was actually provided to AI
+if (documentWasBlocked) {
+  // Don't fail - document was intentionally not provided
+  this.log('[RESPONSE-CONTRACT] Skipping document relevance check - document was blocked by session limits');
+} else if (documentWasProvided) {
+  // Existing document relevance check
+  if (!responseAddressesDocument(response, context.documents)) {
+    // Flag as warning, not failure, if partial extraction
+    if (documentWasExtracted) {
+      this.warn('[RESPONSE-CONTRACT] Response may not fully address partial document extraction');
+    } else {
+      // Full document was provided but not addressed - this is a real failure
+      validationResult.relevanceFailed = true;
+    }
+  }
+}
+```
+
+## Bug #3: Blocked Document Should Still Allow Response
+
+**Location:** `api/core/orchestrator.js` - after document loading returns blocked
+
+**Problem:** When document is blocked, the system should:
+1. Inform user the document was too large
+2. Still attempt to answer based on other context (memory, etc.)
+3. Suggest alternatives (paste specific sections, break up document)
+
+**Current behavior:** Blocks silently and AI has no idea what happened.
+
+**Fix:** Pass blocking info to AI context:
+```javascript
+// When document is blocked, include explanation in context
+if (documentData?.blocked) {
+  contextStr += `
+⚠️ DOCUMENT UPLOAD NOTICE:
+The user uploaded a document (${documentData.filename}) but it exceeded the session 
+token limit (${documentData.tokens} tokens vs ${SESSION_LIMITS.maxUploadedTokens} limit).
+
+The document content is NOT available for this response.
+
+INSTRUCT USER:
+- The document was too large to process in this session
+- They can paste specific sections they want analyzed
+- They can break the document into smaller parts
+- They can start a new chat for a fresh token budget
+
+Respond helpfully based on available context, but be clear you cannot see the document.
+`;
+}
+```
+
+## Complete Flow After Fix
+
+1. User uploads 50K char document (12,587 tokens)
+2. System checks session limit (10,000 remaining)
+3. System logs warning but CONTINUES to extraction
+4. Intelligent extraction pulls best 10,000 tokens using query-relevant strategy
+5. AI receives partial content with truth-first disclosure (showing % coverage)
+6. RESPONSE-CONTRACT validates appropriately for partial content
+7. User gets useful answer + transparency about partial view
+
+## Files to Modify
+
+- `api/core/orchestrator.js`:
+  - Remove blocking return in SESSION_LIMITS check (~line 1678-1691)
+  - Update RESPONSE-CONTRACT to handle blocked/extracted states
+  - Add blocked document context injection for user transparency
+
+## Verification
+
+After fix, logs should show:
+```
+[SESSION-LIMIT] Document (12587 tokens) exceeds remaining budget (10000), will extract within limit
+[COST-CONTROL] Document extracted: 12587 → 2500 tokens (20% coverage, strategy: query-relevant)
+[RESPONSE-CONTRACT] Document relevance check passed (partial extraction acknowledged)
+```
+
+NOT:
+```
+[DOCUMENTS] Loaded 0 tokens from pasted_document.txt
+[RESPONSE-CONTRACT] Response does not address document content
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

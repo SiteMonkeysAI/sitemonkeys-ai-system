@@ -82,13 +82,21 @@ function extractDocumentTerms(text) {
 }
 
 /**
- * Validate response relevance to query (Issue #380 Fix 6)
+ * Validate response relevance to query (Issue #380 Fix 6, Issue #412 Fix)
  * @param {string} userQuery - The user's query
  * @param {string} aiResponse - The AI response
- * @param {object} _context - Context including phase4Metadata (unused)
+ * @param {object} context - Context including phase4Metadata and documentMetadata
  * @returns {object} { valid: boolean, reason: string, recommendation: string }
  */
-function validateResponseRelevance(userQuery, aiResponse, _context) {
+function validateResponseRelevance(userQuery, aiResponse, context) {
+  const documentMetadata = context?.documentMetadata || {};
+
+  // Issue #412 Fix: Skip document relevance check if document was blocked
+  if (documentMetadata.blocked === true) {
+    console.log('[RESPONSE-CONTRACT] Skipping document relevance check - document was blocked by session limits');
+    return { valid: true, skipped: true, reason: 'document_blocked' };
+  }
+
   // For long documents, check that response addresses the document
   if (userQuery.length > 10000) {
     // Response should reference document content
@@ -99,6 +107,18 @@ function validateResponseRelevance(userQuery, aiResponse, _context) {
     const relevanceRatio = termOverlap / Math.max(documentTerms.length, 1);
 
     if (relevanceRatio < 0.1) {
+      // Issue #412 Fix: If document was extracted (partial), this is a warning not a failure
+      if (documentMetadata.extracted === true) {
+        console.log('[RESPONSE-CONTRACT] Response may not fully address partial document extraction');
+        return {
+          valid: true,
+          warning: true,
+          reason: 'partial_extraction_incomplete_coverage',
+          relevanceScore: relevanceRatio
+        };
+      }
+
+      // Full document was provided but not addressed - this is a real failure
       console.log('[RESPONSE-CONTRACT] Response does not address document content');
       return {
         valid: false,
@@ -143,7 +163,7 @@ function detectFormatConstraint(query) {
   return null;
 }
 
-function enforceResponseContract(response, query, phase4Metadata = {}) {
+function enforceResponseContract(response, query, phase4Metadata = {}, documentMetadata = {}) {
   const constraint = detectFormatConstraint(query);
   const userRequestedGuidance = GUIDANCE_REQUEST_PATTERNS.some(p => p.test(query));
 
@@ -157,9 +177,26 @@ function enforceResponseContract(response, query, phase4Metadata = {}) {
     user_requested_guidance: userRequestedGuidance
   };
 
-  // Issue #380 Fix 6: Validate response relevance
-  const relevanceValidation = validateResponseRelevance(query, response, { phase4Metadata });
-  if (!relevanceValidation.valid) {
+  // Issue #380 Fix 6, Issue #412 Fix: Validate response relevance with document metadata
+  const relevanceValidation = validateResponseRelevance(query, response, { phase4Metadata, documentMetadata });
+
+  // Handle skipped validation (blocked document)
+  if (relevanceValidation.skipped) {
+    result.relevance_valid = true;
+    result.relevance_skipped = true;
+    result.relevance_skip_reason = relevanceValidation.reason;
+  }
+  // Handle warning (partial extraction)
+  else if (relevanceValidation.warning) {
+    result.relevance_valid = true;
+    result.relevance_warning = true;
+    result.relevance_warning_reason = relevanceValidation.reason;
+    if (relevanceValidation.relevanceScore !== undefined) {
+      result.relevance_score = relevanceValidation.relevanceScore;
+    }
+  }
+  // Handle failure
+  else if (!relevanceValidation.valid) {
     console.log(`[RESPONSE-CONTRACT] Relevance validation failed: ${relevanceValidation.reason}`);
     result.relevance_valid = false;
     result.relevance_reason = relevanceValidation.reason;

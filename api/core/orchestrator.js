@@ -1017,7 +1017,8 @@ export class Orchestrator {
         const contractResult = enforceResponseContract(
           personalityResponse.response,
           message,
-          phase4Metadata
+          phase4Metadata,
+          documentData || {}
         );
         personalityResponse.response = contractResult.response;
         response_contract = contractResult.contract;
@@ -1681,8 +1682,8 @@ export class Orchestrator {
       }
 
       if (tokens > remainingDocBudget) {
-        this.log(`[SESSION-LIMIT] Document (${tokens} tokens) exceeds budget (${remainingDocBudget}), extracting within limit`);
-        // Fall through to extraction - effectiveBudget will constrain it
+        this.warn(`[SESSION-LIMIT] Document (${tokens} tokens) exceeds remaining budget (${remainingDocBudget}), will extract within limit`);
+        // Continue to extraction logic below - effectiveBudget will limit it
       }
 
       // INTELLIGENT DOCUMENT PREPROCESSING - Issue #407 Fix
@@ -1718,8 +1719,8 @@ export class Orchestrator {
           tokens: extractionResult.extractedTokens,
           filename: filename,
           processed: true,
-          truncated: true,
-          extracted: true,
+          truncated: extractionResult.extracted,
+          extracted: extractionResult.extracted,
           source: source,
           extractionMetadata: {
             originalTokens: extractionResult.originalTokens,
@@ -1743,6 +1744,7 @@ export class Orchestrator {
         filename: filename,
         processed: true,
         truncated: false,
+        extracted: false,
         source: source,
       };
     } catch (error) {

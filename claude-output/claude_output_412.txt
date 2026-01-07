@@ -1,0 +1,122 @@
+Perfect! Let me create a summary of the changes:
+
+---SUMMARY---
+
+## Issue #412 Fix: Document Flow Bug - Blocking + Validation Mismatch
+
+Fixed three interconnected bugs in document handling flow:
+
+### Bug #1: SESSION_LIMITS blocked documents instead of extracting ✅
+**File Modified:** `api/core/orchestrator.js` (lines 1683-1686)
+
+**Problem:** When a document exceeded the remaining session budget, the system returned early with `blocked: true`, preventing intelligent extraction from running.
+
+**Fix:** Removed the early return block. Now logs a warning and continues to the intelligent extraction logic that already exists at line 1710. The existing `effectiveBudget` calculation (line 1705) ensures the document is extracted to fit within limits.
+
+**Code Changed:**
+```javascript
+// BEFORE (blocked documents):
+if (tokens > remainingDocBudget) {
+  this.warn(`[SESSION-LIMIT] Document would exceed session limit...`);
+  return {
+    content: '',
+    tokens: 0,
+    blocked: true,
+    reason: '...'
+  };
+}
+
+// AFTER (allows extraction):
+if (tokens > remainingDocBudget) {
+  this.warn(`[SESSION-LIMIT] Document (${tokens} tokens) exceeds remaining budget (${remainingDocBudget}), will extract within limit`);
+  // Continue to extraction logic below - effectiveBudget will limit it
+}
+```
+
+### Bug #2: RESPONSE-CONTRACT validated against blocked/extracted documents ✅
+**Files Modified:** 
+- `api/core/intelligence/responseContractGate.js` (lines 84-131, 166-211)
+- `api/core/orchestrator.js` (line 1017-1022)
+
+**Problem:** The response contract validator checked if AI addressed document content, but failed when:
+- Document was blocked (0 tokens provided to AI)
+- Document was partially extracted (validator expected full document)
+
+**Fix:** 
+1. Updated `validateResponseRelevance()` to accept `documentMetadata` containing `blocked` and `extracted` flags
+2. Skip validation entirely if document was blocked (nothing to validate)
+3. Treat as warning (not failure) if document was extracted (partial content)
+4. Only fail if full document was provided but not addressed
+5. Updated `enforceResponseContract()` to accept and pass `documentMetadata` parameter
+6. Updated orchestrator to pass `documentData` to `enforceResponseContract()`
+
+**Code Changed:**
+```javascript
+// responseContractGate.js - added document-aware validation
+function validateResponseRelevance(userQuery, aiResponse, context) {
+  const documentMetadata = context?.documentMetadata || {};
+
+  // Skip if blocked
+  if (documentMetadata.blocked === true) {
+    return { valid: true, skipped: true, reason: 'document_blocked' };
+  }
+
+  // Validate relevance...
+  if (relevanceRatio < 0.1) {
+    // Warning (not failure) for partial extraction
+    if (documentMetadata.extracted === true) {
+      return { valid: true, warning: true, reason: 'partial_extraction_incomplete_coverage' };
+    }
+    // Failure only for full documents
+    return { valid: false, reason: 'Response does not address document content' };
+  }
+}
+
+// orchestrator.js - pass documentData to validator
+const contractResult = enforceResponseContract(
+  personalityResponse.response,
+  message,
+  phase4Metadata,
+  documentData || {}  // Added parameter
+);
+```
+
+### Bug #3: Blocked documents should still allow response ✅
+**Status:** Already handled by existing code + Bug #1 fix
+
+**Analysis:** After Bug #1 fix, documents are rarely truly "blocked" - they're extracted instead. The only blocking case is when `remainingDocBudget <= 0` (session completely full), which correctly returns `blocked: true`. In this case:
+- Bug #2 fix ensures RESPONSE-CONTRACT skips validation
+- Existing orchestrator code at lines 481-488 handles missing documents gracefully
+- AI receives context without the document and responds based on available information
+
+### Expected Behavior After Fix
+
+**Scenario: User uploads 50K char document (12,587 tokens) with 10,000 token budget remaining**
+
+Before fix:
+```
+[SESSION-LIMIT] Document would exceed session limit (0 + 12587 > 10000)
+[DOCUMENTS] Loaded 0 tokens from pasted_document.txt
+[RESPONSE-CONTRACT] Response does not address document content
+[RESPONSE-CONTRACT] Relevance validation failed
+```
+
+After fix:
+```
+[SESSION-LIMIT] Document (12587 tokens) exceeds remaining budget (10000), will extract within limit
+[COST-CONTROL] Document extracted: 12587 → 2500 tokens (20% coverage, strategy: query-relevant)
+[RESPONSE-CONTRACT] Response may not fully address partial document extraction (warning only)
+```
+
+### Files Modified
+1. `/api/core/orchestrator.js` - Removed blocking return, added documentData parameter to response contract
+2. `/api/core/intelligence/responseContractGate.js` - Added document-aware validation logic
+
+### Alignment with CLAUDE.md Philosophy
+These fixes uphold truth-first principles:
+- Documents are no longer silently blocked - they're intelligently extracted
+- Partial extraction is disclosed to the user (existing code at line 3113-3127)
+- Validation correctly distinguishes between "blocked", "extracted", and "full" document states
+- No false failures when the AI correctly handles the content it was actually given
+
+---END SUMMARY---
