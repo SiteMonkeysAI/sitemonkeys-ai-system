@@ -1,0 +1,145 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #402: [claude-fix] Title: Implement All Audit #400 Findings - Transform Warehouse Worker to Caring Family Member
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><p>Let me verify against the doctrine documents.I found the gaps. The issue I wrote is missing critical doctrine elements. Let me fix it:</p>
+<hr>
+<h2>What's Missing From My Issue</h2>
+<p><strong>1. The "Caring Family Member" principle is completely absent.</strong></p>
+<p>The doctrine says the system should be like:</p>
+<blockquote>
+<p>"A fiercely loving, brutally honest family member who has world-class expertise"</p>
+</blockquote>
+<p>My issue only talked about "check intent" - it didn't capture WHY the system should let truth through. The WHY is: <strong>because a caring family member would never withhold information you need.</strong></p>
+<p><strong>2. The "Empower, Never Control" principle is missing.</strong></p>
+<p>The current broken behavior (voting disclaimer) is the system CONTROLLING - deciding FOR the user that they shouldn't see political news. That's the opposite of empowerment.</p>
+<p><strong>3. The "Truth Above Comfort" principle isn't emphasized.</strong></p>
+<p>The doctrine says:</p>
+<blockquote>
+<p>"Truth above comfort - 'I care too much about you to lie'"</p>
+</blockquote>
+<p>The current system lies by omission - it fetches truth and hides it.</p>
+<p><strong>4. Anti-Engagement philosophy isn't connected.</strong></p>
+<p>The doctrine says:</p>
+<blockquote>
+<p>"Success = Problems solved quickly, not conversations prolonged"</p>
+</blockquote>
+<p>The current broken behavior PREVENTS problem solving by giving canned non-answers.</p>
+<hr>
+<h2>Corrected Issue</h2>
+<p><strong>Title:</strong> Implement All Audit #400 Findings - Transform Warehouse Worker to Caring Family Member</p>
+<p><strong>Labels:</strong> <code>critical</code>, <code>architecture</code>, <code>doctrine-alignment</code></p>
+<hr>
+<h3>The Doctrine (The Bible)</h3>
+<p>These documents define what correct behavior looks like. Every fix must align:</p>
+<p><strong>Source Files:</strong></p>
+<ul>
+<li><code>MASTER_SPECIFICATION_01.docx</code></li>
+<li><code>PRINCIPLES_AND_PHILOSOPHY_01.docx</code></li>
+<li><code>Master_Alignment_Prompt_01.docx</code></li>
+<li><code>3rd_Chat_about_architecture_very_important</code></li>
+<li><code>PHASE_4_TECHNICAL_SPECIFICATION.docx</code></li>
+<li><code>Additional_Context_and_Depth_01.docx</code></li>
+</ul>
+<hr>
+<h3>Core Principles Being Violated</h3>
+<p><strong>1. Truth &gt; Helpfulness &gt; Engagement</strong></p>
+<blockquote>
+<p>"When the system HAS truth, it must DELIVER truth."</p>
+</blockquote>
+<p>Current behavior: System fetches news, then discards it for canned response.
+Required behavior: Truth reaches the user.</p>
+<p><strong>2. Caring Family Member</strong></p>
+<blockquote>
+<p>"A fiercely loving, brutally honest family member who has world-class expertise... cares deeply about your success... tells you hard truths you need to hear... volunteers risks you haven't considered... empowers but never controls"</p>
+</blockquote>
+<p>Current behavior: System makes decisions FOR the user (withholding political news).
+Required behavior: System provides information, lets user decide.</p>
+<p><strong>3. Empower, Never Control</strong></p>
+<blockquote>
+<p>"Never makes decisions for you (presents options, never chooses)... Points out what you need to consider (volunteering critical information)... Shows you alternative paths you didn't see... Helps you achieve your goals, your way"</p>
+</blockquote>
+<p>Current behavior: System decides user shouldn't see political content.
+Required behavior: System delivers requested information.</p>
+<p><strong>4. Anti-Engagement / Solve Problems Fast</strong></p>
+<blockquote>
+<p>"Success is solving problems quickly, not keeping users talking... Messages to resolution: 1-2... Complete answers upfront, end decisively"</p>
+</blockquote>
+<p>Current behavior: Canned response doesn't solve the user's problem.
+Required behavior: First response solves the problem.</p>
+<p><strong>5. Warehouse Worker → CEO Transformation</strong></p>
+<blockquote>
+<p>"System is like warehouse worker with 1,000 detailed procedures (breaks on novel situations) when it needs to be like CEO who understands principles and can handle ANY situation"</p>
+</blockquote>
+<p>Current behavior: Hardcoded lists, keyword matching, rule-based enforcement.
+Required behavior: Principle-based reasoning that works for ANY situation.</p>
+<hr>
+<h3>Audit Findings to Fix (All 14 Requiring Changes)</h3>
+
+Finding | Anti-Pattern | Doctrine Violation
+-- | -- | --
+1 | Hardcoded political figure names | Warehouse worker (breaks on novel figures)
+2 | Keyword-only enforcement | Decides FOR user instead of empowering
+3 | Canned response replaces truth | Truth suppression, anti-caring
+4 | Hardcoded policy topic list | Warehouse worker
+5 | Product validation without context | Decides FOR user
+6 | Evidence scoring on phrases not citations | False confidence
+7 | Mode validation keyword counting | Warehouse worker
+8 | Drift detection keyword counting | Warehouse worker
+9 | Hardcoded category lists | Warehouse worker
+11 | Hardcoded medication names | Warehouse worker
+12 | Hardcoded boilerplate phrases | Warehouse worker
+13 | Low confidence = silent failure | Not escalating = not caring
+14 | Guardrails bypass reasoning layer | Isolated decisions = not intelligent
+15 | Product validation bypasses semantic | Isolated decisions
+
+
+<hr>
+<h3>Success Criteria</h3>
+<p>After all fixes:</p>
+<ol>
+<li><strong>Truth never discarded</strong> - External lookup results reach users</li>
+<li><strong>No hardcoded entity lists</strong> - System works for ANY name/topic</li>
+<li><strong>Intent checked before restrictions</strong> - Empowers, doesn't control</li>
+<li><strong>Disclaimers augment, never replace</strong> - Truth + context, not canned response</li>
+<li><strong>All modules consult reasoning layer</strong> - Unified intelligence</li>
+<li><strong>Low confidence = escalation</strong> - Not silent failure</li>
+<li><strong>Logs show principle-based decisions</strong> - "Skipping restriction - user asked for information"</li>
+</ol>
+<hr>
+<h3>Validation</h3>
+<p><strong>Log pattern for news queries:</strong></p>
+<pre><code>[ENFORCEMENT] Query intent: information_request
+[ENFORCEMENT] Applying caring family member principle: User asked for news, delivering truth
+[ENFORCEMENT] Skipping political_guardrails - not a voting advice request
+</code></pre>
+<p><strong>Log pattern for actual advice requests:</strong></p>
+<pre><code>[ENFORCEMENT] Query intent: voting_advice
+[ENFORCEMENT] Applying caring family member principle: Empowering with guidance, not deciding for user
+[ENFORCEMENT] Applying political_guardrails in augment mode
+</code></pre>
+<hr>
+<p>This is the complete issue. It fixes all 14 findings, aligned with the doctrine, implementing the caring family member principle throughout.</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

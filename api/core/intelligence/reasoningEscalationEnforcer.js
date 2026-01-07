@@ -197,11 +197,103 @@ function enforceReasoningEscalation(response, phase6Metadata, context = {}) {
   return result;
 }
 
+/**
+ * Low Confidence Escalation Handler  
+ * PRINCIPLE (Issue #402 Finding #13): Escalate, don't fail silently
+ * 
+ * When confidence is low:
+ * 1. Trigger external lookup if appropriate
+ * 2. Apply reasoning escalation (use known facts, parallels, scenarios)
+ * 3. Ask clarifying questions
+ * 4. NEVER just add a disclaimer and ship low-confidence answer
+ */
+function handleLowConfidence(confidence, context = {}) {
+  const threshold = 0.6;
+  
+  if (confidence >= threshold) {
+    return {
+      action: 'none',
+      reason: 'Confidence acceptable',
+      confidence: confidence
+    };
+  }
+  
+  console.log(`[LOW-CONFIDENCE-ESCALATION] Confidence ${confidence.toFixed(2)} below threshold ${threshold}`);
+  
+  // Escalation strategy based on context
+  const escalations = [];
+  
+  // 1. Check if external lookup would help
+  const canLookup = context.truthType === 'EPHEMERAL' || 
+                   context.truthType === 'DYNAMIC' ||
+                   context.hasProperNouns ||
+                   context.hasNewsIntent;
+  
+  if (canLookup && !context.lookupPerformed) {
+    escalations.push({
+      type: 'external_lookup',
+      reason: 'Low confidence + ephemeral/dynamic topic = lookup needed',
+      priority: 'high'
+    });
+  }
+  
+  // 2. Check if reasoning escalation would help
+  const hasUncertainty = context.message && (
+    /\b(unclear|uncertain|not sure|depends|varies|could be)\b/i.test(context.message) ||
+    confidence < 0.5
+  );
+  
+  if (hasUncertainty) {
+    escalations.push({
+      type: 'reasoning_escalation',
+      reason: 'Uncertainty detected - apply bounded reasoning',
+      priority: 'high',
+      steps: ESCALATION_STEPS
+    });
+  }
+  
+  // 3. Check if clarifying questions would help
+  const isAmbiguous = context.semanticAnalysis?.confidence < 0.7 ||
+                     context.message?.split(' ').length < 5;
+  
+  if (isAmbiguous && !context.clarificationAsked) {
+    escalations.push({
+      type: 'clarify',
+      reason: 'Ambiguous query - need more context',
+      priority: 'medium',
+      questions: [
+        'Could you provide more context about what you\'re looking for?',
+        'What specific aspect are you most interested in?',
+        'Is there additional information that would help me give you a better answer?'
+      ]
+    });
+  }
+  
+  // 4. If no other escalation possible, apply reasoning with known facts
+  if (escalations.length === 0) {
+    escalations.push({
+      type: 'bounded_reasoning',
+      reason: 'Low confidence, no external source available - use known facts + scenarios',
+      priority: 'medium'
+    });
+  }
+  
+  return {
+    action: 'escalate',
+    confidence: confidence,
+    threshold: threshold,
+    escalations: escalations,
+    message: `Confidence ${(confidence * 100).toFixed(0)}% requires escalation`,
+    recommended: escalations[0] // Highest priority escalation
+  };
+}
+
 export {
   enforceReasoningEscalation,
   checkEscalationSteps,
   detectPrematureTermination,
   generateEscalationAppend,
+  handleLowConfidence, // NEW: Finding #13
   ESCALATION_STEPS,
   TERMINATION_MARKERS
 };
