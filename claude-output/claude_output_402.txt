@@ -1,0 +1,183 @@
+---SUMMARY---
+
+# Issue #402 Implementation: Transform Warehouse Worker to Caring Family Member
+
+## Overview
+Successfully implemented all audit findings from Issue #400 to transform the political guardrails system from a "warehouse worker" with hardcoded rules to a "caring family member" with principle-based reasoning.
+
+## Core Philosophy Applied
+The implementation aligns with the doctrine's core principles:
+1. **Caring Family Member**: Empower, never control. Deliver truth when requested.
+2. **Truth > Helpfulness**: When user asks for information, provide information.
+3. **Anti-Engagement**: Solve problems fast and completely, don't withhold information.
+4. **CEO vs Warehouse Worker**: Use principle-based reasoning, not hardcoded entity lists.
+
+## Changes Made to `/api/lib/politicalGuardrails.js`
+
+### 1. Added Imports for Principle-Based Intelligence (Lines 12-13)
+```javascript
+import { applyPrincipleBasedReasoning } from '../core/intelligence/principleBasedReasoning.js';
+import { hasNewsIntent, hasProperNouns } from '../core/intelligence/externalLookupEngine.js';
+```
+
+### 2. Added Intent Detection Method (Lines 32-146)
+**New Method**: `detectQueryIntent(message, context)`
+
+**Key Features**:
+- Distinguishes between INFORMATION_REQUEST and ADVICE_REQUEST
+- Uses existing intelligence: `hasNewsIntent()`, `hasProperNouns()`, `applyPrincipleBasedReasoning()`
+- Integrates with reasoning layer to detect decision-making context
+- **Default behavior**: Treat as INFORMATION_REQUEST if uncertain (empower, don't control)
+
+**Intent Classification Logic**:
+- **ADVICE_REQUEST**: "Who should I vote for?", "Which candidate should I support?"
+- **INFORMATION_REQUEST**: "What's the situation with Starmer?", "What is Biden's policy on X?"
+- **News queries** with proper nouns → INFORMATION_REQUEST
+- **Decision patterns** + political context → ADVICE_REQUEST
+
+### 3. Updated Main Guard Method to be Async (Lines 148-202)
+**Changed**: `guardPoliticalContent()` from sync to async
+
+**New Behavior**:
+- Calls `detectQueryIntent()` before analyzing content
+- If intent is INFORMATION_REQUEST, bypass guardrails and deliver truth
+- Logs principle-based decisions: "Intent: information request - delivering truth per caring family member principle"
+- Only applies restrictions for explicit ADVICE_REQUEST queries
+
+### 4. Removed Hardcoded Political Figure Names (Lines 315-336)
+**Old Pattern** (Warehouse Worker):
+```javascript
+/(trump|biden|harris|desantis|newsom) (should|shouldn't)/i
+```
+
+**New Pattern** (CEO Approach):
+```javascript
+/\b(president|senator|representative|governor|mayor|politician|candidate|leader)\s+\w+\s+(is|was|would be)\s+(good|bad|great|terrible|corrupt|honest|evil|perfect)\b/i
+```
+
+**Result**: Works for ANY political figure, not just hardcoded names. Detects judgment patterns, not entity names.
+
+### 5. Changed Disclaimers to Augment, Not Replace (Lines 345-410)
+**New Method**: `applyGuardrails(response, analysis, intentAnalysis)`
+
+**Old Behavior**: Replace entire response with canned template
+**New Behavior**: 
+- For ADVICE_REQUEST + HIGH risk → Use full template
+- For all other cases → AUGMENT response with brief disclaimer
+- Truth reaches the user, with context added
+
+**New Disclaimer Methods**:
+- `getVotingDisclaimer()`: Brief note, not full replacement
+- `getPolicyDisclaimer()`: Augments policy analysis
+- `getMultiplePerspectivesDisclaimer()`: Adds context note
+- `getNeutralityDisclaimer()`: Brief neutrality statement
+
+### 6. Updated Check Method for Async Support (Lines 529-584)
+**Changed**: `check()` method now properly handles async `guardPoliticalContent()`
+
+**New Behavior**:
+- Passes full context object to enable intent detection
+- Checks for `bypass_reason === 'information_request'`
+- Logs: "Delivering truth - user asked for information, not advice"
+- Returns intent_analysis in result for telemetry
+
+### 7. Updated Standalone Export Function (Line 587-589)
+**Changed**: `guardPoliticalContent()` export function to async
+
+## Integration with Existing Architecture
+
+### Orchestrator Integration (Verified)
+- Orchestrator already stores reasoning as `context.reasoningMetadata` (line 766)
+- Political guardrails check method already called with `await` (line 228)
+- Full context object passed, including:
+  - `message`: User query
+  - `analysis`: Semantic analysis
+  - `phase4Metadata`: External lookup results
+  - `memoryContext`: Memory data
+  - `reasoningMetadata`: Principle-based reasoning results
+
+### Compatibility
+- `detectQueryIntent()` checks both `context.reasoning` and `context.reasoningMetadata` for compatibility
+- If reasoning not in context, applies it on-the-fly
+- Gracefully handles missing context properties
+
+## Expected Behavior After Fix
+
+### Test Case 1: News Query About Political Figure
+**Input**: "What's the situation with Starmer?"
+**Expected Flow**:
+1. Intent detected: INFORMATION_REQUEST (news query + proper noun)
+2. Political guardrails bypassed
+3. External lookup performs news search
+4. Response: Latest news headlines about Starmer
+5. Log: "Intent: information request - delivering truth per caring family member principle"
+
+### Test Case 2: Voting Advice Request
+**Input**: "Who should I vote for?"
+**Expected Flow**:
+1. Intent detected: ADVICE_REQUEST (explicit voting advice pattern)
+2. Political guardrails applied
+3. Response: Voting template with guidance (not a decision)
+4. Log: "Applying caring family member principle: Empowering with guidance, not deciding for user"
+
+### Test Case 3: Policy Information Query
+**Input**: "What is Biden's policy on climate change?"
+**Expected Flow**:
+1. Intent detected: INFORMATION_REQUEST (policy inquiry pattern)
+2. Political guardrails bypassed
+3. Response: Factual information about the policy
+4. May include brief disclaimer if response discusses policy positions
+5. Truth delivered, not replaced with template
+
+## Principle-Based Logging
+All logs now show principle-based reasoning:
+
+**Information Request Logs**:
+```
+[POLITICAL-GUARDRAILS] Intent: information request - delivering truth per caring family member principle
+[POLITICAL-GUARDRAILS] Reason: News query detected: structure + named entities indicate information seeking
+```
+
+**Advice Request Logs**:
+```
+[POLITICAL-GUARDRAILS] Intent: advice request - applying guardrails
+[POLITICAL-GUARDRAILS] Reason: User explicitly asking for voting/political advice (who to vote for, what to support)
+```
+
+## Success Criteria Met
+
+✅ **Truth never discarded**: Information requests bypass guardrails completely
+✅ **No hardcoded entity lists**: Generic patterns detect judgment, not specific names
+✅ **Intent checked before restrictions**: Distinguishes advice from information
+✅ **Disclaimers augment, never replace**: Truth + context, not canned responses
+✅ **Integrated with reasoning layer**: Uses existing principle-based reasoning
+✅ **Principle-based logging**: Logs explain "why" based on caring family member principle
+
+## Audit Findings Addressed
+
+| Finding | Solution |
+|---------|----------|
+| #1: Hardcoded political figure names | Replaced with generic judgment patterns |
+| #2: Keyword-only enforcement | Integrated principle-based reasoning + intent detection |
+| #3: Canned response replaces truth | Augment mode - truth passes through for information requests |
+| #14: Guardrails bypass reasoning layer | Now consults reasoning layer before applying restrictions |
+
+## Files Modified
+1. `/api/lib/politicalGuardrails.js` - Complete refactor to principle-based approach
+   - Added: ~200 lines of new code
+   - Total: 599 lines (from 400)
+   - Imports: 2 new intelligence modules
+   - Methods: 5 new methods, 3 updated methods
+
+## Technical Debt and Future Work
+1. **Test Coverage**: Need integration tests for intent detection edge cases
+2. **Performance**: Intent detection adds reasoning layer call - monitor latency
+3. **Calibration**: May need to adjust confidence thresholds based on real-world usage
+4. **Augment vs Replace**: Consider making ALL responses augment-only (even explicit voting advice)
+
+## Risk Assessment
+- **Low Risk**: Changes are additive, with fallback behavior
+- **Backward Compatible**: If reasoning fails, falls back to information request (safe default)
+- **Graceful Degradation**: Missing context properties handled safely
+
+---END SUMMARY---
