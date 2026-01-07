@@ -1,0 +1,480 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #421: [claude-fix] Complete System Integration: Memory, Modes, Vault, Personality, and Response Quality
+
+Issue Description:
+# [claude-fix] Complete System Integration: Memory, Modes, Vault, Personality, and Response Quality
+
+## Objective
+
+Audit and fix ALL remaining systems that PR #418 did not address. These systems are interconnected and must work together per Bible specifications.
+
+**Scope:** Memory retrieval quality, mode enforcement, vault functionality, personality system, and response quality enforcement.
+
+**Approach:** Trace actual code paths, verify against Bible requirements, fix all gaps in one surgical PR.
+
+---
+
+## CRITICAL UNDERSTANDING
+
+These systems are **interconnected**:
+
+```
+User Query
+    ↓
+Mode Detection → Determines what context to load
+    ↓
+Memory Retrieval → Must route to CORRECT categories with HIGH confidence
+    ↓
+Vault Loading → Only in Site Monkeys mode, must be isolated
+    ↓
+AI Processing → Receives memory + vault + document context
+    ↓
+Personality Layer → Eli or Roxy applies tone and structure
+    ↓
+Response Enforcement → Anti-engagement, completion signals, banned phrases
+    ↓
+Final Response
+```
+
+A failure at ANY stage cascades downstream. Fix them together.
+
+---
+
+## SECTION 1: MEMORY RETRIEVAL SYSTEM
+
+### Bible Requirements
+
+**Source: MASTER_SPECIFICATION_01.docx (lines 243-316)**
+
+Architecture:
+- Storage: PostgreSQL `persistent_memories` table
+- Categories: 11 predefined + 5 AI-managed dynamic
+- Token Limits: 50,000 tokens per category
+- Extraction: Up to 2,500 tokens per query
+- Routing: Intelligent categorization based on content
+
+**11 Predefined Categories:**
+```
+1. mental_emotional
+2. health_wellness
+3. relationships_social
+4. work_career
+5. money_income_debt
+6. money_spending_goals
+7. goals_active_current
+8. goals_future_dreams
+9. tools_tech_workflow
+10. daily_routines_habits
+11. personal_life_interests
+```
+
+**Source: File_2_Persistent_Memory_System_Deep_Dive.docx (lines 26-42)**
+
+Routing uses **RoutingIntelligence class** with:
+- Keyword matching
+- Context pattern recognition
+- Confidence scoring
+- Subcategory selection based on semantic weight
+
+Retrieval uses **ExtractionEngine** which:
+- Targets the primary routed category
+- Pulls entries sorted by: relevance, usage frequency, recency
+- Extracts up to 2,400 tokens
+- Applies recency boost and final relevance re-score
+
+### Known Issue
+
+We observed in Railway logs:
+```
+[INTELLIGENCE] SEMANTIC ROUTING: mental_emotional/General Emotional | Confidence: 0.200
+```
+
+For a query about "session token limits" - this should route to `tools_tech_workflow`, not `mental_emotional`. Confidence of 0.200 indicates the routing is essentially guessing.
+
+### Audit Checklist
+
+- [ ] Semantic routing produces confidence > 0.5 for clear queries
+- [ ] Technical queries route to `tools_tech_workflow`
+- [ ] Emotional queries route to `mental_emotional`
+- [ ] Financial queries route to `money_*` categories
+- [ ] Retrieved memories actually match the query topic
+- [ ] Token budget (2,500 max) is respected
+- [ ] Category limits (50K per category) are enforced
+
+### Required Verification
+
+Show actual logs demonstrating:
+1. A technical query routing to correct category with confidence > 0.5
+2. Retrieved memories matching the query topic
+3. Different query types routing to different categories
+
+---
+
+## SECTION 2: MODE ENFORCEMENT SYSTEM
+
+### Bible Requirements
+
+**Source: File_9_Mode_Enforcement_System.docx (lines 17-35)**
+
+Three Modes:
+1. **Truth-General Mode**
+   - Purpose: Factual, assumption-aware, unbiased answers
+   - Behavior: Challenges assumptions, admits uncertainty, provides confidence level
+
+2. **Business Validation Mode**
+   - Purpose: Real-world decision-making under pressure
+   - Behavior: Risk analysis, financial modeling, cash-flow impact
+   - Must include: SURVIVAL IMPACT, CASH FLOW ANALYSIS, TOP 3 RISKS
+
+3. **Site Monkeys Mode**
+   - Purpose: Business-specific enforcement with vault
+   - Behavior: Vault injection, protocol enforcement, personality pairing
+
+**Source: File_9_Mode_Enforcement_System.docx (lines 54-72)**
+
+Mode Isolation Rules:
+1. **Fingerprint Validation** - Each mode has invisible fingerprint; missing = fallback
+2. **Response Structure Requirements**:
+   - Truth Mode: confidence assessment, assumptions, uncertainty acknowledgment
+   - Business Mode: survivability impact, cash-flow notes, top-3 risks
+   - Site Monkeys: operational insight, protocol reference, vault tie-in
+3. **Fallback Routing** - Blocks response until mode compliance passes
+4. **Memory Access Control**:
+   - Truth/Business: May access persistent memory
+   - Site Monkeys: May access persistent memory AND vault (isolated)
+5. **Personality Guardrails**:
+   - Truth Mode → Eli or Roxy (solo)
+   - Business Mode → Eli or Roxy (rotating)
+   - Site Monkeys → Eli and Roxy together with alternating leads
+
+### Audit Checklist
+
+- [ ] Mode switching actually changes response behavior
+- [ ] Business Mode responses include survival impact + risks
+- [ ] Truth Mode responses include confidence + uncertainty handling
+- [ ] Site Monkeys Mode loads vault and includes protocol references
+- [ ] Modes are isolated (vault content never appears in Truth/Business modes)
+- [ ] Fallback triggers when response doesn't match mode structure
+
+### Required Verification
+
+Show actual responses from each mode demonstrating required structure.
+
+---
+
+## SECTION 3: VAULT SYSTEM
+
+### Bible Requirements
+
+**Source: MASTER_SPECIFICATION_01.docx (lines 637-721)**
+
+What It Is:
+- Private business knowledge base (Site Monkeys strategies, pricing, protocols)
+- Founder-only access
+- Session-only storage (never in database)
+
+Access Control:
+- **Who:** Founder only (authorization required)
+- **When:** Only when vault button pressed
+- **Where:** Private deployment only
+- **Duration:** Current session only
+- **Isolation:** Never bleeds into other modes
+
+Loading Mechanism:
+```javascript
+// 1. Verify founder authorization
+if (!isFounder(userId)) return error('Unauthorized');
+// 2. Load from Google Drive
+const vaultContent = await loadFromGoogleDrive();
+// 3. Store in session cache (NOT database)
+sessionCache.set(sessionId, { mode: 'site-monkeys', vaultLoaded: true, vaultContent });
+// 4. UI shows vault active indicator
+```
+
+Token Cost:
+- Initial load: ~5,000 tokens ($0.15)
+- Per-query injection: ~500-1,000 tokens
+- Session limit increased to 50,000 tokens when vault active
+
+### Audit Checklist
+
+- [ ] Vault loads successfully when button pressed
+- [ ] Vault content is injected into AI context in Site Monkeys mode
+- [ ] Vault content does NOT appear in Truth or Business mode responses
+- [ ] Vault is cleared when session ends
+- [ ] UI shows vault active indicator when loaded
+- [ ] Token tracking includes vault tokens
+
+### Required Verification
+
+1. Load vault, ask Site Monkeys question, show vault content was used
+2. Switch to Truth mode, ask same question, show vault was NOT used
+3. Show vault token tracking in cost display
+
+---
+
+## SECTION 4: PERSONALITY SYSTEM
+
+### Bible Requirements
+
+**Source: File_6_Personality__Intelligence__and_Alignment_System.docx (lines 20-33)**
+
+Core Personalities:
+
+**Eli:** Analytical, structured, direct, caring in tone but outcome-focused.
+- Prioritizes clarity, action, and execution
+- Handles high-stakes, business, legal, or analytical topics
+
+**Roxy:** Empathic, intuitive, emotionally intelligent.
+- Truth-first but tuned for high EQ and user encouragement
+- Excels in social, family, wellness, and motivational contexts
+
+Shared Constraints:
+- Truth-first enforcement applies to both
+- Cannot contradict one another in same thread
+- Must hand off contextually if the other is better suited
+
+**Source: File_6_Personality__Intelligence__and_Alignment_System.docx (lines 51-61)**
+
+Personality Switching Logic:
+- Switch when query type/tone better fits the other
+- Switch when one hits a context boundary
+- Mode relevance triggers switch (business_validation → Eli preferred)
+
+Switching Must:
+- Preserve context
+- Clearly indicate the switch ("I'm going to let Eli jump in...")
+- Never result in redundant or conflicting responses
+
+**Source: File_9_Mode_Enforcement_System.docx (lines 68-72)**
+
+Personality per Mode:
+- Truth Mode → Eli or Roxy (solo)
+- Business Mode → Eli or Roxy (rotating)
+- Site Monkeys → Eli and Roxy together with alternating leads
+
+### Audit Checklist
+
+- [ ] Eli handles analytical/business queries
+- [ ] Roxy handles emotional/wellness queries
+- [ ] Personality switching is announced clearly
+- [ ] Context is preserved across switches
+- [ ] Mode determines personality behavior correctly
+- [ ] Avatar and name match the active personality in UI
+
+### Required Verification
+
+1. Send emotional query → Roxy responds
+2. Send business query → Eli responds
+3. Send mixed query → See appropriate handoff
+
+---
+
+## SECTION 5: RESPONSE QUALITY ENFORCEMENT
+
+### Bible Requirements
+
+**Source: MASTER_SPECIFICATION_01.docx (lines 543-636)**
+
+Every Response MUST:
+- ✅ Front-load the answer (no background first)
+- ✅ Give complete framework (not just first step)
+- ✅ Include decision paths (IF/THEN scenarios)
+- ✅ Specify actionable next steps
+- ✅ State confidence level
+- ✅ END decisively (no follow-up bait)
+
+Every Response MUST NOT:
+- ❌ Ask what they want to explore
+- ❌ Offer to elaborate on any point
+- ❌ Suggest related topics
+- ❌ Request unnecessary information
+- ❌ Drip information across messages
+- ❌ Create dependency for next question
+
+Banned Phrases (MUST be stripped):
+```javascript
+const bannedPhrases = [
+  'Would you like me to elaborate',
+  'What would you like to explore',
+  'Which aspect interests you',
+  'Should I explain more about',
+  'Would you like to know',
+  'What else can I help'
+];
+```
+
+Completion Signals (MUST be present):
+```javascript
+const completionPhrases = [
+  "This should give you what you need to move forward.",
+  "That covers the complete approach.",
+  "You now have the framework to decide.",
+  "This addresses your question fully.",
+  "Done."
+];
+```
+
+### Audit Checklist
+
+- [ ] Banned phrases are detected and stripped/rewritten
+- [ ] Completion signals are added to responses
+- [ ] Responses front-load the answer
+- [ ] Responses include confidence levels
+- [ ] Responses end decisively (no follow-up bait)
+- [ ] No drip-feeding across messages
+
+### Required Verification
+
+1. Generate a response and show banned phrases were stripped
+2. Show completion signal was added
+3. Show confidence level was included
+
+---
+
+## INTEGRATION VERIFICATION
+
+After fixing individual systems, verify they work together:
+
+### Test Scenario 1: Technical Query in Truth Mode
+```
+Mode: truth_general
+Query: "What are the best practices for database indexing?"
+Expected:
+- Routes to tools_tech_workflow category
+- Confidence > 0.5
+- Eli responds (analytical topic)
+- Response has confidence level
+- Response has completion signal
+- No banned phrases
+```
+
+### Test Scenario 2: Emotional Query in Truth Mode
+```
+Mode: truth_general  
+Query: "I'm feeling overwhelmed with work stress"
+Expected:
+- Routes to mental_emotional category
+- Roxy responds (emotional topic)
+- Response has empathetic tone
+- Response has actionable steps
+- Completion signal present
+```
+
+### Test Scenario 3: Business Query in Business Mode
+```
+Mode: business_validation
+Query: "Should I hire a contractor or full-time employee?"
+Expected:
+- Routes to work_career category
+- Eli responds (business decision)
+- Response includes SURVIVAL IMPACT
+- Response includes CASH FLOW ANALYSIS
+- Response includes TOP 3 RISKS
+- Confidence level stated
+```
+
+### Test Scenario 4: Site Monkeys with Vault
+```
+Mode: site_monkeys
+Vault: Loaded
+Query: "What's our minimum pricing for web development?"
+Expected:
+- Vault content referenced in response
+- Protocol-aligned answer
+- Eli and Roxy pairing
+- Vault isolation (doesn't leak to other modes)
+```
+
+---
+
+## DELIVERABLES
+
+### Part 1: System Audit
+For each of the 5 sections, provide:
+- **Status:** WORKING / BROKEN / PARTIAL
+- **Evidence:** File:line references or log examples
+- **Gap:** Bible requirement vs actual behavior
+
+### Part 2: Fixes
+Implement production-ready fixes for ALL gaps identified.
+
+### Part 3: Integration Test Results
+Show the 4 test scenarios passing with actual logs.
+
+---
+
+## FILES TO EXAMINE
+
+Memory System:
+- Memory retrieval and routing logic
+- Semantic analysis and categorization
+- Embedding generation and search
+
+Mode System:
+- Mode detection and switching
+- Mode-specific response structure enforcement
+- Fingerprint validation
+
+Vault System:
+- Vault loading mechanism
+- Session storage and isolation
+- Token tracking for vault
+
+Personality System:
+- Personality selection logic
+- Eli and Roxy implementations
+- Handoff and context preservation
+
+Response Enforcement:
+- Banned phrase detection
+- Completion signal injection
+- Anti-engagement validation
+
+---
+
+## SUCCESS CRITERIA
+
+After this PR:
+
+1. ✅ Memory queries route to correct categories with confidence > 0.5
+2. ✅ Mode switching changes response structure appropriately
+3. ✅ Vault loads, injects, and isolates correctly
+4. ✅ Eli handles analytical, Roxy handles emotional
+5. ✅ Banned phrases stripped from all responses
+6. ✅ Completion signals present in all responses
+7. ✅ All 4 integration test scenarios pass
+
+---
+
+## ALIGNMENT VERIFICATION
+
+All fixes must maintain the sacred hierarchy:
+
+> **TRUTH > HELPFULNESS > ENGAGEMENT**
+
+- Memory retrieval serves truth (finding relevant context)
+- Mode enforcement serves helpfulness (appropriate response structure)
+- Personality serves user experience (appropriate tone)
+- Response quality serves anti-engagement (decisive, complete answers)
+
+If any fix optimizes for engagement over truth or helpfulness, it's wrong.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
