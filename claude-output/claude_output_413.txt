@@ -1,0 +1,79 @@
+Excellent! The fix is complete and correct. Let me now provide the summary.
+
+---SUMMARY---
+
+## Fixed Issue #413: SESSION_LIMITS blocks documents instead of intelligently extracting
+
+### Problem
+The SESSION_LIMITS enforcement was blocking documents entirely when they exceeded the 10K token limit (lines 1683-1693 in `api/core/orchestrator.js`). When a document like 12,587 tokens was uploaded, the system would:
+- Return an early blocking response with 0 tokens loaded
+- Tell the user to "clear existing documents or start new chat"
+- Never reach the intelligent extraction code that already existed below
+
+This violated the system's design philosophy: documents should be intelligently extracted within budget limits, not blocked entirely.
+
+### Root Cause
+An early return statement at lines 1683-1693 blocked the document completely before the intelligent extraction logic (lines 1703-1733) could execute.
+
+### Solution
+**File Modified:** `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/core/orchestrator.js`
+
+**Changed lines 1683-1693 from:**
+```javascript
+if (tokens > remainingDocBudget) {
+  this.warn(`[SESSION-LIMIT] Document would exceed session limit...`);
+  return {
+    blocked: true,
+    reason: `Document would exceed session limit...`
+  };
+}
+```
+
+**To:**
+```javascript
+if (tokens > remainingDocBudget) {
+  this.log(`[SESSION-LIMIT] Document (${tokens} tokens) exceeds budget (${remainingDocBudget}), extracting within limit`);
+  // Fall through to extraction - effectiveBudget will constrain it
+}
+```
+
+### How It Works Now
+When a large document (e.g., 12,587 tokens) is uploaded:
+
+1. **Detection** (line 1683): System detects document exceeds budget
+2. **Log** (line 1684): Logs informational message about extraction
+3. **Fall Through**: Code continues to intelligent extraction logic (no early return)
+4. **Budget Calculation** (lines 1698-1701): Calculates `effectiveBudget` as minimum of query budget and remaining session budget
+5. **Extraction** (lines 1703-1709): Calls `#intelligentDocumentExtraction()` with strategies:
+   - `query-relevant`: Prioritizes content matching user's question
+   - `key-sections`: Identifies important sections
+   - `structured`: Preserves document structure
+6. **Result** (lines 1716-1732): Returns extracted content with metadata including coverage percentage
+7. **Truth-First Disclosure** (lines 3110-3135): Shows user: "⚠️ IMPORTANT: This document was 12587 tokens but I can only process 2500 tokens per session. I'm seeing approximately 20% of the content using query-relevant extraction."
+
+### Expected Behavior
+**Before:**
+```
+[SESSION-LIMIT] Document would exceed session limit (0 + 12587 > 10000)
+[DOCUMENTS] Loaded 0 tokens from pasted_document.txt
+User sees: "Document would exceed session limit. Clear existing documents or start new chat."
+```
+
+**After:**
+```
+[SESSION-LIMIT] Document (12587 tokens) exceeds budget (10000), extracting within limit
+[COST-CONTROL] Document extracted: 12587 → 2500 tokens (20% coverage, strategy: query-relevant, source: pasted)
+User sees: AI answer based on extracted content + disclosure about partial coverage + options for specific sections
+```
+
+### Alignment with System Philosophy
+This fix embodies the core CLAUDE.md principles:
+- ✅ **Truth First**: Honestly discloses partial coverage percentage
+- ✅ **Helpful Second**: Provides useful answer based on intelligently extracted content
+- ✅ **Complete Third**: Answers user's question in one response, doesn't force multiple attempts
+- ✅ **Efficient Always**: Handles extraction automatically, respects user's time
+- ✅ **Anti-Engagement**: Solves problem completely rather than forcing conversation
+
+The system now acts as a "caring family member" who handles complexity automatically, is honest about limitations, and empowers the user—rather than punting work back to them.
+
+---END SUMMARY---

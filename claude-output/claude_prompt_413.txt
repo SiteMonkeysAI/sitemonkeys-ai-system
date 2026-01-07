@@ -1,0 +1,94 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #413: [claude-fix] Bug: SESSION_LIMITS blocks documents instead of intelligently extracting
+
+Issue Description:
+## Summary
+
+SESSION_LIMITS enforcement blocks documents entirely when they exceed the 10K token limit, instead of using the intelligent extraction system that already exists in the codebase.
+
+## The Design (Per Bible Documents)
+
+Large document uploaded → Intelligent extraction selects BEST content within budget → AI sees partial content → Truth-first disclosure tells user the coverage percentage
+
+The user should NEVER be told "document too big, try again with smaller pieces." The system handles this automatically.
+
+## Evidence from Railway Logs
+```
+[SESSION-LIMIT] Document would exceed session limit (0 + 12587 > 10000)
+[DOCUMENTS] Loaded 0 tokens from pasted_document.txt
+```
+
+A 12,587 token document was completely blocked. It should have been extracted to ~10,000 tokens.
+
+## Root Cause
+
+In `api/core/orchestrator.js` around lines 1678-1691, an early return blocks documents before the intelligent extraction code can run:
+```javascript
+// THIS BLOCK SHOULD BE REMOVED
+if (tokens > remainingDocBudget) {
+  this.warn(`[SESSION-LIMIT] Document would exceed session limit...`);
+  return {
+    blocked: true,
+    reason: `Document would exceed session limit...`
+  };
+}
+```
+
+The intelligent extraction code exists at lines ~1710-1730 but is never reached.
+
+## Required Fix
+
+**Remove the blocking return entirely.** Replace with a log statement:
+```javascript
+if (tokens > remainingDocBudget) {
+  this.log(`[SESSION-LIMIT] Document (${tokens} tokens) exceeds budget (${remainingDocBudget}), extracting within limit`);
+  // Fall through to extraction - effectiveBudget will constrain it
+}
+```
+
+The existing code handles the rest:
+- Line ~1704: `effectiveBudget = Math.min(TOKEN_BUDGETS[queryType], remainingDocBudget)`
+- Line ~1712: `#intelligentDocumentExtraction()` uses query-relevant, key-sections, or structured strategies
+- Line ~3110: Truth-first disclosure shows user the coverage percentage
+
+## What Should NOT Happen
+
+- ❌ Blocking document and telling user to paste smaller pieces
+- ❌ Returning 0 tokens when document exceeds limit
+- ❌ Punting work back to the user
+
+## What Should Happen
+
+- ✅ Extract best 10K tokens using intelligent strategies
+- ✅ Prioritize sections matching user's query
+- ✅ Tell user "I'm seeing 20% of your document using query-relevant extraction"
+- ✅ Provide useful answer based on extracted content
+
+## Verification
+
+After fix:
+```
+[SESSION-LIMIT] Document (12587 tokens) exceeds budget (10000), extracting within limit
+[COST-CONTROL] Document extracted: 12587 → 2500 tokens (20% coverage, strategy: query-relevant)
+```
+
+User sees: AI answer + disclosure that it's working with partial content + offer to ask about specific sections if needed.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

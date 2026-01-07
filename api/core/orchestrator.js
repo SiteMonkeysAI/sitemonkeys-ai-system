@@ -1681,15 +1681,8 @@ export class Orchestrator {
       }
 
       if (tokens > remainingDocBudget) {
-        this.warn(`[SESSION-LIMIT] Document would exceed session limit (${currentSessionDocTokens} + ${tokens} > ${SESSION_LIMITS.maxUploadedTokens})`);
-        return {
-          content: '',
-          tokens: 0,
-          filename: filename,
-          processed: false,
-          blocked: true,
-          reason: `Document would exceed session limit. Current: ${currentSessionDocTokens} tokens, Document: ${tokens} tokens, Limit: ${SESSION_LIMITS.maxUploadedTokens} tokens. Clear existing documents or start new chat.`
-        };
+        this.log(`[SESSION-LIMIT] Document (${tokens} tokens) exceeds budget (${remainingDocBudget}), extracting within limit`);
+        // Fall through to extraction - effectiveBudget will constrain it
       }
 
       // INTELLIGENT DOCUMENT PREPROCESSING - Issue #407 Fix
