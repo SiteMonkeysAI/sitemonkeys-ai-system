@@ -287,6 +287,7 @@ app.post("/api/chat", async (req, res) => {
       vaultContext,
       vault_content,
       conversationHistory = [],
+      claude_confirmed = false, // BIBLE FIX: User confirmation for Claude escalation
     } = req.body;
 
     // Map user_id to userId for internal use
@@ -374,6 +375,7 @@ app.post("/api/chat", async (req, res) => {
       vaultEnabled,
       vaultContext: finalVaultContext,
       conversationHistory: effectiveConversationHistory,
+      claudeConfirmed: claude_confirmed, // BIBLE FIX: Pass confirmation flag
     });
 
     // TRACE LOGGING - Step 4 & 5 & 6
@@ -557,6 +559,13 @@ app.post("/api/chat", async (req, res) => {
         console.log(
           "[CHAT] [STORAGE] Reason: storeMemory method not available",
         );
+    }
+
+    // ========== HANDLE CLAUDE CONFIRMATION REQUEST (BIBLE REQUIREMENT - Section D) ==========
+    // If orchestrator returns needsConfirmation, pass it to frontend immediately
+    if (result.needsConfirmation) {
+      console.log('[CHAT] ⚠️ Claude escalation requires user confirmation');
+      return res.json(result);
     }
 
     res.json(result);

@@ -1846,6 +1846,146 @@
         console.log("=== END TRACE ===");
       }
 
+      // ========== CLAUDE CONFIRMATION HANDLER (BIBLE REQUIREMENT - Section D) ==========
+      async function handleClaudeConfirmation(useClaude, userMessage) {
+        const box = document.getElementById("chat-box");
+        
+        // Remove the confirmation prompt
+        const confirmPrompt = document.querySelector(".confirmation-prompt");
+        if (confirmPrompt) {
+          confirmPrompt.remove();
+        }
+
+        // Add thinking indicator
+        const thinkingBubble = document.createElement("div");
+        thinkingBubble.className = "bubble ai thinking-bubble";
+        thinkingBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="Thinking"><div class="bubble-content thinking-content"><span class="thinking-brain">🧠</span> ${useClaude ? 'Analyzing with Claude...' : 'Processing with GPT-4...'}</div>`;
+        box.appendChild(thinkingBubble);
+        box.scrollTop = box.scrollHeight;
+
+        try {
+          // USE ALREADY-LOADED VAULT FROM WINDOW
+          let vaultContent = window.currentVaultContent || "";
+
+          // Re-send the request with confirmation flag
+          const response = await fetch("/api/chat", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              message:
+                extractedDocuments.length > 0 &&
+                (userMessage.toLowerCase().includes("analyze") ||
+                  userMessage.toLowerCase().includes("document") ||
+                  userMessage.toLowerCase().includes("file"))
+                  ? `${userMessage}\n\n[DOCUMENT CONTEXT]\nFile: ${extractedDocuments[extractedDocuments.length - 1].filename}\nContent: ${extractedDocuments[extractedDocuments.length - 1].fullContent}\nType: ${extractedDocuments[extractedDocuments.length - 1].contentType}`
+                  : userMessage,
+              user_id: getUserId(),
+              conversation_history: conversationHistory,
+              mode: getCurrentMode(),
+              vault_loaded: isVaultMode(),
+              vault_content: vaultContent,
+              claude_confirmed: useClaude, // BIBLE FIX: Send confirmation flag
+              document_context:
+                extractedDocuments.length > 0 &&
+                (userMessage.toLowerCase().includes("analyze") ||
+                  userMessage.toLowerCase().includes("document"))
+                  ? {
+                      filename:
+                        extractedDocuments[extractedDocuments.length - 1]
+                          .filename,
+                      content:
+                        extractedDocuments[extractedDocuments.length - 1]
+                          .fullContent ||
+                        extractedDocuments[extractedDocuments.length - 1]
+                          .content,
+                      contentType:
+                        extractedDocuments[extractedDocuments.length - 1]
+                          .contentType,
+                      wordCount:
+                        extractedDocuments[extractedDocuments.length - 1]
+                          .wordCount,
+                    }
+                  : null,
+            }),
+          });
+
+          if (!response.ok) {
+            throw new Error(`Chat API error: ${response.status}`);
+          }
+
+          const data = await response.json();
+          const reply = data.response || "No response received";
+
+          // Update token counter
+          const tokenUsage = data.metadata?.token_usage || data.token_usage;
+          if (tokenUsage) {
+            const tokenEl = document.getElementById("token-count");
+            const costEl = document.getElementById("cost-estimate");
+            if (tokenEl) {
+              tokenEl.textContent = tokenUsage.total_tokens || 0;
+              tokenEl.style.color = "#00ff41";
+            }
+            if (costEl) {
+              costEl.textContent = tokenUsage.cost_display || `$${(tokenUsage.cost_usd || 0).toFixed(4)}`;
+              costEl.style.color = "#00ff41";
+            }
+          }
+
+          // Clean the AI response
+          let cleanReply = reply
+            .replace(/^\*?\*?(Eli|Roxy):\*?\*?\s*/i, "")
+            .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+            .replace(/\*\[MODE:.*?\]/g, "")
+            .replace(/\[MODE:.*?\]/g, "")
+            .replace(/\[VAULT:.*?\]/g, "")
+            .replace(/\[TRIGGERED:.*?\]/g, "")
+            .replace(/\[FLOW:.*?\]/g, "")
+            .replace(/\[ASSUMPTIONS:.*?\]/g, "")
+            .trim();
+
+          // Determine who speaks
+          const isEli = aiToggle;
+          const who = isEli ? "Eli" : "Roxy";
+          const avatar = isEli ? "boy-mascot.png" : "girl-mascot.png";
+
+          // Remove thinking indicator
+          const thinkingElement = document.querySelector(".thinking-bubble");
+          if (thinkingElement) {
+            thinkingElement.remove();
+          }
+
+          // Add AI response
+          const responseBubble = document.createElement("div");
+          responseBubble.className = "bubble ai";
+          responseBubble.innerHTML = `<img src="${avatar}" class="avatar" alt="${who}"><div class="bubble-content"><strong>${who}:</strong> ${cleanReply}</div>`;
+          box.appendChild(responseBubble);
+          box.scrollTop = box.scrollHeight;
+
+          // Update conversation history
+          conversationHistory.push({ role: "user", content: userMessage });
+          conversationHistory.push({ role: "assistant", content: reply });
+          manageConversationHistory();
+
+          // Toggle for next message
+          aiToggle = !aiToggle;
+        } catch (error) {
+          console.error("❌ Claude confirmation request failed:", error);
+          
+          // Remove thinking indicator
+          const thinkingElement = document.querySelector(".thinking-bubble");
+          if (thinkingElement) {
+            thinkingElement.remove();
+          }
+
+          // Show error message
+          const errorBubble = document.createElement("div");
+          errorBubble.className = "bubble ai";
+          errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="Eli"><div class="bubble-content"><strong>System Error:</strong> ${error.message || 'Request failed. Please try again.'}</div>`;
+          box.appendChild(errorBubble);
+          box.scrollTop = box.scrollHeight;
+        }
+      }
+
       // Main chat function
       async function sendMessage() {
         const input = document.getElementById("user-input");
@@ -1938,6 +2078,45 @@
           }
 
           const data = await response.json();
+
+          // ========== HANDLE CLAUDE CONFIRMATION REQUEST (BIBLE REQUIREMENT - Section D) ==========
+          if (data.needsConfirmation) {
+            // Remove thinking indicator
+            const thinkingElement = document.querySelector(".thinking-bubble");
+            if (thinkingElement) {
+              thinkingElement.remove();
+            }
+
+            // Display confirmation prompt
+            const confirmBubble = document.createElement("div");
+            confirmBubble.className = "bubble ai confirmation-prompt";
+            confirmBubble.innerHTML = `
+              <img src="boy-mascot.png" class="avatar" alt="Eli">
+              <div class="bubble-content">
+                <strong>🤔 Upgrade to Claude Sonnet 4.5?</strong>
+                <p>${data.message || 'This query would benefit from Claude Sonnet 4.5 analysis.'}</p>
+                <p><strong>Reason:</strong> ${data.reason || 'Requires expert analysis'}</p>
+                <p><strong>Estimated Cost:</strong></p>
+                <ul style="margin: 8px 0; padding-left: 20px;">
+                  <li>Claude Sonnet 4.5: <strong>${data.estimatedCost?.claude || '$0.05-0.15'}</strong> (higher quality)</li>
+                  <li>GPT-4: <strong>${data.estimatedCost?.gpt4 || '$0.01-0.03'}</strong> (faster)</li>
+                </ul>
+                <div style="margin-top: 12px; display: flex; gap: 10px;">
+                  <button onclick="handleClaudeConfirmation(true, '${text.replace(/'/g, "\\'")}');" 
+                          style="padding: 8px 16px; background: #00ff41; color: #1a1a1a; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">
+                    ✓ Use Claude
+                  </button>
+                  <button onclick="handleClaudeConfirmation(false, '${text.replace(/'/g, "\\'")}');" 
+                          style="padding: 8px 16px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Use GPT-4
+                  </button>
+                </div>
+              </div>
+            `;
+            box.appendChild(confirmBubble);
+            box.scrollTop = box.scrollHeight;
+            return; // Stop here, wait for user choice
+          }
 
           const reply = data.response || "No response received";
           // Update token counter - FIX: Access from data.metadata.token_usage
