@@ -586,6 +586,13 @@ export async function performLookup(query, sources, truthType = null) {
       try {
         // Build URL if function provided - use cleaned search query
         const fetchUrl = source.buildUrl ? source.buildUrl(searchQuery) : source.url;
+        
+        // Skip this source if buildUrl returned null (couldn't extract required info)
+        if (!fetchUrl) {
+          console.log(`[externalLookupEngine] ${source.name} buildUrl returned null - skipping source`);
+          continue;
+        }
+        
         console.log(`[externalLookupEngine] Fetching from ${source.name} (${fetchUrl})`);
 
         // Create abort controller for timeout

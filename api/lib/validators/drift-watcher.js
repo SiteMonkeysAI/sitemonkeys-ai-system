@@ -50,10 +50,27 @@ function getValidIntents(semanticAnalysis) {
   ];
 }
 
-// Keep exports for backward compatibility, but marked as deprecated
-// NEW CODE: Use getValidDomains() and getValidIntents() instead
-const BASELINE_DOMAINS = getValidDomains({});
-const BASELINE_INTENTS = getValidIntents({});
+// Deprecated: Keep for backward compatibility only
+// NEW CODE: Use getValidDomains() and getValidIntents() functions instead
+const BASELINE_DOMAINS = [
+  "business",
+  "technical", 
+  "personal",
+  "health",
+  "financial",
+  "creative",
+  "general",
+];
+
+const BASELINE_INTENTS = [
+  "question",
+  "command",
+  "discussion",
+  "problem_solving",
+  "decision_making",
+  "emotional_expression",
+  "information_sharing",
+];
 
 class DriftWatcher {
   constructor() {

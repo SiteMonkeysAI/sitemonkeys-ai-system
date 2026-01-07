@@ -102,7 +102,11 @@ export class ProductValidator {
     // Count distinct citations (not just pattern matches)
     const citationMatches = new Set();
     citationPatterns.forEach((pattern) => {
-      const matches = response.match(new RegExp(pattern, 'gi'));
+      // Patterns are already RegExp objects, use them directly with .match()
+      // Need to add 'gi' flags for global and case-insensitive matching
+      const patternStr = pattern.source;
+      const flags = 'gi';
+      const matches = response.match(new RegExp(patternStr, flags));
       if (matches) {
         matches.forEach(match => citationMatches.add(match.toLowerCase()));
       }
@@ -419,8 +423,9 @@ export class ProductValidator {
     let reasoning = context.reasoning || context.reasoningMetadata;
     
     if (!reasoning || !reasoning.detections) {
-      // Apply reasoning to understand intent
-      reasoning = await applyPrincipleBasedReasoning(response, context);
+      // Apply reasoning to understand intent - use the user's message, not the AI response
+      const userMessage = context.message || context.query || '';
+      reasoning = await applyPrincipleBasedReasoning(userMessage, context);
     }
     
     // Check if this is informational content
