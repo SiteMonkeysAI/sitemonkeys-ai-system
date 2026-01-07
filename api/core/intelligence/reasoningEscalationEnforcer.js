@@ -103,7 +103,7 @@ function detectPrematureTermination(response) {
 }
 
 // Build reasoning scaffold - adds structured prompts to guide reasoning completion
-// ISSUE #406 FIX: Instead of empty templates, provide actionable reasoning structure
+// ISSUE #406 FIX: Provide actionable reasoning structure to complete incomplete responses
 function buildReasoningScaffold(missingSteps, existingResponse) {
   // PRINCIPLE: "Uncertainty is a reason to work harder, not permission to stop"
   // Add structured sections that prompt for the missing reasoning elements
@@ -112,11 +112,10 @@ function buildReasoningScaffold(missingSteps, existingResponse) {
     return null;
   }
 
-  // Check if response already has reasonable length - don't append to very short responses
-  if (existingResponse.length < 100) {
-    return null;
-  }
-
+  // ISSUE #406 FIX: Remove length check that prevented scaffold from being added
+  // Even short responses can benefit from reasoning completion guidance
+  // Original check: if (existingResponse.length < 100) return null;
+  
   const scaffoldParts = ["\n\n---\n"];
 
   // Add each missing step as a structured section

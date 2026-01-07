@@ -511,7 +511,12 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
 
   // News/current events queries - PRINCIPLE-BASED DETECTION
   // Use hasNewsIntent() which detects structure + proper nouns, not hardcoded names
-  if (hasNewsIntent(query)) {
+  // ISSUE #406 FIX: Also check for generic news queries without proper nouns
+  const isGenericNewsQuery = lowerQuery.match(/\b(top|latest|recent|breaking)\s+(news|stories|headlines|updates)\b/i);
+  const isWeatherQuery = lowerQuery.match(/\b(weather|temperature|forecast)\b/i);
+  const isEntertainmentQuery = lowerQuery.match(/\b(celebrity|entertainment|gossip)\b/i);
+  
+  if (hasNewsIntent(query) || isGenericNewsQuery || isWeatherQuery || isEntertainmentQuery) {
     return API_SOURCES.NEWS;
   }
 
