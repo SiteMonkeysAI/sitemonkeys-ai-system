@@ -445,6 +445,7 @@ export class Orchestrator {
       documentContext = null,
       vaultEnabled = false,
       conversationHistory = [],
+      claudeConfirmed = false, // BIBLE FIX: User confirmation for Claude escalation
     } = requestData;
 
     const vaultContext = requestData.vaultContext || null;
@@ -519,6 +520,7 @@ export class Orchestrator {
       context.mode = mode;
       context.sessionId = sessionId;
       context.message = message;
+      context.claudeConfirmed = claudeConfirmed; // BIBLE FIX: Pass confirmation flag
       this.log(`[CONTEXT] Total: ${context.totalTokens} tokens`);
 
       // STEP 5: Perform semantic analysis
@@ -812,6 +814,24 @@ export class Orchestrator {
         conversationHistory,
         phase4Metadata,
       );
+
+      // BIBLE FIX: Handle user confirmation requirement for Claude escalation
+      if (aiResponse.needsConfirmation) {
+        this.log(`[AI ROUTING] Returning confirmation request to user`);
+        return {
+          success: true,
+          needsConfirmation: true,
+          response: aiResponse.message,
+          reason: aiResponse.reason,
+          estimatedCost: aiResponse.estimatedCost,
+          metadata: {
+            confidence: confidence,
+            mode: mode,
+            timestamp: new Date().toISOString(),
+          }
+        };
+      }
+
       this.log(
         `[AI] Model: ${aiResponse.model}, Cost: $${aiResponse.cost.totalCost.toFixed(4)}`,
       );
@@ -1687,19 +1707,22 @@ export class Orchestrator {
       }
 
       // INTELLIGENT DOCUMENT PREPROCESSING - Issue #407 Fix
+      // BIBLE REQUIREMENT (Section A): Progressive token budgets based on query complexity
       // Classify query type to determine appropriate token budget
       const queryType = this.#classifyQueryComplexity(message);
       const TOKEN_BUDGETS = {
-        simple: 10000,
-        medium: 30000,
-        complex: 80000
+        simple: 10000,   // Simple factual queries (BIBLE: target $0.10)
+        medium: 30000,   // Analysis and comparison (BIBLE: target $0.30)
+        complex: 80000   // Comprehensive research (BIBLE: target $0.80)
       };
-      
+
       // Use the LOWER of query budget or remaining session budget
       const effectiveBudget = Math.min(
         TOKEN_BUDGETS[queryType] || 10000,
         remainingDocBudget
       );
+
+      this.log(`[TOKEN-BUDGET] Query classified as '${queryType}', budget: ${TOKEN_BUDGETS[queryType]} tokens (effective: ${effectiveBudget})`);
 
       if (tokens > effectiveBudget) {
         // Use intelligent extraction rather than hard truncation
@@ -2508,9 +2531,20 @@ export class Orchestrator {
     try {
       // ========== CRITICAL FIX: Check vault/tokens BEFORE confidence ==========
       // Priority order: Vault presence → Token budget → Then confidence
-      
+
       let useClaude = false;
       let routingReason = [];
+      let isSafetyCritical = false;
+
+      // PRIORITY 0: High-stakes domain detection (BIBLE REQUIREMENT - Section D)
+      // Medical, legal, financial, safety queries MUST escalate to Claude
+      if (phase4Metadata?.high_stakes?.isHighStakes) {
+        useClaude = true;
+        isSafetyCritical = true;
+        const domains = phase4Metadata.high_stakes.domains || [];
+        routingReason.push(`high_stakes:${domains.join(',')}`);
+        this.log(`[AI ROUTING] High-stakes domain detected: ${domains.join(', ')} - auto-escalating to Claude`);
+      }
 
       // PRIORITY 1: Vault presence (Site Monkeys mode always uses Claude)
       if (context.sources?.hasVault && mode === "site_monkeys") {
@@ -2526,7 +2560,7 @@ export class Orchestrator {
 
       // PRIORITY 3: Confidence and complexity (original logic)
       if (!useClaude) {
-        if (confidence < 0.85 || 
+        if (confidence < 0.85 ||
             analysis.requiresExpertise ||
             (mode === "business_validation" && analysis.complexity > 0.7)) {
           useClaude = true;
@@ -2535,6 +2569,28 @@ export class Orchestrator {
           if (mode === "business_validation" && analysis.complexity > 0.7) {
             routingReason.push(`high_complexity:${analysis.complexity.toFixed(2)}`);
           }
+        }
+      }
+
+      // ========== USER CONFIRMATION FOR CLAUDE (BIBLE REQUIREMENT - Section D) ==========
+      // "User confirmation required before Claude (except safety-critical)"
+      // If escalating to Claude for non-safety-critical reasons, notify user
+      if (useClaude && !isSafetyCritical && !context.sources?.hasVault) {
+        // Return a special response asking for confirmation
+        // Frontend should handle this and re-submit with confirmation flag
+        const confirmationNeeded = !context.claudeConfirmed;
+
+        if (confirmationNeeded) {
+          this.log(`[AI ROUTING] Claude escalation requires user confirmation (reasons: ${routingReason.join(', ')})`);
+          return {
+            needsConfirmation: true,
+            reason: routingReason.join(', '),
+            message: `This query would benefit from Claude Sonnet 4.5 analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use GPT-4 (faster, $0.01-0.03)?`,
+            estimatedCost: {
+              claude: '$0.05-0.15',
+              gpt4: '$0.01-0.03'
+            }
+          };
         }
       }
 
@@ -3289,11 +3345,30 @@ Mode: ${modeConfig?.display_name || mode}
 
   /**
    * Classify query complexity to determine token budget
+   * BIBLE REQUIREMENT (Section A): Progressive escalation based on query complexity
+   * - Simple: 10K tokens (quick factual queries)
+   * - Medium: 30K tokens (analysis, comparison)
+   * - Complex: 80K tokens (comprehensive research)
+   *
    * @param {string} message - User's query
+   * @param {object} analysis - Semantic analysis results (optional)
+   * @param {number} confidence - Confidence score (optional)
    * @returns {string} - 'simple', 'medium', or 'complex'
    */
-  #classifyQueryComplexity(message) {
+  #classifyQueryComplexity(message, analysis = null, confidence = null) {
     const lowerMessage = message.toLowerCase();
+
+    // BIBLE FIX: If confidence is low, escalate budget (simulates progressive escalation)
+    // Instead of retry logic, we make intelligent upfront decisions
+    if (confidence !== null && confidence < 0.7) {
+      this.log(`[COMPLEXITY] Low confidence (${confidence.toFixed(2)}) - escalating to medium budget`);
+      // Force at least medium budget for low-confidence queries
+      if (confidence < 0.5) {
+        this.log(`[COMPLEXITY] Very low confidence (${confidence.toFixed(2)}) - escalating to complex budget`);
+        return 'complex';
+      }
+      // Don't return yet - still check patterns, but bias toward medium/complex
+    }
 
     // Simple queries
     const simplePatterns = [
@@ -3304,7 +3379,11 @@ Mode: ${modeConfig?.display_name || mode}
       /^summarize/
     ];
 
+    // Don't allow simple classification if confidence is low
     if (simplePatterns.some(pattern => pattern.test(lowerMessage))) {
+      if (confidence !== null && confidence < 0.7) {
+        return 'medium'; // Upgrade to medium if uncertain
+      }
       return 'simple';
     }
 
@@ -3328,6 +3407,16 @@ Mode: ${modeConfig?.display_name || mode}
 
     if (complexCount >= 2) {
       return 'complex';
+    }
+
+    // BIBLE FIX: Use analysis to inform classification
+    if (analysis) {
+      if (analysis.complexity > 0.7 || analysis.requiresExpertise) {
+        return 'complex';
+      }
+      if (analysis.complexity < 0.3 && confidence && confidence > 0.85) {
+        return 'simple';
+      }
     }
 
     // Default to medium
