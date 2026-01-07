@@ -1017,7 +1017,8 @@ export class Orchestrator {
         const contractResult = enforceResponseContract(
           personalityResponse.response,
           message,
-          phase4Metadata
+          phase4Metadata,
+          documentData || {}
         );
         personalityResponse.response = contractResult.response;
         response_contract = contractResult.contract;
@@ -1681,15 +1682,8 @@ export class Orchestrator {
       }
 
       if (tokens > remainingDocBudget) {
-        this.warn(`[SESSION-LIMIT] Document would exceed session limit (${currentSessionDocTokens} + ${tokens} > ${SESSION_LIMITS.maxUploadedTokens})`);
-        return {
-          content: '',
-          tokens: 0,
-          filename: filename,
-          processed: false,
-          blocked: true,
-          reason: `Document would exceed session limit. Current: ${currentSessionDocTokens} tokens, Document: ${tokens} tokens, Limit: ${SESSION_LIMITS.maxUploadedTokens} tokens. Clear existing documents or start new chat.`
-        };
+        this.warn(`[SESSION-LIMIT] Document (${tokens} tokens) exceeds remaining budget (${remainingDocBudget}), will extract within limit`);
+        // Continue to extraction logic below - effectiveBudget will limit it
       }
 
       // INTELLIGENT DOCUMENT PREPROCESSING - Issue #407 Fix
