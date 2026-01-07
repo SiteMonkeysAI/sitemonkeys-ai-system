@@ -83,19 +83,32 @@ export class Orchestrator {
       personalityEnhancements: 0,
     };
 
-    // Logging with timestamp for Railway visibility
-    this.log = (message) => {
+    // Session tracking for document token limits (Issue #407 Follow-up)
+    this.sessionCache = new Map();
+
+    // Tiered Logging (Issue #407) - Prevent Railway rate limiting
+    const LOG_LEVEL = process.env.LOG_LEVEL || 'info'; // debug, info, warn, error
+    const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 };
+    const currentLevel = LOG_LEVELS[LOG_LEVEL] || LOG_LEVELS.info;
+
+    this.log = (message, level = 'info') => {
+      if (LOG_LEVELS[level] < currentLevel) return;
+
       const timestamp = new Date().toISOString();
       console.log(`[${timestamp}] [ORCHESTRATOR] ${message}`);
-      // Force flush for Railway
+
       if (process.stdout && process.stdout.write) {
         process.stdout.write("");
       }
     };
+
+    this.debug = (message) => this.log(message, 'debug');
+    this.warn = (message) => this.log(message, 'warn');
+
     this.error = (message, error) => {
       const timestamp = new Date().toISOString();
       console.error(`[${timestamp}] [ORCHESTRATOR ERROR] ${message}`, error || "");
-      // Force flush for Railway
+
       if (process.stderr && process.stderr.write) {
         process.stderr.write("");
       }
@@ -464,7 +477,7 @@ export class Orchestrator {
 
       // STEP 2: Load document context (always check if document available)
       // Check extractedDocuments Map first, then use documentContext if provided
-      const documentData = await this.#loadDocumentContext(effectiveDocumentContext, sessionId);
+      const documentData = await this.#loadDocumentContext(effectiveDocumentContext, sessionId, message);
       if (documentData) {
         this.log(
           `[DOCUMENTS] Loaded ${documentData.tokens} tokens from ${documentData.filename}`,
@@ -1608,7 +1621,7 @@ export class Orchestrator {
 
   // ==================== STEP 2: LOAD DOCUMENT CONTEXT ====================
 
-  async #loadDocumentContext(documentContext, sessionId) {
+  async #loadDocumentContext(documentContext, sessionId, message) {
     try {
       // CRITICAL FIX (Issue #385, Bug 1.1): Handle documents from THREE sources:
       // 1. documentContext parameter (pasted content from frontend)
@@ -1643,27 +1656,94 @@ export class Orchestrator {
 
       const tokens = Math.ceil(documentContent.length / 4);
 
-      // FEATURE FLAG: ENABLE_STRICT_DOC_BUDGET
-      // Spec calls for ≤1,000 tokens, current is 10,000
-      // Default to 10K for backward compatibility
-      const docBudget = process.env.ENABLE_STRICT_DOC_BUDGET === 'true' ? 1000 : 10000;
+      // SESSION_LIMITS ENFORCEMENT - Per Bible Documents (Issue #407 Follow-up)
+      // Check cumulative session document tokens BEFORE applying query budgets
+      const SESSION_LIMITS = {
+        maxUploadedTokens: 10000,      // Total from ALL uploads combined
+        maxMemoryTokens: 2500,         // From persistent memory
+        maxConversationTokens: 20000,  // Chat history
+        totalSessionLimit: 35000       // ABSOLUTE MAXIMUM
+      };
 
-      if (tokens > docBudget) {
-        // 1 token ≈ 4 chars, so multiply by 4
-        const truncated = documentContent.substring(0, docBudget * 4);
-        this.log(`[DOCUMENTS] Truncated from ${tokens} to ~${docBudget} tokens (source: ${source})`);
+      const currentSessionDocTokens = this.getSessionDocumentTokens(sessionId);
+      const remainingDocBudget = SESSION_LIMITS.maxUploadedTokens - currentSessionDocTokens;
+
+      if (remainingDocBudget <= 0) {
+        this.warn(`[SESSION-LIMIT] Document upload blocked - session at ${currentSessionDocTokens}/${SESSION_LIMITS.maxUploadedTokens} doc tokens`);
+        return {
+          content: '',
+          tokens: 0,
+          filename: filename,
+          processed: false,
+          blocked: true,
+          reason: `Session document limit reached (${SESSION_LIMITS.maxUploadedTokens} tokens). Clear existing documents or start new chat.`
+        };
+      }
+
+      if (tokens > remainingDocBudget) {
+        this.warn(`[SESSION-LIMIT] Document would exceed session limit (${currentSessionDocTokens} + ${tokens} > ${SESSION_LIMITS.maxUploadedTokens})`);
+        return {
+          content: '',
+          tokens: 0,
+          filename: filename,
+          processed: false,
+          blocked: true,
+          reason: `Document would exceed session limit. Current: ${currentSessionDocTokens} tokens, Document: ${tokens} tokens, Limit: ${SESSION_LIMITS.maxUploadedTokens} tokens. Clear existing documents or start new chat.`
+        };
+      }
+
+      // INTELLIGENT DOCUMENT PREPROCESSING - Issue #407 Fix
+      // Classify query type to determine appropriate token budget
+      const queryType = this.#classifyQueryComplexity(message);
+      const TOKEN_BUDGETS = {
+        simple: 10000,
+        medium: 30000,
+        complex: 80000
+      };
+      
+      // Use the LOWER of query budget or remaining session budget
+      const effectiveBudget = Math.min(
+        TOKEN_BUDGETS[queryType] || 10000,
+        remainingDocBudget
+      );
+
+      if (tokens > effectiveBudget) {
+        // Use intelligent extraction rather than hard truncation
+        const extractionResult = this.#intelligentDocumentExtraction(
+          documentContent, 
+          effectiveBudget * 4,
+          message
+        );
+        
+        this.log(`[COST-CONTROL] Document extracted: ${extractionResult.originalTokens} → ${extractionResult.extractedTokens} tokens (${Math.round(extractionResult.coverage * 100)}% coverage, strategy: ${extractionResult.strategy}, source: ${source})`);
+
+        // Track in session cache
+        this.#trackSessionDocument(sessionId, extractionResult.extractedTokens, filename);
 
         return {
-          content: truncated,
-          tokens: docBudget,
+          content: extractionResult.content,
+          tokens: extractionResult.extractedTokens,
           filename: filename,
           processed: true,
           truncated: true,
+          extracted: true,
           source: source,
+          extractionMetadata: {
+            originalTokens: extractionResult.originalTokens,
+            extractedTokens: extractionResult.extractedTokens,
+            coverage: extractionResult.coverage,
+            coveragePercent: Math.round(extractionResult.coverage * 100),
+            strategy: extractionResult.strategy
+          },
+          truncationNote: `Document extracted from ${extractionResult.originalTokens} to ${extractionResult.extractedTokens} tokens (${Math.round(extractionResult.coverage * 100)}% coverage) using ${extractionResult.strategy} strategy.`
         };
       }
 
       this.log(`[DOCUMENTS] Loaded: ${filename} (${tokens} tokens, source: ${source})`);
+      
+      // Track in session cache
+      this.#trackSessionDocument(sessionId, tokens, filename);
+
       return {
         content: documentContent,
         tokens: tokens,
@@ -2211,6 +2291,8 @@ export class Orchestrator {
         hasDocuments: !!documents,
         hasVault: !!vault,
       },
+      // Pass through extraction metadata for truth-first disclosure
+      extractionMetadata: documents?.extractionMetadata || null,
     };
   }
 
@@ -3028,10 +3110,64 @@ END OF EXTERNAL DATA
       contextStr += `\n\n**📝 MEMORY STATUS:** This appears to be our first conversation, or no relevant previous context was found. I'll provide the best response based on your current query.\n`;
     }
 
+    // ========== DOCUMENT CONTEXT (Issue #407 Fix + Enhancement) ==========
     if (context.sources?.hasDocuments && context.documents) {
-      contextStr += `\n\n**📄 UPLOADED DOCUMENT CONTEXT:**\n`;
-      contextStr += `I have access to the uploaded document and will reference it in my response.\n\n`;
-      contextStr += `${context.documents}\n`;
+      const extracted = context.extractionMetadata;
+      
+      if (extracted && extracted.coverage < 1.0) {
+        // TRUTH-FIRST DISCLOSURE: Partial document extraction
+        contextStr += `
+═══════════════════════════════════════════════════════════════
+📄 CURRENT DOCUMENT (PARTIAL - ${extracted.coveragePercent}% extracted)
+═══════════════════════════════════════════════════════════════
+
+⚠️ IMPORTANT: This document was ${extracted.originalTokens} tokens but I can only 
+process ${extracted.extractedTokens} tokens per session. I'm seeing approximately 
+${extracted.coveragePercent}% of the content using ${extracted.strategy} extraction.
+
+MY ANSWERS ARE BASED ON THIS PARTIAL VIEW. If you need analysis of specific sections 
+I may have missed, please:
+1. Ask about a specific section/topic (I'll try to find relevant parts)
+2. Break the document into smaller uploads
+3. Copy/paste the specific section you need analyzed
+
+EXTRACTED CONTENT:
+${context.documents}
+
+═══════════════════════════════════════════════════════════════
+END OF PARTIAL DOCUMENT
+═══════════════════════════════════════════════════════════════
+
+INSTRUCTION: 
+- Address the user's question based on THIS extracted content
+- Be clear that you're working with ${extracted.coveragePercent}% of the document
+- Acknowledge if asked about sections that may not be included
+- Do NOT confuse this with previous documents from memory
+
+`;
+      } else {
+        // Full document - existing injection
+        contextStr += `
+═══════════════════════════════════════════════════════════════
+📄 CURRENT DOCUMENT (uploaded just now)
+═══════════════════════════════════════════════════════════════
+
+⚠️ CRITICAL: When the user asks about "this document", "the document",
+"this file", or "what I just uploaded", they are referring to the
+CURRENT DOCUMENT below. Do NOT reference previous documents from memory
+unless explicitly asked.
+
+${context.documents}
+
+═══════════════════════════════════════════════════════════════
+END OF CURRENT DOCUMENT
+═══════════════════════════════════════════════════════════════
+
+INSTRUCTION: Address the user's question about THIS specific document.
+Do NOT confuse it with previous documents mentioned in memory.
+
+`;
+      }
     }
 
     return contextStr;
@@ -3048,6 +3184,28 @@ Core Principles:
 - Never use engagement bait phrases like "Would you like me to elaborate?"
 - Challenge assumptions and surface risks
 - Be honest about limitations
+
+UNCERTAINTY HANDLING - MANDATORY PATTERN:
+When you lack sufficient information to give a definitive answer, you MUST:
+
+1. HONEST ADMISSION (required first)
+   Say directly: "I don't have enough information about [specific aspect] to give you a definitive answer, and being honest with you matters more than appearing knowledgeable."
+
+2. EXPLAIN WHY UNCERTAIN (required second)
+   State clearly:
+   - What I know: [List actual facts you have]
+   - What I don't know: [List specific gaps]
+   - Why this matters: [Explain impact of not knowing]
+
+3. PROVIDE ALTERNATIVES (required third)
+   Offer comparable scenarios:
+   - "If your situation is like [Scenario A]: [specific guidance] (Confidence: 0.X)"
+   - "If your situation is like [Scenario B]: [alternative path] (Confidence: 0.X)"
+
+4. EMPOWER USER (required fourth)
+   State what would help: "To give you a definitive answer, I would need [specific information]. Or you could [alternative action]."
+
+CRITICAL: Fill in ALL brackets with actual content. Never output placeholder text or template markers. Each section must contain real, specific information based on the query.
 
 Mode: ${modeConfig?.display_name || mode}
 `;
@@ -3130,6 +3288,277 @@ Mode: ${modeConfig?.display_name || mode}
         this.requestStats.fallbackUsed / this.requestStats.totalRequests,
       timestamp: new Date().toISOString(),
     };
+  }
+
+  // ==================== DOCUMENT COST CONTROL HELPERS (Issue #407) ====================
+
+  /**
+   * Classify query complexity to determine token budget
+   * @param {string} message - User's query
+   * @returns {string} - 'simple', 'medium', or 'complex'
+   */
+  #classifyQueryComplexity(message) {
+    const lowerMessage = message.toLowerCase();
+
+    // Simple queries
+    const simplePatterns = [
+      /^what (is|are|does)/,
+      /^define/,
+      /^explain briefly/,
+      /^how many/,
+      /^summarize/
+    ];
+
+    if (simplePatterns.some(pattern => pattern.test(lowerMessage))) {
+      return 'simple';
+    }
+
+    // Complex queries
+    const complexIndicators = [
+      'analyze',
+      'compare',
+      'evaluate',
+      'assess',
+      'research',
+      'investigate',
+      'detailed',
+      'comprehensive',
+      'thorough',
+      'breakdown'
+    ];
+
+    const complexCount = complexIndicators.filter(
+      indicator => lowerMessage.includes(indicator)
+    ).length;
+
+    if (complexCount >= 2) {
+      return 'complex';
+    }
+
+    // Default to medium
+    return 'medium';
+  }
+
+  /**
+   * Intelligently extract content from document within budget (Issue #407 Follow-up Enhancement)
+   * Uses query-aware extraction and provides transparency about partial content
+   * Truth-first: Returns metadata about extraction to inform user
+   * @param {string} content - Full document content
+   * @param {number} maxChars - Maximum characters allowed
+   * @param {string} userQuery - User's question (for query-relevant extraction)
+   * @returns {object} - Extraction result with metadata
+   */
+  #intelligentDocumentExtraction(content, maxChars, userQuery = null) {
+    const totalTokens = Math.ceil(content.length / 4);
+    const maxTokens = Math.ceil(maxChars / 4);
+    
+    // If fits, return full content
+    if (content.length <= maxChars) {
+      return { 
+        content, 
+        extracted: false, 
+        coverage: 1.0,
+        originalTokens: totalTokens,
+        extractedTokens: totalTokens,
+        strategy: 'full'
+      };
+    }
+    
+    const strategies = [];
+    
+    // Strategy 1: Query-relevant extraction (if user asked a question)
+    if (userQuery && userQuery.length > 10) {
+      const relevant = this.#extractQueryRelevantSections(content, userQuery, maxChars);
+      if (relevant.confidence > 0.3) {
+        strategies.push({ 
+          type: 'query-relevant', 
+          content: relevant.content, 
+          score: relevant.confidence 
+        });
+      }
+    }
+    
+    // Strategy 2: Key sections (intro + conclusion + headings)
+    const keySections = this.#extractKeySections(content, maxChars);
+    strategies.push({ type: 'key-sections', content: keySections, score: 0.6 });
+    
+    // Strategy 3: Structure-based (headers, sections)
+    const structured = this.#extractByStructure(content, maxChars);
+    strategies.push({ type: 'structured', content: structured, score: 0.5 });
+    
+    // Use best strategy
+    const best = strategies.sort((a, b) => b.score - a.score)[0];
+    const extractedTokens = Math.ceil(best.content.length / 4);
+    
+    return {
+      content: best.content,
+      extracted: true,
+      strategy: best.type,
+      coverage: extractedTokens / totalTokens,
+      originalTokens: totalTokens,
+      extractedTokens: extractedTokens
+    };
+  }
+
+  /**
+   * Extract sections most relevant to user's query
+   * @param {string} content - Document content
+   * @param {string} query - User query
+   * @param {number} maxChars - Character budget
+   * @returns {object} - Relevant content and confidence score
+   */
+  #extractQueryRelevantSections(content, query, maxChars) {
+    // Split into paragraphs/sections
+    const sections = content.split(/\n\n+/);
+    const queryTerms = query.toLowerCase()
+      .split(/\s+/)
+      .filter(t => t.length > 3 && !['what', 'where', 'when', 'which', 'this', 'that', 'about'].includes(t));
+    
+    if (queryTerms.length === 0) {
+      return { content: '', confidence: 0 };
+    }
+    
+    // Score each section by query relevance
+    const scored = sections.map(section => {
+      const lower = section.toLowerCase();
+      const matches = queryTerms.filter(term => lower.includes(term)).length;
+      return { section, score: matches / queryTerms.length };
+    }).filter(s => s.score > 0);
+    
+    // Take highest scoring sections within budget
+    scored.sort((a, b) => b.score - a.score);
+    
+    let result = '';
+    let chars = 0;
+    for (const { section, score } of scored) {
+      if (chars + section.length + 2 > maxChars) break;
+      result += section + '\n\n';
+      chars += section.length + 2;
+    }
+    
+    return { 
+      content: result.trim(), 
+      confidence: scored[0]?.score || 0 
+    };
+  }
+
+  /**
+   * Extract key sections: beginning, end, and all headers
+   * @param {string} content - Document content
+   * @param {number} maxChars - Character budget
+   * @returns {string} - Extracted content
+   */
+  #extractKeySections(content, maxChars) {
+    const lines = content.split('\n');
+    
+    // Always include: first 20%, last 10%, all headers
+    const firstPortion = Math.floor(lines.length * 0.2);
+    const lastPortion = Math.floor(lines.length * 0.1);
+    
+    const first = lines.slice(0, firstPortion).join('\n');
+    const last = lines.slice(-lastPortion).join('\n');
+    const headers = lines
+      .filter(l => /^#{1,3}\s+/.test(l) || /^[A-Z][A-Z\s]{5,}:?\s*$/.test(l))
+      .join('\n');
+    
+    let result = first + '\n\n[...]\n\n' + headers + '\n\n[...]\n\n' + last;
+    
+    if (result.length > maxChars) {
+      result = result.substring(0, maxChars);
+    }
+    
+    return result;
+  }
+
+  /**
+   * Extract by document structure (sections and headers)
+   * @param {string} content - Document content
+   * @param {number} maxChars - Character budget
+   * @returns {string} - Extracted content
+   */
+  #extractByStructure(content, maxChars) {
+    const sections = content.split(/\n#{1,3}\s+/);
+
+    if (sections.length > 1) {
+      let result = '';
+      for (const section of sections) {
+        if (result.length + section.length > maxChars) break;
+        result += section + '\n\n';
+      }
+      if (result.trim().length > 0) {
+        return result.trim();
+      }
+    }
+
+    // Fallback: Extract by paragraphs
+    const paragraphs = content.split(/\n\n+/);
+    let result = '';
+
+    for (const paragraph of paragraphs) {
+      const testLength = result.length + paragraph.length + 2;
+      if (testLength > maxChars) {
+        break;
+      }
+      result += (result ? '\n\n' : '') + paragraph;
+    }
+
+    if (result.trim().length > 0) {
+      return result.trim();
+    }
+
+    // Final fallback: Hard truncate at paragraph boundary
+    const truncated = content.substring(0, maxChars);
+    const lastParagraph = truncated.lastIndexOf('\n\n');
+
+    if (lastParagraph > maxChars * 0.8) {
+      return truncated.substring(0, lastParagraph).trim();
+    }
+
+    return truncated.trim();
+  }
+
+  /**
+   * Get total document tokens for a session (Issue #407 Follow-up)
+   * Tracks cumulative tokens from all documents uploaded in the session
+   * @param {string} sessionId - Session identifier
+   * @returns {number} - Total tokens from all session documents
+   */
+  getSessionDocumentTokens(sessionId) {
+    if (!sessionId) return 0;
+    
+    const session = this.sessionCache.get(sessionId);
+    if (!session || !session.documents) return 0;
+    
+    return session.documents.reduce((sum, doc) => sum + (doc.tokens || 0), 0);
+  }
+
+  /**
+   * Track document in session cache (Issue #407 Follow-up)
+   * Stores document metadata for session-level token limit enforcement
+   * @param {string} sessionId - Session identifier
+   * @param {number} tokens - Document token count
+   * @param {string} filename - Document filename
+   */
+  #trackSessionDocument(sessionId, tokens, filename) {
+    if (!sessionId) return;
+    
+    let session = this.sessionCache.get(sessionId);
+    if (!session) {
+      session = { documents: [] };
+      this.sessionCache.set(sessionId, session);
+    }
+    
+    if (!session.documents) {
+      session.documents = [];
+    }
+    
+    session.documents.push({
+      tokens: tokens,
+      filename: filename,
+      timestamp: Date.now()
+    });
+    
+    this.debug(`[SESSION-TRACKING] Session ${sessionId}: ${this.getSessionDocumentTokens(sessionId)} total doc tokens (${session.documents.length} documents)`);
   }
 }
 
