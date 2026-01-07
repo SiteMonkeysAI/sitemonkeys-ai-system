@@ -518,10 +518,10 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   // Use hasNewsIntent() which detects structure + proper nouns, not hardcoded names
   // ISSUE #406 FIX: Also check for generic news queries without proper nouns
   const isGenericNewsQuery = lowerQuery.match(/\b(top|latest|recent|breaking)\s+(news|stories|headlines|updates)\b/i);
-  const isWeatherQuery = lowerQuery.match(/\b(weather|temperature|forecast)\b/i);
   const isEntertainmentQuery = lowerQuery.match(/\b(celebrity|entertainment|gossip)\b/i);
   
-  if (hasNewsIntent(query) || isGenericNewsQuery || isWeatherQuery || isEntertainmentQuery) {
+  // Note: Weather queries are already handled above (line 507)
+  if (hasNewsIntent(query) || isGenericNewsQuery || isEntertainmentQuery) {
     return API_SOURCES.NEWS;
   }
 

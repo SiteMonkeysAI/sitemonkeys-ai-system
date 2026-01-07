@@ -11,6 +11,16 @@ class IntelligenceSystem {
     this.isInitialized = false;
 
     // ================================================================
+    // ISSUE #406 FIX: Module-level constants for content detection
+    // ================================================================
+    
+    // Financial content keywords (lowercase for case-insensitive matching)
+    this.FINANCIAL_KEYWORDS = ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'cryptocurrency', 'stock', 'stocks', 'market', 'price', 'trading', 'investment'];
+    
+    // News/general content keywords (lowercase for case-insensitive matching)
+    this.NEWS_KEYWORDS = ['news', 'stories', 'headlines', 'weather', 'forecast', 'temperature', 'current events', 'breaking'];
+
+    // ================================================================
     // UNIFIED SEMANTIC ANALYSIS ENGINE
     // ================================================================
 
@@ -908,14 +918,10 @@ class IntelligenceSystem {
   async calculateAdvancedCategoryScores(query, semanticAnalysis, _userId) {
     const scores = new Map();
 
-    // ISSUE #406 FIX: Add special category for financial queries (not in categoryMappings)
-    // Financial queries should route to 'financial' category, not mental_emotional
-    const financialKeywords = ['bitcoin', 'btc', 'ethereum', 'eth', 'crypto', 'cryptocurrency', 'stock', 'stocks', 'market', 'price', 'trading', 'investment'];
-    const hasFinancialContent = financialKeywords.some(keyword => query.includes(keyword));
-    
-    // ISSUE #406 FIX: Add special category for general/news queries
-    const newsKeywords = ['news', 'stories', 'headlines', 'weather', 'forecast', 'temperature', 'current events', 'breaking'];
-    const hasNewsContent = newsKeywords.some(keyword => query.includes(keyword));
+    // ISSUE #406 FIX: Use module-level constants with case-insensitive matching
+    const queryLower = query.toLowerCase();
+    const hasFinancialContent = this.FINANCIAL_KEYWORDS.some(keyword => queryLower.includes(keyword));
+    const hasNewsContent = this.NEWS_KEYWORDS.some(keyword => queryLower.includes(keyword));
 
     for (const [categoryName, config] of this.categoryMappings) {
       let score = 0;
