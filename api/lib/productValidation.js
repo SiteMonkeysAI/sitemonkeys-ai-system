@@ -435,7 +435,7 @@ export class ProductValidator {
     
     // Check if user explicitly asked for recommendations
     const isRecommendationRequest = reasoning.detections?.decision_making ||
-                                    /(?:recommend|suggest|which.*should|what.*better|help me choose)/i.test(context.message || '');
+                                    /(?:recommend|suggest|which\s+\w{1,20}\s+should|what\s+\w{1,20}\s+better|help me choose)/i.test(context.message || '');
     
     return {
       type: isInformational ? 'INFORMATION' : (isRecommendationRequest ? 'RECOMMENDATION' : 'MIXED'),
