@@ -453,10 +453,24 @@ export class Orchestrator {
     try {
       this.log(`[START] User: ${userId}, Mode: ${mode}`);
 
+      // ========== PERFORMANCE TRACKING (BIBLE REQUIREMENT - Section I) ==========
+      const performanceMarkers = {
+        requestStart: startTime,
+        memoryStart: 0,
+        memoryEnd: 0,
+        aiCallStart: 0,
+        aiCallEnd: 0,
+        totalEnd: 0
+      };
+
       // STEP 1: Retrieve memory context (up to 2,500 tokens)
+      performanceMarkers.memoryStart = Date.now();
       const memoryContext = await this.#retrieveMemoryContext(userId, message, { mode });
+      performanceMarkers.memoryEnd = Date.now();
+      
+      const memoryDuration = performanceMarkers.memoryEnd - performanceMarkers.memoryStart;
       this.log(
-        `[MEMORY] Retrieved ${memoryContext.tokens} tokens from ${memoryContext.count} memories`,
+        `[MEMORY] Retrieved ${memoryContext.tokens} tokens from ${memoryContext.count} memories (${memoryDuration}ms)`,
       );
       // Enhanced telemetry for memory injection verification
       if (memoryContext.hasMemory) {
@@ -805,6 +819,7 @@ export class Orchestrator {
       }
 
       // STEP 7: Route to appropriate AI
+      performanceMarkers.aiCallStart = Date.now(); // BIBLE FIX: Track AI call duration
       const aiResponse = await this.#routeToAI(
         message,
         context,
@@ -814,6 +829,7 @@ export class Orchestrator {
         conversationHistory,
         phase4Metadata,
       );
+      performanceMarkers.aiCallEnd = Date.now(); // BIBLE FIX: Track AI call duration
 
       // BIBLE FIX: Handle user confirmation requirement for Claude escalation
       if (aiResponse.needsConfirmation) {
@@ -832,8 +848,9 @@ export class Orchestrator {
         };
       }
 
+      const aiCallDuration = performanceMarkers.aiCallEnd - performanceMarkers.aiCallStart;
       this.log(
-        `[AI] Model: ${aiResponse.model}, Cost: $${aiResponse.cost.totalCost.toFixed(4)}`,
+        `[AI] Model: ${aiResponse.model}, Cost: $${aiResponse.cost.totalCost.toFixed(4)}, Duration: ${aiCallDuration}ms`,
       );
 
       // ========== RUN ENFORCEMENT CHAIN (BEFORE PERSONALITY) ==========
@@ -1075,9 +1092,43 @@ export class Orchestrator {
       }
 
       // STEP 10: Track performance
-      const processingTime = Date.now() - startTime;
+      performanceMarkers.totalEnd = Date.now();
+      const processingTime = performanceMarkers.totalEnd - startTime;
       this.#trackPerformance(startTime, true, false);
-      this.log(`[COMPLETE] Processing time: ${processingTime}ms`);
+      
+      // ========== PERFORMANCE TARGET VALIDATION (BIBLE REQUIREMENT - Section I) ==========
+      const performanceMetrics = {
+        totalDuration: processingTime,
+        memoryDuration: memoryDuration,
+        aiCallDuration: performanceMarkers.aiCallEnd - performanceMarkers.aiCallStart,
+        hasDocument: !!(documentData && documentData.tokens > 0),
+        hasMemory: memoryContext.hasMemory,
+        hasVault: !!(vaultData && vaultData.tokens > 0)
+      };
+      
+      // Bible targets: Simple <2s, Memory <3s, Document <5s, Vault <4s
+      let targetDuration = 2000; // Default: simple query
+      let targetType = 'simple';
+      if (performanceMetrics.hasDocument) {
+        targetDuration = 5000;
+        targetType = 'document';
+      } else if (performanceMetrics.hasVault) {
+        targetDuration = 4000;
+        targetType = 'vault';
+      } else if (performanceMetrics.hasMemory) {
+        targetDuration = 3000;
+        targetType = 'memory';
+      }
+      
+      const targetMet = processingTime <= targetDuration;
+      const targetStatus = targetMet ? '✅' : '⚠️';
+      
+      this.log(`[PERFORMANCE] ${targetStatus} Total: ${processingTime}ms (target: ${targetType} <${targetDuration}ms)`);
+      this.log(`[PERFORMANCE] Breakdown: Memory ${memoryDuration}ms, AI ${performanceMetrics.aiCallDuration}ms`);
+      
+      if (!targetMet) {
+        this.log(`[PERFORMANCE] ⚠️ EXCEEDED TARGET by ${processingTime - targetDuration}ms`);
+      }
 
       // STEP 11: Return complete response
       return {
@@ -1119,7 +1170,16 @@ export class Orchestrator {
           // Mode enforcement
           modeEnforced: mode,
 
-          // Performance tracking
+          // Performance tracking (BIBLE REQUIREMENT - Section I)
+          performance: {
+            totalDuration: processingTime,
+            memoryDuration: performanceMetrics.memoryDuration,
+            aiCallDuration: performanceMetrics.aiCallDuration,
+            targetType: targetType,
+            targetDuration: targetDuration,
+            targetMet: targetMet,
+            exceedBy: targetMet ? 0 : processingTime - targetDuration
+          },
           processingTime: processingTime,
           semanticAnalysisTime: analysis.processingTime || 0,
 
