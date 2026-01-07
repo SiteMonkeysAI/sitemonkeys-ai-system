@@ -106,12 +106,71 @@ export const MODES = {
 
 // Mode validation function
 export function validateModeCompliance(response, mode, _analysis) {
-  // Minimal implementation - validates that response adheres to mode requirements
+  const issues = [];
+  const adjustments = [];
+  
+  if (!mode || !MODES[mode]) {
+    return {
+      compliant: false,
+      mode: mode || "unknown",
+      issues: ["Invalid mode specified"],
+      adjustments: ["Use valid mode: truth_general, business_validation, or site_monkeys"],
+    };
+  }
+
+  const modeConfig = MODES[mode];
+  const responseLower = response.toLowerCase();
+
+  // Business Validation Mode - requires survival impact, cash flow, and risks
+  if (mode === 'business_validation') {
+    const hasSurvivalImpact = /survival|runway|burn rate|cash position/i.test(response);
+    const hasCashFlow = /cash flow|cash|revenue|cost|expense|budget/i.test(response);
+    const hasRisks = /risk|threat|danger|downside|problem|challenge/i.test(response);
+
+    if (!hasSurvivalImpact) {
+      issues.push("Missing survival impact analysis");
+      adjustments.push("Add survival/runway impact assessment");
+    }
+    if (!hasCashFlow) {
+      issues.push("Missing cash flow analysis");
+      adjustments.push("Add cash flow or financial impact analysis");
+    }
+    if (!hasRisks) {
+      issues.push("Missing risk assessment");
+      adjustments.push("Add top 3 risks analysis");
+    }
+  }
+
+  // Truth Mode - requires confidence level
+  if (mode === 'truth_general') {
+    const hasConfidence = /confidence|certain|uncertain|probability|likely/i.test(response);
+    
+    if (!hasConfidence) {
+      issues.push("Missing confidence assessment");
+      adjustments.push("Add confidence level or uncertainty acknowledgment");
+    }
+  }
+
+  // Site Monkeys Mode - inherits business validation requirements
+  if (mode === 'site_monkeys') {
+    const hasSurvivalImpact = /survival|runway|burn rate|cash position/i.test(response);
+    const hasRisks = /risk|threat|danger|downside|problem|challenge/i.test(response);
+
+    if (!hasSurvivalImpact) {
+      issues.push("Missing survival impact analysis");
+      adjustments.push("Add survival/runway impact assessment");
+    }
+    if (!hasRisks) {
+      issues.push("Missing risk assessment");
+      adjustments.push("Add top 3 risks analysis");
+    }
+  }
+
   return {
-    compliant: true,
-    mode: mode || "general",
-    issues: [],
-    adjustments: [],
+    compliant: issues.length === 0,
+    mode: mode,
+    issues,
+    adjustments,
   };
 }
 

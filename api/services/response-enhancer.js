@@ -116,11 +116,20 @@ export function addBlindSpots(response, context = {}) {
 /**
  * Removes engagement-prolonging phrases from response
  *
+ * Bible-specified banned phrases that must be stripped or rewritten
+ *
  * @param {string} response - The AI response to enhance
  * @returns {string} Enhanced response
  */
 export function removeEngagementBait(response) {
+  // Bible-specified banned phrases (MASTER_SPECIFICATION_01.docx lines 543-636)
   const baitPatterns = [
+    /would you like me to elaborate[^.!?\n]*/gi,
+    /what would you like to explore[^.!?\n]*/gi,
+    /which aspect interests you[^.!?\n]*/gi,
+    /should I explain more about[^.!?\n]*/gi,
+    /would you like to know[^.!?\n]*/gi,
+    /what else can I help[^.!?\n]*/gi,
     /let me know if[^.!?\n]*/gi,
     /feel free to[^.!?\n]*/gi,
     /don't hesitate to[^.!?\n]*/gi,
@@ -146,6 +155,53 @@ export function removeEngagementBait(response) {
   cleaned = cleaned.trim();
 
   return cleaned;
+}
+
+/**
+ * Adds completion signal to end response decisively
+ *
+ * Bible-specified completion phrases (MASTER_SPECIFICATION_01.docx lines 543-636)
+ *
+ * @param {string} response - The AI response to enhance
+ * @param {object} context - Context about the request (optional)
+ * @returns {string} Enhanced response with completion signal
+ */
+export function addCompletionSignal(response, context = {}) {
+  // Bible-specified completion signals
+  const completionPhrases = [
+    "This should give you what you need to move forward.",
+    "That covers the complete approach.",
+    "You now have the framework to decide.",
+    "This addresses your question fully.",
+    "Done.",
+  ];
+
+  // Check if response already has a completion signal
+  const hasCompletionSignal = completionPhrases.some(phrase => 
+    response.toLowerCase().includes(phrase.toLowerCase())
+  );
+
+  if (hasCompletionSignal) {
+    return response;
+  }
+
+  // Select appropriate completion phrase based on context
+  let completionPhrase;
+  
+  if (context.mode === 'business_validation') {
+    completionPhrase = "You now have the framework to decide.";
+  } else if (context.hasFramework || /framework|approach|method|process/.test(response)) {
+    completionPhrase = "That covers the complete approach.";
+  } else if (context.isDecision || /should|choose|decide|option/.test(response)) {
+    completionPhrase = "You now have the framework to decide.";
+  } else if (response.length < 200) {
+    completionPhrase = "Done.";
+  } else {
+    completionPhrase = "This addresses your question fully.";
+  }
+
+  // Add completion signal at the end
+  return response.trim() + '\n\n' + completionPhrase;
 }
 
 /**
@@ -217,6 +273,10 @@ export function enhanceToPassGates(response, gateResults, context = {}) {
     enhanced = improveExamples(enhanced);
     enhancements.push('Improved example quality');
   }
+
+  // ALWAYS add completion signal to end response decisively
+  enhanced = addCompletionSignal(enhanced, context);
+  enhancements.push('Added completion signal');
 
   // Re-evaluate after enhancement
   const newResults = enforceDoctrineGates(enhanced, context);

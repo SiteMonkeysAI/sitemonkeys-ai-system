@@ -18,6 +18,7 @@ import {
   removeEngagementBait,
   addBlindSpots,
   addUncertaintyStructure,
+  addCompletionSignal,
 } from "../services/response-enhancer.js";
 
 // Helper function to generate secure IDs with timestamp
@@ -491,13 +492,21 @@ export async function processWithEliAndRoxy({
       }
     }
 
-    // STEP 6: FINAL QUALITY PASS - Remove engagement bait
+    // STEP 6: FINAL QUALITY PASS - Remove engagement bait and add completion signal
     console.log("🎯 Applying final quality pass - removing engagement bait");
     const cleanedResponse = removeEngagementBait(response.response);
     if (cleanedResponse !== response.response) {
       console.log("✅ Engagement bait removed from response");
       response.response = cleanedResponse;
       overridePatterns.engagement_bait_removed = (overridePatterns.engagement_bait_removed || 0) + 1;
+    }
+
+    // Add completion signal to end response decisively
+    console.log("🎯 Adding completion signal");
+    const withCompletionSignal = addCompletionSignal(response.response, { mode });
+    if (withCompletionSignal !== response.response) {
+      console.log("✅ Completion signal added");
+      response.response = withCompletionSignal;
     }
 
     // TIER 2: RESPONSE OPTIMIZATION AND ENHANCEMENT
