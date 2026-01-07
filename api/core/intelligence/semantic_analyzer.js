@@ -67,7 +67,7 @@ export class SemanticAnalyzer {
         business:
           "revenue growth, market strategy, customer acquisition, business model, profitability, scaling operations, entrepreneurship, company management",
         technical:
-          "software development, coding, system architecture, API integration, debugging, technical implementation, programming, computer systems, technology tools",
+          "software development, coding, system architecture, API integration, debugging, technical implementation, programming, computer systems, technology tools, database design, server configuration, authentication tokens, session management, deployment pipeline, error handling, code repository, version control, cloud infrastructure, containerization, microservices, backend development, frontend frameworks, algorithm optimization, data structures, software engineering, DevOps practices, continuous integration, testing frameworks, code review, pull requests, merge conflicts, git workflow, technical documentation, API endpoints, REST services, GraphQL queries, authentication systems, authorization protocols, security patches, performance optimization, scalability issues, technical debt, code refactoring, software architecture patterns",
         personal:
           "relationships, family matters, personal growth, social connections, life decisions, personal experiences, friendships, social life",
         health:
