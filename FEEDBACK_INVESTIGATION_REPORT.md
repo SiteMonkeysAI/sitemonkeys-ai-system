@@ -2,6 +2,24 @@
 
 This document provides complete evidence and code traces for all feedback items from comment #3721035059.
 
+## 🔍 Production Verification Required
+
+**Note from comment #3721177722:** This report provides code-level evidence. For **production verification** with actual Railway logs, see:
+
+- **📖 VERIFICATION_GUIDE.md** - Step-by-step manual testing instructions
+- **🤖 verify-production.js** - Automated test script to run against deployed system
+
+Run after deployment:
+```bash
+node verify-production.js https://your-railway-app.railway.app
+```
+
+This will test:
+1. ✅ Semantic routing with actual confidence scores
+2. ✅ Performance monitoring with real millisecond timings
+3. ✅ Document extraction with actual coverage percentages
+4. ✅ Claude confirmation flow triggering
+
 ---
 
 ## ✅ ITEM 1: Frontend Confirmation Flow - COMPLETE
