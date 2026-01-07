@@ -1719,8 +1719,8 @@ export class Orchestrator {
           tokens: extractionResult.extractedTokens,
           filename: filename,
           processed: true,
-          truncated: true,
-          extracted: true,
+          truncated: extractionResult.extracted,
+          extracted: extractionResult.extracted,
           source: source,
           extractionMetadata: {
             originalTokens: extractionResult.originalTokens,
@@ -1744,6 +1744,7 @@ export class Orchestrator {
         filename: filename,
         processed: true,
         truncated: false,
+        extracted: false,
         source: source,
       };
     } catch (error) {
