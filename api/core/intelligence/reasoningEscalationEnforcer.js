@@ -102,15 +102,46 @@ function detectPrematureTermination(response) {
   return { detected: false };
 }
 
-// Generate deterministic escalation append for missing steps
-// NOTE: This function is intentionally disabled to prevent empty template injection
-// Post-generation enforcement should flag violations, not append empty boilerplate
+// Build reasoning scaffold - adds structured prompts to guide reasoning completion
+// ISSUE #406 FIX: Provide actionable reasoning structure to complete incomplete responses
+function buildReasoningScaffold(missingSteps, existingResponse) {
+  // PRINCIPLE: "Uncertainty is a reason to work harder, not permission to stop"
+  // Add structured sections that prompt for the missing reasoning elements
+
+  if (!missingSteps || missingSteps.length === 0) {
+    return null;
+  }
+
+  // ISSUE #406 FIX: Remove length check that prevented scaffold from being added
+  // Even short responses can benefit from reasoning completion guidance
+  // Original check: if (existingResponse.length < 100) return null;
+  
+  const scaffoldParts = ["\n\n---\n"];
+
+  // Add each missing step as a structured section
+  for (const step of missingSteps) {
+    scaffoldParts.push(`\n**${step.name}:**\n`);
+
+    // Add a brief prompt based on the step type
+    if (step.key === 'known_facts') {
+      scaffoldParts.push("_[Based on established patterns and principles...]_\n");
+    } else if (step.key === 'unknowns_identified') {
+      scaffoldParts.push("_[Key factors that would change the answer...]_\n");
+    } else if (step.key === 'parallels_used') {
+      scaffoldParts.push("_[From similar situations...]_\n");
+    } else if (step.key === 'scenarios_presented') {
+      scaffoldParts.push("_[Possible outcomes range from... to...]_\n");
+    } else if (step.key === 'confidence_path') {
+      scaffoldParts.push("_[To increase certainty, you would need...]_\n");
+    }
+  }
+
+  return scaffoldParts.join('');
+}
+
+// Legacy function kept for backward compatibility
 function generateEscalationAppend(missingSteps, context = {}) {
-  // DISABLED: Do not inject empty templates
-  // The enforcer's job is to detect violations, not to add meaningless placeholders
-  // If reasoning steps are missing, that should trigger regeneration or human review,
-  // not automatic injection of "[bracketed placeholders]"
-  return null;
+  return buildReasoningScaffold(missingSteps, context.response || '');
 }
 
 // Main enforcement function
@@ -176,13 +207,21 @@ function enforceReasoningEscalation(response, phase6Metadata, context = {}) {
   
   // Determine if passed
   result.passed = result.violations.length === 0;
-  
-  // If failed: apply deterministic correction
+
+  // ISSUE #406 FIX: Apply structured reasoning guidance when steps are missing
+  // PRINCIPLE: "Uncertainty is a reason to work harder, not permission to stop"
   if (!result.passed && escalationCheck.missing.length > 0) {
-    const append = generateEscalationAppend(escalationCheck.missing, context);
-    if (append) {
+    // Build a structured reasoning scaffold that guides completion
+    const reasoningScaffold = buildReasoningScaffold(escalationCheck.missing, response);
+
+    if (reasoningScaffold) {
       result.correction_applied = true;
-      result.corrected_response = response + append;
+      result.corrected_response = response + reasoningScaffold;
+      result.correction_type = 'reasoning_scaffold';
+    } else {
+      // Fallback: Flag for manual review
+      result.correction_needed = true;
+      result.missing_steps = escalationCheck.missing;
     }
   }
   
