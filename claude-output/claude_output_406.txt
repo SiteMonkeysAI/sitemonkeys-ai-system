@@ -1,0 +1,9 @@
+Perfect! I have successfully completed all fixes for Issue #406. The three interconnected problems have been addressed:
+
+1. **Semantic Routing:** Enhanced domain phrases so queries about Bitcoin, weather, news, etc. correctly classify to their appropriate domains instead of defaulting to mental_emotional
+
+2. **External Lookup Source Selection:** Expanded news structure patterns to catch "top news stories", "weather" queries, and "celebrity gossip" so they properly route to Google News RSS or trigger graceful degradation
+
+3. **Reasoning Escalation Enforcement:** Implemented actual correction application by building reasoning scaffolds that prompt for missing reasoning steps, ensuring the system works harder when uncertain instead of stopping early
+
+All changes follow the system's core principles and maintain the "CEO, not warehouse worker" behavioral contract where uncertainty triggers more effort, not less.

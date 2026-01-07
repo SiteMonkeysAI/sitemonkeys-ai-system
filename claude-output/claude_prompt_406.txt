@@ -1,0 +1,271 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #406: [claude-fix] Comprehensive System Alignment: Semantic Intelligence, Source Selection, and Reasoning Completion
+
+Issue Description:
+## The Problem in One Sentence
+
+The system has made excellent progress with Issue #402 (political guardrails now work correctly), but testing reveals three interconnected areas where the system is still falling back to "warehouse worker" defaults instead of applying "CEO" principle-based reasoning.
+
+---
+
+## CRITICAL CONTEXT: Read Before Implementing
+
+This system is built on a **truth-first architecture** with a specific behavioral contract:
+
+```
+OLD (Warehouse Worker): "I can't be certain, therefore I should stop."
+NEW (CEO): "I can't be certain, therefore I must reason carefully and transparently."
+```
+
+**The Core Invariant:**
+> Uncertainty must increase effort, not reduce it.
+
+Every issue identified below violates this invariant by defaulting to a fallback when the system should be working harder to classify, route, or reason correctly.
+
+---
+
+## PROBLEM AREA 1: Semantic Routing Defaulting Instead of Reasoning
+
+### What's Happening
+
+The semantic router is classifying almost everything as `mental_emotional` with `Confidence: 0.200` (the minimum), regardless of actual query content:
+
+```
+"What's the current Bitcoin price?" → mental_emotional (should be: financial)
+"What's Apple's stock price today?" → tools_tech_workflow (should be: financial)  
+"What's the weather in New York?" → mental_emotional (should be: general/location)
+"What are today's top news stories?" → mental_emotional (should be: news/current_events)
+"What's the latest celebrity gossip?" → mental_emotional (should be: entertainment)
+```
+
+### Why This Matters
+
+Memory is categorized based on this routing. Wrong categorization = degraded retrieval over time. The system stores Bitcoin price discussions under "emotional" topics, meaning future financial queries won't find relevant context.
+
+### The Doctrine Being Violated
+
+**Genuine Intelligence Doctrine:**
+> "Problem Understanding Before Answering — Before answering, implicitly establish: What is being asked (surface question), What matters (decision stake)"
+
+**Memory & Intelligence Doctrine:**
+> "Categorization → Intelligent Storage → Contextual Retrieval"
+
+The router isn't understanding the problem before categorizing. It's pattern-matching to a default.
+
+### What Correct Behavior Looks Like
+
+| Query | Expected Category | Expected Confidence |
+|-------|------------------|-------------------|
+| "What's Bitcoin price?" | financial | 0.7+ |
+| "What's the weather?" | general OR location | 0.6+ |
+| "Top news stories" | news OR current_events | 0.7+ |
+| "Celebrity gossip" | entertainment | 0.6+ |
+| "How am I feeling about this?" | mental_emotional | 0.7+ |
+
+`mental_emotional` should be reserved for queries with actual emotional content, not used as a catch-all default.
+
+---
+
+## PROBLEM AREA 2: External Lookup Source Selection Gaps
+
+### What's Happening
+
+The external lookup engine correctly triggers for VOLATILE queries but then returns "No reliable parseable source available" for queries that SHOULD have sources:
+
+```
+[externalLookupEngine] No reliable parseable source available for this query type
+```
+
+**Queries that failed to find sources:**
+- "What's the weather in New York?" — No source found
+- "What are today's top news stories?" — No source found  
+- "What's the latest celebrity gossip?" — No source found
+
+**But these worked correctly:**
+- "What's the current Bitcoin price?" → CoinGecko ✅
+- "What's Apple's stock price today?" → Google News RSS ✅
+- "What's the latest news about Keir Starmer?" → Google News RSS ✅
+
+### The Contradiction
+
+"What are today's top news stories?" should ABSOLUTELY match the news pattern and trigger Google News RSS. The log shows `matchesNewsPattern: true` but then no source is selected:
+
+```
+matchesNewsPattern: true,
+...
+[externalLookupEngine] No reliable parseable source available for this query type
+```
+
+Something in the source selection logic is rejecting valid matches.
+
+### The Doctrine Being Violated
+
+**Injection Doctrine:**
+> "MUST trigger when: truth_type is VOLATILE, Query contains freshness markers ('current', 'today', 'latest')"
+
+**Opportunity Doctrine:**
+> "If external fails → do not stop. Move to bounded reasoning, clearly labeled."
+
+The system IS moving to bounded reasoning (good), but it shouldn't be failing to find sources for basic news queries when Google News RSS is available and working for other queries.
+
+### What Correct Behavior Looks Like
+
+| Query | Should Use Source |
+|-------|------------------|
+| "Top news stories" | Google News RSS |
+| "Weather in New York" | Weather API (if available) OR graceful disclosure |
+| "Celebrity gossip" | Google News RSS (entertainment news) |
+| "Bitcoin price" | CoinGecko ✅ (already working) |
+
+---
+
+## PROBLEM AREA 3: Reasoning Escalation Not Completing
+
+### What's Happening
+
+The Reasoning Escalation Enforcer is detecting incomplete reasoning but not correcting it:
+
+```
+[REASONING-ESCALATION] {
+    enforced: true,
+    passed: false,
+    steps: '2/5',
+    violations: 2,
+    correction: false
+}
+```
+
+The system is only completing 1-2 of 5 reasoning steps before stopping.
+
+### The Doctrine Being Violated
+
+**Opportunity Doctrine — The Effort Ladder:**
+1. Fast Sanity Classification ✅ (working)
+2. "Can it be verified?" ✅ (working)  
+3. "Is there a truthful reasoning path?" ⚠️ (partially working)
+4. Bounded Reasoning Structure ⚠️ (not always completing)
+5. Clean Stop ❌ (stopping too early)
+
+**The Effort Escalation Invariant:**
+> "IF bounded reasoning is required AND truthful reasoning paths exist THEN system MUST output a reasoning-structured answer. It CANNOT stop at disclaimers."
+
+### What Correct Behavior Looks Like
+
+When `passed: false` and `violations > 0`, the system should either:
+1. Apply correction to complete the reasoning steps, OR
+2. If correction isn't possible, log WHY and what would be needed
+
+Currently: `correction: false` with no explanation of why correction wasn't applied.
+
+---
+
+## THE INTERCONNECTED ROOT CAUSE
+
+All three problems share a common pattern:
+
+**The system defaults to fallbacks when uncertain, instead of working harder.**
+
+- Semantic router: "I'm not sure → default to mental_emotional"
+- Source selection: "I'm not sure if this matches → return no source"
+- Reasoning escalation: "I detected violations → but I won't correct them"
+
+This is the opposite of the core behavioral contract.
+
+---
+
+## IMPLEMENTATION REQUIREMENTS
+
+### What Claude Code Must Do
+
+1. **INVESTIGATE** — Search the codebase to find where each of these behaviors originates. Don't assume — verify.
+
+2. **TRACE THE LOGIC** — For each problem area:
+   - What is the current decision logic?
+   - Where does it choose to default instead of reason?
+   - What would "working harder" look like?
+
+3. **FIX COMPREHENSIVELY** — Address all three areas in this PR. No "future work" items. No "phase 2" promises.
+
+4. **VERIFY WITH TEST CASES** — After fixing, these should pass:
+
+```javascript
+// Semantic Routing
+"What's Bitcoin price?" → category: financial, confidence > 0.5
+"Weather in NYC" → category: general OR location, confidence > 0.5
+"Top news" → category: news, confidence > 0.5
+
+// Source Selection  
+"Top news stories" → source: Google News RSS (not "no source")
+"Weather in NYC" → source: weather API OR explicit disclosure of no weather source
+
+// Reasoning Escalation
+When violations detected AND correction possible → correction: true
+```
+
+5. **DO NOT LEAVE INCOMPLETE** — The pattern of fixing one thing and saying "other things need to happen" stops here. If you identify additional issues during investigation, fix them in this PR or explicitly document why they cannot be fixed here.
+
+---
+
+## SUCCESS CRITERIA
+
+After this fix:
+
+1. **Semantic routing** produces meaningful categories with confidence > 0.5 for clear queries (financial, news, weather, etc.)
+
+2. **Source selection** uses Google News RSS for any news-pattern query, not just political queries
+
+3. **Reasoning escalation** either completes all 5 steps OR applies correction when violations are detected
+
+4. **No new regressions** — Political guardrails (Issue #402) continue working correctly
+
+---
+
+## EFFICIENCY MANDATE
+
+This system has strict token efficiency requirements. The fix should:
+- Not add unnecessary logging verbosity
+- Not add new API calls unless absolutely required
+- Not increase response latency significantly
+- Prefer deterministic improvements over AI-based classification where possible
+
+---
+
+## REFERENCE: The Doctrines That Apply
+
+**Opportunity Doctrine:** "Uncertainty is a reason to work harder, not permission to stop."
+
+**Genuine Intelligence Doctrine:** "Not rule-following. Real reasoning under constraints."
+
+**Injection Doctrine:** "MUST trigger when truth_type is VOLATILE"
+
+**Memory & Intelligence Doctrine:** "Categorization → Intelligent Storage → Contextual Retrieval"
+
+**Token Efficiency Doctrine:** "Every token must earn its existence."
+
+---
+
+## FINAL NOTE
+
+The system made excellent progress with Issue #402. The political guardrails transformation worked. This issue is about extending that same "CEO, not warehouse worker" thinking to semantic routing, source selection, and reasoning completion.
+
+The goal: A system that works harder when uncertain, not one that defaults to fallbacks.
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

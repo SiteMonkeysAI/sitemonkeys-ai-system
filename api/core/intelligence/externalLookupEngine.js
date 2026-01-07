@@ -171,6 +171,7 @@ const HIGH_STAKES_NEWS_MARKERS = /attack|bombing|invasion|coup|killed|missile|wa
 
 // News intent structural patterns - detect news queries by STRUCTURE, not specific names
 // PRINCIPLE: News intent = question structure + proper nouns, NOT hardcoded name lists
+// ISSUE #406 FIX: Added patterns for "top news", "news stories", "headlines"
 const NEWS_STRUCTURE_PATTERNS = [
   // "What's the situation with X" patterns
   /\bwhat'?s\s+(the\s+)?(situation|happening|going\s+on|news|latest|update)\s+(with|about|regarding|on|in)\b/i,
@@ -190,7 +191,20 @@ const NEWS_STRUCTURE_PATTERNS = [
 
   // Direct "what happened" patterns
   /\bwhat\s+happened\s+(with|to|in)\b/i,
-  /\bwhat'?s\s+going\s+on\s+(with|in)\b/i
+  /\bwhat'?s\s+going\s+on\s+(with|in)\b/i,
+
+  // ISSUE #406 FIX: "What are..." news patterns
+  /\bwhat\s+(are|is)\s+(the\s+)?(top|latest|today'?s|recent)\s+(news|stories|headlines|updates)\b/i,
+
+  // ISSUE #406 FIX: General news request patterns
+  /\b(top|latest|recent|breaking)\s+(news|stories|headlines|updates)\b/i,
+
+  // ISSUE #406 FIX: Weather queries
+  /\bwhat'?s\s+the\s+weather\b/i,
+  /\bweather\s+(in|at|for)\b/i,
+
+  // ISSUE #406 FIX: Celebrity/entertainment news
+  /\b(latest|recent)\s+(celebrity|entertainment)\s+(news|gossip|stories)\b/i
 ];
 
 // Geopolitical context markers (not entity names, but CONTEXT indicators)
@@ -488,6 +502,13 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return API_SOURCES.MEDICAL;
   }
 
+  // ISSUE #406 FIX: Weather queries - no API source available, return empty for graceful degradation
+  if (lowerQuery.match(/weather|temperature|forecast|rain|snow|storm/i)) {
+    // No weather API configured - return empty to trigger graceful degradation with disclosure
+    console.log('[externalLookupEngine] Weather query detected - no weather API configured');
+    return [];
+  }
+
   // News/current events queries - PRINCIPLE-BASED DETECTION
   // Use hasNewsIntent() which detects structure + proper nouns, not hardcoded names
   if (hasNewsIntent(query)) {
@@ -496,6 +517,11 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
 
   // Additional news patterns (attacks, breaking events, etc.)
   if (lowerQuery.match(/attack|breaking|killed|died|war|invasion|military|bombing|coup|strike/i)) {
+    return API_SOURCES.NEWS;
+  }
+
+  // ISSUE #406 FIX: Celebrity/entertainment news
+  if (lowerQuery.match(/celebrity|entertainment|gossip|hollywood/i) && lowerQuery.match(/news|latest|recent|stories/i)) {
     return API_SOURCES.NEWS;
   }
 
