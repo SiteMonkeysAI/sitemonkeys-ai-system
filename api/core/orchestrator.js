@@ -2634,11 +2634,18 @@ export class Orchestrator {
 
       // ========== USER CONFIRMATION FOR CLAUDE (BIBLE REQUIREMENT - Section D) ==========
       // "User confirmation required before Claude (except safety-critical)"
-      // If escalating to Claude for non-safety-critical reasons, notify user
-      if (useClaude && !isSafetyCritical && !context.sources?.hasVault) {
-        // Return a special response asking for confirmation
-        // Frontend should handle this and re-submit with confirmation flag
-        const confirmationNeeded = !context.claudeConfirmed;
+      // CRITICAL FIX: Respect user's explicit choice when confirmation is provided
+      
+      // If user explicitly said NO to Claude (claudeConfirmed: false), force GPT-4
+      if (context.claudeConfirmed === false) {
+        this.log(`[AI ROUTING] User declined Claude, forcing GPT-4`);
+        useClaude = false;
+        routingReason = ['user_declined_claude'];
+      }
+      // If escalating to Claude for non-safety-critical reasons, notify user ONCE
+      else if (useClaude && !isSafetyCritical && !context.sources?.hasVault) {
+        // Return a special response asking for confirmation ONLY if not yet confirmed
+        const confirmationNeeded = context.claudeConfirmed !== true;
 
         if (confirmationNeeded) {
           this.log(`[AI ROUTING] Claude escalation requires user confirmation (reasons: ${routingReason.join(', ')})`);

@@ -62,18 +62,19 @@ export class SemanticAnalyzer {
       };
 
       // Domain representative phrases
-      // ISSUE #406 FIX: Enhanced domain phrases to better distinguish between categories
+      // ROOT CAUSE FIX: Enhanced technical domain with API/authentication terminology
+      // Separates "API token" from "cryptocurrency token" through contextual clustering
       const domainPhrases = {
         business:
           "revenue growth, market strategy, customer acquisition, business model, profitability, scaling operations, entrepreneurship, company management",
         technical:
-          "software development, coding, system architecture, API integration, debugging, technical implementation, programming, computer systems, technology tools",
+          "software development, coding, system architecture, API integration, debugging, technical implementation, programming, computer systems, technology tools, API tokens, session tokens, authentication tokens, JWT tokens, OAuth tokens, refresh tokens, access tokens, API rate limiting, rate limits, API quotas, token expiration, session management, API keys, authentication headers, bearer tokens, token-based authentication, API endpoints, REST API, GraphQL API, API gateway, middleware, backend services, database queries, connection pooling, cache management, request throttling, concurrent requests, API versioning, SDK integration, webhook handling, payload validation, request signing, token refresh flow, session persistence, distributed systems, microservices architecture",
         personal:
           "relationships, family matters, personal growth, social connections, life decisions, personal experiences, friendships, social life",
         health:
           "medical concerns, wellness, fitness, symptoms, healthcare, mental health, physical wellbeing, exercise, nutrition, doctor visits",
         financial:
-          "money management, investments, budgeting, financial planning, savings, debt, income, cryptocurrency prices, stock market, Bitcoin, Ethereum, financial assets",
+          "money management, investments, budgeting, financial planning, savings, debt, income, cryptocurrency prices, stock market, Bitcoin price, Ethereum price, crypto tokens, payment tokens, financial tokens, utility tokens, security tokens, token sale, ICO, token economics, tokenomics, DeFi tokens, NFT tokens, blockchain tokens, digital assets, crypto portfolio, token trading, token staking",
         creative:
           "artistic projects, creative writing, design work, creative problem solving, artistic expression, music, art, design",
         general:
