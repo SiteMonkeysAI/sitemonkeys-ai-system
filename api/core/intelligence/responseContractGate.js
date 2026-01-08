@@ -163,7 +163,16 @@ function detectFormatConstraint(query) {
   return null;
 }
 
-function enforceResponseContract(response, query, phase4Metadata = {}, documentMetadata = {}) {
+function enforceResponseContract(response, query, phase4Metadata = {}, documentMetadata = {}, queryClassification = null) {
+  // ISSUE #431 FIX: Respect intelligent query classification
+  // Simple queries should not have scaffolding stripped - they shouldn't have scaffolding added in the first place
+  // However, we still enforce TRUTH checks (false claims, theater phrases)
+  const respectClassification = queryClassification?.requiresScaffolding === false;
+
+  if (respectClassification) {
+    console.log(`[RESPONSE-CONTRACT] Respecting query classification: ${queryClassification.classification} - minimal hygiene only`);
+  }
+
   const constraint = detectFormatConstraint(query);
   const userRequestedGuidance = GUIDANCE_REQUEST_PATTERNS.some(p => p.test(query));
 
@@ -174,7 +183,8 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
     stripped_sections_count: 0,
     stripped_sections: [],
     original_length: response.length,
-    user_requested_guidance: userRequestedGuidance
+    user_requested_guidance: userRequestedGuidance,
+    classification_respected: respectClassification
   };
 
   // Issue #380 Fix 6, Issue #412 Fix: Validate response relevance with document metadata

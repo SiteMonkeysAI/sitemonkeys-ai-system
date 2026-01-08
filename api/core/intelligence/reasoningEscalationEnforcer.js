@@ -146,6 +146,23 @@ function generateEscalationAppend(missingSteps, context = {}) {
 
 // Main enforcement function
 function enforceReasoningEscalation(response, phase6Metadata, context = {}) {
+  // ISSUE #431 FIX: Respect intelligent query classification
+  // If semantic classifier determined scaffolding is not needed, pass through
+  if (context?.queryClassification?.requiresScaffolding === false) {
+    console.log(`[REASONING-ESCALATION] Respecting query classification: ${context.queryClassification.classification} - skipping scaffolding`);
+    return {
+      enforced: false,
+      bounded_reasoning_required: false,
+      escalation_check: null,
+      termination_check: null,
+      passed: true,
+      violations: [],
+      correction_applied: false,
+      corrected_response: null,
+      skipped_for_classification: true
+    };
+  }
+
   const result = {
     enforced: false,
     bounded_reasoning_required: phase6Metadata?.required || false,
@@ -156,7 +173,7 @@ function enforceReasoningEscalation(response, phase6Metadata, context = {}) {
     correction_applied: false,
     corrected_response: null
   };
-  
+
   // Only enforce when bounded reasoning is required
   if (!phase6Metadata?.required) {
     return result;

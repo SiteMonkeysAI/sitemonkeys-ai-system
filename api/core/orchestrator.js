@@ -999,6 +999,7 @@ export class Orchestrator {
           {
             queryText: message, // Pass the original user query for speculative detection
             isInference: phase4Metadata.source_class !== 'vault' && phase4Metadata.source_class !== 'external',
+            queryClassification: context.queryClassification, // ISSUE #431 FIX: Pass query classification
             // Add other context as available
           }
         );
@@ -1038,7 +1039,7 @@ export class Orchestrator {
         reasoningEscalationResult = enforceReasoningEscalation(
           personalityResponse.response,
           phase6BoundedReasoning,
-          { message, phase4Metadata, mode }
+          { message, phase4Metadata, mode, queryClassification: context.queryClassification } // ISSUE #431 FIX: Pass query classification
         );
 
         // If correction was applied, use the corrected response
@@ -1073,7 +1074,8 @@ export class Orchestrator {
           personalityResponse.response,
           message,
           phase4Metadata,
-          documentData || {}
+          documentData || {},
+          context.queryClassification // ISSUE #431 FIX: Pass query classification
         );
         personalityResponse.response = contractResult.response;
         response_contract = contractResult.contract;
@@ -1309,6 +1311,9 @@ export class Orchestrator {
             emotionalWeight: analysis.emotionalWeight,
             cacheHit: analysis.cacheHit,
           },
+
+          // ISSUE #431 FIX: Query Classification (for verification and debugging)
+          queryClassification: context.queryClassification || null,
 
           // Validation
           validation: {

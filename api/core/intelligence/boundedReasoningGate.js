@@ -511,10 +511,37 @@ const BOUNDED_REASONING_STRUCTURE = {
  *
  * @param {string} response - The AI response
  * @param {object} phase4Metadata - Phase 4 metadata
- * @param {object} context - Context including queryText
+ * @param {object} context - Context including queryText and queryClassification
  * @param {function} semanticSimilarityFn - Optional similarity function
  */
 function enforceBoundedReasoning(response, phase4Metadata, context = {}, semanticSimilarityFn = null) {
+  // ISSUE #431 FIX: Respect intelligent query classification
+  // If semantic classifier determined scaffolding is not needed, pass through
+  if (context?.queryClassification?.requiresScaffolding === false) {
+    console.log(`[BOUNDED-REASONING] Respecting query classification: ${context.queryClassification.classification} - skipping scaffolding`);
+    return {
+      bounded_reasoning_required: false,
+      disclosure_added: false,
+      items_filtered: 0,
+      items_passed: 0,
+      stopped_reason: 'Query classification: scaffolding not required',
+      gates_applied: {
+        truth: { checked: 0, passed: 0, failed: 0 },
+        material_impact: { checked: 0, passed: 0, failed: 0 },
+        proportionality: { checked: 0, passed: 0, failed: 0 }
+      },
+      creativity_check: {
+        allowed_used: [],
+        forbidden_blocked: []
+      },
+      enforced_response: response,
+      enforcement_passed: true,
+      violations: [],
+      principle: 'The system may reason beyond available facts, but it may never pretend that reasoning is fact.',
+      skipped_for_classification: true
+    };
+  }
+
   const enforcement = {
     bounded_reasoning_required: false,
     disclosure_added: false,
