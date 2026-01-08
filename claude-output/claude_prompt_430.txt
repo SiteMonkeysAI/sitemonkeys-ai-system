@@ -1,0 +1,269 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #430: [claude-fix] Issue #430: Response Output Contamination - Unified Fix Requiring GENUINE Intelligence
+
+Issue Description:
+Priority: CRITICAL
+Summary
+The response assembly layer is injecting content that violates core doctrine principles. This issue requires a unified fix that uses GENUINE SEMANTIC INTELLIGENCE - not keyword lists, not regex patterns, not hardcoded rules.
+
+⛔ EXPLICITLY FORBIDDEN APPROACHES
+Before reading anything else, understand what is NOT acceptable:
+FORBIDDEN: Keyword Lists
+javascript// ❌ THIS IS FORBIDDEN - DO NOT DO THIS
+const newsKeywords = ["Macron", "Biden", "Trump", "election", "politics"];
+if (newsKeywords.some(k => query.includes(k))) { /* route to news */ }
+FORBIDDEN: Regex Pattern Matching
+javascript// ❌ THIS IS FORBIDDEN - DO NOT DO THIS  
+const SIMPLE_QUERY_PATTERNS = [
+  /^(hi|hey|hello|good morning)/i,
+  /^what is \d+\s*\+\s*\d+/i
+];
+if (SIMPLE_QUERY_PATTERNS.some(p => p.test(query))) { /* skip scaffolding */ }
+FORBIDDEN: Hardcoded Phrase Lists
+javascript// ❌ THIS IS FORBIDDEN - DO NOT DO THIS
+const generalDomain = "news, Macron, Biden, Trump, Putin, elections, world leaders...";
+WHY THESE ARE FORBIDDEN
+The Bible is explicit:
+
+"NOT just keyword matching - NOT just rule-based selection - MUST understand context and meaning"
+
+
+"This isn't supposed to be a system that is solely based on tons of rules that's gonna break natural and real intelligence"
+
+
+"A CEO who understands business principles - Can reason through any novel situation - Doesn't need a rule for every possible scenario - Gets smarter with experience, not just more rule-laden"
+
+
+"You've been encoding wisdom as rules instead of building reasoning intelligence"
+
+Keyword lists and regex patterns are the warehouse worker approach - they require constant maintenance, break on novel inputs, and will NEVER achieve genuine intelligence. They are explicitly against the system's foundational architecture.
+
+✅ REQUIRED APPROACH: Genuine Semantic Intelligence
+What Real Intelligence Looks Like
+Semantic Embedding Comparison:
+javascript// ✅ THIS IS THE REQUIRED APPROACH
+async function classifyQueryIntent(query) {
+  // Get embedding for the user's query
+  const queryEmbedding = await getEmbedding(query);
+  
+  // Compare semantic similarity to concept anchors (not keyword lists)
+  const similarities = {
+    news_current_events: cosineSimilarity(queryEmbedding, NEWS_CONCEPT_EMBEDDING),
+    emotional_support: cosineSimilarity(queryEmbedding, EMOTIONAL_CONCEPT_EMBEDDING),
+    factual_lookup: cosineSimilarity(queryEmbedding, FACTUAL_CONCEPT_EMBEDDING),
+    decision_making: cosineSimilarity(queryEmbedding, DECISION_CONCEPT_EMBEDDING),
+    greeting: cosineSimilarity(queryEmbedding, GREETING_CONCEPT_EMBEDDING)
+  };
+  
+  // Return the category with highest semantic similarity
+  return Object.entries(similarities)
+    .sort((a, b) => b[1] - a[1])[0];
+}
+Concept Anchors (Not Keyword Lists):
+javascript// Concept anchors are EMBEDDING VECTORS that represent the meaning of a category
+// They are generated ONCE from representative phrases, not matched against queries
+
+// Generate anchor embedding for "news/current events" concept
+const NEWS_CONCEPT_EMBEDDING = await getEmbedding(
+  "Breaking news about world events, political developments, what is happening in countries, current affairs, recent developments in government and international relations"
+);
+
+// Generate anchor embedding for "emotional support" concept  
+const EMOTIONAL_CONCEPT_EMBEDDING = await getEmbedding(
+  "I am feeling sad, stressed, anxious, worried, I need someone to talk to about my feelings, emotional support, mental health struggles"
+);
+Why This Works
+
+Novel queries work automatically - A question about a world leader NOT in any list will still route correctly because the MEANING is similar to news/current events
+No maintenance required - You don't add keywords when new situations arise; the semantic understanding already covers them
+Genuine comprehension - The system understands that "What's the latest with the German chancellor?" is semantically similar to news even though "German chancellor" was never explicitly listed
+This is what intelligence IS - Understanding meaning, not matching patterns
+
+
+THE FOUR PROBLEMS TO FIX
+Problem 1: Personality Debug Output in Responses
+Current: Responses contain 🍌 **Roxy:** (Empathetic framework applied - 2 enhancements)
+Required: Response contains ONLY the answer. Personality metadata goes in metadata.personalityApplied.
+Fix approach: Remove the signature injection from personality frameworks. This is a mechanical fix - acceptable to do directly.
+Problem 2: False Continuity Claims
+Current: "Building on our previous discussion" appears when memoryUsed: false
+Required: Continuity language ONLY when memory was actually retrieved.
+Fix approach:
+
+PREFERRED: Prevent the AI from generating false continuity by adjusting the prompt/context when no memory exists
+ACCEPTABLE: Strip false continuity as a safety net, but the generation should be fixed at the source
+
+Problem 3: Bounded Reasoning on Simple Queries
+Current: "Hello" receives 500+ characters of scaffolding
+Required: Simple queries get simple responses; complex queries get structured analysis
+Fix approach using REAL INTELLIGENCE:
+javascriptasync function requiresBoundedReasoning(query, phase4Metadata) {
+  // Use semantic similarity to determine query complexity
+  const queryEmbedding = await getEmbedding(query);
+  
+  // Simple queries are semantically similar to greetings, basic facts, simple math
+  const simpleQuerySimilarity = cosineSimilarity(queryEmbedding, SIMPLE_QUERY_CONCEPT);
+  
+  // Complex queries are semantically similar to decisions, predictions, analysis requests
+  const complexQuerySimilarity = cosineSimilarity(queryEmbedding, COMPLEX_QUERY_CONCEPT);
+  
+  // If query is more similar to simple concepts, no scaffolding needed
+  if (simpleQuerySimilarity > complexQuerySimilarity && simpleQuerySimilarity > 0.7) {
+    return { required: false, reason: 'Query semantically similar to simple/direct queries' };
+  }
+  
+  // Also check truth type from Phase 4
+  if (phase4Metadata.truth_type === 'PERMANENT') {
+    return { required: false, reason: 'Permanent fact - no uncertainty needed' };
+  }
+  
+  return { required: true, reason: 'Query requires structured reasoning' };
+}
+❌ NOT ACCEPTABLE:
+javascript// This is keyword matching disguised as intelligence - FORBIDDEN
+const SIMPLE_PATTERNS = [/^hello/i, /^hi/i, /^what is \d+/];
+Problem 4: Semantic Routing Misclassification
+Current: "What's happening with Macron in France?" routes to mental_emotional
+Required: News/current events queries route to appropriate non-emotional categories
+Fix approach using REAL INTELLIGENCE:
+The semantic analyzer must use embedding comparison, not keyword lists. When a query comes in:
+
+Generate embedding for the query
+Compare to concept anchor embeddings for each category
+Route to the category with highest semantic similarity
+
+THE REAL TEST: After the fix, this query should route correctly WITHOUT "Macron" being mentioned anywhere in the code:
+
+"What's the latest news about the Finnish prime minister?"
+"Tell me about recent developments in Brazilian politics"
+"What's happening with the situation in Moldova?"
+
+If these work without being explicitly listed, the intelligence is REAL. If they fail, it's just keyword matching.
+
+ACCEPTANCE CRITERIA
+Output Cleanliness
+
+ response field contains no emoji prefixes
+ response field contains no **Personality:** labels
+ response field contains no (X framework applied) annotations
+ response field contains no empty _[...]_ template placeholders
+
+Truth-First Compliance
+
+ "Previous discussion" language ONLY appears when memoryUsed === true && memoryTokens > 0
+ System does not generate (not just strip) false continuity claims
+
+Intelligent Response Scaling
+
+ "Hello" receives response under 100 characters with no scaffolding
+ "What is 2+2?" receives direct answer without uncertainty framework
+ "Should I invest in Bitcoin?" receives thoughtful structured analysis
+ Classification uses semantic similarity, NOT regex/keyword matching
+
+Semantic Intelligence Verification
+
+ "What's happening with Macron?" routes to general/news, NOT emotional
+ "What's the latest on the Austrian chancellor?" routes correctly (NOT in any keyword list)
+ "Tell me about political developments in Kenya" routes correctly (NOT in any keyword list)
+ "I'm feeling really anxious and stressed" routes to emotional (correctly)
+ The routing works because of MEANING COMPREHENSION, not pattern matching
+
+
+VERIFICATION TEST
+This test MUST pass to verify genuine intelligence:
+javascript// These queries contain entities/topics NOT mentioned anywhere in the codebase
+// They must route correctly based on semantic understanding alone
+
+const NOVEL_QUERIES = [
+  { query: "What's happening with the Slovenian parliament?", expected: "general/news" },
+  { query: "Latest developments in Peruvian government", expected: "general/news" },
+  { query: "Tell me about the Mongolian election results", expected: "general/news" },
+  { query: "I'm feeling overwhelmed and need support", expected: "emotional" },
+  { query: "What's 847 divided by 11?", expected: "simple/factual" },
+  { query: "Howdy partner", expected: "greeting/simple" }
+];
+
+for (const test of NOVEL_QUERIES) {
+  const result = await classifyQuery(test.query);
+  // Must pass WITHOUT these terms being in any keyword list
+  expect(result.category).toMatch(test.expected);
+}
+If this test requires adding "Slovenia", "Peru", "Mongolia", or "Howdy" to a keyword list to pass, THE IMPLEMENTATION IS WRONG.
+
+IMPLEMENTATION GUIDANCE
+The Core Question
+Before writing any code, ask: "Will this work for queries I've never seen?"
+
+If yes → It's intelligence
+If no → It's just keyword matching with extra steps
+
+Embedding Infrastructure
+The system should already have access to embeddings through the OpenAI API. Use them:
+javascriptasync function getEmbedding(text) {
+  const response = await openai.embeddings.create({
+    model: "text-embedding-3-small", // or ada-002
+    input: text
+  });
+  return response.data[0].embedding;
+}
+
+function cosineSimilarity(vecA, vecB) {
+  const dotProduct = vecA.reduce((sum, a, i) => sum + a * vecB[i], 0);
+  const magnitudeA = Math.sqrt(vecA.reduce((sum, a) => sum + a * a, 0));
+  const magnitudeB = Math.sqrt(vecB.reduce((sum, b) => sum + b * b, 0));
+  return dotProduct / (magnitudeA * magnitudeB);
+}
+Concept Anchors
+Pre-compute embeddings for concept categories on system startup:
+javascriptconst CONCEPT_ANCHORS = {
+  greeting: await getEmbedding("Hello, hi, hey, good morning, greetings, howdy, what's up"),
+  simple_factual: await getEmbedding("What is the answer to this simple question, basic fact lookup, definition, simple math calculation, unit conversion"),
+  news_current_events: await getEmbedding("Current news, political developments, what is happening in the world, recent events, government news, international affairs, world leaders, elections"),
+  emotional_support: await getEmbedding("I feel sad, anxious, stressed, worried, I need emotional support, mental health, feelings, struggling emotionally"),
+  decision_making: await getEmbedding("Should I do this, what's the best choice, help me decide, weighing options, making a decision, uncertain what to do"),
+  technical: await getEmbedding("Code, programming, technical question, software, API, debugging, development, engineering")
+};
+Caching for Efficiency
+Cache embeddings to avoid repeated API calls:
+javascriptconst embeddingCache = new Map();
+
+async function getCachedEmbedding(text) {
+  const cacheKey = text.toLowerCase().trim();
+  if (embeddingCache.has(cacheKey)) {
+    return embeddingCache.get(cacheKey);
+  }
+  const embedding = await getEmbedding(text);
+  embeddingCache.set(cacheKey, embedding);
+  return embedding;
+}
+
+WHAT SUCCESS LOOKS LIKE
+After this fix:
+
+Simple queries get simple responses - because the system UNDERSTANDS they're simple, not because they match a pattern
+Complex queries get structured responses - because the system COMPREHENDS the need for analysis
+Novel queries route correctly - because intelligence generalizes; it doesn't enumerate
+No false claims ever - truth-first is absolute
+No maintenance burden - real intelligence doesn't need constant keyword updates
+
+This is what separates this system from everything else. This is what 13 months of work has been building toward. This is what the Bible describes.
+Real intelligence. Not keyword matching dressed up as AI.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -140,6 +140,21 @@ export class EliFramework {
       const query = context?.message || '';
       const externalLookupSucceeded = (context?.phase4Metadata?.sources_used > 0) || (context?.phase4Metadata?.sources_succeeded > 0);
 
+      // ISSUE #430: Check query classification for simple queries (GENUINE semantic intelligence)
+      if (context?.queryClassification?.responseApproach?.type === 'direct') {
+        this.logger.log(`[ISSUE #430 FIX] Skipping all enhancements: Simple query detected via semantic classification (${context.queryClassification.classification})`);
+        this.logger.log(`[ISSUE #430 FIX] Reason: ${context.queryClassification.responseApproach.reason}`);
+        return {
+          enhancedResponse: response,
+          personality: "eli",
+          modificationsCount: 0,
+          reasoningApplied: false,
+          skipped: true,
+          skipReason: context.queryClassification.responseApproach.reason,
+          classification: context.queryClassification.classification
+        };
+      }
+
       // Issue #380 Fix 5: Check if enhancements should be applied
       const relevanceCheck = shouldApplyEnhancements(query, response, context);
       if (!relevanceCheck.apply) {
@@ -982,12 +997,9 @@ export class EliFramework {
   }
 
   #applyEliSignature(response, modificationsCount) {
-    const signature =
-      modificationsCount > 0
-        ? `🍌 **Eli:** (Analytical framework applied - ${modificationsCount} enhancements)\n\n`
-        : `🍌 **Eli:**\n\n`;
-
-    return signature + response;
+    // ISSUE #430 FIX: Personality signatures go in metadata, NOT in response text
+    // The response field should contain ONLY the answer, no emoji prefixes or framework labels
+    return response;
   }
 
   // ==================== VALIDATION METHODS ====================
