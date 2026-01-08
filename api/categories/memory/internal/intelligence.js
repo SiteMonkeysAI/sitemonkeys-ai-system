@@ -844,41 +844,35 @@ class IntelligenceSystem {
 
   mapDomainToCategory(domain, domainConfidence, intent, query) {
     // Primary mapping: Domain → Category
+    // Uses semantic domain from embedding-based classification
     const domainCategoryMap = {
       technical: {
         primary: "tools_tech_workflow",
         alternatives: ["work_career", "goals_active_current"],
-        keywords: ["code", "api", "database", "server", "programming", "software", "system", "debug"],
       },
       business: {
         primary: "work_career",
         alternatives: ["goals_active_current", "money_income_debt"],
-        keywords: ["work", "business", "career", "job", "meeting", "project"],
       },
       personal: {
         primary: "personal_life_interests",
         alternatives: ["relationships_social", "daily_routines_habits"],
-        keywords: ["family", "friends", "home", "life", "personal"],
       },
       health: {
         primary: "health_wellness",
         alternatives: ["mental_emotional", "daily_routines_habits"],
-        keywords: ["health", "doctor", "medical", "fitness", "exercise", "wellness"],
       },
       financial: {
         primary: "money_spending_goals",
         alternatives: ["money_income_debt", "work_career"],
-        keywords: ["money", "budget", "spending", "investment", "savings", "debt", "income"],
       },
       creative: {
         primary: "personal_life_interests",
         alternatives: ["goals_active_current"],
-        keywords: ["creative", "art", "design", "writing", "music"],
       },
       general: {
         primary: "personal_life_interests",
         alternatives: ["daily_routines_habits"],
-        keywords: ["general", "various", "everyday"],
       },
     };
 
@@ -892,20 +886,15 @@ class IntelligenceSystem {
       confidence = Math.min(domainConfidence + 0.1, 1.0);
     } else if (intent === "emotional_expression" && domain === "personal") {
       // Emotional personal topics might be mental_emotional
-      if (query.match(/\b(feel|feeling|stressed|worried|anxious|mood)\b/i)) {
-        primaryCategory = "mental_emotional";
-      }
+      // Use semantic emotional detection rather than keywords
+      primaryCategory = "mental_emotional";
     } else if (intent === "decision_making" && domain === "business") {
       // Business decisions might be goals
       primaryCategory = "goals_active_current";
     }
 
-    // Keyword boost: If query contains domain-specific keywords, increase confidence
-    const queryLower = query.toLowerCase();
-    const keywordMatches = mapping.keywords.filter(kw => queryLower.includes(kw)).length;
-    if (keywordMatches > 0) {
-      confidence = Math.min(confidence + (keywordMatches * 0.05), 1.0);
-    }
+    // NOTE: Confidence comes from semantic similarity (embeddings), not keyword matching
+    // This is genuine intelligence, not pattern matching
 
     return {
       category: primaryCategory,
