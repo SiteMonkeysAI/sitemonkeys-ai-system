@@ -1051,7 +1051,8 @@ function getVerificationSources(query) {
   }
 
   // Stock prices
-  if (lowerQuery.match(/stock|share|market.*price/i)) {
+  if (lowerQuery.includes('stock') || lowerQuery.includes('share') || 
+      (lowerQuery.includes('market') && lowerQuery.includes('price'))) {
     return [
       { name: 'Yahoo Finance', url: 'https://finance.yahoo.com' },
       { name: 'Google Finance', url: 'https://www.google.com/finance' }
@@ -1059,7 +1060,8 @@ function getVerificationSources(query) {
   }
 
   // Commodity prices
-  if (lowerQuery.match(/gold|silver|oil.*price/i)) {
+  if (lowerQuery.includes('gold') || lowerQuery.includes('silver') || 
+      (lowerQuery.includes('oil') && lowerQuery.includes('price'))) {
     return [
       { name: 'Kitco', url: 'https://www.kitco.com' },
       { name: 'Bloomberg', url: 'https://www.bloomberg.com/markets/commodities' }
