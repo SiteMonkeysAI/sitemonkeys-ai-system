@@ -235,6 +235,16 @@ export async function processWithEliAndRoxy({
       // Continue without classification - personalities will apply default logic
     }
 
+    // Create context object for personality frameworks (matches orchestrator.js pattern)
+    const context = {
+      message,
+      mode,
+      phase4Metadata,
+      queryClassification,
+      memoryContext,
+      vaultContext,
+    };
+
     // GENERATE RESPONSE BASED ON ROUTING DECISION
     let response;
     let aiUsed;
