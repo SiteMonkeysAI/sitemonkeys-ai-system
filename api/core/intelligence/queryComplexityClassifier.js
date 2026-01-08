@@ -194,8 +194,41 @@ export async function classifyQueryComplexity(query, phase4Metadata = {}) {
 }
 
 /**
+ * Determine data freshness requirement from query
+ * @param {string} query - Original query
+ * @param {string} truthType - Truth type from phase4Metadata
+ * @returns {string} - REAL_TIME | CURRENT | HISTORICAL | TIMELESS
+ */
+function determineDataFreshnessRequirement(query, truthType) {
+  const lowerQuery = query.toLowerCase();
+
+  // REAL_TIME: Needs data from right now (prices, rates, live data)
+  if (lowerQuery.match(/\b(right now|live|current price|current rate|today's price|real-time)\b/i)) {
+    return 'REAL_TIME';
+  }
+
+  // CURRENT: Needs recent data but not necessarily real-time (current leaders, current policies)
+  if (truthType === 'VOLATILE' || truthType === 'SEMI_STABLE') {
+    return 'CURRENT';
+  }
+
+  // HISTORICAL: Asking about past events
+  if (lowerQuery.match(/\b(was|were|happened|occurred|in \d{4}|last year|ago)\b/i)) {
+    return 'HISTORICAL';
+  }
+
+  // TIMELESS: Permanent facts, definitions, mathematical constants
+  if (truthType === 'PERMANENT') {
+    return 'TIMELESS';
+  }
+
+  // Default to CURRENT for ambiguous cases
+  return 'CURRENT';
+}
+
+/**
  * Determine final classification and response approach based on similarities
- * 
+ *
  * @param {string} primaryCategory - Category with highest similarity
  * @param {number} primaryScore - Similarity score for primary category
  * @param {string} secondaryCategory - Category with second highest similarity
@@ -217,6 +250,10 @@ function determineClassification(
   const queryLength = query.trim().length;
   const truthType = phase4Metadata?.truth_type;
   const isHighStakes = phase4Metadata?.high_stakes?.isHighStakes || false;
+
+  // NEW: Determine data freshness requirement
+  const dataFreshnessRequirement = determineDataFreshnessRequirement(query, truthType);
+  const externalLookupRequired = (dataFreshnessRequirement === 'REAL_TIME' || dataFreshnessRequirement === 'CURRENT');
   
   // High confidence threshold - only act on strong signals
   const HIGH_CONFIDENCE = 0.70;
@@ -229,6 +266,8 @@ function determineClassification(
       classification: 'greeting',
       confidence: primaryScore,
       requiresScaffolding: false,
+      dataFreshnessRequirement: 'TIMELESS',
+      externalLookupRequired: false,
       responseApproach: {
         type: 'direct',
         reason: 'Simple greeting - direct friendly response without scaffolding',
@@ -248,9 +287,11 @@ function determineClassification(
       classification: 'simple_factual',
       confidence: primaryScore,
       requiresScaffolding: false,
+      dataFreshnessRequirement: dataFreshnessRequirement,
+      externalLookupRequired: externalLookupRequired,
       responseApproach: {
         type: 'direct',
-        reason: truthType === 'PERMANENT' 
+        reason: truthType === 'PERMANENT'
           ? 'Permanent fact - direct answer without uncertainty framework'
           : 'Simple factual query - direct answer sufficient',
         maxLength: 200
@@ -258,7 +299,7 @@ function determineClassification(
       similarities
     };
   }
-  
+
   // ==================== NEWS/CURRENT EVENTS ====================
   // Political queries, world events - route to general/news, NOT emotional
   if (primaryCategory === 'news_current_events' && primaryScore > MEDIUM_CONFIDENCE) {
@@ -266,6 +307,8 @@ function determineClassification(
       classification: 'news_current_events',
       confidence: primaryScore,
       requiresScaffolding: false,
+      dataFreshnessRequirement: 'CURRENT',
+      externalLookupRequired: true,
       responseApproach: {
         type: 'direct',
         reason: 'Current events query - direct factual response, should trigger external lookup',
@@ -282,6 +325,8 @@ function determineClassification(
       classification: 'emotional_support',
       confidence: primaryScore,
       requiresScaffolding: false,
+      dataFreshnessRequirement: 'TIMELESS',
+      externalLookupRequired: false,
       responseApproach: {
         type: 'empathetic',
         reason: 'Emotional support needed - empathetic response without analytical scaffolding',
@@ -290,7 +335,7 @@ function determineClassification(
       similarities
     };
   }
-  
+
   // ==================== DECISION MAKING ====================
   // User needs help deciding - requires structured analysis
   if (primaryCategory === 'decision_making' && primaryScore > MEDIUM_CONFIDENCE) {
@@ -298,6 +343,8 @@ function determineClassification(
       classification: 'decision_making',
       confidence: primaryScore,
       requiresScaffolding: true,
+      dataFreshnessRequirement: dataFreshnessRequirement,
+      externalLookupRequired: externalLookupRequired,
       responseApproach: {
         type: 'structured',
         reason: 'Decision-making query - requires bounded reasoning and trade-off analysis'
@@ -305,7 +352,7 @@ function determineClassification(
       similarities
     };
   }
-  
+
   // ==================== COMPLEX ANALYTICAL ====================
   // Complex queries need full scaffolding
   if (primaryCategory === 'complex_analytical' && primaryScore > MEDIUM_CONFIDENCE) {
@@ -313,6 +360,8 @@ function determineClassification(
       classification: 'complex_analytical',
       confidence: primaryScore,
       requiresScaffolding: true,
+      dataFreshnessRequirement: dataFreshnessRequirement,
+      externalLookupRequired: externalLookupRequired,
       responseApproach: {
         type: 'structured',
         reason: 'Complex analytical query - full scaffolding and structured reasoning required'
@@ -320,16 +369,18 @@ function determineClassification(
       similarities
     };
   }
-  
+
   // ==================== TECHNICAL QUERIES ====================
   if (primaryCategory === 'technical' && primaryScore > MEDIUM_CONFIDENCE) {
     return {
       classification: 'technical',
       confidence: primaryScore,
       requiresScaffolding: queryLength > 200 || isHighStakes,
+      dataFreshnessRequirement: dataFreshnessRequirement,
+      externalLookupRequired: externalLookupRequired,
       responseApproach: {
         type: queryLength > 200 ? 'structured' : 'direct',
-        reason: queryLength > 200 
+        reason: queryLength > 200
           ? 'Complex technical query - structured approach needed'
           : 'Technical query - direct technical response'
       },
@@ -340,7 +391,7 @@ function determineClassification(
   // ==================== AMBIGUOUS CLASSIFICATION ====================
   // If scores are close or all low, use query characteristics
   const scoreDiff = primaryScore - secondaryScore;
-  
+
   // If primary score is low or difference is small, use heuristics
   if (primaryScore < MEDIUM_CONFIDENCE || scoreDiff < 0.1) {
     // Very short queries are likely simple
@@ -349,6 +400,8 @@ function determineClassification(
         classification: 'simple_short',
         confidence: 0.6,
         requiresScaffolding: false,
+        dataFreshnessRequirement: dataFreshnessRequirement,
+        externalLookupRequired: externalLookupRequired,
         responseApproach: {
           type: 'direct',
           reason: 'Very short query - direct response',
@@ -358,13 +411,15 @@ function determineClassification(
         ambiguous: true
       };
     }
-    
+
     // High stakes always gets scaffolding
     if (isHighStakes) {
       return {
         classification: 'high_stakes',
         confidence: 0.7,
         requiresScaffolding: true,
+        dataFreshnessRequirement: dataFreshnessRequirement,
+        externalLookupRequired: externalLookupRequired,
         responseApproach: {
           type: 'structured',
           reason: 'High stakes query - full analytical framework applied'
@@ -373,12 +428,14 @@ function determineClassification(
         ambiguous: true
       };
     }
-    
+
     // Default to medium complexity
     return {
       classification: 'medium_complexity',
       confidence: primaryScore,
       requiresScaffolding: queryLength > 100,
+      dataFreshnessRequirement: dataFreshnessRequirement,
+      externalLookupRequired: externalLookupRequired,
       responseApproach: {
         type: queryLength > 100 ? 'structured' : 'conversational',
         reason: 'Ambiguous classification - using query length heuristic'
@@ -387,13 +444,15 @@ function determineClassification(
       ambiguous: true
     };
   }
-  
+
   // ==================== FALLBACK ====================
   // Default case - use primary category with moderate scaffolding
   return {
     classification: primaryCategory,
     confidence: primaryScore,
     requiresScaffolding: queryLength > 150,
+    dataFreshnessRequirement: dataFreshnessRequirement,
+    externalLookupRequired: externalLookupRequired,
     responseApproach: {
       type: 'conversational',
       reason: `Classified as ${primaryCategory} with ${(primaryScore * 100).toFixed(0)}% confidence`

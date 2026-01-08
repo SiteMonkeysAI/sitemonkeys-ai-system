@@ -35,6 +35,25 @@ const ENGAGEMENT_PADDING_SECTIONS = [
   /\*\*Opportunities I See:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
 ];
 
+// FALSE CONTINUITY CLAIMS (Issue #435 - ALWAYS strip these lies)
+const FALSE_CONTINUITY_PATTERNS = [
+  /\b(as|like) (we|I) (discussed|talked about|mentioned|said) (before|earlier|previously)\b/gi,
+  /\b(as|like) (I|we) (said|mentioned|noted) (earlier|before|previously)\b/gi,
+  /\byou (told|said to|mentioned to|asked) me (earlier|before|previously)\b/gi,
+  /\bearlier (in|during) (our|this) (conversation|discussion|chat)\b/gi,
+  /\bwhen (we|you) (discussed|talked about|mentioned) this (earlier|before)\b/gi,
+  /\bremember (when|that) (we|you|I) (discussed|talked about|said)\b/gi,
+];
+
+// ENGAGEMENT BAIT ENDINGS (Issue #435 - strip for simple/factual queries)
+const ENGAGEMENT_BAIT_ENDINGS = [
+  /\n*Is there anything else (you'?d like to know|I can help you with|you need)\??\s*$/gi,
+  /\n*Would you like (to know more|me to explain|further details)\??\s*$/gi,
+  /\n*Do you (have|want) (other|any|more) questions\??\s*$/gi,
+  /\n*Should I explain (further|more|this)\??\s*$/gi,
+  /\n*Let me know if you (need|want|would like) (anything else|more information|help with anything)\!?\s*$/gi,
+];
+
 // HYGIENE BAD: False claims and theater phrases (ALWAYS strip)
 const ALWAYS_STRIP_SECTIONS = [
   /\[Note: Evaluate this recommendation.*?\]/gs,
@@ -164,6 +183,40 @@ function detectFormatConstraint(query) {
 }
 
 function enforceResponseContract(response, query, phase4Metadata = {}, documentMetadata = {}, queryClassification = null) {
+  // ISSUE #435: If external lookup failed for volatile data, enforce MINIMAL response
+  // The user doesn't need 200 words about why we can't answer - they need 20 words + where to find the answer
+  const lookupFailed = phase4Metadata?.degraded === true;
+  const minimalResponseRequired = phase4Metadata?.minimal_response_required === true;
+  const maxResponseWords = phase4Metadata?.max_response_words || 50;
+
+  if (lookupFailed && minimalResponseRequired) {
+    console.log(`[RESPONSE-CONTRACT] External lookup failed - enforcing minimal response (max ${maxResponseWords} words)`);
+
+    // Extract verification path from phase4Metadata
+    const verificationSources = phase4Metadata?.verification_path?.sources || [];
+    const disclosure = phase4Metadata?.disclosure || "I can't access current data for this query.";
+
+    // Build minimal response: disclosure + verification path
+    const sourceLinks = verificationSources
+      .map(s => `${s.name}: ${s.url}`)
+      .join(' or ');
+
+    const minimalResponse = `${disclosure} Check current information at: ${sourceLinks}`;
+
+    return {
+      response: minimalResponse,
+      contract: {
+        triggered: true,
+        style: 'minimal_redirect',
+        minimal_response_enforced: true,
+        original_length: response.length,
+        final_length: minimalResponse.length,
+        words_saved: Math.floor((response.length - minimalResponse.length) / 6),
+        lookup_degraded: true
+      }
+    };
+  }
+
   // ISSUE #431 FIX: Respect intelligent query classification
   // Simple queries should not have scaffolding stripped - they shouldn't have scaffolding added in the first place
   // However, we still enforce TRUTH checks (false claims, theater phrases)
@@ -221,6 +274,36 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
   }
 
   let cleanedResponse = response;
+
+  // CRITICAL: Strip false continuity claims (ALWAYS - these are LIES)
+  for (const pattern of FALSE_CONTINUITY_PATTERNS) {
+    const matches = cleanedResponse.match(pattern);
+    if (matches) {
+      result.stripped_sections.push(...matches.map(m => `FALSE_CONTINUITY: "${m.substring(0, 40)}..."`));
+      result.stripped_sections_count += matches.length;
+      result.false_continuity_detected = true;
+      // Replace with empty string or just the rest of the sentence
+      cleanedResponse = cleanedResponse.replace(pattern, '');
+    }
+  }
+
+  // Strip engagement bait endings for simple/factual queries
+  // Issue #435: Simple factual answers should end decisively, not invite more questions
+  const isSimpleFact = queryClassification?.classification === 'simple_factual' ||
+                       queryClassification?.classification === 'simple_short' ||
+                       queryClassification?.classification === 'greeting';
+
+  if (isSimpleFact) {
+    for (const pattern of ENGAGEMENT_BAIT_ENDINGS) {
+      const matches = cleanedResponse.match(pattern);
+      if (matches) {
+        result.stripped_sections.push(...matches.map(m => `ENGAGEMENT_BAIT: "${m.substring(0, 30)}..."`));
+        result.stripped_sections_count += matches.length;
+        result.engagement_bait_detected = true;
+        cleanedResponse = cleanedResponse.replace(pattern, '');
+      }
+    }
+  }
 
   // ALWAYS strip these (false claims, theater)
   for (const pattern of ALWAYS_STRIP_SECTIONS) {
