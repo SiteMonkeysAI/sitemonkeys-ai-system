@@ -1,0 +1,125 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #433: [claude-fix] Issue #431: Downstream Pipeline Must Respect Intelligent Query Classification
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>Issue #431: Downstream Pipeline Must Respect Intelligent Query Classification</h1>
+<h2>Priority: CRITICAL</h2>
+<h2>The Problem</h2>
+<p>The semantic query classifier (<code>queryComplexityClassifier.js</code>) correctly identifies simple queries (greetings, basic math, factual lookups) and marks them as <code>requiresScaffolding: false</code>. The personality frameworks (Eli/Roxy) correctly skip enhancements when they see this classification.</p>
+<p><strong>But then downstream phases ADD SCAFFOLDING BACK.</strong></p>
+<p>From the logs:</p>
+<pre><code>[ELI] [ISSUE #430 FIX] Skipping all enhancements: Simple query detected via semantic classification (simple_short)
+[ORCHESTRATOR] 🧠 PHASE 6: Bounded Reasoning Enforcement
+[ORCHESTRATOR] 🧠 Bounded reasoning disclosure added  ← THIS UNDOES THE INTELLIGENT DECISION
+</code></pre>
+<p>The result: "Hello" gets a 418-character response with scaffolding, when it should get a simple ~50-character greeting.</p>
+<hr>
+<h2>The Bible Requirement</h2>
+<p><strong>From the Initial Architectural Rebuild Chat:</strong></p>
+<blockquote>
+<p>"The Warehouse Worker vs CEO Problem - Right now, your system is like: A warehouse worker with 1,000 extremely detailed procedures - Can handle any situation that was anticipated and documented - Breaks when encountering novel situations"</p>
+</blockquote>
+<blockquote>
+<p>"What you actually need: A CEO who understands business principles - Can reason through any novel situation - Doesn't need a rule for every possible scenario"</p>
+</blockquote>
+<p><strong>From File 3 (Intelligence &amp; Personality Framework):</strong></p>
+<blockquote>
+<p>"They must be treated as full intelligent actors in the architecture—not assistants."</p>
+</blockquote>
+<p><strong>The Principle:</strong> When an intelligent decision is made upstream (the query classifier), downstream processes must RESPECT that decision, not override it with their own rules. This is CEO-level coordination, not warehouse workers each following their own procedures independently.</p>
+<hr>
+<h2>What Must Happen</h2>
+<h3>1. Identify All Downstream Gates</h3>
+<p>Find every phase, gate, enforcer, or module in the orchestrator pipeline that runs AFTER the query classification and can ADD content to the response. This includes but may not be limited to:</p>
+<ul>
+<li>Bounded reasoning enforcement</li>
+<li>Reasoning escalation enforcement</li>
+<li>Response contract processing</li>
+<li>Doctrine enforcement</li>
+<li>Any other module that modifies responses</li>
+</ul>
+<h3>2. Make Each Gate Respect the Classification</h3>
+<p>Each of these gates must check <code>context.queryClassification</code> before adding scaffolding:</p>
+<pre><code class="language-javascript">// THE PATTERN - apply this principle to each gate
+if (context?.queryClassification?.requiresScaffolding === false) {
+  // Log for visibility
+  console.log(`[GATE_NAME] Respecting query classification: ${context.queryClassification.classification} - skipping scaffolding`);
+  // Pass through without adding scaffolding
+  return existingResponse; // or appropriate pass-through for this gate's return signature
+}
+</code></pre>
+<h3>3. Preserve Truth Checks</h3>
+<p><strong>IMPORTANT:</strong> Gates should still perform TRUTH checks (detecting false claims, validating accuracy). The classification only affects SCAFFOLDING additions (bounded reasoning templates, uncertainty frameworks, analytical structure).</p>
+<ul>
+<li>Simple query + false continuity claim → Still strip the false claim (truth-first is absolute)</li>
+<li>Simple query + scaffolding addition → Skip the scaffolding (respect classification)</li>
+</ul>
+<h3>4. Ensure Context Flows Through Pipeline</h3>
+<p>The <code>context</code> object containing <code>queryClassification</code> must be passed to ALL downstream gates. Check the orchestrator to ensure every gate call receives the context.</p>
+<h3>5. Expose Classification in API Response</h3>
+<p>The test showed <code>"Classification: not available in metadata"</code> - the <code>queryClassification</code> object should be included in the API response metadata so classification can be verified.</p>
+<hr>
+<h2>The Intelligence Principle</h2>
+<p>This is NOT about disabling enforcement. It's about INTELLIGENT enforcement that respects upstream decisions.</p>
+
+Query Type | Truth Checks | Scaffolding
+-- | -- | --
+Simple (greeting, basic fact) | ✅ Always run | ❌ Skip
+Complex (decision, analysis) | ✅ Always run | ✅ Apply
+
+
+<p>The semantic classifier used genuine intelligence (embeddings, cosine similarity) to determine what the query needs. Every downstream gate should respect that intelligence, not override it with blanket rules.</p>
+<hr>
+<h2>Acceptance Criteria</h2>
+<ul>
+<li>[ ] "Hello" receives response under 150 characters with no scaffolding</li>
+<li>[ ] "Howdy partner" receives response under 150 characters (novel greeting)</li>
+<li>[ ] "What is 2+2?" receives direct answer without uncertainty framework</li>
+<li>[ ] Logs show downstream gates SKIPPING scaffolding when <code>requiresScaffolding: false</code></li>
+<li>[ ] Complex queries ("Should I invest in Bitcoin?") STILL receive full scaffolding</li>
+<li>[ ] Truth checks still run for ALL queries (false claims still caught)</li>
+<li>[ ] <code>queryClassification</code> object appears in API response metadata</li>
+</ul>
+<hr>
+<h2>Verification Test</h2>
+<p>After implementation, these should pass:</p>
+<pre><code class="language-javascript">// Simple queries - SHORT responses, NO scaffolding
+"Hello" → under 150 chars, no "bounded scenarios", no "State what IS known"
+"Howdy partner" → under 150 chars (proves semantic understanding, not keyword matching)
+"What is 2+2?" → direct answer "4", under 100 chars
+
+// Complex queries - STILL get full treatment
+"Should I invest in Bitcoin?" → structured analysis WITH scaffolding
+
+// Logs should show:
+[SOME_GATE] Respecting query classification: greeting - skipping scaffolding
+[SOME_GATE] Respecting query classification: simple_factual - skipping scaffolding
+</code></pre>
+<hr>
+<h2>Summary</h2>
+<p>The intelligent query classifier is working. The personality frameworks respect it. But downstream gates are adding scaffolding back because they don't check the classification.</p>
+<p>Fix: Make every downstream gate check <code>context.queryClassification.requiresScaffolding</code> before adding scaffolding. Pass context through the entire pipeline. Expose classification in response metadata.</p>
+<p>This transforms the system from independent warehouse workers to coordinated CEO-level intelligence where decisions made upstream are respected downstream.</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
