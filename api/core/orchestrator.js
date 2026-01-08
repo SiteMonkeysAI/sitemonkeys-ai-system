@@ -1055,7 +1055,8 @@ export class Orchestrator {
           personalityResponse.response,
           message,
           phase4Metadata,
-          documentData || {}
+          documentData || {},
+          { memoryUsed: !!memoryContext, memoryTokens: memoryTokens } // Issue #426: Pass memory metadata to prevent false continuity claims
         );
         personalityResponse.response = contractResult.response;
         response_contract = contractResult.contract;

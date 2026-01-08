@@ -296,7 +296,7 @@ export class RoxyFramework {
       this.logger.error("Roxy framework failed", error);
 
       return {
-        enhancedResponse: `🍌 **Roxy:** ${response}`,
+        enhancedResponse: response, // Issue #426 Fix: No emoji labels even in error cases
         personality: "roxy",
         analysisApplied: {},
         modificationsCount: 0,
@@ -662,12 +662,10 @@ export class RoxyFramework {
   }
 
   #applyRoxySignature(response, modificationsCount) {
-    const signature =
-      modificationsCount > 0
-        ? `🍌 **Roxy:** (Empathetic framework applied - ${modificationsCount} enhancements)\n\n`
-        : `🍌 **Roxy:**\n\n`;
-
-    return signature + response;
+    // Issue #426 Fix: Personality signatures belong in METADATA, not user-facing response
+    // The user should receive clean responses with personality INFLUENCING tone, not decorating it
+    // Emoji labels and framework annotations are debug info, not user value
+    return response;
   }
 
   // ==================== VALIDATION METHODS ====================

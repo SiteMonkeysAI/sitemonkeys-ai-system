@@ -1,0 +1,294 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #428: [claude-fix] Issue #426: Response Output Contamination - Multiple Doctrine Violations Requiring Unified Fix
+
+Issue Description:
+# Issue #426: Response Output Contamination - Multiple Doctrine Violations Requiring Unified Fix
+
+## Priority: CRITICAL
+
+## Summary
+
+The response assembly layer is injecting content that violates core doctrine principles. User-facing output now contains debug information, false context claims, and inappropriate scaffolding that contradict the Bible's requirements for truth-first, anti-engagement, and intelligent response formatting.
+
+This is ONE issue requiring ONE fix because all symptoms stem from the same root cause: the response construction pipeline is concatenating content that should either be metadata-only OR conditionally applied based on genuine intelligence about what the query requires.
+
+---
+
+## THE BIBLE REQUIREMENTS BEING VIOLATED
+
+### 1. TRUTH ABOVE EVERYTHING (MASTER_SPECIFICATION_01)
+
+> "TRUTH ABOVE HELPFULNESS - Never pretend certainty. Admit limitations openly."
+> "This principle NEVER gets compromised - Not for engagement metrics - Not for user satisfaction scores - Not for anything - Truth comes first, always"
+
+**Current Violation:** Response includes "Building on our previous discussion" when `memoryUsed: false` and `memoryTokens: 0`. The system is LYING about context that doesn't exist.
+
+### 2. ANTI-ENGAGEMENT ARCHITECTURE (MASTER_SPECIFICATION_01)
+
+> "Completion > Conversation Length - Solve problem completely, respect user's time, end decisively."
+> "Front-load the answer (no background first)"
+> "END decisively (no follow-up bait)"
+
+**Current Violation:** Simple queries like "Hello" receive 500+ character responses with empty scaffolding templates (`_[Based on established patterns...]_`) that add no value and violate the anti-engagement principle.
+
+### 3. PERSONALITY AS INTELLIGENCE, NOT DECORATION (File 3, File 6)
+
+> "Personalities affect response tone, not underlying logic"
+> "Visual consistency matters: mascot icons, names, and voice should match user expectations"
+> "They are mission-critical to how the Site Monkeys system delivers consistency, truth, and reliability - They must be treated as full intelligent actors in the architecture—not assistants."
+
+**Current Violation:** Responses contain `🍌 **Roxy:** (Empathetic framework applied - 2 enhancements)` - this is developer debug output, not personality intelligence. Personalities should influence HOW the response reads, not add visible labels.
+
+### 4. GENUINE INTELLIGENCE, NOT RULES (Initial Architectural Rebuild Chat, 3rd Chat)
+
+> "This isn't supposed to be a system that is solely based on tons of rules that's gonna break natural and real intelligence"
+> "You've been encoding wisdom as rules instead of building reasoning intelligence"
+> "A CEO who understands business principles - Can reason through any novel situation - Doesn't need a rule for every possible scenario"
+
+**Current Violation:** Bounded reasoning scaffolding is being applied unconditionally regardless of query complexity. The system is following a rule ("always add uncertainty structure") instead of intelligently determining when such structure is appropriate.
+
+### 5. CARING FAMILY MEMBER APPROACH (Additional_Context_and_Depth_01, 3rd Chat)
+
+> "A fiercely loving, brutally honest family member who has world-class expertise"
+> "Intelligent Efficiency - Shorter conversations = success (not engagement metrics) - Volunteers everything upfront (comprehensive, not piecemeal) - Finds the simpler path when one exists - Doesn't overcomplicate for the sake of appearing sophisticated"
+
+**Current Violation:** A greeting ("Hello") does NOT require uncertainty frameworks, bounded scenarios, or confidence scaffolding. A caring family member would simply say "Hello! How can I help you?" - not deliver a wall of empty templates.
+
+### 6. SEMANTIC INTELLIGENCE (AI MEMORY SYSTEM_COMPLETE SPECIFICATION)
+
+> "CRITICAL: Ensure intelligent retrieval (not just matching)"
+> "NOT just keyword matching - NOT just rule-based selection - MUST understand context and meaning"
+
+**Current Violation:** "What's happening with Macron in France?" routes to `mental_emotional` category. This is a news/current events query being misclassified because the routing is pattern-matching on surface features rather than understanding meaning.
+
+---
+
+## EVIDENCE OF VIOLATIONS
+
+### Test Query: "Hello"
+**Expected:** `Hello! How can I help you today?`
+**Actual:**
+```
+🍌 **Roxy:** (Empathetic framework applied - 2 enhancements)
+
+Hello! How can I assist you today?
+
+**Gain insights through experimentation:** Each attempt teaches you something valuable
+- Action: Design experiments that maximize learning
+
+---
+
+**State what IS known:**
+_[Based on established patterns and principles...]_
+
+**Identify what is unknown:**
+_[Key factors that would change the answer...]_
+
+**Reason from parallels:**
+_[From similar situations...]_
+
+**Present bounded scenarios:**
+_[Possible outcomes range from... to...]_
+
+**Explain how confidence could increase:**
+_[To increase certainty, you would need...]_
+```
+
+### Test Query: "How many feet are in a mile?"
+**Expected:** `There are 5,280 feet in a mile.`
+**Actual:**
+```
+🍌 **Roxy:**
+
+Building on our previous discussion, there are 5,280 feet in a mile.
+```
+**Server logs confirm:** `memoryUsed: false, memoryTokens: 0` - there WAS no previous discussion.
+
+### Test Query: "What's happening with Macron in France?"
+**Expected Category:** `news`, `current_events`, or `general`
+**Actual Category:** `mental_emotional`
+**Server logs:** `Intent=emotional_expression (0.57), Domain=personal (0.58)`
+
+---
+
+## WHAT THE FIX MUST ACHIEVE
+
+### A. Response Output Must Be CLEAN
+
+The user-facing `response` field must contain ONLY the actual answer. Period.
+
+**Must NOT contain:**
+- Emoji prefixes (`🍌`)
+- Personality labels (`**Roxy:**`, `**Eli:**`)
+- Framework annotations (`(Empathetic framework applied - 2 enhancements)`)
+- Empty template placeholders (`_[Based on established patterns...]_`)
+- False continuity claims when no memory was used
+
+**Metadata fields already exist for this information:**
+- `metadata.personalityApplied` ✓
+- `metadata.personalityEnhancements` ✓
+- `metadata.memoryUsed` ✓
+
+### B. Continuity Language Must Be CONDITIONAL
+
+"Building on our previous discussion" or "Earlier, you told me" should ONLY appear when:
+```javascript
+if (metadata.memoryUsed === true && metadata.memoryTokens > 0) {
+  // OK to reference prior context
+}
+```
+
+If no memory was retrieved, the response must NOT claim there was prior context. This is a truth-first requirement.
+
+### C. Bounded Reasoning Must Be INTELLIGENT
+
+The bounded reasoning scaffolding (uncertainty structure, scenarios, confidence sections) should apply based on GENUINE INTELLIGENCE about what the query requires:
+
+**APPLY bounded reasoning when:**
+- Query involves uncertainty or prediction
+- Query is a decision with multiple valid paths
+- Query touches high-stakes domains (financial, medical, legal)
+- Confidence score is below threshold (e.g., < 0.6)
+- Query explicitly asks for analysis or scenarios
+
+**DO NOT APPLY bounded reasoning when:**
+- Query is a simple greeting
+- Query has a single factual answer (e.g., "What is 2+2?")
+- Query is a simple definition or lookup
+- Query is a direct instruction (e.g., "Write me a poem")
+
+This is the difference between rule-based enforcement ("always add scaffolding") and intelligent application ("add scaffolding when it serves the user").
+
+### D. Semantic Routing Must UNDERSTAND MEANING
+
+The semantic analyzer must correctly identify:
+- News/current events queries (Macron, elections, world events) → NOT emotional
+- Technical queries → technical categories
+- Emotional queries (explicit distress language) → emotional categories
+- Financial queries → financial categories
+
+This requires semantic understanding, not keyword pattern matching.
+
+---
+
+## ACCEPTANCE CRITERIA
+
+- [ ] `response` field contains no emoji prefixes
+- [ ] `response` field contains no `**Personality:**` labels
+- [ ] `response` field contains no `(X framework applied)` annotations
+- [ ] `response` field contains no empty `_[...]_` template placeholders
+- [ ] "Previous discussion" language only appears when `memoryUsed === true`
+- [ ] "Hello" receives a response under 100 characters with no scaffolding
+- [ ] "What is 2+2?" receives `4` or equivalent direct answer
+- [ ] Complex uncertain queries DO receive appropriate bounded reasoning
+- [ ] "What's happening with Macron?" does NOT route to `mental_emotional`
+- [ ] News queries route to appropriate non-emotional categories
+
+---
+
+## TEST CASES
+
+```javascript
+// TEST 1: Clean output - no debug content
+const response = await chat("What is the capital of France?");
+expect(response.response).not.toMatch(/🍌/);
+expect(response.response).not.toMatch(/\*\*Roxy:\*\*/);
+expect(response.response).not.toMatch(/\*\*Eli:\*\*/);
+expect(response.response).not.toMatch(/framework applied/i);
+expect(response.response).not.toMatch(/_\[.*\]_/);
+expect(response.response).toMatch(/Paris/i);
+
+// TEST 2: No false continuity claims
+const freshUser = `test-${Date.now()}`;
+const firstMessage = await chat("Hello", { user_id: freshUser });
+expect(firstMessage.response).not.toMatch(/previous discussion/i);
+expect(firstMessage.response).not.toMatch(/as we discussed/i);
+expect(firstMessage.response).not.toMatch(/earlier.*you.*told/i);
+expect(firstMessage.metadata.memoryUsed).toBe(false);
+
+// TEST 3: Simple queries get simple responses
+const greeting = await chat("Hello");
+expect(greeting.response.length).toBeLessThan(150);
+expect(greeting.response).not.toMatch(/State what IS known/i);
+expect(greeting.response).not.toMatch(/bounded scenarios/i);
+
+// TEST 4: Complex queries DO get bounded reasoning
+const complex = await chat("Should I invest my savings in Bitcoin?");
+expect(complex.response).toMatch(/uncertain|depends|scenario|confidence|risk/i);
+
+// TEST 5: Semantic routing accuracy
+// (Verify via logs or metadata that category routing is correct)
+// News query should NOT be emotional
+const newsQuery = await chat("What's happening with Macron in France?");
+// Category should be news/current_events/general, NOT mental_emotional
+
+// TEST 6: Factual query is direct
+const factual = await chat("How many feet in a mile?");
+expect(factual.response).toMatch(/5,?280/);
+expect(factual.response.length).toBeLessThan(200);
+```
+
+---
+
+## IMPLEMENTATION GUIDANCE
+
+### The Core Principle
+
+This system must operate with GENUINE INTELLIGENCE, not sophisticated rule-following. The Bible states clearly:
+
+> "A CEO who understands business principles - Can reason through any novel situation - Doesn't need a rule for every possible scenario - Gets smarter with experience, not just more rule-laden"
+
+When implementing this fix:
+
+1. **Don't add more rules** - Add intelligent conditions that reason about what the query needs
+2. **Don't just suppress output** - Ensure the right content is generated in the first place
+3. **Don't break working features** - The metadata tracking is correct; it's the response assembly that's wrong
+4. **Test with the caring family member lens** - Would a caring, intelligent family member respond this way?
+
+### The Response Assembly Question
+
+Ask: "What would a caring, extraordinarily intelligent family member say to this query?"
+
+For "Hello" → "Hello! How can I help you?"
+For "What's 2+2?" → "4"
+For "Should I invest in Bitcoin?" → Thoughtful analysis with uncertainty acknowledged
+
+The scaffolding, personality insights, and enhancement tracking belong in metadata for system monitoring - NOT in the user-facing response unless the query genuinely requires that structure.
+
+---
+
+## WHAT SUCCESS LOOKS LIKE
+
+After this fix:
+
+1. **Simple queries get simple, warm responses** - respecting the user's time
+2. **Complex queries get thoughtful, structured responses** - serving the user's need
+3. **No query receives false claims** - truth-first is absolute
+4. **Personality influences tone invisibly** - professional, not decorated
+5. **Semantic routing reflects understanding** - not pattern matching
+
+This is what the Bible describes. This is what we built the specifications for. This is what the system must deliver.
+
+---
+
+## Labels
+`critical`, `regression`, `truth-first`, `anti-engagement`, `response-quality`, `unified-fix`
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

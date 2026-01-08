@@ -163,7 +163,7 @@ function detectFormatConstraint(query) {
   return null;
 }
 
-function enforceResponseContract(response, query, phase4Metadata = {}, documentMetadata = {}) {
+function enforceResponseContract(response, query, phase4Metadata = {}, documentMetadata = {}, memoryMetadata = {}) {
   const constraint = detectFormatConstraint(query);
   const userRequestedGuidance = GUIDANCE_REQUEST_PATTERNS.some(p => p.test(query));
 
@@ -174,7 +174,8 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
     stripped_sections_count: 0,
     stripped_sections: [],
     original_length: response.length,
-    user_requested_guidance: userRequestedGuidance
+    user_requested_guidance: userRequestedGuidance,
+    false_continuity_stripped: false // Issue #426
   };
 
   // Issue #380 Fix 6, Issue #412 Fix: Validate response relevance with document metadata
@@ -211,6 +212,35 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
   }
 
   let cleanedResponse = response;
+
+  // Issue #426 Fix: Strip false continuity claims when no memory was used
+  // TRUTH-FIRST REQUIREMENT: Never claim prior context that doesn't exist
+  const memoryWasUsed = memoryMetadata?.memoryUsed === true && memoryMetadata?.memoryTokens > 0;
+
+  if (!memoryWasUsed) {
+    // Patterns that falsely claim prior conversation when none exists
+    const FALSE_CONTINUITY_PATTERNS = [
+      /^Building on our previous discussion,?\s*/im,
+      /^As we discussed (earlier|before),?\s*/im,
+      /^Earlier,? you (told|mentioned|said)\s+me\s*/im,
+      /^As I mentioned (earlier|before|previously),?\s*/im,
+      /^Following up on our (earlier|previous) conversation,?\s*/im,
+      /^Continuing from (where we left off|our last discussion),?\s*/im
+    ];
+
+    for (const pattern of FALSE_CONTINUITY_PATTERNS) {
+      if (pattern.test(cleanedResponse)) {
+        const before = cleanedResponse;
+        cleanedResponse = cleanedResponse.replace(pattern, '');
+        if (cleanedResponse !== before) {
+          result.false_continuity_stripped = true;
+          result.stripped_sections.push('False continuity claim (no memory was used)');
+          result.stripped_sections_count++;
+          console.log('[RESPONSE-CONTRACT] ⚠️ TRUTH-FIRST VIOLATION: Stripped false continuity claim - no memory was used');
+        }
+      }
+    }
+  }
 
   // ALWAYS strip these (false claims, theater)
   for (const pattern of ALWAYS_STRIP_SECTIONS) {

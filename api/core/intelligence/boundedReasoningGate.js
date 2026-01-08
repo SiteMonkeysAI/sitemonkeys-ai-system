@@ -265,6 +265,17 @@ function proportionalityGate(content, mainAnswer, semanticSimilarityFn = null) {
 // Patterns that indicate speculative/predictive queries
 const SPECULATIVE_PATTERNS = /\b(will .+ in the (next|future)|predict|forecast|going to happen|what will|years from now|by 20\d\d|in \d+ years)\b/i;
 
+// Issue #426 Fix: Simple queries that should NEVER get bounded reasoning scaffolding
+// These are greetings, simple math, basic definitions - anti-engagement principle
+const SIMPLE_QUERY_PATTERNS = [
+  /^(hi|hey|hello|good (morning|afternoon|evening))[\s!?.]*$/i,
+  /^what('?s| is) \d+\s*[\+\-\*×÷\/]\s*\d+/i,                    // Simple math: "What's 2+2?"
+  /^how many \w+ (in|are in) (a|an) \w+/i,                       // Unit conversion: "How many feet in a mile?"
+  /^(who|what|when|where) (is|are|was|were) (the )?[a-z\s]{1,30}\??$/i, // Simple facts (short queries)
+  /^define \w+$/i,                                               // Single word definitions
+  /^what does ['"]?\w+['"]? mean\??$/i,                         // Single word meaning
+];
+
 /**
  * Determine if we're operating in bounded reasoning territory
  *
@@ -275,6 +286,16 @@ const SPECULATIVE_PATTERNS = /\b(will .+ in the (next|future)|predict|forecast|g
  * @param {string} queryText - Original user query (optional)
  */
 function requiresBoundedReasoning(phase4Metadata, queryText = '') {
+  // Issue #426 Fix: Simple queries NEVER need bounded reasoning
+  // A greeting doesn't need uncertainty frameworks - this violates anti-engagement principle
+  if (queryText) {
+    for (const pattern of SIMPLE_QUERY_PATTERNS) {
+      if (pattern.test(queryText.trim())) {
+        return { required: false, reason: 'Simple query - no scaffolding needed (anti-engagement)' };
+      }
+    }
+  }
+
   // PERMANENT facts NEVER need bounded reasoning - exit immediately
   if (phase4Metadata.truth_type === 'PERMANENT') {
     return { required: false, reason: 'Permanent fact - no uncertainty disclosure needed' };

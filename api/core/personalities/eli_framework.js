@@ -346,7 +346,7 @@ export class EliFramework {
       this.logger.error("Eli framework failed", error);
 
       return {
-        enhancedResponse: `🍌 **Eli:** ${response}`,
+        enhancedResponse: response, // Issue #426 Fix: No emoji labels even in error cases
         personality: "eli",
         analysisApplied: {},
         modificationsCount: 0,
@@ -982,12 +982,10 @@ export class EliFramework {
   }
 
   #applyEliSignature(response, modificationsCount) {
-    const signature =
-      modificationsCount > 0
-        ? `🍌 **Eli:** (Analytical framework applied - ${modificationsCount} enhancements)\n\n`
-        : `🍌 **Eli:**\n\n`;
-
-    return signature + response;
+    // Issue #426 Fix: Personality signatures belong in METADATA, not user-facing response
+    // The user should receive clean responses with personality INFLUENCING tone, not decorating it
+    // Emoji labels and framework annotations are debug info, not user value
+    return response;
   }
 
   // ==================== VALIDATION METHODS ====================

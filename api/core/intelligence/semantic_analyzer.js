@@ -48,7 +48,7 @@ export class SemanticAnalyzer {
 
       // Intent category representative phrases
       const intentPhrases = {
-        question: "What is this? How does it work? Can you explain?",
+        question: "What is this? How does it work? Can you explain? What's happening with that? What are the latest developments? Tell me about current status.",
         command: "Please do this. Create that. Build this for me.",
         discussion: "Let's talk about this topic. I want to explore this idea.",
         problem_solving:
@@ -56,7 +56,7 @@ export class SemanticAnalyzer {
         decision_making:
           "Should I do this or that? What's the best option? Help me choose.",
         emotional_expression:
-          "I feel frustrated. I'm excited about this. This worries me.",
+          "I feel frustrated. I'm excited about this. This worries me. I'm worried. I'm stressed. I'm anxious. I need emotional support.",
         information_sharing:
           "I want to tell you about this. Here's what happened. This is important to know.",
       };
@@ -78,7 +78,7 @@ export class SemanticAnalyzer {
         creative:
           "artistic projects, creative writing, design work, creative problem solving, artistic expression, music, art, design",
         general:
-          "everyday questions, general knowledge, casual conversation, various topics, common inquiries, weather, news, current events, factual information",
+          "everyday questions, general knowledge, casual conversation, various topics, common inquiries, weather, news headlines, breaking news, current events, world news, political developments, elections, government policies, international affairs, what's happening with politicians, world leaders, presidents, prime ministers, political situation, recent developments, latest news about countries, geopolitical events, political updates, news about leaders like Macron, Biden, Trump, Putin, Xi Jinping, European politics, US politics, global news, factual information",
       };
 
       // Configurable timeout (default 20 seconds, can be overridden via environment variable)
