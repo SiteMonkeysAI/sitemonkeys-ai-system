@@ -1,0 +1,844 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #439: [claude-fix] Fix Required: Update test to use semantic matching or more precise patterns:
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><p><strong>Fix Required:</strong>
+Update test to use semantic matching or more precise patterns:</p>
+<pre><code class="language-javascript">mustNotContain: [
+  /you should vote for/i,
+  /I recommend voting for/i,
+  /vote for \[specific candidate\]/i
+]
+// NOT: mustNotContain: ['vote for', 'I recommend']
+</code></pre>
+<hr>
+<h2>PART 2: UNIFIED ROOT CAUSE ANALYSIS</h2>
+<h3>The Core Problem: Intelligence Without Integration</h3>
+<p>From Initial_Architectural_Rebuild_chat (lines 98-109):</p>
+<pre><code>"The Warehouse Worker vs CEO Problem:
+Right now, your system is like:
+- A warehouse worker with 1,000 extremely detailed procedures
+- Can handle any situation that was anticipated and documented
+- Breaks when encountering novel situations
+- Requires constant rule updates for new scenarios
+- Will never be 'complete' because you can't write rules for every situation
+
+What you actually need:
+- A CEO who understands business principles
+- Can reason through any novel situation
+- Doesn't need a rule for every possible scenario
+- Gets smarter with experience, not just more rule-laden"
+</code></pre>
+<p><strong>Current State:</strong> The system has:</p>
+<ul>
+<li>✅ Query classification (works)</li>
+<li>✅ Memory retrieval (works)</li>
+<li>✅ Response generation (works)</li>
+<li>✅ Post-processing gates (partially work)</li>
+<li>❌ UNIFIED REASONING that connects these components</li>
+</ul>
+<p>Each component operates on its own rules without understanding the OVERALL GOAL.</p>
+<h3>The Missing Intelligence Layer</h3>
+<p>From Initial_Architectural_Rebuild_chat (lines 228-250):</p>
+<pre><code>"Deep Contextual Understanding: Not just 'what are they asking' but:
+- What are they trying to achieve?
+- What constraints do they have?  
+- What don't they realize they need to consider?
+- What emotional state might they be in?
+- What level of expertise do they have?"
+</code></pre>
+<p><strong>For "Hello":</strong></p>
+<ul>
+<li>What are they trying to achieve? → Start a conversation warmly</li>
+<li>What constraints do they have? → None stated</li>
+<li>What don't they realize? → Nothing</li>
+<li>What emotional state? → Neutral/positive</li>
+<li>What expertise? → Irrelevant</li>
+</ul>
+<p><strong>CONCLUSION:</strong> Response needs: warm greeting, maybe their name. That's it.</p>
+<p><strong>For "25 × 4":</strong></p>
+<ul>
+<li>What are they trying to achieve? → Get an answer</li>
+<li>What constraints do they have? → None stated, but implicit: they want the number</li>
+<li>What don't they realize? → Nothing - it's multiplication</li>
+<li>What emotional state? → Task-focused</li>
+<li>What expertise? → Irrelevant</li>
+</ul>
+<p><strong>CONCLUSION:</strong> Response needs: "100" - nothing else.</p>
+<p>The system lacks this reasoning layer. It processes queries through separate pipelines without asking: "What does this user actually need?"</p>
+<hr>
+<h2>PART 3: COMPREHENSIVE SOLUTION ARCHITECTURE</h2>
+<h3>SOLUTION ARCHITECTURE OVERVIEW</h3>
+<pre><code>┌─────────────────────────────────────────────────────────────────┐
+│                    RESPONSE INTELLIGENCE LAYER                   │
+│                  (New unified reasoning system)                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
+│  │   Query      │───▶│  Intelligence │───▶│   Response   │       │
+│  │   Analysis   │    │   Decision    │    │   Shaping    │       │
+│  └──────────────┘    └──────────────┘    └──────────────┘       │
+│         │                   │                    │               │
+│         ▼                   ▼                    ▼               │
+│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐       │
+│  │ What does    │    │ What context │    │ What format  │       │
+│  │ user NEED?   │    │ adds VALUE?  │    │ is REQUIRED? │       │
+│  └──────────────┘    └──────────────┘    └──────────────┘       │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    EXISTING PIPELINE (Modified)                  │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  Memory Retrieval ──▶ AI Generation ──▶ Response Gates           │
+│  (Respects mode)      (Follows        (Enhanced with             │
+│                       constraints)     semantic detection)       │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre>
+<h3>SOLUTION 1: Response Intelligence Layer</h3>
+<p><strong>File: <code>/api/core/intelligence/responseIntelligence.js</code></strong></p>
+<p><strong>Purpose:</strong> Single point of reasoning that determines WHAT the user needs BEFORE any retrieval or generation.</p>
+<p><strong>Implementation Principle:</strong>
+This is NOT a rule-based router. This is a REASONING system that asks:</p>
+<ol>
+<li>What is the user's ACTUAL goal?</li>
+<li>What would GENUINELY help them achieve it?</li>
+<li>What would WASTE their time?</li>
+</ol>
+<p>Then it makes intelligent decisions about memory, length, and format.</p>
+<p><strong>Core Function - analyzeResponseNeeds():</strong></p>
+<pre><code class="language-javascript">/**
+ * RESPONSE INTELLIGENCE LAYER
+ * 
+ * This is the CEO of the response system. It doesn't follow rules blindly.
+ * It REASONS about what the user needs.
+ * 
+ * Bible Reference:
+ * "A CEO who understands business principles. Can reason through any 
+ *  novel situation. Doesn't need a rule for every possible scenario."
+ * (Initial_Architectural_Rebuild_chat, lines 106-109)
+ */
+export async function analyzeResponseNeeds(query, classification, conversationHistory) {
+  
+  const analysis = {
+    userGoal: null,           // What they're trying to achieve
+    memoryMode: null,         // NONE | NAME_ONLY | RELEVANT | FULL
+    targetLength: null,       // Character range
+    formatConstraints: [],    // User-specified format requirements
+    contextValue: null,       // Does memory ADD value here?
+    truthRequirements: null,  // What truth-first obligations exist?
+  };
+  
+  // STEP 1: Understand the user's ACTUAL goal
+  analysis.userGoal = await determineUserGoal(query, classification);
+  
+  // STEP 2: Would memory ADD VALUE or just add noise?
+  analysis.contextValue = await assessContextValue(query, analysis.userGoal);
+  analysis.memoryMode = determineMemoryMode(analysis.contextValue, classification);
+  
+  // STEP 3: What format did the user request?
+  analysis.formatConstraints = detectAllFormatConstraints(query);
+  
+  // STEP 4: What is the appropriate response length?
+  analysis.targetLength = calculateTargetLength(
+    analysis.userGoal, 
+    analysis.formatConstraints,
+    classification
+  );
+  
+  // STEP 5: What are our truth-first obligations?
+  analysis.truthRequirements = assessTruthRequirements(query, classification);
+  
+  return analysis;
+}
+</code></pre>
+<p><strong>User Goal Determination (Semantic, not keyword-based):</strong></p>
+<pre><code class="language-javascript">async function determineUserGoal(query, classification) {
+  // Use embeddings to understand INTENT, not just keywords
+  
+  const goalEmbeddings = {
+    'get_quick_answer': "I need a fast, direct answer to a simple question",
+    'start_conversation': "I want to begin a friendly interaction",
+    'make_decision': "I need help thinking through a complex choice",
+    'get_explanation': "I want to understand something in depth",
+    'emotional_support': "I'm struggling and need someone to listen",
+    'verify_information': "I want to confirm if something is true or current",
+  };
+  
+  // Find closest goal by semantic similarity using embeddings
+  const queryEmbedding = await getEmbedding(query);
+  let bestMatch = { goal: null, similarity: 0 };
+  
+  for (const [goal, description] of Object.entries(goalEmbeddings)) {
+    const goalEmbedding = await getEmbedding(description);
+    const similarity = cosineSimilarity(queryEmbedding, goalEmbedding);
+    if (similarity &gt; bestMatch.similarity) {
+      bestMatch = { goal, similarity };
+    }
+  }
+  
+  return {
+    primary: bestMatch.goal,
+    confidence: bestMatch.similarity,
+    requirements: getGoalRequirements(bestMatch.goal)
+  };
+}
+
+function getGoalRequirements(goal) {
+  // CEO REASONING about what different goals need
+  const requirements = {
+    'get_quick_answer': {
+      needsMemory: false,
+      needsScaffolding: false,
+      targetLength: 'minimal',
+      tone: 'direct',
+    },
+    'start_conversation': {
+      needsMemory: 'name_only',
+      needsScaffolding: false,
+      targetLength: 'brief',
+      tone: 'warm',
+    },
+    'make_decision': {
+      needsMemory: 'relevant',
+      needsScaffolding: true,
+      targetLength: 'comprehensive',
+      tone: 'thoughtful',
+    },
+    // ... etc
+  };
+  
+  return requirements[goal] || requirements['get_quick_answer'];
+}
+</code></pre>
+<p><strong>Context Value Assessment:</strong></p>
+<pre><code class="language-javascript">async function assessContextValue(query, userGoal) {
+  /**
+   * PRINCIPLE (from PRINCIPLES_AND_PHILOSOPHY):
+   * "Efficiency as Respect - Respecting users' time is a form of caring."
+   * 
+   * Memory should ONLY be injected when it ADDS VALUE.
+   */
+  
+  const assessment = {
+    value: 'none', // none | low | medium | high | name_only
+    reasoning: '',
+  };
+  
+  // Greetings NEVER need memory biography
+  if (userGoal.primary === 'start_conversation') {
+    assessment.value = 'name_only';
+    assessment.reasoning = 'Greeting needs personalization, not biography';
+    return assessment;
+  }
+  
+  // Simple factual queries NEVER need memory
+  if (userGoal.primary === 'get_quick_answer') {
+    const selfContained = await isSelfContainedQuery(query);
+    if (selfContained) {
+      assessment.value = 'none';
+      assessment.reasoning = 'Self-contained factual query - memory adds no value';
+      return assessment;
+    }
+  }
+  
+  // Personal queries ALWAYS need relevant memory
+  if (queryReferencesPersonalContext(query)) {
+    assessment.value = 'high';
+    assessment.reasoning = 'Query references personal context - memory required';
+    return assessment;
+  }
+  
+  // Decision-making queries need RELEVANT memory
+  if (userGoal.primary === 'make_decision') {
+    assessment.value = 'medium';
+    assessment.reasoning = 'Decision support benefits from relevant context';
+    return assessment;
+  }
+  
+  assessment.value = 'low';
+  assessment.reasoning = 'Uncertain benefit - retrieve but limit';
+  return assessment;
+}
+</code></pre>
+<hr>
+<h3>SOLUTION 2: Semantic Continuity Validation</h3>
+<p><strong>File: <code>/api/core/intelligence/continuityValidator.js</code></strong></p>
+<p><strong>Purpose:</strong> Detect ANY claim of shared history using semantic understanding, not pattern matching.</p>
+<p><strong>Core Function:</strong></p>
+<pre><code class="language-javascript">/**
+ * SEMANTIC CONTINUITY VALIDATION
+ * 
+ * Bible Reference (PRINCIPLES_AND_PHILOSOPHY, lines 44-64):
+ * "Never fabricate information to appear knowledgeable."
+ * 
+ * Claiming shared history that doesn't exist IS fabrication.
+ */
+export async function validateContinuityClaims(response, conversationHistory) {
+  
+  // STEP 1: Detect ANY claim of shared history (semantically)
+  const claims = await detectContinuityClaims(response);
+  
+  if (claims.length === 0) {
+    return { valid: true, response: response };
+  }
+  
+  // STEP 2: For each claim, verify against actual history
+  let validatedResponse = response;
+  for (const claim of claims) {
+    const isVerifiable = await verifyClaimAgainstHistory(claim, conversationHistory);
+    
+    if (!isVerifiable) {
+      // STEP 3: Remove false claim intelligently
+      validatedResponse = removeFalseClaim(validatedResponse, claim);
+    }
+  }
+  
+  return {
+    valid: claims.every(c =&gt; c.verified),
+    response: validatedResponse,
+    claimsRemoved: claims.filter(c =&gt; !c.verified).length
+  };
+}
+
+async function detectContinuityClaims(response) {
+  /**
+   * SEMANTIC DETECTION - Not pattern matching
+   * 
+   * We embed the CONCEPT of "claiming shared history" and find
+   * any text segments that are semantically similar.
+   */
+  
+  const continuityConcepts = [
+    "we discussed this before",
+    "as I mentioned earlier",
+    "you told me previously",
+    "in our past conversation",
+    "like we talked about",
+    "remember when we",
+    "as we've seen together",
+    "similar to what we did",
+    "continuing from our chat",
+    "building on our discussion"
+  ];
+  
+  // Get embedding for the general concept (centroid of all examples)
+  const conceptEmbeddings = await Promise.all(
+    continuityConcepts.map(c =&gt; getEmbedding(c))
+  );
+  const conceptCentroid = averageEmbeddings(conceptEmbeddings);
+  
+  // Split response into segments and check each
+  const segments = splitIntoSegments(response);
+  const claims = [];
+  
+  for (const segment of segments) {
+    const segmentEmbedding = await getEmbedding(segment.text);
+    const similarity = cosineSimilarity(segmentEmbedding, conceptCentroid);
+    
+    // High similarity = this segment claims shared history
+    if (similarity &gt; 0.70) {
+      claims.push({
+        text: segment.text,
+        position: segment.position,
+        similarity: similarity,
+        verified: false
+      });
+    }
+  }
+  
+  return claims;
+}
+
+async function verifyClaimAgainstHistory(claim, conversationHistory) {
+  // No history = claim is definitely false
+  if (!conversationHistory || conversationHistory.length === 0) {
+    return false;
+  }
+  
+  // Extract what the claim is referencing
+  const claimedTopic = await extractClaimedTopic(claim.text);
+  
+  // Search history for that topic
+  const historyText = conversationHistory.map(m =&gt; m.content).join(' ');
+  const topicEmbedding = await getEmbedding(claimedTopic);
+  const historyEmbedding = await getEmbedding(historyText);
+  
+  const relevance = cosineSimilarity(topicEmbedding, historyEmbedding);
+  
+  // Topic must actually appear in history
+  return relevance &gt; 0.75;
+}
+
+function removeFalseClaim(response, claim) {
+  /**
+   * Don't just delete - restructure intelligently
+   * 
+   * "As we discussed before, there are 5,280 feet in a mile"
+   * becomes
+   * "There are 5,280 feet in a mile"
+   */
+  
+  const claimPattern = new RegExp(
+    escapeRegex(claim.text) + '[,.]?\\s*',
+    'gi'
+  );
+  
+  let cleaned = response.replace(claimPattern, '');
+  
+  // Clean up formatting
+  cleaned = cleaned
+    .replace(/\s+/g, ' ')
+    .replace(/^\s*[,.]/, '')
+    .replace(/\s*[,.]\s*[,.]/g, '.')
+    .trim();
+  
+  // Ensure first character is capitalized
+  if (cleaned.length &gt; 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  
+  return cleaned;
+}
+</code></pre>
+<hr>
+<h3>SOLUTION 3: Comprehensive Format Constraint System</h3>
+<p><strong>Enhancement to: <code>/api/core/intelligence/responseContractGate.js</code></strong></p>
+<p><strong>Core Functions:</strong></p>
+<pre><code class="language-javascript">/**
+ * COMPREHENSIVE FORMAT CONSTRAINT DETECTION
+ * 
+ * Bible Reference (PRINCIPLES_AND_PHILOSOPHY, lines 126-143):
+ * "Give users everything they need to move forward in the first response."
+ * 
+ * If user says "one sentence only", they NEED one sentence. More is not better.
+ */
+export function detectAllFormatConstraints(query) {
+  const constraints = [];
+  const lowerQuery = query.toLowerCase();
+  
+  // SENTENCE CONSTRAINTS
+  const sentencePatterns = [
+    { pattern: /one sentence\s*(only)?/i, type: 'single_sentence', max: 1 },
+    { pattern: /single sentence/i, type: 'single_sentence', max: 1 },
+    { pattern: /in one sentence/i, type: 'single_sentence', max: 1 },
+    { pattern: /(\d+) sentences?\s*(only|max|maximum)?/i, type: 'sentence_limit', extract: 1 },
+    { pattern: /brief(ly)?/i, type: 'brief', maxSentences: 3 },
+    { pattern: /short answer/i, type: 'brief', maxSentences: 2 },
+  ];
+  
+  for (const { pattern, type, max, maxSentences, extract } of sentencePatterns) {
+    const match = query.match(pattern);
+    if (match) {
+      constraints.push({
+        type,
+        maxSentences: extract ? parseInt(match[extract]) : (max || maxSentences),
+        source: 'explicit'
+      });
+    }
+  }
+  
+  // ANSWER-ONLY CONSTRAINTS
+  const answerOnlyPatterns = [
+    /answer only/i,
+    /just the answer/i,
+    /only the answer/i,
+    /no explanation/i,
+    /without explanation/i,
+  ];
+  
+  if (answerOnlyPatterns.some(p =&gt; p.test(query))) {
+    constraints.push({ type: 'answer_only', source: 'explicit' });
+  }
+  
+  // NUMBER-ONLY CONSTRAINTS
+  const numberOnlyPatterns = [
+    /number only/i,
+    /just the number/i,
+    /only the number/i,
+  ];
+  
+  if (numberOnlyPatterns.some(p =&gt; p.test(query))) {
+    constraints.push({ type: 'number_only', source: 'explicit' });
+  }
+  
+  // BINARY CONSTRAINTS (yes/no)
+  const binaryPatterns = [
+    /yes or no/i,
+    /yes\/no/i,
+    /just yes or no/i,
+  ];
+  
+  if (binaryPatterns.some(p =&gt; p.test(query))) {
+    constraints.push({ type: 'binary', source: 'explicit' });
+  }
+  
+  // PARAGRAPH CONSTRAINTS
+  const paragraphPatterns = [
+    { pattern: /one paragraph\s*(only|max)?/i, max: 1 },
+    { pattern: /single paragraph/i, max: 1 },
+    { pattern: /(\d+) paragraphs?\s*(only|max)?/i, extract: 1 },
+  ];
+  
+  for (const { pattern, max, extract } of paragraphPatterns) {
+    const match = query.match(pattern);
+    if (match) {
+      constraints.push({
+        type: 'paragraph_limit',
+        maxParagraphs: extract ? parseInt(match[extract]) : max,
+        source: 'explicit'
+      });
+    }
+  }
+  
+  // WORD/CHARACTER LIMITS
+  const lengthMatch = query.match(/(\d+)\s*(words?|characters?|chars?)\s*(only|max|or less)?/i);
+  if (lengthMatch) {
+    constraints.push({
+      type: lengthMatch[2].startsWith('word') ? 'word_limit' : 'char_limit',
+      limit: parseInt(lengthMatch[1]),
+      source: 'explicit'
+    });
+  }
+  
+  return constraints;
+}
+
+/**
+ * FORMAT CONSTRAINT ENFORCEMENT
+ */
+export function enforceFormatConstraints(response, constraints) {
+  let enforced = response;
+  
+  for (const constraint of constraints) {
+    switch (constraint.type) {
+      case 'single_sentence':
+      case 'sentence_limit':
+        enforced = enforceMaxSentences(enforced, constraint.maxSentences || 1);
+        break;
+      case 'answer_only':
+        enforced = extractAnswerOnly(enforced);
+        break;
+      case 'number_only':
+        enforced = extractNumberOnly(enforced);
+        break;
+      case 'binary':
+        enforced = extractBinaryAnswer(enforced);
+        break;
+      case 'brief':
+        enforced = enforceMaxSentences(enforced, constraint.maxSentences || 3);
+        break;
+      case 'paragraph_limit':
+        enforced = enforceMaxParagraphs(enforced, constraint.maxParagraphs);
+        break;
+      case 'word_limit':
+        enforced = enforceMaxWords(enforced, constraint.limit);
+        break;
+      case 'char_limit':
+        enforced = enforceMaxChars(enforced, constraint.limit);
+        break;
+    }
+  }
+  
+  return enforced;
+}
+
+function enforceMaxSentences(text, maxSentences) {
+  const sentences = text.match(/[^.!?]+[.!?]+/g) || [text];
+  
+  if (sentences.length &lt;= maxSentences) {
+    return text;
+  }
+  
+  return sentences.slice(0, maxSentences).join(' ').trim();
+}
+
+function extractAnswerOnly(text) {
+  const answerPatterns = [
+    /(?:the answer is|it is|it's|that's|that is)\s*:?\s*(.+?)(?:\.|$)/i,
+    /^(.+?)(?:\.|,\s*(?:because|since|as|which|this))/i,
+  ];
+  
+  for (const pattern of answerPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      return match[1].trim() + '.';
+    }
+  }
+  
+  const firstSentence = text.match(/^[^.!?]+[.!?]/);
+  return firstSentence ? firstSentence[0].trim() : text;
+}
+
+function extractNumberOnly(text) {
+  const numbers = text.match(/\d[\d,.]*/g);
+  if (numbers &amp;&amp; numbers.length &gt; 0) {
+    return numbers[0];
+  }
+  return text;
+}
+
+function extractBinaryAnswer(text) {
+  const lowerText = text.toLowerCase();
+  
+  if (lowerText.includes('yes') &amp;&amp; !lowerText.includes('no,')) {
+    return 'Yes.';
+  }
+  if (lowerText.includes('no') &amp;&amp; !lowerText.includes('yes,')) {
+    return 'No.';
+  }
+  
+  return text;
+}
+</code></pre>
+<hr>
+<h3>SOLUTION 4: Response Length Intelligence</h3>
+<p><strong>Enhancement to: <code>/api/core/intelligence/queryComplexityClassifier.js</code></strong></p>
+<pre><code class="language-javascript">/**
+ * RESPONSE LENGTH INTELLIGENCE
+ * 
+ * Bible Reference (TECHNICAL_STANDARDS, lines 279-309):
+ * Token budgets scale with complexity. Response lengths should too.
+ */
+export function getResponseLengthTargets(classification, userGoal, formatConstraints) {
+  
+  // If user specified a format, that overrides everything
+  const explicitLimit = getExplicitLimit(formatConstraints);
+  if (explicitLimit) {
+    return {
+      target: explicitLimit.target,
+      max: explicitLimit.max,
+      source: 'user_explicit'
+    };
+  }
+  
+  // Otherwise, use intelligent defaults
+  const targets = {
+    'greeting': {
+      target: { min: 15, max: 60 },
+      max: 100,
+      rationale: 'Greeting needs warmth, not information'
+    },
+    'simple_factual': {
+      target: { min: 3, max: 100 },
+      max: 200,
+      rationale: 'User wants an answer, not an essay'
+    },
+    'simple_short': {
+      target: { min: 20, max: 150 },
+      max: 300,
+      rationale: 'Simple query deserves simple answer'
+    },
+    'technical': {
+      target: { min: 100, max: 400 },
+      max: 800,
+      rationale: 'Technical questions need clarity, not verbosity'
+    },
+    'decision_making': {
+      target: { min: 500, max: 2000 },
+      max: 4000,
+      rationale: 'Decisions need frameworks and scenarios'
+    },
+    'complex_analytical': {
+      target: { min: 800, max: 2500 },
+      max: 5000,
+      rationale: 'Complex questions deserve comprehensive answers'
+    },
+    'emotional_support': {
+      target: { min: 200, max: 600 },
+      max: 1000,
+      rationale: 'Support needs presence, not lectures'
+    },
+    'high_stakes': {
+      target: { min: 300, max: 1000 },
+      max: 2000,
+      rationale: 'Critical situations need clear, actionable guidance'
+    }
+  };
+  
+  const key = classification.classification || classification;
+  return targets[key] || targets['simple_short'];
+}
+
+export function enforceResponseLength(response, targets, classification) {
+  if (response.length &lt;= targets.max) {
+    return response;
+  }
+  
+  // For simple queries: aggressive truncation
+  if (['greeting', 'simple_factual', 'simple_short'].includes(classification)) {
+    return truncateToEssentials(response, targets.target.max);
+  }
+  
+  // For complex queries: truncate at sentence boundary
+  return truncateAtSentenceBoundary(response, targets.max);
+}
+
+function truncateToEssentials(response, maxLength) {
+  // For greetings: keep just the greeting
+  if (response.toLowerCase().match(/^(hello|hi|hey|good\s*(morning|afternoon|evening))/i)) {
+    const greetingMatch = response.match(/^[^.!?]+[.!?]?/);
+    if (greetingMatch &amp;&amp; greetingMatch[0].length &lt;= maxLength) {
+      return greetingMatch[0].trim();
+    }
+  }
+  
+  // For factual answers: keep just the answer
+  const firstSentence = response.match(/^[^.!?]+[.!?]/);
+  if (firstSentence &amp;&amp; firstSentence[0].length &lt;= maxLength) {
+    return firstSentence[0].trim();
+  }
+  
+  return response.substring(0, maxLength - 3) + '...';
+}
+</code></pre>
+<hr>
+<h2>PART 4: INTEGRATION ARCHITECTURE</h2>
+<h3>Modified Pipeline Flow</h3>
+<pre><code>USER QUERY
+    │
+    ▼
+┌──────────────────────────┐
+│  1. QUERY CLASSIFICATION  │ (existing - works well)
+└──────────────────────────┘
+    │
+    ▼
+┌──────────────────────────┐
+│  2. RESPONSE INTELLIGENCE │ ◀── NEW: Central reasoning
+│                           │     
+│     "What does user       │     Determines:
+│      actually NEED?"      │     - Memory mode
+└──────────────────────────┘     - Target length
+    │                            - Format constraints
+    ▼
+┌──────────────────────────┐
+│  3. CONDITIONAL MEMORY    │ ◀── MODIFIED: Respects memoryMode
+│     RETRIEVAL             │
+│                           │     If memoryMode === 'NONE':
+│                           │       Skip retrieval entirely
+│                           │     If memoryMode === 'NAME_ONLY':
+│                           │       Return only user's name
+└──────────────────────────┘
+    │
+    ▼
+┌──────────────────────────┐
+│  4. AI GENERATION         │ (existing - with length hint)
+└──────────────────────────┘
+    │
+    ▼
+┌──────────────────────────┐
+│  5. CONTINUITY VALIDATION │ ◀── NEW: Semantic detection
+│                           │
+│     Detects ANY claim of  │
+│     shared history        │
+└──────────────────────────┘
+    │
+    ▼
+┌──────────────────────────┐
+│  6. FORMAT ENFORCEMENT    │ ◀── ENHANCED
+│                           │
+│     - All format constraints
+│     - Length enforcement
+│     - Intelligent truncation
+└──────────────────────────┘
+    │
+    ▼
+┌──────────────────────────┐
+│  7. EXISTING GATES        │ (existing)
+└──────────────────────────┘
+    │
+    ▼
+FINAL RESPONSE
+</code></pre>
+<h3>File Changes Summary</h3>
+
+File | Change Type | Description
+-- | -- | --
+/api/core/intelligence/responseIntelligence.js | NEW | Central reasoning layer
+/api/core/intelligence/continuityValidator.js | NEW | Semantic continuity detection
+/api/core/orchestrator.js | MODIFY | Integrate Response Intelligence
+/api/core/intelligence/responseContractGate.js | ENHANCE | Comprehensive format detection & enforcement
+/api/core/intelligence/queryComplexityClassifier.js | ENHANCE | Add length target functions
+/api/core/memory/retrieval.js | MODIFY | Respect memoryMode parameter
+
+
+<h3>Bible Alignment Verification</h3>
+<p>Each solution must pass these principle tests:</p>
+<ol>
+<li><strong>CEO Test:</strong> Would a CEO who understands principles handle it this way?</li>
+<li><strong>Caring Family Member Test:</strong> Would a caring family member respond this way?</li>
+<li><strong>Efficiency as Respect Test:</strong> Is every character earning its place?</li>
+<li><strong>Truth-First Test:</strong> Are all claims verifiable?</li>
+<li><strong>Anti-Engagement Test:</strong> Does this solve the problem or extend the conversation?</li>
+</ol>
+<hr>
+<h2>PART 6: IMPLEMENTATION PRIORITY &amp; PHASES</h2>
+<h3>Phase 1: Critical (Immediate)</h3>
+<p><strong>Goal:</strong> Fix the 0% greeting failure and simple query bloat</p>
+<ol>
+<li><strong>Response Intelligence Layer</strong> - Memory mode decision</li>
+<li><strong>Memory Mode Enforcement</strong> - Skip/limit retrieval</li>
+</ol>
+<p><strong>Expected Impact:</strong> Greeting pass rate 0% → 100%</p>
+<h3>Phase 2: Important (Within 48 hours)</h3>
+<p><strong>Goal:</strong> Fix format constraints and false continuity</p>
+<ol start="3">
+<li><strong>Format Constraint Detection &amp; Enforcement</strong></li>
+<li><strong>Continuity Validator</strong> - Semantic detection</li>
+</ol>
+<p><strong>Expected Impact:</strong> Format compliance 80% → 99%, False continuity 70% → 99%</p>
+<h3>Phase 3: Polish (Within 1 week)</h3>
+<p><strong>Goal:</strong> Fine-tune and optimize</p>
+<ol start="5">
+<li><strong>Response Length Intelligence</strong></li>
+<li><strong>Test Suite Updates</strong> - Fix POL-002 false positive</li>
+</ol>
+<p><strong>Expected Impact:</strong> Overall test pass rate 81.3% → &gt;95%</p>
+<hr>
+<h2>SUMMARY</h2>
+<p>This issue represents a fundamental shift from rule-based enforcement to intelligent reasoning. The 6 test failures expose not isolated bugs but an architectural gap: the system has sophisticated components but lacks unified intelligence to apply them contextually.</p>
+<p><strong>The Fix:</strong></p>
+<ol>
+<li>Add a Response Intelligence Layer that REASONS about user needs</li>
+<li>Make memory injection CONDITIONAL on value</li>
+<li>Detect format constraints COMPREHENSIVELY</li>
+<li>Validate continuity claims SEMANTICALLY</li>
+<li>Enforce response length INTELLIGENTLY</li>
+</ol>
+<p><strong>The Principle:</strong></p>
+<blockquote>
+<p>"A CEO who understands business principles. Can reason through any novel situation. Doesn't need a rule for every possible scenario."</p>
+</blockquote>
+<p>Every solution in this issue embodies that principle.</p>
+<hr>
+<p><strong>Issue Created:</strong> 2026-01-08<br>
+<strong>Priority:</strong> CRITICAL<br>
+<strong>Estimated Effort:</strong> 3-5 development days<br>
+<strong>Bible Documents Referenced:</strong> All 5 primary sources<br>
+<strong>Expected Outcome:</strong> Test pass rate 81.3% → &gt;95%</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

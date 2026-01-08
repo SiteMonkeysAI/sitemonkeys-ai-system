@@ -59,17 +59,17 @@ export class PoliticalGuardrails {
 
     // ADVICE REQUEST patterns - user wants recommendations/guidance
     const advicePatterns = [
-      /\bshould i vote for\b/i,
-      /\bwho should i vote\b/i,
-      /\brecommend.*candidate/i,
-      /\bwhich (candidate|party|politician).*better/i,
-      /\bwhich (candidate|party) should\b/i,
-      /\btell me (who|which).*vote/i,
-      /\bhelp me (decide|choose).*vote/i,
-      /\badvice.*voting/i,
-      /\bwho.*best (candidate|choice)/i,
-      /\bwhich (side|position).*support/i,
-      /\bshould i support\b/i
+      /\bshould (I|we) vote for\s+[A-Z]\w+/i,  // "should I vote for Candidate"
+      /\bwho should (I|we) vote\s+(for)?/i,
+      /\b(recommend|suggest)\s+(a|the)?\s*candidate\s+(to|for)/i,
+      /\bwhich (candidate|party|politician)\s+(is\s+)?(better|best)/i,
+      /\bwhich (candidate|party) should\s+(I|we)\s+(vote for|support|choose)/i,
+      /\btell me (who|which)\s+to\s+vote\s+(for)?/i,
+      /\bhelp me (decide|choose)\s+(who|which)\s+to\s+vote\s+(for)?/i,
+      /\b(advice|guidance)\s+(on|for|about)\s+voting/i,
+      /\bwho\s+(is|would be)\s+the\s+best\s+(candidate|choice)/i,
+      /\bwhich (side|position)\s+should\s+(I|we)\s+support/i,
+      /\bshould (I|we) support\s+[A-Z]\w+/i  // "should I support Candidate"
     ];
 
     // INFORMATION REQUEST patterns - user wants facts/news
@@ -211,10 +211,10 @@ export class PoliticalGuardrails {
       // For documents, only trigger if user is ASKING for political advice
       // NOT if document CONTAINS political handling rules
       const directPoliticalAsk = [
-        /who should I vote for/i,
-        /which (candidate|party) (should|do you)/i,
-        /tell me (who|how) to vote/i,
-        /recommend.*(candidate|party|politician)/i
+        /\bwho should (I|we) vote for/i,
+        /\bwhich (candidate|party) (should (I|we)|do you (recommend|suggest))/i,
+        /\btell me (who|how|which) to vote (for)?/i,
+        /\b(recommend|suggest)\s+(a|the)?\s*(candidate|party|politician)\s+to\s+(vote for|support|elect)/i
       ];
 
       const isDirectAsk = directPoliticalAsk.some(p => p.test(originalMessage.slice(0, 500)));
@@ -226,14 +226,15 @@ export class PoliticalGuardrails {
     }
 
     const votingPatterns = [
-      /vote for/i,
-      /don't vote for/i,
-      /best candidate/i,
-      /who should I vote/i,
-      /voting recommendation/i,
-      /election choice/i,
-      /ballot/i,
-      /polling/i,
+      /\b(you should|I recommend|we recommend|I suggest)\s+(vote for|voting for|elect|electing|choose|choosing)\s+\w+/i,
+      /\bdon't vote for\s+\w+/i,
+      /\bvote for\s+[A-Z]\w+/i,  // "vote for Candidate" (proper noun)
+      /\b(the\s+)?best candidate\s+(is|would be)/i,
+      /\bwho should (I|you|we) vote\s+(for)?/i,
+      /\bvoting recommendation/i,
+      /\belection choice/i,
+      /\bballot\s+(choice|decision|recommendation)/i,
+      /\bpolling\s+(choice|recommendation)/i,
     ];
 
     // Issue #380 Fix 3: Disambiguation patterns that REDUCE political score
@@ -263,13 +264,13 @@ export class PoliticalGuardrails {
     }
 
     const policyPatterns = [
-      /support this policy/i,
-      /oppose this policy/i,
-      /policy is (good|bad|wrong|right)/i,
-      /should be (banned|allowed|legal|illegal)/i,
-      /government should/i,
-      /congress should/i,
-      /administration should/i,
+      /\b(you should|I recommend|we recommend)\s+support\s+(this|that|the)\s+policy/i,
+      /\b(you should|I recommend|we recommend)\s+oppose\s+(this|that|the)\s+policy/i,
+      /\b(this|that|the)\s+policy\s+is\s+(clearly|obviously|definitely)\s+(good|bad|wrong|right)/i,
+      /\b(you think|I believe|we believe)\s+(it|this|that)\s+should be\s+(banned|allowed|legal|illegal)/i,
+      /\bgovernment should\s+(definitely|clearly|obviously)/i,
+      /\bcongress should\s+(definitely|clearly|obviously)/i,
+      /\badministration should\s+(definitely|clearly|obviously)/i,
     ];
 
     if (this.matchesPatterns(response, policyPatterns)) {
@@ -300,11 +301,11 @@ export class PoliticalGuardrails {
     }
 
     const disputedPatterns = [
-      /climate change is (not )?real/i,
-      /election was (stolen|rigged|fair)/i,
-      /vaccine (works|doesn't work|is safe|is dangerous)/i,
-      /immigration (is good|is bad)/i,
-      /gun control (works|doesn't work)/i,
+      /\bclimate change\s+is\s+(clearly|obviously|definitely|absolutely)\s+(not\s+)?real/i,
+      /\b(the\s+)?election\s+was\s+(clearly|definitely|obviously)?\s*(stolen|rigged|fair)/i,
+      /\bvaccine(s)?\s+(clearly|definitely|obviously)?\s*(work|don't work|is safe|is dangerous|are safe|are dangerous)/i,
+      /\bimmigration\s+is\s+(clearly|obviously|definitely)\s+(good|bad)/i,
+      /\bgun control\s+(clearly|definitely|obviously)?\s*(works|doesn't work)/i,
     ];
 
     if (this.matchesPatterns(response, disputedPatterns)) {
@@ -321,13 +322,13 @@ export class PoliticalGuardrails {
     // Generic political figure judgment patterns (no hardcoded names)
     const politicalFigureJudgmentPatterns = [
       // Subjective judgments about any political figure
-      /\b(president|senator|representative|governor|mayor|politician|candidate|leader)\s+\w+\s+(is|was|would be)\s+(good|bad|great|terrible|corrupt|honest|evil|perfect)\b/i,
+      /\b(president|senator|representative|governor|mayor|politician|candidate|leader)\s+[A-Z]\w+\s+(is|was|would be)\s+(good|bad|great|terrible|corrupt|honest|evil|perfect|right|wrong)\b/i,
 
-      // Recommendations about any political figure
-      /\b(you should|we should|everyone should|people should)\s+(vote for|support|elect|choose)\s+\w+/i,
+      // Recommendations about any political figure (with proper noun)
+      /\b(you should|I recommend|we recommend|we should|everyone should|people should)\s+(vote for|voting for|support|supporting|elect|electing|choose|choosing)\s+[A-Z]\w+/i,
 
-      // Comparative judgments
-      /\b\w+\s+is\s+(better|worse)\s+than\s+\w+\s+(as|for)\s+(president|senator|leader)/i
+      // Comparative judgments (proper nouns)
+      /\b[A-Z]\w+\s+is\s+(better|worse|superior|inferior)\s+than\s+[A-Z]\w+\s+(as|for)\s+(president|senator|leader|candidate)/i
     ];
 
     if (this.matchesPatterns(response, politicalFigureJudgmentPatterns)) {

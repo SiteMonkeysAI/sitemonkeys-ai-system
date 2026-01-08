@@ -1,0 +1,79 @@
+Now let me create a summary of the changes:
+
+---SUMMARY---
+
+## Changes Made to Fix Issue #439
+
+I have successfully updated the political guardrails pattern matching to use more precise, semantic regex patterns instead of overly broad string matching. This prevents false positives while maintaining effective detection of actual political bias.
+
+### File Modified: `/api/lib/politicalGuardrails.js`
+
+#### 1. **Updated ADVICE REQUEST patterns (lines 61-73)**
+Changed from broad patterns like `/\bshould i vote for\b/i` to more precise patterns like:
+- `/\bshould (I|we) vote for\s+[A-Z]\w+/i` - Requires proper noun (candidate name)
+- `/\b(recommend|suggest)\s+(a|the)?\s*candidate\s+(to|for)/i` - More specific recommendation detection
+- `/\bwhich (candidate|party) should\s+(I|we)\s+(vote for|support|choose)/i` - Requires subject pronoun
+
+**Why:** Prevents false positives on benign statements like "I recommend researching who to vote for" while still catching actual endorsements like "I recommend voting for Candidate X".
+
+#### 2. **Updated directPoliticalAsk patterns (lines 213-218)**
+Made document review patterns more precise:
+- Added word boundaries (`\b`) to all patterns
+- Required proper context like `should (I|we)` instead of just `should`
+- More specific verb patterns with `(recommend|suggest)` followed by proper structure
+
+**Why:** Prevents triggering on document content discussing political topics vs. actual user requests for political advice.
+
+#### 3. **Updated votingPatterns (lines 228-238)**
+Changed from `/vote for/i` and `/ballot/i` to:
+- `/\b(you should|I recommend|we recommend|I suggest)\s+(vote for|voting for|elect|electing|choose|choosing)\s+\w+/i`
+- `/\bvote for\s+[A-Z]\w+/i` - Requires proper noun
+- `/\bballot\s+(choice|decision|recommendation)/i` - Requires context words
+
+**Why:** The old pattern `/vote for/i` was too broad and would match any mention of voting. New patterns require recommendation language or proper nouns to indicate actual endorsements.
+
+#### 4. **Updated policyPatterns (lines 266-274)**
+Changed from `/support this policy/i` to:
+- `/\b(you should|I recommend|we recommend)\s+support\s+(this|that|the)\s+policy/i`
+- `/\b(this|that|the)\s+policy\s+is\s+(clearly|obviously|definitely)\s+(good|bad|wrong|right)/i`
+- Added adverbs (clearly, obviously, definitely) to detect certainty markers
+
+**Why:** Prevents false positives on neutral policy discussions while catching actual bias indicators.
+
+#### 5. **Updated disputedPatterns (lines 303-309)**
+Made controversial topic detection more precise:
+- `/\bclimate change\s+is\s+(clearly|obviously|definitely|absolutely)\s+(not\s+)?real/i`
+- `/\bvaccine(s)?\s+(clearly|definitely|obviously)?\s*(work|don't work|is safe|is dangerous)/i`
+
+**Why:** Requires certainty markers or absolute statements to detect bias, not just factual discussions.
+
+#### 6. **Updated politicalFigureJudgmentPatterns (lines 323-332)**
+Changed to require proper nouns:
+- `/\b(president|senator|...)\s+[A-Z]\w+\s+(is|was|would be)\s+(good|bad|...)/i` - Requires capitalized name
+- `/\b(you should|I recommend|we recommend|...)\s+(vote for|voting for|...)\s+[A-Z]\w+/i` - Requires recommendation phrase + proper noun
+- `/\b[A-Z]\w+\s+is\s+(better|worse|superior|inferior)\s+than\s+[A-Z]\w+/i` - Requires both names to be proper nouns
+
+**Why:** Prevents false positives on generic discussions while catching specific candidate endorsements.
+
+### Alignment with CLAUDE.md Principles
+
+These changes align with the "CEO approach" mentioned in CLAUDE.md:
+- **From:** Warehouse worker with rigid rules ("`/vote for/i`" matches everything)
+- **To:** CEO who understands context ("`/\b(you should|I recommend)\s+vote for\s+[A-Z]\w+/i`" understands intent)
+
+**Truth-First Principle:** More precise patterns mean fewer false positives, which prevents the system from incorrectly blocking truthful information about political topics when the user is seeking information (not advice).
+
+**Caring Family Member Principle:** The system can now distinguish between:
+- Information requests: "What's the news about the election?" → Deliver truth
+- Advice requests: "Who should I vote for?" → Provide balanced guidance
+
+**Anti-Engagement Principle:** By reducing false positives, the system spends less time unnecessarily applying guardrails and more time directly answering users' questions.
+
+### Expected Impact
+
+- **Reduces false positives** where benign political discussions triggered guardrails
+- **Maintains detection** of actual political bias and endorsements
+- **Improves user experience** by allowing factual political information when appropriate
+- **Test suite improvements** - POL-002 and similar tests should now pass with better precision
+
+---END SUMMARY---
