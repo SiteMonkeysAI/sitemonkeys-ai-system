@@ -1139,12 +1139,18 @@ export async function lookup(query, options = {}) {
     forceRefresh = false
   } = options;
 
-  // Ensure query is a string to avoid type confusion (for example, when multiple query parameters are provided)
+  // Input sanitization - Prevent ReDoS and injection
   if (typeof query !== 'string') {
+    query = String(query || '');
+  }
+  query = query.slice(0, 500).replace(/[\x00-\x1F\x7F]/g, '');
+
+  // Validate query is not empty after sanitization
+  if (!query || query.trim().length === 0) {
     return {
       success: false,
       lookup_performed: false,
-      reason: 'Invalid query type; expected string',
+      reason: 'Invalid or empty query after sanitization',
       truth_type: null,
       internal_confidence: internalConfidence,
       total_time_ms: Date.now() - startTime
