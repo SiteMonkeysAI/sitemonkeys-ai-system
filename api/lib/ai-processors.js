@@ -12,6 +12,7 @@ import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
 import { route } from "../core/intelligence/hierarchyRouter.js";
 import { lookup } from "../core/intelligence/externalLookupEngine.js";
 import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
+import { classifyQueryComplexity } from "../core/intelligence/queryComplexityClassifier.js";
 
 // STEP 5: Response quality consolidation
 import {
@@ -218,6 +219,20 @@ export async function processWithEliAndRoxy({
       console.error("⚠️ Phase 4 pipeline error:", phase4Error);
       // Continue with internal processing even if Phase 4 fails
       phase4Metadata.phase4_error = phase4Error.message;
+    }
+
+    // ==================== QUERY COMPLEXITY CLASSIFICATION ====================
+    // Use genuine semantic intelligence to determine response approach
+    let queryClassification = null;
+    try {
+      console.log('🎯 [QUERY_CLASSIFICATION] Analyzing query complexity...');
+      queryClassification = await classifyQueryComplexity(message, phase4Metadata);
+      console.log(`🎯 [QUERY_CLASSIFICATION] Result: ${queryClassification.classification} (confidence: ${queryClassification.confidence.toFixed(2)})`);
+      console.log(`🎯 [QUERY_CLASSIFICATION] Scaffolding required: ${queryClassification.requiresScaffolding}`);
+      console.log(`🎯 [QUERY_CLASSIFICATION] Response approach: ${queryClassification.responseApproach?.type || 'default'}`);
+    } catch (classificationError) {
+      console.error('⚠️ Query classification error:', classificationError);
+      // Continue without classification - personalities will apply default logic
     }
 
     // GENERATE RESPONSE BASED ON ROUTING DECISION

@@ -44,6 +44,7 @@ import { enforceBoundedReasoning } from "../core/intelligence/boundedReasoningGa
 import { enforceResponseContract } from "../core/intelligence/responseContractGate.js";
 import { enforceReasoningEscalation } from "./intelligence/reasoningEscalationEnforcer.js";
 import { applyPrincipleBasedReasoning } from "./intelligence/principleBasedReasoning.js";
+import { classifyQueryComplexity } from "./intelligence/queryComplexityClassifier.js";
 // ================================================
 
 // ==================== ORCHESTRATOR CLASS ====================
@@ -738,6 +739,23 @@ export class Orchestrator {
         this.error("⚠️ Phase 4 pipeline error:", phase4Error);
         // Continue with internal processing even if Phase 4 fails
         phase4Metadata.phase4_error = phase4Error.message;
+      }
+
+      // STEP 6.4: QUERY COMPLEXITY CLASSIFICATION (uses Phase 4 metadata)
+      // Use genuine semantic intelligence to determine response approach
+      let queryClassification = null;
+      try {
+        this.log('🎯 [QUERY_CLASSIFICATION] Analyzing query complexity...');
+        queryClassification = await classifyQueryComplexity(message, phase4Metadata);
+        this.log(`🎯 [QUERY_CLASSIFICATION] Result: ${queryClassification.classification} (confidence: ${queryClassification.confidence.toFixed(2)})`);
+        this.log(`🎯 [QUERY_CLASSIFICATION] Scaffolding required: ${queryClassification.requiresScaffolding}`);
+        this.log(`🎯 [QUERY_CLASSIFICATION] Response approach: ${queryClassification.responseApproach?.type || 'default'}`);
+        
+        // Add to context for personality frameworks
+        context.queryClassification = queryClassification;
+      } catch (classificationError) {
+        this.error('⚠️ Query classification error:', classificationError);
+        // Continue without classification - personalities will apply default logic
       }
 
       // STEP 6.5: Inject external data into context if available
