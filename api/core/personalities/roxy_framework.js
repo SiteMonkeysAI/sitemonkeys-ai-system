@@ -662,12 +662,9 @@ export class RoxyFramework {
   }
 
   #applyRoxySignature(response, modificationsCount) {
-    const signature =
-      modificationsCount > 0
-        ? `🍌 **Roxy:** (Empathetic framework applied - ${modificationsCount} enhancements)\n\n`
-        : `🍌 **Roxy:**\n\n`;
-
-    return signature + response;
+    // ISSUE #430 FIX: Personality signatures go in metadata, NOT in response text
+    // The response field should contain ONLY the answer, no emoji prefixes or framework labels
+    return response;
   }
 
   // ==================== VALIDATION METHODS ====================

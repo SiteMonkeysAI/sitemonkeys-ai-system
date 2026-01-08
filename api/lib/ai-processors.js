@@ -711,7 +711,7 @@ BUSINESS VALIDATION MODE ENFORCEMENT:
 
 ${vaultContext}
 
-${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nUSE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant to show continuity and understanding of the user's situation.\n` : ''}
+${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nUSE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant to show continuity and understanding of the user's situation.\n` : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'}
 
 Respond with practical business analysis, always considering survival implications.`;
 
@@ -762,7 +762,7 @@ TRUTH-FIRST MODE ENFORCEMENT:
 
 ${vaultContext}
 
-${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nUSE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant to show continuity and understanding of the user's situation.\n` : ''}
+${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nUSE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant to show continuity and understanding of the user's situation.\n` : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'}
 
 Provide honest, accurate analysis with clear confidence indicators.`;
 

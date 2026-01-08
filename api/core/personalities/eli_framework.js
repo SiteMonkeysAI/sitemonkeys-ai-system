@@ -982,12 +982,9 @@ export class EliFramework {
   }
 
   #applyEliSignature(response, modificationsCount) {
-    const signature =
-      modificationsCount > 0
-        ? `🍌 **Eli:** (Analytical framework applied - ${modificationsCount} enhancements)\n\n`
-        : `🍌 **Eli:**\n\n`;
-
-    return signature + response;
+    // ISSUE #430 FIX: Personality signatures go in metadata, NOT in response text
+    // The response field should contain ONLY the answer, no emoji prefixes or framework labels
+    return response;
   }
 
   // ==================== VALIDATION METHODS ====================
