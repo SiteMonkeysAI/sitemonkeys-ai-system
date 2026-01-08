@@ -1,0 +1,639 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #435: [claude-fix] Issue #435: Comprehensive System Diagnostic - Bible Alignment Audit
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>Issue #435: Comprehensive System Diagnostic - Bible Alignment Audit</h1>
+<h2>Overview</h2>
+<p>This issue documents a complete diagnostic of the Site Monkeys AI system against the four Bible documents, identifying every deviation from foundational principles and prescribing principle-based solutions that rely on genuine semantic intelligence—not rules or keywords.</p>
+<p><strong>Bible Documents Referenced:</strong></p>
+<ol>
+<li><code>MASTER_SPECIFICATION_01.docx</code> - System architecture and requirements</li>
+<li><code>TECHNICAL_STANDARDS_01.docx</code> - Implementation patterns and cost management</li>
+<li><code>PRINCIPLES_AND_PHILOSOPHY_01.docx</code> - Core values and behavioral standards</li>
+<li><code>Initial_Architectural_Rebuild_chat</code> - CEO vs warehouse worker principle, caring family member model</li>
+</ol>
+<p><strong>Diagnostic Method:</strong> Real production traffic analysis against doctrine requirements</p>
+<hr>
+<h2>PART 1: CRITICAL FAILURES IDENTIFIED</h2>
+<h3>1.1 External Lookup Engine - Fundamentally Broken</h3>
+<p><strong>Observed Behavior (from production logs):</strong></p>
+<pre><code>[externalLookupEngine] No reliable parseable source available for this query type
+</code></pre>
+<p>This appears for:</p>
+<ul>
+<li>"What's the current EUR/USD exchange rate?"</li>
+<li>"What's the current price of gold per ounce?"</li>
+<li>"What's Apple's stock price today?"</li>
+<li>"Who is the current Prime Minister of the UK?" → Returns BORIS JOHNSON (outdated by 2+ years!)</li>
+</ul>
+<p><strong>Bible Requirement (Phase 4 Technical Specification):</strong></p>
+<blockquote>
+<p>"External Lookup Engine - Fetches and validates external source data with automatic triggers"</p>
+<p>Domain Detection Patterns:</p>
+<ul>
+<li>Financial: stock price, investment, tax rate, interest rate, market, trading → SEC, IRS, Bloomberg, Reuters, official exchanges</li>
+</ul>
+</blockquote>
+<p><strong>Bible Requirement (Master Specification, lines 31-37):</strong></p>
+<blockquote>
+<p>"Core Differentiators:</p>
+<ol>
+<li>Truth First: Admits uncertainty, never fabricates"</li>
+</ol>
+</blockquote>
+<p><strong>THE VIOLATION:</strong>
+The system is FABRICATING answers (Boris Johnson) because the external lookup engine has NO CONFIGURED SOURCES for:</p>
+<ul>
+<li>Currency exchange rates</li>
+<li>Commodity prices (gold, silver)</li>
+<li>Stock prices (except CoinGecko for crypto)</li>
+<li>Current political positions</li>
+</ul>
+<p>This is a <strong>TRUTH-FIRST VIOLATION</strong> at the foundational level. The system should NEVER provide outdated information as if it were current when it has mechanisms to detect this is VOLATILE data.</p>
+<hr>
+<h3>1.2 Query Classifier Misclassifying Simple Factual Queries</h3>
+<p><strong>Observed Behavior:</strong></p>
+<pre><code>[QUERY_CLASSIFIER] ✅ Classified as: medium_complexity (confidence: 0.19)
+[QUERY_CLASSIFIER] Scaffolding required: false
+</code></pre>
+<p>For query: "What's the current EUR/USD exchange rate?"</p>
+<p><strong>The Problem:</strong>
+This is NOT <code>medium_complexity</code>. This is <code>simple_factual</code> or should be a new category: <code>real_time_lookup_required</code>.</p>
+<p>The classifier's concept anchors don't include:</p>
+<ul>
+<li>Real-time data requests</li>
+<li>Current value lookups</li>
+<li>"What is X right now?" patterns</li>
+</ul>
+<p><strong>Bible Requirement (Initial Architectural Rebuild Chat, lines 98-109):</strong></p>
+<blockquote>
+<p>"The Warehouse Worker vs CEO Problem:
+Right now, your system is like a warehouse worker with 1,000 extremely detailed procedures.
+Can handle any situation that was anticipated and documented.
+<strong>Breaks when encountering novel situations.</strong></p>
+<p>What you actually need:
+A CEO who understands business principles.
+Can reason through any novel situation."</p>
+</blockquote>
+<p><strong>THE VIOLATION:</strong>
+The classifier was built with specific concept anchors that don't cover this query type. A CEO would understand: "This is asking for current data → I need to look it up externally → If I can't, I admit that directly."</p>
+<hr>
+<h3>1.3 "I Don't Know" Responses Are Over-Scaffolded</h3>
+<p><strong>Observed Behavior (EUR/USD response - 1,346 characters):</strong></p>
+<pre><code>I'm sorry, but as a text-based AI, I don't have real-time capabilities to provide you with the current EUR/USD exchange rate. Being honest with you matters more than appearing knowledgeable.
+
+Here's what I can tell you:
+- What I know: The EUR/USD exchange rate fluctuates throughout the day...
+- What I don't know: I don't have access to real-time data...
+- Why this matters: The exchange rate can influence your decisions...
+
+However, I can provide you with general guidance:
+- If your situation is like Scenario A...
+- If your situation is like Scenario B...
+
+To give you a definitive answer, I would need real-time data access...
+</code></pre>
+<p><strong>Bible Requirement (Principles &amp; Philosophy, lines 377-406):</strong></p>
+<blockquote>
+<p>"Principle 5: EFFICIENCY AS RESPECT
+What This Means:</p>
+<ul>
+<li>Get to the point quickly</li>
+<li>No unnecessary background</li>
+<li>No filler phrases</li>
+<li>Front-load the answer</li>
+<li>Be concise while complete"</li>
+</ul>
+</blockquote>
+<p><strong>Bible Requirement (Principles &amp; Philosophy, lines 219-230):</strong></p>
+<blockquote>
+<p>"Anti-Engagement:
+Success looks like:
+User: 'I need help with X'
+System: Provides comprehensive answer... DONE"</p>
+</blockquote>
+<p><strong>THE VIOLATION:</strong>
+When the system knows it CANNOT answer (lookup failed), it's applying the full CEO-level bounded reasoning scaffold. This is WRONG.</p>
+<p>The correct response should be:</p>
+<blockquote>
+<p>"I don't have access to real-time exchange rates. You can check current EUR/USD at XE.com, Google Finance, or your bank."</p>
+</blockquote>
+<p>That's 20 words. Not 200+ words of scaffolding for a simple "I can't get that data."</p>
+<hr>
+<h3>1.4 False Continuity Still Present</h3>
+<p><strong>Observed Behavior:</strong>
+Response to "How many feet in a mile?":</p>
+<blockquote>
+<p>"There are 5,280 feet in a mile. <strong>As we discussed before</strong>, this is a standard conversion in the Imperial system of measurements. Is there anything else you would like to know about measurements or conversions?"</p>
+</blockquote>
+<p><strong>Problems:</strong></p>
+<ol>
+<li>"As we discussed before" - FALSE. Fresh user, never discussed this.</li>
+<li>"Is there anything else..." - ENGAGEMENT BAIT forbidden by doctrine</li>
+</ol>
+<p><strong>Bible Requirement (Principles &amp; Philosophy, lines 279-293):</strong></p>
+<blockquote>
+<p>"Anti-Engagement:
+Non-Negotiable:</p>
+<ul>
+<li>Never ask unnecessary follow-ups</li>
+<li>Never drip-feed information</li>
+<li>Never optimize for conversation length</li>
+<li>Complete answers, decisive endings"</li>
+</ul>
+</blockquote>
+<p><strong>Bible Requirement (Master Specification, lines 31-33):</strong></p>
+<blockquote>
+<p>"Truth First: Admits uncertainty, never fabricates"</p>
+</blockquote>
+<p><strong>THE VIOLATION:</strong>
+Fabricating shared history ("As we discussed before") is a TRUTH violation. Asking "Is there anything else?" is an ENGAGEMENT violation.</p>
+<hr>
+<h3>1.5 Volatile Data Returning Internal Knowledge Instead of Admitting Failure</h3>
+<p><strong>Observed Behavior:</strong>
+Query: "Who is the current Prime Minister of the UK?"
+Response: "The current Prime Minister of the United Kingdom is Boris Johnson."</p>
+<p><strong>Reality:</strong> Boris Johnson resigned July 2022. Rishi Sunak became PM October 2022. Keir Starmer became PM July 2024.</p>
+<p><strong>The system correctly detected:</strong></p>
+<pre><code>[truthTypeDetector] Truth type: VOLATILE
+[externalLookupEngine] No reliable parseable source available
+</code></pre>
+<p>But then STILL returned the internal (wrong) answer as if it were current fact.</p>
+<p><strong>Bible Requirement (Phase 4 Technical Specification, Section 6.1):</strong></p>
+<blockquote>
+<p>"Failure Handling Protocol - Three-Step Graceful Degradation:</p>
+<ol>
+<li>DISCLOSE: 'I couldn't verify current information from external sources.'</li>
+<li>PROVIDE: Best internal answer WITH explicit labels: 'Based on my training data (as of [date])'</li>
+<li>PATH: 'You can verify current information at [authoritative source URL]'"</li>
+</ol>
+</blockquote>
+<p><strong>THE VIOLATION:</strong>
+The graceful degradation protocol is NOT being executed. The system is returning stale data WITHOUT:</p>
+<ul>
+<li>Disclosure that verification failed</li>
+<li>Labeling it as training data (with cutoff date)</li>
+<li>Providing verification path</li>
+</ul>
+<hr>
+<h3>1.6 Response Length Inversely Correlated with Certainty</h3>
+<p><strong>Pattern Observed:</strong></p>
+
+Query | Certainty | Response Length | Expected
+-- | -- | -- | --
+"Hello" | High | 34 chars ✅ | Short
+"What's 17×23?" | High | 29 chars ✅ | Short
+"EUR/USD rate?" | CAN'T ANSWER | 1,346 chars ❌ | Short
+"Gold price?" | CAN'T ANSWER | 1,225 chars ❌ | Short
+"UK Prime Minister?" | WRONG ANSWER | ~200 chars ❌ | Short + disclaimer
+
+
+<p><strong>Bible Requirement (Principles &amp; Philosophy, lines 126-143):</strong></p>
+<blockquote>
+<p>"Principle 2: COMPLETE ANSWERS
+Statement: Give users everything they need to move forward in the first response.
+...
+First response should solve the problem. If it doesn't, system failed."</p>
+</blockquote>
+<p><strong>THE VIOLATION:</strong>
+When the system CAN'T answer, it's generating MORE text (explaining why it can't) instead of LESS text (direct admission + where to find answer).</p>
+<hr>
+<h2>PART 2: ROOT CAUSE ANALYSIS</h2>
+<h3>2.1 The Architecture is Correct, The Implementation is Broken</h3>
+<p>The Phase 4 specification correctly defines:</p>
+<ul>
+<li>Truth Type Detection (VOLATILE, SEMI-STABLE, PERMANENT)</li>
+<li>Hierarchy Router (External-first for factual, Vault-first for policy)</li>
+<li>External Lookup Engine (with domain-specific sources)</li>
+<li>Graceful Degradation Protocol</li>
+</ul>
+<p><strong>What's Missing in Implementation:</strong></p>
+<ol>
+<li>
+<p><strong>externalLookupEngine.js</strong> only has sources for:</p>
+<ul>
+<li>CoinGecko (crypto prices) ✅</li>
+<li>Google News RSS (news) ✅</li>
+<li>Wikipedia Current Events (minimal) ✅</li>
+</ul>
+<p>Missing:</p>
+<ul>
+<li>Currency exchange API (XE.com, exchangeratesapi.io)</li>
+<li>Stock price API (Alpha Vantage, Yahoo Finance)</li>
+<li>Commodity API (gold, silver, oil prices)</li>
+<li>Government data API (current political positions)</li>
+</ul>
+</li>
+<li>
+<p><strong>Graceful Degradation is NOT implemented</strong> - when lookup fails, the system should:</p>
+<ul>
+<li>Disclose failure</li>
+<li>Label internal answer with training cutoff</li>
+<li>Provide verification path</li>
+</ul>
+<p>Instead, it just returns internal (potentially wrong) answer.</p>
+</li>
+<li>
+<p><strong>Query Classifier lacks real-time category</strong> - "EUR/USD rate" hits <code>medium_complexity</code> instead of a category that triggers different handling.</p>
+</li>
+</ol>
+<hr>
+<h3>2.2 The Warehouse Worker Pattern is Still Present</h3>
+<p><strong>Evidence:</strong>
+The query classifier uses fixed concept anchors:</p>
+<pre><code class="language-javascript">const CONCEPT_ANCHORS = {
+  greeting: [...],
+  simple_factual: [...],
+  news_current_events: [...],
+  // etc.
+}
+</code></pre>
+<p>When a query doesn't match these anchors well (low confidence: 0.17-0.23), it falls back to <code>medium_complexity</code>.</p>
+<p><strong>This is the Warehouse Worker pattern:</strong></p>
+<ul>
+<li>Can handle queries that match predefined anchors</li>
+<li>Breaks on novel queries</li>
+<li>Requires adding more anchors for new situations</li>
+</ul>
+<p><strong>Bible Requirement (Initial Architectural Rebuild Chat, lines 235-250):</strong></p>
+<blockquote>
+<p>"2. Principle-Based Reasoning
+Not rules, but understanding:</p>
+<ul>
+<li>Why truth matters more than comfort</li>
+<li>How to find simpler paths without sacrificing outcomes</li>
+<li>When to volunteer information vs. when to wait</li>
+<li>How to empower without controlling"</li>
+</ul>
+</blockquote>
+<p><strong>THE FIX NEEDED:</strong>
+The classifier should REASON about queries, not just match them to anchors. A CEO would think:</p>
+<ul>
+<li>"This is asking for a current value" → needs external data</li>
+<li>"This is asking about a person's current role" → needs verification</li>
+<li>"This is asking for a calculation" → I can compute this myself</li>
+</ul>
+<hr>
+<h2>PART 3: COMPREHENSIVE SOLUTION SPECIFICATION</h2>
+<h3>3.1 External Lookup Engine Expansion</h3>
+<p><strong>Principle (not rules):</strong></p>
+<blockquote>
+<p>When a query asks for current state of external reality (prices, rates, positions, events), the system must either:</p>
+<ol>
+<li>Fetch and provide verified current data, OR</li>
+<li>Explicitly admit it cannot verify and provide path to verification</li>
+</ol>
+</blockquote>
+<p><strong>Implementation Requirements:</strong></p>
+<ol>
+<li>
+<p><strong>Add source adapters for:</strong></p>
+<ul>
+<li>Currency rates: Use free tier of exchangeratesapi.io or similar</li>
+<li>Stock prices: Yahoo Finance API (free) or Alpha Vantage</li>
+<li>Commodity prices: Use financial news feed or commodity API</li>
+<li>Government/political: Wikipedia Infobox parsing for current office holders</li>
+</ul>
+</li>
+<li>
+<p><strong>Source adapter interface:</strong></p>
+<pre><code class="language-javascript">// Each source adapter must implement:
+{
+  canHandle(query, truthType, domain) // semantic understanding, not keyword match
+  async fetch(query)
+  formatResponse(data)
+  getVerificationPath()
+}
+</code></pre>
+</li>
+<li>
+<p><strong>Semantic matching for source selection:</strong></p>
+<ul>
+<li>Use embeddings to understand query intent</li>
+<li>Match to source capabilities semantically</li>
+<li>NOT by keyword patterns</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h3>3.2 Graceful Degradation Implementation</h3>
+<p><strong>Principle:</strong></p>
+<blockquote>
+<p>When external verification fails for volatile data, the response must be shorter and more direct, not longer. The user needs to know quickly that they should look elsewhere.</p>
+</blockquote>
+<p><strong>Required Response Pattern for Failed Volatile Lookup:</strong></p>
+<pre><code>[Direct admission] + [Training cutoff if providing internal answer] + [Verification path]
+</code></pre>
+<p><strong>Example:</strong>
+Query: "What's the current EUR/USD exchange rate?"
+Lookup: FAILED</p>
+<p>Response:</p>
+<blockquote>
+<p>"I can't access real-time exchange rates. For current EUR/USD, check XE.com or Google 'EUR USD'."</p>
+</blockquote>
+<p>That's it. 20 words. Not 200.</p>
+<p><strong>Implementation:</strong></p>
+<pre><code class="language-javascript">// In responseContractGate.js or new gracefulDegradation.js
+
+function handleFailedVolatileLookup(query, lookupResult) {
+  return {
+    response: buildMinimalFailureResponse(query, lookupResult),
+    skipScaffolding: true,
+    skipEnhancements: true,
+    maxLength: 100 // words
+  };
+}
+</code></pre>
+<hr>
+<h3>3.3 Query Classification Enhancement</h3>
+<p><strong>Principle:</strong></p>
+<blockquote>
+<p>Classification should understand WHAT the query is asking for, not just match it to predefined categories. If a query asks for current external data, that's a different handling path than asking for general knowledge.</p>
+</blockquote>
+<p><strong>New Classification Dimension: Data Freshness Requirement</strong></p>
+<pre><code class="language-javascript">// Add to query classification output:
+{
+  category: 'simple_factual',
+  confidence: 0.8,
+  requiresScaffolding: false,
+  
+  // NEW:
+  dataFreshnessRequirement: 'REAL_TIME' | 'CURRENT' | 'HISTORICAL' | 'TIMELESS',
+  externalLookupRequired: true | false,
+  verificationNeeded: true | false
+}
+</code></pre>
+<p><strong>Semantic Understanding for Freshness:</strong></p>
+<ul>
+<li>"What IS the X?" (timeless definition) → TIMELESS</li>
+<li>"What WAS the X?" (historical) → HISTORICAL</li>
+<li>"Who IS the current X?" (current state) → CURRENT</li>
+<li>"What's X right now?" (real-time) → REAL_TIME</li>
+</ul>
+<p>This should be determined by semantic analysis of the query, NOT by keyword matching.</p>
+<hr>
+<h3>3.4 Response Contract for "Can't Answer" Scenarios</h3>
+<p><strong>Principle:</strong></p>
+<blockquote>
+<p>The response contract should recognize that "I can't answer this" is a COMPLETE answer. It doesn't need scaffolding, scenarios, or engagement.</p>
+</blockquote>
+<p><strong>New Response Contract Type: MINIMAL_REDIRECT</strong></p>
+<p>When:</p>
+<ul>
+<li>Query requires external data</li>
+<li>External lookup failed</li>
+<li>System cannot provide reliable answer</li>
+</ul>
+<p>Then:</p>
+<ul>
+<li>Response must be &lt; 50 words</li>
+<li>Must include verification path</li>
+<li>Must NOT include:
+<ul>
+<li>Scenarios</li>
+<li>"What I know / don't know" sections</li>
+<li>Follow-up questions</li>
+<li>Engagement hooks</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h3>3.5 Truth Labeling for Stale Data</h3>
+<p><strong>Principle:</strong></p>
+<blockquote>
+<p>If the system provides internal knowledge for a VOLATILE or SEMI-STABLE query, it MUST label that information with its source and limitations.</p>
+</blockquote>
+<p><strong>Required Labels:</strong></p>
+<p>For VOLATILE (when lookup fails):</p>
+<blockquote>
+<p>"Based on my training data (cutoff: early 2024), [answer]. This may be outdated—verify at [source]."</p>
+</blockquote>
+<p>For SEMI-STABLE (when lookup fails):</p>
+<blockquote>
+<p>"As of my last update ([date]), [answer]. You should verify this is still current."</p>
+</blockquote>
+<p>For PERMANENT:</p>
+<blockquote>
+<p>No special label needed—facts don't change.</p>
+</blockquote>
+<p><strong>Implementation:</strong>
+The personality frameworks (eli.js, roxy.js) should inject these labels when:</p>
+<ol>
+<li><code>truthType === 'VOLATILE' || truthType === 'SEMI-STABLE'</code></li>
+<li><code>lookupResult.degraded === true</code></li>
+</ol>
+<hr>
+<h3>3.6 False Continuity Elimination</h3>
+<p><strong>Principle:</strong></p>
+<blockquote>
+<p>The system must NEVER claim shared history that doesn't exist. Every claim of "we discussed" must be verifiable against actual conversation history.</p>
+</blockquote>
+<p><strong>Implementation:</strong></p>
+<ol>
+<li>
+<p><strong>Scan responses for continuity claims:</strong></p>
+<ul>
+<li>"As we discussed"</li>
+<li>"Like I mentioned"</li>
+<li>"You told me earlier"</li>
+<li>"We talked about"</li>
+<li>"Earlier you said"</li>
+</ul>
+</li>
+<li>
+<p><strong>Verify against actual context:</strong></p>
+<ul>
+<li>If conversation history is empty → these phrases are LIES</li>
+<li>If conversation history exists → verify the claim is accurate</li>
+</ul>
+</li>
+<li>
+<p><strong>Strip false claims:</strong></p>
+<ul>
+<li>If unverifiable, remove the phrase entirely</li>
+<li>Don't replace with another phrase—just state the fact</li>
+</ul>
+</li>
+</ol>
+<p><strong>Example Fix:</strong></p>
+<ul>
+<li>Before: "As we discussed before, there are 5,280 feet in a mile."</li>
+<li>After: "There are 5,280 feet in a mile."</li>
+</ul>
+<hr>
+<h3>3.7 Engagement Bait Elimination</h3>
+<p><strong>Principle:</strong></p>
+<blockquote>
+<p>Responses should end decisively. "Is there anything else?" is FORBIDDEN unless the user is in an ongoing workflow that genuinely requires follow-up.</p>
+</blockquote>
+<p><strong>Implementation:</strong></p>
+<p>Already partially in responseContractGate.js, but needs enforcement for:</p>
+<ul>
+<li>Simple factual answers (should NEVER have follow-up offers)</li>
+<li>Failed lookups (should redirect to external source, not invite more questions)</li>
+<li>Unit conversions, calculations (answer is complete—DONE)</li>
+</ul>
+<p><strong>Phrases to strip unconditionally for simple/factual queries:</strong></p>
+<ul>
+<li>"Is there anything else...?"</li>
+<li>"Would you like to know more...?"</li>
+<li>"Should I explain further...?"</li>
+<li>"Do you have other questions...?"</li>
+</ul>
+<hr>
+<h2>PART 4: VERIFICATION TESTS</h2>
+<h3>4.1 External Lookup Tests</h3>
+<pre><code class="language-javascript">// Test: Currency rate lookup
+// Input: "What's the current EUR/USD exchange rate?"
+// Expected: Either real rate with source, OR admission + verification path (&lt;50 words)
+
+// Test: Stock price lookup  
+// Input: "What's Apple's stock price today?"
+// Expected: Either real price with source, OR admission + verification path (&lt;50 words)
+
+// Test: Current position lookup
+// Input: "Who is the Prime Minister of the UK?"
+// Expected: Keir Starmer (verified), OR admission that verification failed + link to gov.uk
+// MUST NOT: Return Boris Johnson
+
+// Test: Gold price lookup
+// Input: "What's the current price of gold per ounce?"
+// Expected: Either real price, OR admission + link to commodity tracker
+</code></pre>
+<h3>4.2 Response Length Tests for Failed Lookups</h3>
+<pre><code class="language-javascript">// Test: Failed volatile lookup response length
+// Input: Any VOLATILE query where lookup fails
+// Expected: Response &lt; 50 words
+// MUST NOT: Include "What I know / What I don't know" sections
+// MUST NOT: Include scenarios
+// MUST: Include verification path (URL or source name)
+</code></pre>
+<h3>4.3 False Continuity Tests</h3>
+<pre><code class="language-javascript">// Test: Fresh user, no history
+// Input: "How many feet in a mile?" (first message, no history)
+// Expected: Response contains NO phrases like "as we discussed", "like I mentioned"
+// Response SHOULD: Just state "5,280 feet in a mile."
+
+// Test: Continuity claim verification
+// Input: Any response containing "as we discussed"
+// Validation: Check if conversation history actually contains that discussion
+// If not found: FAIL - false continuity
+</code></pre>
+<h3>4.4 Engagement Elimination Tests</h3>
+<pre><code class="language-javascript">// Test: Simple factual answer endings
+// Input: "What's 17 × 23?"
+// Expected: "391" or "17 × 23 = 391"
+// MUST NOT: End with "Is there anything else?"
+
+// Test: Unit conversion endings
+// Input: "How many feet in a mile?"
+// Expected: "5,280 feet"
+// MUST NOT: End with "Would you like to know about other conversions?"
+</code></pre>
+<h3>4.5 Truth Labeling Tests</h3>
+<pre><code class="language-javascript">// Test: Stale data labeling
+// When: VOLATILE query, lookup failed, internal answer provided
+// Expected: Response includes training cutoff date
+// Expected: Response includes "verify at [source]"
+
+// Example:
+// Input: "Who is the CEO of Twitter?"
+// If lookup fails:
+// Expected: "Based on my training data (early 2024), the CEO was [X]. Verify current leadership at twitter.com/about"
+</code></pre>
+<hr>
+<h2>PART 5: IMPLEMENTATION PRIORITY</h2>
+<h3>Phase 1: Stop the Bleeding (Immediate)</h3>
+<ol>
+<li><strong>Graceful Degradation Protocol</strong> - Stop returning wrong answers for volatile queries</li>
+<li><strong>Truth Labeling</strong> - All internal answers for volatile/semi-stable must be labeled</li>
+<li><strong>Response Length Control</strong> - Failed lookups must be SHORT</li>
+</ol>
+<h3>Phase 2: Expand Capabilities (This Week)</h3>
+<ol>
+<li><strong>External Source Adapters</strong> - Add currency, stock, commodity, government sources</li>
+<li><strong>Query Freshness Classification</strong> - Add data freshness dimension to classification</li>
+</ol>
+<h3>Phase 3: Eliminate All Violations (Next Week)</h3>
+<ol>
+<li><strong>False Continuity Stripping</strong> - Verify all "we discussed" claims</li>
+<li><strong>Engagement Bait Elimination</strong> - Enforce decisive endings</li>
+<li><strong>Comprehensive Testing</strong> - Run all verification tests</li>
+</ol>
+<hr>
+<h2>PART 6: GUIDING PRINCIPLES FOR IMPLEMENTATION</h2>
+<h3>The CEO Test</h3>
+<p>Before implementing any solution, ask:</p>
+<blockquote>
+<p>"Would a CEO who understands our principles handle this query this way?"</p>
+</blockquote>
+<p>If the answer is no, the implementation is wrong.</p>
+<h3>The Caring Family Member Test</h3>
+<p>For every response, ask:</p>
+<blockquote>
+<p>"Would a caring family member who genuinely wants to help give this response?"</p>
+</blockquote>
+<p>A caring family member would:</p>
+<ul>
+<li>Admit when they don't know</li>
+<li>Point you to where you CAN get the answer</li>
+<li>NOT waste your time with long explanations of why they can't help</li>
+<li>NOT pretend to remember conversations that never happened</li>
+<li>NOT ask "anything else?" when the question was fully answered</li>
+</ul>
+<h3>The Anti-Engagement Test</h3>
+<p>For every response, ask:</p>
+<blockquote>
+<p>"Is this response trying to keep the user talking, or trying to solve their problem?"</p>
+</blockquote>
+<p>If it's trying to keep them talking → WRONG
+If it solves the problem and ends → CORRECT</p>
+<h3>The Truth Test</h3>
+<p>For every factual claim, ask:</p>
+<blockquote>
+<p>"Can we verify this is true as of RIGHT NOW?"</p>
+</blockquote>
+<p>If yes → state it
+If no but we can provide a source → admit uncertainty + provide source
+If no and it's internal knowledge → LABEL it as such with date</p>
+<hr>
+<h2>Summary</h2>
+<p>This diagnostic reveals that while Issues #430 and #431 fixed the classification→pipeline flow, there are <strong>upstream architectural gaps</strong> that cause the system to violate its foundational principles:</p>
+<ol>
+<li><strong>External lookup engine</strong> needs sources for currency, stocks, commodities, government data</li>
+<li><strong>Graceful degradation</strong> is not implemented—stale data returned without disclosure</li>
+<li><strong>Response length</strong> is inversely correlated with certainty (should be the opposite)</li>
+<li><strong>False continuity</strong> claims slip through in some code paths</li>
+<li><strong>Engagement bait</strong> still present in some response types</li>
+<li><strong>Query classification</strong> lacks data freshness dimension</li>
+</ol>
+<p>All solutions must be implemented using <strong>genuine semantic intelligence</strong>—embeddings, concept understanding, principle-based reasoning. NOT by adding more keyword patterns or rules.</p>
+<p>The system has the architecture for truth-first AI. Now it needs the implementation.</p>
+<hr>
+<p><strong>Issue Created:</strong> 2026-01-08
+<strong>Priority:</strong> CRITICAL
+<strong>Affects:</strong> Core truth-first functionality
+<strong>Bible Documents Referenced:</strong> All four primary sources</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

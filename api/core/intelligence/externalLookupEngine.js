@@ -41,6 +41,148 @@ export const API_SOURCES = {
       }
     }
   ],
+  CURRENCY: [
+    {
+      name: 'Exchange Rates API',
+      buildUrl: (query) => {
+        // Extract currency pairs from query (e.g., EUR/USD, GBP/USD, EUR to USD)
+        const pairMatch = query.match(/([A-Z]{3})[\/\s-]?(?:to\s+)?([A-Z]{3})/i);
+        if (!pairMatch) return null;
+
+        const fromCurrency = pairMatch[1].toUpperCase();
+        const toCurrency = pairMatch[2].toUpperCase();
+
+        // Using exchangerate-api.com free tier
+        return `https://open.er-api.com/v6/latest/${fromCurrency}`;
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json, query) => {
+        if (!json || !json.rates) return null;
+
+        // Extract target currency from query again
+        const pairMatch = query.match(/([A-Z]{3})[\/\s-]?(?:to\s+)?([A-Z]{3})/i);
+        if (!pairMatch) return null;
+
+        const fromCurrency = pairMatch[1].toUpperCase();
+        const toCurrency = pairMatch[2].toUpperCase();
+        const rate = json.rates[toCurrency];
+
+        if (!rate) return null;
+
+        return `${fromCurrency}/${toCurrency} exchange rate: ${rate.toFixed(4)} (as of ${json.time_last_update_utc || 'now'})`;
+      }
+    }
+  ],
+  STOCKS: [
+    {
+      name: 'Yahoo Finance',
+      buildUrl: (query) => {
+        // Extract stock symbol or company name
+        const symbolMatch = query.match(/\b([A-Z]{1,5})\b.*?(?:stock|share|price)/i) ||
+                          query.match(/(?:stock|share|price).*?\b([A-Z]{1,5})\b/i);
+
+        // Common company name to ticker mapping
+        const companyTickers = {
+          'apple': 'AAPL',
+          'microsoft': 'MSFT',
+          'google': 'GOOGL',
+          'amazon': 'AMZN',
+          'tesla': 'TSLA',
+          'meta': 'META',
+          'facebook': 'META',
+          'nvidia': 'NVDA'
+        };
+
+        let symbol = null;
+        if (symbolMatch) {
+          symbol = symbolMatch[1].toUpperCase();
+        } else {
+          // Try to extract company name
+          const lowerQuery = query.toLowerCase();
+          for (const [company, ticker] of Object.entries(companyTickers)) {
+            if (lowerQuery.includes(company)) {
+              symbol = ticker;
+              break;
+            }
+          }
+        }
+
+        if (!symbol) return null;
+
+        // Note: This is a placeholder - Yahoo Finance API requires authentication
+        // For production, use a proper financial data API
+        return null; // Disabled until proper API configured
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        // Placeholder for Yahoo Finance data extraction
+        return null;
+      }
+    }
+  ],
+  COMMODITIES: [
+    {
+      name: 'Metals API',
+      buildUrl: (query) => {
+        // Extract commodity name (gold, silver, oil, etc.)
+        const commodityMatch = query.match(/\b(gold|silver|platinum|palladium|crude oil|oil|natural gas)\b/i);
+        if (!commodityMatch) return null;
+
+        // Note: Metals API requires authentication
+        // For production, use a proper commodities API
+        return null; // Disabled until proper API configured
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        // Placeholder for commodities data extraction
+        return null;
+      }
+    }
+  ],
+  GOVERNMENT: [
+    {
+      name: 'Wikipedia Political Leaders',
+      buildUrl: (query) => {
+        // Extract country and position from query
+        const ukMatch = query.match(/\b(UK|United Kingdom|Britain|British)\b.*?(prime minister|PM)/i);
+        const usMatch = query.match(/\b(US|USA|United States|America|American)\b.*?(president)/i);
+        const germanyMatch = query.match(/\b(Germany|German)\b.*?(chancellor)/i);
+        const franceMatch = query.match(/\b(France|French)\b.*?(president)/i);
+
+        if (ukMatch) {
+          return 'https://en.wikipedia.org/api/rest_v1/page/summary/Prime_Minister_of_the_United_Kingdom';
+        } else if (usMatch) {
+          return 'https://en.wikipedia.org/api/rest_v1/page/summary/President_of_the_United_States';
+        } else if (germanyMatch) {
+          return 'https://en.wikipedia.org/api/rest_v1/page/summary/Chancellor_of_Germany';
+        } else if (franceMatch) {
+          return 'https://en.wikipedia.org/api/rest_v1/page/summary/President_of_France';
+        }
+
+        // Generic current leader lookup
+        const leaderMatch = query.match(/(?:current|who is the)\s+(?:prime minister|president|chancellor|leader)\s+of\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i);
+        if (leaderMatch) {
+          const country = leaderMatch[1];
+          // Try to construct Wikipedia URL for that country's leader
+          return `https://en.wikipedia.org/api/rest_v1/page/summary/List_of_current_heads_of_state_and_government`;
+        }
+
+        return null;
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        if (!json || !json.extract) return null;
+
+        // Extract current leader name from Wikipedia summary
+        // This will get the first few sentences which usually mention the current holder
+        return json.extract.substring(0, 500);
+      }
+    }
+  ],
   MEDICAL: [
     {
       name: 'FDA Drug Labels',
@@ -491,6 +633,34 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
 export function selectSourcesForQuery(query, truthType, highStakesResult) {
   const lowerQuery = query.toLowerCase();
 
+  // Currency exchange rates - use Exchange Rates API
+  if (lowerQuery.match(/exchange rate|currency|EUR|USD|GBP|JPY|CHF|CAD|AUD/) &&
+      lowerQuery.match(/current|rate|price|convert|exchange/i)) {
+    return API_SOURCES.CURRENCY;
+  }
+
+  // Stock prices - use financial API (currently disabled pending proper API)
+  if (lowerQuery.match(/stock|share|market/) &&
+      lowerQuery.match(/price|value|trading|current/i)) {
+    // Return empty for graceful degradation until proper API configured
+    console.log('[externalLookupEngine] Stock price query detected - no API configured');
+    return [];
+  }
+
+  // Commodity prices - use metals/commodity API (currently disabled pending proper API)
+  if (lowerQuery.match(/gold|silver|platinum|palladium|oil|crude|natural gas/) &&
+      lowerQuery.match(/price|cost|value|ounce|barrel/i)) {
+    // Return empty for graceful degradation until proper API configured
+    console.log('[externalLookupEngine] Commodity price query detected - no API configured');
+    return [];
+  }
+
+  // Government/political positions - use Wikipedia API
+  if (lowerQuery.match(/prime minister|president|chancellor|leader|government/) &&
+      lowerQuery.match(/current|who is|UK|United Kingdom|USA|United States|Germany|France/i)) {
+    return API_SOURCES.GOVERNMENT;
+  }
+
   // Crypto - use API
   if (lowerQuery.match(/bitcoin|btc|ethereum|eth|crypto|cryptocurrency/)) {
     return API_SOURCES.CRYPTO;
@@ -689,7 +859,8 @@ export async function performLookup(query, sources, truthType = null) {
 
           // Apply extractor if provided
           if (source.extract && typeof source.extract === 'function') {
-            extractedText = source.extract(jsonData);
+            // Pass both jsonData and query to extractor (some extractors need query context)
+            extractedText = source.extract(jsonData, searchQuery);
           } else {
             extractedText = JSON.stringify(jsonData).substring(0, 1000);
           }
@@ -864,47 +1035,94 @@ export async function performLookup(query, sources, truthType = null) {
 }
 
 /**
+ * Get appropriate verification sources based on query type
+ * @param {string} query - The user's query
+ * @returns {array} Array of verification sources with URLs
+ */
+function getVerificationSources(query) {
+  const lowerQuery = query.toLowerCase();
+
+  // Currency exchange rates
+  if (lowerQuery.match(/exchange rate|currency|EUR|USD|GBP/i)) {
+    return [
+      { name: 'XE.com', url: 'https://www.xe.com' },
+      { name: 'Google Finance', url: 'https://www.google.com/finance' }
+    ];
+  }
+
+  // Stock prices
+  if (lowerQuery.includes('stock') || lowerQuery.includes('share') || 
+      (lowerQuery.includes('market') && lowerQuery.includes('price'))) {
+    return [
+      { name: 'Yahoo Finance', url: 'https://finance.yahoo.com' },
+      { name: 'Google Finance', url: 'https://www.google.com/finance' }
+    ];
+  }
+
+  // Commodity prices
+  if (lowerQuery.includes('gold') || lowerQuery.includes('silver') || 
+      (lowerQuery.includes('oil') && lowerQuery.includes('price'))) {
+    return [
+      { name: 'Kitco', url: 'https://www.kitco.com' },
+      { name: 'Bloomberg', url: 'https://www.bloomberg.com/markets/commodities' }
+    ];
+  }
+
+  // Government/political positions
+  if (lowerQuery.match(/prime minister|president|chancellor/i)) {
+    return [
+      { name: 'Wikipedia', url: 'https://en.wikipedia.org' },
+      { name: 'Official government website', url: 'Search for official gov site' }
+    ];
+  }
+
+  // News queries
+  if (hasNewsIntent(query)) {
+    return [
+      { name: 'Reuters', url: 'https://www.reuters.com' },
+      { name: 'Associated Press', url: 'https://apnews.com' }
+    ];
+  }
+
+  // Default general sources
+  return [
+    { name: 'Google Search', url: 'https://www.google.com' },
+    { name: 'Wikipedia', url: 'https://en.wikipedia.org' }
+  ];
+}
+
+/**
  * Execute graceful degradation when lookup fails
- * PRINCIPLE-BASED: Uses hasNewsIntent() instead of hardcoded name lists
+ * PRINCIPLE: When you can't answer, be SHORT and direct - point to where they CAN get the answer
  * @param {string} query - The user's query
  * @param {object} lookupResult - Failed lookup result
  * @param {object} internalAnswer - Best internal answer available
  * @returns {object} Degraded response with proper disclosure
  */
 export function gracefulDegradation(query, lookupResult, internalAnswer = null) {
-  let sources = [];
-  let disclosure = "External lookup returned no results.";
+  const sources = getVerificationSources(query);
 
-  // Determine if this is a news query using principle-based detection
-  const isNewsQuery = hasNewsIntent(query);
-
-  if (isNewsQuery) {
-    disclosure = "External news lookup returned no results. This may indicate breaking news not yet indexed or a topic with limited coverage.";
-    sources = [
-      { name: 'Reuters', url: 'https://www.reuters.com' },
-      { name: 'Associated Press', url: 'https://apnews.com' },
-      { name: 'BBC News', url: 'https://www.bbc.com/news' }
-    ];
-  } else {
-    sources = getSourcesForQuery({ isHighStakes: false, domains: [] });
-    sources = sources.slice(0, 3).map(s => ({ name: s.name, url: s.url }));
-  }
+  // CRITICAL: Minimal disclosure for failed lookups
+  // The user needs to know quickly they should look elsewhere, not read 200 words about why we failed
+  const disclosure = "I can't access current data for this query.";
 
   return {
     success: true,
     degraded: true,
     disclosure: disclosure,
+    minimal_response_required: true, // Signal to response generator: keep it SHORT
+    max_response_words: 30, // Maximum words for the response
     internal_answer: internalAnswer,
     internal_answer_labeled: internalAnswer ? {
       data: internalAnswer,
-      label: 'Based on training data - may not reflect current information',
+      label: 'Based on training data (as of early 2024) - may be outdated',
       confidence: 'unverified'
     } : null,
     verification_path: {
-      message: 'You can verify this information at:',
-      sources: sources
+      message: 'Check current information at:',
+      sources: sources.slice(0, 2) // Max 2 sources for brevity
     },
-    lookup_error: lookupResult.error || 'Lookup did not complete',
+    lookup_error: lookupResult.error || 'No reliable source available',
     timestamp: new Date().toISOString()
   };
 }
@@ -923,12 +1141,18 @@ export async function lookup(query, options = {}) {
     forceRefresh = false
   } = options;
 
-  // Ensure query is a string to avoid type confusion (for example, when multiple query parameters are provided)
+  // Input sanitization - Prevent ReDoS and injection
   if (typeof query !== 'string') {
+    query = String(query || '');
+  }
+  query = query.slice(0, 500).replace(/[\x00-\x1F\x7F]/g, '');
+
+  // Validate query is not empty after sanitization
+  if (!query || query.trim().length === 0) {
     return {
       success: false,
       lookup_performed: false,
-      reason: 'Invalid query type; expected string',
+      reason: 'Invalid or empty query after sanitization',
       truth_type: null,
       internal_confidence: internalConfidence,
       total_time_ms: Date.now() - startTime

@@ -1774,7 +1774,15 @@ export default async function handler(req, res) {
       // PHASE 4: EXTERNAL LOOKUP ENGINE
       // ============================================
       case 'external-lookup': {
-        const { q: query, internalConfidence, forceRefresh } = req.query;
+        let { q: query, internalConfidence, forceRefresh } = req.query;
+
+        // INPUT SANITIZATION - Prevent ReDoS and injection
+        if (query) {
+          // Limit length to prevent DoS
+          query = String(query).slice(0, 500);
+          // Remove control characters
+          query = query.replace(/[\x00-\x1F\x7F]/g, '');
+        }
 
         try {
           const options = {
