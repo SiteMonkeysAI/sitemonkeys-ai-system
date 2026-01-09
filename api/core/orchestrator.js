@@ -464,23 +464,55 @@ export class Orchestrator {
         totalEnd: 0
       };
 
-      // STEP 1: Retrieve memory context (up to 2,500 tokens)
-      performanceMarkers.memoryStart = Date.now();
-      const memoryContext = await this.#retrieveMemoryContext(userId, message, { mode });
-      performanceMarkers.memoryEnd = Date.now();
-      
-      const memoryDuration = performanceMarkers.memoryEnd - performanceMarkers.memoryStart;
-      this.log(
-        `[MEMORY] Retrieved ${memoryContext.tokens} tokens from ${memoryContext.count} memories (${memoryDuration}ms)`,
-      );
-      // Enhanced telemetry for memory injection verification
-      if (memoryContext.hasMemory) {
-        this.log(`[MEMORY] ✓ Memory WILL be injected into prompt (${memoryContext.tokens} tokens)`);
-        if (memoryContext.memory_ids && memoryContext.memory_ids.length > 0) {
-          this.log(`[MEMORY] Memory IDs: [${memoryContext.memory_ids.join(', ')}]`);
-        }
+      // STEP 0.5: EARLY QUERY CLASSIFICATION (CEO vs Warehouse Worker)
+      // Ask "What does this user actually NEED?" BEFORE retrieving context
+      // This prevents injecting irrelevant memory for simple queries like "Hello"
+      this.log('🎯 [EARLY_CLASSIFICATION] Analyzing query before context retrieval...');
+      let earlyClassification = null;
+      try {
+        // Use lightweight classification without full phase4 metadata
+        earlyClassification = await classifyQueryComplexity(message, { truth_type: 'UNKNOWN' });
+        this.log(`🎯 [EARLY_CLASSIFICATION] Result: ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)})`);
+        this.log(`🎯 [EARLY_CLASSIFICATION] Needs memory: ${earlyClassification.classification !== 'greeting' && earlyClassification.classification !== 'simple_factual'}`);
+      } catch (classificationError) {
+        this.error('⚠️ Early classification error:', classificationError);
+        // Continue with memory retrieval on error (safe fallback)
+      }
+
+      // STEP 1: Conditionally retrieve memory context (up to 2,500 tokens)
+      // Skip memory for greetings and simple factual queries - they don't need context
+      let memoryContext = null;
+      const skipMemoryForSimpleQuery = earlyClassification &&
+        (earlyClassification.classification === 'greeting' ||
+         (earlyClassification.classification === 'simple_factual' && message.length < 50));
+
+      if (skipMemoryForSimpleQuery) {
+        this.log(`[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} - user needs direct answer, not biography`);
+        memoryContext = {
+          hasMemory: false,
+          memory: '',
+          tokens: 0,
+          count: 0,
+          memories: []
+        };
       } else {
-        this.log(`[MEMORY] ✗ No memory to inject (first conversation or no relevant context)`);
+        performanceMarkers.memoryStart = Date.now();
+        memoryContext = await this.#retrieveMemoryContext(userId, message, { mode });
+        performanceMarkers.memoryEnd = Date.now();
+
+        const memoryDuration = performanceMarkers.memoryEnd - performanceMarkers.memoryStart;
+        this.log(
+          `[MEMORY] Retrieved ${memoryContext.tokens} tokens from ${memoryContext.count} memories (${memoryDuration}ms)`,
+        );
+        // Enhanced telemetry for memory injection verification
+        if (memoryContext.hasMemory) {
+          this.log(`[MEMORY] ✓ Memory WILL be injected into prompt (${memoryContext.tokens} tokens)`);
+          if (memoryContext.memory_ids && memoryContext.memory_ids.length > 0) {
+            this.log(`[MEMORY] Memory IDs: [${memoryContext.memory_ids.join(', ')}]`);
+          }
+        } else {
+          this.log(`[MEMORY] ✗ No memory to inject (first conversation or no relevant context)`);
+        }
       }
 
       // STEP 1.5: CRITICAL FIX (Issue #385, Bug 1.1) - Detect if message itself contains a large document
@@ -1088,6 +1120,151 @@ export class Orchestrator {
       } catch (phase7Error) {
         this.error("⚠️ Phase 7 response contract error:", phase7Error);
         response_contract.phase7_error = phase7Error.message;
+      }
+
+      // ============================================
+      // PHASE 7.5: RESPONSE INTELLIGENCE (Issue #443)
+      // ============================================
+      // Apply response length limits for simple queries
+      // This is the "CEO vs Warehouse Worker" principle in action
+      this.log("✂️ PHASE 7.5: Response Intelligence (length enforcement)");
+      let responseIntelligence = {
+        applied: false,
+        originalLength: personalityResponse.response.length,
+        finalLength: personalityResponse.response.length,
+        reason: null
+      };
+
+      try {
+        // Use the earlyClassification if available, otherwise use context.queryClassification
+        const classification = earlyClassification || context.queryClassification;
+
+        if (classification) {
+          const maxLength = classification.responseApproach?.maxLength;
+
+          if (maxLength && personalityResponse.response.length > maxLength) {
+            this.log(`✂️ Response too long for ${classification.classification} (${personalityResponse.response.length} > ${maxLength})`);
+
+            // For greetings: Strip everything except first line
+            if (classification.classification === 'greeting') {
+              const lines = personalityResponse.response.split('\n');
+              const firstLine = lines[0].trim();
+              personalityResponse.response = firstLine;
+              responseIntelligence.applied = true;
+              responseIntelligence.finalLength = firstLine.length;
+              responseIntelligence.reason = `greeting_truncated_to_first_line`;
+              this.log(`✂️ Greeting truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
+            }
+            // For simple factual: Keep first paragraph or sentence
+            else if (classification.classification === 'simple_factual') {
+              // Extract first sentence or up to maxLength
+              const sentences = personalityResponse.response.match(/[^.!?]+[.!?]+/g) || [personalityResponse.response];
+              const firstSentence = sentences[0].trim();
+              if (firstSentence.length <= maxLength) {
+                personalityResponse.response = firstSentence;
+              } else {
+                personalityResponse.response = personalityResponse.response.substring(0, maxLength).trim() + '...';
+              }
+              responseIntelligence.applied = true;
+              responseIntelligence.finalLength = personalityResponse.response.length;
+              responseIntelligence.reason = `simple_factual_truncated`;
+              this.log(`✂️ Simple query truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
+            }
+          }
+
+          // Also check for format constraints in the message
+          const formatConstraints = [
+            { pattern: /one sentence only|single sentence|just one sentence/i, maxSentences: 1 },
+            { pattern: /two sentences|2 sentences/i, maxSentences: 2 },
+            { pattern: /one word|single word/i, maxWords: 1 }
+          ];
+
+          for (const constraint of formatConstraints) {
+            if (constraint.pattern.test(message)) {
+              if (constraint.maxSentences) {
+                const sentences = personalityResponse.response.match(/[^.!?]+[.!?]+/g) || [personalityResponse.response];
+                if (sentences.length > constraint.maxSentences) {
+                  personalityResponse.response = sentences.slice(0, constraint.maxSentences).join(' ').trim();
+                  responseIntelligence.applied = true;
+                  responseIntelligence.finalLength = personalityResponse.response.length;
+                  responseIntelligence.reason = `format_constraint_${constraint.maxSentences}_sentences`;
+                  this.log(`✂️ Format constraint applied: ${constraint.maxSentences} sentence(s)`);
+                  break;
+                }
+              } else if (constraint.maxWords) {
+                const words = personalityResponse.response.trim().split(/\s+/);
+                if (words.length > constraint.maxWords) {
+                  personalityResponse.response = words.slice(0, constraint.maxWords).join(' ');
+                  responseIntelligence.applied = true;
+                  responseIntelligence.finalLength = personalityResponse.response.length;
+                  responseIntelligence.reason = `format_constraint_${constraint.maxWords}_word`;
+                  this.log(`✂️ Format constraint applied: ${constraint.maxWords} word(s)`);
+                  break;
+                }
+              }
+            }
+          }
+
+          // Remove engagement bait from simple queries (greetings, simple factual)
+          // Patterns like "Let me know if...", "Feel free to...", "Happy to help with..."
+          if (classification.classification === 'greeting' ||
+              classification.classification === 'simple_factual' ||
+              classification.classification === 'simple_short') {
+
+            const engagementBaitPatterns = [
+              /let me know if you (need|want|would like|have)/gi,
+              /feel free to (ask|reach out|contact)/gi,
+              /happy to help with (any|more|further)/gi,
+              /if you (need|want|would like) (anything|more|help)/gi,
+              /don't hesitate to (ask|reach out|contact)/gi,
+              /i'?m here to help/gi,
+              /is there anything else/gi,
+              /would you like me to/gi,
+              /i can help you with/gi,
+              /let me assist you with/gi,
+              /glad to have helped/gi,
+              /we have discussed/gi,
+              /we've talked about/gi,
+              /in our previous (conversation|chat)/gi,
+              /as (we|i) mentioned (before|earlier)/gi
+            ];
+
+            let cleanedResponse = personalityResponse.response;
+            let engagementBaitRemoved = false;
+
+            for (const pattern of engagementBaitPatterns) {
+              const matches = cleanedResponse.match(pattern);
+              if (matches) {
+                // Remove sentences containing engagement bait
+                const sentences = cleanedResponse.split(/[.!?]+/).filter(s => s.trim());
+                cleanedResponse = sentences
+                  .filter(sentence => !pattern.test(sentence))
+                  .join('. ')
+                  .trim();
+
+                if (cleanedResponse && !cleanedResponse.match(/[.!?]$/)) {
+                  cleanedResponse += '.';
+                }
+
+                engagementBaitRemoved = true;
+                this.log(`✂️ Removed engagement bait: "${matches[0]}"`);
+              }
+            }
+
+            if (engagementBaitRemoved && cleanedResponse.length > 0) {
+              personalityResponse.response = cleanedResponse;
+              responseIntelligence.applied = true;
+              responseIntelligence.finalLength = cleanedResponse.length;
+              responseIntelligence.reason = (responseIntelligence.reason || 'simple_query') + '+engagement_bait_removed';
+            }
+          }
+        }
+
+        if (!responseIntelligence.applied) {
+          this.log('✅ No response length enforcement needed');
+        }
+      } catch (responseIntelError) {
+        this.error("⚠️ Response intelligence error:", responseIntelError);
       }
 
       // STEP 9: Validate compliance (truth-first, mode enforcement)
@@ -2736,7 +2913,8 @@ export class Orchestrator {
       }
 
       // Build system prompt with reasoning guidance if available
-      const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance);
+      // ISSUE #443: Add query classification to system prompt for response intelligence
+      const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, earlyClassification);
 
       // PHASE 4: Inject external content if fetched
       let externalContext = "";
@@ -3314,7 +3492,7 @@ Do NOT confuse it with previous documents mentioned in memory.
     return contextStr;
   }
 
-  #buildSystemPrompt(mode, _analysis, reasoningGuidance = null) {
+  #buildSystemPrompt(mode, _analysis, reasoningGuidance = null, queryClassification = null) {
     const modeConfig = MODES[mode];
 
     let prompt = `You are a truth-first AI assistant. Your priorities are: Truth > Helpfulness > Engagement.
@@ -3325,7 +3503,36 @@ Core Principles:
 - Never use engagement bait phrases like "Would you like me to elaborate?"
 - Challenge assumptions and surface risks
 - Be honest about limitations
+`;
 
+    // ISSUE #443: Add query-specific response guidance
+    if (queryClassification) {
+      if (queryClassification.classification === 'greeting') {
+        prompt += `
+IMPORTANT - GREETING DETECTED:
+This is a simple greeting. Respond warmly and concisely in ONE LINE.
+- DO NOT add biographical information unless specifically asked
+- DO NOT add context from memory unless relevant to greeting
+- DO NOT add engagement bait or follow-up questions
+- Maximum response length: 100 characters
+Example: "Hello! How can I help you today?"
+`;
+      } else if (queryClassification.classification === 'simple_factual') {
+        const maxLength = queryClassification.responseApproach?.maxLength || 200;
+        prompt += `
+IMPORTANT - SIMPLE QUERY DETECTED:
+This is a straightforward factual question. Provide a DIRECT, CONCISE answer.
+- Answer in ONE sentence if possible
+- DO NOT add explanations unless asked
+- DO NOT add context or background unless necessary
+- DO NOT add engagement bait or follow-up questions
+- Maximum response length: ${maxLength} characters
+- If it's a calculation, just give the answer
+`;
+      }
+    }
+
+    prompt += `
 UNCERTAINTY HANDLING - MANDATORY PATTERN:
 When you lack sufficient information to give a definitive answer, you MUST:
 
