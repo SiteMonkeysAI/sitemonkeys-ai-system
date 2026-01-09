@@ -54,6 +54,7 @@ import rateLimit from "express-rate-limit";
 // ========== SEMANTIC INTEGRATION ==========
 import { storeWithSupersession, generateFactFingerprint } from "./api/services/supersession.js";
 import { embedMemoryNonBlocking } from "./api/services/embedding-service.js";
+import { sanitizePII } from "./api/memory/pii-sanitizer.js";
 // ================================================
 
 console.log("[SERVER] ✅ Dependencies loaded");
@@ -246,6 +247,58 @@ app.get("/api/health", (req, res) => {
 
 // System status endpoint
 app.get("/api/system-status", systemStatus); // <-- ADDED
+
+// Memory visibility endpoint - Innovation #46: Users can view what system remembers
+app.get('/api/memory/list', async (req, res) => {
+  try {
+    const userId = req.headers['x-user-id'] || req.query.userId || 'anonymous';
+    
+    // Validate userId format (alphanumeric, hyphens, underscores only)
+    if (!/^[a-zA-Z0-9_-]+$/.test(userId)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid userId format' 
+      });
+    }
+    
+    // Get database pool from memory system
+    const pool = global.memorySystem?.pool || persistentMemory.pool;
+    
+    if (!pool) {
+      return res.status(500).json({ 
+        success: false, 
+        error: 'Memory system not available' 
+      });
+    }
+    
+    const memories = await pool.query(`
+      SELECT id, content, category_name, created_at, relevance_score, mode
+      FROM persistent_memories
+      WHERE user_id = $1 AND (is_current = true OR is_current IS NULL)
+      ORDER BY relevance_score DESC, created_at DESC
+      LIMIT 50
+    `, [userId]);
+    
+    res.json({
+      success: true,
+      count: memories.rows.length,
+      memories: memories.rows.map(m => ({
+        id: m.id,
+        content: sanitizePII(m.content), // Apply PII protection
+        category: m.category_name,
+        stored: m.created_at,
+        importance: m.relevance_score,
+        mode: m.mode
+      }))
+    });
+  } catch (error) {
+    console.error('[MEMORY-LIST] Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to retrieve memories' 
+    });
+  }
+});
 
 // Vault loading endpoint - connects frontend to existing vault-loader.js
 app.get("/api/load-vault", loadVaultHandler);
