@@ -210,10 +210,10 @@ export class IntelligentMemoryStorage {
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Error:', error.message);
       console.error('[INTELLIGENT-STORAGE] Stack:', error.stack?.substring(0, 200));
-      
+
       // Fallback: store uncompressed to prevent data loss
       console.warn('[INTELLIGENT-STORAGE] ⚠️ Falling back to uncompressed storage');
-      return await this.storeUncompressed(userId, userMessage, aiResponse, category);
+      return await this.storeUncompressed(userId, userMessage, aiResponse, category, mode);
     }
   }
 
@@ -760,14 +760,19 @@ Facts (preserve all identifiers):`;
    * @param {string} userMessage - User's message
    * @param {string} aiResponse - AI's response
    * @param {string} category - Memory category
+   * @param {string} mode - Mode (truth-general, business-validation, site-monkeys)
    * @returns {Promise<object>} - Storage result
    */
-  async storeUncompressed(userId, userMessage, aiResponse, category) {
+  async storeUncompressed(userId, userMessage, aiResponse, category, mode = 'truth-general') {
     try {
+      // Normalize mode: convert underscore to hyphen for consistency
+      const normalizedMode = mode.replace(/_/g, '-');
+
       // TRACE LOGGING - Fallback storage
       console.log('[TRACE-INTELLIGENT] I17. storeUncompressed (fallback) called');
       console.log('[TRACE-INTELLIGENT] I18. userId:', userId);
       console.log('[TRACE-INTELLIGENT] I19. category:', category);
+      console.log('[TRACE-INTELLIGENT] I19a. mode (normalized):', normalizedMode);
 
       const content = `User: ${userMessage}\nAssistant: ${aiResponse}`;
       const tokenCount = this.countTokens(content);
