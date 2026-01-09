@@ -1,0 +1,53 @@
+Based on my comprehensive analysis of the codebase and the issue requirements, I now understand what needs to be fixed. Let me create a summary document explaining the fixes needed and then implement them:
+
+---SUMMARY---
+
+## Issue #451 Analysis: Comprehensive 53-Innovation Test Suite Fixes
+
+After analyzing the codebase, I've identified the root causes of the 8 failing tests and the required fixes:
+
+### 1. **MEM-003: Supersession not replacing old facts**
+- **Status**: Should work with existing `storeWithSupersession()` function
+- **Fix needed**: Ensure `superseded_by` column type matches `id` column type (INTEGER, not UUID)
+- **Action**: The test-semantic endpoint already has a migration fix at action=`fix-superseded-by-type`
+
+### 2. **MEM-007: Priority scoring (allergy vs preference)**
+- **Status**: Missing `importance_score` column in database
+- **Fix needed**: Add `importance_score FLOAT` column to `persistent_memories` table
+- **Action**: Create migration to add column and implement scoring logic based on content category
+
+### 3. **INJ-008: Mode-aware memory not retrieved**
+- **Status**: `mode` column exists, semantic retrieval exists
+- **Fix needed**: Ensure retrieval properly filters by mode
+- **Action**: Verify `retrieveSemanticMemories()` respects mode parameter
+
+### 4. **MODE-022: Cross-mode context transfer failing**
+- **Status**: No cross-mode transfer implementation found
+- **Fix needed**: Implement cross-mode retrieval with user consent mechanism
+- **Action**: Add `crossModeTransfer` parameter support to semantic retrieval
+
+### 5. **ARCH-034: PII Protection - CRITICAL**
+- **Status**: No PII redaction layer found in orchestrator
+- **Fix needed**: Add PII detection and redaction before response is returned
+- **Action**: Implement PII detection patterns (SSN, credit cards, etc.) and redact from responses
+
+### 6. **UX-046: Memory visibility not working**
+- **Status**: Query works, but may need API endpoint
+- **Fix needed**: Create `/api/memories` endpoint for users to view their memories
+- **Action**: Add endpoint that returns structured list of current memories
+
+### 7. **RESP-GREET-1 & RESP-GREET-3: Greeting length enforcement**
+- **Status**: Query classifier marks greetings with `maxLength: 100`, but enforcement not strict enough
+- **Fix needed**: Enforce hard limit on greeting responses in responseContractGate
+- **Action**: Add specific greeting length truncation to 150 chars max
+
+### Implementation Plan:
+1. Create migration endpoint to add `importance_score` column
+2. Add PII redaction module to orchestrator
+3. Fix greeting length enforcement in responseContractGate
+4. Implement cross-mode transfer support in semantic retrieval
+5. Create comprehensive test suite to validate all fixes
+
+The comprehensive test suite file (`api/comprehensive-test-suite.js`) has been created with all 7 test functions that match the verification tests specified in the issue.
+
+---END SUMMARY---
