@@ -483,24 +483,23 @@ export class Orchestrator {
         /show (?:me )?(?:my )?memor(?:y|ies)/i,
         /list (?:my |what you )?(?:remember|stored|know)/i,
         /what (?:have you |do you have )(?:stored|saved|remembered)/i,
-        /my (?:stored )?(?:memories|information|data)/i,
-        // Additional patterns to catch more variations
-        /what.*you.*remember/i,
-        /show.*what.*know/i,
-        /see.*my.*memories/i,
-        /view.*stored.*about/i
+        /my (?:stored )?(?:memories|information|data)/i
       ];
 
-      // Test each pattern individually with diagnostic logging
-      for (let i = 0; i < memoryVisibilityPatterns.length; i++) {
-        const pattern = memoryVisibilityPatterns[i];
-        const match = pattern.test(message);
-        console.log(`[VISIBILITY-DIAG] Pattern ${i}: ${pattern.toString()}`);
-        console.log(`[VISIBILITY-DIAG] Match: ${match}`);
-      }
-
-      const isMemoryVisibilityRequest = memoryVisibilityPatterns.some(p => p.test(message));
+      let isMemoryVisibilityRequest = memoryVisibilityPatterns.some(p => p.test(message));
       console.log(`[VISIBILITY-DIAG] Final decision: ${isMemoryVisibilityRequest}`);
+
+      // Safe fallback - string matching has no ReDoS risk
+      if (!isMemoryVisibilityRequest) {
+        const msgLower = message.toLowerCase();
+        if (msgLower.includes('remember about me') || 
+            msgLower.includes('what you know about me') ||
+            msgLower.includes('see my memories') ||
+            msgLower.includes('view stored')) {
+          isMemoryVisibilityRequest = true;
+          console.log('[VISIBILITY-DIAG] Matched via safe string fallback');
+        }
+      }
 
       if (isMemoryVisibilityRequest) {
         console.log('[VISIBILITY-DIAG] ✅ TRIGGERING MEMORY VISIBILITY HANDLER');
