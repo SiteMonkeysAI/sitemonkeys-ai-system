@@ -23,6 +23,11 @@
 
 /* global fetch, AbortController */
 
+import { SemanticAnalyzer } from '../core/intelligence/semantic_analyzer.js';
+
+// Initialize semantic analyzer for fingerprint detection
+const semanticAnalyzer = new SemanticAnalyzer();
+
 // ============================================================================
 // CONFIGURATION
 // ============================================================================
@@ -236,7 +241,11 @@ function detectFingerprintDeterministic(content) {
 /**
  * Use GPT to classify content that didn't match deterministic patterns.
  * Only called as a FALLBACK with strict timeout.
- * 
+ *
+ * NOTE: This is a legacy approach. For semantic supersession detection,
+ * use semanticAnalyzer.analyzeSupersession() instead, which compares
+ * semantic similarity between new content and existing memories.
+ *
  * @param {string} content - The content to analyze
  * @param {object} options - Options including timeout
  * @returns {Promise<{ fingerprint: string|null, confidence: number, method: string, error?: string }>}

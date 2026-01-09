@@ -1,0 +1,335 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #462: [claude-fix] Issue #461: CRITICAL - Reconnect Existing Semantic Intelligence (Stop Bypassing It)
+
+Issue Description:
+# Issue #461: CRITICAL - Reconnect Existing Semantic Intelligence (Stop Bypassing It)
+
+## 🚨 SEVERITY: WIRING - NOT REBUILD
+
+**Current State:** Semantic intelligence EXISTS but is being BYPASSED by rules-based fallbacks
+**Required State:** All components USE the existing semantic intelligence infrastructure
+
+---
+
+## THE DISCOVERY
+
+Claude Code analysis found that **TRUE semantic intelligence already exists** in the codebase:
+
+### ✅ ALREADY BUILT (747+ lines of semantic intelligence):
+
+1. **`/api/core/intelligence/semantic_analyzer.js`** (747 lines)
+   - Uses OpenAI embeddings (`text-embedding-3-small`)
+   - Intent classification via cosine similarity (NOT keyword matching)
+   - Domain classification via semantic embeddings
+   - Complexity calculation, emotional tone detection
+   - **THIS IS REAL INTELLIGENCE - IT'S JUST NOT BEING CALLED**
+
+2. **`/api/services/semantic-retrieval.js`** (506 lines)
+   - Vector similarity search using embeddings
+   - Hybrid ranking (semantic + recency + confidence)
+   - **THIS IS WORKING - embeddings ARE being generated**
+
+3. **`/api/services/embedding-service.js`**
+   - Non-blocking embedding generation
+   - Graceful degradation
+   - Backfill support
+   - **LOGS PROVE THIS WORKS: `[EMBEDDING] ✅ Generated for memory 3284 (300ms)`**
+
+### ❌ THE PROBLEM - These components BYPASS the semantic intelligence:
+
+1. **`/api/memory/intelligent-storage.js`** - Lines 16-45
+   - `calculateImportanceScore()` uses KEYWORD ARRAYS
+   - Should call `semantic_analyzer.analyzeContentImportance()` instead
+   - **THE SEMANTIC ANALYZER CAN DO THIS - WE'RE JUST NOT CALLING IT**
+
+2. **`/api/services/supersession.js`** - Lines 41-190
+   - `detectFingerprintDeterministic()` uses REGEX PATTERNS
+   - AI fallback exists but returns null because it's not properly configured
+   - Should call `semantic_analyzer.analyzeSupersession()` instead
+
+3. **`/api/core/orchestrator.js`** - Memory visibility detection
+   - Uses regex patterns and string.includes()
+   - Should call `semantic_analyzer.analyzeIntent()` instead
+
+---
+
+## PROOF FROM LOGS
+
+The logs show the semantic intelligence IS working, but importance scoring BYPASSES it:
+
+```
+[EMBEDDING] ✅ Generated for memory 3284 (300ms)     ← SEMANTIC WORKING
+[SEMANTIC RETRIEVAL] ✅ Found 5 memories             ← SEMANTIC WORKING
+[IMPORTANCE-DIAG] No critical keywords found         ← BUT THIS USES KEYWORDS
+[IMPORTANCE-DIAG] Defaulting based on category       ← BYPASSES SEMANTIC
+[SUPERSESSION] Model returned null (347ms)           ← AI FALLBACK BROKEN
+```
+
+The infrastructure is there. We're just not using it.
+
+---
+
+## THE FIX - RECONNECTION, NOT REBUILD
+
+### Fix 1: Importance Scoring - Connect to Semantic Analyzer
+
+**File:** `api/memory/intelligent-storage.js`
+
+**REMOVE:**
+```javascript
+const CRITICAL_KEYWORDS = ['allergy', 'allergies', ...];
+const HIGH_PRIORITY_KEYWORDS = ['family', 'work', ...];
+
+function calculateImportanceScore(content, category) {
+  const contentLower = content.toLowerCase();
+  for (const keyword of CRITICAL_KEYWORDS) {
+    if (contentLower.includes(keyword)) return 0.95;
+  }
+  // ... more keyword matching
+}
+```
+
+**REPLACE WITH:**
+```javascript
+import { semanticAnalyzer } from '../core/intelligence/semantic_analyzer.js';
+
+async function calculateImportanceScore(content, category) {
+  // Use the EXISTING semantic analyzer - it's already built!
+  const analysis = await semanticAnalyzer.analyzeContentImportance(content, category);
+  return analysis.importanceScore;
+}
+```
+
+**OR if analyzeContentImportance doesn't exist, ADD it to semantic_analyzer.js:**
+```javascript
+async analyzeContentImportance(content, category) {
+  // Use embeddings to understand importance semantically
+  const embedding = await this.generateEmbedding(content);
+  
+  // Compare against importance archetypes (health-critical, life-impacting, etc.)
+  const healthSimilarity = await this.cosineSimilarity(embedding, this.healthCriticalArchetype);
+  const lifeSimilarity = await this.cosineSimilarity(embedding, this.lifeImpactingArchetype);
+  const urgentSimilarity = await this.cosineSimilarity(embedding, this.urgentArchetype);
+  
+  // Highest similarity determines importance
+  const maxSimilarity = Math.max(healthSimilarity, lifeSimilarity, urgentSimilarity);
+  
+  if (maxSimilarity > 0.8) return { importanceScore: 0.95 };
+  if (maxSimilarity > 0.6) return { importanceScore: 0.80 };
+  if (maxSimilarity > 0.4) return { importanceScore: 0.65 };
+  return { importanceScore: 0.50 };
+}
+```
+
+### Fix 2: Supersession - Connect to Semantic Analyzer
+
+**File:** `api/services/supersession.js`
+
+**REMOVE:**
+```javascript
+const FINGERPRINT_PATTERNS = [
+  { fingerprint: 'user_salary', patterns: [/salary\s+(?:is|was|:)?\s*\$?[\d,]+/i] },
+  // ... more regex patterns
+];
+
+function detectFingerprintDeterministic(content) {
+  for (const { fingerprint, patterns } of FINGERPRINT_PATTERNS) {
+    for (const pattern of patterns) {
+      if (pattern.test(content)) return { fingerprint };
+    }
+  }
+  return null;
+}
+```
+
+**REPLACE WITH:**
+```javascript
+import { semanticAnalyzer } from '../core/intelligence/semantic_analyzer.js';
+
+async function detectSupersession(newContent, userId) {
+  // Get existing memories for this user
+  const existingMemories = await getRecentMemories(userId, 20);
+  
+  // Use semantic analyzer to understand if new content updates old
+  const analysis = await semanticAnalyzer.analyzeSupersession(newContent, existingMemories);
+  
+  return analysis;
+}
+```
+
+**ADD to semantic_analyzer.js if needed:**
+```javascript
+async analyzeSupersession(newContent, existingMemories) {
+  const newEmbedding = await this.generateEmbedding(newContent);
+  
+  const supersedes = [];
+  for (const memory of existingMemories) {
+    const similarity = await this.cosineSimilarity(newEmbedding, memory.embedding);
+    
+    // High similarity + different values = supersession
+    if (similarity > 0.85) {
+      // Use AI to confirm this is an UPDATE not just similar topic
+      const isUpdate = await this.confirmSupersession(newContent, memory.content);
+      if (isUpdate) {
+        supersedes.push({ memoryId: memory.id, reason: 'Updated information' });
+      }
+    }
+  }
+  
+  return { supersedes, isNewFact: supersedes.length === 0 };
+}
+```
+
+### Fix 3: Intent Detection - Connect to Semantic Analyzer
+
+**File:** `api/core/orchestrator.js`
+
+**REMOVE:**
+```javascript
+const memoryVisibilityPatterns = [
+  /what do you (?:remember|know) about me/i,
+  // ... regex patterns
+];
+
+if (msgLower.includes('remember about me')) {
+  isMemoryVisibilityRequest = true;
+}
+```
+
+**REPLACE WITH:**
+```javascript
+import { semanticAnalyzer } from './intelligence/semantic_analyzer.js';
+
+// The semantic analyzer ALREADY has intent classification!
+const intentAnalysis = await semanticAnalyzer.analyzeIntent(message);
+
+if (intentAnalysis.intent === 'MEMORY_VISIBILITY') {
+  isMemoryVisibilityRequest = true;
+}
+```
+
+**The semantic_analyzer.js ALREADY has analyzeIntent - we just need to add MEMORY_VISIBILITY as an intent type.**
+
+---
+
+## VERIFICATION
+
+After reconnection, logs should show:
+
+```
+[SEMANTIC-ANALYZER] Analyzing importance for: "I'm allergic to peanuts"
+[SEMANTIC-ANALYZER] Health-critical similarity: 0.92
+[SEMANTIC-ANALYZER] Importance score: 0.95 (semantic reasoning)
+```
+
+NOT:
+```
+[IMPORTANCE-DIAG] Checking keyword: allergic
+[IMPORTANCE-DIAG] Found critical keyword, returning 0.95
+```
+
+---
+
+## WHAT TO CHECK IN semantic_analyzer.js
+
+Before implementing, verify what methods already exist:
+
+1. Does `analyzeContentImportance()` exist? If not, add it.
+2. Does `analyzeSupersession()` exist? If not, add it.
+3. Does `analyzeIntent()` support MEMORY_VISIBILITY intent? If not, add it.
+4. Are there archetype embeddings for health-critical, life-impacting, urgent? If not, create them.
+
+The 747-line semantic_analyzer.js likely has most of this - we just need to verify and connect.
+
+---
+
+## SUCCESS CRITERIA
+
+1. ✅ `calculateImportanceScore()` calls semantic analyzer, not keyword arrays
+2. ✅ `detectSupersession()` calls semantic analyzer, not regex patterns
+3. ✅ Intent detection calls semantic analyzer, not string matching
+4. ✅ Logs show "semantic reasoning" not "keyword found"
+5. ✅ All 9 failing tests pass using EXISTING semantic infrastructure
+6. ✅ Zero new keyword arrays added
+7. ✅ Zero new regex patterns added
+
+---
+
+## IMPLEMENTATION ORDER
+
+1. **Audit semantic_analyzer.js** - What methods exist? What needs to be added?
+2. **Connect importance scoring** - Replace keywords with semantic analyzer call
+3. **Connect supersession** - Replace regex with semantic analyzer call
+4. **Connect intent detection** - Use existing intent classification
+5. **Test** - Run 53-innovation suite
+6. **Verify logs** - Confirm semantic reasoning, not pattern matching
+
+---
+
+## BIBLE ALIGNMENT
+
+This approach aligns with the Bible because:
+
+1. **The semantic intelligence EXISTS** - We built it correctly
+2. **It's being BYPASSED** - Rules-based code is running instead
+3. **Reconnection is the fix** - Not rebuilding, not adding more rules
+4. **Two-stage approach preserved** - Semantic first, with caching for efficiency
+
+The Bible's "two-stage detection" was meant to be:
+- Stage 1: **Semantic analysis with caching** (not regex)
+- Stage 2: **AI reasoning for ambiguous cases** (not keyword fallback)
+
+We inverted this by making rules Stage 1 and semantic Stage 2. We need to flip it back.
+
+---
+
+## ESTIMATED EFFORT
+
+- **Audit semantic_analyzer.js:** 30 minutes
+- **Connect importance scoring:** 1 hour
+- **Connect supersession:** 1 hour
+- **Connect intent detection:** 30 minutes
+- **Testing:** 1 hour
+
+**Total: 4-5 hours** (not 16-24 hours for rebuild)
+
+---
+
+## CRITICAL NOTE
+
+**DO NOT:**
+- Add new keyword arrays
+- Add new regex patterns
+- Rebuild semantic intelligence from scratch
+- Create new files when existing ones have the functionality
+
+**DO:**
+- Use what's already built
+- Connect the existing semantic analyzer
+- Remove the rules-based bypasses
+- Verify with logs that semantic reasoning is happening
+
+---
+
+**Priority:** 🔴 CRITICAL
+**Type:** RECONNECTION (not rebuild)
+**Risk:** LOW (using existing tested infrastructure)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

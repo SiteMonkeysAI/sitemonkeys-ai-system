@@ -474,32 +474,52 @@ export class Orchestrator {
 
       // STEP 0.4: MEMORY VISIBILITY REQUEST DETECTION (UX-046)
       // Detect if user is asking to see their stored memories
+      // NOW USES SEMANTIC ANALYZER instead of regex patterns
       console.log('[VISIBILITY-DIAG] ════════════════════════════════════════');
       console.log('[VISIBILITY-DIAG] Input message:', message);
       console.log('[VISIBILITY-DIAG] Message length:', message.length);
 
-      const memoryVisibilityPatterns = [
-        /what do you (?:remember|know) about me/i,
-        /show (?:me )?(?:my )?memor(?:y|ies)/i,
-        /list (?:my |what you )?(?:remember|stored|know)/i,
-        /what (?:have you |do you have )(?:stored|saved|remembered)/i,
-        /my (?:stored )?(?:memories|information|data)/i
-      ];
+      let isMemoryVisibilityRequest = false;
 
-      let isMemoryVisibilityRequest = memoryVisibilityPatterns.some(p => p.test(message));
-      console.log(`[VISIBILITY-DIAG] Final decision: ${isMemoryVisibilityRequest}`);
+      try {
+        // Use semantic analyzer for intent detection
+        console.log('[VISIBILITY-DIAG] Using semantic analyzer for intent detection...');
+        const intentResult = await this.semanticAnalyzer.analyzeIntent(message);
 
-      // Safe fallback - string matching has no ReDoS risk
-      if (!isMemoryVisibilityRequest) {
-        const msgLower = message.toLowerCase();
-        if (msgLower.includes('remember about me') || 
-            msgLower.includes('what you know about me') ||
-            msgLower.includes('see my memories') ||
-            msgLower.includes('view stored')) {
+        if (intentResult.intent === 'MEMORY_VISIBILITY') {
           isMemoryVisibilityRequest = true;
-          console.log('[VISIBILITY-DIAG] Matched via safe string fallback');
+          console.log(`[VISIBILITY-DIAG] ✅ Semantic analyzer detected MEMORY_VISIBILITY intent (confidence: ${intentResult.confidence.toFixed(3)})`);
+        } else {
+          console.log(`[VISIBILITY-DIAG] Semantic analyzer detected intent: ${intentResult.intent} (confidence: ${intentResult.confidence.toFixed(3)})`);
+        }
+      } catch (error) {
+        console.error('[VISIBILITY-DIAG] ⚠️ Semantic analyzer failed, using regex fallback:', error.message);
+
+        // Fallback to regex patterns if semantic analyzer fails
+        const memoryVisibilityPatterns = [
+          /what do you (?:remember|know) about me/i,
+          /show (?:me )?(?:my )?memor(?:y|ies)/i,
+          /list (?:my |what you )?(?:remember|stored|know)/i,
+          /what (?:have you |do you have )(?:stored|saved|remembered)/i,
+          /my (?:stored )?(?:memories|information|data)/i
+        ];
+
+        isMemoryVisibilityRequest = memoryVisibilityPatterns.some(p => p.test(message));
+
+        // Safe fallback - string matching has no ReDoS risk
+        if (!isMemoryVisibilityRequest) {
+          const msgLower = message.toLowerCase();
+          if (msgLower.includes('remember about me') ||
+              msgLower.includes('what you know about me') ||
+              msgLower.includes('see my memories') ||
+              msgLower.includes('view stored')) {
+            isMemoryVisibilityRequest = true;
+            console.log('[VISIBILITY-DIAG] Matched via safe string fallback');
+          }
         }
       }
+
+      console.log(`[VISIBILITY-DIAG] Final decision: ${isMemoryVisibilityRequest}`);
 
       if (isMemoryVisibilityRequest) {
         console.log('[VISIBILITY-DIAG] ✅ TRIGGERING MEMORY VISIBILITY HANDLER');

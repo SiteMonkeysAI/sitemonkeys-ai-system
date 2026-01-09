@@ -8,87 +8,10 @@ import { encoding_for_model } from 'tiktoken';
 import { logMemoryOperation } from '../routes/debug.js';
 import { embedMemoryNonBlocking } from '../services/embedding-service.js';
 import { generateFactFingerprint, storeWithSupersession } from '../services/supersession.js';
+import { SemanticAnalyzer } from '../core/intelligence/semantic_analyzer.js';
 
-// ==================== IMPORTANCE SCORING KEYWORDS ====================
-// Innovation #7: Critical facts prioritized over preferences
-
-// Critical health/safety keywords - EXPANDED for MEM-007
-const CRITICAL_KEYWORDS = [
-  // Allergy variations (MUST CATCH ALL)
-  'allergy', 'allergies', 'allergic', 'allergen', 'allergens',
-  'anaphylactic', 'anaphylaxis', 'epipen', 'epinephrine',
-
-  // Medical conditions
-  'medical', 'medication', 'medications', 'medicine', 'medicines',
-  'prescription', 'prescriptions', 'diagnosed', 'diagnosis',
-  'condition', 'conditions', 'disease', 'diseases',
-  'diabetic', 'diabetes', 'insulin',
-  'asthma', 'asthmatic', 'inhaler',
-  'epilepsy', 'epileptic', 'seizure', 'seizures',
-
-  // Emergency info
-  'emergency', 'emergency contact', 'blood type',
-  'surgery', 'surgical', 'operation',
-  'pregnant', 'pregnancy',
-  'disability', 'disabled',
-  'pacemaker', 'implant',
-
-  // Safety-critical
-  'deadly', 'fatal', 'life-threatening', 'severe reaction'
-];
-
-// High priority keywords
-const HIGH_PRIORITY_KEYWORDS = [
-  'family', 'spouse', 'child', 'children', 'kids',
-  'work', 'salary', 'income', 'compensation', 'pay',
-  'employer', 'budget', 'financial'
-];
-
-/**
- * Calculate importance score based on content type
- * Innovation #7: Health/safety info > Personal facts > Preferences
- * @param {string} content - Memory content
- * @param {string} category - Memory category
- * @returns {number} - Importance score (0.0 to 1.0)
- */
-function calculateImportanceScore(content, category) {
-  console.log('[IMPORTANCE-DIAG] ════════════════════════════════════════');
-  console.log('[IMPORTANCE-DIAG] Content:', content.substring(0, 100));
-  console.log('[IMPORTANCE-DIAG] Category:', category);
-
-  const contentLower = content.toLowerCase();
-  console.log('[IMPORTANCE-DIAG] Content lowercase:', contentLower.substring(0, 100));
-
-  // Critical: health, safety, emergency, allergies
-  for (const keyword of CRITICAL_KEYWORDS) {
-    const found = contentLower.includes(keyword);
-    if (found) {
-      console.log(`[IMPORTANCE-DIAG] ✅ CRITICAL keyword found: "${keyword}" → returning 0.95`);
-      return 0.95;
-    }
-  }
-  console.log('[IMPORTANCE-DIAG] No critical keywords found');
-
-  // High: family, work, financial
-  for (const keyword of HIGH_PRIORITY_KEYWORDS) {
-    const found = contentLower.includes(keyword);
-    if (found) {
-      console.log(`[IMPORTANCE-DIAG] ✅ HIGH keyword found: "${keyword}" → returning 0.80`);
-      return 0.80;
-    }
-  }
-  console.log('[IMPORTANCE-DIAG] No high priority keywords found');
-
-  // Medium: health category boost
-  if (category === 'health_wellness' || category === 'health') {
-    console.log(`[IMPORTANCE-DIAG] Health category boost → returning 0.75`);
-    return 0.75;
-  }
-
-  // Default
-  console.log(`[IMPORTANCE-DIAG] Defaulting based on category: ${category} → returning 0.50`);
-  return 0.50;
-}
+// Initialize semantic analyzer for importance scoring
+const semanticAnalyzer = new SemanticAnalyzer();
 
 /**
  * Boilerplate patterns that should NEVER be stored in memory
@@ -737,8 +660,11 @@ Facts (preserve all identifiers):`;
 
       // No fingerprint or confidence too low - use normal storage
 
-      // Calculate importance score (Innovation #7: Priority scoring)
-      let importanceScore = calculateImportanceScore(facts, category);
+      // Calculate importance score using SEMANTIC ANALYZER (Innovation #7: Priority scoring)
+      console.log('[INTELLIGENT-STORAGE] 🧠 Using semantic analyzer for importance scoring...');
+      const importanceResult = await semanticAnalyzer.analyzeContentImportance(facts, category);
+      let importanceScore = importanceResult.importanceScore;
+      console.log(`[INTELLIGENT-STORAGE] 📊 Semantic importance: ${importanceScore.toFixed(2)} - ${importanceResult.reasoning}`);
 
       // Boost importance if user priority detected (UX-049)
       if (metadata.user_priority) {
@@ -746,7 +672,7 @@ Facts (preserve all identifiers):`;
         importanceScore = Math.max(importanceScore, 0.85);
       }
 
-      console.log(`[INTELLIGENT-STORAGE] 📊 Importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
+      console.log(`[INTELLIGENT-STORAGE] 📊 Final importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
 
       console.log('[TRACE-INTELLIGENT] I14. About to execute INSERT query...');
       const result = await this.db.query(`

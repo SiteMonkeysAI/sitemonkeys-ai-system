@@ -708,6 +708,194 @@ export class SemanticAnalyzer {
     };
   }
 
+  // ==================== IMPORTANCE SCORING (for intelligent-storage.js) ====================
+
+  /**
+   * Analyze content importance using semantic similarity
+   * Replaces keyword-based importance scoring with semantic understanding
+   * @param {string} content - Content to analyze
+   * @param {string} category - Memory category
+   * @returns {Promise<{ importanceScore: number, reasoning: string }>}
+   */
+  async analyzeContentImportance(content, category) {
+    try {
+      this.logger.log(`Analyzing importance for content in category: ${category}`);
+
+      // Generate embedding for the content
+      const contentEmbedding = await this.#getEmbedding(content);
+
+      // Define importance archetype phrases
+      const importanceArchetypes = {
+        healthCritical: "severe allergy, life-threatening condition, emergency medical information, anaphylaxis, critical health issue, deadly reaction, severe medical condition, emergency contact, blood type",
+        lifeImpacting: "family members, spouse name, children names, home address, employer, job title, salary, important personal information, contact details",
+        urgent: "immediate action needed, time-sensitive information, critical deadline, urgent matter, must remember this",
+        highPriority: "important preference, significant decision, key information, should remember, meaningful detail",
+        standard: "general information, casual fact, minor detail, everyday information"
+      };
+
+      // Calculate similarity to each archetype
+      const similarities = {};
+      for (const [type, phrase] of Object.entries(importanceArchetypes)) {
+        const archetypeEmbedding = await this.#getEmbedding(phrase);
+        similarities[type] = this.#cosineSimilarity(contentEmbedding, archetypeEmbedding);
+      }
+
+      // Determine importance based on highest similarity
+      let importanceScore = 0.50;
+      let reasoning = "standard information";
+
+      if (similarities.healthCritical > 0.75) {
+        importanceScore = 0.95;
+        reasoning = "health-critical or life-threatening information (semantic)";
+      } else if (similarities.lifeImpacting > 0.70) {
+        importanceScore = 0.85;
+        reasoning = "life-impacting personal information (semantic)";
+      } else if (similarities.urgent > 0.65) {
+        importanceScore = 0.80;
+        reasoning = "urgent or time-sensitive information (semantic)";
+      } else if (similarities.highPriority > 0.60) {
+        importanceScore = 0.70;
+        reasoning = "high-priority information (semantic)";
+      }
+
+      // Category boost for health-related content
+      if (category === 'health_wellness' || category === 'health') {
+        importanceScore = Math.max(importanceScore, 0.75);
+        reasoning += " + health category boost";
+      }
+
+      this.logger.log(`Importance: ${importanceScore.toFixed(2)} - ${reasoning}`);
+
+      return { importanceScore, reasoning };
+    } catch (error) {
+      this.logger.error("Importance analysis failed", error);
+      return { importanceScore: 0.50, reasoning: "fallback default" };
+    }
+  }
+
+  // ==================== SUPERSESSION DETECTION (for supersession.js) ====================
+
+  /**
+   * Analyze if new content supersedes existing memories
+   * Uses semantic similarity to detect updates to the same fact
+   * @param {string} newContent - New content to check
+   * @param {Array} existingMemories - Array of existing memories with {id, content, embedding}
+   * @returns {Promise<{ supersedes: Array<{memoryId: number, similarity: number, reason: string}>, isNewFact: boolean }>}
+   */
+  async analyzeSupersession(newContent, existingMemories) {
+    try {
+      this.logger.log(`Analyzing supersession for ${existingMemories.length} existing memories`);
+
+      const newEmbedding = await this.#getEmbedding(newContent);
+      const supersedes = [];
+
+      for (const memory of existingMemories) {
+        // Use existing embedding if available, otherwise generate
+        let memoryEmbedding;
+        if (memory.embedding && Array.isArray(memory.embedding)) {
+          memoryEmbedding = memory.embedding;
+        } else {
+          memoryEmbedding = await this.#getEmbedding(memory.content);
+        }
+
+        const similarity = this.#cosineSimilarity(newEmbedding, memoryEmbedding);
+
+        // High similarity (>0.85) suggests same topic
+        if (similarity > 0.85) {
+          // Use AI to confirm this is an UPDATE not just similar topic
+          const isUpdate = await this.#confirmSupersession(newContent, memory.content);
+
+          if (isUpdate) {
+            supersedes.push({
+              memoryId: memory.id,
+              similarity: similarity,
+              reason: `Updated information (similarity: ${similarity.toFixed(3)})`
+            });
+            this.logger.log(`Supersession detected: memory ${memory.id} (similarity: ${similarity.toFixed(3)})`);
+          }
+        }
+      }
+
+      return {
+        supersedes: supersedes,
+        isNewFact: supersedes.length === 0
+      };
+    } catch (error) {
+      this.logger.error("Supersession analysis failed", error);
+      return { supersedes: [], isNewFact: true };
+    }
+  }
+
+  /**
+   * Confirm if new content actually updates old content (not just similar topic)
+   * @param {string} newContent - New content
+   * @param {string} oldContent - Old content
+   * @returns {Promise<boolean>} - True if new content supersedes old
+   */
+  async #confirmSupersession(newContent, oldContent) {
+    try {
+      const prompt = `Does the NEW statement update or replace information in the OLD statement?
+
+OLD: ${oldContent}
+NEW: ${newContent}
+
+Answer ONLY "yes" if NEW provides updated/different information about the SAME topic.
+Answer "no" if they're just similar topics or NEW doesn't replace OLD.
+
+Answer (yes/no):`;
+
+      const response = await this.openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0,
+        max_tokens: 10
+      });
+
+      const answer = response.choices[0].message.content.trim().toLowerCase();
+      return answer === 'yes';
+    } catch (error) {
+      this.logger.error("Supersession confirmation failed", error);
+      return false; // Conservative: don't supersede if unsure
+    }
+  }
+
+  // ==================== INTENT ANALYSIS EXTENSIONS ====================
+
+  /**
+   * Analyze intent with support for MEMORY_VISIBILITY detection
+   * Extends the existing intent classification
+   * @param {string} message - User message
+   * @returns {Promise<{ intent: string, confidence: number, specificIntent?: string }>}
+   */
+  async analyzeIntent(message) {
+    try {
+      // First, check for memory visibility intent using semantic similarity
+      const memoryVisibilityPhrases = "what do you remember about me, what do you know about me, show my memories, list what you stored, tell me what you remember";
+      const messageEmbedding = await this.#getEmbedding(message);
+      const memoryVisibilityEmbedding = await this.#getEmbedding(memoryVisibilityPhrases);
+      const memoryVisibilitySimilarity = this.#cosineSimilarity(messageEmbedding, memoryVisibilityEmbedding);
+
+      if (memoryVisibilitySimilarity > 0.75) {
+        this.logger.log(`Memory visibility intent detected (similarity: ${memoryVisibilitySimilarity.toFixed(3)})`);
+        return {
+          intent: 'MEMORY_VISIBILITY',
+          confidence: memoryVisibilitySimilarity,
+          specificIntent: 'memory_visibility'
+        };
+      }
+
+      // Fall back to standard intent classification
+      const standardIntent = await this.#classifyIntent(messageEmbedding);
+      return {
+        intent: standardIntent.intent,
+        confidence: standardIntent.confidence
+      };
+    } catch (error) {
+      this.logger.error("Intent analysis failed", error);
+      return { intent: 'question', confidence: 0.5 };
+    }
+  }
+
   // ==================== FALLBACK ANALYSIS ====================
 
   #generateFallbackAnalysis(query, _context) {
