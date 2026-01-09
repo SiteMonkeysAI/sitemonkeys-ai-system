@@ -869,6 +869,8 @@ export class Orchestrator {
       }
 
       // STEP 7: Route to appropriate AI
+      // Add earlyClassification to context for system prompt (Issue #444 fix)
+      context.earlyClassification = earlyClassification;
       performanceMarkers.aiCallStart = Date.now(); // BIBLE FIX: Track AI call duration
       const aiResponse = await this.#routeToAI(
         message,
@@ -2914,7 +2916,7 @@ export class Orchestrator {
 
       // Build system prompt with reasoning guidance if available
       // ISSUE #443: Add query classification to system prompt for response intelligence
-      const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, earlyClassification);
+      const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, context.earlyClassification);
 
       // PHASE 4: Inject external content if fetched
       let externalContext = "";

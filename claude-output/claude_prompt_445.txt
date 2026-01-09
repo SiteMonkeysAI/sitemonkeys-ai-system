@@ -1,0 +1,99 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #445: [claude-fix] Issue #444: CRITICAL HOTFIX - earlyClassification is not defined
+
+Issue Description:
+# Issue #444: CRITICAL HOTFIX - earlyClassification is not defined
+
+## Priority: EMERGENCY
+
+**The system is completely broken. 21.9% pass rate. Every request fails.**
+
+## The Error
+
+```
+[ORCHESTRATOR ERROR] [AI] Routing failed ReferenceError: earlyClassification is not defined
+    at #routeToAI (file:///app/api/core/orchestrator.js:2917:95)
+```
+
+## Root Cause
+
+PR #443 introduced `earlyClassification` variable in `processRequest()` but references it in `#routeToAI()` where it's **not in scope**.
+
+The variable is defined around line 467-480 in `processRequest()`:
+```javascript
+let earlyClassification = null;
+try {
+  earlyClassification = await classifyQueryComplexity(message, { truth_type: 'UNKNOWN' });
+  // ...
+}
+```
+
+But then referenced at line 2917 in `#routeToAI()`:
+```javascript
+const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, earlyClassification);
+```
+
+`earlyClassification` doesn't exist in `#routeToAI` scope.
+
+## The Fix
+
+**Option A: Pass through context object**
+
+In `processRequest()`, add to the context object before calling `#routeToAI`:
+```javascript
+context.earlyClassification = earlyClassification;
+```
+
+Then in `#routeToAI()`, change line 2917 from:
+```javascript
+const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, earlyClassification);
+```
+to:
+```javascript
+const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, context.earlyClassification);
+```
+
+**Option B: Pass as parameter**
+
+Add `earlyClassification` as a parameter to `#routeToAI()` and pass it when calling.
+
+## Files to Modify
+
+- `/api/core/orchestrator.js`
+  - Line ~870: Add `earlyClassification` to context before `#routeToAI` call
+  - Line ~2917: Change `earlyClassification` to `context.earlyClassification`
+
+## Verification
+
+After fix:
+1. System should not throw "earlyClassification is not defined"
+2. Requests should complete without emergency fallback
+3. Test pass rate should return to 81%+ baseline
+
+## DO NOT
+
+- Do not add any new features
+- Do not refactor anything else
+- Do not change any logic
+- ONLY fix the variable scope issue
+
+This is a 2-line fix. Nothing more.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
