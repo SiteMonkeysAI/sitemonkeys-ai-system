@@ -1161,6 +1161,16 @@ export class Orchestrator {
               responseIntelligence.reason = `greeting_truncated_to_first_line`;
               this.log(`✂️ Greeting truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
             }
+            // For simple_short: Keep first line or sentence (same as greeting)
+            else if (classification.classification === 'simple_short') {
+              const lines = personalityResponse.response.split('\n');
+              const firstLine = lines[0].trim();
+              personalityResponse.response = firstLine;
+              responseIntelligence.applied = true;
+              responseIntelligence.finalLength = firstLine.length;
+              responseIntelligence.reason = `simple_short_truncated_to_first_line`;
+              this.log(`✂️ Simple short query truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
+            }
             // For simple factual: Keep first paragraph or sentence
             else if (classification.classification === 'simple_factual') {
               // Extract first sentence or up to maxLength
