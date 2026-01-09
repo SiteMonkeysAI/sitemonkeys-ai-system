@@ -49,6 +49,12 @@ import { applyPrincipleBasedReasoning } from "./intelligence/principleBasedReaso
 import { classifyQueryComplexity } from "./intelligence/queryComplexityClassifier.js";
 // ================================================
 
+// ==================== CONSTANTS ====================
+
+// Response Intelligence Configuration
+const GREETING_LIMIT = 150; // Max chars for greeting responses (Anti-Engagement)
+const MIN_SENTENCE_LENGTH = 50; // Minimum chars to consider a valid sentence
+
 // ==================== ORCHESTRATOR CLASS ====================
 
 export class Orchestrator {
@@ -1155,9 +1161,6 @@ export class Orchestrator {
 
             // For greetings: HARD LIMIT 150 chars (Anti-Engagement Architecture)
             if (classification.classification === 'greeting') {
-              const GREETING_LIMIT = 150;
-              const MIN_SENTENCE_LENGTH = 50; // Minimum chars to consider a valid sentence
-              
               if (personalityResponse.response.length > GREETING_LIMIT) {
                 // Find last complete sentence under limit, or hard cut
                 const truncated = personalityResponse.response.substring(0, GREETING_LIMIT);

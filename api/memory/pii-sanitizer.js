@@ -2,6 +2,9 @@
  * PII Sanitization Layer
  * Bible: Innovation #34, Section 4.3 Data Privacy
  * "A caring family member would NEVER repeat your SSN back to you"
+ * 
+ * Note: Patterns are intentionally broad for safety. False positives
+ * (like dates matching SSN format) are acceptable to ensure protection.
  */
 
 const PII_PATTERNS = {

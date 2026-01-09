@@ -252,6 +252,9 @@ app.get('/api/memory/list', async (req, res) => {
   try {
     const userId = req.headers['x-user-id'] || req.query.userId || 'anonymous';
     
+    // Import PII sanitizer for response protection
+    const { sanitizePII } = await import('./api/memory/pii-sanitizer.js');
+    
     // Get database pool from memory system
     const pool = global.memorySystem?.pool || persistentMemory.pool;
     
@@ -275,7 +278,7 @@ app.get('/api/memory/list', async (req, res) => {
       count: memories.rows.length,
       memories: memories.rows.map(m => ({
         id: m.id,
-        content: m.content,
+        content: sanitizePII(m.content), // Apply PII protection
         category: m.category_name,
         stored: m.created_at,
         importance: m.relevance_score,

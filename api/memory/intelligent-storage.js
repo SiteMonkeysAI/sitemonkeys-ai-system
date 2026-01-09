@@ -19,8 +19,9 @@ import { generateFactFingerprint, storeWithSupersession } from '../services/supe
 function calculateImportanceScore(content, category) {
   // Critical health/safety keywords
   const CRITICAL_KEYWORDS = [
-    'allerg', 'medical', 'medication', 'emergency', 
-    'condition', 'diabetic', 'asthma', 'epipen'
+    'allergy', 'allergic', 'allergies', 'allergen',
+    'medical', 'medication', 'emergency', 
+    'condition', 'diabetic', 'diabetes', 'asthma', 'epipen'
   ];
   
   // High priority keywords
