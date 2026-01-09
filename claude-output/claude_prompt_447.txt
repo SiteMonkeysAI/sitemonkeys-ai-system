@@ -1,0 +1,88 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #447: [claude-fix] Issue #446: CRITICAL HOTFIX - memoryDuration is not defined
+
+Issue Description:
+# Issue #446: CRITICAL HOTFIX - memoryDuration is not defined
+
+## Priority: EMERGENCY
+
+**Issue #444/445 fix worked but PR #443 has ANOTHER scope bug. System still broken.**
+
+## The Error
+
+```
+[ORCHESTRATOR ERROR] Request failed: memoryDuration is not defined ReferenceError: memoryDuration is not defined
+    at Orchestrator.processRequest (file:///app/api/core/orchestrator.js:1301:25)
+```
+
+## Root Cause
+
+Same pattern as Issue #444. PR #443 introduced `memoryDuration` variable somewhere in `processRequest()` but it's being referenced at line 1301 where it's not in scope.
+
+## The Fix
+
+**Same approach as Issue #444:**
+
+1. Find where `memoryDuration` is defined in `processRequest()`
+2. Add it to the context object: `context.memoryDuration = memoryDuration;`
+3. Change line 1301 from `memoryDuration` to `context.memoryDuration`
+
+## IMPORTANT: Check for MORE variables
+
+PR #443 may have introduced OTHER variables with the same scope issue. Before submitting:
+
+1. Search the entire `#routeToAI()` method for any variable that's NOT:
+   - A parameter of the method
+   - Defined within the method
+   - Accessed via `this.` or `context.`
+
+2. Search anywhere after line 1000 in `processRequest()` for variables defined earlier that might be out of scope in nested functions.
+
+## Files to Modify
+
+- `/api/core/orchestrator.js`
+  - Find where `memoryDuration` is defined
+  - Add to context object before it goes out of scope
+  - Change line 1301 to use `context.memoryDuration`
+
+## Verification
+
+After fix:
+1. System should not throw "memoryDuration is not defined"
+2. Run: `fetch('/api/chat', {...}).then(r => r.json()).then(d => console.log(d.response))`
+3. Response should NOT be emergency fallback
+
+## DO NOT
+
+- Do not add any new features
+- Do not refactor anything else  
+- Do not change any logic
+- ONLY fix scope issues
+
+## Systematic Check Required
+
+Since PR #443 had at least TWO scope bugs, **audit the entire PR diff** for any other variables that might have the same problem. Fix them ALL in this PR.
+
+Variables to verify are properly scoped:
+- `earlyClassification` ✅ Fixed in #444/445
+- `memoryDuration` ❌ Needs fix
+- Any others? Search for `is not defined` pattern potential
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
