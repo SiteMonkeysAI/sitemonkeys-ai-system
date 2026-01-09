@@ -1,0 +1,45 @@
+Perfect! All the key variables are properly scoped. The fix I made for `memoryDuration` should resolve the issue completely. Let me create a summary of the changes:
+
+---SUMMARY---
+
+## Fixed Issue #447: CRITICAL HOTFIX - memoryDuration is not defined
+
+### Problem
+The `memoryDuration` variable was defined inside an `else` block (line 503) but was being referenced outside that scope at lines 1305, 1330, and potentially other locations in the performance metrics section. This caused a `ReferenceError: memoryDuration is not defined` error.
+
+### Root Cause
+When the early classification determined that memory retrieval should be skipped (for greetings or simple factual queries), the code would enter the `if` block instead of the `else` block. In the `if` block, `memoryDuration` was never defined. Later, when the performance metrics section tried to reference `memoryDuration`, it was out of scope or undefined.
+
+### Solution Applied
+Modified `/api/core/orchestrator.js`:
+
+1. **Moved `memoryDuration` declaration to higher scope** (line 490):
+   - Declared `let memoryDuration = 0;` before the if/else block
+   - This ensures the variable is accessible throughout the entire `processRequest` method
+
+2. **Updated the else block** (line 507):
+   - Changed from `const memoryDuration = ...` to `memoryDuration = ...`
+   - This assigns the calculated value to the higher-scoped variable
+
+3. **Added comment for documentation** (line 489):
+   - Added comment `// Define memoryDuration at higher scope (Issue #446 fix)`
+   - Added comment `// memoryDuration stays 0 when skipped` in the if block
+
+### Verification
+Confirmed that all other variables used in the performance metrics section (lines 1303-1310) are properly scoped:
+- ✅ `processingTime` - defined at same level (line 1299)
+- ✅ `memoryDuration` - NOW properly scoped (line 490)
+- ✅ `performanceMarkers.*` - object properties, always accessible
+- ✅ `documentData` - properly scoped (line 532)
+- ✅ `memoryContext` - properly scoped (line 484)
+- ✅ `vaultData` - properly scoped (line 542)
+
+### No Other Scope Issues Found
+Performed comprehensive audit of the `processRequest` method and confirmed that:
+- `earlyClassification` - already properly scoped with `let` (line 471)
+- All other key variables (`context`, `analysis`, `confidence`, `aiResponse`, `personalityResponse`) are properly scoped at function level
+- No other similar scope issues detected
+
+The fix follows the same pattern as the fix for Issue #444 (earlyClassification scope issue) and should completely resolve the memoryDuration error.
+
+---END SUMMARY---

@@ -486,6 +486,9 @@ export class Orchestrator {
         (earlyClassification.classification === 'greeting' ||
          (earlyClassification.classification === 'simple_factual' && message.length < 50));
 
+      // Define memoryDuration at higher scope (Issue #446 fix)
+      let memoryDuration = 0;
+
       if (skipMemoryForSimpleQuery) {
         this.log(`[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} - user needs direct answer, not biography`);
         memoryContext = {
@@ -495,12 +498,13 @@ export class Orchestrator {
           count: 0,
           memories: []
         };
+        // memoryDuration stays 0 when skipped
       } else {
         performanceMarkers.memoryStart = Date.now();
         memoryContext = await this.#retrieveMemoryContext(userId, message, { mode });
         performanceMarkers.memoryEnd = Date.now();
 
-        const memoryDuration = performanceMarkers.memoryEnd - performanceMarkers.memoryStart;
+        memoryDuration = performanceMarkers.memoryEnd - performanceMarkers.memoryStart;
         this.log(
           `[MEMORY] Retrieved ${memoryContext.tokens} tokens from ${memoryContext.count} memories (${memoryDuration}ms)`,
         );
