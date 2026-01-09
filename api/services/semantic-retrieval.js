@@ -59,11 +59,12 @@ function buildPrefilterQuery(options) {
     "embedding_status = 'ready'"
   ];
 
-  // Filter by is_current=true by default (only show current facts)
+  // Filter out superseded memories (Innovation #3)
   // Include history only if explicitly requested
   const includeHistory = options.includeHistory || false;
   if (!includeHistory) {
-    conditions.push('is_current = true');
+    // Handle legacy memories without is_current column set
+    conditions.push('(is_current = true OR is_current IS NULL)');
   }
 
   // Mode filtering (respects vault boundaries)

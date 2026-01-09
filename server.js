@@ -274,7 +274,7 @@ app.get('/api/memory/list', async (req, res) => {
     const memories = await pool.query(`
       SELECT id, content, category_name, created_at, relevance_score, mode
       FROM persistent_memories
-      WHERE user_id = $1 AND is_current = true
+      WHERE user_id = $1 AND (is_current = true OR is_current IS NULL)
       ORDER BY relevance_score DESC, created_at DESC
       LIMIT 50
     `, [userId]);
