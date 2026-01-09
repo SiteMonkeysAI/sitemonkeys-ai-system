@@ -110,6 +110,17 @@ const FINGERPRINT_PATTERNS = [
     ],
     confidence: 0.90
   },
+  // Salary/Compensation
+  {
+    fingerprint: 'user_salary',
+    patterns: [
+      /\b(?:my|our)\s+(?:salary|income|pay|compensation|wage|earnings?)\s+(?:is|:)?\s*\$?\d+[,\d]*(?:k|K|\d{3})?/i,
+      /\bi\s+(?:make|earn|get paid)\s+\$?\d+[,\d]*(?:k|K|\d{3})?/i,
+      /\b(?:salary|income|pay|compensation)(?:\s+is|\s+of)?\s*\$?\d+[,\d]*(?:k|K|\d{3})?/i,
+      /\$\d+[,\d]*(?:\.\d{2})?\s*(?:per year|annually|\/year|a year)/i
+    ],
+    confidence: 0.95
+  },
   // Marital Status
   {
     fingerprint: 'user_marital_status',
@@ -164,6 +175,17 @@ const FINGERPRINT_PATTERNS = [
       /\bi(?:'m| am)\s+(?:in|on)\s+(EST|PST|CST|MST|UTC|GMT)/i
     ],
     confidence: 0.85
+  },
+  // Meeting/Appointment Time
+  {
+    fingerprint: 'user_meeting_time',
+    patterns: [
+      /\b(?:meeting|appointment|call|session)\s+(?:is\s+)?(?:at|scheduled\s+for|changed\s+to)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)?)/i,
+      /\b(?:my|our|the)\s+(?:meeting|appointment|call)\s+(?:time\s+)?(?:is|:)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)?)/i,
+      /\brescheduled?\s+(?:to|for)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)?)/i,
+      /\bmoved?\s+(?:to|for)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)?)/i
+    ],
+    confidence: 0.90
   }
 ];
 
@@ -234,6 +256,7 @@ If it does, return ONLY one of these canonical fingerprints:
 - user_location_residence
 - user_job_title
 - user_employer
+- user_salary
 - user_age
 - user_birthday
 - user_marital_status
@@ -242,6 +265,7 @@ If it does, return ONLY one of these canonical fingerprints:
 - user_pet
 - user_favorite_color
 - user_timezone
+- user_meeting_time
 - user_preferred_language
 - user_health_condition
 - user_dietary_preference
@@ -273,7 +297,8 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
     // Validate it's one of our known fingerprints
     const validFingerprints = FINGERPRINT_PATTERNS.map(p => p.fingerprint);
     const additionalValid = [
-      'user_preferred_language', 'user_health_condition', 'user_dietary_preference'
+      'user_preferred_language', 'user_health_condition', 'user_dietary_preference',
+      'user_salary', 'user_meeting_time'
     ];
     const allValid = [...validFingerprints, ...additionalValid];
 

@@ -472,6 +472,67 @@ export class Orchestrator {
         totalEnd: 0
       };
 
+      // STEP 0.4: MEMORY VISIBILITY REQUEST DETECTION (UX-046)
+      // Detect if user is asking to see their stored memories
+      const memoryVisibilityPatterns = [
+        /what do you (?:remember|know) about me/i,
+        /show (?:me )?(?:my )?memor(?:y|ies)/i,
+        /list (?:my |what you )?(?:remember|stored|know)/i,
+        /what (?:have you |do you have )(?:stored|saved|remembered)/i,
+        /my (?:stored )?(?:memories|information|data)/i
+      ];
+
+      const isMemoryVisibilityRequest = memoryVisibilityPatterns.some(p => p.test(message));
+
+      if (isMemoryVisibilityRequest) {
+        this.log(`[MEMORY-VISIBILITY] Detected memory visibility request`);
+
+        try {
+          const memories = await this.pool.query(`
+            SELECT id, content, category_name, created_at, relevance_score, mode
+            FROM persistent_memories
+            WHERE user_id = $1 AND (is_current = true OR is_current IS NULL)
+            ORDER BY relevance_score DESC, created_at DESC
+            LIMIT 20
+          `, [userId]);
+
+          if (memories.rows.length === 0) {
+            return {
+              success: true,
+              response: "I don't have any memories stored for you yet. As we talk, I'll remember important facts you share.",
+              metadata: {
+                memoryVisibility: true,
+                count: 0,
+                duration: Date.now() - startTime
+              }
+            };
+          }
+
+          // Format as structured list
+          let response = `I have ${memories.rows.length} memories stored about you:\n\n`;
+
+          memories.rows.forEach((m, i) => {
+            const importance = m.relevance_score >= 0.9 ? '⭐ Critical' :
+                              m.relevance_score >= 0.75 ? '📌 Important' : '📝 Note';
+            response += `${i + 1}. [${m.category_name}] ${m.content}\n`;
+            response += `   ${importance} | Stored: ${new Date(m.created_at).toLocaleDateString()}\n\n`;
+          });
+
+          return {
+            success: true,
+            response: response.trim(),
+            metadata: {
+              memoryVisibility: true,
+              count: memories.rows.length,
+              duration: Date.now() - startTime
+            }
+          };
+        } catch (error) {
+          this.log(`[MEMORY-VISIBILITY] Error: ${error.message}`);
+          // Fall through to normal processing
+        }
+      }
+
       // STEP 0.5: EARLY QUERY CLASSIFICATION (CEO vs Warehouse Worker)
       // Ask "What does this user actually NEED?" BEFORE retrieving context
       // This prevents injecting irrelevant memory for simple queries like "Hello"
@@ -1163,12 +1224,12 @@ export class Orchestrator {
             if (classification.classification === 'greeting') {
               if (personalityResponse.response.length > GREETING_LIMIT) {
                 // Find last complete sentence under limit, or hard cut
-                const truncated = personalityResponse.response.substring(0, GREETING_LIMIT);
+                let truncated = personalityResponse.response.substring(0, GREETING_LIMIT);
                 const lastPeriod = truncated.lastIndexOf('.');
                 const lastQuestion = truncated.lastIndexOf('?');
                 const lastExclaim = truncated.lastIndexOf('!');
                 const lastSentence = Math.max(lastPeriod, lastQuestion, lastExclaim);
-                
+
                 if (lastSentence > MIN_SENTENCE_LENGTH) {
                   personalityResponse.response = personalityResponse.response.substring(0, lastSentence + 1);
                 } else {
@@ -1180,7 +1241,13 @@ export class Orchestrator {
                 const firstLine = lines[0].trim();
                 personalityResponse.response = firstLine;
               }
-              
+
+              // CRITICAL: Final safety check - NEVER exceed GREETING_LIMIT
+              if (personalityResponse.response.length > GREETING_LIMIT) {
+                this.log(`⚠️ Response still over limit after truncation (${personalityResponse.response.length} > ${GREETING_LIMIT}), applying hard cut`);
+                personalityResponse.response = personalityResponse.response.substring(0, GREETING_LIMIT - 3).trim() + '...';
+              }
+
               responseIntelligence.applied = true;
               responseIntelligence.finalLength = personalityResponse.response.length;
               responseIntelligence.reason = `greeting_hard_limited_150_chars`;
@@ -1191,8 +1258,15 @@ export class Orchestrator {
               const lines = personalityResponse.response.split('\n');
               const firstLine = lines[0].trim();
               personalityResponse.response = firstLine;
+
+              // CRITICAL: Final safety check - NEVER exceed GREETING_LIMIT for simple_short
+              if (personalityResponse.response.length > GREETING_LIMIT) {
+                this.log(`⚠️ Simple short response over limit (${personalityResponse.response.length} > ${GREETING_LIMIT}), applying hard cut`);
+                personalityResponse.response = personalityResponse.response.substring(0, GREETING_LIMIT - 3).trim() + '...';
+              }
+
               responseIntelligence.applied = true;
-              responseIntelligence.finalLength = firstLine.length;
+              responseIntelligence.finalLength = personalityResponse.response.length;
               responseIntelligence.reason = `simple_short_truncated_to_first_line`;
               this.log(`✂️ Simple short query truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
             }
