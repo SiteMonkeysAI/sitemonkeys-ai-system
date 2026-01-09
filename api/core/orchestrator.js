@@ -491,14 +491,6 @@ export class Orchestrator {
         /view.*stored.*about/i
       ];
 
-      // Test each pattern individually with diagnostic logging
-      for (let i = 0; i < memoryVisibilityPatterns.length; i++) {
-        const pattern = memoryVisibilityPatterns[i];
-        const match = pattern.test(message);
-        console.log(`[VISIBILITY-DIAG] Pattern ${i}: ${pattern.toString()}`);
-        console.log(`[VISIBILITY-DIAG] Match: ${match}`);
-      }
-
       const isMemoryVisibilityRequest = memoryVisibilityPatterns.some(p => p.test(message));
       console.log(`[VISIBILITY-DIAG] Final decision: ${isMemoryVisibilityRequest}`);
 
