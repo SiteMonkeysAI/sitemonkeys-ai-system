@@ -1156,6 +1156,7 @@ export class Orchestrator {
             // For greetings: HARD LIMIT 150 chars (Anti-Engagement Architecture)
             if (classification.classification === 'greeting') {
               const GREETING_LIMIT = 150;
+              const MIN_SENTENCE_LENGTH = 50; // Minimum chars to consider a valid sentence
               
               if (personalityResponse.response.length > GREETING_LIMIT) {
                 // Find last complete sentence under limit, or hard cut
@@ -1165,7 +1166,7 @@ export class Orchestrator {
                 const lastExclaim = truncated.lastIndexOf('!');
                 const lastSentence = Math.max(lastPeriod, lastQuestion, lastExclaim);
                 
-                if (lastSentence > 50) {
+                if (lastSentence > MIN_SENTENCE_LENGTH) {
                   personalityResponse.response = personalityResponse.response.substring(0, lastSentence + 1);
                 } else {
                   personalityResponse.response = truncated.trim() + '...';

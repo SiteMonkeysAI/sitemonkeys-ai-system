@@ -73,10 +73,10 @@ function buildPrefilterQuery(options) {
       // Site Monkeys can access all modes
       // No mode filter needed
     } else {
-      // If cross-mode allowed, include shared memories from other modes
+      // If cross-mode allowed, include memories from truth-general mode (shared base)
       // Otherwise, strict mode isolation
       if (allowCrossMode) {
-        conditions.push(`(mode = $${paramIndex} OR is_shared = true)`);
+        conditions.push(`(mode = $${paramIndex} OR mode = 'truth-general')`);
         params.push(mode);
         paramIndex++;
       } else {

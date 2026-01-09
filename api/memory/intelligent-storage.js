@@ -17,18 +17,35 @@ import { generateFactFingerprint, storeWithSupersession } from '../services/supe
  * @returns {number} - Importance score (0.0 to 1.0)
  */
 function calculateImportanceScore(content, category) {
+  // Critical health/safety keywords
+  const CRITICAL_KEYWORDS = [
+    'allerg', 'medical', 'medication', 'emergency', 
+    'condition', 'diabetic', 'asthma', 'epipen'
+  ];
+  
+  // High priority keywords
+  const HIGH_PRIORITY_KEYWORDS = [
+    'family', 'spouse', 'child', 'work', 'salary', 
+    'employer', 'budget', 'income'
+  ];
+  
+  const contentLower = content.toLowerCase();
+  
   // Critical: health, safety, emergency, allergies
-  if (/allerg(y|ic|ies)|medical|medication|emergency|condition|diabetic|asthma|epipen/i.test(content)) {
+  if (CRITICAL_KEYWORDS.some(keyword => contentLower.includes(keyword))) {
     return 0.95;
   }
+  
   // High: family, work, financial
-  if (/family|spouse|child|work|salary|employer|budget|income/i.test(content)) {
+  if (HIGH_PRIORITY_KEYWORDS.some(keyword => contentLower.includes(keyword))) {
     return 0.80;
   }
+  
   // Medium: health category boost
   if (category === 'health_wellness' || category === 'health') {
     return 0.75;
   }
+  
   // Default
   return 0.50;
 }

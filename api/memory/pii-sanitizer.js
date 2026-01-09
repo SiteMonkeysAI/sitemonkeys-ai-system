@@ -7,7 +7,8 @@
 const PII_PATTERNS = {
   ssn: /\b\d{3}[-.]?\d{2}[-.]?\d{4}\b/g,
   creditCard: /\b\d{4}[-\s]?\d{4}[-\s]?\d{4}[-\s]?\d{4}\b/g,
-  bankAccount: /\b\d{8,17}\b/g
+  // More specific pattern: account numbers are typically preceded by context
+  bankAccount: /(?:account|acct|routing)[\s#:]*\d{8,17}\b/gi
 };
 
 export function sanitizePII(content) {
