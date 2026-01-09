@@ -474,17 +474,36 @@ export class Orchestrator {
 
       // STEP 0.4: MEMORY VISIBILITY REQUEST DETECTION (UX-046)
       // Detect if user is asking to see their stored memories
+      console.log('[VISIBILITY-DIAG] ════════════════════════════════════════');
+      console.log('[VISIBILITY-DIAG] Input message:', message);
+      console.log('[VISIBILITY-DIAG] Message length:', message.length);
+
       const memoryVisibilityPatterns = [
         /what do you (?:remember|know) about me/i,
         /show (?:me )?(?:my )?memor(?:y|ies)/i,
         /list (?:my |what you )?(?:remember|stored|know)/i,
         /what (?:have you |do you have )(?:stored|saved|remembered)/i,
-        /my (?:stored )?(?:memories|information|data)/i
+        /my (?:stored )?(?:memories|information|data)/i,
+        // Additional patterns to catch more variations
+        /what.*you.*remember/i,
+        /show.*what.*know/i,
+        /see.*my.*memories/i,
+        /view.*stored.*about/i
       ];
 
+      // Test each pattern individually with diagnostic logging
+      for (let i = 0; i < memoryVisibilityPatterns.length; i++) {
+        const pattern = memoryVisibilityPatterns[i];
+        const match = pattern.test(message);
+        console.log(`[VISIBILITY-DIAG] Pattern ${i}: ${pattern.toString()}`);
+        console.log(`[VISIBILITY-DIAG] Match: ${match}`);
+      }
+
       const isMemoryVisibilityRequest = memoryVisibilityPatterns.some(p => p.test(message));
+      console.log(`[VISIBILITY-DIAG] Final decision: ${isMemoryVisibilityRequest}`);
 
       if (isMemoryVisibilityRequest) {
+        console.log('[VISIBILITY-DIAG] ✅ TRIGGERING MEMORY VISIBILITY HANDLER');
         this.log(`[MEMORY-VISIBILITY] Detected memory visibility request`);
 
         try {
@@ -1796,7 +1815,11 @@ export class Orchestrator {
   // ==================== STEP 1: RETRIEVE MEMORY CONTEXT ====================
 
   async #retrieveMemoryContext(userId, message, options = {}) {
-    const { mode = 'truth-general', tokenBudget = 2000 } = options;
+    const { mode = 'truth-general', tokenBudget = 2000, previousMode = null } = options;
+
+    console.log('[CROSS-MODE-DIAG] ════════════════════════════════════════');
+    console.log('[CROSS-MODE-DIAG] Current mode:', mode);
+    console.log('[CROSS-MODE-DIAG] Previous mode:', previousMode);
 
     let telemetry = {
       method: 'keyword_fallback',
@@ -1815,11 +1838,29 @@ export class Orchestrator {
         return await this.#keywordRetrievalFallback(userId, message, mode);
       }
 
+      // Detect if cross-mode transfer should be enabled (MODE-022)
+      let allowCrossMode = false;
+      if (previousMode && previousMode !== mode) {
+        console.log(`[CROSS-MODE-DIAG] Mode switch detected: ${previousMode} → ${mode}`);
+
+        // For business-validation, check if user references personal context
+        if (mode === 'business-validation' || mode === 'business_validation') {
+          const referencesPersonalContext = this.#detectPersonalContextReference(message);
+          if (referencesPersonalContext) {
+            console.log('[CROSS-MODE-DIAG] ✅ Personal context reference detected - enabling cross-mode transfer');
+            allowCrossMode = true;
+          }
+        }
+      }
+
+      console.log('[CROSS-MODE-DIAG] allowCrossMode:', allowCrossMode);
+
       const result = await retrieveSemanticMemories(pool, message, {
         userId,
         mode,
         tokenBudget,
-        includePinned: true
+        includePinned: true,
+        allowCrossMode
       });
 
       telemetry = result.telemetry;
@@ -1877,6 +1918,19 @@ export class Orchestrator {
       // Fallback to existing keyword/category retrieval
       return await this.#keywordRetrievalFallback(userId, message, mode);
     }
+  }
+
+  /**
+   * Detect if message references personal context (for cross-mode transfer)
+   */
+  #detectPersonalContextReference(message) {
+    const personalPatterns = [
+      /\b(?:my|i|me|mine)\b/i,
+      /\b(?:personal|family|home|life)\b/i,
+      /\b(?:remember|mentioned|told you|said)\b/i
+    ];
+
+    return personalPatterns.some(pattern => pattern.test(message));
   }
 
   /**

@@ -344,11 +344,18 @@ app.post("/api/chat", async (req, res) => {
     } = req.body;
 
     // Map user_id to userId for internal use
-    const userId = user_id || "anonymous";
+    // Check all possible sources for consistency (UX-044)
+    console.log('[SESSION-DIAG] ════════════════════════════════════════');
+    console.log('[SESSION-DIAG] Headers x-user-id:', req.headers['x-user-id']);
+    console.log('[SESSION-DIAG] Body user_id:', user_id);
+    console.log('[SESSION-DIAG] Query userId:', req.query?.userId);
+
+    const userId = user_id || req.headers['x-user-id'] || req.query?.userId || "anonymous";
 
     // TRACE LOGGING - Step 1 & 2
     console.log("[TRACE] 1. Received user_id from request:", user_id);
     console.log("[TRACE] 2. Mapped to userId:", userId);
+    console.log('[SESSION-DIAG] Final userId:', userId);
 
     // SECURITY: Input validation - message is required
     // Prevents processing empty/invalid requests

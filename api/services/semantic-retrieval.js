@@ -36,11 +36,14 @@ const RETRIEVAL_CONFIG = {
 /**
  * Build SQL prefilter query based on retrieval options
  * Mode-aware, respects vault boundaries, handles pinned memories
- * 
+ *
  * @param {object} options - Filter options
  * @returns {{sql: string, params: any[]}} Query and parameters
  */
 function buildPrefilterQuery(options) {
+  console.log('[MODE-DIAG] ════════════════════════════════════════');
+  console.log('[MODE-DIAG] Options:', JSON.stringify(options, null, 2));
+
   const {
     userId,
     mode = 'truth-general',
@@ -49,6 +52,9 @@ function buildPrefilterQuery(options) {
     allowCrossMode = false,
     limit = RETRIEVAL_CONFIG.maxCandidates
   } = options;
+
+  console.log('[MODE-DIAG] Mode from options:', mode);
+  console.log('[MODE-DIAG] allowCrossMode:', allowCrossMode);
 
   const params = [userId];
   let paramIndex = 2;
@@ -73,20 +79,25 @@ function buildPrefilterQuery(options) {
     if (mode === 'site-monkeys') {
       // Site Monkeys can access all modes
       // No mode filter needed
+      console.log('[MODE-DIAG] Site Monkeys mode - no mode filter applied');
     } else {
       // If cross-mode allowed, include memories from truth-general mode (shared base)
       // Otherwise, strict mode isolation
       if (allowCrossMode) {
+        console.log(`[MODE-DIAG] ✅ Cross-mode transfer ENABLED - including truth-general`);
         conditions.push(`(mode = $${paramIndex} OR mode = 'truth-general')`);
         params.push(mode);
         paramIndex++;
       } else {
         // All modes use exact matching (mode isolation)
+        console.log(`[MODE-DIAG] Adding mode filter for: ${mode} (strict isolation)`);
         conditions.push(`mode = $${paramIndex}`);
         params.push(mode);
         paramIndex++;
       }
     }
+  } else {
+    console.log('[MODE-DIAG] includeAllModes = true - no mode filter');
   }
 
   // Category filtering
