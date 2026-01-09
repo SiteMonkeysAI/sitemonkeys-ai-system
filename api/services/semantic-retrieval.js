@@ -46,6 +46,7 @@ function buildPrefilterQuery(options) {
     mode = 'truth-general',
     categories = null,
     includeAllModes = false,
+    allowCrossMode = false,
     limit = RETRIEVAL_CONFIG.maxCandidates
   } = options;
 
@@ -66,15 +67,24 @@ function buildPrefilterQuery(options) {
   }
 
   // Mode filtering (respects vault boundaries)
+  // Innovation #22: Cross-mode context transfer with consent
   if (!includeAllModes) {
     if (mode === 'site-monkeys') {
       // Site Monkeys can access all modes
       // No mode filter needed
     } else {
-      // All modes use exact matching (mode isolation)
-      conditions.push(`mode = $${paramIndex}`);
-      params.push(mode);
-      paramIndex++;
+      // If cross-mode allowed, include shared memories from other modes
+      // Otherwise, strict mode isolation
+      if (allowCrossMode) {
+        conditions.push(`(mode = $${paramIndex} OR is_shared = true)`);
+        params.push(mode);
+        paramIndex++;
+      } else {
+        // All modes use exact matching (mode isolation)
+        conditions.push(`mode = $${paramIndex}`);
+        params.push(mode);
+        paramIndex++;
+      }
     }
   }
 
@@ -85,7 +95,7 @@ function buildPrefilterQuery(options) {
     paramIndex++;
   }
 
-  // Build query with ordering by recency (for tie-breaking)
+  // Build query with ordering by relevance_score (importance), then recency
   const sql = `
     SELECT
       id,
@@ -95,11 +105,12 @@ function buildPrefilterQuery(options) {
       embedding,
       fact_fingerprint,
       fingerprint_confidence,
+      relevance_score,
       created_at,
       EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400 as days_ago
     FROM persistent_memories
     WHERE ${conditions.join(' AND ')}
-    ORDER BY created_at DESC
+    ORDER BY relevance_score DESC, created_at DESC
     LIMIT $${paramIndex}
   `;
   params.push(limit);
@@ -161,7 +172,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     categories = null,
     topK = RETRIEVAL_CONFIG.defaultTopK,
     minSimilarity = RETRIEVAL_CONFIG.minSimilarity,
-    includeAllModes = false
+    includeAllModes = false,
+    allowCrossMode = false
   } = options;
 
   // Normalize mode: convert underscore to hyphen for consistency
@@ -243,6 +255,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       mode,
       categories,
       includeAllModes,
+      allowCrossMode,
       limit: RETRIEVAL_CONFIG.maxCandidates
     });
 

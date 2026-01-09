@@ -35,6 +35,8 @@ import { logMemoryOperation } from "../routes/debug.js";
 //import { validateCompliance as validateVaultCompliance } from '../lib/vault.js';
 // ========== SEMANTIC INTEGRATION ==========
 import { retrieveSemanticMemories } from "../services/semantic-retrieval.js";
+// ========== PII PROTECTION (Innovation #34) ==========
+import { sanitizePII } from "../memory/pii-sanitizer.js";
 // ========== PHASE 4/5/6/7 INTEGRATION ==========
 import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
 import { route } from "../core/intelligence/hierarchyRouter.js";
@@ -1151,15 +1153,34 @@ export class Orchestrator {
           if (maxLength && personalityResponse.response.length > maxLength) {
             this.log(`✂️ Response too long for ${classification.classification} (${personalityResponse.response.length} > ${maxLength})`);
 
-            // For greetings: Strip everything except first line
+            // For greetings: HARD LIMIT 150 chars (Anti-Engagement Architecture)
             if (classification.classification === 'greeting') {
-              const lines = personalityResponse.response.split('\n');
-              const firstLine = lines[0].trim();
-              personalityResponse.response = firstLine;
+              const GREETING_LIMIT = 150;
+              
+              if (personalityResponse.response.length > GREETING_LIMIT) {
+                // Find last complete sentence under limit, or hard cut
+                const truncated = personalityResponse.response.substring(0, GREETING_LIMIT);
+                const lastPeriod = truncated.lastIndexOf('.');
+                const lastQuestion = truncated.lastIndexOf('?');
+                const lastExclaim = truncated.lastIndexOf('!');
+                const lastSentence = Math.max(lastPeriod, lastQuestion, lastExclaim);
+                
+                if (lastSentence > 50) {
+                  personalityResponse.response = personalityResponse.response.substring(0, lastSentence + 1);
+                } else {
+                  personalityResponse.response = truncated.trim() + '...';
+                }
+              } else {
+                // Still strip to first line if under limit but multi-line
+                const lines = personalityResponse.response.split('\n');
+                const firstLine = lines[0].trim();
+                personalityResponse.response = firstLine;
+              }
+              
               responseIntelligence.applied = true;
-              responseIntelligence.finalLength = firstLine.length;
-              responseIntelligence.reason = `greeting_truncated_to_first_line`;
-              this.log(`✂️ Greeting truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
+              responseIntelligence.finalLength = personalityResponse.response.length;
+              responseIntelligence.reason = `greeting_hard_limited_150_chars`;
+              this.log(`✂️ Greeting hard-limited: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
             }
             // For simple_short: Keep first line or sentence (same as greeting)
             else if (classification.classification === 'simple_short') {
@@ -1729,6 +1750,7 @@ export class Orchestrator {
       this._lastRetrievalTelemetry = telemetry;
 
       // Format memories into string for context injection
+      // Apply PII sanitization (Innovation #34: Privacy Protection)
       let memoryText = "";
       let memoryIds = [];
 
@@ -1736,7 +1758,9 @@ export class Orchestrator {
         memoryText = result.memories
           .map((m) => {
             if (m.id) memoryIds.push(m.id);
-            return m.content || "";
+            const content = m.content || "";
+            // Sanitize PII before injection
+            return sanitizePII(content);
           })
           .filter(c => c.length > 0)
           .join("\n\n");

@@ -10,6 +10,30 @@ import { embedMemoryNonBlocking } from '../services/embedding-service.js';
 import { generateFactFingerprint, storeWithSupersession } from '../services/supersession.js';
 
 /**
+ * Calculate importance score based on content type
+ * Innovation #7: Health/safety info > Personal facts > Preferences
+ * @param {string} content - Memory content
+ * @param {string} category - Memory category
+ * @returns {number} - Importance score (0.0 to 1.0)
+ */
+function calculateImportanceScore(content, category) {
+  // Critical: health, safety, emergency, allergies
+  if (/allerg(y|ic|ies)|medical|medication|emergency|condition|diabetic|asthma|epipen/i.test(content)) {
+    return 0.95;
+  }
+  // High: family, work, financial
+  if (/family|spouse|child|work|salary|employer|budget|income/i.test(content)) {
+    return 0.80;
+  }
+  // Medium: health category boost
+  if (category === 'health_wellness' || category === 'health') {
+    return 0.75;
+  }
+  // Default
+  return 0.50;
+}
+
+/**
  * Boilerplate patterns that should NEVER be stored in memory
  */
 const BOILERPLATE_PATTERNS = [
@@ -622,6 +646,10 @@ Facts (preserve all identifiers):`;
 
       // No fingerprint or confidence too low - use normal storage
 
+      // Calculate importance score (Innovation #7: Priority scoring)
+      const importanceScore = calculateImportanceScore(facts, category);
+      console.log(`[INTELLIGENT-STORAGE] 📊 Importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
+
       console.log('[TRACE-INTELLIGENT] I14. About to execute INSERT query...');
       const result = await this.db.query(`
         INSERT INTO persistent_memories (
@@ -645,7 +673,7 @@ Facts (preserve all identifiers):`;
         'general', // Default subcategory
         facts,
         tokenCount,
-        0.70, // Base relevance for new compressed memories
+        importanceScore, // Use calculated importance score
         JSON.stringify({
           ...metadata,
           compressed: true,
