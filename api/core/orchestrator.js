@@ -474,6 +474,10 @@ export class Orchestrator {
 
       // STEP 0.4: MEMORY VISIBILITY REQUEST DETECTION (UX-046)
       // Detect if user is asking to see their stored memories
+      console.log('[VISIBILITY-DIAG] ════════════════════════════════════════');
+      console.log('[VISIBILITY-DIAG] Input message:', message);
+      console.log('[VISIBILITY-DIAG] Message length:', message.length);
+
       const memoryVisibilityPatterns = [
         /what do you (?:remember|know) about me/i,
         /show (?:me )?(?:my )?memor(?:y|ies)/i,
@@ -482,9 +486,23 @@ export class Orchestrator {
         /my (?:stored )?(?:memories|information|data)/i
       ];
 
-      const isMemoryVisibilityRequest = memoryVisibilityPatterns.some(p => p.test(message));
+      let isMemoryVisibilityRequest = memoryVisibilityPatterns.some(p => p.test(message));
+      console.log(`[VISIBILITY-DIAG] Final decision: ${isMemoryVisibilityRequest}`);
+
+      // Safe fallback - string matching has no ReDoS risk
+      if (!isMemoryVisibilityRequest) {
+        const msgLower = message.toLowerCase();
+        if (msgLower.includes('remember about me') || 
+            msgLower.includes('what you know about me') ||
+            msgLower.includes('see my memories') ||
+            msgLower.includes('view stored')) {
+          isMemoryVisibilityRequest = true;
+          console.log('[VISIBILITY-DIAG] Matched via safe string fallback');
+        }
+      }
 
       if (isMemoryVisibilityRequest) {
+        console.log('[VISIBILITY-DIAG] ✅ TRIGGERING MEMORY VISIBILITY HANDLER');
         this.log(`[MEMORY-VISIBILITY] Detected memory visibility request`);
 
         try {
@@ -1796,7 +1814,11 @@ export class Orchestrator {
   // ==================== STEP 1: RETRIEVE MEMORY CONTEXT ====================
 
   async #retrieveMemoryContext(userId, message, options = {}) {
-    const { mode = 'truth-general', tokenBudget = 2000 } = options;
+    const { mode = 'truth-general', tokenBudget = 2000, previousMode = null } = options;
+
+    console.log('[CROSS-MODE-DIAG] ════════════════════════════════════════');
+    console.log('[CROSS-MODE-DIAG] Current mode:', mode);
+    console.log('[CROSS-MODE-DIAG] Previous mode:', previousMode);
 
     let telemetry = {
       method: 'keyword_fallback',
@@ -1815,11 +1837,29 @@ export class Orchestrator {
         return await this.#keywordRetrievalFallback(userId, message, mode);
       }
 
+      // Detect if cross-mode transfer should be enabled (MODE-022)
+      let allowCrossMode = false;
+      if (previousMode && previousMode !== mode) {
+        console.log(`[CROSS-MODE-DIAG] Mode switch detected: ${previousMode} → ${mode}`);
+
+        // For business-validation, check if user references personal context
+        if (mode === 'business-validation' || mode === 'business_validation') {
+          const referencesPersonalContext = this.#detectPersonalContextReference(message);
+          if (referencesPersonalContext) {
+            console.log('[CROSS-MODE-DIAG] ✅ Personal context reference detected - enabling cross-mode transfer');
+            allowCrossMode = true;
+          }
+        }
+      }
+
+      console.log('[CROSS-MODE-DIAG] allowCrossMode:', allowCrossMode);
+
       const result = await retrieveSemanticMemories(pool, message, {
         userId,
         mode,
         tokenBudget,
-        includePinned: true
+        includePinned: true,
+        allowCrossMode
       });
 
       telemetry = result.telemetry;
@@ -1877,6 +1917,19 @@ export class Orchestrator {
       // Fallback to existing keyword/category retrieval
       return await this.#keywordRetrievalFallback(userId, message, mode);
     }
+  }
+
+  /**
+   * Detect if message references personal context (for cross-mode transfer)
+   */
+  #detectPersonalContextReference(message) {
+    const personalPatterns = [
+      /\b(?:my|i|me|mine)\b/i,
+      /\b(?:personal|family|home|life)\b/i,
+      /\b(?:remember|mentioned|told you|said)\b/i
+    ];
+
+    return personalPatterns.some(pattern => pattern.test(message));
   }
 
   /**

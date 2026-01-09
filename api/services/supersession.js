@@ -196,24 +196,36 @@ const FINGERPRINT_PATTERNS = [
 /**
  * Attempt to extract fingerprint using deterministic regex patterns.
  * This runs FIRST, before any API call.
- * 
+ *
  * @param {string} content - The content to analyze
  * @returns {{ fingerprint: string|null, confidence: number, method: string }}
  */
 function detectFingerprintDeterministic(content) {
+  console.log('[SUPERSESSION-DIAG] ════════════════════════════════════════');
+  console.log('[SUPERSESSION-DIAG] Input content:', content?.substring(0, 100));
+  console.log('[SUPERSESSION-DIAG] Content length:', content?.length || 0);
+
   if (!content || typeof content !== 'string') {
+    console.log('[SUPERSESSION-DIAG] ❌ Invalid content type');
     return { fingerprint: null, confidence: 0, method: 'none' };
   }
 
   for (const { fingerprint, patterns, confidence } of FINGERPRINT_PATTERNS) {
-    for (const pattern of patterns) {
-      if (pattern.test(content)) {
+    console.log(`[SUPERSESSION-DIAG] Checking fingerprint: ${fingerprint}`);
+    for (let i = 0; i < patterns.length; i++) {
+      const pattern = patterns[i];
+      const match = content.match(pattern);
+      console.log(`[SUPERSESSION-DIAG]   Pattern ${i}: ${pattern.toString().substring(0, 80)}...`);
+      console.log(`[SUPERSESSION-DIAG]   Match: ${match ? 'YES - ' + match[0] : 'NO'}`);
+      if (match) {
+        console.log(`[SUPERSESSION-DIAG] ✅ PATTERN MATCH FOUND: ${fingerprint}`);
         console.log(`[SUPERSESSION] Deterministic match: ${fingerprint} (confidence: ${confidence})`);
         return { fingerprint, confidence, method: 'deterministic' };
       }
     }
   }
 
+  console.log('[SUPERSESSION-DIAG] ❌ No pattern matches found');
   return { fingerprint: null, confidence: 0, method: 'none' };
 }
 

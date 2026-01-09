@@ -12,17 +12,36 @@ import { generateFactFingerprint, storeWithSupersession } from '../services/supe
 // ==================== IMPORTANCE SCORING KEYWORDS ====================
 // Innovation #7: Critical facts prioritized over preferences
 
-// Critical health/safety keywords
+// Critical health/safety keywords - EXPANDED for MEM-007
 const CRITICAL_KEYWORDS = [
-  'allergy', 'allergic', 'allergies', 'allergen',
-  'medical', 'medication', 'emergency', 
-  'condition', 'diabetic', 'diabetes', 'asthma', 'epipen'
+  // Allergy variations (MUST CATCH ALL)
+  'allergy', 'allergies', 'allergic', 'allergen', 'allergens',
+  'anaphylactic', 'anaphylaxis', 'epipen', 'epinephrine',
+
+  // Medical conditions
+  'medical', 'medication', 'medications', 'medicine', 'medicines',
+  'prescription', 'prescriptions', 'diagnosed', 'diagnosis',
+  'condition', 'conditions', 'disease', 'diseases',
+  'diabetic', 'diabetes', 'insulin',
+  'asthma', 'asthmatic', 'inhaler',
+  'epilepsy', 'epileptic', 'seizure', 'seizures',
+
+  // Emergency info
+  'emergency', 'emergency contact', 'blood type',
+  'surgery', 'surgical', 'operation',
+  'pregnant', 'pregnancy',
+  'disability', 'disabled',
+  'pacemaker', 'implant',
+
+  // Safety-critical
+  'deadly', 'fatal', 'life-threatening', 'severe reaction'
 ];
 
 // High priority keywords
 const HIGH_PRIORITY_KEYWORDS = [
-  'family', 'spouse', 'child', 'work', 'salary', 
-  'employer', 'budget', 'income'
+  'family', 'spouse', 'child', 'children', 'kids',
+  'work', 'salary', 'income', 'compensation', 'pay',
+  'employer', 'budget', 'financial'
 ];
 
 /**
@@ -33,24 +52,41 @@ const HIGH_PRIORITY_KEYWORDS = [
  * @returns {number} - Importance score (0.0 to 1.0)
  */
 function calculateImportanceScore(content, category) {
+  console.log('[IMPORTANCE-DIAG] ════════════════════════════════════════');
+  console.log('[IMPORTANCE-DIAG] Content:', content.substring(0, 100));
+  console.log('[IMPORTANCE-DIAG] Category:', category);
+
   const contentLower = content.toLowerCase();
-  
+  console.log('[IMPORTANCE-DIAG] Content lowercase:', contentLower.substring(0, 100));
+
   // Critical: health, safety, emergency, allergies
-  if (CRITICAL_KEYWORDS.some(keyword => contentLower.includes(keyword))) {
-    return 0.95;
+  for (const keyword of CRITICAL_KEYWORDS) {
+    const found = contentLower.includes(keyword);
+    if (found) {
+      console.log(`[IMPORTANCE-DIAG] ✅ CRITICAL keyword found: "${keyword}" → returning 0.95`);
+      return 0.95;
+    }
   }
-  
+  console.log('[IMPORTANCE-DIAG] No critical keywords found');
+
   // High: family, work, financial
-  if (HIGH_PRIORITY_KEYWORDS.some(keyword => contentLower.includes(keyword))) {
-    return 0.80;
+  for (const keyword of HIGH_PRIORITY_KEYWORDS) {
+    const found = contentLower.includes(keyword);
+    if (found) {
+      console.log(`[IMPORTANCE-DIAG] ✅ HIGH keyword found: "${keyword}" → returning 0.80`);
+      return 0.80;
+    }
   }
-  
+  console.log('[IMPORTANCE-DIAG] No high priority keywords found');
+
   // Medium: health category boost
   if (category === 'health_wellness' || category === 'health') {
+    console.log(`[IMPORTANCE-DIAG] Health category boost → returning 0.75`);
     return 0.75;
   }
-  
+
   // Default
+  console.log(`[IMPORTANCE-DIAG] Defaulting based on category: ${category} → returning 0.50`);
   return 0.50;
 }
 
@@ -127,6 +163,32 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Detect if user is expressing priorities (UX-049)
+   * @param {string} content - Content to check
+   * @returns {boolean} - True if priority language detected
+   */
+  detectUserPriority(content) {
+    if (!content || typeof content !== 'string') return false;
+
+    const PRIORITY_PATTERNS = [
+      /(?:i |my )(?:priority|priorities|most important|care most about)/i,
+      /(?:always|never) (?:want|need|prefer)/i,
+      /(?:this is|that's) (?:important|critical|essential)/i,
+      /(?:don't|do not) ever/i,
+      /(?:make sure|ensure|remember that)/i
+    ];
+
+    for (const pattern of PRIORITY_PATTERNS) {
+      if (pattern.test(content)) {
+        console.log(`[PRIORITY-DETECT] Pattern matched: ${pattern.toString()}`);
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Main entry point - stores memory with compression and deduplication
    * @param {string} userId - User identifier
    * @param {string} userMessage - User's message
@@ -178,11 +240,17 @@ export class IntelligentMemoryStorage {
       const ratio = originalTokens > 0 ? (originalTokens / compressedTokens).toFixed(1) : 1;
 
       console.log(`[INTELLIGENT-STORAGE] 📊 Compression: ${originalTokens} → ${compressedTokens} tokens (${ratio}:1)`);
-      
+
+      // Step 1.5: Detect user priorities (UX-049)
+      const userPriorityDetected = this.detectUserPriority(userMessage);
+      if (userPriorityDetected) {
+        console.log('[INTELLIGENT-STORAGE] 🎯 User priority detected - will boost importance');
+      }
+
       // Step 2: Check for duplicates
       console.log('[INTELLIGENT-STORAGE] 🔍 Checking for similar memories...');
       const existing = await this.findSimilarMemories(userId, category, facts);
-      
+
       // Step 3: Update existing OR create new
       if (existing) {
         console.log(`[DEDUP] ♻️ Found similar memory (id=${existing.id}), boosting instead of duplicating`);
@@ -204,7 +272,8 @@ export class IntelligentMemoryStorage {
         return await this.storeCompressedMemory(userId, category, facts, {
           original_tokens: originalTokens,
           compressed_tokens: compressedTokens,
-          compression_ratio: parseFloat(ratio)
+          compression_ratio: parseFloat(ratio),
+          user_priority: userPriorityDetected
         }, mode);
       }
     } catch (error) {
@@ -596,6 +665,7 @@ Facts (preserve all identifiers):`;
       console.log('[TRACE-INTELLIGENT] I11. category:', category);
       console.log('[TRACE-INTELLIGENT] I12. facts length:', facts?.length || 0);
       console.log('[TRACE-INTELLIGENT] I12a. mode (normalized):', normalizedMode);
+      console.log('[SESSION-DIAG] Storing for userId:', userId);
 
       // GUARD: Refuse to store empty content at database layer
       if (!facts || facts.trim().length === 0) {
@@ -668,7 +738,14 @@ Facts (preserve all identifiers):`;
       // No fingerprint or confidence too low - use normal storage
 
       // Calculate importance score (Innovation #7: Priority scoring)
-      const importanceScore = calculateImportanceScore(facts, category);
+      let importanceScore = calculateImportanceScore(facts, category);
+
+      // Boost importance if user priority detected (UX-049)
+      if (metadata.user_priority) {
+        console.log('[INTELLIGENT-STORAGE] 🎯 Boosting importance due to user priority (0.85 minimum)');
+        importanceScore = Math.max(importanceScore, 0.85);
+      }
+
       console.log(`[INTELLIGENT-STORAGE] 📊 Importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
 
       console.log('[TRACE-INTELLIGENT] I14. About to execute INSERT query...');
