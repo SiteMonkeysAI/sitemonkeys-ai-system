@@ -1,0 +1,428 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #460: [claude-fix] I
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>Issue #457: CRITICAL - Replace Rules-Based System with TRUE Semantic Intelligence</h1>
+<h2>🚨 SEVERITY: ARCHITECTURAL - COMPLETE REBUILD REQUIRED</h2>
+<p><strong>Current State:</strong> Rules-based system disguised as intelligence
+<strong>Required State:</strong> True semantic intelligence as defined in Bible documents</p>
+<hr>
+<h2>THE PROBLEM</h2>
+<p>We have been building the <strong>exact opposite</strong> of what the Bible documents require.</p>
+<h3>What the Bible Says:</h3>
+<p>From <strong>Complete Specification v1.1:</strong></p>
+<blockquote>
+<p>"Intelligence Requirements:</p>
+<ul>
+<li><strong>NOT just keyword matching</strong></li>
+<li><strong>NOT just rule-based selection</strong></li>
+<li><strong>MUST understand context and meaning</strong></li>
+<li><strong>MUST prioritize relevance intelligently</strong>"</li>
+</ul>
+</blockquote>
+<blockquote>
+<p>"<strong>NOT simple pattern matching</strong>"
+"<strong>MUST reason about confidence</strong>"</p>
+</blockquote>
+<p>From <strong>Master Completion Ledger - Innovation #8:</strong></p>
+<blockquote>
+<p>"Indexing system creates <strong>semantic embeddings</strong> that capture meaning and relationships, not just keywords"
+"Retrieval searches <strong>meaning-space</strong> within appropriate vaults, finding conceptually related information even when exact keywords don't match"</p>
+</blockquote>
+<p>From <strong>Technical Standards:</strong></p>
+<blockquote>
+<p>"CRITICAL: Ensure intelligent retrieval (not just matching)"
+"Intelligence: Not just pattern matching - understands meaning"</p>
+</blockquote>
+<h3>What We Built Instead:</h3>
+<pre><code class="language-javascript">// MEM-007 "FIX" - THIS IS RULES, NOT INTELLIGENCE
+const CRITICAL_KEYWORDS = [
+  'allergy', 'allergies', 'allergic', 'allergen', 'allergens',
+  // ... 37 keywords
+];
+
+function calculateImportanceScore(content, category) {
+  const contentLower = content.toLowerCase();
+  for (const keyword of CRITICAL_KEYWORDS) {
+    if (contentLower.includes(keyword)) {  // &lt;-- KEYWORD MATCHING
+      return 0.95;
+    }
+  }
+}
+</code></pre>
+<pre><code class="language-javascript">// UX-046 "FIX" - THIS IS PATTERN MATCHING, NOT INTELLIGENCE
+const memoryVisibilityPatterns = [
+  /what do you (?:remember|know) about me/i,
+  /show (?:me )?(?:my )?memor(?:y|ies)/i,
+  // ... regex patterns
+];
+
+if (msgLower.includes('remember about me')) {  // &lt;-- STRING MATCHING
+  isMemoryVisibilityRequest = true;
+}
+</code></pre>
+<pre><code class="language-javascript">// MEM-003 "FIX" - THIS IS REGEX, NOT INTELLIGENCE
+const FINGERPRINT_PATTERNS = [
+  {
+    fingerprint: 'user_salary',
+    patterns: [
+      /salary\s+(?:is|was|:)?\s*\$?[\d,]+/i,  // &lt;-- REGEX PATTERN
+    ]
+  }
+];
+</code></pre>
+<p><strong>Every single "fix" we've made violates the Bible's core intelligence requirements.</strong></p>
+<hr>
+<h2>THE REAL SOLUTION</h2>
+<h3>What TRUE Semantic Intelligence Looks Like:</h3>
+<p>The system must use <strong>AI reasoning</strong> to understand meaning, not keyword lists or regex patterns.</p>
+<h4>For MEM-007 (Importance Scoring):</h4>
+<p><strong>WRONG (Current):</strong></p>
+<pre><code class="language-javascript">if (content.toLowerCase().includes('allergic')) return 0.95;
+</code></pre>
+<p><strong>RIGHT (True Intelligence):</strong></p>
+<pre><code class="language-javascript">async function calculateImportanceScore(content, category) {
+  // Use AI to UNDERSTAND the content's importance
+  const analysis = await analyzeContentImportance(content);
+  
+  // AI reasons about: Is this health-critical? Safety-related? 
+  // Time-sensitive? Life-impacting? Without keyword lists.
+  return analysis.importanceScore;
+}
+
+async function analyzeContentImportance(content) {
+  const prompt = `Analyze this content and determine its importance score (0.0 to 1.0).
+
+Consider:
+- Is this health or safety critical? (allergies, medical conditions, emergencies)
+- Is this life-impacting? (family, career, financial survival)
+- Is this time-sensitive? (deadlines, appointments, urgent decisions)
+- Is this personally significant to the user?
+
+Content: "${content}"
+
+Respond with JSON: { "score": 0.XX, "reasoning": "brief explanation" }`;
+
+  const response = await callAI(prompt);
+  return JSON.parse(response);
+}
+</code></pre>
+<h4>For MEM-003 (Supersession):</h4>
+<p><strong>WRONG (Current):</strong></p>
+<pre><code class="language-javascript">if (/salary\s+(?:is|was|:)?\s*\$?[\d,]+/i.test(content)) {
+  return { fingerprint: 'user_salary' };
+}
+</code></pre>
+<p><strong>RIGHT (True Intelligence):</strong></p>
+<pre><code class="language-javascript">async function detectSupersession(newContent, existingMemories) {
+  // Use AI to UNDERSTAND if new content supersedes old
+  const analysis = await analyzeSupersession(newContent, existingMemories);
+  
+  // AI reasons: Does this new fact replace an old fact?
+  // Is this the same topic with updated information?
+  return analysis;
+}
+
+async function analyzeSupersession(newContent, existingMemories) {
+  const prompt = `Analyze if this new content updates or supersedes any existing memories.
+
+New content: "${newContent}"
+
+Existing memories:
+${existingMemories.map((m, i) =&gt; `${i+1}. ${m.content}`).join('\n')}
+
+For each existing memory, determine:
+1. Does the new content provide updated information about the same topic?
+2. Should the old memory be marked as superseded?
+
+Respond with JSON: { 
+  "supersedes": [{ "memoryIndex": N, "reason": "explanation" }],
+  "isNewFact": true/false
+}`;
+
+  const response = await callAI(prompt);
+  return JSON.parse(response);
+}
+</code></pre>
+<h4>For UX-046 (Memory Visibility):</h4>
+<p><strong>WRONG (Current):</strong></p>
+<pre><code class="language-javascript">if (message.toLowerCase().includes('remember about me')) {
+  // trigger memory visibility
+}
+</code></pre>
+<p><strong>RIGHT (True Intelligence):</strong></p>
+<pre><code class="language-javascript">async function classifyUserIntent(message) {
+  // Use AI to UNDERSTAND what the user is asking for
+  const classification = await analyzeIntent(message);
+  
+  // AI reasons: Is this user asking to see their memories?
+  // Are they asking for help? Are they making a statement?
+  return classification;
+}
+
+async function analyzeIntent(message) {
+  const prompt = `Classify the user's intent for this message.
+
+Message: "${message}"
+
+Possible intents:
+- MEMORY_VISIBILITY: User wants to see what the system remembers about them
+- HELP_REQUEST: User is asking for help with a task
+- INFORMATION_SHARING: User is sharing new information
+- QUESTION: User is asking a question
+- CONVERSATION: General conversation
+
+Respond with JSON: { "intent": "CATEGORY", "confidence": 0.XX }`;
+
+  const response = await callAI(prompt);
+  return JSON.parse(response);
+}
+</code></pre>
+<h4>For Semantic Retrieval (Innovation #8):</h4>
+<p><strong>WRONG (Current):</strong></p>
+<pre><code class="language-javascript">// Keyword-based category routing
+const categories = await routeQuery(query);  // Uses keyword matching internally
+</code></pre>
+<p><strong>RIGHT (True Intelligence):</strong></p>
+<pre><code class="language-javascript">async function retrieveRelevantMemories(query, userId, mode) {
+  // Step 1: Generate embedding for the query
+  const queryEmbedding = await generateEmbedding(query);
+  
+  // Step 2: Use vector similarity to find semantically related memories
+  const memories = await pool.query(`
+    SELECT id, content, category_name, relevance_score,
+           1 - (embedding &lt;=&gt; $1) as similarity
+    FROM persistent_memories
+    WHERE user_id = $2 
+      AND (mode = $3 OR mode = 'truth-general' OR mode IS NULL)
+    ORDER BY similarity DESC
+    LIMIT 20
+  `, [queryEmbedding, userId, mode]);
+  
+  // Step 3: Use AI to rank by contextual relevance
+  const rankedMemories = await rankByContextualRelevance(query, memories.rows);
+  
+  return rankedMemories;
+}
+
+async function generateEmbedding(text) {
+  // Use OpenAI's embedding API
+  const response = await openai.embeddings.create({
+    model: "text-embedding-3-small",
+    input: text
+  });
+  return response.data[0].embedding;
+}
+</code></pre>
+<hr>
+<h2>IMPLEMENTATION REQUIREMENTS</h2>
+<h3>Database Changes:</h3>
+<ol>
+<li><strong>Add pgvector extension</strong> (if not already enabled):</li>
+</ol>
+<pre><code class="language-sql">CREATE EXTENSION IF NOT EXISTS vector;
+</code></pre>
+<ol start="2">
+<li><strong>Add embedding column to persistent_memories</strong>:</li>
+</ol>
+<pre><code class="language-sql">ALTER TABLE persistent_memories 
+ADD COLUMN embedding vector(1536);
+
+CREATE INDEX ON persistent_memories 
+USING ivfflat (embedding vector_cosine_ops);
+</code></pre>
+<h3>New Files Required:</h3>
+<ol>
+<li>
+<p><strong>api/intelligence/semantic-analyzer.js</strong></p>
+<ul>
+<li><code>analyzeContentImportance(content)</code> - AI-based importance scoring</li>
+<li><code>analyzeSupersession(newContent, existingMemories)</code> - AI-based supersession detection</li>
+<li><code>analyzeIntent(message)</code> - AI-based intent classification</li>
+<li><code>rankByContextualRelevance(query, memories)</code> - AI-based relevance ranking</li>
+</ul>
+</li>
+<li>
+<p><strong>api/intelligence/embedding-service.js</strong></p>
+<ul>
+<li><code>generateEmbedding(text)</code> - Generate vector embeddings</li>
+<li><code>findSimilarMemories(embedding, userId, mode)</code> - Vector similarity search</li>
+</ul>
+</li>
+<li>
+<p><strong>api/intelligence/reasoning-engine.js</strong></p>
+<ul>
+<li><code>reasonAboutClaim(claim)</code> - AI-based truth confidence</li>
+<li><code>reasonAboutContext(query, memories)</code> - AI-based context understanding</li>
+</ul>
+</li>
+</ol>
+<h3>Files to Modify:</h3>
+<ol>
+<li>
+<p><strong>api/memory/intelligent-storage.js</strong></p>
+<ul>
+<li>Remove: <code>CRITICAL_KEYWORDS</code>, <code>HIGH_PRIORITY_KEYWORDS</code>, <code>calculateImportanceScore()</code></li>
+<li>Add: Call to <code>analyzeContentImportance()</code> from semantic-analyzer</li>
+<li>Add: Call to <code>generateEmbedding()</code> before storage</li>
+</ul>
+</li>
+<li>
+<p><strong>api/services/supersession.js</strong></p>
+<ul>
+<li>Remove: <code>FINGERPRINT_PATTERNS</code>, <code>detectFingerprintDeterministic()</code></li>
+<li>Add: Call to <code>analyzeSupersession()</code> from semantic-analyzer</li>
+</ul>
+</li>
+<li>
+<p><strong>api/services/semantic-retrieval.js</strong></p>
+<ul>
+<li>Remove: Keyword-based category routing</li>
+<li>Add: Vector similarity search using embeddings</li>
+<li>Add: AI-based contextual ranking</li>
+</ul>
+</li>
+<li>
+<p><strong>api/core/orchestrator.js</strong></p>
+<ul>
+<li>Remove: <code>memoryVisibilityPatterns</code>, regex/string matching</li>
+<li>Add: Call to <code>analyzeIntent()</code> from semantic-analyzer</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2>COST CONSIDERATIONS</h2>
+<p>The Bible acknowledges this approach has costs but requires it anyway:</p>
+<blockquote>
+<p>"Token efficiency isn't optional optimization but foundational architecture"</p>
+</blockquote>
+<h3>How to Balance:</h3>
+<ol>
+<li><strong>Cache AI analysis results</strong> - Same content = same importance score</li>
+<li><strong>Batch embedding generation</strong> - Generate embeddings in background, not on every request</li>
+<li><strong>Use lightweight models for simple tasks</strong> - GPT-3.5-turbo for intent classification</li>
+<li><strong>Progressive escalation</strong> - Try simple heuristics first, escalate to AI only when needed</li>
+</ol>
+<h3>Cost Per Operation (Estimated):</h3>
+
+Operation | Model | Est. Cost
+-- | -- | --
+Intent Classification | GPT-3.5-turbo | $0.0002
+Importance Analysis | GPT-4 | $0.002
+Supersession Detection | GPT-4 | $0.003
+Embedding Generation | text-embedding-3-small | $0.00002
+Contextual Ranking | GPT-3.5-turbo | $0.0005
+
+
+<hr>
+<h2>DO NOT</h2>
+<ol>
+<li><strong>DO NOT</strong> add more keywords to keyword lists</li>
+<li><strong>DO NOT</strong> add more regex patterns</li>
+<li><strong>DO NOT</strong> use string.includes() for intent detection</li>
+<li><strong>DO NOT</strong> use pattern matching disguised as intelligence</li>
+<li><strong>DO NOT</strong> take shortcuts that violate Bible intelligence requirements</li>
+</ol>
+<hr>
+<h2>IMPLEMENTATION ORDER</h2>
+<ol>
+<li>
+<p><strong>Set up infrastructure</strong></p>
+<ul>
+<li>Enable pgvector extension</li>
+<li>Add embedding column to database</li>
+<li>Create embedding-service.js</li>
+</ul>
+</li>
+<li>
+<p><strong>Build semantic analyzer</strong></p>
+<ul>
+<li>Create semantic-analyzer.js</li>
+<li>Implement AI-based intent classification</li>
+<li>Implement AI-based importance scoring</li>
+<li>Implement AI-based supersession detection</li>
+</ul>
+</li>
+<li>
+<p><strong>Replace importance scoring (MEM-007)</strong></p>
+<ul>
+<li>Remove keyword arrays from intelligent-storage.js</li>
+<li>Integrate semantic-analyzer.analyzeContentImportance()</li>
+</ul>
+</li>
+<li>
+<p><strong>Replace supersession detection (MEM-003)</strong></p>
+<ul>
+<li>Remove regex patterns from supersession.js</li>
+<li>Integrate semantic-analyzer.analyzeSupersession()</li>
+</ul>
+</li>
+<li>
+<p><strong>Replace intent detection (UX-046)</strong></p>
+<ul>
+<li>Remove regex patterns from orchestrator.js</li>
+<li>Integrate semantic-analyzer.analyzeIntent()</li>
+</ul>
+</li>
+<li>
+<p><strong>Replace retrieval system</strong></p>
+<ul>
+<li>Generate embeddings on memory storage</li>
+<li>Implement vector similarity search</li>
+<li>Add AI-based contextual ranking</li>
+</ul>
+</li>
+<li>
+<p><strong>Test and verify</strong></p>
+<ul>
+<li>Run all 53-innovation tests</li>
+<li>Verify AI reasoning in logs</li>
+<li>Confirm no keyword/pattern matching</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2>SUCCESS CRITERIA</h2>
+<p>This issue is COMPLETE when:</p>
+<ol>
+<li>✅ Zero keyword arrays in codebase</li>
+<li>✅ Zero regex patterns for semantic decisions</li>
+<li>✅ All importance scoring uses AI reasoning</li>
+<li>✅ All supersession uses AI analysis</li>
+<li>✅ All intent classification uses AI</li>
+<li>✅ All retrieval uses vector similarity</li>
+<li>✅ All 7 failing tests pass using TRUE intelligence</li>
+<li>✅ Logs show AI reasoning, not pattern matches</li>
+</ol>
+<hr>
+<p><strong>Priority:</strong> 🔴 CRITICAL - ARCHITECTURAL
+<strong>Estimated Effort:</strong> 16-24 hours
+<strong>Risk Level:</strong> HIGH (but necessary - current approach fundamentally wrong)</p>
+<hr>
+<h2>FINAL NOTE</h2>
+<p>The Bible is clear. We've been violating it for days. Every "fix" made things worse by adding more rules disguised as intelligence.</p>
+<p><strong>This is the correct path forward.</strong></p>
+<p>The system was designed to be intelligent. Let's actually build it that way.</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
