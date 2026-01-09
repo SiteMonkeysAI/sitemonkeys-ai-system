@@ -54,6 +54,7 @@ import rateLimit from "express-rate-limit";
 // ========== SEMANTIC INTEGRATION ==========
 import { storeWithSupersession, generateFactFingerprint } from "./api/services/supersession.js";
 import { embedMemoryNonBlocking } from "./api/services/embedding-service.js";
+import { sanitizePII } from "./api/memory/pii-sanitizer.js";
 // ================================================
 
 console.log("[SERVER] ✅ Dependencies loaded");
@@ -252,8 +253,13 @@ app.get('/api/memory/list', async (req, res) => {
   try {
     const userId = req.headers['x-user-id'] || req.query.userId || 'anonymous';
     
-    // Import PII sanitizer for response protection
-    const { sanitizePII } = await import('./api/memory/pii-sanitizer.js');
+    // Validate userId format (alphanumeric, hyphens, underscores only)
+    if (!/^[a-zA-Z0-9_-]+$/.test(userId)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid userId format' 
+      });
+    }
     
     // Get database pool from memory system
     const pool = global.memorySystem?.pool || persistentMemory.pool;

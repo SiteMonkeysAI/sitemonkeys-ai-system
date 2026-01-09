@@ -9,6 +9,22 @@ import { logMemoryOperation } from '../routes/debug.js';
 import { embedMemoryNonBlocking } from '../services/embedding-service.js';
 import { generateFactFingerprint, storeWithSupersession } from '../services/supersession.js';
 
+// ==================== IMPORTANCE SCORING KEYWORDS ====================
+// Innovation #7: Critical facts prioritized over preferences
+
+// Critical health/safety keywords
+const CRITICAL_KEYWORDS = [
+  'allergy', 'allergic', 'allergies', 'allergen',
+  'medical', 'medication', 'emergency', 
+  'condition', 'diabetic', 'diabetes', 'asthma', 'epipen'
+];
+
+// High priority keywords
+const HIGH_PRIORITY_KEYWORDS = [
+  'family', 'spouse', 'child', 'work', 'salary', 
+  'employer', 'budget', 'income'
+];
+
 /**
  * Calculate importance score based on content type
  * Innovation #7: Health/safety info > Personal facts > Preferences
@@ -17,19 +33,6 @@ import { generateFactFingerprint, storeWithSupersession } from '../services/supe
  * @returns {number} - Importance score (0.0 to 1.0)
  */
 function calculateImportanceScore(content, category) {
-  // Critical health/safety keywords
-  const CRITICAL_KEYWORDS = [
-    'allergy', 'allergic', 'allergies', 'allergen',
-    'medical', 'medication', 'emergency', 
-    'condition', 'diabetic', 'diabetes', 'asthma', 'epipen'
-  ];
-  
-  // High priority keywords
-  const HIGH_PRIORITY_KEYWORDS = [
-    'family', 'spouse', 'child', 'work', 'salary', 
-    'employer', 'budget', 'income'
-  ];
-  
   const contentLower = content.toLowerCase();
   
   // Critical: health, safety, emergency, allergies
