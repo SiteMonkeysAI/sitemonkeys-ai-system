@@ -19,6 +19,15 @@
  */
 
 import { Pool } from 'pg';
+import rateLimit from 'express-rate-limit';
+
+// Rate limiter for migration endpoints to prevent abuse/DoS
+const migrationRateLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 30, // limit each IP to 30 migration requests per window
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 
 /**
  * Validates migration is allowed and authenticates request
@@ -526,13 +535,13 @@ export async function migrateData(req, res) {
  */
 export default function dbMigrationRouter(app) {
   // List all tables with metadata
-  app.get('/api/admin/db-tables', listTables);
+  app.get('/api/admin/db-tables', migrationRateLimiter, listTables);
 
   // Replicate schema
-  app.get('/api/admin/db-schema', replicateSchema);
+  app.get('/api/admin/db-schema', migrationRateLimiter, replicateSchema);
 
   // Migrate data with cursor pagination
-  app.get('/api/admin/db-migrate-data', migrateData);
+  app.get('/api/admin/db-migrate-data', migrationRateLimiter, migrateData);
 
   console.log('[DB-MIGRATION] Migration endpoints registered');
 }
