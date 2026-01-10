@@ -372,6 +372,28 @@ export async function migrateData(req, res) {
     });
   }
 
+  // Validate table name to prevent SQL injection via identifier interpolation
+  if (typeof tableName !== 'string') {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid parameter: table must be a string'
+    });
+  }
+
+  // Allow only standard SQL identifier characters and a reasonable length
+  const TABLE_NAME_REGEX = /^[A-Za-z_][A-Za-z0-9_]*$/;
+  const MAX_TABLE_NAME_LENGTH = 63; // default PostgreSQL identifier length
+  if (
+    tableName.length === 0 ||
+    tableName.length > MAX_TABLE_NAME_LENGTH ||
+    !TABLE_NAME_REGEX.test(tableName)
+  ) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid parameter: table name is not allowed'
+    });
+  }
+
   const { oldPool, newPool } = getDatabasePools();
 
   try {
