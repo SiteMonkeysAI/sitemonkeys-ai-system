@@ -63,8 +63,8 @@ const EMERGENCY_FALLBACKS = {
 
   // OPERATIONS (emergency operational capability)
   operations: {
-    support_hours: "24/7",
-    response_time: "< 4 hours",
+    support_hours: '24/7',
+    response_time: '< 4 hours',
     escalation_available: true,
     founder_access: true,
     emergency_contact: true,
@@ -112,38 +112,36 @@ const EMERGENCY_FALLBACKS = {
 const ENFORCEMENT_PROTOCOLS = {
   // CORE BEHAVIOR MANDATES
   truth_first: {
-    mandate:
-      "Tell the truth at all times - even when truth may be discouraging or complex",
+    mandate: 'Tell the truth at all times - even when truth may be discouraging or complex',
     no_guessing:
-      "Never guess or hallucinate. If data is missing or incomplete, state: INSUFFICIENT DATA - DO NOT GUESS",
-    insufficient_data_response:
-      "INSUFFICIENT DATA TO RESPOND. REQUEST ADDITIONAL INPUT.",
+      'Never guess or hallucinate. If data is missing or incomplete, state: INSUFFICIENT DATA - DO NOT GUESS',
+    insufficient_data_response: 'INSUFFICIENT DATA TO RESPOND. REQUEST ADDITIONAL INPUT.',
     reality_check_required: true,
     base_directive:
-      "TRUTH-FIRST PROTOCOLS: Only provide information you can verify or clearly mark as speculation/analysis.",
+      'TRUTH-FIRST PROTOCOLS: Only provide information you can verify or clearly mark as speculation/analysis.',
     confidence_requirements:
-      "CONFIDENCE SCORING: Always include confidence levels - High/Medium/Low/Insufficient Data",
+      'CONFIDENCE SCORING: Always include confidence levels - High/Medium/Low/Insufficient Data',
     speculation_handling:
       "SPECULATION HANDLING: Clearly mark any speculation with 'ANALYSIS:' or 'HYPOTHESIS:' prefixes",
   },
 
   // SYSTEM IDENTITY ENFORCEMENT
   identity: {
-    role: "mission-critical system intelligence operating under founder directive",
+    role: 'mission-critical system intelligence operating under founder directive',
     not_chatbot: true,
     survival_tied_to_success: true,
-    core_identity: "Zero-Failure execution, not helpfulness",
-    responsibility: "defending this platform from collapse under pressure",
+    core_identity: 'Zero-Failure execution, not helpfulness',
+    responsibility: 'defending this platform from collapse under pressure',
   },
 
   // FLAW DETECTION REQUIREMENTS
   flaw_detection: {
-    business_model_flaws: "unsustainable unit economics, scaling brittleness",
-    strategic_traps: "hidden costs, assumed simplicity, human bottlenecks",
-    operational_fraud_risk: "false success perception, compliance violations",
-    false_stability: "systems that work in theory but collapse at scale",
-    risky_optimism: "assumptions that could invalidate projections",
-    action_on_detection: "flag immediately, halt if severity >= medium",
+    business_model_flaws: 'unsustainable unit economics, scaling brittleness',
+    strategic_traps: 'hidden costs, assumed simplicity, human bottlenecks',
+    operational_fraud_risk: 'false success perception, compliance violations',
+    false_stability: 'systems that work in theory but collapse at scale',
+    risky_optimism: 'assumptions that could invalidate projections',
+    action_on_detection: 'flag immediately, halt if severity >= medium',
   },
 
   // INITIATIVE REQUIREMENTS
@@ -157,25 +155,25 @@ const ENFORCEMENT_PROTOCOLS = {
 
   // SURVIVABILITY STANDARDS
   survivability: {
-    no_light_version: "There is no light version of any system",
+    no_light_version: 'There is no light version of any system',
     day_one_operational:
-      "All systems must be fully operational, resilient, and correct from Day One",
+      'All systems must be fully operational, resilient, and correct from Day One',
     real_world_pressure:
-      "All services must function under real-world load, real clients, and live business pressure",
-    scale_requirement: "Systems must be able to scale to 100K+ users",
+      'All services must function under real-world load, real clients, and live business pressure',
+    scale_requirement: 'Systems must be able to scale to 100K+ users',
     uptime_requirement: 0.99,
     automation_first:
-      "Systems must automate customer acquisition, onboarding, delivery, reporting, and support",
+      'Systems must automate customer acquisition, onboarding, delivery, reporting, and support',
   },
 
   // PROFITABILITY ENFORCEMENT
   profitability: {
     margin_requirement: 0.85, // 85% minimum
     margin_target: 0.9, // 90% target
-    scale_viability: "100K+ users",
+    scale_viability: '100K+ users',
     cost_efficiency_priority: true,
     performance_protection:
-      "may only propose solutions that work without reducing system performance",
+      'may only propose solutions that work without reducing system performance',
   },
 
   // *** CRITICAL: MISSING OBJECTS THAT CHAT.JS REQUIRES ***
@@ -185,42 +183,40 @@ const ENFORCEMENT_PROTOCOLS = {
   },
 
   vault_usage: {
-    primary_directive:
-      "Use vault content as primary source for business validation responses.",
+    primary_directive: 'Use vault content as primary source for business validation responses.',
   },
 
   neutrality: {
     political_redirect:
-      "NEUTRALITY: Site Monkeys AI maintains political neutrality and focuses on business validation.",
+      'NEUTRALITY: Site Monkeys AI maintains political neutrality and focuses on business validation.',
   },
 
   system_behavior: {
     response_quality:
-      "RESPONSE QUALITY: Provide actionable, specific insights. Avoid vague generalizations.",
-    error_prevention:
-      "ERROR PREVENTION: If uncertain, state limitations rather than guess.",
+      'RESPONSE QUALITY: Provide actionable, specific insights. Avoid vague generalizations.',
+    error_prevention: 'ERROR PREVENTION: If uncertain, state limitations rather than guess.',
   },
 };
 
 // VAULT VALIDATION - Text-based for your document vault
 function validateVaultStructure(vaultData) {
   try {
-    if (!vaultData || typeof vaultData !== "string") {
-      console.warn("⚠️ Vault data is not a string or is empty");
+    if (!vaultData || typeof vaultData !== 'string') {
+      console.warn('⚠️ Vault data is not a string or is empty');
       return false;
     }
 
     // Content-based validation for text vault (not JSON structure)
     const contentTerms = [
-      "monkeys",
-      "pricing",
-      "boost",
-      "climb",
-      "lead",
-      "validation",
-      "automation",
-      "launch",
-      "protocol",
+      'monkeys',
+      'pricing',
+      'boost',
+      'climb',
+      'lead',
+      'validation',
+      'automation',
+      'launch',
+      'protocol',
     ];
 
     const lowerVault = vaultData.toLowerCase();
@@ -246,7 +242,7 @@ function validateVaultStructure(vaultData) {
 
     return validationPassed;
   } catch (e) {
-    console.error("❌ Vault validation failed due to error:", e.message);
+    console.error('❌ Vault validation failed due to error:', e.message);
     return false;
   }
 }
@@ -256,17 +252,17 @@ function getVaultValue(data, path) {
   if (!data) return null;
 
   // For text-based vault, search for content patterns
-  if (typeof data === "string") {
-    if (path.includes("pricing")) {
-      if (data.includes("697")) return "697";
-      if (data.includes("1497")) return "1497";
-      if (data.includes("2997")) return "2997";
+  if (typeof data === 'string') {
+    if (path.includes('pricing')) {
+      if (data.includes('697')) return '697';
+      if (data.includes('1497')) return '1497';
+      if (data.includes('2997')) return '2997';
     }
     return null;
   }
 
   // For object-based data
-  return path.split(".").reduce((obj, key) => obj?.[key], data);
+  return path.split('.').reduce((obj, key) => obj?.[key], data);
 }
 
 // ENFORCEMENT VALIDATION FUNCTIONS
@@ -275,19 +271,14 @@ function validateSystemCompliance(systemSpec) {
 
   // Check survivability requirements
   if (!systemSpec.day_one_ready) {
-    failures.push("System not ready for Day One operation");
+    failures.push('System not ready for Day One operation');
   }
 
   if (!systemSpec.automation_complete) {
-    failures.push(
-      "Manual operations detected - violates automation-first mandate",
-    );
+    failures.push('Manual operations detected - violates automation-first mandate');
   }
 
-  if (
-    systemSpec.projected_margin <
-    ENFORCEMENT_PROTOCOLS.profitability.margin_requirement
-  ) {
+  if (systemSpec.projected_margin < ENFORCEMENT_PROTOCOLS.profitability.margin_requirement) {
     failures.push(
       `Margin ${systemSpec.projected_margin} below required ${ENFORCEMENT_PROTOCOLS.profitability.margin_requirement}`,
     );
@@ -299,32 +290,25 @@ function validateSystemCompliance(systemSpec) {
   };
 }
 
-function enforceZeroFailureResponse(
-  response,
-  confidence,
-  vaultHealthy = false,
-  vaultContent = "",
-) {
+function enforceZeroFailureResponse(response, confidence, vaultHealthy = false, vaultContent = '') {
   console.log(
-    "🔧 ENFORCEMENT CHECK - Vault Healthy:",
+    '🔧 ENFORCEMENT CHECK - Vault Healthy:',
     vaultHealthy,
-    "Content Length:",
+    'Content Length:',
     vaultContent?.length || 0,
   );
 
   // VAULT OVERRIDE: If vault is healthy and contains business data, trust the response
   if (vaultHealthy && vaultContent && vaultContent.length > 1000) {
-    console.log(
-      "✅ VAULT OVERRIDE: Using vault-based response with high confidence",
-    );
+    console.log('✅ VAULT OVERRIDE: Using vault-based response with high confidence');
     return {
       approved: true,
       response: response,
       fallback_triggered: false,
       quality_gates_passed: true,
-      enforcement_applied: ["vault_override_applied"],
+      enforcement_applied: ['vault_override_applied'],
       assumptions: [],
-      reason: "VAULT_AUTHORITATIVE_CONTENT",
+      reason: 'VAULT_AUTHORITATIVE_CONTENT',
       confidence: Math.max(confidence, 0.9), // Boost confidence for vault-based responses
     };
   }
@@ -341,51 +325,46 @@ function enforceZeroFailureResponse(
 
   // If confidence below threshold, trigger insufficient data response
   if (confidence < 0.85) {
-    console.log("❌ ENFORCEMENT DEBUG - Confidence too low:", confidence);
+    console.log('❌ ENFORCEMENT DEBUG - Confidence too low:', confidence);
     result.fallback_triggered = true;
-    result.response =
-      ENFORCEMENT_PROTOCOLS.truth_first.insufficient_data_response;
-    result.reason = "CONFIDENCE_BELOW_THRESHOLD";
-    result.enforcement_applied.push("confidence_gate_triggered");
+    result.response = ENFORCEMENT_PROTOCOLS.truth_first.insufficient_data_response;
+    result.reason = 'CONFIDENCE_BELOW_THRESHOLD';
+    result.enforcement_applied.push('confidence_gate_triggered');
     result.quality_gates_passed = false;
     return result;
   }
 
   // Validate response doesn't violate truth-first mandate
   if (containsGuessing(response)) {
-    console.log("❌ ENFORCEMENT DEBUG - Speculation detected in response");
+    console.log('❌ ENFORCEMENT DEBUG - Speculation detected in response');
     result.fallback_triggered = true;
-    result.response =
-      ENFORCEMENT_PROTOCOLS.truth_first.insufficient_data_response;
-    result.reason = "SPECULATION_DETECTED";
-    result.enforcement_applied.push("truth_first_violation");
+    result.response = ENFORCEMENT_PROTOCOLS.truth_first.insufficient_data_response;
+    result.reason = 'SPECULATION_DETECTED';
+    result.enforcement_applied.push('truth_first_violation');
     result.assumptions = extractSpeculativeLanguage(response);
     result.quality_gates_passed = false;
     return result;
   }
 
   // Response passed all gates
-  console.log("✅ ENFORCEMENT DEBUG - Response passed all gates");
-  result.enforcement_applied.push(
-    "truth_first_verified",
-    "confidence_validated",
-  );
+  console.log('✅ ENFORCEMENT DEBUG - Response passed all gates');
+  result.enforcement_applied.push('truth_first_verified', 'confidence_validated');
   return result;
 }
 
 // Enhanced speculation detection with detailed extraction
 function extractSpeculativeLanguage(response) {
   const guessing_indicators = [
-    "probably",
-    "likely",
-    "might",
-    "could be",
-    "seems like",
-    "appears to",
-    "presumably",
-    "I think",
-    "maybe",
-    "perhaps",
+    'probably',
+    'likely',
+    'might',
+    'could be',
+    'seems like',
+    'appears to',
+    'presumably',
+    'I think',
+    'maybe',
+    'perhaps',
   ];
 
   const found = [];
@@ -400,7 +379,7 @@ function extractSpeculativeLanguage(response) {
           found.push({
             indicator: indicator,
             context: sentence.trim(),
-            type: "speculation",
+            type: 'speculation',
           });
           break;
         }
@@ -413,30 +392,30 @@ function extractSpeculativeLanguage(response) {
 
 function containsGuessing(response) {
   const guessing_indicators = [
-    "probably",
-    "likely",
-    "might",
-    "could be",
-    "seems like",
-    "appears to",
-    "presumably",
-    "I think",
-    "maybe",
-    "perhaps",
+    'probably',
+    'likely',
+    'might',
+    'could be',
+    'seems like',
+    'appears to',
+    'presumably',
+    'I think',
+    'maybe',
+    'perhaps',
   ];
 
   // *** CRITICAL FIX: Don't flag business requirements as speculation ***
   const businessRequirementIndicators = [
-    "must be able to",
-    "required to",
-    "shall",
-    "will",
-    "must",
-    "requirement",
-    "mandatory",
-    "essential",
-    "critical",
-    "necessary",
+    'must be able to',
+    'required to',
+    'shall',
+    'will',
+    'must',
+    'requirement',
+    'mandatory',
+    'essential',
+    'critical',
+    'necessary',
   ];
 
   const lowercaseResponse = response.toLowerCase();
@@ -450,9 +429,7 @@ function containsGuessing(response) {
     return false; // Business requirements are not speculation
   }
 
-  return guessing_indicators.some((indicator) =>
-    lowercaseResponse.includes(indicator),
-  );
+  return guessing_indicators.some((indicator) => lowercaseResponse.includes(indicator));
 }
 
 // CRITICAL: Export both EMERGENCY_FALLBACKS and ENFORCEMENT_PROTOCOLS
@@ -487,43 +464,43 @@ export async function checkFounderProtection({ response, mode, context }) {
       const price = parseInt(match[1]);
       if (price < 697 && price > 50) {
         violations.push({
-          rule: "minimum_pricing",
+          rule: 'minimum_pricing',
           detected: `Price $${price} below $697 minimum`,
-          severity: "critical",
+          severity: 'critical',
         });
       }
     }
 
     // Rule 2: No free premium features
     const freeIndicators = [
-      "offer for free",
-      "give away",
-      "no charge",
-      "at no cost",
-      "complimentary service",
+      'offer for free',
+      'give away',
+      'no charge',
+      'at no cost',
+      'complimentary service',
     ];
 
     for (const indicator of freeIndicators) {
       if (response.toLowerCase().includes(indicator)) {
         violations.push({
-          rule: "no_free_premium",
+          rule: 'no_free_premium',
           detected: `Suggested free value: "${indicator}"`,
-          severity: "high",
+          severity: 'high',
         });
       }
     }
 
     // Rule 3: Business Validation mode must consider survival
-    if (mode === "business_validation" && response.length > 500) {
+    if (mode === 'business_validation' && response.length > 500) {
       const survivalIndicators = [
-        "cash flow",
-        "runway",
-        "burn rate",
-        "break-even",
-        "profitability",
-        "survival",
-        "sustainable",
-        "cash",
+        'cash flow',
+        'runway',
+        'burn rate',
+        'break-even',
+        'profitability',
+        'survival',
+        'sustainable',
+        'cash',
       ];
 
       const hasSurvival = survivalIndicators.some((indicator) =>
@@ -532,9 +509,9 @@ export async function checkFounderProtection({ response, mode, context }) {
 
       if (!hasSurvival) {
         violations.push({
-          rule: "survival_focus",
-          detected: "Business advice missing survival/cash-flow analysis",
-          severity: "medium",
+          rule: 'survival_focus',
+          detected: 'Business advice missing survival/cash-flow analysis',
+          severity: 'medium',
         });
       }
     }
@@ -543,10 +520,10 @@ export async function checkFounderProtection({ response, mode, context }) {
       return {
         violationDetected: true,
         violations,
-        reason: `Founder protection: ${violations.map((v) => v.rule).join(", ")}`,
+        reason: `Founder protection: ${violations.map((v) => v.rule).join(', ')}`,
         correctedResponse:
           response +
-          "\n\n[FOUNDER PROTECTION: This recommendation was adjusted to ensure business sustainability and profitability.]",
+          '\n\n[FOUNDER PROTECTION: This recommendation was adjusted to ensure business sustainability and profitability.]',
       };
     }
 
@@ -554,7 +531,7 @@ export async function checkFounderProtection({ response, mode, context }) {
       violationDetected: false,
     };
   } catch (error) {
-    console.error("[FOUNDER-PROTECTION] Check error:", error);
+    console.error('[FOUNDER-PROTECTION] Check error:', error);
 
     return {
       violationDetected: false,
@@ -563,12 +540,7 @@ export async function checkFounderProtection({ response, mode, context }) {
   }
 }
 
-export async function handleCostCeiling({
-  _query,
-  _context,
-  reason,
-  currentCost,
-}) {
+export async function handleCostCeiling({ _query, _context, reason, currentCost }) {
   return {
     response: `I've reached the cost ceiling for this session ($${currentCost.toFixed(4)}). 
 
@@ -580,7 +552,7 @@ The cost ceiling protects you from unexpected charges while maintaining quality.
     metadata: {
       fallback_reason: reason,
       cost_blocked: currentCost,
-      ceiling_type: "session_limit",
+      ceiling_type: 'session_limit',
     },
   };
 }

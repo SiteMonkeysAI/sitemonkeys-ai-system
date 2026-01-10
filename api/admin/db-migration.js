@@ -1,7 +1,7 @@
 /**
  * pgvector Infrastructure Migration Endpoints
  * ONE-TIME USE - DELETE AFTER SUCCESSFUL MIGRATION
- * 
+ *
  * Requirements:
  * - ES Modules (import/export)
  * - Dynamic schema replication (no hardcoded tables)
@@ -11,7 +11,7 @@
  * - Dry-run support
  * - Secret authentication
  * - Migration lock (ALLOW_DB_MIGRATION env var)
- * 
+ *
  * Endpoints:
  * - GET /api/admin/db-tables - List all tables with metadata
  * - GET /api/admin/db-schema - Replicate schema to new DB
@@ -37,7 +37,7 @@ function validateMigrationRequest(req, res) {
   if (process.env.ALLOW_DB_MIGRATION !== 'true') {
     return {
       allowed: false,
-      error: 'Migration locked. Set ALLOW_DB_MIGRATION=true to enable.'
+      error: 'Migration locked. Set ALLOW_DB_MIGRATION=true to enable.',
     };
   }
 
@@ -45,14 +45,14 @@ function validateMigrationRequest(req, res) {
   if (!process.env.NEW_DATABASE_URL) {
     return {
       allowed: false,
-      error: 'NEW_DATABASE_URL environment variable not set'
+      error: 'NEW_DATABASE_URL environment variable not set',
     };
   }
 
   if (!process.env.MIGRATION_SECRET) {
     return {
       allowed: false,
-      error: 'MIGRATION_SECRET environment variable not set'
+      error: 'MIGRATION_SECRET environment variable not set',
     };
   }
 
@@ -63,14 +63,14 @@ function validateMigrationRequest(req, res) {
   if (!secret) {
     return {
       allowed: false,
-      error: 'Missing authentication. Provide X-Migration-Secret header'
+      error: 'Missing authentication. Provide X-Migration-Secret header',
     };
   }
 
   if (secret !== process.env.MIGRATION_SECRET) {
     return {
       allowed: false,
-      error: 'Invalid migration secret'
+      error: 'Invalid migration secret',
     };
   }
 
@@ -85,14 +85,14 @@ function getDatabasePools() {
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     max: 5,
-    connectionTimeoutMillis: 10000
+    connectionTimeoutMillis: 10000,
   });
 
   const newPool = new Pool({
     connectionString: process.env.NEW_DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
     max: 5,
-    connectionTimeoutMillis: 10000
+    connectionTimeoutMillis: 10000,
   });
 
   return { oldPool, newPool };
@@ -102,7 +102,8 @@ function getDatabasePools() {
  * Detect primary key for a table
  */
 async function detectPrimaryKey(client, tableName) {
-  const result = await client.query(`
+  const result = await client.query(
+    `
     SELECT kcu.column_name, c.data_type
     FROM information_schema.table_constraints tc
     JOIN information_schema.key_column_usage kcu 
@@ -115,7 +116,9 @@ async function detectPrimaryKey(client, tableName) {
       AND tc.table_name = $1
       AND tc.table_schema = 'public'
     ORDER BY kcu.ordinal_position
-  `, [tableName]);
+  `,
+    [tableName],
+  );
 
   if (result.rows.length === 0) {
     return { column: null, dataType: null, isNumeric: false };
@@ -130,7 +133,7 @@ async function detectPrimaryKey(client, tableName) {
     dataType: pk.data_type,
     isNumeric,
     isComposite: result.rows.length > 1,
-    allColumns: result.rows.map(r => r.column_name)
+    allColumns: result.rows.map((r) => r.column_name),
   };
 }
 
@@ -196,12 +199,15 @@ export async function listTables(req, res) {
       const pkInfo = await detectPrimaryKey(oldClient, tableName);
 
       // Check if table exists in new database
-      const newTableCheck = await newClient.query(`
+      const newTableCheck = await newClient.query(
+        `
         SELECT EXISTS (
           SELECT FROM pg_tables 
           WHERE schemaname = 'public' AND tablename = $1
         )
-      `, [tableName]);
+      `,
+        [tableName],
+      );
       const existsInNew = newTableCheck.rows[0].exists;
 
       tables.push({
@@ -211,7 +217,7 @@ export async function listTables(req, res) {
         pkDataType: pkInfo.dataType,
         pkIsNumeric: pkInfo.isNumeric,
         pkIsComposite: pkInfo.isComposite || false,
-        existsInNewDB: existsInNew
+        existsInNewDB: existsInNew,
       });
     }
 
@@ -223,15 +229,14 @@ export async function listTables(req, res) {
       tables,
       totalTables: tables.length,
       totalRows: tables.reduce((sum, t) => sum + t.rowCount, 0),
-      message: 'Table discovery complete'
+      message: 'Table discovery complete',
     });
-
   } catch (error) {
     console.error('[DB-MIGRATION] Error listing tables:', error);
     res.status(500).json({
       success: false,
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
     });
   } finally {
     await oldPool.end();
@@ -286,26 +291,28 @@ export async function replicateSchema(req, res) {
         const pkInfo = await detectPrimaryKey(oldClient, tableName);
 
         // Build CREATE TABLE statement
-        const columns = schema.map(col => {
-          let def = `"${col.column_name}" ${col.data_type}`;
-          
-          if (col.not_null) {
-            def += ' NOT NULL';
-          }
-          
-          if (col.default_value) {
-            def += ` DEFAULT ${col.default_value}`;
-          }
-          
-          return def;
-        }).join(',\n  ');
+        const columns = schema
+          .map((col) => {
+            let def = `"${col.column_name}" ${col.data_type}`;
+
+            if (col.not_null) {
+              def += ' NOT NULL';
+            }
+
+            if (col.default_value) {
+              def += ` DEFAULT ${col.default_value}`;
+            }
+
+            return def;
+          })
+          .join(',\n  ');
 
         let createStatement = `CREATE TABLE IF NOT EXISTS "${tableName}" (\n  ${columns}`;
 
         // Add primary key constraint if exists
         if (pkInfo.column) {
           if (pkInfo.isComposite) {
-            createStatement += `,\n  PRIMARY KEY (${pkInfo.allColumns.map(c => `"${c}"`).join(', ')})`;
+            createStatement += `,\n  PRIMARY KEY (${pkInfo.allColumns.map((c) => `"${c}"`).join(', ')})`;
           } else {
             createStatement += `,\n  PRIMARY KEY ("${pkInfo.column}")`;
           }
@@ -324,14 +331,13 @@ export async function replicateSchema(req, res) {
           columns: schema.length,
           primaryKey: pkInfo.column,
           created: !dryRun,
-          sql: createStatement
+          sql: createStatement,
         });
-
       } catch (error) {
         results.push({
           table: tableName,
           success: false,
-          error: error.message
+          error: error.message,
         });
       }
     }
@@ -344,16 +350,15 @@ export async function replicateSchema(req, res) {
       dryRun,
       results,
       tablesProcessed: results.length,
-      tablesCreated: results.filter(r => r.success && !dryRun).length,
-      message: dryRun ? 'Schema preview complete (dry run)' : 'Schema replication complete'
+      tablesCreated: results.filter((r) => r.success && !dryRun).length,
+      message: dryRun ? 'Schema preview complete (dry run)' : 'Schema replication complete',
     });
-
   } catch (error) {
     console.error('[DB-MIGRATION] Error replicating schema:', error);
     res.status(500).json({
       success: false,
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
     });
   } finally {
     await oldPool.end();
@@ -379,7 +384,7 @@ export async function migrateData(req, res) {
   if (!tableName) {
     return res.status(400).json({
       success: false,
-      error: 'Missing required parameter: table'
+      error: 'Missing required parameter: table',
     });
   }
 
@@ -387,7 +392,7 @@ export async function migrateData(req, res) {
   if (typeof tableName !== 'string') {
     return res.status(400).json({
       success: false,
-      error: 'Invalid parameter: table must be a string'
+      error: 'Invalid parameter: table must be a string',
     });
   }
 
@@ -401,7 +406,7 @@ export async function migrateData(req, res) {
   ) {
     return res.status(400).json({
       success: false,
-      error: 'Invalid parameter: table name is not allowed'
+      error: 'Invalid parameter: table name is not allowed',
     });
   }
 
@@ -450,13 +455,13 @@ export async function migrateData(req, res) {
     if (!dryRun && rows.length > 0) {
       // Get column names from first row
       const columns = Object.keys(rows[0]);
-      const columnsList = columns.map(c => `"${c}"`).join(', ');
-      
+      const columnsList = columns.map((c) => `"${c}"`).join(', ');
+
       // Build conflict clause
       let conflictClause = 'DO NOTHING';
       if (pkInfo.column) {
         if (pkInfo.isComposite) {
-          const pkColumns = pkInfo.allColumns.map(c => `"${c}"`).join(', ');
+          const pkColumns = pkInfo.allColumns.map((c) => `"${c}"`).join(', ');
           conflictClause = `(${pkColumns}) DO NOTHING`;
         } else {
           conflictClause = `("${pkInfo.column}") DO NOTHING`;
@@ -465,9 +470,9 @@ export async function migrateData(req, res) {
 
       for (const row of rows) {
         try {
-          const values = columns.map(c => row[c]);
+          const values = columns.map((c) => row[c]);
           const placeholders = values.map((_, i) => `$${i + 1}`).join(', ');
-          
+
           const insertQuery = `
             INSERT INTO "${tableName}" (${columnsList})
             VALUES (${placeholders})
@@ -475,7 +480,7 @@ export async function migrateData(req, res) {
           `;
 
           const insertResult = await newClient.query(insertQuery, values);
-          
+
           if (insertResult.rowCount > 0) {
             insertedCount++;
           } else {
@@ -484,7 +489,7 @@ export async function migrateData(req, res) {
         } catch (error) {
           errors.push({
             row: pkInfo.column ? row[pkInfo.column] : 'unknown',
-            error: error.message
+            error: error.message,
           });
         }
       }
@@ -514,17 +519,16 @@ export async function migrateData(req, res) {
       cursor: cursor || 'start',
       nextCursor,
       hasMore,
-      message: dryRun 
-        ? `Preview: Would migrate ${rows.length} rows` 
-        : `Migrated batch: ${insertedCount} inserted, ${skippedCount} skipped`
+      message: dryRun
+        ? `Preview: Would migrate ${rows.length} rows`
+        : `Migrated batch: ${insertedCount} inserted, ${skippedCount} skipped`,
     });
-
   } catch (error) {
     console.error('[DB-MIGRATION] Error migrating data:', error);
     res.status(500).json({
       success: false,
       error: error.message,
-      stack: error.stack
+      stack: error.stack,
     });
   } finally {
     await oldPool.end();
