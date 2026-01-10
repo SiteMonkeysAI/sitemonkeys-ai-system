@@ -203,7 +203,7 @@ function generateEntropy() {
   }
 
   // Should never reach here in Node.js environment
-  throw new Error("No cryptographically secure random generator available");
+  throw new Error("No cryptographically secure random generator available. This should not occur in Node.js environments with crypto module support.");
 }
 
 function generateStatisticalSignature(content, entropy) {

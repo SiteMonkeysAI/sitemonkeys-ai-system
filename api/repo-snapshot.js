@@ -21,8 +21,9 @@ router.get("/api/repo-snapshot", async (req, res) => {
       try {
         const list = fs.readdirSync(dir);
         list.forEach((file) => {
-          // Skip node_modules and hidden directories
-          if (file === 'node_modules' || file.startsWith('.')) return;
+          // Skip node_modules, build artifacts, and hidden directories
+          const skipDirs = ['node_modules', 'dist', 'build', '.tmp', '.cache', '.next', 'out'];
+          if (skipDirs.includes(file) || file.startsWith('.')) return;
           
           const filePath = path.join(dir, file);
           const stat = fs.statSync(filePath);
