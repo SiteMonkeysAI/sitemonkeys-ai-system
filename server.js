@@ -50,6 +50,7 @@ import memoryFullCheckRoutes from "./api/test/memory-full-check.js";
 import migrateSemanticHandler from "./api/routes/migrate-semantic.js";
 import migrateSemanticV2Handler from "./api/routes/migrate-semantic-v2.js";
 import testSemanticHandler from "./api/routes/test-semantic.js";
+import dbMigrationRouter from "./api/admin/db-migration.js";
 import rateLimit from "express-rate-limit";
 // ========== SEMANTIC INTEGRATION ==========
 import { storeWithSupersession, generateFactFingerprint } from "./api/services/supersession.js";
@@ -948,6 +949,9 @@ app.use("/api/test", memoryFullCheckRoutes);
 app.get("/api/migrate-semantic", migrateSemanticRateLimiter, migrateSemanticHandler);
 app.get('/api/migrate-semantic-v2', migrateSemanticV2RateLimiter, migrateSemanticV2Handler);
 app.get('/api/test-semantic', testSemanticRateLimiter, testSemanticHandler);
+
+// Database migration routes (one-time use - delete after migration)
+dbMigrationRouter(app);
 
 // Repo snapshot endpoint
 app.use("/api", repoSnapshotRoute);
