@@ -1,10 +1,39 @@
 ---
 name: Claude/Copilot Fix
-about: Issue for Claude Code or Copilot to fix
+about: Issue for Claude Code or Copilot to autonomously fix problems in the codebase
 title: '[claude-fix] '
 labels: claude-fix
 assignees: ''
 ---
+
+<!--
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                        HOW TO USE THIS TEMPLATE                               ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  1. Fill in the sections below with as much detail as possible               ║
+║  2. Save the issue                                                           ║
+║  3. Add the label "claude-fix" (should be auto-added from template)          ║
+║  4. Claude Code will automatically:                                          ║
+║     - Read this issue                                                        ║
+║     - Read CLAUDE.md for system context                                      ║
+║     - Investigate the codebase                                               ║
+║     - Create a PR with the fix                                               ║
+║  5. Review the PR Claude creates                                             ║
+║                                                                              ║
+║  TIPS FOR BEST RESULTS:                                                      ║
+║  - Be specific about what's wrong (include logs, error messages)             ║
+║  - Describe expected vs actual behavior clearly                              ║
+║  - If you know which files are involved, mention them                        ║
+║  - Include test cases that should pass after the fix                         ║
+║                                                                              ║
+║  WHEN TO USE THIS vs MANUAL FIXING:                                          ║
+║  ✅ Use this for: Clear bugs, test failures, missing functionality           ║
+║  ✅ Use this for: Batching multiple related fixes                            ║
+║  ❌ Don't use for: Architecture changes, new features, ambiguous problems    ║
+║                                                                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+-->
 
 ## Problem Summary
 <!-- One sentence describing what's wrong -->
@@ -21,9 +50,13 @@ assignees: ''
 ## Actual Behavior
 <!-- What IS happening -->
 
+## Files Likely Involved (if known)
+<!-- Help Claude find the right place to look - leave blank if unsure -->
+- 
+
 ---
 
-## Authority Rule
+## AUTHORITY RULES (Claude Code: Read This First)
 
 **If the Truth Map (verified runtime behavior) and this document disagree, the Truth Map wins until updated with evidence.**
 
