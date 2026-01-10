@@ -675,9 +675,12 @@ All files go in `/api/core/intelligence/`:
 ### Critical Phase 4 Rule
 
 **Measured ≠ Enforced.** Phase 4 measures truth behavior. Phase 5 enforces it. Do not collapse these phases.
-PART 4.6: SEMANTIC INTELLIGENCE REQUIREMENTS
-Authority Rule
-If the Truth Map (verified runtime behavior) and this document disagree, the Truth Map wins until updated with evidence.
+
+## PART 4.6: SEMANTIC INTELLIGENCE REQUIREMENTS
+
+### Authority Rule
+
+**If the Truth Map (verified runtime behavior) and this document disagree, the Truth Map wins until updated with evidence.**
 All claims in CURRENT VERIFIED REALITY must be verified via repo grep before acting. If uncertain, treat as unknown.
 This section describes both what EXISTS today and what MUST BE BUILT. These are clearly separated. Do not "fix" the repo to match target requirements without explicit issue authorization.
 
