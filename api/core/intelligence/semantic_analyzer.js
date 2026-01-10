@@ -899,20 +899,30 @@ Answer (yes/no):`;
   // ==================== TEMPORAL RECONCILIATION ====================
 
   /**
-   * Detect if content contains temporal markers (times, dates, appointments)
+   * Detect if content contains temporal/scheduling information using semantic similarity
    * @param {string} content - Content to check
-   * @returns {boolean} - True if temporal content detected
+   * @returns {Promise<boolean>} - True if temporal content detected
    */
-  hasTemporalContent(content) {
-    const temporalPatterns = [
-      /\b\d{1,2}:\d{2}\s*(am|pm|AM|PM)?\b/,  // Time: 3:00 PM, 14:30
-      /\b(meeting|appointment|schedule|call|event)\b/i,
-      /\b(today|tomorrow|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
-      /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
-      /\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/,  // Date: 12/25, 12/25/2024
-    ];
-
-    return temporalPatterns.some(pattern => pattern.test(content));
+  async hasTemporalContent(content) {
+    try {
+      // Temporal archetype - covers explicit times AND semantic scheduling language
+      const temporalArchetype = "meeting time changed, appointment rescheduled, event moved, schedule updated, time changed, pushed back, moved to later, reschedule, postponed, bumped, sync moved, standup changed, calendar update, meeting at 3pm, appointment at 2pm, scheduled for tomorrow, event on Monday";
+      
+      const contentEmbedding = await this.#getEmbedding(content);
+      const temporalEmbedding = await this.#getEmbedding(temporalArchetype);
+      
+      const similarity = this.#cosineSimilarity(contentEmbedding, temporalEmbedding);
+      
+      if (similarity > 0.65) {
+        console.log(`[SEMANTIC-TEMPORAL-DETECT] Temporal content detected, similarity: ${similarity.toFixed(3)}`);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      this.logger.error("Temporal detection failed", error);
+      return false; // Conservative fallback
+    }
   }
 
   /**
@@ -925,9 +935,9 @@ Answer (yes/no):`;
    */
   async analyzeTemporalReconciliation(newContent, oldContent, similarity) {
     try {
-      // Check if both contain temporal information
-      const newHasTemporal = this.hasTemporalContent(newContent);
-      const oldHasTemporal = this.hasTemporalContent(oldContent);
+      // Check if both contain temporal information (NOW ASYNC)
+      const newHasTemporal = await this.hasTemporalContent(newContent);
+      const oldHasTemporal = await this.hasTemporalContent(oldContent);
 
       if (!newHasTemporal || !oldHasTemporal) {
         return { shouldSupersede: false, reason: 'not_temporal' };

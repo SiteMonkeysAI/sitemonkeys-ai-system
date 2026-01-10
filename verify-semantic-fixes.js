@@ -170,6 +170,24 @@ function test4() {
     return;
   }
   
+  // Check for semantic-based detection (NOT regex)
+  if (analyzerContent.includes('async hasTemporalContent') && analyzerContent.includes('temporalArchetype')) {
+    console.log('✓ Uses semantic similarity (not regex patterns)');
+  } else {
+    console.log('✗ Still uses regex patterns for temporal detection');
+    failed++;
+    return;
+  }
+  
+  // Verify [SEMANTIC-TEMPORAL-DETECT] logging exists
+  if (analyzerContent.includes('[SEMANTIC-TEMPORAL-DETECT]')) {
+    console.log('✓ [SEMANTIC-TEMPORAL-DETECT] logging present');
+  } else {
+    console.log('✗ [SEMANTIC-TEMPORAL-DETECT] logging missing');
+    failed++;
+    return;
+  }
+  
   console.log('✓ TEST 4 PASSED\n');
   passed++;
 }
