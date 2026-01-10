@@ -141,14 +141,48 @@ export class IntelligentMemoryStorage {
       }
       console.log('[TRACE-INTELLIGENT] I8. Content sanitized, length:', sanitizedResponse.length);
 
+      // CRITICAL FIX: Detect fingerprint and importance BEFORE extraction
+      // This preserves original content for analysis instead of analyzing compressed garbage
+
+      // Step 0.5: Detect user priorities (UX-049) - on ORIGINAL message
+      const userPriorityDetected = this.detectUserPriority(userMessage);
+      if (userPriorityDetected) {
+        console.log('[INTELLIGENT-STORAGE] 🎯 User priority detected - will boost importance');
+      }
+
+      // Step 0.6: Detect fingerprint on ORIGINAL user message (before extraction)
+      console.log('[INTELLIGENT-STORAGE] 🔍 Detecting fact fingerprint on original message...');
+      const fingerprintResult = await generateFactFingerprint(userMessage, { skipModel: false });
+      console.log(`[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`);
+
+      // Step 0.7: Calculate importance score on ORIGINAL user message (before extraction)
+      console.log('[INTELLIGENT-STORAGE] 🧠 Using semantic analyzer for importance scoring on original message...');
+      const importanceResult = await semanticAnalyzer.analyzeContentImportance(userMessage, category);
+      let importanceScore = importanceResult.importanceScore;
+      console.log(`[INTELLIGENT-STORAGE] 📊 Semantic importance: ${importanceScore.toFixed(2)} - ${importanceResult.reasoning}`);
+
+      // Boost importance if user priority detected (UX-049)
+      if (userPriorityDetected) {
+        console.log('[INTELLIGENT-STORAGE] 🎯 Boosting importance due to user priority (0.85 minimum)');
+        importanceScore = Math.max(importanceScore, 0.85);
+      }
+
+      console.log(`[INTELLIGENT-STORAGE] 📊 Final importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
+
       // Step 1: Extract facts (compression)
       console.log('[INTELLIGENT-STORAGE] 📝 Extracting key facts...');
       let facts = await this.extractKeyFacts(userMessage, sanitizedResponse);
 
-      // GUARD: Never store empty content - fallback to user message
-      if (!facts || facts.trim().length === 0) {
-        console.log('[INTELLIGENT-STORAGE] ⚠️ No facts extracted, using fallback');
-        // Fallback: Extract key info from user message directly
+      // GUARD: Never store empty or meaningless content - fallback to user message
+      const isMeaningless = !facts ||
+                           facts.trim().length === 0 ||
+                           facts.toLowerCase().includes('no essential facts') ||
+                           facts.toLowerCase().includes('no key facts') ||
+                           facts.toLowerCase().includes('nothing to extract');
+
+      if (isMeaningless) {
+        console.log('[INTELLIGENT-STORAGE] ⚠️ No meaningful facts extracted, using fallback to original message');
+        // Fallback: Use original user message directly (already has fingerprint and importance calculated)
         facts = userMessage.substring(0, 200).trim();
 
         // If user message also empty, skip storage entirely
@@ -156,6 +190,8 @@ export class IntelligentMemoryStorage {
           console.log('[INTELLIGENT-STORAGE] ⏭️ Skipping storage - no content');
           return { action: 'skipped', reason: 'no_content' };
         }
+
+        console.log('[INTELLIGENT-STORAGE] ✅ Using original user message as facts:', facts.substring(0, 80));
       }
 
       const originalTokens = this.countTokens(userMessage + aiResponse);
@@ -163,12 +199,6 @@ export class IntelligentMemoryStorage {
       const ratio = originalTokens > 0 ? (originalTokens / compressedTokens).toFixed(1) : 1;
 
       console.log(`[INTELLIGENT-STORAGE] 📊 Compression: ${originalTokens} → ${compressedTokens} tokens (${ratio}:1)`);
-
-      // Step 1.5: Detect user priorities (UX-049)
-      const userPriorityDetected = this.detectUserPriority(userMessage);
-      if (userPriorityDetected) {
-        console.log('[INTELLIGENT-STORAGE] 🎯 User priority detected - will boost importance');
-      }
 
       // Step 2: Check for duplicates
       console.log('[INTELLIGENT-STORAGE] 🔍 Checking for similar memories...');
@@ -196,7 +226,10 @@ export class IntelligentMemoryStorage {
           original_tokens: originalTokens,
           compressed_tokens: compressedTokens,
           compression_ratio: parseFloat(ratio),
-          user_priority: userPriorityDetected
+          user_priority: userPriorityDetected,
+          fingerprint: fingerprintResult.fingerprint,
+          fingerprintConfidence: fingerprintResult.confidence,
+          importance_score: importanceScore
         }, mode);
       }
     } catch (error) {
@@ -590,19 +623,29 @@ Facts (preserve all identifiers):`;
       console.log('[TRACE-INTELLIGENT] I12a. mode (normalized):', normalizedMode);
       console.log('[SESSION-DIAG] Storing for userId:', userId);
 
-      // GUARD: Refuse to store empty content at database layer
-      if (!facts || facts.trim().length === 0) {
-        console.log('[INTELLIGENT-STORAGE] ❌ Refusing to store empty content');
-        return { action: 'skipped', reason: 'empty_content' };
+      // GUARD: Refuse to store empty or meaningless content at database layer
+      const isMeaningless = !facts ||
+                           facts.trim().length === 0 ||
+                           facts.toLowerCase().includes('no essential facts') ||
+                           facts.toLowerCase().includes('no key facts') ||
+                           facts.toLowerCase().includes('nothing to extract');
+
+      if (isMeaningless) {
+        console.log('[INTELLIGENT-STORAGE] ❌ Refusing to store empty/meaningless content:', facts?.substring(0, 100));
+        return { action: 'skipped', reason: 'meaningless_content' };
       }
 
       const tokenCount = this.countTokens(facts);
       console.log('[TRACE-INTELLIGENT] I13. tokenCount:', tokenCount);
 
-      // CRITICAL: Detect fingerprints on extracted facts (not raw user message)
-      console.log('[INTELLIGENT-STORAGE] 🔍 Detecting fact fingerprint...');
-      const fingerprintResult = await generateFactFingerprint(facts, { skipModel: false });
-      console.log(`[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`);
+      // CRITICAL FIX: Use PRE-CALCULATED fingerprint and importance from metadata
+      // These were already calculated on the ORIGINAL user message before extraction
+      const fingerprintResult = {
+        fingerprint: metadata.fingerprint || null,
+        confidence: metadata.fingerprintConfidence || 0,
+        method: 'pre-calculated'
+      };
+      console.log(`[INTELLIGENT-STORAGE] Using pre-calculated fingerprint: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence})`);
 
       // If fingerprint detected, route through supersession
       if (fingerprintResult.fingerprint && fingerprintResult.confidence >= 0.7) {
@@ -660,19 +703,10 @@ Facts (preserve all identifiers):`;
 
       // No fingerprint or confidence too low - use normal storage
 
-      // Calculate importance score using SEMANTIC ANALYZER (Innovation #7: Priority scoring)
-      console.log('[INTELLIGENT-STORAGE] 🧠 Using semantic analyzer for importance scoring...');
-      const importanceResult = await semanticAnalyzer.analyzeContentImportance(facts, category);
-      let importanceScore = importanceResult.importanceScore;
-      console.log(`[INTELLIGENT-STORAGE] 📊 Semantic importance: ${importanceScore.toFixed(2)} - ${importanceResult.reasoning}`);
-
-      // Boost importance if user priority detected (UX-049)
-      if (metadata.user_priority) {
-        console.log('[INTELLIGENT-STORAGE] 🎯 Boosting importance due to user priority (0.85 minimum)');
-        importanceScore = Math.max(importanceScore, 0.85);
-      }
-
-      console.log(`[INTELLIGENT-STORAGE] 📊 Final importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
+      // CRITICAL FIX: Use PRE-CALCULATED importance score from metadata
+      // This was already calculated on the ORIGINAL user message before extraction
+      let importanceScore = metadata.importance_score || 0.5;
+      console.log(`[INTELLIGENT-STORAGE] 📊 Using pre-calculated importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
 
       console.log('[TRACE-INTELLIGENT] I14. About to execute INSERT query...');
       const result = await this.db.query(`
@@ -697,7 +731,7 @@ Facts (preserve all identifiers):`;
         'general', // Default subcategory
         facts,
         tokenCount,
-        importanceScore, // Use calculated importance score
+        importanceScore, // Use pre-calculated importance score
         JSON.stringify({
           ...metadata,
           compressed: true,
