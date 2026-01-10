@@ -181,6 +181,7 @@ class CoreSystem {
           usage_frequency INTEGER DEFAULT 0,
           last_accessed TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           metadata JSONB DEFAULT '{}'::jsonb
         )
       `);
@@ -208,9 +209,21 @@ class CoreSystem {
       `);
 
       await this.executeQuery(`
-        CREATE INDEX IF NOT EXISTS idx_memories_relevance 
+        CREATE INDEX IF NOT EXISTS idx_memories_relevance
         ON persistent_memories(relevance_score DESC)
       `);
+
+      // Migration: Add updated_at column if it doesn't exist (for Issue #466)
+      try {
+        await this.executeQuery(`
+          ALTER TABLE persistent_memories
+          ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        `);
+        this.logger.log("Migration: updated_at column added/verified");
+      } catch (migrationError) {
+        // Column might already exist, that's okay
+        this.logger.log("Migration: updated_at column already exists or migration skipped");
+      }
 
       this.logger.log("Database schema created successfully");
     } catch (error) {

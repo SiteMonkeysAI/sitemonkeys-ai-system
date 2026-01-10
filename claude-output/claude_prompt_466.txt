@@ -1,0 +1,50 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #466: [claude-fix] Issue #465: FINAL 6 FAILING TESTS - Complete Bible-Aligned Fix
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>Issue #465: FINAL 6 FAILING TESTS - Complete Bible-Aligned Fix</h1>
+<h2>OVERVIEW</h2>
+<p><strong>Current State:</strong> 88% pass rate (54/61 tests) - 6 failures remain
+<strong>Target State:</strong> 100% pass rate (61/61 tests)
+<strong>Approach:</strong> Bible-aligned fixes with full trace verification</p>
+<hr>
+<h2>THE 6 FAILING TESTS</h2>
+
+Test ID | Innovation | What It Tests
+-- | -- | --
+MEM-002 | #2 Semantic De-Duplication | Duplicate content detected and merged, not stored twice
+MEM-003 | #3 Age + Relevance Weighted Overwrite | Newer facts supersede older facts (e.g., salary update)
+MEM-007 | #7 Memory Importance Scoring | Critical facts (allergies) scored higher than preferences (sushi)
+TRUTH-018 | #18 Cross-Source Truth Reconciliation | When conflicting info exists, use the most recent
+UX-044 | #44 Cross-Device Continuity | Memory persists across sessions/devices for same user
+UX-046 | #46 Memory Visibility | User can ask "what do you know about me" and get structured list
+
+
+<hr>
+<p><strong>Priority:</strong> 🔴 CRITICAL
+<strong>Type:</strong> FINAL FIX (targeting 100% pass rate)
+<strong>Risk:</strong> LOW (uses existing infrastructure correctly)
+<strong>Blocking:</strong> System launch</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
