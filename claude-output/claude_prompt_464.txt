@@ -1,0 +1,94 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #464: [claude-fix] Issue #463: COMPLETE SEMANTIC INTELLIGENCE DATA FLOW FIX
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>Issue #463: COMPLETE SEMANTIC INTELLIGENCE DATA FLOW FIX</h1>
+<h2>🚨 SEVERITY: CRITICAL - ROOT CAUSE ANALYSIS</h2>
+<p><strong>Current State:</strong> 84% pass rate (9 failures) - UNCHANGED after PR #462
+<strong>Previous PRs:</strong> #451, #454, #456, #462 all failed to fix the same tests
+<strong>Root Cause:</strong> The data flow is broken BEFORE semantic intelligence can help</p>
+<hr>
+<h2>WHAT'S ACTUALLY HAPPENING (LOG EVIDENCE)</h2>
+<h3>The Real Problem: Content is Destroyed Before Analysis</h3>
+<p>From the logs:</p>
+<pre><code>[SUPERSESSION-DIAG] Input content: No essential facts to extract.
+[SUPERSESSION-DIAG] Content length: 30
+</code></pre>
+<p>When someone says "I'm allergic to peanuts", by the time it reaches importance scoring and supersession, <strong>the content has been compressed to "No essential facts to extract."</strong></p>
+<p>The semantic analyzer IS being called now (PR #462 worked):</p>
+<pre><code>[SEMANTIC] Analyzing importance for content in category: personal_life_interests
+[SEMANTIC] Importance: 0.50 - standard information
+</code></pre>
+<p>But it's analyzing <strong>the compressed garbage</strong>, not the original content. So it correctly scores "No essential facts to extract" as 0.50 (standard information).</p>
+<p><strong>This is why every fix has failed - we've been treating symptoms, not the disease.</strong></p>
+<hr>
+<h2>THE 9 FAILING TESTS - TRUE ROOT CAUSES</h2>
+<h3>CATEGORY 1: FACT EXTRACTION DESTROYS CONTENT (4 tests)</h3>
+
+Test | What Fails | Root Cause
+-- | -- | --
+MEM-002 | Deduplication | Facts extracted as "No essential facts" - can't deduplicate nothing
+MEM-003 | Supersession | New salary "No essential facts" can't supersede old salary
+MEM-007 | Importance | "No essential facts" scored as 0.50, not 0.95 for allergy
+TRUTH-018 | Reconciliation | Meeting time change lost in extraction
+
+
+<p><strong>All fixes tried to improve analysis of ALREADY-BROKEN content instead of fixing WHERE the content breaks.</strong></p>
+<hr>
+<h2>BIBLE ALIGNMENT</h2>
+<p>This fix aligns with the Bible because:</p>
+<ol>
+<li><strong>Meaning-Preserving Compression</strong> (Innovation #4): "no loss of semantic meaning" - currently LOSING meaning in extraction</li>
+<li><strong>Memory Importance Scoring</strong> (Innovation #7): Should score based on "mention frequency, retrieval patterns, user emphasis" - not on extraction output</li>
+<li><strong>Semantic De-Duplication</strong> (Innovation #2): Should "recognize that different phrasings express the same core fact" - can't do this with "No essential facts"</li>
+<li><strong>Cross-Mode Transfer Gateway</strong> (Innovation #22): "safely transfer specific information between modes" - currently broken</li>
+</ol>
+<hr>
+<h2>ESTIMATED EFFORT</h2>
+<ul>
+<li>Phase 1 (Data Flow): 3-4 hours</li>
+<li>Phase 2 (Mode/Session): 2-3 hours</li>
+<li>Phase 3 (Output): 1 hour</li>
+<li>Testing &amp; Verification: 2 hours</li>
+</ul>
+<p><strong>Total: 8-10 hours</strong></p>
+<p>This is longer than previous estimates because this fix addresses the ROOT CAUSE, not symptoms.</p>
+<hr>
+<h2>CRITICAL SUCCESS CRITERIA</h2>
+<ol>
+<li>✅ No memory ever stored as "No essential facts to extract"</li>
+<li>✅ Importance scoring happens BEFORE extraction</li>
+<li>✅ Supersession checking happens BEFORE extraction</li>
+<li>✅ User memories accessible across modes (vault remains isolated)</li>
+<li>✅ Memory visibility detected at 0.70+ similarity</li>
+<li>✅ All 9 failing tests pass</li>
+<li>✅ 100% test pass rate achieved</li>
+</ol>
+<hr>
+<p><strong>Priority:</strong> 🔴 CRITICAL<br>
+<strong>Type:</strong> ROOT CAUSE FIX<br>
+<strong>Risk:</strong> MEDIUM (changes core data flow)<br>
+<strong>Dependencies:</strong> None - this is the foundation everything else depends on</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

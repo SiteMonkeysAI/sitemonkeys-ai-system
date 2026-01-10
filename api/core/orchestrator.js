@@ -1857,19 +1857,20 @@ export class Orchestrator {
         return await this.#keywordRetrievalFallback(userId, message, mode);
       }
 
-      // Detect if cross-mode transfer should be enabled (MODE-022)
-      let allowCrossMode = false;
-      if (previousMode && previousMode !== mode) {
-        console.log(`[CROSS-MODE-DIAG] Mode switch detected: ${previousMode} → ${mode}`);
+      // CRITICAL FIX (Issue #463): Enable cross-mode access by default
+      // User memories (truth-general) should be accessible across all modes
+      // Only vault content (site-monkeys) remains isolated
+      // This fixes the "I don't have information" bug when memory exists but mode differs
+      let allowCrossMode = true; // Default to true for cross-mode memory access
 
-        // For business-validation, check if user references personal context
-        if (mode === 'business-validation' || mode === 'business_validation') {
-          const referencesPersonalContext = this.#detectPersonalContextReference(message);
-          if (referencesPersonalContext) {
-            console.log('[CROSS-MODE-DIAG] ✅ Personal context reference detected - enabling cross-mode transfer');
-            allowCrossMode = true;
-          }
-        }
+      // Vault isolation: site-monkeys mode should NOT pull from other modes
+      // (but other modes CAN pull from truth-general base)
+      if (mode === 'site-monkeys' || mode === 'site_monkeys') {
+        // Site monkeys has access to everything including vault
+        allowCrossMode = false; // Use all modes, handled by buildPrefilterQuery
+        console.log('[CROSS-MODE-DIAG] Site Monkeys mode - accessing all modes including vault');
+      } else {
+        console.log('[CROSS-MODE-DIAG] ✅ Cross-mode transfer ENABLED by default - including truth-general memories');
       }
 
       console.log('[CROSS-MODE-DIAG] allowCrossMode:', allowCrossMode);
