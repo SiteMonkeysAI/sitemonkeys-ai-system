@@ -675,6 +675,114 @@ All files go in `/api/core/intelligence/`:
 ### Critical Phase 4 Rule
 
 **Measured ≠ Enforced.** Phase 4 measures truth behavior. Phase 5 enforces it. Do not collapse these phases.
+PART 4.6: SEMANTIC INTELLIGENCE REQUIREMENTS
+Authority Rule
+If the Truth Map (verified runtime behavior) and this document disagree, the Truth Map wins until updated with evidence.
+All claims in CURRENT VERIFIED REALITY must be verified via repo grep before acting. If uncertain, treat as unknown.
+This section describes both what EXISTS today and what MUST BE BUILT. These are clearly separated. Do not "fix" the repo to match target requirements without explicit issue authorization.
+
+SECTION A: CURRENT VERIFIED REALITY
+This section is not a claim of existence; it is a verification guide.
+Verify before assuming anything about current state.
+api/core/intelligence/semantic_analyzer.js
+
+File may exist with embedding-based methods
+May contain #getEmbedding(), #cosineSimilarity(), analyzeContentImportance(), analyzeSupersession(), analyzeIntent()
+Verify current state:
+
+bash  grep -n "getEmbedding\|cosineSimilarity\|analyzeContent\|analyzeSupersession" api/core/intelligence/semantic_analyzer.js
+api/memory/intelligent-storage.js
+
+Memory storage operations
+May call semantic_analyzer methods depending on current implementation
+Verify current state:
+
+bash  grep -n "semanticAnalyzer\|SEMANTIC-" api/memory/intelligent-storage.js
+What May NOT Exist (or is partial):
+
+Retrieval may still use SQL keyword/category filters in some paths
+Not all retrieval paths may use pgvector semantic search
+Verify retrieval implementation (path-agnostic):
+
+bash  grep -rn "FROM persistent_memories" api/ memory_system/
+  grep -rn "ILIKE\|<=>\|pgvector\|embedding" api/ memory_system/
+Current Logging: When semantic operations ARE used, they should log with [SEMANTIC-*] prefixes. Verify: grep -rn "\[SEMANTIC-" api/
+
+SECTION B: TARGET REQUIREMENTS (For New/Modified Semantic Code)
+From the Bible - Genuine Intelligence Doctrine:
+
+"Not rule-following. Real reasoning under constraints."
+
+From Innovation #14 - Reasoning-Based Confidence Engine:
+
+"Evaluates truthfulness using intelligent reasoning about plausibility and consistency — not pattern matching."
+
+Core Rule: When the system must make a SEMANTIC decision (importance, similarity, intent, supersession, deduplication), the FINAL decision must come from semantic methods (embeddings, AI reasoning), not from keyword arrays or pattern matching alone.
+
+SECTION C: HYBRID APPROACH (Cost-Aware)
+From the Bible - Token Efficiency Doctrine:
+
+"Every token must earn its existence."
+
+Hybrid approaches are ALLOWED and ENCOURAGED:
+ALLOWED PATTERN:
+1. Cheap deterministic prefilter (regex, patterns)
+   → Quick rejection of obviously non-matching content
+   → Reduces embedding API calls, cost, and latency
+
+2. Semantic confirmation (embeddings, AI reasoning)
+   → Final decision on candidates that pass prefilter
+   → Provides the actual intelligence
+Prefilter Finalization Rule:
+
+Prefilters may ONLY produce a final decision if the decision is non-semantic by definition (e.g., exact match greeting like "hi" or "thanks")
+If the output affects memory retention, dedup, supersession, or ranking, prefilter CANNOT finalize—it must forward to semantic analysis
+When in doubt, forward to semantic confirmation
+
+
+SECTION D: ANTI-PATTERNS (What NOT To Do)
+❌ Keyword arrays as final intelligence:
+javascript// WRONG - keyword array as final decision
+const IMPORTANT_KEYWORDS = ['allergy', 'medication', 'emergency'];
+const isImportant = IMPORTANT_KEYWORDS.some(k => content.includes(k));
+return { important: isImportant }; // NOT ALLOWED as final decision
+❌ Prefilter finalizing a semantic decision:
+javascript// WRONG - prefilter making final decision on something that affects retention
+if (content.includes('allergy')) {
+  return { important: true }; // Affects retention - can't finalize here
+}
+❌ "Inject everything" retrieval:
+Retrieval must demonstrate selectivity. Passing tests by injecting all memories is NOT semantic intelligence and must be treated as FAIL at scale.
+
+SECTION E: CORRECT PATTERNS
+✅ Trivial prefilter (OK to finalize):
+javascriptif (['hi', 'hello', 'thanks', 'ok'].includes(content.toLowerCase().trim())) {
+  return { important: false, reason: 'trivial-greeting' };
+}
+✅ Prefilter forwards to semantic:
+javascriptconst mayBeImportant = /allergy|medication|emergency/i.test(content);
+if (!mayBeImportant) { /* only reject obvious non-matches */ }
+const result = await semanticAnalyzer.analyzeContentImportance(content);
+return result; // Semantic method makes final decision
+✅ Use existing semantic_analyzer methods:
+javascriptconst importance = await semanticAnalyzer.analyzeContentImportance(content);
+console.log(`[SEMANTIC-IMPORTANCE] Score: ${importance.score}, Reason: ${importance.reason}`);
+
+SECTION F: VERIFICATION COMMANDS
+Before implementing semantic features, run these:
+bash# What semantic methods exist?
+grep -n "getEmbedding\|cosineSimilarity\|analyze" api/core/intelligence/semantic_analyzer.js
+
+# How is retrieval currently implemented?
+grep -rn "FROM persistent_memories" api/ memory_system/
+grep -rn "ILIKE\|<=>\|pgvector" api/ memory_system/
+
+# What semantic logging exists?
+grep -rn "\[SEMANTIC-" api/
+
+# Are there keyword arrays in semantic modules? (review these)
+grep -rn "const.*KEYWORD\|const.*PATTERN.*=.*\[" api/core/intelligence/ api/memory/
+
 
 ---
 
