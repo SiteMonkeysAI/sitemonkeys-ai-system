@@ -896,6 +896,61 @@ Answer (yes/no):`;
     }
   }
 
+  // ==================== TEMPORAL RECONCILIATION ====================
+
+  /**
+   * Detect if content contains temporal markers (times, dates, appointments)
+   * @param {string} content - Content to check
+   * @returns {boolean} - True if temporal content detected
+   */
+  hasTemporalContent(content) {
+    const temporalPatterns = [
+      /\b\d{1,2}:\d{2}\s*(am|pm|AM|PM)?\b/,  // Time: 3:00 PM, 14:30
+      /\b(meeting|appointment|schedule|call|event)\b/i,
+      /\b(today|tomorrow|next week|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/i,
+      /\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i,
+      /\b\d{1,2}\/\d{1,2}(\/\d{2,4})?\b/,  // Date: 12/25, 12/25/2024
+    ];
+
+    return temporalPatterns.some(pattern => pattern.test(content));
+  }
+
+  /**
+   * Analyze if new temporal content should supersede old temporal content
+   * Used for meeting time updates, appointment changes, etc.
+   * @param {string} newContent - New content
+   * @param {string} oldContent - Old content
+   * @param {number} similarity - Semantic similarity score
+   * @returns {Promise<{ shouldSupersede: boolean, reason: string }>}
+   */
+  async analyzeTemporalReconciliation(newContent, oldContent, similarity) {
+    try {
+      // Check if both contain temporal information
+      const newHasTemporal = this.hasTemporalContent(newContent);
+      const oldHasTemporal = this.hasTemporalContent(oldContent);
+
+      if (!newHasTemporal || !oldHasTemporal) {
+        return { shouldSupersede: false, reason: 'not_temporal' };
+      }
+
+      // If high semantic similarity (>0.75) and both temporal, assume newer is update
+      if (similarity > 0.75) {
+        const preview = newContent.substring(0, 50);
+        console.log(`[SEMANTIC-TEMPORAL] Temporal update detected, using newer: ${preview}`);
+        return { 
+          shouldSupersede: true, 
+          reason: 'temporal_update',
+          explanation: `High similarity (${similarity.toFixed(3)}) with temporal content - newer replaces older`
+        };
+      }
+
+      return { shouldSupersede: false, reason: 'similarity_too_low' };
+    } catch (error) {
+      this.logger.error("Temporal reconciliation failed", error);
+      return { shouldSupersede: false, reason: 'error' };
+    }
+  }
+
   // ==================== FALLBACK ANALYSIS ====================
 
   #generateFallbackAnalysis(query, _context) {

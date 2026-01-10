@@ -488,6 +488,7 @@ export class Orchestrator {
 
         if (intentResult.intent === 'MEMORY_VISIBILITY') {
           isMemoryVisibilityRequest = true;
+          console.log(`[SEMANTIC-VISIBILITY] Intent detected, similarity: ${intentResult.confidence.toFixed(2)}`);
           console.log(`[VISIBILITY-DIAG] ✅ Semantic analyzer detected MEMORY_VISIBILITY intent (confidence: ${intentResult.confidence.toFixed(3)})`);
         } else {
           console.log(`[VISIBILITY-DIAG] Semantic analyzer detected intent: ${intentResult.intent} (confidence: ${intentResult.confidence.toFixed(3)})`);
