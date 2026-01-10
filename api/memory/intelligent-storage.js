@@ -159,7 +159,7 @@ export class IntelligentMemoryStorage {
       console.log('[INTELLIGENT-STORAGE] 🧠 Using semantic analyzer for importance scoring on original message...');
       const importanceResult = await semanticAnalyzer.analyzeContentImportance(userMessage, category);
       let importanceScore = importanceResult.importanceScore;
-      console.log(`[INTELLIGENT-STORAGE] 📊 Semantic importance: ${importanceScore.toFixed(2)} - ${importanceResult.reasoning}`);
+      console.log(`[SEMANTIC-IMPORTANCE] Score: ${importanceScore.toFixed(2)}, Reason: ${importanceResult.reasoning}`);
 
       // Boost importance if user priority detected (UX-049)
       if (userPriorityDetected) {
@@ -529,8 +529,8 @@ Facts (preserve all identifiers):`;
   }
 
   /**
-   * Find similar memories using PostgreSQL full-text search
-   * Threshold: 70% keyword overlap = duplicate
+   * Find similar memories using semantic embeddings with pgvector
+   * Threshold: distance < 0.15 = semantic duplicate
    * @param {string} userId - User identifier
    * @param {string} category - Memory category
    * @param {string} facts - Extracted facts to compare
@@ -538,32 +538,54 @@ Facts (preserve all identifiers):`;
    */
   async findSimilarMemories(userId, category, facts) {
     try {
-      const result = await this.db.query(`
-        SELECT
-          id,
-          content,
-          ts_rank(
-            to_tsvector('english', content),
-            plainto_tsquery('english', $3)
-          ) as similarity
-        FROM persistent_memories
-        WHERE user_id = $1
-          AND category_name = $2
-          AND created_at > NOW() - INTERVAL '30 days'
-        ORDER BY similarity DESC
-        LIMIT 5
-      `, [userId, category, facts]);
+      // Generate embedding for new content
+      const { generateEmbedding } = await import('../services/embedding-service.js');
+      const embeddingResult = await generateEmbedding(facts);
+      
+      if (!embeddingResult.success || !embeddingResult.embedding) {
+        console.log('[DEDUP] ⚠️ Could not generate embedding, falling back to text search');
+        // Fallback to text-based search
+        const result = await this.db.query(`
+          SELECT id, content, 0.5 as distance
+          FROM persistent_memories
+          WHERE user_id = $1
+            AND category_name = $2
+            AND is_current = true
+            AND created_at > NOW() - INTERVAL '30 days'
+          LIMIT 5
+        `, [userId, category]);
+        
+        if (result.rows.length > 0) {
+          return result.rows[0];
+        }
+        return null;
+      }
 
-      // Check each potential match for high-entropy token conflicts
+      // Query for similar memories using pgvector cosine distance
+      const result = await this.db.query(`
+        SELECT 
+          id, 
+          content, 
+          embedding <=> $1::vector as distance
+        FROM persistent_memories
+        WHERE user_id = $2 
+          AND category_name = $3 
+          AND is_current = true
+          AND embedding IS NOT NULL
+        ORDER BY distance ASC
+        LIMIT 5
+      `, [JSON.stringify(embeddingResult.embedding), userId, category]);
+
+      // Check for semantic duplicates (distance < 0.15)
       for (const row of result.rows) {
-        if (row.similarity > 0.3) {
+        if (row.distance < 0.15) {
           // Apply high-entropy guard before merging
           if (this.shouldPreventMerge(row.content, facts)) {
             console.log(`[DEDUP] ⏭️ Skipping similar memory (id=${row.id}) due to high-entropy mismatch`);
             continue; // Skip this match, check next one
           }
 
-          console.log(`[DEDUP] 📊 Found similar memory with similarity score: ${row.similarity.toFixed(3)}`);
+          console.log(`[SEMANTIC-DEDUP] Duplicate detected, distance: ${row.distance.toFixed(3)}`);
           return row;
         }
       }
@@ -646,6 +668,67 @@ Facts (preserve all identifiers):`;
         method: 'pre-calculated'
       };
       console.log(`[INTELLIGENT-STORAGE] Using pre-calculated fingerprint: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence})`);
+
+      // SEMANTIC SUPERSESSION CHECK - Check existing memories for semantic similarity
+      // This catches updates that don't match regex patterns (e.g., "My salary is now $100K" after "I earn $80K")
+      try {
+        console.log('[INTELLIGENT-STORAGE] 🔍 Checking for semantic supersession...');
+        
+        // Query existing memories in same category
+        const existingMemories = await this.db.query(`
+          SELECT id, content, embedding
+          FROM persistent_memories
+          WHERE user_id = $1
+            AND category_name = $2
+            AND is_current = true
+            AND embedding IS NOT NULL
+          ORDER BY created_at DESC
+          LIMIT 10
+        `, [userId, category]);
+
+        if (existingMemories.rows.length > 0) {
+          // Use semantic analyzer to detect supersession
+          const supersessionResult = await semanticAnalyzer.analyzeSupersession(
+            facts,
+            existingMemories.rows.map(row => ({
+              id: row.id,
+              content: row.content,
+              embedding: row.embedding
+            }))
+          );
+
+          if (supersessionResult.supersedes && supersessionResult.supersedes.length > 0) {
+            // Semantic supersession detected - mark old memories as superseded
+            for (const superseded of supersessionResult.supersedes) {
+              console.log(`[SEMANTIC-SUPERSESSION] Memory ${superseded.memoryId} superseded (similarity: ${superseded.similarity.toFixed(3)}, reason: ${superseded.reason})`);
+              
+              // Also check for temporal reconciliation
+              const existingMem = existingMemories.rows.find(m => m.id === superseded.memoryId);
+              if (existingMem) {
+                const temporalResult = await semanticAnalyzer.analyzeTemporalReconciliation(
+                  facts,
+                  existingMem.content,
+                  superseded.similarity
+                );
+
+                if (temporalResult.shouldSupersede) {
+                  console.log(`[SEMANTIC-TEMPORAL] ${temporalResult.explanation}`);
+                }
+              }
+              
+              await this.db.query(`
+                UPDATE persistent_memories
+                SET is_current = false,
+                    superseded_at = NOW()
+                WHERE id = $1
+              `, [superseded.memoryId]);
+            }
+          }
+        }
+      } catch (semanticError) {
+        console.error('[INTELLIGENT-STORAGE] ⚠️ Semantic supersession check failed:', semanticError.message);
+        // Continue with normal storage
+      }
 
       // If fingerprint detected, route through supersession
       if (fingerprintResult.fingerprint && fingerprintResult.confidence >= 0.7) {
