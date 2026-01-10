@@ -56,12 +56,14 @@ function validateMigrationRequest(req, res) {
     };
   }
 
-  // Validate secret (prefer header, fallback to query param)
-  const secret = req.headers['x-migration-secret'] || req.query.secret;
+  // Validate secret from header (and optionally request body)
+  const secret =
+    req.headers['x-migration-secret'] ||
+    (req.body && (req.body.secret || req.body.migrationSecret));
   if (!secret) {
     return {
       allowed: false,
-      error: 'Missing authentication. Provide X-Migration-Secret header or ?secret= param'
+      error: 'Missing authentication. Provide X-Migration-Secret header'
     };
   }
 
@@ -535,13 +537,13 @@ export async function migrateData(req, res) {
  */
 export default function dbMigrationRouter(app) {
   // List all tables with metadata
-  app.get('/api/admin/db-tables', migrationRateLimiter, listTables);
+  app.post('/api/admin/db-tables', migrationRateLimiter, listTables);
 
   // Replicate schema
-  app.get('/api/admin/db-schema', migrationRateLimiter, replicateSchema);
+  app.post('/api/admin/db-schema', migrationRateLimiter, replicateSchema);
 
   // Migrate data with cursor pagination
-  app.get('/api/admin/db-migrate-data', migrationRateLimiter, migrateData);
+  app.post('/api/admin/db-migrate-data', migrationRateLimiter, migrateData);
 
   console.log('[DB-MIGRATION] Migration endpoints registered');
 }
