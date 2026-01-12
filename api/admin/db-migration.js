@@ -139,7 +139,7 @@ async function detectPrimaryKey(client, tableName) {
  */
 async function getTableSchema(client, tableName) {
   const query = `
-    SELECT 
+    SELECT
       a.attname AS column_name,
       format_type(a.atttypid, a.atttypmod) AS data_type,
       a.attnotnull AS not_null,
@@ -155,6 +155,40 @@ async function getTableSchema(client, tableName) {
 
   const result = await client.query(query, [tableName]);
   return result.rows;
+}
+
+/**
+ * Converts nextval() defaults to SERIAL/BIGSERIAL types
+ * @param {string} dataType - The column's data type (e.g., 'integer', 'bigint')
+ * @param {string|null} defaultValue - The DEFAULT expression
+ * @param {string} columnName - The column name
+ * @returns {Object} { newDataType, newDefault } - Adjusted type and default
+ */
+function handleAutoIncrement(dataType, defaultValue, columnName) {
+  // Check if this is an auto-increment column (has nextval default)
+  const isAutoIncrement = defaultValue &&
+    defaultValue.toLowerCase().includes('nextval(') &&
+    defaultValue.toLowerCase().includes('_seq');
+
+  if (!isAutoIncrement) {
+    return { newDataType: dataType, newDefault: defaultValue };
+  }
+
+  // Log the conversion for transparency
+  console.log(`[DB-MIGRATION] Converting ${columnName} from ${dataType} with nextval() to SERIAL type`);
+
+  // Convert to SERIAL or BIGSERIAL based on original type
+  if (dataType === 'integer') {
+    return { newDataType: 'SERIAL', newDefault: null };
+  } else if (dataType === 'bigint') {
+    return { newDataType: 'BIGSERIAL', newDefault: null };
+  } else if (dataType === 'smallint') {
+    return { newDataType: 'SMALLSERIAL', newDefault: null };
+  }
+
+  // For other types with nextval, strip the default (will fail gracefully)
+  console.log(`[DB-MIGRATION] Warning: Unexpected auto-increment type ${dataType} for column ${columnName}`);
+  return { newDataType: dataType, newDefault: null };
 }
 
 /**
@@ -287,16 +321,26 @@ export async function replicateSchema(req, res) {
 
         // Build CREATE TABLE statement
         const columns = schema.map(col => {
-          let def = `"${col.column_name}" ${col.data_type}`;
-          
-          if (col.not_null) {
+          // Handle auto-increment columns (convert nextval to SERIAL)
+          const { newDataType, newDefault } = handleAutoIncrement(
+            col.data_type,
+            col.default_value,
+            col.column_name
+          );
+
+          let def = `"${col.column_name}" ${newDataType}`;
+
+          // SERIAL types implicitly include NOT NULL, so skip for auto-increment
+          const isSerial = ['SERIAL', 'BIGSERIAL', 'SMALLSERIAL'].includes(newDataType);
+
+          if (col.not_null && !isSerial) {
             def += ' NOT NULL';
           }
-          
-          if (col.default_value) {
-            def += ` DEFAULT ${col.default_value}`;
+
+          if (newDefault) {
+            def += ` DEFAULT ${newDefault}`;
           }
-          
+
           return def;
         }).join(',\n  ');
 
