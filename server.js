@@ -953,8 +953,8 @@ app.get('/api/test-semantic', testSemanticRateLimiter, testSemanticHandler);
 // Database migration routes (one-time use - delete after migration)
 dbMigrationRouter(app);
 
-// Repo snapshot endpoint
-app.use("/api", repoSnapshotRoute);
+// Repo snapshot endpoint - mount at root level so routes in router are absolute
+app.use(repoSnapshotRoute);
 
 console.log("[SERVER] ✅ Routes configured");
 

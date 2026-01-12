@@ -202,11 +202,8 @@ function generateEntropy() {
     return crypto.randomBytes(16).toString("hex");
   }
 
-  // Fallback for environments without crypto support (should not happen in Node.js)
-  return (
-    Math.random().toString(36).substring(2, 15) +
-    Math.random().toString(36).substring(2, 15)
-  );
+  // Should never reach here in Node.js environment
+  throw new Error("No cryptographically secure random generator available. This should not occur in Node.js environments with crypto module support.");
 }
 
 function generateStatisticalSignature(content, entropy) {
