@@ -1,0 +1,169 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #485: [claude-fix] Supersession must mark ALL memories with matching fingerprint as not current, not just the one found during dedu
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>GitHub Issue: Comprehensive Supersession - Mark ALL Matching Fingerprints as Not Current</h1>
+<h2>Title</h2>
+<p><code>[claude-fix] Supersession must mark ALL memories with matching fingerprint as not current, not just the one found during dedup</code></p>
+<h2>Labels</h2>
+<ul>
+<li><code>bug</code></li>
+<li><code>memory-system</code></li>
+<li><code>priority-high</code></li>
+<li><code>innovation-3</code></li>
+</ul>
+<hr>
+<h2>Problem Statement</h2>
+<p>When a user updates a single-valued attribute (salary, phone number, meeting time), the supersession system correctly marks the OLD memory as <code>is_current = false</code> and creates a NEW memory with the updated value. <strong>However, it only marks ONE old memory</strong> - the one found during the deduplication similarity check.</p>
+<p>This means <strong>stale memories from previous test runs or sessions remain marked as <code>is_current = true</code></strong> and continue to be retrieved, causing the AI to report outdated information alongside current information.</p>
+<h2>Evidence from Production Logs</h2>
+<h3>Test Run Behavior (Working Within Session)</h3>
+<pre><code>[SUPERSESSION-DIAG] Input content: My salary is $80,000 per year
+[SUPERSESSION-DIAG] ✅ PATTERN MATCH FOUND: user_salary
+[SUPERSESSION] Deterministic match: user_salary (confidence: 0.95)
+[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=264
+
+[SUPERSESSION-DIAG] Input content: I just got a raise! My new salary is $95,000
+[SUPERSESSION-DIAG] ✅ PATTERN MATCH FOUND: user_salary
+[SUPERSESSION] Marked 1 old facts as not current
+[SUPERSESSION]    Old IDs: 264
+[SUPERSESSION] ✅ Replaced 1 old facts with ID 265
+</code></pre>
+<p>✅ Within the same session, supersession works perfectly.</p>
+<h3>Cross-Session Failure</h3>
+<p>When querying "What is my salary?", the system retrieves:</p>
+<ul>
+<li>Memory ID 265 ($95,000) - CORRECT ✅</li>
+<li>Memory ID 229 ($80,000 from previous run) - STALE, should be superseded ❌</li>
+<li>Memory ID 3041 ($80,000 from earlier run) - STALE, should be superseded ❌</li>
+</ul>
+<p><strong>Result:</strong> AI responds with "$80,000" because stale memories outnumber or outrank the current one.</p>
+<h2>Root Cause</h2>
+<p>In <code>/api/memory/intelligent-storage.js</code>, the <code>storeCompressedMemory</code> function only marks the single memory found during deduplication:</p>
+<pre><code class="language-javascript">// Current behavior (INCOMPLETE):
+// Only marks the ONE memory found by findSimilarMemories
+if (existingMemory) {
+  await pool.query(
+    `UPDATE persistent_memories 
+     SET is_current = false, superseded_by = $1 
+     WHERE id = $2`,
+    [newMemoryId, existingMemory.id]  // ← Only ONE id
+  );
+}
+</code></pre>
+<h2>Required Fix</h2>
+<p>When supersession is detected (fingerprint match with different value), mark <strong>ALL</strong> memories with that fingerprint as not current:</p>
+<pre><code class="language-javascript">// Fixed behavior (COMPREHENSIVE):
+if (fingerprint &amp;&amp; isSupersession) {
+  // Mark ALL memories with this fingerprint as superseded
+  const result = await pool.query(
+    `UPDATE persistent_memories 
+     SET is_current = false, superseded_by = $1, superseded_at = NOW()
+     WHERE user_id = $2 
+       AND fact_fingerprint = $3 
+       AND is_current = true 
+       AND id != $1
+       AND pinned = false`,  // Never supersede pinned memories
+    [newMemoryId, userId, fingerprint]
+  );
+  
+  console.log(`[SUPERSESSION] Marked ${result.rowCount} old memories as superseded`);
+  console.log(`[SUPERSESSION]    Fingerprint: ${fingerprint}`);
+  console.log(`[SUPERSESSION]    New current memory: ${newMemoryId}`);
+}
+</code></pre>
+<h2>Doctrine Alignment</h2>
+<p>This fix directly implements the documented behavior from the Master Completion Ledger:</p>
+<p><strong>Innovation #3 - Age + Relevance Weighted Overwrite Logic:</strong></p>
+<blockquote>
+<p>"When new information needs storage space, system identifies lowest-scoring memories"</p>
+</blockquote>
+<p><strong>Test MEM-003 - Newer Facts Supersede Older Facts:</strong></p>
+<blockquote>
+<p>"Verify that when user provides updated information, the system uses the newer value"</p>
+</blockquote>
+<p><strong>The principle is clear:</strong> For single-valued attributes (salary, phone, meeting time), there can only be ONE current value. All previous values must be marked as historical/superseded.</p>
+<h2>Safety Constraints</h2>
+<p>The fix includes safeguards to prevent unintended data loss:</p>
+
+Constraint | Implementation
+-- | --
+User isolation | WHERE user_id = $X ensures only that user's memories are affected
+Fingerprint specificity | Only marks memories with exact same fingerprint (e.g., user_salary)
+Pinned protection | AND pinned = false ensures pinned memories are NEVER superseded
+New memory exclusion | AND id != $1 ensures the new memory isn't marked as superseded
+Current-only targeting | AND is_current = true avoids re-processing already-superseded memories
+
+
+<h2>Files to Modify</h2>
+<p><strong>Primary:</strong> <code>/api/memory/intelligent-storage.js</code></p>
+<ul>
+<li>Function: <code>storeCompressedMemory</code> (around line 580-627)</li>
+<li>Add comprehensive fingerprint-based supersession after successful storage</li>
+</ul>
+<p><strong>Secondary (for logging):</strong> Same file</p>
+<ul>
+<li>Add telemetry for supersession count and affected IDs</li>
+</ul>
+<h2>Acceptance Criteria</h2>
+<pre><code class="language-javascript">// Test sequence:
+await store("My salary is $80,000");  // Creates ID 100
+await store("My salary is $80,000");  // Creates ID 101 (different session)
+await store("My salary is $95,000");  // Creates ID 102, supersedes BOTH 100 and 101
+
+// Database state after:
+// ID 100: is_current=false, superseded_by=102
+// ID 101: is_current=false, superseded_by=102  
+// ID 102: is_current=true, superseded_by=null
+
+// Query result:
+const response = await query("What is my salary?");
+assert(response.includes("$95,000"));
+assert(!response.includes("$80,000"));
+</code></pre>
+<h2>Test Cases</h2>
+<ol>
+<li><strong>MEM-003 (Primary):</strong> Store $80K → Store $95K → Query → Expect ONLY $95K</li>
+<li><strong>Cross-session:</strong> Store $80K (session 1) → Store $80K (session 2) → Store $95K (session 3) → Query → Expect ONLY $95K</li>
+<li><strong>Pinned protection:</strong> Pin $80K memory → Store $95K → Query → Should mention both (pinned preserved)</li>
+<li><strong>Different fingerprints:</strong> Store salary $80K → Store phone 555-1234 → Verify phone doesn't affect salary</li>
+</ol>
+<h2>Performance Impact</h2>
+<ul>
+<li><strong>Minimal:</strong> Single UPDATE query with indexed columns (<code>user_id</code>, <code>fact_fingerprint</code>)</li>
+<li><strong>Expected rows affected:</strong> Typically 1-5 (number of previous values for that attribute)</li>
+<li><strong>No additional API calls:</strong> Pure database operation</li>
+</ul>
+<h2>Related Issues</h2>
+<ul>
+<li>PR #484: Supersession detection fix (checks supersession BEFORE boosting) ✅ MERGED</li>
+<li>This issue completes the supersession system by ensuring comprehensive cleanup</li>
+</ul>
+<hr>
+<h2>Summary</h2>
+<p><strong>Current state:</strong> Supersession marks 1 old memory → stale memories persist → AI reports wrong info
+<strong>Fixed state:</strong> Supersession marks ALL old memories with same fingerprint → only current value retrieved → AI reports correct info</p>
+<p>This is a surgical fix that completes Innovation #3's supersession behavior without affecting any other system functionality.</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

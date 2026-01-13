@@ -1,0 +1,83 @@
+Perfect! The changes look good. Now let me create a summary of what was changed:
+
+---SUMMARY---
+
+## Summary of Changes
+
+I've successfully implemented the comprehensive supersession fix for issue #485. The problem was that the supersession system only marked old memories as `is_current = false` when they matched BOTH the user_id AND mode, which meant memories stored in different modes (or previous sessions) were not being properly superseded.
+
+### Files Modified
+
+**1. `/api/services/supersession.js`**
+
+#### Change 1: Removed mode filter from supersession query (lines 415-427)
+- **Before**: Query filtered by `user_id`, `mode`, AND `fact_fingerprint`
+- **After**: Query filters by `user_id` AND `fact_fingerprint` only (removed mode filter)
+- **Why**: This ensures ALL memories with the same fingerprint are superseded, regardless of which mode they were created in
+- **Added**: `AND pinned = false` to ensure pinned memories are never superseded (safety constraint)
+- **Added**: Comprehensive comments explaining the comprehensive approach
+
+#### Change 2: Enhanced logging for supersession (lines 443-450)
+- **Added**: More detailed logging showing:
+  - The fingerprint being superseded
+  - List of superseded memory IDs
+  - Content preview of each superseded memory (first 60 chars)
+- **Why**: Better debugging and verification that all memories are being marked
+
+#### Change 3: Improved success logging (lines 482-489)
+- **Enhanced**: Success messages now clearly indicate comprehensive supersession
+- **Added**: Separate logging for cases with and without memories to supersede
+- **Why**: Clearer indication that the system is working comprehensively
+
+#### Change 4: Updated database constraint creation (lines 571-627)
+- **Changed**: Index name from `idx_one_current_fact` to `idx_one_current_fact_comprehensive`
+- **Removed**: `mode` column from the unique index
+- **Added**: `pinned = false` filter to the index WHERE clause
+- **Added**: Logic to drop old index (with mode) before creating new one
+- **Why**: Database-level enforcement of comprehensive uniqueness across all modes
+
+#### Change 5: Updated cleanup function (lines 629-687)
+- **Changed**: Cleanup now partitions by `user_id` and `fact_fingerprint` only (removed mode)
+- **Added**: `AND pinned = false` filter to cleanup query
+- **Enhanced**: Logging now shows breakdown by fingerprint type
+- **Why**: Comprehensive cleanup that matches the new supersession behavior
+
+### Key Improvements
+
+1. **Comprehensive Supersession**: When a user updates a single-valued attribute (salary, phone, etc.), ALL previous memories with that fingerprint are marked as `is_current = false`, regardless of mode
+   
+2. **Pinned Memory Protection**: Added explicit protection for pinned memories - they will NEVER be superseded
+
+3. **Better Observability**: Enhanced logging provides clear visibility into:
+   - How many memories were superseded
+   - Which specific memory IDs were affected
+   - What content was superseded (preview)
+   - Which fingerprint triggered the supersession
+
+4. **Database-Level Enforcement**: Updated unique constraint to enforce one current fact per user per fingerprint (across all modes) at the database level
+
+5. **Backward Compatibility**: The function automatically drops the old index (with mode filter) and creates the new comprehensive index
+
+### Testing Recommendations
+
+The fix should now pass the acceptance criteria from the issue:
+
+```javascript
+// Test sequence:
+await store("My salary is $80,000");  // Creates ID 100
+await store("My salary is $80,000");  // Creates ID 101 (different session)
+await store("My salary is $95,000");  // Creates ID 102, supersedes BOTH 100 and 101
+
+// Expected Database state:
+// ID 100: is_current=false, superseded_by=102
+// ID 101: is_current=false, superseded_by=102  
+// ID 102: is_current=true, superseded_by=null
+
+// Query result:
+const response = await query("What is my salary?");
+// Should include ONLY $95,000, not $80,000
+```
+
+This surgical fix completes Innovation #3's supersession behavior by ensuring comprehensive cleanup across all modes and sessions.
+
+---END SUMMARY---
