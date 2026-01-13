@@ -287,11 +287,13 @@ export async function embedDocumentChunks(documentId, options = {}) {
 
         if (embeddingResult.success) {
           // Store embedding
+          // Convert embedding array to JSON string for vector(1536) type
+          const embeddingStr = JSON.stringify(embeddingResult.embedding);
           await dbPool.query(
             `UPDATE document_chunks
-             SET embedding = $1, embedding_status = 'ready'
+             SET embedding = $1::vector(1536), embedding_status = 'ready'
              WHERE id = $2`,
-            [embeddingResult.embedding, chunk.id]
+            [embeddingStr, chunk.id]
           );
           embedded++;
         } else {
@@ -367,11 +369,13 @@ export async function backfillDocumentEmbeddings(options = {}) {
           const embeddingResult = await generateEmbedding(chunk.content);
 
           if (embeddingResult.success) {
+            // Convert embedding array to JSON string for vector(1536) type
+            const embeddingStr = JSON.stringify(embeddingResult.embedding);
             await dbPool.query(
               `UPDATE document_chunks
-               SET embedding = $1, embedding_status = 'ready'
+               SET embedding = $1::vector(1536), embedding_status = 'ready'
                WHERE id = $2`,
-              [embeddingResult.embedding, chunk.id]
+              [embeddingStr, chunk.id]
             );
             totalSucceeded++;
           } else {
@@ -434,9 +438,10 @@ export async function searchDocuments(userId, mode, queryEmbedding, options = {}
 
   try {
     // Get all chunks for this user and mode with embeddings
+    // Cast vector type to text for JSON parsing in Node.js
     const chunksResult = await dbPool.query(
       `SELECT dc.id, dc.document_id, dc.chunk_index, dc.content, dc.token_count,
-              dc.embedding, d.filename
+              dc.embedding::text as embedding, d.filename
        FROM document_chunks dc
        JOIN documents d ON dc.document_id = d.id
        WHERE dc.user_id = $1 AND dc.mode = $2 AND dc.embedding_status = 'ready'`,
@@ -445,11 +450,30 @@ export async function searchDocuments(userId, mode, queryEmbedding, options = {}
 
     const chunks = chunksResult.rows;
 
+    // Parse embeddings (handle both FLOAT4[] and vector(1536) types)
+    const chunksWithParsedEmbeddings = chunks.map(chunk => {
+      let embedding = chunk.embedding;
+
+      // If embedding is a string (from pgvector vector type), parse it
+      if (typeof embedding === 'string') {
+        try {
+          embedding = JSON.parse(embedding);
+        } catch (error) {
+          console.warn(`[DOCUMENT-SERVICE] Failed to parse embedding for chunk ${chunk.id}: ${error.message}`);
+          embedding = null;
+        }
+      }
+
+      return { ...chunk, embedding };
+    });
+
     // Calculate similarity scores
-    const scoredChunks = chunks.map(chunk => ({
-      ...chunk,
-      similarity: cosineSimilarity(queryEmbedding, chunk.embedding)
-    }));
+    const scoredChunks = chunksWithParsedEmbeddings
+      .filter(chunk => chunk.embedding && Array.isArray(chunk.embedding))
+      .map(chunk => ({
+        ...chunk,
+        similarity: cosineSimilarity(queryEmbedding, chunk.embedding)
+      }));
 
     // Sort by similarity
     scoredChunks.sort((a, b) => b.similarity - a.similarity);

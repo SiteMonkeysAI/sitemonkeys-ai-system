@@ -108,13 +108,14 @@ function buildPrefilterQuery(options) {
   }
 
   // Build query with ordering by relevance_score (importance), then recency
+  // Cast vector type to text for JSON parsing in Node.js
   const sql = `
     SELECT
       id,
       content,
       category_name,
       mode,
-      embedding,
+      embedding::text as embedding,
       fact_fingerprint,
       fingerprint_confidence,
       relevance_score,
@@ -303,9 +304,27 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // STEP 3: Score candidates with cosine similarity
     const scoringStart = Date.now();
-    
+
+    // Parse embeddings (handle both FLOAT4[] and vector(1536) types)
+    const candidatesWithParsedEmbeddings = candidates.map(c => {
+      let embedding = c.embedding;
+
+      // If embedding is a string (from pgvector vector type), parse it
+      if (typeof embedding === 'string') {
+        try {
+          // pgvector returns vectors as strings like "[0.1,0.2,0.3,...]"
+          embedding = JSON.parse(embedding);
+        } catch (error) {
+          console.warn(`[SEMANTIC RETRIEVAL] Failed to parse embedding for memory ${c.id}: ${error.message}`);
+          embedding = null;
+        }
+      }
+
+      return { ...c, embedding };
+    });
+
     // Filter to only those with valid embeddings
-    const withEmbeddings = candidates.filter(c =>
+    const withEmbeddings = candidatesWithParsedEmbeddings.filter(c =>
       c.embedding && Array.isArray(c.embedding) && c.embedding.length > 0
     );
     telemetry.candidates_with_embeddings = withEmbeddings.length;

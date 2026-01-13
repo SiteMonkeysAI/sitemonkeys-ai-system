@@ -792,8 +792,20 @@ export class SemanticAnalyzer {
       for (const memory of existingMemories) {
         // Use existing embedding if available, otherwise generate
         let memoryEmbedding;
-        if (memory.embedding && Array.isArray(memory.embedding)) {
-          memoryEmbedding = memory.embedding;
+        if (memory.embedding) {
+          // Handle both array (FLOAT4[]) and string (vector type) formats
+          if (Array.isArray(memory.embedding)) {
+            memoryEmbedding = memory.embedding;
+          } else if (typeof memory.embedding === 'string') {
+            try {
+              memoryEmbedding = JSON.parse(memory.embedding);
+            } catch (error) {
+              this.logger.error(`Failed to parse embedding for memory ${memory.id}: ${error.message}`);
+              memoryEmbedding = await this.#getEmbedding(memory.content);
+            }
+          } else {
+            memoryEmbedding = await this.#getEmbedding(memory.content);
+          }
         } else {
           memoryEmbedding = await this.#getEmbedding(memory.content);
         }
