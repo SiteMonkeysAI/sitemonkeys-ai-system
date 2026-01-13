@@ -840,19 +840,30 @@ export class SemanticAnalyzer {
 
   /**
    * Confirm if new content actually updates old content (not just similar topic)
+   * CRITICAL: Distinguishes fact UPDATES from fact DUPLICATES
    * @param {string} newContent - New content
    * @param {string} oldContent - Old content
    * @returns {Promise<boolean>} - True if new content supersedes old
    */
   async #confirmSupersession(newContent, oldContent) {
     try {
-      const prompt = `Does the NEW statement update or replace information in the OLD statement?
+      const prompt = `You are analyzing if a NEW statement UPDATES the OLD statement (different value for same attribute).
 
 OLD: ${oldContent}
 NEW: ${newContent}
 
-Answer ONLY "yes" if NEW provides updated/different information about the SAME topic.
-Answer "no" if they're just similar topics or NEW doesn't replace OLD.
+EXAMPLES OF SUPERSESSION (answer "yes"):
+- OLD: "My salary is $80,000" / NEW: "My salary is $95,000" → yes (same attribute, different value)
+- OLD: "Meeting at 2pm" / NEW: "Meeting at 3pm" → yes (same attribute, different value)
+- OLD: "Favorite color is blue" / NEW: "Favorite color is red" → yes (same attribute, different value)
+
+EXAMPLES OF DUPLICATES (answer "no"):
+- OLD: "My wife is Sarah" / NEW: "My wife Sarah" → no (same fact, same value)
+- OLD: "I have a dog" / NEW: "I have a dog named Max" → no (additional info, not update)
+- OLD: "I like pizza" / NEW: "I also like pasta" → no (different topic)
+
+Answer ONLY "yes" if NEW updates/changes a value in OLD for the SAME ATTRIBUTE.
+Answer "no" if they're duplicates, additional info, or different topics.
 
 Answer (yes/no):`;
 
@@ -864,7 +875,13 @@ Answer (yes/no):`;
       });
 
       const answer = response.choices[0].message.content.trim().toLowerCase();
-      return answer === 'yes';
+      const isUpdate = answer === 'yes';
+
+      console.log(`[SEMANTIC-SUPERSESSION-CONFIRM] Old: "${oldContent.substring(0, 50)}..."`);
+      console.log(`[SEMANTIC-SUPERSESSION-CONFIRM] New: "${newContent.substring(0, 50)}..."`);
+      console.log(`[SEMANTIC-SUPERSESSION-CONFIRM] Result: ${isUpdate ? 'UPDATE' : 'NOT UPDATE'}`);
+
+      return isUpdate;
     } catch (error) {
       this.logger.error("Supersession confirmation failed", error);
       return false; // Conservative: don't supersede if unsure
