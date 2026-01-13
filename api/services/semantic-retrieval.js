@@ -391,6 +391,27 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     telemetry.total_ms = Date.now() - startTime;
     telemetry.latency_ms = Date.now() - startTime;
 
+    // INNOVATION #7: Track semantic access to update importance scores
+    // High-importance memories are those frequently semantically relevant to queries
+    if (results.length > 0) {
+      // Update importance scores for retrieved memories (non-blocking)
+      const memoryIds = results.map(r => r.id);
+      pool.query(`
+        UPDATE persistent_memories
+        SET
+          usage_frequency = usage_frequency + 1,
+          relevance_score = LEAST(relevance_score + 0.03, 1.0),
+          last_accessed = CURRENT_TIMESTAMP
+        WHERE id = ANY($1::int[])
+      `, [memoryIds])
+        .then(() => {
+          console.log(`[SEMANTIC-IMPORTANCE] Updated importance for ${memoryIds.length} semantically retrieved memories`);
+        })
+        .catch(err => {
+          console.error(`[SEMANTIC-IMPORTANCE] ⚠️ Failed to update importance: ${err.message}`);
+        });
+    }
+
     // Clean up results (remove embeddings from response to save bandwidth)
     const cleanResults = results.map(({ embedding, ...rest }) => ({
       ...rest,
