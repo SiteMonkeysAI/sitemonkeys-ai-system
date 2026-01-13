@@ -1,0 +1,89 @@
+Excellent! The implementation is complete and properly integrated. Let me create a summary of the changes:
+
+---SUMMARY---
+
+## Fixed Issue #476: Enable pgvector extension and convert embedding columns to vector type
+
+### Changes Made
+
+**File Modified:** `api/admin/db-migration.js`
+
+### Implementation Details
+
+1. **Added new `setupVector` function (lines 585-692):**
+   - Implements POST endpoint `/api/admin/db-setup-vector`
+   - Follows the exact specification from the issue description
+   - Validates migration lock (`ALLOW_DB_MIGRATION=true`)
+   - Validates authentication via `X-Migration-Secret` header or query parameter
+   - Requires `NEW_DATABASE_URL` environment variable
+   - Supports dry run mode via `?dryRun=true` query parameter
+
+2. **Four-step execution process:**
+   - **Step 1:** Enable pgvector extension with `CREATE EXTENSION IF NOT EXISTS vector`
+   - **Step 2:** Convert `persistent_memories.embedding` from `real[]` to `vector(1536)`
+   - **Step 3:** Convert `document_chunks.embedding` from `real[]` to `vector(1536)`
+   - **Step 4:** Verify extension is enabled by querying `pg_extension` table
+
+3. **Registered new route in router (line 709):**
+   - Added `app.post('/api/admin/db-setup-vector', migrationRateLimiter, setupVector);`
+   - Applied rate limiting for security
+   - Integrated with existing migration infrastructure
+
+4. **Updated file header documentation (lines 1-20):**
+   - Added the new endpoint to the endpoints list
+   - Corrected HTTP methods from GET to POST for consistency
+
+### Key Features Implemented
+
+✅ **ES6 Modules:** Uses `import`/`export` syntax, async/await patterns
+✅ **Security:** Requires migration lock + secret authentication
+✅ **Dry Run Support:** Preview SQL without executing via `?dryRun=true`
+✅ **Error Handling:** Proper try/catch with graceful client cleanup
+✅ **Structured Logging:** Uses `[DB-MIGRATION]` prefix with emoji indicators
+✅ **Response Format:** Returns structured JSON with SQL preview and results
+✅ **Idempotent:** Uses `IF NOT EXISTS` and safe ALTER TYPE operations
+✅ **Verification:** Confirms pgvector extension is active after setup
+
+### Expected Behavior
+
+After deployment and execution, the endpoint will:
+1. Enable the pgvector extension on the new PostgreSQL database
+2. Convert embedding columns from `real[]` arrays to proper `vector(1536)` types
+3. Fix the error: `type "vector" does not exist`
+4. Unblock 6 failing semantic search tests (MEM-002, MEM-003, MEM-007, TRUTH-018, UX-044, UX-046)
+
+### Usage Instructions
+
+**Dry Run (preview changes):**
+```javascript
+fetch('https://sitemonkeys-ai-system-production.up.railway.app/api/admin/db-setup-vector?dryRun=true', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Migration-Secret': 'migrate-jan2026-secure'
+  }
+})
+```
+
+**Execute (apply changes):**
+```javascript
+fetch('https://sitemonkeys-ai-system-production.up.railway.app/api/admin/db-setup-vector', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Migration-Secret': 'migrate-jan2026-secure'
+  }
+})
+```
+
+### Doctrine Alignment
+
+The implementation follows all SiteMonkeys AI System principles:
+- Minimal, surgical changes (only added what was needed)
+- No over-engineering or unnecessary features
+- Follows existing code patterns and conventions
+- Proper error handling and logging
+- Security-first approach with multiple validation layers
+- One-time use code (marked for deletion after successful execution)
+
+---END SUMMARY---

@@ -1,0 +1,278 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #476: [claude-fix] Enable pgvector extension and convert embedding columns to vector type
+
+Issue Description:
+# [claude-fix] Enable pgvector extension and convert embedding columns to vector type
+
+## Issue Type
+**Infrastructure Fix** - One-time database setup for pgvector
+
+## Priority
+**HIGH** - Blocking semantic search functionality (6 tests failing)
+
+## Context
+The pgvector database migration completed successfully (5 tables, 2,060 rows migrated), but the pgvector extension needs to be enabled and the embedding columns need to be converted from `real[]` to `vector(1536)` type.
+
+**Current Error in Logs:**
+```
+[DEDUP] ⚠️ Similarity search failed: type "vector" does not exist
+```
+
+**Failing Tests (6 total):**
+- MEM-002: Semantic deduplication prevents memory bloat
+- MEM-003: Newer facts supersede older facts  
+- MEM-007: Critical facts prioritized over preferences
+- TRUTH-018: Reconciles conflicting sources (uses latest)
+- UX-044: Memory persists across sessions (devices)
+- UX-046: User can see their stored memory
+
+All failures relate to semantic/vector operations that require the `vector` type.
+
+---
+
+## ROOT CAUSE
+
+1. The pgvector Docker image (`pgvector/pgvector:pg17`) includes pgvector but doesn't auto-enable it
+2. The migration replicated the schema with `real[]` type (what the old database had)
+3. Need to run `CREATE EXTENSION vector` and `ALTER COLUMN ... TYPE vector(1536)`
+
+---
+
+## REQUIRED FIX
+
+Add a one-time SQL execution endpoint to `api/admin/db-migration.js` that runs the pgvector setup commands.
+
+### Implementation
+
+**Add new endpoint: POST /api/admin/db-setup-vector**
+
+```javascript
+/**
+ * Endpoint: Enable pgvector extension and convert embedding columns
+ * POST /api/admin/db-setup-vector
+ * 
+ * One-time use - delete after successful execution
+ */
+export async function setupVector(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Validate migration is allowed
+  if (process.env.ALLOW_DB_MIGRATION !== 'true') {
+    return res.status(403).json({ 
+      success: false, 
+      error: 'Migration locked. Set ALLOW_DB_MIGRATION=true to enable' 
+    });
+  }
+
+  // Validate secret
+  const secret = req.headers['x-migration-secret'] || req.query.secret;
+  if (secret !== process.env.MIGRATION_SECRET) {
+    return res.status(401).json({ success: false, error: 'Invalid migration secret' });
+  }
+
+  const newDbUrl = process.env.NEW_DATABASE_URL;
+  if (!newDbUrl) {
+    return res.status(403).json({ success: false, error: 'NEW_DATABASE_URL not set' });
+  }
+
+  const dryRun = req.query.dryRun === 'true';
+  const results = [];
+
+  let client;
+  try {
+    const { Client } = await import('pg');
+    client = new Client({ connectionString: newDbUrl });
+    await client.connect();
+
+    // Step 1: Enable pgvector extension
+    const enableExtensionSQL = 'CREATE EXTENSION IF NOT EXISTS vector';
+    results.push({ step: 'enable_extension', sql: enableExtensionSQL });
+    
+    if (!dryRun) {
+      await client.query(enableExtensionSQL);
+      console.log('[DB-MIGRATION] ✅ pgvector extension enabled');
+    }
+
+    // Step 2: Convert persistent_memories.embedding to vector(1536)
+    const convertMemoriesSQL = `
+      ALTER TABLE persistent_memories 
+      ALTER COLUMN embedding TYPE vector(1536) 
+      USING embedding::vector(1536)
+    `;
+    results.push({ step: 'convert_persistent_memories', sql: convertMemoriesSQL.trim() });
+    
+    if (!dryRun) {
+      await client.query(convertMemoriesSQL);
+      console.log('[DB-MIGRATION] ✅ persistent_memories.embedding converted to vector(1536)');
+    }
+
+    // Step 3: Convert document_chunks.embedding to vector(1536)
+    const convertChunksSQL = `
+      ALTER TABLE document_chunks 
+      ALTER COLUMN embedding TYPE vector(1536) 
+      USING embedding::vector(1536)
+    `;
+    results.push({ step: 'convert_document_chunks', sql: convertChunksSQL.trim() });
+    
+    if (!dryRun) {
+      await client.query(convertChunksSQL);
+      console.log('[DB-MIGRATION] ✅ document_chunks.embedding converted to vector(1536)');
+    }
+
+    // Step 4: Verify extension is enabled
+    if (!dryRun) {
+      const verifyResult = await client.query(`
+        SELECT extname, extversion 
+        FROM pg_extension 
+        WHERE extname = 'vector'
+      `);
+      
+      if (verifyResult.rows.length > 0) {
+        results.push({ 
+          step: 'verify', 
+          success: true, 
+          extension: verifyResult.rows[0] 
+        });
+      }
+    }
+
+    await client.end();
+
+    return res.status(200).json({
+      success: true,
+      dryRun,
+      message: dryRun ? 'Dry run complete - no changes made' : 'pgvector setup complete',
+      results
+    });
+
+  } catch (error) {
+    console.error('[DB-MIGRATION] pgvector setup error:', error);
+    if (client) await client.end().catch(() => {});
+    
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      results
+    });
+  }
+}
+```
+
+**Register the endpoint in the router (around line 500):**
+
+```javascript
+// Add after existing migration routes
+app.post('/api/admin/db-setup-vector', setupVector);
+```
+
+---
+
+## FILE TO MODIFY
+
+**ONLY ONE FILE:**
+- `api/admin/db-migration.js`
+
+**Changes:**
+1. Add `setupVector` function (~80 lines)
+2. Register route in the router section (~1 line)
+
+---
+
+## VERIFICATION STEPS
+
+**1. Dry run first:**
+```javascript
+fetch('https://sitemonkeys-ai-system-production.up.railway.app/api/admin/db-setup-vector?dryRun=true', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Migration-Secret': 'migrate-jan2026-secure'
+  }
+}).then(r => r.json()).then(console.log)
+```
+
+**2. Execute for real:**
+```javascript
+fetch('https://sitemonkeys-ai-system-production.up.railway.app/api/admin/db-setup-vector', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'X-Migration-Secret': 'migrate-jan2026-secure'
+  }
+}).then(r => r.json()).then(console.log)
+```
+
+**3. Run 53 Innovation test suite** - semantic tests should now pass
+
+---
+
+## EXPECTED OUTCOME
+
+After running the setup endpoint:
+- ✅ `CREATE EXTENSION vector` executed
+- ✅ `persistent_memories.embedding` is type `vector(1536)`
+- ✅ `document_chunks.embedding` is type `vector(1536)`
+- ✅ Semantic similarity searches work
+- ✅ 6 failing tests now pass
+
+---
+
+## ACCEPTANCE CRITERIA
+
+1. Endpoint accessible at POST `/api/admin/db-setup-vector`
+2. Supports `?dryRun=true` for preview
+3. Requires `ALLOW_DB_MIGRATION=true` and valid secret
+4. Successfully enables pgvector extension
+5. Successfully converts both embedding columns
+6. Returns verification that extension is active
+
+---
+
+## DOCTRINE ALIGNMENT
+
+- ✅ ES6 modules
+- ✅ Async/await patterns
+- ✅ Proper error handling with try/catch
+- ✅ Structured logging with `[DB-MIGRATION]` prefix
+- ✅ Security: requires migration lock + secret
+- ✅ Supports dry run for safety
+- ✅ One-time use code (delete after migration)
+
+---
+
+## CLEANUP AFTER SUCCESS
+
+Once pgvector is enabled and tests pass:
+1. Set `ALLOW_DB_MIGRATION=false`
+2. Remove `NEW_DATABASE_URL`
+3. Remove `MIGRATION_SECRET`
+4. Create PR to delete entire `api/admin/db-migration.js` file
+
+---
+
+## RELATED
+
+- PR #471: Original migration infrastructure
+- Issue #474: SERIAL schema fix (completed)
+- Blocking: Full semantic search functionality
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

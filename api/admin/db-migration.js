@@ -1,7 +1,7 @@
 /**
  * pgvector Infrastructure Migration Endpoints
  * ONE-TIME USE - DELETE AFTER SUCCESSFUL MIGRATION
- * 
+ *
  * Requirements:
  * - ES Modules (import/export)
  * - Dynamic schema replication (no hardcoded tables)
@@ -11,11 +11,12 @@
  * - Dry-run support
  * - Secret authentication
  * - Migration lock (ALLOW_DB_MIGRATION env var)
- * 
+ *
  * Endpoints:
- * - GET /api/admin/db-tables - List all tables with metadata
- * - GET /api/admin/db-schema - Replicate schema to new DB
- * - GET /api/admin/db-migrate-data - Migrate data with cursor pagination
+ * - POST /api/admin/db-tables - List all tables with metadata
+ * - POST /api/admin/db-schema - Replicate schema to new DB
+ * - POST /api/admin/db-migrate-data - Migrate data with cursor pagination
+ * - POST /api/admin/db-setup-vector - Enable pgvector extension and convert embedding columns
  */
 
 import { Pool } from 'pg';
@@ -577,6 +578,121 @@ export async function migrateData(req, res) {
 }
 
 /**
+ * Endpoint: Enable pgvector extension and convert embedding columns
+ * POST /api/admin/db-setup-vector?dryRun=true
+ *
+ * One-time use - delete after successful execution
+ */
+export async function setupVector(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  // Validate migration is allowed
+  if (process.env.ALLOW_DB_MIGRATION !== 'true') {
+    return res.status(403).json({
+      success: false,
+      error: 'Migration locked. Set ALLOW_DB_MIGRATION=true to enable'
+    });
+  }
+
+  // Validate secret
+  const secret = req.headers['x-migration-secret'] || req.query.secret;
+  if (secret !== process.env.MIGRATION_SECRET) {
+    return res.status(401).json({ success: false, error: 'Invalid migration secret' });
+  }
+
+  const newDbUrl = process.env.NEW_DATABASE_URL;
+  if (!newDbUrl) {
+    return res.status(403).json({ success: false, error: 'NEW_DATABASE_URL not set' });
+  }
+
+  const dryRun = req.query.dryRun === 'true';
+  const results = [];
+
+  let client;
+  try {
+    const { Client } = await import('pg');
+    client = new Client({
+      connectionString: newDbUrl,
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    });
+    await client.connect();
+
+    // Step 1: Enable pgvector extension
+    const enableExtensionSQL = 'CREATE EXTENSION IF NOT EXISTS vector';
+    results.push({ step: 'enable_extension', sql: enableExtensionSQL });
+
+    if (!dryRun) {
+      await client.query(enableExtensionSQL);
+      console.log('[DB-MIGRATION] ✅ pgvector extension enabled');
+    }
+
+    // Step 2: Convert persistent_memories.embedding to vector(1536)
+    const convertMemoriesSQL = `
+      ALTER TABLE persistent_memories
+      ALTER COLUMN embedding TYPE vector(1536)
+      USING embedding::vector(1536)
+    `;
+    results.push({ step: 'convert_persistent_memories', sql: convertMemoriesSQL.trim() });
+
+    if (!dryRun) {
+      await client.query(convertMemoriesSQL);
+      console.log('[DB-MIGRATION] ✅ persistent_memories.embedding converted to vector(1536)');
+    }
+
+    // Step 3: Convert document_chunks.embedding to vector(1536)
+    const convertChunksSQL = `
+      ALTER TABLE document_chunks
+      ALTER COLUMN embedding TYPE vector(1536)
+      USING embedding::vector(1536)
+    `;
+    results.push({ step: 'convert_document_chunks', sql: convertChunksSQL.trim() });
+
+    if (!dryRun) {
+      await client.query(convertChunksSQL);
+      console.log('[DB-MIGRATION] ✅ document_chunks.embedding converted to vector(1536)');
+    }
+
+    // Step 4: Verify extension is enabled
+    if (!dryRun) {
+      const verifyResult = await client.query(`
+        SELECT extname, extversion
+        FROM pg_extension
+        WHERE extname = 'vector'
+      `);
+
+      if (verifyResult.rows.length > 0) {
+        results.push({
+          step: 'verify',
+          success: true,
+          extension: verifyResult.rows[0]
+        });
+      }
+    }
+
+    await client.end();
+
+    return res.status(200).json({
+      success: true,
+      dryRun,
+      message: dryRun ? 'Dry run complete - no changes made' : 'pgvector setup complete',
+      results
+    });
+
+  } catch (error) {
+    console.error('[DB-MIGRATION] pgvector setup error:', error);
+    if (client) await client.end().catch(() => {});
+
+    return res.status(500).json({
+      success: false,
+      error: error.message,
+      results
+    });
+  }
+}
+
+/**
  * Main router function
  */
 export default function dbMigrationRouter(app) {
@@ -588,6 +704,9 @@ export default function dbMigrationRouter(app) {
 
   // Migrate data with cursor pagination
   app.post('/api/admin/db-migrate-data', migrationRateLimiter, migrateData);
+
+  // Enable pgvector extension and convert embedding columns
+  app.post('/api/admin/db-setup-vector', migrationRateLimiter, setupVector);
 
   console.log('[DB-MIGRATION] Migration endpoints registered');
 }
