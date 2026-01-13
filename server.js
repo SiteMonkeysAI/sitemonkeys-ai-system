@@ -51,6 +51,7 @@ import migrateSemanticHandler from "./api/routes/migrate-semantic.js";
 import migrateSemanticV2Handler from "./api/routes/migrate-semantic-v2.js";
 import testSemanticHandler from "./api/routes/test-semantic.js";
 import dbMigrationRouter from "./api/admin/db-migration.js";
+import { handleCleanupRequest } from "./api/admin/cleanup.js";
 import rateLimit from "express-rate-limit";
 // ========== SEMANTIC INTEGRATION ==========
 import { storeWithSupersession, generateFactFingerprint } from "./api/services/supersession.js";
@@ -952,6 +953,9 @@ app.get('/api/test-semantic', testSemanticRateLimiter, testSemanticHandler);
 
 // Database migration routes (one-time use - delete after migration)
 dbMigrationRouter(app);
+
+// Admin cleanup endpoint for database maintenance
+app.get("/api/admin/cleanup-stale-memories", handleCleanupRequest);
 
 // Repo snapshot endpoint - mount at root level so routes in router are absolute
 app.use(repoSnapshotRoute);
