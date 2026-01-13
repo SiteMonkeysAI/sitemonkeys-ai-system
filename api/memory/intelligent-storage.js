@@ -200,12 +200,13 @@ export class IntelligentMemoryStorage {
 
       console.log(`[INTELLIGENT-STORAGE] 📊 Compression: ${originalTokens} → ${compressedTokens} tokens (${ratio}:1)`);
 
-      // Step 2: Check for duplicates
+      // Step 2: Check for duplicates (now also checks for supersession)
       console.log('[INTELLIGENT-STORAGE] 🔍 Checking for similar memories...');
       const existing = await this.findSimilarMemories(userId, category, facts);
 
       // Step 3: Update existing OR create new
       if (existing) {
+        // findSimilarMemories returns non-null only for TRUE DUPLICATES (not supersessions)
         console.log(`[DEDUP] ♻️ Found similar memory (id=${existing.id}), boosting instead of duplicating`);
         const boostResult = await this.boostExistingMemory(existing.id);
 
@@ -221,6 +222,8 @@ export class IntelligentMemoryStorage {
 
         return boostResult;
       } else {
+        // No duplicate found - either new fact or supersession
+        // If supersession, storeCompressedMemory will detect and mark old memory as superseded
         console.log('[INTELLIGENT-STORAGE] ✨ Storing new compressed memory');
         return await this.storeCompressedMemory(userId, category, facts, {
           original_tokens: originalTokens,
@@ -530,18 +533,19 @@ Facts (preserve all identifiers):`;
 
   /**
    * Find similar memories using semantic embeddings with pgvector
-   * Threshold: distance < 0.15 = semantic duplicate
+   * CRITICAL: Distinguishes DUPLICATES (boost) from SUPERSESSIONS (replace)
+   * Threshold: distance < 0.15 = high similarity (may be duplicate OR update)
    * @param {string} userId - User identifier
    * @param {string} category - Memory category
    * @param {string} facts - Extracted facts to compare
-   * @returns {Promise<object|null>} - Similar memory or null
+   * @returns {Promise<object|null>} - Similar memory to boost, or null if supersession/no match
    */
   async findSimilarMemories(userId, category, facts) {
     try {
       // Generate embedding for new content
       const { generateEmbedding } = await import('../services/embedding-service.js');
       const embeddingResult = await generateEmbedding(facts);
-      
+
       if (!embeddingResult.success || !embeddingResult.embedding) {
         console.log('[DEDUP] ⚠️ Could not generate embedding, falling back to text search');
         // Fallback to text-based search
@@ -554,7 +558,7 @@ Facts (preserve all identifiers):`;
             AND created_at > NOW() - INTERVAL '30 days'
           LIMIT 5
         `, [userId, category]);
-        
+
         if (result.rows.length > 0) {
           return result.rows[0];
         }
@@ -562,14 +566,16 @@ Facts (preserve all identifiers):`;
       }
 
       // Query for similar memories using pgvector cosine distance
+      // CRITICAL: Also retrieve embedding for supersession analysis
       const result = await this.db.query(`
-        SELECT 
-          id, 
-          content, 
+        SELECT
+          id,
+          content,
+          embedding,
           embedding <=> $1::vector as distance
         FROM persistent_memories
-        WHERE user_id = $2 
-          AND category_name = $3 
+        WHERE user_id = $2
+          AND category_name = $3
           AND is_current = true
           AND embedding IS NOT NULL
         ORDER BY distance ASC
@@ -579,13 +585,38 @@ Facts (preserve all identifiers):`;
       // Check for semantic duplicates (distance < 0.15)
       for (const row of result.rows) {
         if (row.distance < 0.15) {
+          // CRITICAL FIX: Check if this is an UPDATE (supersession) or DUPLICATE (same fact)
+          // High similarity could mean either:
+          // 1. DUPLICATE: "My wife is Sarah" + "My wife Sarah" = SAME FACT → Boost
+          // 2. SUPERSESSION: "My salary is $80K" + "My salary is $95K" = UPDATED FACT → Don't boost, supersede instead
+
+          console.log(`[DEDUP] High similarity detected (distance: ${row.distance.toFixed(3)}), checking if update or duplicate...`);
+
+          // Use semantic analyzer to determine if this is an update
+          // Pass the OLD memory's embedding from the database
+          const isUpdate = await semanticAnalyzer.analyzeSupersession(facts, [{
+            id: row.id,
+            content: row.content,
+            embedding: row.embedding  // Use the embedding from the database row
+          }]);
+
+          if (isUpdate.supersedes && isUpdate.supersedes.length > 0) {
+            // This is a SUPERSESSION (update), not a duplicate
+            console.log(`[DEDUP] 🔄 SUPERSESSION detected - new content updates old memory (id=${row.id})`);
+            console.log(`[DEDUP]    Old: "${row.content.substring(0, 60)}..."`);
+            console.log(`[DEDUP]    New: "${facts.substring(0, 60)}..."`);
+            console.log(`[DEDUP]    Reason: ${isUpdate.supersedes[0].reason}`);
+            // Return null to signal this should be stored as new (supersession will handle marking old as superseded)
+            return null;
+          }
+
           // Apply high-entropy guard before merging
           if (this.shouldPreventMerge(row.content, facts)) {
             console.log(`[DEDUP] ⏭️ Skipping similar memory (id=${row.id}) due to high-entropy mismatch`);
             continue; // Skip this match, check next one
           }
 
-          console.log(`[SEMANTIC-DEDUP] Duplicate detected, distance: ${row.distance.toFixed(3)}`);
+          console.log(`[SEMANTIC-DEDUP] ✅ True DUPLICATE detected (same fact repeated), will boost existing memory`);
           return row;
         }
       }
