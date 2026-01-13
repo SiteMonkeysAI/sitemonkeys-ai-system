@@ -11,3 +11,4 @@ __pycache__/
 test-vault-fixes.js
 test-vault-endpoint.js
 verify-fixes.js
+test-user-priority-learning.js
