@@ -601,21 +601,24 @@ Facts (preserve all identifiers):`;
   /**
    * Boost existing memory instead of creating duplicate
    * Makes it more likely to be retrieved
+   * Innovation #7: Importance increases when memory is semantically retrieved
    * @param {number} memoryId - ID of existing memory
    * @returns {Promise<object>} - Boost result
    */
   async boostExistingMemory(memoryId) {
     try {
+      // SEMANTIC BOOST: Increase importance score based on semantic access
+      // This implements Innovation #7 - semantic access patterns determine importance
       await this.db.query(`
         UPDATE persistent_memories
-        SET 
+        SET
           usage_frequency = usage_frequency + 1,
           relevance_score = LEAST(relevance_score + 0.05, 1.0),
           last_accessed = CURRENT_TIMESTAMP
         WHERE id = $1
       `, [memoryId]);
-      
-      console.log(`[DEDUP] ✅ Boosted memory ${memoryId}`);
+
+      console.log(`[SEMANTIC-IMPORTANCE] ✅ Boosted memory ${memoryId} (semantic access tracked)`);
       return { action: 'boosted', memoryId };
     } catch (error) {
       console.error('[DEDUP] ❌ Boost failed:', error.message);

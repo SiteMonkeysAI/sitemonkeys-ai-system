@@ -1,0 +1,323 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #480: [claude-fix] [CRITICAL] Implement True Semantic Intelligence - Replace All Keyword/Rules-Based Logic with Vector Operations
+
+Issue Description:
+<h2>GitHub Issue: Implement True Semantic Intelligence Across All Vector-Dependent Systems</h2>
+<p><strong>Title:</strong> <code>[CRITICAL] Implement True Semantic Intelligence - Replace All Keyword/Rules-Based Logic with Vector Operations</code></p>
+<p><strong>Labels:</strong> <code>bug</code>, <code>critical</code>, <code>memory-system</code>, <code>pgvector</code>, <code>semantic-intelligence</code></p>
+<hr>
+<h3>Context</h3>
+<p>This issue is a companion to the Semantic Retrieval fix. Once retrieval is working, these additional systems MUST also use true vector-based semantic intelligence — not keyword matching, not regex patterns, not rules pretending to be intelligence.</p>
+<p><strong>The Doctrine is clear:</strong></p>
+<blockquote>
+<p>"No rules pretending to be intelligence. Must use real semantic vector operations."</p>
+</blockquote>
+<hr>
+<h3>Systems Requiring True Semantic Intelligence</h3>
+<h4>1. Semantic De-Duplication Engine (Innovation #2)</h4>
+<p><strong>Current State (Likely Broken):</strong>
+The logs show deduplication detecting duplicates but the logic may be using text comparison:</p>
+<pre><code>[SEMANTIC-DEDUP] Duplicate detected, distance: 0.000
+[DEDUP-VALIDATE] Extracted EXISTING tokens: []
+[DEDUP-VALIDATE] Extracted NEW tokens: []
+</code></pre>
+<p>The <code>distance: 0.000</code> with empty token arrays suggests it's comparing text strings, not embeddings.</p>
+<p><strong>Required Implementation:</strong></p>
+<pre><code class="language-javascript">// CORRECT: Vector-based semantic deduplication
+async function findSemanticDuplicates(newEmbedding, userId, threshold = 0.1) {
+  const result = await pool.query(
+    `SELECT id, content, embedding &lt;=&gt; $1 as distance
+     FROM persistent_memories
+     WHERE user_id = $2
+       AND embedding IS NOT NULL
+       AND embedding &lt;=&gt; $1 &lt; $3
+     ORDER BY distance ASC
+     LIMIT 5`,
+    [newEmbedding, userId, threshold]
+  );
+  return result.rows;
+}
+</code></pre>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>[ ] Deduplication uses <code>embedding &lt;=&gt; embedding</code> for similarity comparison</li>
+<li>[ ] Threshold of ~0.1 or less indicates true semantic duplicate</li>
+<li>[ ] "My wife Sarah" and "Sarah, my spouse" detected as duplicates</li>
+<li>[ ] MEM-002 test passes</li>
+</ul>
+<hr>
+<h4>2. Age + Relevance Weighted Overwrite (Innovation #3)</h4>
+<p><strong>Current State:</strong>
+May be using stored <code>relevance</code> score (a number) rather than computing semantic relevance dynamically.</p>
+<p><strong>Required Implementation:</strong>
+When determining what to overwrite, relevance must be computed semantically:</p>
+<pre><code class="language-javascript">// CORRECT: Compute relevance based on recent query patterns
+async function computeMemoryRelevance(memoryEmbedding, recentQueryEmbeddings) {
+  // Average similarity to recent queries indicates ongoing relevance
+  let totalRelevance = 0;
+  for (const queryEmb of recentQueryEmbeddings) {
+    const result = await pool.query(
+      `SELECT $1::vector &lt;=&gt; $2::vector as distance`,
+      [memoryEmbedding, queryEmb]
+    );
+    totalRelevance += (1 - result.rows[0].distance); // Convert distance to similarity
+  }
+  return totalRelevance / recentQueryEmbeddings.length;
+}
+</code></pre>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>[ ] Overwrite decisions use semantic relevance, not just stored scores</li>
+<li>[ ] Frequently semantically-accessed memories protected</li>
+<li>[ ] MEM-003 test passes</li>
+</ul>
+<hr>
+<h4>3. Cross-Source Truth Reconciliation (Innovation #18)</h4>
+<p><strong>Current State:</strong>
+May be using text matching to find conflicting sources.</p>
+<p><strong>Required Implementation:</strong></p>
+<pre><code class="language-javascript">// CORRECT: Find semantically similar claims across sources
+async function findConflictingClaims(claimEmbedding, sources) {
+  const conflicts = [];
+  for (const source of sources) {
+    const result = await pool.query(
+      `SELECT id, content, source_class, verified_at,
+              embedding &lt;=&gt; $1 as distance
+       FROM persistent_memories
+       WHERE source_class = $2
+         AND embedding IS NOT NULL
+         AND embedding &lt;=&gt; $1 &lt; 0.3
+       ORDER BY distance ASC`,
+      [claimEmbedding, source]
+    );
+    if (result.rows.length &gt; 0) {
+      conflicts.push(...result.rows);
+    }
+  }
+  return conflicts;
+}
+</code></pre>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>[ ] Conflicting claims found via semantic similarity</li>
+<li>[ ] Same fact stated differently is recognized as same claim</li>
+<li>[ ] TRUTH-018 test passes</li>
+</ul>
+<hr>
+<h4>4. Contextual Relevance Ranking (Innovation #12)</h4>
+<p><strong>Current State:</strong>
+Logs suggest ranking by stored <code>relevance</code> field:</p>
+<pre><code class="language-javascript">// WRONG: Static relevance scoring
+ORDER BY relevance DESC, created_at DESC
+</code></pre>
+<p><strong>Required Implementation:</strong></p>
+<pre><code class="language-javascript">// CORRECT: Dynamic semantic relevance to current query
+const result = await pool.query(
+  `SELECT id, content, category, tokens, created_at,
+          embedding &lt;=&gt; $1 as semantic_distance,
+          importance_score,
+          -- Combined ranking: semantic similarity + importance
+          (1 - (embedding &lt;=&gt; $1)) * 0.7 + importance_score * 0.3 as combined_relevance
+   FROM persistent_memories
+   WHERE user_id = $2
+     AND embedding IS NOT NULL
+   ORDER BY combined_relevance DESC
+   LIMIT $3`,
+  [queryEmbedding, userId, limit]
+);
+</code></pre>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>[ ] Ranking uses live semantic similarity to current query</li>
+<li>[ ] Same query in different contexts can surface different results</li>
+<li>[ ] INJ-012 test passes</li>
+</ul>
+<hr>
+<h4>5. Mode-Aware Semantic Indexing (Innovation #8)</h4>
+<p><strong>Current State:</strong>
+May be filtering by mode/category BEFORE semantic search, potentially filtering out relevant results.</p>
+<p><strong>Required Implementation:</strong></p>
+<pre><code class="language-javascript">// CORRECT: Semantic search with mode as a ranking factor, not hard filter
+const result = await pool.query(
+  `SELECT id, content, category, mode, tokens,
+          embedding &lt;=&gt; $1 as distance,
+          CASE WHEN mode = $3 THEN 0.9 ELSE 0.5 END as mode_boost,
+          (1 - (embedding &lt;=&gt; $1)) * CASE WHEN mode = $3 THEN 0.9 ELSE 0.5 END as relevance
+   FROM persistent_memories
+   WHERE user_id = $2
+     AND embedding IS NOT NULL
+     AND (mode = $3 OR $4 = true)  -- allowCrossMode flag
+   ORDER BY relevance DESC
+   LIMIT $5`,
+  [queryEmbedding, userId, currentMode, allowCrossMode, limit]
+);
+</code></pre>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>[ ] Semantic similarity is primary ranking factor</li>
+<li>[ ] Mode provides boost, not hard filter (unless isolation required)</li>
+<li>[ ] Cross-mode transfer works when enabled</li>
+<li>[ ] INJ-008 test passes</li>
+<li>[ ] MODE-022 test passes</li>
+</ul>
+<hr>
+<h4>6. Memory Importance Scoring (Innovation #7)</h4>
+<p><strong>Current State:</strong>
+May be using mention counts or recency only.</p>
+<p><strong>Required Implementation:</strong>
+Importance should factor in semantic centrality — how often this memory is semantically relevant to queries:</p>
+<pre><code class="language-javascript">// CORRECT: Track semantic access patterns
+async function updateImportanceScore(memoryId, queryEmbedding) {
+  // Memory was semantically relevant to this query - boost importance
+  await pool.query(
+    `UPDATE persistent_memories
+     SET importance_score = LEAST(importance_score + 0.1, 1.0),
+         last_accessed = NOW(),
+         access_count = access_count + 1
+     WHERE id = $1`,
+    [memoryId]
+  );
+}
+</code></pre>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>[ ] Importance increases when memory is semantically retrieved</li>
+<li>[ ] High-importance memories prioritized in retrieval</li>
+<li>[ ] MEM-007 test passes</li>
+</ul>
+<hr>
+<h4>7. Adaptive Learning of User Priorities (Innovation #49)</h4>
+<p><strong>Current State:</strong>
+May not be tracking which semantic clusters user engages with.</p>
+<p><strong>Required Implementation:</strong></p>
+<pre><code class="language-javascript">// CORRECT: Track semantic patterns user cares about
+async function learnUserPriorities(userId, engagedMemoryIds) {
+  // Get embeddings of memories user engaged with
+  const result = await pool.query(
+    `SELECT AVG(embedding) as priority_centroid
+     FROM persistent_memories
+     WHERE id = ANY($1)`,
+    [engagedMemoryIds]
+  );
+  
+  // Store as user's priority vector for future retrieval boosting
+  await pool.query(
+    `UPDATE user_memory_profiles
+     SET priority_embedding = $1,
+         updated_at = NOW()
+     WHERE user_id = $2`,
+    [result.rows[0].priority_centroid, userId]
+  );
+}
+</code></pre>
+<p><strong>Acceptance Criteria:</strong></p>
+<ul>
+<li>[ ] System learns user's semantic interests over time</li>
+<li>[ ] Future retrievals boosted toward learned priorities</li>
+<li>[ ] UX-049 test passes</li>
+</ul>
+<hr>
+<h3>What This Issue Does NOT Cover</h3>
+<p>The first issue (Semantic Retrieval) must be fixed first. This issue assumes:</p>
+<ul>
+<li>✅ Basic semantic retrieval is working</li>
+<li>✅ Query embeddings are being generated</li>
+<li>✅ <code>embedding &lt;=&gt; query</code> syntax works</li>
+</ul>
+<p>This issue extends that foundation to all vector-dependent systems.</p>
+<hr>
+<h3>Doctrine Alignment Checklist</h3>
+<p>Every implementation in this issue MUST comply with:</p>
+<ul>
+<li>[ ] <strong>Innovation #2:</strong> Semantic deduplication uses vector distance &lt; 0.1</li>
+<li>[ ] <strong>Innovation #3:</strong> Overwrite logic uses semantic relevance</li>
+<li>[ ] <strong>Innovation #7:</strong> Importance scoring reflects semantic access patterns</li>
+<li>[ ] <strong>Innovation #8:</strong> Mode-aware indexing uses semantic similarity as primary factor</li>
+<li>[ ] <strong>Innovation #12:</strong> Relevance ranking is dynamic per-query, not static</li>
+<li>[ ] <strong>Innovation #18:</strong> Conflict detection uses semantic similarity</li>
+<li>[ ] <strong>Innovation #49:</strong> Priority learning uses embedding centroids</li>
+<li>[ ] <strong>Injection Doctrine:</strong> All injected content has provenance</li>
+<li>[ ] <strong>Token Efficiency Doctrine:</strong> All operations respect token budgets</li>
+<li>[ ] <strong>Memory &amp; Intelligence Doctrine:</strong> "Compressed meaning, not accumulated text"</li>
+</ul>
+<hr>
+<h3>Anti-Patterns to Eliminate</h3>
+<p>Search codebase for and REMOVE/REPLACE:</p>
+<pre><code class="language-javascript">// ❌ WRONG: Keyword matching
+if (content.includes(keyword))
+
+// ❌ WRONG: Regex pattern matching for semantic tasks
+if (/pattern/.test(content))
+
+// ❌ WRONG: Static relevance scores
+ORDER BY relevance DESC
+
+// ❌ WRONG: Text comparison for deduplication
+if (existingContent === newContent)
+
+// ❌ WRONG: Substring matching
+if (memory.content.toLowerCase().includes(query.toLowerCase()))
+</code></pre>
+<p>Replace with vector operations:</p>
+<pre><code class="language-javascript">// ✅ CORRECT: Semantic similarity
+embedding &lt;=&gt; query_embedding
+
+// ✅ CORRECT: Distance threshold
+WHERE embedding &lt;=&gt; $1 &lt; 0.3
+
+// ✅ CORRECT: Dynamic ranking
+ORDER BY embedding &lt;=&gt; $query ASC
+</code></pre>
+<hr>
+<h3>Testing Requirements</h3>
+<p>After implementation, ALL of these tests must pass:</p>
+
+Test ID | Test Name | Innovation
+-- | -- | --
+MEM-002 | Semantic deduplication | #2
+MEM-003 | Supersession | #3
+MEM-004 | Compression preserves facts | #4
+MEM-006 | Pinned memory persists | #6
+MEM-007 | Importance prioritization | #7
+INJ-008 | Mode-aware retrieval | #8
+INJ-012 | Relevance ranking | #12
+TRUTH-018 | Source reconciliation | #18
+MODE-022 | Cross-mode transfer | #22
+UX-044 | Cross-session continuity | #44
+UX-046 | Memory visibility | #46
+UX-049 | Adaptive learning | #49
+
+
+<p><strong>Target: 100% pass rate (53/53 tests)</strong></p>
+<hr>
+<h3>Critical Constraints</h3>
+<ol>
+<li><strong>No keyword matching for semantic tasks</strong> — If it's not using <code>&lt;=&gt;</code> operator, it's wrong</li>
+<li><strong>No rules pretending to be intelligence</strong> — Pattern matching is not semantic understanding</li>
+<li><strong>Production-grade only</strong> — No placeholders, no "basic version first"</li>
+<li><strong>No regressions</strong> — Currently passing tests must continue to pass</li>
+<li><strong>Token efficiency</strong> — All operations must respect budget limits</li>
+</ol>
+<hr>
+<h3>Priority</h3>
+<p><strong>CRITICAL</strong> — This completes the semantic intelligence foundation. Without this, the system is "rules pretending to be intelligence."</p>
+<hr>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
