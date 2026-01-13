@@ -412,16 +412,19 @@ export async function storeWithSupersession(pool, memoryData) {
     try {
       await client.query('BEGIN');
 
-      // Lock any existing current facts with same fingerprint for this user/mode
+      // Lock any existing current facts with same fingerprint for this user
+      // Note: We don't filter by mode to ensure ALL memories with this fingerprint are superseded
+      // across all modes (e.g., salary stored in truth-general should be superseded even if
+      // new salary comes in via a different mode)
       const existing = await client.query(`
         SELECT id, content, fact_fingerprint
         FROM persistent_memories
         WHERE user_id = $1
-          AND mode = $2
-          AND fact_fingerprint = $3
+          AND fact_fingerprint = $2
           AND is_current = true
+          AND pinned = false
         FOR UPDATE
-      `, [userId, mode, factFingerprint]);
+      `, [userId, factFingerprint]);
 
       // CRITICAL: Mark old facts as not current BEFORE inserting new fact
       // This prevents violating the unique constraint idx_one_current_fact
@@ -437,8 +440,14 @@ export async function storeWithSupersession(pool, memoryData) {
           WHERE id = ANY($1::integer[])
         `, [oldIds]);
 
-        console.log(`[SUPERSESSION] Marked ${existing.rows.length} old facts as not current`);
-        console.log(`[SUPERSESSION]    Old IDs: ${oldIds.join(', ')}`);
+        console.log(`[SUPERSESSION] Marked ${existing.rows.length} old memories as not current`);
+        console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
+        console.log(`[SUPERSESSION]    Superseded IDs: ${oldIds.join(', ')}`);
+
+        // Log content preview for debugging
+        existing.rows.forEach((row, idx) => {
+          console.log(`[SUPERSESSION]    Memory ${row.id}: "${row.content.substring(0, 60)}..."`);
+        });
       }
 
       // Insert new memory (id is INTEGER with sequence, auto-generated)
@@ -470,7 +479,12 @@ export async function storeWithSupersession(pool, memoryData) {
           WHERE id = ANY($2::integer[])
         `, [newId, oldIds]);
 
-        console.log(`[SUPERSESSION] ✅ Replaced ${oldIds.length} old facts with ID ${newId}`);
+        console.log(`[SUPERSESSION] ✅ Comprehensive supersession complete`);
+        console.log(`[SUPERSESSION]    New memory ID: ${newId}`);
+        console.log(`[SUPERSESSION]    Superseded ${oldIds.length} old memories: ${oldIds.join(', ')}`);
+        console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
+      } else {
+        console.log(`[SUPERSESSION] ✅ Stored new memory ID ${newId} (no existing memories to supersede)`);
         console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
       }
 
@@ -557,41 +571,55 @@ async function storeWithoutSupersession(pool, memoryData) {
 /**
  * Create the partial unique index that enforces one current fact per fingerprint.
  * This is the gold standard - prevents multiple current facts even under race conditions.
- * 
+ * NOTE: This constraint ensures uniqueness across ALL modes for a given user and fingerprint.
+ *
  * @param {object} pool - PostgreSQL pool
  * @returns {Promise<{ success: boolean, message: string }>}
  */
 export async function createSupersessionConstraint(pool) {
   try {
-    // Check if index already exists
-    const check = await pool.query(`
-      SELECT indexname FROM pg_indexes 
-      WHERE tablename = 'persistent_memories' 
+    // Check if old index exists (with mode) and drop it
+    const oldCheck = await pool.query(`
+      SELECT indexname FROM pg_indexes
+      WHERE tablename = 'persistent_memories'
       AND indexname = 'idx_one_current_fact'
     `);
 
-    if (check.rows.length > 0) {
-      return { success: true, message: 'Index already exists' };
+    if (oldCheck.rows.length > 0) {
+      console.log('[SUPERSESSION] 🔄 Dropping old index (with mode filter)...');
+      await pool.query(`DROP INDEX idx_one_current_fact`);
     }
 
-    // Create the partial unique index
-    await pool.query(`
-      CREATE UNIQUE INDEX idx_one_current_fact 
-      ON persistent_memories (user_id, mode, fact_fingerprint) 
-      WHERE is_current = true AND fact_fingerprint IS NOT NULL
+    // Check if new index already exists
+    const newCheck = await pool.query(`
+      SELECT indexname FROM pg_indexes
+      WHERE tablename = 'persistent_memories'
+      AND indexname = 'idx_one_current_fact_comprehensive'
     `);
 
-    console.log('[SUPERSESSION] ✅ Created unique constraint: idx_one_current_fact');
-    return { success: true, message: 'Index created successfully' };
+    if (newCheck.rows.length > 0) {
+      return { success: true, message: 'Comprehensive index already exists' };
+    }
+
+    // Create the partial unique index (without mode - comprehensive across all modes)
+    await pool.query(`
+      CREATE UNIQUE INDEX idx_one_current_fact_comprehensive
+      ON persistent_memories (user_id, fact_fingerprint)
+      WHERE is_current = true AND fact_fingerprint IS NOT NULL AND pinned = false
+    `);
+
+    console.log('[SUPERSESSION] ✅ Created comprehensive unique constraint: idx_one_current_fact_comprehensive');
+    console.log('[SUPERSESSION]    (enforces one current fact per user per fingerprint, across all modes)');
+    return { success: true, message: 'Comprehensive index created successfully' };
 
   } catch (error) {
     // If there are existing duplicates, we need to clean them first
     if (error.code === '23505') {
       console.error('[SUPERSESSION] ❌ Cannot create index - duplicate current facts exist');
-      return { 
-        success: false, 
+      return {
+        success: false,
         message: 'Duplicate current facts exist. Run cleanupDuplicateCurrentFacts() first.',
-        error: error.message 
+        error: error.message
       };
     }
     throw error;
@@ -601,37 +629,53 @@ export async function createSupersessionConstraint(pool) {
 /**
  * Clean up any duplicate current facts (keeps the newest one)
  * Run this BEFORE createSupersessionConstraint if there are existing duplicates.
- * 
+ * NOTE: This cleanup is comprehensive - marks old facts across ALL modes as not current.
+ *
  * @param {object} pool - PostgreSQL pool
  * @returns {Promise<{ success: boolean, cleaned: number }>}
  */
 export async function cleanupDuplicateCurrentFacts(pool) {
   try {
     // Find and fix duplicates - keep the newest, mark others as not current
+    // COMPREHENSIVE: partition by user_id and fingerprint only (not mode)
     const result = await pool.query(`
       WITH duplicates AS (
-        SELECT id, user_id, mode, fact_fingerprint, created_at,
+        SELECT id, user_id, fact_fingerprint, created_at,
                ROW_NUMBER() OVER (
-                 PARTITION BY user_id, mode, fact_fingerprint 
+                 PARTITION BY user_id, fact_fingerprint
                  ORDER BY created_at DESC
                ) as rn
         FROM persistent_memories
-        WHERE is_current = true 
+        WHERE is_current = true
           AND fact_fingerprint IS NOT NULL
+          AND pinned = false
       )
       UPDATE persistent_memories p
       SET is_current = false,
           superseded_at = NOW()
       FROM duplicates d
-      WHERE p.id = d.id 
+      WHERE p.id = d.id
         AND d.rn > 1
-      RETURNING p.id
+      RETURNING p.id, p.fact_fingerprint
     `);
 
     const cleanedCount = result.rowCount;
-    
+
     if (cleanedCount > 0) {
-      console.log(`[SUPERSESSION] 🧹 Cleaned ${cleanedCount} duplicate current facts`);
+      console.log(`[SUPERSESSION] 🧹 Comprehensive cleanup: Marked ${cleanedCount} duplicate current facts as superseded`);
+      console.log(`[SUPERSESSION]    (cleaned duplicates across all modes per fingerprint)`);
+
+      // Group by fingerprint for reporting
+      const byFingerprint = {};
+      result.rows.forEach(row => {
+        byFingerprint[row.fact_fingerprint] = (byFingerprint[row.fact_fingerprint] || 0) + 1;
+      });
+
+      Object.entries(byFingerprint).forEach(([fp, count]) => {
+        console.log(`[SUPERSESSION]    ${fp}: ${count} duplicates removed`);
+      });
+    } else {
+      console.log(`[SUPERSESSION] ✅ No duplicate current facts found`);
     }
 
     return { success: true, cleaned: cleanedCount };
