@@ -675,8 +675,9 @@ Facts (preserve all identifiers):`;
         console.log('[INTELLIGENT-STORAGE] 🔍 Checking for semantic supersession...');
         
         // Query existing memories in same category
+        // Cast vector type to text for JSON parsing in Node.js
         const existingMemories = await this.db.query(`
-          SELECT id, content, embedding
+          SELECT id, content, embedding::text as embedding
           FROM persistent_memories
           WHERE user_id = $1
             AND category_name = $2

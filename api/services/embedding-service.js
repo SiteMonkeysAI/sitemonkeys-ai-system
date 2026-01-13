@@ -146,15 +146,19 @@ export async function embedMemory(pool, memoryId, content, options = {}) {
   if (result.success) {
     // Success: store embedding and mark as ready
     try {
+      // Convert embedding array to JSON string for vector(1536) type
+      // pgvector expects JSON array format: "[0.1,0.2,0.3,...]"
+      const embeddingStr = JSON.stringify(result.embedding);
+
       await pool.query(`
-        UPDATE persistent_memories 
-        SET 
-          embedding = $1::float4[],
+        UPDATE persistent_memories
+        SET
+          embedding = $1::vector(1536),
           embedding_status = 'ready',
           embedding_updated_at = NOW(),
           embedding_model = $2
         WHERE id = $3
-      `, [result.embedding, result.model, memoryId]);
+      `, [embeddingStr, result.model, memoryId]);
 
       console.log(`[EMBEDDING] ✅ Generated for memory ${memoryId} (${result.timeMs}ms)`);
       

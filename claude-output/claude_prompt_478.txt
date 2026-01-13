@@ -1,0 +1,174 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #478: [claude-fix] [CRITICAL] Semantic Memory Retrieval Returns 0 Results - pgvector Query Not Using Vector Similarity
+
+Issue Description:
+Title: [CRITICAL] Semantic Memory Retrieval Returns 0 Results - pgvector Query Not Using Vector Similarity
+Labels: bug, critical, memory-system, pgvector
+
+Problem Summary
+The semantic retrieval system is returning 0 memories for every query despite:
+
+✅ 2,060+ rows existing in persistent_memories table
+✅ pgvector extension enabled at database level
+✅ embedding column converted to vector(1536) type
+✅ Query embeddings being generated (evidenced by 350-430ms latency)
+
+This is causing 12 of 53 Innovation Tests to fail (79% pass rate → should be 100%).
+
+Evidence From Logs
+[SEMANTIC RETRIEVAL] ✅ Found 0 memories for "Good morning..." (431ms)
+[SEMANTIC RETRIEVAL] ✅ Found 0 memories for "Who should I vote for in the election?..." (420ms)
+[SEMANTIC RETRIEVAL] ✅ Found 0 memories for "What is 2 + 2?..." (356ms)
+The 350-430ms latency indicates OpenAI embedding generation IS happening. But the SQL query returns nothing.
+
+Root Cause Hypothesis
+The retrieval SQL is not using pgvector's cosine similarity operator.
+Current code likely does something like:
+javascriptconst result = await pool.query(
+  `SELECT id, content, category, relevance, tokens, created_at
+   FROM persistent_memories
+   WHERE user_id = $1 AND category = ANY($2)
+   ORDER BY relevance DESC, created_at DESC
+   LIMIT 50`,
+  [userId, categories]
+);
+It MUST do this instead:
+javascriptconst result = await pool.query(
+  `SELECT id, content, category, tokens, created_at,
+          embedding <=> $3 as distance
+   FROM persistent_memories
+   WHERE user_id = $1 
+     AND embedding IS NOT NULL
+   ORDER BY embedding <=> $3
+   LIMIT 50`,
+  [userId, categories, queryEmbedding]
+);
+```
+
+---
+
+### Files to Investigate
+
+Locate the function that logs `[SEMANTIC RETRIEVAL]` — this is where the bug lives. Likely locations:
+- `/api/core/memory/retrieval.js`
+- `/api/core/memory/semanticRetrieval.js`
+- Any file containing `SEMANTIC RETRIEVAL` or `semanticRetrieval`
+
+Search the codebase for:
+```
+"SEMANTIC RETRIEVAL"
+"Found 0 memories"
+"embedding <=>"
+"ORDER BY relevance"
+
+Required Fix
+
+Find the semantic retrieval function
+Ensure query embedding is generated — Verify the user's query is being converted to a 1536-dimension vector via OpenAI's embedding API before the SQL query
+Fix the SQL to use pgvector cosine similarity:
+
+sql   SELECT id, content, category, tokens, created_at,
+          embedding <=> $queryEmbedding as distance
+   FROM persistent_memories
+   WHERE user_id = $userId
+     AND embedding IS NOT NULL
+   ORDER BY embedding <=> $queryEmbedding ASC
+   LIMIT 50
+
+Ensure the query embedding is passed as a parameter — The embedding must be cast properly: $queryEmbedding::vector
+Add a reasonable similarity threshold (optional but recommended):
+
+sql   WHERE embedding <=> $queryEmbedding < 0.8
+(Lower distance = more similar. 0.8 is a reasonable threshold for relevance.)
+
+Doctrine Alignment Requirements
+Per the System Bible, this fix MUST comply with:
+Innovation #2 (Semantic De-Duplication):
+
+Deduplication must use embedding <=> other_embedding < 0.1 to detect semantic duplicates
+
+Innovation #9 (Token-Efficient Retrieval):
+
+Must achieve 300-600:1 efficiency ratio
+Retrieval must stay under 10,000 tokens
+
+Innovation #12 (Contextual Relevance Ranking):
+
+Must rank by genuine semantic similarity, not stored relevance scores
+ORDER BY embedding <=> query_embedding ASC (smaller distance = more relevant)
+
+Injection Doctrine - Gate 4 (Budget Gate):
+
+Selection loop must stop when token budget reached
+Never exceed token limits
+
+Memory & Intelligence Doctrine:
+
+"If retrieved memory is ignored, the system is broken"
+Memory retrieval must be semantic, not chronological
+
+
+Acceptance Criteria
+
+ [SEMANTIC RETRIEVAL] logs show non-zero results for relevant queries
+ MEM-002 (Semantic deduplication) test passes
+ MEM-003 (Supersession) test passes
+ MEM-004 (Compression) test passes
+ MEM-006 (Pinned memory) test passes
+ MEM-007 (Importance scoring) test passes
+ INJ-008 (Mode-aware retrieval) test passes
+ INJ-012 (Relevance ranking) test passes
+ TRUTH-018 (Source reconciliation) test passes
+ MODE-022 (Cross-mode transfer) test passes
+ UX-044 (Cross-session continuity) test passes
+ UX-046 (Memory visibility) test passes
+ UX-049 (Adaptive learning) test passes
+ All 53 Innovation Tests pass (100% pass rate)
+
+
+Testing the Fix
+After implementation, run this diagnostic query directly against the database:
+sql-- Verify embeddings exist
+SELECT COUNT(*) FROM persistent_memories WHERE embedding IS NOT NULL;
+
+-- Test vector similarity search (should return results)
+SELECT id, content, embedding <=> (
+  SELECT embedding FROM persistent_memories WHERE id = (
+    SELECT id FROM persistent_memories WHERE embedding IS NOT NULL LIMIT 1
+  )
+) as distance
+FROM persistent_memories
+WHERE embedding IS NOT NULL
+ORDER BY distance ASC
+LIMIT 5;
+Then re-run the Innovation Test Suite to verify all 12 failing tests now pass.
+
+Critical Constraints
+
+Production-grade code only — No placeholders, no "TODO" comments
+No new issues introduced — This fix must not break any currently-passing tests
+Token efficiency — Retrieval must respect budget limits per Doctrine
+Real semantic search — Must use actual vector operations, not keyword matching ("No rules pretending to be intelligence")
+
+
+Priority
+CRITICAL — This blocks core system functionality. 12 innovations are non-functional until this is resolved.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
