@@ -87,10 +87,15 @@ export class IntelligentMemoryStorage {
 
   /**
    * Detect fingerprint from EXTRACTED FACTS using semantic pattern matching
-   * This is the CRITICAL FIX for Issue #496
+   * This is the CRITICAL FIX for Issue #498
    *
    * Instead of running brittle regex on raw user input, we detect fingerprints
    * on the CLEANED/COMPRESSED facts that the system already extracts.
+   *
+   * DOCTRINE ALIGNMENT:
+   * - Genuine Intelligence (Doctrine 3): Uses semantic understanding on compressed facts
+   * - Innovation #2: Enables semantic deduplication by detecting canonical fact types
+   * - Innovation #3: Enables supersession by identifying updatable facts
    *
    * @param {string} facts - Extracted facts (compressed, cleaned content)
    * @returns {Promise<{ fingerprint: string|null, confidence: number, method: string }>}
@@ -100,82 +105,141 @@ export class IntelligentMemoryStorage {
       return { fingerprint: null, confidence: 0, method: 'invalid_input' };
     }
 
+    const factsLower = facts.toLowerCase();
     console.log('[SEMANTIC-FINGERPRINT] Analyzing facts:', facts.substring(0, 100));
 
-    // Semantic patterns that work on CLEANED facts (not raw user input)
-    // These patterns are MUCH simpler because facts are already compressed
-    const fingerprintPatterns = {
-      // Salary/Income/Compensation
-      'user_salary': {
-        keywords: /\b(salary|income|pay|compensation|earning|wage|paid)\b/i,
+    // CANONICAL FACT PATTERNS - Semantic, comprehensive detection
+    // These patterns work on CLEANED facts, not raw user input
+    // They detect semantic indicators (what the fact is about) + value patterns (specific values)
+    const canonicalPatterns = [
+      {
+        id: 'user_salary',
+        semanticIndicators: ['salary', 'income', 'pay', 'compensation', 'earning', 'wage', 'make', 'paid', 'raise', 'paying'],
+        // Using bounded patterns to prevent ReDoS vulnerability
+        // Pattern matches: $123, $1,234, $123.45, $1,234.56, 123k, 12345 (5-9 digits)
+        valuePatterns: [/\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?/, /\$\d+/, /\d{1,6}k/i, /\d{5,9}/],
         confidence: 0.90
       },
-      // Email
-      'user_email': {
-        keywords: /\b(email|e-mail)\b/i,
+      {
+        id: 'user_job_title',
+        semanticIndicators: ['job', 'position', 'role', 'title', 'work as', 'employed as', 'engineer', 'manager', 'developer', 'analyst', 'director'],
+        confidence: 0.85
+      },
+      {
+        id: 'user_employer',
+        semanticIndicators: ['company', 'employer', 'work at', 'employed by', 'organization', 'firm', 'working for'],
+        confidence: 0.85
+      },
+      {
+        id: 'user_phone_number',
+        semanticIndicators: ['phone', 'number', 'call', 'mobile', 'cell', 'telephone', 'reach'],
+        valuePatterns: [/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/, /\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/],
         confidence: 0.95
       },
-      // Phone
-      'user_phone_number': {
-        keywords: /\b(phone|cell|mobile|telephone)\b/i,
+      {
+        id: 'user_email',
+        semanticIndicators: ['email', 'e-mail', 'mail', 'contact'],
+        valuePatterns: [/[\w.-]+@[\w.-]+\.\w+/],
         confidence: 0.95
       },
-      // Name
-      'user_name': {
-        keywords: /\b(name)\b/i,
+      {
+        id: 'user_location_residence',
+        semanticIndicators: ['address', 'live', 'reside', 'location', 'home', 'house', 'moved', 'moving', 'based', 'from'],
         confidence: 0.85
       },
-      // Location/Address
-      'user_location_residence': {
-        keywords: /\b(live|reside|location|address|based|home|moved|moving)\b/i,
+      {
+        id: 'user_name',
+        semanticIndicators: ['name', 'called', 'i\'m', 'i am'],
         confidence: 0.85
       },
-      // Job Title
-      'user_job_title': {
-        keywords: /\b(job|work|position|role|title|occupation|profession)\b/i,
-        confidence: 0.85
+      {
+        id: 'user_allergy',
+        semanticIndicators: ['allergy', 'allergic', 'intolerant', 'cannot eat', 'reaction to', 'peanut', 'shellfish', 'lactose'],
+        confidence: 0.95  // HIGH - Safety critical
       },
-      // Company/Employer
-      'user_employer': {
-        keywords: /\b(company|employer|work at|work for)\b/i,
-        confidence: 0.85
+      {
+        id: 'user_medical',
+        semanticIndicators: ['medical', 'condition', 'diagnosis', 'disease', 'illness', 'health', 'doctor'],
+        confidence: 0.90  // HIGH - Health critical
       },
-      // Age/Birthday
-      'user_age': {
-        keywords: /\b(age|years old|born|birthday)\b/i,
+      {
+        id: 'user_age',
+        semanticIndicators: ['age', 'years old', 'born', 'birthday'],
+        valuePatterns: [/\d{1,3}\s*years/, /\d{1,3}\s*old/, /age\s*\d+/],
         confidence: 0.90
       },
-      // Marital Status
-      'user_marital_status': {
-        keywords: /\b(married|single|divorced|engaged|spouse|wife|husband)\b/i,
+      {
+        id: 'user_marital_status',
+        semanticIndicators: ['married', 'single', 'divorced', 'engaged', 'spouse', 'wife', 'husband', 'partner'],
         confidence: 0.90
       },
-      // Children
-      'user_children_count': {
-        keywords: /\b(child|children|kid|son|daughter)\b/i,
+      {
+        id: 'user_spouse_name',
+        semanticIndicators: ['wife', 'husband', 'spouse', 'partner', 'married to'],
         confidence: 0.85
       },
-      // Pet
-      'user_pet': {
-        keywords: /\b(pet|dog|cat|bird|fish)\b/i,
+      {
+        id: 'user_children_count',
+        semanticIndicators: ['child', 'children', 'kid', 'son', 'daughter'],
+        confidence: 0.85
+      },
+      {
+        id: 'user_pet',
+        semanticIndicators: ['pet', 'dog', 'cat', 'bird', 'fish', 'animal'],
         confidence: 0.80
       },
-      // Meeting/Appointment Time
-      'user_meeting_time': {
-        keywords: /\b(meeting|appointment|call|scheduled|rescheduled)\b/i,
+      {
+        id: 'user_meeting_time',
+        semanticIndicators: ['meeting', 'appointment', 'call', 'scheduled', 'rescheduled', 'moved', 'changed'],
+        valuePatterns: [/\d{1,2}:\d{2}/, /\d{1,2}\s?(am|pm)/i, /\d{1,2}pm/i],
         confidence: 0.90
+      },
+      {
+        id: 'user_favorite_color',
+        semanticIndicators: ['favorite color', 'favourite color', 'color', 'like', 'prefer'],
+        confidence: 0.80
+      },
+      {
+        id: 'user_timezone',
+        semanticIndicators: ['timezone', 'time zone', 'est', 'pst', 'cst', 'mst', 'utc', 'gmt'],
+        confidence: 0.85
       }
-    };
+    ];
 
-    // Check patterns against facts
-    for (const [fingerprint, pattern] of Object.entries(fingerprintPatterns)) {
-      if (pattern.keywords.test(facts)) {
-        console.log(`[SEMANTIC-FINGERPRINT] ✅ Detected ${fingerprint} from facts (confidence: ${pattern.confidence})`);
-        return {
-          fingerprint: fingerprint,
-          confidence: pattern.confidence,
-          method: 'semantic_facts'
-        };
+    // Semantic matching: Check for indicator presence + value patterns (if required)
+    for (const pattern of canonicalPatterns) {
+      const hasIndicator = pattern.semanticIndicators.some(ind => factsLower.includes(ind.toLowerCase()));
+
+      if (hasIndicator) {
+        // If value patterns exist, verify at least one matches
+        if (pattern.valuePatterns) {
+          const hasValue = pattern.valuePatterns.some(vp => vp.test(facts));
+          if (hasValue) {
+            console.log(`[SEMANTIC-FINGERPRINT] ✅ Detected ${pattern.id} from facts (indicator + value, confidence: ${pattern.confidence})`);
+            return {
+              fingerprint: pattern.id,
+              confidence: pattern.confidence,
+              method: 'semantic_facts_with_value'
+            };
+          } else {
+            // Indicator found but no value - assign with LOWER confidence
+            // This ensures supersession still triggers, just with less certainty
+            console.log(`[SEMANTIC-FINGERPRINT] ⚠️ Found ${pattern.id} indicator but no value pattern - assigning with reduced confidence`);
+            return {
+              fingerprint: pattern.id,
+              confidence: pattern.confidence * 0.6,  // 60% of normal confidence
+              method: 'semantic_indicator_only'
+            };
+          }
+        } else {
+          // No value pattern required, indicator is sufficient
+          console.log(`[SEMANTIC-FINGERPRINT] ✅ Detected ${pattern.id} from facts (semantic indicator, confidence: ${pattern.confidence})`);
+          return {
+            fingerprint: pattern.id,
+            confidence: pattern.confidence,
+            method: 'semantic_facts'
+          };
+        }
       }
     }
 
@@ -263,8 +327,22 @@ export class IntelligentMemoryStorage {
       console.log(`[INTELLIGENT-STORAGE] 📊 Final importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
 
       // Step 1: Extract facts (compression)
-      console.log('[INTELLIGENT-STORAGE] 📝 Extracting key facts...');
+      console.log('[FLOW] Step 1: Extracting key facts from conversation...');
       let facts = await this.extractKeyFacts(userMessage, sanitizedResponse);
+      console.log('[FLOW] Step 1: Facts extracted ✓');
+
+      // Validation: Check if numeric values from input survived extraction
+      // Using bounded patterns to prevent ReDoS vulnerability
+      // Pattern matches: $123, $1,234, $123.45, $1,234.56, 123k, 12345 (5-9 digits)
+      const amountPattern = /\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\$\d+|\d{1,6}k|\d{5,9}/i;
+      const inputHasAmount = amountPattern.test(userMessage);
+      const factsHaveAmount = amountPattern.test(facts);
+
+      if (inputHasAmount && !factsHaveAmount) {
+        console.warn('[EXTRACTION-WARNING] Input contained numeric value but extraction lost it');
+        console.warn('[EXTRACTION-WARNING] Input:', userMessage.substring(0, 100));
+        console.warn('[EXTRACTION-WARNING] Extracted:', facts);
+      }
 
       // GUARD: Never store empty or meaningless content - fallback to user message
       const isMeaningless = !facts ||
@@ -293,17 +371,18 @@ export class IntelligentMemoryStorage {
 
       console.log(`[INTELLIGENT-STORAGE] 📊 Compression: ${originalTokens} → ${compressedTokens} tokens (${ratio}:1)`);
 
-      // Step 1.5: Detect fingerprint on EXTRACTED FACTS (not raw input)
-      // This is the CRITICAL FIX for Issue #496 - semantic fingerprint detection
-      console.log('[INTELLIGENT-STORAGE] 🔍 Detecting fact fingerprint on extracted facts...');
+      // Step 2: Detect fingerprint on EXTRACTED FACTS (not raw input)
+      // This is the CRITICAL FIX for Issue #498 - semantic fingerprint detection
+      console.log('[FLOW] Step 2: Detecting fingerprint on extracted facts...');
       const fingerprintResult = await this.detectFingerprintFromFacts(facts);
+      console.log('[FLOW] Step 2: Fingerprint detected ✓', fingerprintResult);
       console.log(`[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`);
 
-      // Step 2: Check for duplicates (now also checks for supersession)
-      console.log('[INTELLIGENT-STORAGE] 🔍 Checking for similar memories...');
+      // Step 3: Check for duplicates (now also checks for supersession)
+      console.log('[FLOW] Step 3: Checking for similar memories and supersession candidates...');
       const existing = await this.findSimilarMemories(userId, category, facts);
 
-      // Step 3: Update existing OR create new
+      // Step 4: Update existing OR create new (with supersession handled internally)
       if (existing) {
         // findSimilarMemories returns non-null only for TRUE DUPLICATES (not supersessions)
         console.log(`[DEDUP] ♻️ Found similar memory (id=${existing.id}), boosting instead of duplicating`);
@@ -323,8 +402,8 @@ export class IntelligentMemoryStorage {
       } else {
         // No duplicate found - either new fact or supersession
         // If supersession, storeCompressedMemory will detect and mark old memory as superseded
-        console.log('[INTELLIGENT-STORAGE] ✨ Storing new compressed memory');
-        return await this.storeCompressedMemory(userId, category, facts, {
+        console.log('[FLOW] Step 4: Storing new memory (supersession handled internally if applicable)...');
+        const result = await this.storeCompressedMemory(userId, category, facts, {
           original_tokens: originalTokens,
           compressed_tokens: compressedTokens,
           compression_ratio: parseFloat(ratio),
@@ -333,6 +412,8 @@ export class IntelligentMemoryStorage {
           fingerprintConfidence: fingerprintResult.confidence,
           importance_score: importanceScore
         }, mode);
+        console.log('[FLOW] Step 4: Memory stored ✓');
+        return result;
       }
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Error:', error.message);
@@ -354,14 +435,17 @@ export class IntelligentMemoryStorage {
    */
   async extractKeyFacts(userMsg, aiResponse) {
     // IDENTIFIER-PRESERVING PROMPT: Compress while retaining unique tokens
-    const prompt = `Extract ONLY the essential facts from this conversation. Be extremely brief but PRESERVE all identifiers.
+    // CRITICAL: Must preserve financial amounts, salaries, and numeric values for supersession
+    const prompt = `Extract ONLY the essential facts from this conversation. Be extremely brief but PRESERVE all identifiers and numeric values.
 
 CRITICAL RULES:
 1. ALWAYS preserve exact alphanumeric identifiers (e.g., ECHO-123-ABC, ALPHA-456)
 2. ALWAYS preserve names exactly as written (e.g., Dr. Smith, Dr. FOXTROT-123)
 3. ALWAYS preserve numbers, codes, IDs, license plates, serial numbers VERBATIM
-4. Never generalize unique identifiers into descriptions like "identifier" or "code"
-5. If user says "My X is Y", output MUST contain Y exactly
+4. ALWAYS preserve salary amounts, prices, financial figures EXACTLY (e.g., $250,000, $95,000, $80K)
+5. ALWAYS preserve times, dates, and numeric values EXACTLY (e.g., 3pm, 4pm, Tuesday)
+6. Never generalize unique identifiers into descriptions like "identifier" or "code"
+7. If user says "My X is Y", output MUST contain Y exactly
 
 Examples:
 Input: "My license plate is ABC-123-XYZ"
@@ -372,16 +456,24 @@ Input: "My doctor is Dr. FOXTROT-789"
 Output: "Doctor: Dr. FOXTROT-789"
 NOT: "Has a doctor" or "Medical contact stored"
 
+Input: "I got a raise! They're now paying me $250,000"
+Output: "Salary: $250,000"
+NOT: "Got a raise" or "Higher salary"
+
+Input: "Meeting moved to 4pm"
+Output: "Meeting: 4pm"
+NOT: "Meeting rescheduled"
+
 Rules for compression:
 - Maximum 3-5 facts total
-- Each fact: 3-8 words (more if needed for identifiers)
-- Include ONLY: Names, numbers, specific entities, user statements
+- Each fact: 3-8 words (more if needed for identifiers or amounts)
+- Include ONLY: Names, numbers, specific entities, user statements, amounts, times
 - EXCLUDE: Questions, greetings, explanations, AI responses
 
 User: ${userMsg}
 Assistant: ${aiResponse}
 
-Facts (preserve all identifiers):`;
+Facts (preserve all identifiers and amounts):`;
 
     try {
       const response = await this.openai.chat.completions.create({
