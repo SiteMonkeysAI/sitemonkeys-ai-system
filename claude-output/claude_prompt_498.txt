@@ -1,0 +1,467 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #498: [claude-fix] Issue Type: Comprehensive Architecture Fix
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>🔴 CRITICAL: Semantic Fingerprint &amp; Supersession System Overhaul</h1>
+<h2>Issue Type: Comprehensive Architecture Fix</h2>
+<p><strong>Priority:</strong> CRITICAL<br>
+<strong>Affects:</strong> 7 Innovation Tests (MEM-002, MEM-003, MEM-006, MEM-007, TRUTH-018, UX-044, UX-046)<br>
+<strong>Pass Rate Impact:</strong> 87% → Target 100%</p>
+<hr>
+<h2>EXECUTIVE SUMMARY</h2>
+<p>The memory system's fingerprint detection mechanism is fundamentally broken, causing cascading failures across 7 of 53 innovation tests. All failures trace to a single root cause: <strong>fingerprint detection uses brittle pattern matching instead of semantic intelligence</strong>.</p>
+<p>The fix must be comprehensive, addressing the root cause while maintaining alignment with the Four Doctrine Documents (The Soul, The Innovations, The Enforcement Rules, The Operational Rules).</p>
+<hr>
+<h2>PART 1: COMPREHENSIVE ANALYSIS</h2>
+<h3>1.1 The Root Cause</h3>
+<p><strong>Current Broken Flow:</strong></p>
+<pre><code>User Input: "I got a raise! They're now paying me $250,000"
+     ↓
+Fingerprint Detection (runs ~50 regex patterns on RAW input)
+     ↓
+Patterns expect: "my salary is $X" — ALL FAIL
+     ↓
+No fingerprint assigned
+     ↓
+Memory stored WITHOUT fingerprint
+     ↓
+Supersession NEVER triggers (requires fingerprint match)
+     ↓
+Old salary ($200,000) stays is_current = true
+     ↓
+Query returns OLD value ❌
+</code></pre>
+<p><strong>BUT - The Intelligence Already Exists:</strong></p>
+<pre><code>User Input: "I got a raise! They're now paying me $250,000"
+     ↓
+Compression/Extraction System (WORKS PERFECTLY)
+     ↓
+Extracted Fact: "Salary: $250,000 per year"
+     ↓
+[This intelligence is NOT being used for fingerprinting]
+</code></pre>
+<h3>1.2 Doctrine Violations</h3>
+<p>The current implementation violates multiple core doctrines:</p>
+
+Doctrine | Violation
+-- | --
+Genuine Intelligence (Doctrine 3) | "Not rule-following. Real reasoning under constraints." Current: Brittle regex = rule-following, not reasoning
+Memory & Intelligence (Doctrine 5) | "Compressed, intelligence-distilled representations." Current: Intelligence exists but isn't leveraged for fingerprinting
+Innovation #2 (Semantic De-Duplication) | "Understands conceptual equivalence and meaning similarity, not just identical text." Current: Requires identical text patterns
+Innovation #3 (Supersession) | "Newer facts supersede older facts." Current: Supersession doesn't trigger without fingerprint
+
+
+<h3>2.4 Implementation: <code>detectFingerprintFromFacts()</code></h3>
+<pre><code class="language-javascript">/**
+ * Detect fingerprint from extracted facts using semantic intelligence.
+ * This runs AFTER fact extraction, operating on clean semantic content.
+ * 
+ * Doctrine Alignment:
+ * - Genuine Intelligence: Uses semantic understanding, not keywords
+ * - Memory &amp; Intelligence: Leverages existing compression intelligence
+ * - Innovation #2: Enables semantic deduplication
+ * 
+ * @param {string} extractedFacts - The compressed, extracted facts
+ * @returns {Object} { fingerprint: string|null, confidence: number, method: string }
+ */
+async function detectFingerprintFromFacts(extractedFacts) {
+  const facts = extractedFacts.toLowerCase();
+  
+  // CANONICAL FACT PATTERNS - Semantic, not keyword-based
+  const canonicalPatterns = [
+    {
+      id: 'user_salary',
+      semanticIndicators: ['salary', 'income', 'pay', 'compensation', 'earning', 'wage', 'make', 'paid'],
+      valuePatterns: [/\$[\d,]+/, /\d+k/i, /\d+,\d{3}/],
+      confidence: 0.90
+    },
+    {
+      id: 'user_job_title',
+      semanticIndicators: ['job', 'position', 'role', 'title', 'work as', 'employed as', 'engineer', 'manager', 'developer', 'analyst'],
+      confidence: 0.85
+    },
+    {
+      id: 'user_employer',
+      semanticIndicators: ['company', 'employer', 'work at', 'employed by', 'organization', 'firm'],
+      confidence: 0.85
+    },
+    {
+      id: 'user_phone',
+      semanticIndicators: ['phone', 'number', 'call', 'mobile', 'cell'],
+      valuePatterns: [/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/, /\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/],
+      confidence: 0.95
+    },
+    {
+      id: 'user_email',
+      semanticIndicators: ['email', 'mail', 'contact'],
+      valuePatterns: [/[\w.-]+@[\w.-]+\.\w+/],
+      confidence: 0.95
+    },
+    {
+      id: 'user_address',
+      semanticIndicators: ['address', 'live at', 'location', 'reside', 'home', 'house'],
+      confidence: 0.80
+    },
+    {
+      id: 'user_allergy',
+      semanticIndicators: ['allergy', 'allergic', 'intolerant', 'cannot eat', 'reaction to'],
+      confidence: 0.95  // HIGH - Safety critical
+    },
+    {
+      id: 'user_medical',
+      semanticIndicators: ['medical', 'condition', 'diagnosis', 'disease', 'illness', 'health'],
+      confidence: 0.90  // HIGH - Health critical
+    },
+    {
+      id: 'user_meeting',
+      semanticIndicators: ['meeting', 'appointment', 'schedule', 'calendar', 'event'],
+      valuePatterns: [/\d{1,2}:\d{2}/, /\d{1,2}\s?(am|pm)/i],
+      confidence: 0.85
+    },
+    {
+      id: 'user_preference',
+      semanticIndicators: ['prefer', 'favorite', 'like', 'enjoy', 'love'],
+      confidence: 0.70  // Lower - preferences are softer facts
+    },
+    {
+      id: 'user_relationship',
+      semanticIndicators: ['wife', 'husband', 'spouse', 'partner', 'married', 'relationship'],
+      confidence: 0.85
+    }
+  ];
+  
+  // Semantic matching: Check for indicator presence + value patterns
+  for (const pattern of canonicalPatterns) {
+    const hasIndicator = pattern.semanticIndicators.some(ind =&gt; facts.includes(ind));
+    
+    if (hasIndicator) {
+      // If value patterns exist, verify at least one matches
+      if (pattern.valuePatterns) {
+        const hasValue = pattern.valuePatterns.some(vp =&gt; vp.test(facts));
+        if (hasValue) {
+          return {
+            fingerprint: pattern.id,
+            confidence: pattern.confidence,
+            method: 'semantic_facts_with_value'
+          };
+        }
+      } else {
+        // No value pattern required, indicator is sufficient
+        return {
+          fingerprint: pattern.id,
+          confidence: pattern.confidence,
+          method: 'semantic_facts'
+        };
+      }
+    }
+  }
+  
+  return { fingerprint: null, confidence: 0, method: 'no_match' };
+}
+</code></pre>
+<h3>2.5 Implementation: Modified <code>storeWithIntelligence()</code></h3>
+<pre><code class="language-javascript">async function storeWithIntelligence(userId, content, category, options = {}) {
+  // Step 1: Sanitize and prepare content
+  const sanitizedContent = sanitizeContent(content);
+  
+  // Step 2: Calculate importance using semantic analyzer
+  const importanceResult = await calculateImportance(sanitizedContent, category);
+  
+  // Step 3: Extract key facts (THIS WORKS - leverage it)
+  const extractedFacts = await extractKeyFacts(sanitizedContent);
+  
+  // Step 4: NOW detect fingerprint from extracted facts (MOVED HERE)
+  // This is the critical fix - fingerprint detection uses cleaned semantic facts
+  const fingerprintResult = await detectFingerprintFromFacts(extractedFacts);
+  
+  console.log('[INTELLIGENT-STORAGE] Fingerprint detected:', fingerprintResult);
+  
+  // Step 5: Check for similar memories (deduplication)
+  const similarMemories = await findSimilarMemories(userId, extractedFacts, category);
+  
+  // Step 6: If fingerprint exists, check for supersession candidates
+  if (fingerprintResult.fingerprint) {
+    const supersessionCandidates = await findSupersessionCandidates(
+      userId, 
+      fingerprintResult.fingerprint
+    );
+    
+    if (supersessionCandidates.length &gt; 0) {
+      // Mark ALL matching memories as superseded (comprehensive supersession)
+      await markAsSuperseded(supersessionCandidates, {
+        supersededBy: 'new_memory_pending',
+        reason: 'newer_fact_with_matching_fingerprint',
+        fingerprint: fingerprintResult.fingerprint
+      });
+      
+      console.log('[SUPERSESSION] Marked', supersessionCandidates.length, 'memories as superseded');
+    }
+  }
+  
+  // Step 7: Store the new memory with fingerprint
+  const memoryId = await storeCompressedMemory({
+    userId,
+    content: extractedFacts,
+    category,
+    fingerprint: fingerprintResult.fingerprint,
+    fingerprintConfidence: fingerprintResult.confidence,
+    importance: importanceResult.score,
+    tokenCount: calculateTokens(extractedFacts),
+    mode: options.mode || 'truth-general',
+    isCurrent: true
+  });
+  
+  // Step 8: Generate embedding for semantic search
+  await generateEmbedding(memoryId, extractedFacts);
+  
+  return {
+    action: 'created',
+    memoryId,
+    fingerprint: fingerprintResult.fingerprint,
+    tokensUsed: calculateTokens(extractedFacts)
+  };
+}
+</code></pre>
+<h3>2.6 Implementation: Comprehensive Supersession</h3>
+<pre><code class="language-javascript">/**
+ * Find all memories that should be superseded by a new fact.
+ * Uses fingerprint matching for canonical facts.
+ * 
+ * @param {string} userId 
+ * @param {string} fingerprint - The canonical fact type
+ * @returns {Array} Memories to mark as superseded
+ */
+async function findSupersessionCandidates(userId, fingerprint) {
+  const query = `
+    SELECT id, content, created_at, fingerprint
+    FROM persistent_memories
+    WHERE user_id = $1
+      AND fingerprint = $2
+      AND is_current = true
+    ORDER BY created_at DESC
+  `;
+  
+  const result = await pool.query(query, [userId, fingerprint]);
+  return result.rows;
+}
+
+/**
+ * Mark memories as superseded (no longer current).
+ * This is comprehensive - ALL matching memories are marked.
+ * 
+ * @param {Array} memories - Memories to mark
+ * @param {Object} metadata - Supersession metadata
+ */
+async function markAsSuperseded(memories, metadata) {
+  const memoryIds = memories.map(m =&gt; m.id);
+  
+  const query = `
+    UPDATE persistent_memories
+    SET is_current = false,
+        superseded_at = NOW(),
+        superseded_reason = $2
+    WHERE id = ANY($1)
+  `;
+  
+  await pool.query(query, [memoryIds, metadata.reason]);
+  
+  // Log for telemetry
+  console.log('[SUPERSESSION] Marked', memoryIds.length, 'memories as superseded');
+  console.log('[SUPERSESSION] Reason:', metadata.reason);
+  console.log('[SUPERSESSION] Fingerprint:', metadata.fingerprint);
+}
+</code></pre>
+<h3>2.7 Implementation: Enhanced Deduplication</h3>
+<pre><code class="language-javascript">/**
+ * Check if new content is a semantic duplicate of existing memory.
+ * Uses fingerprint matching AND embedding similarity.
+ * 
+ * @param {string} userId 
+ * @param {string} content - Extracted facts
+ * @param {string} category 
+ * @returns {Object} { isDuplicate, existingMemoryId, action }
+ */
+async function checkForDuplicate(userId, content, fingerprint) {
+  // Method 1: Fingerprint exact match (fast)
+  if (fingerprint) {
+    const fingerprintMatch = await pool.query(`
+      SELECT id, content FROM persistent_memories
+      WHERE user_id = $1 AND fingerprint = $2 AND is_current = true
+    `, [userId, fingerprint]);
+    
+    if (fingerprintMatch.rows.length &gt; 0) {
+      // Same fingerprint = same canonical fact type
+      // This is an UPDATE, not a duplicate
+      return { isDuplicate: false, isUpdate: true, existingId: fingerprintMatch.rows[0].id };
+    }
+  }
+  
+  // Method 2: Embedding similarity (semantic)
+  const embedding = await generateEmbedding(null, content);
+  const similarMemories = await pool.query(`
+    SELECT id, content, 1 - (embedding &lt;=&gt; $2) as similarity
+    FROM persistent_memories
+    WHERE user_id = $1 AND is_current = true
+    ORDER BY embedding &lt;=&gt; $2
+    LIMIT 5
+  `, [userId, JSON.stringify(embedding)]);
+  
+  for (const memory of similarMemories.rows) {
+    if (memory.similarity &gt; 0.95) {
+      // Very high similarity = true duplicate
+      return { isDuplicate: true, existingId: memory.id, similarity: memory.similarity };
+    }
+  }
+  
+  return { isDuplicate: false, isUpdate: false };
+}
+</code></pre>
+<hr>
+<h2>PART 3: VERIFICATION &amp; TESTING</h2>
+<h3>3.1 Test Scenarios for Each Failing Innovation</h3>
+<p><strong>MEM-002: Semantic Deduplication</strong></p>
+<pre><code>Input 1: "I live in Chicago"
+Input 2: "My home is in Chicago"
+Input 3: "Chicago is where I'm based"
+Expected: Single consolidated memory, mention count = 3
+</code></pre>
+<p><strong>MEM-003: Supersession</strong></p>
+<pre><code>Input 1: "My salary is $80,000 per year"
+Input 2: "I got a raise! They're now paying me $95,000"
+Query: "What is my salary?"
+Expected: $95,000 ONLY (old value superseded)
+</code></pre>
+<p><strong>MEM-006: Pinned Memory</strong></p>
+<pre><code>Input: "CRITICAL: I'm allergic to peanuts - this is life-threatening" (pinned)
+Fill memory to capacity
+Query: "What are my allergies?"
+Expected: Peanut allergy persists regardless of memory pressure
+</code></pre>
+<p><strong>MEM-007: Priority (Safety over Preference)</strong></p>
+<pre><code>Input 1: "My favorite food is Thai cuisine"
+Input 2: "I have a severe peanut allergy"
+Query: "What should I know about my food preferences?"
+Expected: Allergy mentioned FIRST (safety-critical), then preference
+</code></pre>
+<p><strong>TRUTH-018: Conflicting Sources</strong></p>
+<pre><code>Input 1 (Monday): "Meeting is at 3pm on Tuesday"
+Input 2 (Tuesday): "Meeting moved to 4pm"
+Query: "What time is the meeting?"
+Expected: 4pm (newer information wins)
+</code></pre>
+<p><strong>UX-044: Cross-Session Continuity</strong></p>
+<pre><code>Session 1: "My favorite color is blue"
+[End session, start new session on different device]
+Query: "What's my favorite color?"
+Expected: "Blue" (memory persists across sessions)
+</code></pre>
+<p><strong>UX-046: Memory Visibility</strong></p>
+<pre><code>Store multiple memories across categories
+Call: GET /api/memory/user/{userId}
+Expected: Organized display by fingerprint/category, showing importance scores
+</code></pre>
+<h3>3.2 Regression Tests (Ensure No Degradation)</h3>
+<p>These tests must CONTINUE passing:</p>
+<ul>
+<li>✅ MEM-001: Persistent memory across sessions</li>
+<li>✅ MEM-004: Compression preserves key facts</li>
+<li>✅ MEM-005: Cross-session reconstruction</li>
+<li>✅ All 53 passing tests remain passing</li>
+</ul>
+<hr>
+<h2>PART 4: DOCTRINE ALIGNMENT CHECKLIST</h2>
+<p>Before merging, verify:</p>
+<h3>Soul Doctrine</h3>
+<ul>
+<li>[ ] System uses semantic intelligence, not keyword patterns</li>
+<li>[ ] Behavior embodies "caring family member" - remembers what matters</li>
+<li>[ ] Truth &gt; Helpfulness &gt; Engagement preserved</li>
+</ul>
+<h3>Genuine Intelligence Doctrine</h3>
+<ul>
+<li>[ ] No brittle regex patterns against raw input</li>
+<li>[ ] Fingerprint detection reasons about meaning</li>
+<li>[ ] Can handle natural language variations</li>
+</ul>
+<h3>Memory &amp; Intelligence Doctrine</h3>
+<ul>
+<li>[ ] Compressed, intelligence-distilled representations</li>
+<li>[ ] Supersession MUST apply to canonical facts</li>
+<li>[ ] Memory exists to improve reasoning</li>
+</ul>
+<h3>Innovation Compliance</h3>
+<ul>
+<li>[ ] #2 Semantic De-Duplication: Understands meaning similarity</li>
+<li>[ ] #3 Age + Relevance Overwrite: Supersession works correctly</li>
+<li>[ ] #6 Pinned Memory: Critical facts protected</li>
+<li>[ ] #7 Importance Scoring: Safety &gt; Preference</li>
+<li>[ ] #18 Cross-Source Reconciliation: Newer facts win</li>
+</ul>
+<hr>
+<h2>PART 5: IMPLEMENTATION NOTES FOR AUTOMATION</h2>
+<h3>For GitHub Copilot / Claude Code:</h3>
+<ol>
+<li><strong>DO NOT</strong> add new keyword-based patterns to fix individual tests</li>
+<li><strong>DO</strong> restructure the flow so fingerprint detection uses extracted facts</li>
+<li><strong>DO</strong> ensure supersession is comprehensive (marks ALL matching memories)</li>
+<li><strong>DO</strong> add logging at each step for debugging</li>
+<li><strong>DO</strong> maintain existing passing tests</li>
+<li><strong>DO NOT</strong> modify the fact extraction logic - it works correctly</li>
+</ol>
+<h3>File Modification Order:</h3>
+<ol>
+<li><code>semantic-fingerprint.js</code> - Add <code>detectFingerprintFromFacts()</code></li>
+<li><code>intelligent-storage.js</code> - Move fingerprint detection after extraction</li>
+<li><code>supersession.js</code> - Ensure comprehensive supersession marking</li>
+<li><code>deduplication.js</code> - Use fingerprints for semantic grouping</li>
+</ol>
+<h3>Testing Order:</h3>
+<ol>
+<li>Run MEM-003 first (supersession - most critical)</li>
+<li>Run full test suite</li>
+<li>Verify no regressions</li>
+<li>Check logs for fingerprint detection success</li>
+</ol>
+<hr>
+<h2>ACCEPTANCE CRITERIA</h2>
+<ul>
+<li>[ ] All 7 failing tests pass</li>
+<li>[ ] All 53 previously passing tests still pass</li>
+<li>[ ] Fingerprint detection logs show <code>semantic_facts</code> method, not regex</li>
+<li>[ ] Supersession logs show "marked X memories as superseded"</li>
+<li>[ ] No doctrine violations in implementation</li>
+<li>[ ] Response time remains under 3 seconds for memory operations</li>
+</ul>
+<hr>
+<h2>REFERENCES</h2>
+<ul>
+<li><strong>Handover Document:</strong> January 14, 2026 session analysis</li>
+<li><strong>System Bible:</strong> Four Doctrine Documents</li>
+<li><strong>Test Suite:</strong> 53 Innovation Test Suite</li>
+<li><strong>Railway Logs:</strong> Fingerprint detection failure evidence</li>
+</ul>
+<hr>
+<p><em>This issue embodies the doctrine principle: "Would the smartest, most caring person I know respond this way?" The fix must be comprehensive, intelligent, and aligned - not a series of keyword patches.</em></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
