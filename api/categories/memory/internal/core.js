@@ -116,6 +116,9 @@ class CoreSystem {
       // Schema Management & Migration
       await this.createDatabaseSchema();
 
+      // Fix sequence if out of sync (Issue #494)
+      await this.fixSequenceIfNeeded();
+
       // Ensure category tracking is initialized (Diagnostic #139 fix)
       await this.ensureCategoryTracking('anonymous');
 
@@ -216,6 +219,44 @@ class CoreSystem {
     } catch (error) {
       this.logger.error("Schema creation failed:", error);
       throw error;
+    }
+  }
+
+  async fixSequenceIfNeeded() {
+    this.logger.log("Checking if sequence needs fixing...");
+
+    try {
+      // Get the maximum ID currently in the table
+      const maxIdResult = await this.executeQuery(`
+        SELECT COALESCE(MAX(id), 0) as max_id FROM persistent_memories
+      `);
+      const maxId = parseInt(maxIdResult.rows[0].max_id) || 0;
+
+      // Get the current value of the sequence
+      const seqResult = await this.executeQuery(`
+        SELECT last_value FROM persistent_memories_id_seq
+      `);
+      const seqValue = parseInt(seqResult.rows[0].last_value) || 0;
+
+      this.logger.log(`Max ID in table: ${maxId}, Sequence value: ${seqValue}`);
+
+      // If sequence is behind the max ID, fix it
+      if (seqValue <= maxId) {
+        const newSeqValue = maxId + 1;
+        this.logger.log(`⚠️ Sequence is out of sync! Fixing: setting sequence to ${newSeqValue}`);
+
+        await this.executeQuery(`
+          SELECT setval('persistent_memories_id_seq', $1, false)
+        `, [newSeqValue]);
+
+        this.logger.log(`✅ Sequence fixed: next ID will be ${newSeqValue}`);
+      } else {
+        this.logger.log("✅ Sequence is in sync, no fix needed");
+      }
+    } catch (error) {
+      // Don't throw - this is a non-critical fix
+      this.logger.error("Failed to fix sequence (non-critical):", error);
+      this.logger.warn("System will continue, but you may encounter duplicate key errors");
     }
   }
 
