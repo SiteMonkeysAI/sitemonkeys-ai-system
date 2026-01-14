@@ -608,13 +608,36 @@ Facts (preserve user terminology + add synonyms):`;
     // Pattern to detect high-entropy identifiers
     const HIGH_ENTROPY_PATTERN = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/i;
 
-    // CRITICAL FIX #504: Pattern to detect lines with synonym lists (for retrieval matching)
-    const HAS_SYNONYMS = /\([^)]+\)/;
+    // CRITICAL FIX #504: Safe function to detect lines with synonym lists (for retrieval matching)
+    // Avoids ReDoS vulnerability from regex on user-controlled input
+    /**
+     * Detects if a line contains synonym lists in parentheses.
+     * Returns true if the line contains at least one occurrence of (content)
+     * where content is one or more characters.
+     * @param {string} line - The line to check for synonym patterns
+     * @returns {boolean} True if line contains (content) pattern with non-empty content
+     */
+    const hasSynonyms = (line) => {
+      // Find all opening parens and check if any have a valid closing paren after them
+      let pos = 0;
+      while (pos < line.length) {
+        const openParen = line.indexOf('(', pos);
+        if (openParen === -1) break;
+        
+        const closeParen = line.indexOf(')', openParen + 1);
+        if (closeParen !== -1 && closeParen > openParen + 1) {
+          return true; // Found valid (content) pattern
+        }
+        
+        pos = openParen + 1;
+      }
+      return false;
+    };
 
     // Separate lines by type: identifiers, synonyms, regular
     const identifierLines = lines.filter(line => HIGH_ENTROPY_PATTERN.test(line));
-    const synonymLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && HAS_SYNONYMS.test(line));
-    const regularLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && !HAS_SYNONYMS.test(line));
+    const synonymLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && hasSynonyms(line));
+    const regularLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && !hasSynonyms(line));
 
     // ADAPTIVE LIMIT: Allow more facts if they contain identifiers or synonyms
     const maxFacts = (identifierLines.length + synonymLines.length) > 0 ? 5 : 3;
@@ -671,7 +694,7 @@ Facts (preserve user terminology + add synonyms):`;
       if (HIGH_ENTROPY_PATTERN.test(line)) {
         return true; // Always keep lines with identifiers
       }
-      if (HAS_SYNONYMS.test(line)) {
+      if (hasSynonyms(line)) {
         return true; // Always keep lines with synonyms
       }
       return line.split(/\s+/).length >= 3;
@@ -686,7 +709,7 @@ Facts (preserve user terminology + add synonyms):`;
       }
 
       // CRITICAL FIX #504: Don't remove filler words from synonym lines - preserve full content
-      if (HAS_SYNONYMS.test(line)) {
+      if (hasSynonyms(line)) {
         return line;
       }
 
