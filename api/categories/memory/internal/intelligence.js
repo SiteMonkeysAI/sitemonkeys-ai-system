@@ -1646,6 +1646,7 @@ class IntelligenceSystem {
             exactMatchQuery = `
               SELECT * FROM persistent_memories
               WHERE user_id = $1
+              AND (is_current = true OR is_current IS NULL)
               AND (${queryTokens.map((_, i) => `content ILIKE $${i + 2}`).join(' OR ')})
               ORDER BY created_at DESC
               LIMIT 5
@@ -1656,6 +1657,7 @@ class IntelligenceSystem {
             exactMatchQuery = `
               SELECT * FROM persistent_memories
               WHERE user_id = $1
+              AND (is_current = true OR is_current IS NULL)
               AND content ~ '[A-Z]+-[A-Z]+-[0-9]{4,}|[A-Za-z0-9]{12,}'
               ORDER BY created_at DESC
               LIMIT 10
@@ -1892,8 +1894,9 @@ class IntelligenceSystem {
                  
                  ELSE relevance_score
                END as content_intelligence_score
-        FROM persistent_memories 
+        FROM persistent_memories
         WHERE user_id = $1 AND category_name = $2 AND relevance_score > 0
+        AND (is_current = true OR is_current IS NULL)
       `;
 
         let queryParams = [userId, primaryCategory];
@@ -2018,12 +2021,13 @@ class IntelligenceSystem {
 
         const memories = await this.coreSystem.withDbClient(async (client) => {
           const query_text = `
-            SELECT id, user_id, category_name, subcategory_name, content, token_count, 
+            SELECT id, user_id, category_name, subcategory_name, content, token_count,
                    relevance_score, usage_frequency, created_at, last_accessed, metadata
-            FROM persistent_memories 
+            FROM persistent_memories
             WHERE user_id = $1 AND category_name = $2
+            AND (is_current = true OR is_current IS NULL)
             AND NOT (
-              content::text ~* '\\b(remember anything|do you remember|what did i tell|can you recall)\\b' 
+              content::text ~* '\\b(remember anything|do you remember|what did i tell|can you recall)\\b'
               AND NOT content::text ~* '\\b(i have|i own|my \\w+\\s+(is|are|was)|name is|work at|live in)\\b'
             )
             ORDER BY relevance_score DESC, created_at DESC
@@ -2077,24 +2081,25 @@ class IntelligenceSystem {
           .join(' OR ');
         
         const query = `
-          SELECT id, user_id, category_name, subcategory_name, content, 
-                 token_count, relevance_score, usage_frequency, 
+          SELECT id, user_id, category_name, subcategory_name, content,
+                 token_count, relevance_score, usage_frequency,
                  created_at, last_accessed, metadata,
                  -- Count how many topics match (more matches = higher score)
                  (${topics.map((_, i) => `CASE WHEN content::text ILIKE $${i + 3}::text THEN 1 ELSE 0 END`).join(' + ')}) as topic_matches
-          FROM persistent_memories 
-          WHERE user_id = $1 
+          FROM persistent_memories
+          WHERE user_id = $1
             AND category_name != $2
             AND relevance_score > 0.3
+            AND (is_current = true OR is_current IS NULL)
             AND (${topicFilters})
             -- Filter out pure question memories
             AND NOT (
-              content::text ~* '\\b(remember anything|do you remember|what did i tell|can you recall)\\b' 
+              content::text ~* '\\b(remember anything|do you remember|what did i tell|can you recall)\\b'
               AND NOT content::text ~* '\\b(i have|i own|my \\w+\\s+(is|are|was)|name is|work at|live in)\\b'
             )
-          ORDER BY 
+          ORDER BY
             topic_matches DESC,  -- Prioritize memories matching multiple topics
-            relevance_score DESC, 
+            relevance_score DESC,
             created_at DESC
           LIMIT 10
         `;
@@ -3640,12 +3645,13 @@ class IntelligenceSystem {
           async (client) => {
             const result = await client.query(
               `
-            SELECT id, user_id, category_name, subcategory_name, content, token_count, 
+            SELECT id, user_id, category_name, subcategory_name, content, token_count,
                    relevance_score, usage_frequency, created_at, last_accessed, metadata
-            FROM persistent_memories 
+            FROM persistent_memories
             WHERE user_id = $1 AND category_name = $2 AND relevance_score > 0.3
+            AND (is_current = true OR is_current IS NULL)
             AND NOT (
-              content::text ~* '\\b(remember anything|do you remember|what did i tell|can you recall)\\b' 
+              content::text ~* '\\b(remember anything|do you remember|what did i tell|can you recall)\\b'
               AND NOT content::text ~* '\\b(i have|i own|my \\w+\\s+(is|are|was)|name is|work at|live in)\\b'
             )
             ORDER BY relevance_score DESC, created_at DESC
