@@ -68,9 +68,13 @@ function expandQuery(query) {
 
     // Job/Work terms
     'job': ['work', 'career', 'role', 'position', 'title', 'occupation', 'employed'],
-    'work': ['job', 'career', 'role', 'position', 'title', 'employed'],
+    'work': ['job', 'career', 'role', 'position', 'title', 'employed', 'company', 'employer'],
     'title': ['job', 'position', 'role', 'work', 'career'],
     'position': ['job', 'title', 'role', 'work', 'career'],
+    'employment': ['work', 'job', 'company', 'employer', 'workplace', 'office'],
+    'place': ['location', 'city', 'address', 'where', 'office', 'workplace'],
+    'company': ['employer', 'work', 'job', 'workplace', 'organization'],
+    'employer': ['company', 'work', 'job', 'workplace', 'organization'],
 
     // Health/Medical terms
     'allergy': ['allergic', 'intolerant', 'reaction', 'sensitive'],

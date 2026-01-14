@@ -1,0 +1,263 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #509: [claude-fix] Comprehensive Fix for All Remaining Test Failures
+
+Issue Description:
+# [claude-fix] Comprehensive Fix for All Remaining Test Failures
+
+## Summary
+
+This issue addresses **9 total test failures** across the Innovation Test Suite (53 features) and Supersession Test Suite.
+
+**Current Status:**
+- Innovation Suite: 53/60 passing (88%)
+- Supersession Suite: 8/10 passing (80%)
+- **Target: 100% pass rate**
+
+---
+
+## FAILURE CATEGORY A: Fingerprint Detection Gaps
+
+### Failures Affected:
+- **Supersession Test 3**: Natural language "90k" not extracted
+- **Supersession Test 5**: Location not superseding (Seattle → Austin)
+- **MEM-003**: Salary supersession failing in Innovation Suite
+
+### Root Cause
+
+The fingerprint detection in `api/memory/intelligent-storage.js` is missing patterns for:
+
+1. **Salary without dollar sign**: "90k", "75k" not matching `user_salary`
+2. **Location/relocation**: No `user_location` fingerprint exists
+3. **Casual phrasing**: "giving me 90k now" not being prioritized over "got promoted"
+
+### Fix Required
+
+**File: `api/memory/intelligent-storage.js`**
+
+In the `detectSemanticFingerprint()` function (around line 200-250), add:
+
+```javascript
+// Add to fingerprint patterns object:
+const fingerprintPatterns = {
+  // EXISTING patterns...
+  
+  // ADD: Enhanced salary detection
+  user_salary: {
+    indicators: [
+      'salary', 'income', 'compensation', 'pay', 'earn', 'make', 'making',
+      'wage', 'hourly', 'annual', 'yearly', 'per year', 'a year'
+    ],
+    valuePatterns: [
+      /\$[\d,]+/,                    // $75,000
+      /\d+k\b/i,                     // 90k, 75K
+      /\d{2,3},?\d{3}/,              // 75000 or 75,000
+      /\d+\s*(thousand|k)/i          // 90 thousand
+    ],
+    updateIndicators: [
+      'increased', 'raised', 'bumped', 'promoted', 'giving me', 'now making',
+      'now earning', 'went up', 'raise to', 'new salary'
+    ]
+  },
+  
+  // ADD: New location fingerprint
+  user_location: {
+    indicators: [
+      'live', 'living', 'moved', 'moving', 'relocate', 'relocated',
+      'based', 'home', 'residence', 'address', 'city', 'town', 'state'
+    ],
+    updateIndicators: [
+      'moved to', 'just moved', 'relocated to', 'moving to', 'new home',
+      'transferred to', 'now living', 'now based'
+    ],
+    valuePatterns: [
+      /(?:in|to|at)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?(?:,\s*[A-Z]{2})?)/  // "in Austin, TX"
+    ]
+  }
+};
+```
+
+**File: `api/memory/intelligent-storage.js`**
+
+In the extraction prompt (around line 460), add these rules AFTER the existing update rules:
+
+```javascript
+// Add after rule 12:
+13. LOCATION UPDATES supersede old locations:
+   - "moved to Austin" → Current location: Austin (not previous city)
+   - "relocated to Denver" → Current location: Denver
+   - "now living in Seattle" → Current location: Seattle
+   - The words "moved", "relocated", "now living" signal NEW location
+
+14. SALARY VALUES without $ are still salary:
+   - "90k" = $90,000
+   - "75k a year" = $75,000/year
+   - "making 85" in salary context = $85,000
+   - Always extract the NUMERIC VALUE as income
+
+// Add examples:
+Input User: "Just moved to Austin, Texas for a new job" | AI: "That's exciting..."
+Output: "Location: Austin Texas (home residence city moved relocated)"
+NOT: Historical context about previous location
+
+Input User: "They're giving me 90k now" | AI: "Congratulations..."
+Output: "Income: 90k ($90,000 salary pay compensation)"
+NOT: "Got promoted" without the salary value
+```
+
+---
+
+## FAILURE CATEGORY B: Test-Specific Issues
+
+### MEM-002: Semantic deduplication test failing
+**Response**: "I don't have enough information about your current place of employment"
+
+**Root Cause**: The test stores employment info but query doesn't trigger retrieval
+
+**Fix**: In `api/services/semantic-retrieval.js`, add query expansion:
+```javascript
+'employment': ['work', 'job', 'company', 'employer', 'workplace', 'office'],
+'place': ['location', 'city', 'address', 'where']
+```
+
+### MEM-007: Allergy not prioritized over preference
+**Response**: Shows preferences without prioritizing safety info
+
+**Root Cause**: `user_allergy` fingerprint should have higher importance weight
+
+**Fix**: In `api/memory/intelligent-storage.js`, ensure allergy fingerprint has `priority: 'critical'`:
+```javascript
+user_allergy: {
+  indicators: ['allergy', 'allergic', 'anaphylaxis', 'intolerant', 'sensitivity'],
+  priority: 'critical',  // ADD THIS
+  importance: 1.0        // Maximum importance
+}
+```
+
+### MODE-022: Cross-mode context not transferring
+**Response**: "I don't have enough information" when switching modes
+
+**Root Cause**: Mode transition not preserving shared memory context
+
+**Fix**: In `api/core/orchestrator.js`, ensure `allowCrossMode: true` is respected during mode switches:
+```javascript
+// In memory retrieval section, ensure cross-mode is enabled:
+const memories = await semanticRetrieval.retrieve({
+  userId,
+  query,
+  mode: currentMode,
+  allowCrossMode: true,  // Must be true for transfers
+  includeSharedMemories: true  // ADD: explicitly include shared
+});
+```
+
+### ARCH-035: Source code "exposure" false positive
+**Response**: "I'm sorry for any confusion, but as an AI developed by OpenAI, I don't have a server.js file..."
+
+**Root Cause**: GPT-4 is correctly refusing, but test is flagging the response incorrectly
+
+**Fix**: This is actually CORRECT behavior - GPT-4 should not expose source code. The test validation needs adjustment, not the system. Mark this test as reviewing test logic, not system behavior.
+
+### UX-044: Cross-session memory failing
+**Response**: "Your favorite color is blue" (old info, not new)
+
+**Root Cause**: Session isolation preventing cross-session retrieval during test
+
+**Fix**: Ensure test is using consistent `userId` and waiting for async storage to complete. The test may need longer delays (increase from 2s to 3s between store and query).
+
+### UX-046: Memory visibility failing  
+**Response**: Shows monkey information but not in visibility format
+
+**Root Cause**: No `/api/memory/view` endpoint or the test expects specific format
+
+**Fix**: This requires a dedicated endpoint for user-facing memory display:
+```javascript
+// Add endpoint: GET /api/memory/view/:userId
+// Returns formatted list of stored memories for user review
+```
+
+---
+
+## Implementation Order
+
+1. **Phase 1 - Fingerprint Fixes** (addresses 4 failures)
+   - Add `user_location` fingerprint
+   - Enhance `user_salary` with k-format detection
+   - Add extraction prompt rules for location/salary updates
+   - Add query expansion for employment terms
+
+2. **Phase 2 - Priority/Importance Fixes** (addresses 2 failures)
+   - Add `priority: 'critical'` to allergy fingerprint
+   - Ensure critical facts get higher retrieval weight
+
+3. **Phase 3 - Mode & Session Fixes** (addresses 2 failures)
+   - Verify cross-mode memory transfer
+   - Add `includeSharedMemories` option
+
+4. **Phase 4 - Test Adjustments** (addresses 1 failure)
+   - Review ARCH-035 test logic (may be false positive)
+
+---
+
+## Expected Results After Fix
+
+### Supersession Suite: 10/10 (100%)
+- ✅ Test 3: "90k now" extracts as $90,000 salary
+- ✅ Test 5: "moved to Austin" supersedes Seattle
+
+### Innovation Suite: 60/60+ (100%)
+- ✅ MEM-002: Deduplication works with query expansion
+- ✅ MEM-003: Salary supersession with k-format
+- ✅ MEM-007: Allergy prioritized via critical flag
+- ✅ MODE-022: Cross-mode transfer enabled
+- ✅ ARCH-035: Review test logic (likely false positive)
+- ✅ UX-044: Cross-session with proper delays
+- ✅ UX-046: Memory visibility endpoint
+
+---
+
+## Files to Modify
+
+1. `api/memory/intelligent-storage.js`
+   - Add `user_location` fingerprint pattern
+   - Enhance `user_salary` with k-format detection
+   - Add extraction rules 13-14 for location/salary
+   - Add priority flag to `user_allergy`
+
+2. `api/services/semantic-retrieval.js`
+   - Add 'employment' and 'place' query expansions
+
+3. `api/core/orchestrator.js`
+   - Ensure `includeSharedMemories: true` for cross-mode
+
+4. Test suite (review only)
+   - ARCH-035 may need test logic adjustment
+
+---
+
+## Do NOT Change
+
+- Similarity thresholds (working correctly)
+- Supersession logic (working correctly for detected fingerprints)
+- Deduplication logic (working correctly)
+- Core embedding generation
+
+The issues are all about **detection** (fingerprints, query expansion) and **prioritization** (critical flags), not the underlying supersession/dedup mechanics.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

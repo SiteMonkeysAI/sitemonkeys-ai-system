@@ -114,10 +114,10 @@ export class IntelligentMemoryStorage {
     const canonicalPatterns = [
       {
         id: 'user_salary',
-        semanticIndicators: ['salary', 'income', 'pay', 'compensation', 'earning', 'wage', 'make', 'paid', 'raise', 'paying'],
+        semanticIndicators: ['salary', 'income', 'pay', 'compensation', 'earning', 'wage', 'make', 'paid', 'raise', 'paying', 'giving', 'bumped', 'increased', 'promoted'],
         // Using bounded patterns to prevent ReDoS vulnerability
-        // Pattern matches: $123, $1,234, $123.45, $1,234.56, 123k, 12345 (5-9 digits)
-        valuePatterns: [/\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?/, /\$\d+/, /\d{1,6}k/i, /\d{5,9}/],
+        // Pattern matches: $123, $1,234, $123.45, $1,234.56, 123k, 90k, 12345 (5-9 digits)
+        valuePatterns: [/\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?/, /\$\d+/, /\d{1,6}k\b/i, /\d{5,9}/],
         confidence: 0.90
       },
       {
@@ -143,8 +143,11 @@ export class IntelligentMemoryStorage {
         confidence: 0.95
       },
       {
-        id: 'user_location_residence',
-        semanticIndicators: ['address', 'live', 'reside', 'location', 'home', 'house', 'moved', 'moving', 'based', 'from'],
+        id: 'user_location',
+        semanticIndicators: ['address', 'live', 'reside', 'location', 'home', 'house', 'moved', 'moving', 'based', 'from', 'relocate', 'relocated', 'city', 'town', 'state'],
+        // Value patterns are optional - location is often detected by semantic indicators alone
+        // Pattern matches city names like "Austin", "Austin Texas", "Seattle, WA"
+        valuePatterns: [/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?(?:,?\s*[A-Z]{2})?\b/],
         confidence: 0.85
       },
       {
@@ -154,7 +157,8 @@ export class IntelligentMemoryStorage {
       },
       {
         id: 'user_allergy',
-        semanticIndicators: ['allergy', 'allergic', 'intolerant', 'cannot eat', 'reaction to', 'peanut', 'shellfish', 'lactose'],
+        semanticIndicators: ['allergy', 'allergic', 'intolerant', 'cannot eat', 'reaction to', 'peanut', 'shellfish', 'lactose', 'anaphylaxis', 'sensitivity'],
+        priority: 'critical',  // CRITICAL - Safety critical
         confidence: 0.95  // HIGH - Safety critical
       },
       {
@@ -473,6 +477,18 @@ CRITICAL RULES:
    - "Was $50k, now $70k" → Income: $70k (ignore $50k)
    - "Increased from $60k to $80k" → Income: $80k (ignore $60k)
 
+13. LOCATION UPDATES supersede old locations:
+   - "moved to Austin" → Current location: Austin (not previous city)
+   - "relocated to Denver" → Current location: Denver
+   - "now living in Seattle" → Current location: Seattle
+   - The words "moved", "relocated", "now living" signal NEW location
+
+14. SALARY VALUES without $ are still salary:
+   - "90k" = $90,000
+   - "75k a year" = $75,000/year
+   - "making 85" in salary context = $85,000
+   - Always extract the NUMERIC VALUE as income
+
 Examples:
 Input User: "I make 55k a year" | AI: "That's a good starting salary..."
 Output: "Income: make 55k ($55,000/year salary pay compensation earnings)"
@@ -507,6 +523,14 @@ NOT: "Got promoted" without the salary value
 Input User: "Was making 50k, now I'm at 75k" | AI: "Nice raise..."
 Output: "Income: 75k ($75,000 salary pay compensation)"
 NOT: Both values or just the old value
+
+Input User: "Just moved to Austin, Texas for a new job" | AI: "That's exciting..."
+Output: "Location: Austin Texas (home residence city moved relocated)"
+NOT: Historical context about previous location
+
+Input User: "They're giving me 90k now" | AI: "Congratulations..."
+Output: "Income: 90k ($90,000 salary pay compensation)"
+NOT: "Got promoted" without the salary value
 
 Rules for compression:
 - Maximum 3-5 facts total
