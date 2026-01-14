@@ -115,7 +115,9 @@ export class IntelligentMemoryStorage {
       {
         id: 'user_salary',
         semanticIndicators: ['salary', 'income', 'pay', 'compensation', 'earning', 'wage', 'make', 'paid', 'raise', 'paying'],
-        valuePatterns: [/\$[\d,]+/, /\d+k/i, /\d+,\d{3}/, /\d{5,}/],
+        // Using bounded patterns to prevent ReDoS vulnerability
+        // Pattern matches: $123, $1,234, $123.45, $1,234.56, 123k, 12345 (5-9 digits)
+        valuePatterns: [/\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?/, /\$\d+/, /\d{1,6}k/i, /\d{5,9}/],
         confidence: 0.90
       },
       {
@@ -330,8 +332,11 @@ export class IntelligentMemoryStorage {
       console.log('[FLOW] Step 1: Facts extracted ✓');
 
       // Validation: Check if numeric values from input survived extraction
-      const inputHasAmount = /\$[\d,]+|\d+k|\d{5,}/i.test(userMessage);
-      const factsHaveAmount = /\$[\d,]+|\d+k|\d{5,}/i.test(facts);
+      // Using bounded patterns to prevent ReDoS vulnerability
+      // Pattern matches: $123, $1,234, $123.45, $1,234.56, 123k, 12345 (5-9 digits)
+      const amountPattern = /\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\$\d+|\d{1,6}k|\d{5,9}/i;
+      const inputHasAmount = amountPattern.test(userMessage);
+      const factsHaveAmount = amountPattern.test(facts);
 
       if (inputHasAmount && !factsHaveAmount) {
         console.warn('[EXTRACTION-WARNING] Input contained numeric value but extraction lost it');
