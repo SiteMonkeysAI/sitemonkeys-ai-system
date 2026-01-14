@@ -608,13 +608,19 @@ Facts (preserve user terminology + add synonyms):`;
     // Pattern to detect high-entropy identifiers
     const HIGH_ENTROPY_PATTERN = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/i;
 
-    // CRITICAL FIX #504: Pattern to detect lines with synonym lists (for retrieval matching)
-    const HAS_SYNONYMS = /\([^)]+\)/;
+    // CRITICAL FIX #504: Safe function to detect lines with synonym lists (for retrieval matching)
+    // Avoids ReDoS vulnerability from regex on user-controlled input
+    const hasSynonyms = (line) => {
+      const openParen = line.indexOf('(');
+      const closeParen = line.indexOf(')');
+      // Must have ( before ) with at least one char between
+      return openParen !== -1 && closeParen !== -1 && closeParen > openParen + 1;
+    };
 
     // Separate lines by type: identifiers, synonyms, regular
     const identifierLines = lines.filter(line => HIGH_ENTROPY_PATTERN.test(line));
-    const synonymLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && HAS_SYNONYMS.test(line));
-    const regularLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && !HAS_SYNONYMS.test(line));
+    const synonymLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && hasSynonyms(line));
+    const regularLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && !hasSynonyms(line));
 
     // ADAPTIVE LIMIT: Allow more facts if they contain identifiers or synonyms
     const maxFacts = (identifierLines.length + synonymLines.length) > 0 ? 5 : 3;
@@ -671,7 +677,7 @@ Facts (preserve user terminology + add synonyms):`;
       if (HIGH_ENTROPY_PATTERN.test(line)) {
         return true; // Always keep lines with identifiers
       }
-      if (HAS_SYNONYMS.test(line)) {
+      if (hasSynonyms(line)) {
         return true; // Always keep lines with synonyms
       }
       return line.split(/\s+/).length >= 3;
@@ -686,7 +692,7 @@ Facts (preserve user terminology + add synonyms):`;
       }
 
       // CRITICAL FIX #504: Don't remove filler words from synonym lines - preserve full content
-      if (HAS_SYNONYMS.test(line)) {
+      if (hasSynonyms(line)) {
         return line;
       }
 
