@@ -57,6 +57,8 @@ function expandQuery(query) {
     'paid': ['salary', 'income', 'pay', 'make', 'compensation', 'earn'],
     'compensation': ['salary', 'income', 'pay', 'make', 'earn'],
     'income': ['salary', 'pay', 'compensation', 'earnings', 'make', 'earn'],
+    'situation': ['salary', 'income', 'pay', 'status', 'compensation'],
+    'pay': ['salary', 'income', 'compensation', 'make', 'earn', 'earning'],
 
     // Location terms
     'live': ['location', 'home', 'residence', 'address', 'city', 'based', 'reside'],

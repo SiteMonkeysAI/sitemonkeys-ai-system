@@ -1,0 +1,100 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #507: [claude-fix] Fix extraction for salary UPDATE patterns
+
+Issue Description:
+Fix extraction for salary UPDATE patterns
+
+## Problem
+
+Test 1 and Test 3 fail because the extraction prompt doesn't properly handle UPDATE language:
+
+1. "My salary increased to $92,000" → System returns $75,000 (the OLD value)
+2. "They're giving me 90k now" → System says "I don't have enough information"
+
+The extraction is treating "increased to X" as historical context rather than the NEW current value.
+
+## Root Cause
+
+In `api/memory/intelligent-storage.js`, the `extractKeyFacts()` prompt (around line 437) needs explicit rules for update language patterns.
+
+## Fix Required
+
+Add these rules to the extraction prompt after the existing rules (around line 458):
+```javascript
+// Add after rule 10, before "Examples:"
+11. UPDATE LANGUAGE means NEW VALUE IS PRIMARY:
+   - "increased to $X" → Current income: $X (not the old value)
+   - "raised to $X" → Current income: $X
+   - "bumped to $X" → Current income: $X  
+   - "giving me $X now" → Current income: $X
+   - "now making $X" → Current income: $X
+   - "promoted... $X" → Current income: $X
+   - The word "now" or "increased/raised/bumped" signals the NEW value
+   
+12. When message contains BOTH old and new values, extract ONLY the new:
+   - "Was $50k, now $70k" → Income: $70k (ignore $50k)
+   - "Increased from $60k to $80k" → Income: $80k (ignore $60k)
+```
+
+Also add these examples to the prompt:
+```javascript
+Input User: "My salary increased to $92,000 per year" | AI: "Congratulations..."
+Output: "Income: salary $92,000 (pay compensation earnings increased)"
+NOT: "Income: increased" or historical context
+
+Input User: "Just got promoted! They're giving me 90k now" | AI: "That's great..."  
+Output: "Income: 90k ($90,000 salary pay compensation promoted)"
+NOT: "Got promoted" without the salary value
+
+Input User: "Was making 50k, now I'm at 75k" | AI: "Nice raise..."
+Output: "Income: 75k ($75,000 salary pay compensation)"
+NOT: Both values or just the old value
+```
+
+## Also Fix Query Expansion
+
+In `api/services/semantic-retrieval.js`, the `expandQuery()` function (around line 48) needs to handle more query patterns:
+
+Add to the expansions object:
+```javascript
+'situation': ['salary', 'income', 'pay', 'status', 'compensation'],
+'pay': ['salary', 'income', 'compensation', 'make', 'earn', 'earning']
+```
+
+This ensures "What's my pay situation?" triggers synonym expansion.
+
+## Expected Result After Fix
+
+Test 1:
+- "My salary increased to $92,000" → Extracts $92,000 as NEW value
+- Query "What is my salary?" → Returns $92,000
+
+Test 3:
+- "They're giving me 90k now" → Extracts 90k as NEW value
+- Query "What's my pay situation?" → Expands to include salary synonyms, returns 90k
+
+## Do NOT
+- Change the fingerprint detection logic (it's working)
+- Modify the supersession logic (it's working)
+- Change similarity thresholds (they're working)
+
+This is purely an extraction prompt enhancement to handle update language patterns.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

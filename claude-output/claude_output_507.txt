@@ -1,0 +1,55 @@
+Perfect! All the changes have been successfully applied. Let me create a summary of the changes made:
+
+---SUMMARY---
+
+I have successfully fixed the extraction for salary UPDATE patterns as described in Issue #507. Here are the changes made:
+
+## Files Modified
+
+### 1. `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/memory/intelligent-storage.js`
+
+**Added two new rules to the extraction prompt (after rule 10, before "Examples:"):**
+
+- **Rule 11: UPDATE LANGUAGE means NEW VALUE IS PRIMARY**
+  - Explicitly handles update patterns like "increased to $X", "raised to $X", "bumped to $X", "giving me $X now", "now making $X", "promoted... $X"
+  - Instructs the extraction engine that "now" or "increased/raised/bumped" signals the NEW value
+
+- **Rule 12: When message contains BOTH old and new values, extract ONLY the new**
+  - Handles cases like "Was $50k, now $70k" → Income: $70k (ignore $50k)
+  - Handles "Increased from $60k to $80k" → Income: $80k (ignore $60k)
+
+**Added three new examples to demonstrate UPDATE pattern extraction:**
+
+1. "My salary increased to $92,000 per year" → Extracts $92,000 as current income (NOT "increased" or historical context)
+2. "Just got promoted! They're giving me 90k now" → Extracts 90k with proper synonyms (NOT just "Got promoted")
+3. "Was making 50k, now I'm at 75k" → Extracts only 75k (NOT both values or old value)
+
+### 2. `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/services/semantic-retrieval.js`
+
+**Added two new query expansions to the `expandQuery()` function:**
+
+- `'situation': ['salary', 'income', 'pay', 'status', 'compensation']` - Ensures "What's my pay situation?" triggers synonym expansion
+- `'pay': ['salary', 'income', 'compensation', 'make', 'earn', 'earning']` - Ensures queries with "pay" expand to include all salary-related terms
+
+## Expected Results After Fix
+
+**Test 1:**
+- User: "My salary increased to $92,000"
+- Extraction: Will now properly extract $92,000 as the NEW current value
+- Query: "What is my salary?" → Returns $92,000
+
+**Test 3:**
+- User: "They're giving me 90k now"
+- Extraction: Will now properly extract 90k as the NEW current value
+- Query: "What's my pay situation?" → Synonym expansion will include salary terms, returns 90k
+
+## What Was NOT Changed
+
+As instructed in the issue:
+- Did not change fingerprint detection logic (it's working correctly)
+- Did not modify supersession logic (it's working correctly)
+- Did not change similarity thresholds (they're working correctly)
+
+These are purely extraction prompt enhancements to handle UPDATE language patterns correctly.
+
+---END SUMMARY---
