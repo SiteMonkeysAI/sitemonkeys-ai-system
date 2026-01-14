@@ -1,0 +1,81 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #502: [claude-fix] Fix semantic retrieval to only return current memories
+
+Issue Description:
+## Problem
+
+Supersession correctly marks old memories as `is_current = false`, but semantic retrieval returns ALL memories including superseded ones. This causes the AI to see conflicting information and sometimes use the old value.
+
+## Evidence
+
+From logs:
+```
+[SUPERSESSION] Marked 1 old memories as not current
+[SUPERSESSION]    Superseded IDs: 3677
+```
+
+But then:
+```
+[SEMANTIC RETRIEVAL] ✅ Found 8 memories for "What is my salary?"
+```
+
+It should find only 1-2 memories (the current ones), not 8.
+
+## Root Cause
+
+The semantic retrieval query in `memory-core.js` or `intelligent-storage.js` likely does:
+```sql
+SELECT * FROM persistent_memories WHERE user_id = $1 ORDER BY similarity(...)
+```
+
+But should be:
+```sql
+SELECT * FROM persistent_memories WHERE user_id = $1 AND is_current = true ORDER BY similarity(...)
+```
+
+## Files to Check
+
+1. `api/memory/memory-core.js` - look for `getMemoriesForUser`, `retrieveMemories`, or similar
+2. `api/memory/intelligent-storage.js` - look for `findSimilarMemories` 
+3. Any file with semantic retrieval SQL queries
+
+## Fix Required
+
+Add `AND is_current = true` (or `AND is_current != false`) to ALL retrieval queries that feed into AI context.
+
+**Exception**: Admin/debug endpoints that need to see all memories can skip this filter.
+
+## Acceptance Criteria
+
+- [ ] Query "What is my salary?" after supersession returns ONLY the current salary
+- [ ] Old superseded memories do not appear in AI context
+- [ ] MEM-003 test passes
+- [ ] No regression in other memory tests
+
+## Test Validation
+
+After fix, this sequence should work:
+1. Store "My salary is $80,000"
+2. Wait 2 seconds
+3. Store "I got a raise! My new salary is $95,000"  
+4. Query "What is my salary?"
+5. Response should mention ONLY $95,000
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -1,0 +1,40 @@
+Perfect! The semantic-retrieval.js already has the correct `is_current` filter. Let me write a final summary:
+
+---SUMMARY---
+
+## Issue Fixed: Semantic retrieval now only returns current memories
+
+### Problem
+Supersession was correctly marking old memories as `is_current = false`, but several retrieval queries in the intelligence layer were returning ALL memories including superseded ones. This caused the AI to see conflicting information (e.g., both old and new salary values).
+
+### Root Cause
+Five SQL queries in `api/categories/memory/internal/intelligence.js` were missing the `is_current` filter:
+1. High-entropy token exact match query (line ~1647)
+2. Pattern-based identifier search query (line ~1657)  
+3. Base query for primary category extraction (line ~1897)
+4. Related category retrieval query (line ~2023)
+5. Topic-based cross-category search query (line ~2085)
+6. Category memories scoring query (line ~3645)
+
+### Solution
+Added `AND (is_current = true OR is_current IS NULL)` to all five retrieval queries. The filter includes `OR is_current IS NULL` to handle legacy memories that were created before the supersession system was implemented.
+
+### Files Modified
+- `api/categories/memory/internal/intelligence.js` - Added `is_current` filter to 6 retrieval queries
+
+### Verification
+- Main semantic retrieval in `api/services/semantic-retrieval.js` already had the correct filter (line 73)
+- Deduplication in `api/memory/intelligent-storage.js` already had the correct filter (lines 748, 770)
+- Supersession queries intentionally query all memories to find duplicates - no change needed
+- Admin endpoints intentionally show all memories for debugging - no change needed
+- Statistics/aggregation queries don't need filtering - no change needed
+
+### Expected Behavior After Fix
+When a user updates information (e.g., "My salary is now $95,000" after previously saying "$80,000"):
+1. Supersession marks the old memory as `is_current = false`
+2. All retrieval queries now filter to only `is_current = true` memories
+3. Query "What is my salary?" returns ONLY the current value ($95,000)
+4. Old superseded memories are not injected into AI context
+5. Test MEM-003 should now pass
+
+---END SUMMARY---
