@@ -1,0 +1,269 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #487: [claude-fix] Add /api/admin/cleanup-stale-memories endpoint for database maintenance
+
+Issue Description:
+# GitHub Issue: Add Admin Endpoint for Supersession Cleanup
+
+## Title
+`[claude-fix] Add /api/admin/cleanup-stale-memories endpoint for database maintenance`
+
+## Labels
+- `enhancement`
+- `memory-system`
+- `priority-high`
+- `admin-tools`
+
+---
+
+## Problem Statement
+
+After deploying PR #485 (comprehensive supersession), there may be stale memories in the database from previous test runs that were never marked as `is_current = false`. These orphaned records cause tests like MEM-003 to fail because the AI retrieves outdated information alongside current information.
+
+Currently, there's no way to trigger database cleanup without direct PostgreSQL access, which the developer doesn't have configured locally.
+
+## Solution
+
+Create a simple admin endpoint that:
+1. Runs the `cleanupDuplicateCurrentFacts()` function
+2. Returns a JSON report of what was cleaned
+3. Can be called via browser URL
+
+## Implementation
+
+### File: `/api/admin/cleanup.js` (new file)
+
+```javascript
+import { cleanupDuplicateCurrentFacts, createSupersessionConstraint } from '../services/supersession.js';
+import pool from '../config/database.js';
+
+/**
+ * Admin endpoint to clean up stale memories and ensure database constraints
+ * GET /api/admin/cleanup-stale-memories
+ * 
+ * Optional query params:
+ * - dry_run=true : Only report what would be cleaned, don't actually clean
+ * - create_index=true : Also create/verify the supersession constraint index
+ */
+export async function handleCleanupRequest(req, res) {
+  const startTime = Date.now();
+  const dryRun = req.query.dry_run === 'true';
+  const createIndex = req.query.create_index === 'true';
+  
+  console.log('[ADMIN] Cleanup endpoint called', { dryRun, createIndex });
+  
+  try {
+    const report = {
+      timestamp: new Date().toISOString(),
+      dry_run: dryRun,
+      actions: []
+    };
+    
+    // Step 1: Check current state
+    const beforeCount = await pool.query(`
+      SELECT COUNT(*) as total,
+             COUNT(CASE WHEN is_current = true THEN 1 END) as current_count,
+             COUNT(DISTINCT fact_fingerprint) as unique_fingerprints
+      FROM persistent_memories
+      WHERE user_id = 'anonymous'
+        AND fact_fingerprint IS NOT NULL
+    `);
+    
+    report.before = {
+      total_memories: parseInt(beforeCount.rows[0].total),
+      current_memories: parseInt(beforeCount.rows[0].current_count),
+      unique_fingerprints: parseInt(beforeCount.rows[0].unique_fingerprints)
+    };
+    
+    // Step 2: Find duplicates that would be cleaned
+    const duplicates = await pool.query(`
+      WITH ranked AS (
+        SELECT id, content, fact_fingerprint, created_at, is_current,
+               ROW_NUMBER() OVER (
+                 PARTITION BY user_id, fact_fingerprint
+                 ORDER BY created_at DESC
+               ) as rn
+        FROM persistent_memories
+        WHERE user_id = 'anonymous'
+          AND fact_fingerprint IS NOT NULL
+          AND is_current = true
+          AND pinned = false
+      )
+      SELECT id, fact_fingerprint, 
+             substring(content, 1, 50) as content_preview,
+             created_at
+      FROM ranked
+      WHERE rn > 1
+      ORDER BY fact_fingerprint, created_at DESC
+    `);
+    
+    report.duplicates_found = duplicates.rows.length;
+    report.duplicates_by_fingerprint = {};
+    
+    duplicates.rows.forEach(row => {
+      if (!report.duplicates_by_fingerprint[row.fact_fingerprint]) {
+        report.duplicates_by_fingerprint[row.fact_fingerprint] = [];
+      }
+      report.duplicates_by_fingerprint[row.fact_fingerprint].push({
+        id: row.id,
+        content_preview: row.content_preview,
+        created_at: row.created_at
+      });
+    });
+    
+    // Step 3: Actually clean (unless dry run)
+    if (!dryRun && duplicates.rows.length > 0) {
+      const cleanupResult = await cleanupDuplicateCurrentFacts(pool);
+      report.cleanup_result = cleanupResult;
+      report.actions.push(`Cleaned ${cleanupResult.cleaned} duplicate current facts`);
+    } else if (dryRun) {
+      report.actions.push(`DRY RUN: Would clean ${duplicates.rows.length} duplicate current facts`);
+    } else {
+      report.actions.push('No duplicates found to clean');
+    }
+    
+    // Step 4: Create/verify index (if requested)
+    if (createIndex) {
+      const indexResult = await createSupersessionConstraint(pool);
+      report.index_result = indexResult;
+      report.actions.push(`Index: ${indexResult.message}`);
+    }
+    
+    // Step 5: Check state after cleanup
+    if (!dryRun) {
+      const afterCount = await pool.query(`
+        SELECT COUNT(*) as total,
+               COUNT(CASE WHEN is_current = true THEN 1 END) as current_count
+        FROM persistent_memories
+        WHERE user_id = 'anonymous'
+          AND fact_fingerprint IS NOT NULL
+      `);
+      
+      report.after = {
+        total_memories: parseInt(afterCount.rows[0].total),
+        current_memories: parseInt(afterCount.rows[0].current_count)
+      };
+    }
+    
+    report.duration_ms = Date.now() - startTime;
+    
+    console.log('[ADMIN] Cleanup complete', report);
+    
+    res.json({
+      success: true,
+      report
+    });
+    
+  } catch (error) {
+    console.error('[ADMIN] Cleanup error:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+}
+```
+
+### File: `/api/server.js` (add route)
+
+Add to your Express routes:
+
+```javascript
+import { handleCleanupRequest } from './admin/cleanup.js';
+
+// Admin routes
+app.get('/api/admin/cleanup-stale-memories', handleCleanupRequest);
+```
+
+## Usage
+
+### Check what would be cleaned (safe - no changes):
+```
+https://sitemonkeys-ai-system-production.up.railway.app/api/admin/cleanup-stale-memories?dry_run=true
+```
+
+### Actually run the cleanup:
+```
+https://sitemonkeys-ai-system-production.up.railway.app/api/admin/cleanup-stale-memories
+```
+
+### Cleanup AND create/verify the index:
+```
+https://sitemonkeys-ai-system-production.up.railway.app/api/admin/cleanup-stale-memories?create_index=true
+```
+
+## Expected Response
+
+```json
+{
+  "success": true,
+  "report": {
+    "timestamp": "2026-01-13T23:30:00.000Z",
+    "dry_run": false,
+    "before": {
+      "total_memories": 3500,
+      "current_memories": 3200,
+      "unique_fingerprints": 45
+    },
+    "duplicates_found": 12,
+    "duplicates_by_fingerprint": {
+      "user_salary": [
+        { "id": 229, "content_preview": "User salary: $80,000 per year", "created_at": "..." },
+        { "id": 264, "content_preview": "User salary: $80,000 per year", "created_at": "..." }
+      ],
+      "user_favorite_color": [
+        { "id": 100, "content_preview": "User's favorite color is blue", "created_at": "..." }
+      ]
+    },
+    "cleanup_result": { "success": true, "cleaned": 12 },
+    "after": {
+      "total_memories": 3500,
+      "current_memories": 3188
+    },
+    "actions": [
+      "Cleaned 12 duplicate current facts"
+    ],
+    "duration_ms": 234
+  }
+}
+```
+
+## Security Considerations
+
+For production, this endpoint should be protected. Options:
+1. Add a secret query parameter: `?admin_key=YOUR_SECRET`
+2. Check for admin header
+3. Rate limit to prevent abuse
+
+For now, since this is a controlled deployment, the endpoint can be unprotected.
+
+## Acceptance Criteria
+
+- [ ] Endpoint accessible via browser URL
+- [ ] Dry run mode shows what would be cleaned without making changes
+- [ ] Actual cleanup marks stale memories as `is_current = false`
+- [ ] Returns clear JSON report of actions taken
+- [ ] Logs actions to Railway logs for debugging
+
+## Related Issues
+
+- PR #485: Comprehensive supersession fix (deployed)
+- MEM-003 test: Still failing due to stale database records
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
