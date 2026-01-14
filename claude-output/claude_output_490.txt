@@ -1,0 +1,16 @@
+Excellent! The fix has been successfully applied. The query now correctly excludes the non-existent `pinned` column reference and will execute without errors.
+
+---SUMMARY---
+
+Fixed issue #490 by removing the reference to a non-existent `pinned` column in the cleanup.js admin endpoint.
+
+**File Modified:** `/api/admin/cleanup.js`
+
+**Change Made:**
+- Removed line 60: `AND pinned = false` from the SQL query in the duplicates detection section (Step 2)
+- The query now correctly filters for duplicates using only existing columns: `user_id`, `fact_fingerprint`, and `is_current`
+
+**Result:**
+The `/api/admin/cleanup-stale-memories` endpoint will no longer return the error "column 'pinned' does not exist". The query now properly identifies duplicate memory entries for cleanup without referencing the non-existent `pinned` column. The functionality remains intact - it still finds duplicate current facts by fingerprint for the anonymous user, but without the invalid column constraint.
+
+---END SUMMARY---
