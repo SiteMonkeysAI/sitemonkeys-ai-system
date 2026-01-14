@@ -1,0 +1,102 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #494: [claude-fix] Fix duplicate key violation in persistent_memories INSERT - primary key collision
+
+Issue Description:
+# GitHub Issue: Fix Primary Key Collision in Memory Storage
+
+## Title
+`[claude-fix] Fix duplicate key violation in persistent_memories INSERT - primary key collision`
+
+## Labels
+- `bug`
+- `priority-critical`
+- `memory-system`
+
+---
+
+## Problem
+
+Memory storage is failing with:
+```
+[INTELLIGENT-STORAGE] ❌ Compressed storage failed: duplicate key value violates unique constraint "persistent_memories_pkey"
+```
+
+This happens on EVERY insert attempt, causing all memory storage to fail. Both compressed storage and fallback uncompressed storage fail with the same error.
+
+## Evidence from Logs
+
+```
+[TRACE-INTELLIGENT] I14. About to execute INSERT query...
+[INTELLIGENT-STORAGE] ❌ Compressed storage failed: duplicate key value violates unique constraint "persistent_memories_pkey"
+[INTELLIGENT-STORAGE] ⚠️ Falling back to uncompressed storage
+[INTELLIGENT-STORAGE] ❌ Fallback storage failed: duplicate key value violates unique constraint "persistent_memories_pkey"
+```
+
+## Likely Root Causes
+
+1. **Manual ID generation instead of using SERIAL/sequence** - If the code is manually calculating or passing an `id` value instead of letting PostgreSQL auto-generate it, collisions will occur.
+
+2. **Sequence out of sync** - If the database sequence got reset or is behind the actual max ID in the table, new inserts will collide with existing rows.
+
+3. **INSERT specifying the id column** - The INSERT query might be explicitly including an `id` value when it should omit it and let the database auto-generate.
+
+## Investigation Steps
+
+1. Check `/api/memory/intelligent-storage.js` around line 937 (`storeUncompressed`) and the `storeCompressedMemory` function
+2. Look for INSERT queries that include `id` in the column list
+3. Check if code is manually generating IDs
+
+## Expected Fix
+
+The INSERT queries should NOT specify the `id` column. PostgreSQL will auto-generate it.
+
+**Wrong:**
+```sql
+INSERT INTO persistent_memories (id, user_id, content, category, ...)
+VALUES ($1, $2, $3, $4, ...)
+```
+
+**Correct:**
+```sql
+INSERT INTO persistent_memories (user_id, content, category, ...)
+VALUES ($1, $2, $3, ...)
+RETURNING id
+```
+
+## Alternative Fix - Reset Sequence
+
+If the sequence is out of sync, run:
+```sql
+SELECT setval('persistent_memories_id_seq', (SELECT MAX(id) FROM persistent_memories) + 1);
+```
+
+## Files to Check
+
+- `/api/memory/intelligent-storage.js` - `storeCompressedMemory` function (~line 800+)
+- `/api/memory/intelligent-storage.js` - `storeUncompressed` function (~line 937)
+- `/api/services/supersession.js` - `storeWithSupersession` function
+
+## Acceptance Criteria
+
+- [ ] Memory storage succeeds without primary key errors
+- [ ] New memories get auto-generated IDs
+- [ ] Test: "My salary is $95,000" stores successfully
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
