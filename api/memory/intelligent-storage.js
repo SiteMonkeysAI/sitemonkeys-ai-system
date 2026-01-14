@@ -611,10 +611,20 @@ Facts (preserve user terminology + add synonyms):`;
     // CRITICAL FIX #504: Safe function to detect lines with synonym lists (for retrieval matching)
     // Avoids ReDoS vulnerability from regex on user-controlled input
     const hasSynonyms = (line) => {
-      const openParen = line.indexOf('(');
-      const closeParen = line.indexOf(')');
-      // Must have ( before ) with at least one char between
-      return openParen !== -1 && closeParen !== -1 && closeParen > openParen + 1;
+      // Find all opening parens and check if any have a valid closing paren after them
+      let pos = 0;
+      while (pos < line.length) {
+        const openParen = line.indexOf('(', pos);
+        if (openParen === -1) break;
+        
+        const closeParen = line.indexOf(')', openParen + 1);
+        if (closeParen !== -1 && closeParen > openParen + 1) {
+          return true; // Found valid (content) pattern
+        }
+        
+        pos = openParen + 1;
+      }
+      return false;
     };
 
     // Separate lines by type: identifiers, synonyms, regular
