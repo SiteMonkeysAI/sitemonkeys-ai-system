@@ -422,7 +422,6 @@ export async function storeWithSupersession(pool, memoryData) {
         WHERE user_id = $1
           AND fact_fingerprint = $2
           AND is_current = true
-          AND pinned = false
         FOR UPDATE
       `, [userId, factFingerprint]);
 
@@ -605,7 +604,7 @@ export async function createSupersessionConstraint(pool) {
     await pool.query(`
       CREATE UNIQUE INDEX idx_one_current_fact_comprehensive
       ON persistent_memories (user_id, fact_fingerprint)
-      WHERE is_current = true AND fact_fingerprint IS NOT NULL AND pinned = false
+      WHERE is_current = true AND fact_fingerprint IS NOT NULL
     `);
 
     console.log('[SUPERSESSION] ✅ Created comprehensive unique constraint: idx_one_current_fact_comprehensive');
@@ -648,7 +647,6 @@ export async function cleanupDuplicateCurrentFacts(pool) {
         FROM persistent_memories
         WHERE is_current = true
           AND fact_fingerprint IS NOT NULL
-          AND pinned = false
       )
       UPDATE persistent_memories p
       SET is_current = false,

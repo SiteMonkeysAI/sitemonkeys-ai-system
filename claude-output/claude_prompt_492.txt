@@ -1,0 +1,98 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #492: [claude-fix] Remove pinned column from supersession.js - column does not exist in database
+
+Issue Description:
+# GitHub Issue: Remove pinned column references from supersession.js
+
+## Title
+`[claude-fix] Remove pinned column from supersession.js - column does not exist in database`
+
+## Labels
+- `bug`
+- `priority-critical`
+
+---
+
+## Problem
+
+The supersession system is failing with:
+```
+[SUPERSESSION] ❌ Transaction failed: column "pinned" does not exist
+```
+
+This prevents ALL memory storage when a fingerprint is detected, causing the system to fall back to uncompressed storage which then also fails.
+
+## Evidence from Logs
+
+```
+[SUPERSESSION-DIAG] ✅ PATTERN MATCH FOUND: user_salary
+[SUPERSESSION] Deterministic match: user_salary (confidence: 0.95)
+[INTELLIGENT-STORAGE] ✨ Routing through supersession for fingerprint: user_salary
+[SUPERSESSION] ❌ Transaction failed: column "pinned" does not exist
+```
+
+The fingerprinting works perfectly, but the actual supersession storage fails because the SQL queries reference a `pinned` column that doesn't exist.
+
+## Required Fix
+
+In `/api/services/supersession.js`, find and remove ALL references to `pinned`. There are likely references in:
+
+1. **The SELECT query** that locks existing facts (around line 415-427):
+```sql
+WHERE user_id = $1
+  AND fact_fingerprint = $2
+  AND is_current = true
+  AND pinned = false  -- REMOVE THIS LINE
+FOR UPDATE
+```
+
+2. **The cleanup function** `cleanupDuplicateCurrentFacts` (around line 629-687):
+```sql
+WHERE user_id = 'anonymous'
+  AND fact_fingerprint IS NOT NULL
+  AND is_current = true
+  AND pinned = false  -- REMOVE THIS LINE
+```
+
+3. **The unique index creation** `createSupersessionConstraint` (around line 571-627):
+```sql
+WHERE is_current = true AND fact_fingerprint IS NOT NULL AND pinned = false
+-- Change to:
+WHERE is_current = true AND fact_fingerprint IS NOT NULL
+```
+
+## Search Pattern
+
+Search for `pinned` in the file and remove all occurrences from SQL queries.
+
+## Acceptance Criteria
+
+- [ ] No references to `pinned` column in supersession.js
+- [ ] Memory storage with fingerprints works without errors
+- [ ] Supersession correctly marks old facts as not current
+- [ ] Test: "My salary is $250,000" stores successfully
+
+## Related Issues
+
+- PR #485: Added comprehensive supersession (introduced the pinned references)
+- PR #490: Fixed pinned in cleanup.js (same issue, different file)
+- PR #490: Fixed pinned in cleanup.js (same issue, different file)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
