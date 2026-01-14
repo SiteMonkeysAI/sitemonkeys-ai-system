@@ -57,7 +57,6 @@ export async function handleCleanupRequest(req, res) {
         WHERE user_id = 'anonymous'
           AND fact_fingerprint IS NOT NULL
           AND is_current = true
-          AND pinned = false
       )
       SELECT id, fact_fingerprint,
              substring(content, 1, 50) as content_preview,
