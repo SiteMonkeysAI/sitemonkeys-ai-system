@@ -410,7 +410,8 @@ export class IntelligentMemoryStorage {
           user_priority: userPriorityDetected,
           fingerprint: fingerprintResult.fingerprint,
           fingerprintConfidence: fingerprintResult.confidence,
-          importance_score: importanceScore
+          importance_score: importanceScore,
+          original_user_phrase: userMessage.substring(0, 200)  // CRITICAL FIX #504: Store original for fallback matching
         }, mode);
         console.log('[FLOW] Step 4: Memory stored ✓');
         return result;
@@ -429,6 +430,7 @@ export class IntelligentMemoryStorage {
    * Extract key facts from conversation using GPT-4o-mini
    * Target: 10-20:1 compression ratio
    * CRITICAL: Preserves unique identifiers and high-entropy tokens
+   * CRITICAL FIX (Issue #504): Handles casual language and preserves user's original terminology
    * @param {string} userMsg - User's message
    * @param {string} aiResponse - AI's response
    * @returns {Promise<string>} - Extracted facts as bullet points
@@ -436,51 +438,70 @@ export class IntelligentMemoryStorage {
   async extractKeyFacts(userMsg, aiResponse) {
     // IDENTIFIER-PRESERVING PROMPT: Compress while retaining unique tokens
     // CRITICAL: Must preserve financial amounts, salaries, and numeric values for supersession
-    const prompt = `Extract ONLY the essential facts from this conversation. Be extremely brief but PRESERVE all identifiers and numeric values.
+    // CRITICAL FIX #504: Handle casual formats like "55k", "make", "earn" and preserve user terminology
+    const prompt = `Extract ONLY the essential facts from this conversation. Be extremely brief but PRESERVE all identifiers, numeric values, and the USER'S EXACT TERMINOLOGY.
 
 CRITICAL RULES:
 1. ALWAYS preserve exact alphanumeric identifiers (e.g., ECHO-123-ABC, ALPHA-456)
 2. ALWAYS preserve names exactly as written (e.g., Dr. Smith, Dr. FOXTROT-123)
 3. ALWAYS preserve numbers, codes, IDs, license plates, serial numbers VERBATIM
-4. ALWAYS preserve salary amounts, prices, financial figures EXACTLY (e.g., $250,000, $95,000, $80K)
-5. ALWAYS preserve times, dates, and numeric values EXACTLY (e.g., 3pm, 4pm, Tuesday)
-6. Never generalize unique identifiers into descriptions like "identifier" or "code"
-7. If user says "My X is Y", output MUST contain Y exactly
+4. ALWAYS preserve salary/income amounts EXACTLY including casual formats:
+   - "55k" → store as "55k" AND "$55,000"
+   - "70K" → store as "70K" AND "$70,000"
+   - "$85,000" → store as "$85,000"
+   - Include BOTH the user's exact term AND a searchable synonym
+5. Handle casual income terminology - preserve the user's verb:
+   - "I make 55k" → "Income: make 55k ($55,000)"
+   - "They pay me 70k" → "Income: pay 70k ($70,000)"
+   - "My compensation is $85k" → "Income: compensation $85k ($85,000)"
+   - "I earn 90k" → "Income: earn 90k ($90,000)"
+6. ALWAYS preserve times, dates, and numeric values EXACTLY (e.g., 3pm, 4pm, Tuesday)
+7. Never generalize unique identifiers into descriptions like "identifier" or "code"
+8. If user says "My X is Y", output MUST contain Y exactly
+9. PRIORITIZE extracting from the USER's message - the AI response is context only
+10. Include searchable synonyms in parentheses for better retrieval matching
 
 Examples:
+Input User: "I make 55k a year" | AI: "That's a good starting salary..."
+Output: "Income: make 55k ($55,000/year salary pay compensation earnings)"
+NOT: "Has income" or "Makes money"
+
+Input User: "Great news - my compensation was bumped to $85,000!" | AI: "Congratulations..."
+Output: "Income: compensation $85,000 (salary pay earnings raised bumped)"
+NOT: "Got a raise" or "Higher income"
+
+Input User: "I live in Seattle" | AI: "Seattle is a great city..."
+Output: "Location: live Seattle (home residence based in)"
+NOT: "Has location"
+
+Input User: "My job title is Senior Engineer" | AI: "That's a great role..."
+Output: "Job: Senior Engineer (title position role work)"
+NOT: "Has job"
+
 Input: "My license plate is ABC-123-XYZ"
 Output: "License plate: ABC-123-XYZ"
-NOT: "Has a license plate" or "Vehicle identifier stored"
-
-Input: "My doctor is Dr. FOXTROT-789"
-Output: "Doctor: Dr. FOXTROT-789"
-NOT: "Has a doctor" or "Medical contact stored"
-
-Input: "I got a raise! They're now paying me $250,000"
-Output: "Salary: $250,000"
-NOT: "Got a raise" or "Higher salary"
 
 Input: "Meeting moved to 4pm"
-Output: "Meeting: 4pm"
-NOT: "Meeting rescheduled"
+Output: "Meeting: 4pm (moved rescheduled changed)"
 
 Rules for compression:
 - Maximum 3-5 facts total
-- Each fact: 3-8 words (more if needed for identifiers or amounts)
+- Each fact: Include user's exact terminology + synonyms in parentheses
 - Include ONLY: Names, numbers, specific entities, user statements, amounts, times
 - EXCLUDE: Questions, greetings, explanations, AI responses
+- Format: "Category: user_exact_term (synonym1 synonym2 synonym3)"
 
 User: ${userMsg}
 Assistant: ${aiResponse}
 
-Facts (preserve all identifiers and amounts):`;
+Facts (preserve user terminology + add synonyms):`;
 
     try {
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 100  // Increased to allow room for identifiers
+        max_tokens: 150  // Increased to allow room for identifiers and synonyms
       });
 
       let facts = response.choices[0].message.content.trim();
@@ -488,10 +509,30 @@ Facts (preserve all identifiers and amounts):`;
       // CRITICAL: Post-processing protection - verify identifiers survived
       facts = this.protectHighEntropyTokens(userMsg, facts);
 
+      // CRITICAL FIX #504: Verify numeric values survived extraction
+      const amountPattern = /\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\$\d+|\d{1,6}k/i;
+      const inputHasAmount = amountPattern.test(userMsg);
+      const factsHaveAmount = amountPattern.test(facts);
+
+      if (inputHasAmount && !factsHaveAmount) {
+        console.warn('[EXTRACTION-FIX] Input had amount but extraction lost it - injecting from original');
+        const amounts = userMsg.match(amountPattern);
+        if (amounts && amounts.length > 0) {
+          // Inject the lost amount back into facts
+          facts += `\nAmount: ${amounts[0]}`;
+        }
+      }
+
+      // Store original user message snippet for fallback retrieval
+      const originalSnippet = userMsg.substring(0, 100).trim();
+
       // AGGRESSIVE POST-PROCESSING: Guarantee 10-20:1 compression
       const processedFacts = this.aggressivePostProcessing(facts);
 
       console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${processedFacts.split('\n').filter(l => l.trim()).length} facts`);
+      console.log(`[EXTRACTION-DEBUG] Original: "${originalSnippet}"`);
+      console.log(`[EXTRACTION-DEBUG] Extracted: "${processedFacts.substring(0, 150)}"`);
+
       return processedFacts;
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Fact extraction failed:', error.message);
@@ -551,6 +592,7 @@ Facts (preserve all identifiers and amounts):`;
    * Aggressive post-processing to guarantee 10-20:1 compression
    * Enforces ULTRA-strict limits: max 3-5 facts, max 5-8 words each
    * CRITICAL: Preserves lines containing high-entropy identifiers
+   * CRITICAL FIX #504: Preserves synonym lists in parentheses for better retrieval
    * @param {string} facts - Raw facts from AI
    * @returns {string} - Aggressively compressed facts
    */
@@ -566,17 +608,44 @@ Facts (preserve all identifiers and amounts):`;
     // Pattern to detect high-entropy identifiers
     const HIGH_ENTROPY_PATTERN = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/i;
 
-    // Separate lines with identifiers from regular lines
-    const identifierLines = lines.filter(line => HIGH_ENTROPY_PATTERN.test(line));
-    const regularLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line));
+    // CRITICAL FIX #504: Safe function to detect lines with synonym lists (for retrieval matching)
+    // Avoids ReDoS vulnerability from regex on user-controlled input
+    /**
+     * Detects if a line contains synonym lists in parentheses.
+     * Returns true if the line contains at least one occurrence of (content)
+     * where content is one or more characters.
+     * @param {string} line - The line to check for synonym patterns
+     * @returns {boolean} True if line contains (content) pattern with non-empty content
+     */
+    const hasSynonyms = (line) => {
+      // Find all opening parens and check if any have a valid closing paren after them
+      let pos = 0;
+      while (pos < line.length) {
+        const openParen = line.indexOf('(', pos);
+        if (openParen === -1) break;
+        
+        const closeParen = line.indexOf(')', openParen + 1);
+        if (closeParen !== -1 && closeParen > openParen + 1) {
+          return true; // Found valid (content) pattern
+        }
+        
+        pos = openParen + 1;
+      }
+      return false;
+    };
 
-    // ADAPTIVE LIMIT: Allow more facts if they contain identifiers
-    const maxFacts = identifierLines.length > 0 ? 5 : 3;
+    // Separate lines by type: identifiers, synonyms, regular
+    const identifierLines = lines.filter(line => HIGH_ENTROPY_PATTERN.test(line));
+    const synonymLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && hasSynonyms(line));
+    const regularLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && !hasSynonyms(line));
+
+    // ADAPTIVE LIMIT: Allow more facts if they contain identifiers or synonyms
+    const maxFacts = (identifierLines.length + synonymLines.length) > 0 ? 5 : 3;
 
     // Process regular lines with strict limits
-    let processedRegularLines = regularLines.slice(0, maxFacts - identifierLines.length);
+    let processedRegularLines = regularLines.slice(0, maxFacts - identifierLines.length - synonymLines.length);
 
-    // ADAPTIVE WORD LIMIT: Don't truncate lines with identifiers
+    // ADAPTIVE WORD LIMIT: Don't truncate lines with identifiers or synonyms
     processedRegularLines = processedRegularLines.map(line => {
       const words = line.split(/\s+/);
       if (words.length > 5) {
@@ -601,8 +670,13 @@ Facts (preserve all identifiers and amounts):`;
       return line;
     });
 
-    // Combine: Identifier lines first (most important), then regular lines
-    lines = [...processedIdentifierLines, ...processedRegularLines];
+    // CRITICAL FIX #504: Synonym lines - preserve the entire line including parentheses
+    // These are critical for semantic matching during retrieval
+    // Don't apply word limits to lines with synonyms - they need the full synonym list
+    const processedSynonymLines = synonymLines.slice(0, 5);  // Just limit the count, not the content
+
+    // Combine: Identifier lines first (most important), then synonym lines, then regular lines
+    lines = [...processedIdentifierLines, ...processedSynonymLines, ...processedRegularLines];
 
     // Remove duplicates (case-insensitive)
     const seen = new Set();
@@ -615,19 +689,27 @@ Facts (preserve all identifiers and amounts):`;
       return true;
     });
 
-    // Remove very short facts (< 3 words), UNLESS they contain identifiers
+    // Remove very short facts (< 3 words), UNLESS they contain identifiers or synonyms
     lines = lines.filter(line => {
       if (HIGH_ENTROPY_PATTERN.test(line)) {
         return true; // Always keep lines with identifiers
       }
+      if (hasSynonyms(line)) {
+        return true; // Always keep lines with synonyms
+      }
       return line.split(/\s+/).length >= 3;
     });
 
-    // Ultra-aggressive compression: remove ALL filler words (but not from identifier lines)
+    // Ultra-aggressive compression: remove ALL filler words (but not from identifier or synonym lines)
     const fillerWords = ['the', 'a', 'an', 'this', 'that', 'these', 'those', 'is', 'are', 'was', 'were', 'has', 'have', 'had'];
     lines = lines.map(line => {
       // Don't remove filler words from identifier lines - preserve full context
       if (HIGH_ENTROPY_PATTERN.test(line)) {
+        return line;
+      }
+
+      // CRITICAL FIX #504: Don't remove filler words from synonym lines - preserve full content
+      if (hasSynonyms(line)) {
         return line;
       }
 
@@ -649,7 +731,7 @@ Facts (preserve all identifiers and amounts):`;
     });
 
     // Join with newlines for clean formatting
-    // Result: "License plate ECHO-1767204140342-9K7X.\nDoctor Dr. FOXTROT-1767204140342.\nUser owns pet monkeys."
+    // Result: "Income: make 55k ($55,000 salary pay compensation).\nLocation: live Seattle (home residence)."
     return lines.join('\n');
   }
 
@@ -1018,6 +1100,10 @@ Facts (preserve all identifiers and amounts):`;
       console.log(`[INTELLIGENT-STORAGE] 📊 Using pre-calculated importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
 
       console.log('[TRACE-INTELLIGENT] I14. About to execute INSERT query...');
+
+      // CRITICAL FIX #504: Store original user message snippet in metadata for fallback matching
+      const originalUserSnippet = metadata.original_user_phrase || '';
+
       const result = await this.db.query(`
         INSERT INTO persistent_memories (
           user_id,
@@ -1045,7 +1131,8 @@ Facts (preserve all identifiers and amounts):`;
           ...metadata,
           compressed: true,
           dedup_checked: true,
-          storage_version: 'intelligent_v1'
+          storage_version: 'intelligent_v1',
+          original_user_phrase: originalUserSnippet  // Store for fallback retrieval matching
         })
       ]);
 
