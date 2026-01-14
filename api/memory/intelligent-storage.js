@@ -220,9 +220,14 @@ export class IntelligentMemoryStorage {
               method: 'semantic_facts_with_value'
             };
           } else {
-            // Has indicator but no value pattern - lower confidence
-            console.log(`[SEMANTIC-FINGERPRINT] ⚠️ Found ${pattern.id} indicator but no value pattern`);
-            continue;
+            // Indicator found but no value - assign with LOWER confidence
+            // This ensures supersession still triggers, just with less certainty
+            console.log(`[SEMANTIC-FINGERPRINT] ⚠️ Found ${pattern.id} indicator but no value pattern - assigning with reduced confidence`);
+            return {
+              fingerprint: pattern.id,
+              confidence: pattern.confidence * 0.6,  // 60% of normal confidence
+              method: 'semantic_indicator_only'
+            };
           }
         } else {
           // No value pattern required, indicator is sufficient
@@ -320,8 +325,19 @@ export class IntelligentMemoryStorage {
       console.log(`[INTELLIGENT-STORAGE] 📊 Final importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
 
       // Step 1: Extract facts (compression)
-      console.log('[INTELLIGENT-STORAGE] 📝 Extracting key facts...');
+      console.log('[FLOW] Step 1: Extracting key facts from conversation...');
       let facts = await this.extractKeyFacts(userMessage, sanitizedResponse);
+      console.log('[FLOW] Step 1: Facts extracted ✓');
+
+      // Validation: Check if numeric values from input survived extraction
+      const inputHasAmount = /\$[\d,]+|\d+k|\d{5,}/i.test(userMessage);
+      const factsHaveAmount = /\$[\d,]+|\d+k|\d{5,}/i.test(facts);
+
+      if (inputHasAmount && !factsHaveAmount) {
+        console.warn('[EXTRACTION-WARNING] Input contained numeric value but extraction lost it');
+        console.warn('[EXTRACTION-WARNING] Input:', userMessage.substring(0, 100));
+        console.warn('[EXTRACTION-WARNING] Extracted:', facts);
+      }
 
       // GUARD: Never store empty or meaningless content - fallback to user message
       const isMeaningless = !facts ||
@@ -350,17 +366,18 @@ export class IntelligentMemoryStorage {
 
       console.log(`[INTELLIGENT-STORAGE] 📊 Compression: ${originalTokens} → ${compressedTokens} tokens (${ratio}:1)`);
 
-      // Step 1.5: Detect fingerprint on EXTRACTED FACTS (not raw input)
-      // This is the CRITICAL FIX for Issue #496 - semantic fingerprint detection
-      console.log('[INTELLIGENT-STORAGE] 🔍 Detecting fact fingerprint on extracted facts...');
+      // Step 2: Detect fingerprint on EXTRACTED FACTS (not raw input)
+      // This is the CRITICAL FIX for Issue #498 - semantic fingerprint detection
+      console.log('[FLOW] Step 2: Detecting fingerprint on extracted facts...');
       const fingerprintResult = await this.detectFingerprintFromFacts(facts);
+      console.log('[FLOW] Step 2: Fingerprint detected ✓', fingerprintResult);
       console.log(`[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`);
 
-      // Step 2: Check for duplicates (now also checks for supersession)
-      console.log('[INTELLIGENT-STORAGE] 🔍 Checking for similar memories...');
+      // Step 3: Check for duplicates (now also checks for supersession)
+      console.log('[FLOW] Step 3: Checking for similar memories and supersession candidates...');
       const existing = await this.findSimilarMemories(userId, category, facts);
 
-      // Step 3: Update existing OR create new
+      // Step 4: Update existing OR create new (with supersession handled internally)
       if (existing) {
         // findSimilarMemories returns non-null only for TRUE DUPLICATES (not supersessions)
         console.log(`[DEDUP] ♻️ Found similar memory (id=${existing.id}), boosting instead of duplicating`);
@@ -380,8 +397,8 @@ export class IntelligentMemoryStorage {
       } else {
         // No duplicate found - either new fact or supersession
         // If supersession, storeCompressedMemory will detect and mark old memory as superseded
-        console.log('[INTELLIGENT-STORAGE] ✨ Storing new compressed memory');
-        return await this.storeCompressedMemory(userId, category, facts, {
+        console.log('[FLOW] Step 4: Storing new memory (supersession handled internally if applicable)...');
+        const result = await this.storeCompressedMemory(userId, category, facts, {
           original_tokens: originalTokens,
           compressed_tokens: compressedTokens,
           compression_ratio: parseFloat(ratio),
@@ -390,6 +407,8 @@ export class IntelligentMemoryStorage {
           fingerprintConfidence: fingerprintResult.confidence,
           importance_score: importanceScore
         }, mode);
+        console.log('[FLOW] Step 4: Memory stored ✓');
+        return result;
       }
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Error:', error.message);
