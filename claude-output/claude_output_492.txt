@@ -1,0 +1,31 @@
+Excellent! All references to the `pinned` column have been successfully removed. Let me create a summary of the changes:
+
+---SUMMARY---
+
+## Issue #492 - Fixed: Remove pinned column references from supersession.js
+
+### Problem
+The supersession system was failing with the error `column "pinned" does not exist` because SQL queries were referencing a database column that doesn't exist in the schema. This caused ALL memory storage with fingerprints to fail.
+
+### Changes Made
+Modified `/api/services/supersession.js` to remove all 3 references to the non-existent `pinned` column:
+
+1. **Line 425 (storeWithSupersession function)**: Removed `AND pinned = false` from the SELECT query that locks existing facts with the same fingerprint
+   - This query is used to identify which memories need to be superseded
+
+2. **Line 608 (createSupersessionConstraint function)**: Removed `AND pinned = false` from the partial unique index WHERE clause
+   - This index enforces that only one current fact exists per user per fingerprint
+
+3. **Line 651 (cleanupDuplicateCurrentFacts function)**: Removed `AND pinned = false` from the cleanup query's WHERE clause
+   - This query finds and removes duplicate current facts
+
+### Impact
+- Memory storage with fingerprints (like "My salary is $250,000") will now work without errors
+- Supersession will correctly mark old facts as not current when new facts arrive
+- The unique constraint and cleanup operations will function properly
+- No other functionality is affected - only the non-existent column references were removed
+
+### Verification
+Confirmed that zero occurrences of the word "pinned" remain in the supersession.js file after the changes.
+
+---END SUMMARY---
