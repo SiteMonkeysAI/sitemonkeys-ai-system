@@ -610,6 +610,13 @@ Facts (preserve user terminology + add synonyms):`;
 
     // CRITICAL FIX #504: Safe function to detect lines with synonym lists (for retrieval matching)
     // Avoids ReDoS vulnerability from regex on user-controlled input
+    /**
+     * Detects if a line contains synonym lists in parentheses.
+     * Returns true if the line contains at least one occurrence of (content)
+     * where content is one or more characters.
+     * @param {string} line - The line to check for synonym patterns
+     * @returns {boolean} True if line contains (content) pattern with non-empty content
+     */
     const hasSynonyms = (line) => {
       // Find all opening parens and check if any have a valid closing paren after them
       let pos = 0;
