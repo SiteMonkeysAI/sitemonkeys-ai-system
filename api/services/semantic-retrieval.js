@@ -22,12 +22,89 @@ import { generateEmbedding, cosineSimilarity, rankBySimilarity } from './embeddi
 const RETRIEVAL_CONFIG = {
   maxCandidates: 500,           // Max memories to pull from DB for scoring
   defaultTopK: 10,              // Default number of results to return
-  minSimilarity: 0.25,          // Minimum similarity threshold
+  minSimilarity: 0.25,          // Minimum similarity threshold (default)
+  minSimilarityPersonal: 0.20,  // Lower threshold for personal fact queries (Issue #504)
   recencyBoostDays: 7,          // Boost memories from last N days
   recencyBoostWeight: 0.1,      // How much to boost recent memories
   confidenceWeight: 0.05,       // Weight for fingerprint confidence
   embeddingTimeout: 5000        // Timeout for query embedding
 };
+
+// ============================================
+// QUERY EXPANSION (Issue #504)
+// ============================================
+
+/**
+ * Expand query with synonyms for better semantic matching
+ * CRITICAL FIX #504: Helps bridge the gap between casual queries and formal stored facts
+ *
+ * Examples:
+ * - "What do I make?" → "What do I make salary income pay compensation earn"
+ * - "Where do I live?" → "Where do I live location home residence address"
+ *
+ * @param {string} query - Original query
+ * @returns {{expanded: string, isPersonal: boolean}} Expanded query and whether it's a personal fact query
+ */
+function expandQuery(query) {
+  const queryLower = query.toLowerCase();
+
+  // Synonym expansions for common personal fact categories
+  const expansions = {
+    // Financial/Income terms
+    'salary': ['income', 'pay', 'compensation', 'earnings', 'wage', 'make', 'earn'],
+    'make': ['salary', 'income', 'pay', 'earn', 'compensation', 'paid', 'earning'],
+    'earn': ['salary', 'income', 'pay', 'make', 'compensation', 'earning'],
+    'paid': ['salary', 'income', 'pay', 'make', 'compensation', 'earn'],
+    'compensation': ['salary', 'income', 'pay', 'make', 'earn'],
+    'income': ['salary', 'pay', 'compensation', 'earnings', 'make', 'earn'],
+
+    // Location terms
+    'live': ['location', 'home', 'residence', 'address', 'city', 'based', 'reside'],
+    'location': ['live', 'home', 'residence', 'address', 'based', 'city'],
+    'home': ['live', 'location', 'residence', 'address', 'based'],
+    'address': ['live', 'location', 'home', 'residence'],
+
+    // Job/Work terms
+    'job': ['work', 'career', 'role', 'position', 'title', 'occupation', 'employed'],
+    'work': ['job', 'career', 'role', 'position', 'title', 'employed'],
+    'title': ['job', 'position', 'role', 'work', 'career'],
+    'position': ['job', 'title', 'role', 'work', 'career'],
+
+    // Health/Medical terms
+    'allergy': ['allergic', 'intolerant', 'reaction', 'sensitive'],
+    'allergic': ['allergy', 'intolerant', 'reaction', 'sensitive'],
+
+    // Meeting/Appointment terms
+    'meeting': ['appointment', 'call', 'scheduled', 'scheduled', 'rescheduled']
+  };
+
+  // Check if this is a personal fact query (uses first-person pronouns + personal terms)
+  const personalPattern = /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location)\b/i;
+  const isPersonal = personalPattern.test(query);
+
+  let expanded = query;
+  let addedSynonyms = [];
+
+  // Find matching terms and add their synonyms
+  for (const [term, synonyms] of Object.entries(expansions)) {
+    if (queryLower.includes(term)) {
+      // Add top 3-4 synonyms to improve matching without overwhelming the query
+      const synToAdd = synonyms.slice(0, 4).filter(s => !queryLower.includes(s));
+      addedSynonyms.push(...synToAdd);
+    }
+  }
+
+  // Append unique synonyms to the query
+  if (addedSynonyms.length > 0) {
+    const uniqueSynonyms = [...new Set(addedSynonyms)];
+    expanded = `${query} ${uniqueSynonyms.join(' ')}`;
+    console.log(`[QUERY-EXPANSION] Original: "${query}"`);
+    console.log(`[QUERY-EXPANSION] Expanded: "${expanded}"`);
+    console.log(`[QUERY-EXPANSION] Added synonyms: [${uniqueSynonyms.join(', ')}]`);
+  }
+
+  return { expanded, isPersonal };
+}
 
 // ============================================
 // PREFILTER QUERY BUILDER
@@ -242,9 +319,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
   }
 
   try {
-    // STEP 1: Generate query embedding
+    // STEP 0.5: Expand query with synonyms for better matching (Issue #504)
+    const { expanded: expandedQuery, isPersonal } = expandQuery(query);
+
+    // STEP 1: Generate query embedding (use expanded query for better semantic matching)
     const embedStart = Date.now();
-    const queryEmbeddingResult = await generateEmbedding(query, {
+    const queryEmbeddingResult = await generateEmbedding(expandedQuery, {
       timeout: RETRIEVAL_CONFIG.embeddingTimeout
     });
     telemetry.query_embedding_ms = Date.now() - embedStart;
@@ -260,6 +340,15 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     }
 
     const queryEmbedding = queryEmbeddingResult.embedding;
+
+    // CRITICAL FIX #504: Use lower similarity threshold for personal queries
+    const effectiveMinSimilarity = isPersonal
+      ? RETRIEVAL_CONFIG.minSimilarityPersonal
+      : (minSimilarity || RETRIEVAL_CONFIG.minSimilarity);
+
+    if (isPersonal) {
+      console.log(`[SEMANTIC RETRIEVAL] 🎯 Personal query detected - using lower threshold: ${effectiveMinSimilarity}`);
+    }
 
     // STEP 2: Prefilter candidates from DB
     const dbStart = Date.now();
@@ -343,12 +432,21 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     }));
 
     // Filter by minimum similarity and sort
+    // CRITICAL FIX #504: Use effectiveMinSimilarity (lower for personal queries)
     const filtered = hybridScored
-      .filter(m => m.similarity >= minSimilarity)
+      .filter(m => m.similarity >= effectiveMinSimilarity)
       .sort((a, b) => b.hybrid_score - a.hybrid_score);
 
     telemetry.candidates_above_threshold = filtered.length;
     telemetry.scoring_ms = Date.now() - scoringStart;
+
+    // Log threshold impact for debugging
+    if (filtered.length > 0) {
+      const belowOldThreshold = filtered.filter(m => m.similarity < RETRIEVAL_CONFIG.minSimilarity).length;
+      if (belowOldThreshold > 0 && isPersonal) {
+        console.log(`[SEMANTIC RETRIEVAL] ✅ Lower threshold recovered ${belowOldThreshold} personal fact memories`);
+      }
+    }
 
     // STEP 4: Enforce token budget and take results that fit
     const tokenBudget = options.tokenBudget || 2000;

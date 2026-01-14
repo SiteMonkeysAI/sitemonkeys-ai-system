@@ -1,0 +1,205 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #504: [claude-fix] CRITICAL: Fix Memory System End-to-End (Extraction + Retrieval + Semantic Matching)
+
+Issue Description:
+CRITICAL: Fix Memory System End-to-End (Extraction + Retrieval + Semantic Matching)
+
+## Executive Summary
+
+The memory supersession infrastructure is working (fingerprint detection, `is_current` filtering), but the system fails end-to-end because:
+1. **Fact extraction fails on casual/natural language** - returns empty, loses critical values
+2. **Semantic retrieval threshold is too strict** - stored memories don't match natural queries
+3. **Extracted facts lose queryable terms** - "I make 55k" becomes "Previous salary: $55,000" which doesn't match "What do I make?"
+
+## Evidence From Logs
+
+### Problem 1: Extraction Fails on Natural Language
+```
+Input: "I make 55k a year"
+[EXTRACTION-WARNING] Input contained numeric value but extraction lost it
+[EXTRACTION-WARNING] Extracted: (empty)
+```
+
+The GPT-4o-mini extraction prompt doesn't handle:
+- Casual notation: "55k", "70k" 
+- Informal verbs: "make", "get paid", "earn"
+- Conversational style: "So I work at TechCorp and they pay me around 70k"
+
+### Problem 2: Retrieval Returns Zero Matches
+```
+Query: "What do I make?"
+[SEMANTIC RETRIEVAL] ✅ Found 0 memories for "What do I make?..." (254ms)
+```
+
+The memory `"Previous salary: $55,000"` EXISTS and is `is_current = true`, but semantic similarity between query and stored fact is below threshold.
+
+### Problem 3: Extracted Facts Lose Queryable Terms
+```
+User says: "Great news - my compensation was bumped to $85,000!"
+Stored as: "Previous salary: $55,000" (lost "compensation", lost "$85,000")
+```
+
+The AI response influences extraction more than the user's actual statement.
+
+## Root Cause Analysis
+
+### File 1: `api/memory/intelligent-storage.js` - `extractKeyFacts()`
+
+The extraction prompt (around line 431-490) needs to:
+1. **Preserve user's original terminology** alongside normalized terms
+2. **Handle casual numeric formats** (55k, 70k, 80K)
+3. **Extract from USER message primarily**, not AI response
+4. **Include synonyms** in extracted facts for better retrieval matching
+
+### File 2: `api/services/semantic-retrieval.js` - Similarity Threshold
+
+The cosine similarity threshold is likely 0.7+ which is too strict for:
+- "What do I make?" vs "Salary: $70,000"
+- "How much do I earn?" vs "Annual income: $85,000"
+
+Need to either:
+1. Lower threshold for personal fact queries
+2. Add keyword boosting for financial/personal terms
+3. Include query expansion (add synonyms before searching)
+
+### File 3: `api/memory/intelligent-storage.js` - Fact Preservation
+
+The extraction should store BOTH:
+- Normalized fact: "Salary: $85,000"
+- Original phrasing: "compensation bumped to $85,000"
+
+This enables matching on either query style.
+
+## Required Fixes
+
+### Fix 1: Enhance Extraction Prompt (intelligent-storage.js ~line 440)
+```javascript
+const prompt = `Extract key facts from this conversation. CRITICAL RULES:
+1. PRESERVE the user's exact wording AND create a normalized version
+2. Handle casual formats: "55k" = "$55,000", "70k" = "$70,000"  
+3. Financial facts MUST include: salary, income, pay, compensation, earnings, wage, make, earn
+4. For salary/income, output format: "Salary: $X (user said: '[original phrase]')"
+5. PRIORITIZE extracting from the USER's message, not the AI response
+6. If user mentions a NEW value, that is the PRIMARY fact (not historical context)
+
+USER MESSAGE: ${userMsg}
+AI RESPONSE: ${aiResponse}
+
+Extract the key facts:`
+```
+
+### Fix 2: Add Query Expansion Before Retrieval (semantic-retrieval.js)
+
+Before searching, expand financial queries with synonyms:
+```javascript
+function expandQuery(query) {
+  const expansions = {
+    'salary': ['income', 'pay', 'compensation', 'earnings', 'wage', 'make', 'earn'],
+    'make': ['salary', 'income', 'pay', 'earn', 'compensation'],
+    'earn': ['salary', 'income', 'pay', 'make', 'compensation'],
+    'live': ['location', 'home', 'residence', 'address', 'city'],
+    'job': ['work', 'career', 'role', 'position', 'title', 'occupation']
+  };
+  
+  let expanded = query;
+  for (const [term, synonyms] of Object.entries(expansions)) {
+    if (query.toLowerCase().includes(term)) {
+      // Add top 2 synonyms to query for better vector matching
+      expanded += ' ' + synonyms.slice(0, 2).join(' ');
+      break;
+    }
+  }
+  return expanded;
+}
+```
+
+### Fix 3: Lower Similarity Threshold for Personal Queries (semantic-retrieval.js)
+```javascript
+// Current: const SIMILARITY_THRESHOLD = 0.7;
+// For personal fact queries, use lower threshold
+const getThreshold = (query) => {
+  const personalPatterns = /\b(my|i|me|our)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy)\b/i;
+  return personalPatterns.test(query) ? 0.5 : 0.7;
+};
+```
+
+### Fix 4: Store Original Phrasing Alongside Normalized Facts
+
+In `storeCompressedMemory`, ensure metadata includes original user message for fallback matching:
+```javascript
+metadata: {
+  ...existingMetadata,
+  original_user_phrase: userMessage.substring(0, 200),  // Store original for retrieval fallback
+  extraction_terms: extractedTerms  // Store key terms for keyword boosting
+}
+```
+
+## Acceptance Criteria
+
+All 10 tests in the comprehensive test suite must pass:
+
+- [ ] **Test 1**: Basic supersession (same keyword) - MUST PASS
+- [ ] **Test 2**: Semantic supersession (make → compensation → earn) - MUST PASS  
+- [ ] **Test 3**: Natural language ("pay me 70k" → "giving me 90k") - MUST PASS
+- [ ] **Test 4**: Multiple cycles ($50k → $60k → $72k, only final returned) - MUST PASS
+- [ ] **Test 5**: Location supersession (Seattle → Austin) - MUST PASS
+- [ ] **Test 6**: Job title supersession (Junior → Senior) - MUST PASS
+- [ ] **Test 7**: Meeting time (Monday 2pm → Wednesday 4pm) - MUST PASS
+- [ ] **Test 8**: Safety info (mild → severe allergy) - MUST PASS
+- [ ] **Test 9**: Retrieval count (5 updates → only 1 returned) - MUST PASS
+- [ ] **Test 10**: Dedup + supersession combined - MUST PASS
+
+## Doctrine Alignment
+
+From the Bible documents:
+- **"When the system HAS truth, it must DELIVER truth"** - Currently failing because retrieval can't find stored truth
+- **"Genuine intelligence, not pattern matching"** - System must understand "What do I make?" = "What is my salary?"
+- **"Caring family member"** - A family member would remember "you said you make 70k" not fail silently
+
+## Files to Modify
+
+1. `api/memory/intelligent-storage.js` - Fix extraction prompt, store original phrasing
+2. `api/services/semantic-retrieval.js` - Add query expansion, adjust threshold for personal queries
+3. Possibly `api/categories/memory/internal/intelligence.js` - If retrieval logic lives here
+
+## Testing After Fix
+
+Run this exact sequence and verify:
+```
+1. "I make $65,000 annually at my job"
+2. Wait 3 seconds
+3. "Great news - my compensation was bumped to $85,000!"
+4. Wait 2 seconds  
+5. "How much do I earn?"
+→ Response MUST mention $85,000 ONLY (not $65,000)
+```
+
+## Do NOT
+
+- Add temporary workarounds
+- Create keyword-only matching (must remain semantic)
+- Break existing passing tests
+- Add excessive logging that impacts performance
+
+## Priority
+
+This is blocking the core value proposition of the system. The memory architecture is 33-50% of innovations - if users can't reliably retrieve what they stored, the system fails its mission.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
