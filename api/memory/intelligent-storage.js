@@ -86,6 +86,104 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Detect fingerprint from EXTRACTED FACTS using semantic pattern matching
+   * This is the CRITICAL FIX for Issue #496
+   *
+   * Instead of running brittle regex on raw user input, we detect fingerprints
+   * on the CLEANED/COMPRESSED facts that the system already extracts.
+   *
+   * @param {string} facts - Extracted facts (compressed, cleaned content)
+   * @returns {Promise<{ fingerprint: string|null, confidence: number, method: string }>}
+   */
+  async detectFingerprintFromFacts(facts) {
+    if (!facts || typeof facts !== 'string') {
+      return { fingerprint: null, confidence: 0, method: 'invalid_input' };
+    }
+
+    console.log('[SEMANTIC-FINGERPRINT] Analyzing facts:', facts.substring(0, 100));
+
+    // Semantic patterns that work on CLEANED facts (not raw user input)
+    // These patterns are MUCH simpler because facts are already compressed
+    const fingerprintPatterns = {
+      // Salary/Income/Compensation
+      'user_salary': {
+        keywords: /\b(salary|income|pay|compensation|earning|wage|paid)\b/i,
+        confidence: 0.90
+      },
+      // Email
+      'user_email': {
+        keywords: /\b(email|e-mail)\b/i,
+        confidence: 0.95
+      },
+      // Phone
+      'user_phone_number': {
+        keywords: /\b(phone|cell|mobile|telephone)\b/i,
+        confidence: 0.95
+      },
+      // Name
+      'user_name': {
+        keywords: /\b(name)\b/i,
+        confidence: 0.85
+      },
+      // Location/Address
+      'user_location_residence': {
+        keywords: /\b(live|reside|location|address|based|home|moved|moving)\b/i,
+        confidence: 0.85
+      },
+      // Job Title
+      'user_job_title': {
+        keywords: /\b(job|work|position|role|title|occupation|profession)\b/i,
+        confidence: 0.85
+      },
+      // Company/Employer
+      'user_employer': {
+        keywords: /\b(company|employer|work at|work for)\b/i,
+        confidence: 0.85
+      },
+      // Age/Birthday
+      'user_age': {
+        keywords: /\b(age|years old|born|birthday)\b/i,
+        confidence: 0.90
+      },
+      // Marital Status
+      'user_marital_status': {
+        keywords: /\b(married|single|divorced|engaged|spouse|wife|husband)\b/i,
+        confidence: 0.90
+      },
+      // Children
+      'user_children_count': {
+        keywords: /\b(child|children|kid|son|daughter)\b/i,
+        confidence: 0.85
+      },
+      // Pet
+      'user_pet': {
+        keywords: /\b(pet|dog|cat|bird|fish)\b/i,
+        confidence: 0.80
+      },
+      // Meeting/Appointment Time
+      'user_meeting_time': {
+        keywords: /\b(meeting|appointment|call|scheduled|rescheduled)\b/i,
+        confidence: 0.90
+      }
+    };
+
+    // Check patterns against facts
+    for (const [fingerprint, pattern] of Object.entries(fingerprintPatterns)) {
+      if (pattern.keywords.test(facts)) {
+        console.log(`[SEMANTIC-FINGERPRINT] ✅ Detected ${fingerprint} from facts (confidence: ${pattern.confidence})`);
+        return {
+          fingerprint: fingerprint,
+          confidence: pattern.confidence,
+          method: 'semantic_facts'
+        };
+      }
+    }
+
+    console.log('[SEMANTIC-FINGERPRINT] ❌ No fingerprint detected in facts');
+    return { fingerprint: null, confidence: 0, method: 'no_match' };
+  }
+
+  /**
    * Detect if user is expressing priorities (UX-049)
    * @param {string} content - Content to check
    * @returns {boolean} - True if priority language detected
@@ -150,11 +248,6 @@ export class IntelligentMemoryStorage {
         console.log('[INTELLIGENT-STORAGE] 🎯 User priority detected - will boost importance');
       }
 
-      // Step 0.6: Detect fingerprint on ORIGINAL user message (before extraction)
-      console.log('[INTELLIGENT-STORAGE] 🔍 Detecting fact fingerprint on original message...');
-      const fingerprintResult = await generateFactFingerprint(userMessage, { skipModel: false });
-      console.log(`[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`);
-
       // Step 0.7: Calculate importance score on ORIGINAL user message (before extraction)
       console.log('[INTELLIGENT-STORAGE] 🧠 Using semantic analyzer for importance scoring on original message...');
       const importanceResult = await semanticAnalyzer.analyzeContentImportance(userMessage, category);
@@ -199,6 +292,12 @@ export class IntelligentMemoryStorage {
       const ratio = originalTokens > 0 ? (originalTokens / compressedTokens).toFixed(1) : 1;
 
       console.log(`[INTELLIGENT-STORAGE] 📊 Compression: ${originalTokens} → ${compressedTokens} tokens (${ratio}:1)`);
+
+      // Step 1.5: Detect fingerprint on EXTRACTED FACTS (not raw input)
+      // This is the CRITICAL FIX for Issue #496 - semantic fingerprint detection
+      console.log('[INTELLIGENT-STORAGE] 🔍 Detecting fact fingerprint on extracted facts...');
+      const fingerprintResult = await this.detectFingerprintFromFacts(facts);
+      console.log(`[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`);
 
       // Step 2: Check for duplicates (now also checks for supersession)
       console.log('[INTELLIGENT-STORAGE] 🔍 Checking for similar memories...');

@@ -1,0 +1,272 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #496: [claude-fix] Replace regex fingerprint detection with semantic/AI-based detection - patterns are too brittle
+
+Issue Description:
+# GitHub Issue: Replace Pattern-Based Fingerprint Detection with Semantic Intelligence
+
+## Title
+`[claude-fix] Replace regex fingerprint detection with semantic/AI-based detection - patterns are too brittle`
+
+## Labels
+- `bug`
+- `priority-critical`
+- `memory-system`
+- `doctrine-alignment`
+
+---
+
+## Executive Summary
+
+Fingerprint detection currently uses rigid regex patterns that fail on natural language variations. The system already has semantic intelligence that correctly extracts facts (e.g., "Salary: $200,000"), but the fingerprint detection runs BEFORE this and fails because users don't speak in regex-compatible phrases.
+
+**The fix:** Use the SAME semantic intelligence for fingerprint detection that we already use for fact extraction.
+
+---
+
+## Problem Statement
+
+### What's Happening
+
+1. User says: "I'm now at $250,000 a year" (salary update)
+2. Fingerprint detection runs 18 rigid regex patterns - ALL FAIL
+3. No fingerprint assigned → supersession never triggers
+4. Old salary ($200,000) remains `is_current = true`
+5. New salary stored as separate memory without fingerprint
+6. Query "What's my salary?" retrieves OLD value
+
+### Evidence from Logs
+
+```
+[SUPERSESSION-DIAG] Input content: I just got a they're now paying me $250,000 a year
+[SUPERSESSION-DIAG] Checking fingerprint: user_salary
+[SUPERSESSION-DIAG]   Pattern 0: /\b(?:my|our)\s+(?:salary|income|pay|compensation|wage|earnings?)...
+[SUPERSESSION-DIAG]   Match: NO
+[SUPERSESSION-DIAG]   Pattern 1: /\bi\s+(?:make|earn|get paid)\s+\$?\d+[,\d]*...
+[SUPERSESSION-DIAG]   Match: NO
+[SUPERSESSION-DIAG]   Pattern 2: /\b(?:salary|income|pay|compensation)(?:\s+is|\s+of)?\s*\$?...
+[SUPERSESSION-DIAG]   Match: NO
+[SUPERSESSION-DIAG]   Pattern 3: /\$\d+[,\d]*(?:\.\d{2})?\s*(?:per year|annually|\/year|a year)/i...
+[SUPERSESSION-DIAG]   Match: NO
+[SUPERSESSION-DIAG] ❌ No pattern matches found
+```
+
+Yet the compression system CORRECTLY extracted: `content: 'Salary: $200,000 per year.'`
+
+**The intelligence exists - it's just not being used for fingerprinting.**
+
+---
+
+## Root Cause
+
+The fingerprint detection in `/api/services/supersession.js` function `detectFactFingerprint()` uses a two-stage approach:
+
+1. **Stage 1 (Deterministic):** 18 fingerprint types × 2-4 regex patterns each = ~50 rigid patterns
+2. **Stage 2 (AI Fallback):** Only called if Stage 1 finds nothing, but it's also failing
+
+The patterns are too specific:
+- Requires exact phrases like "my salary is" or "I make $X"
+- Fails on natural variations like "they're paying me" or "I'm now at"
+- Fails on formatting differences (commas, dollar signs, spacing)
+
+---
+
+## Solution: Semantic Fingerprint Detection
+
+### Approach
+
+Instead of pattern matching on the RAW user input, detect fingerprints on the COMPRESSED/EXTRACTED facts that the system already produces.
+
+**Current Flow (Broken):**
+```
+User Input → Pattern Match (FAILS) → No Fingerprint → No Supersession
+     ↓
+Compression → "Salary: $250,000" (WORKS but too late)
+```
+
+**Fixed Flow:**
+```
+User Input → Compression → "Salary: $250,000" → Semantic Fingerprint Detection → user_salary → Supersession ✓
+```
+
+### Implementation
+
+#### Option A: Detect Fingerprint from Compressed Facts (Recommended)
+
+In `/api/memory/intelligent-storage.js`, the `storeWithIntelligence()` function already extracts facts. AFTER extraction, analyze the extracted facts to detect fingerprints:
+
+```javascript
+// After fact extraction (around line 180-200)
+const extractedFacts = await this.extractKeyFacts(content, category);
+
+// NEW: Detect fingerprint from extracted facts instead of raw input
+let fingerprint = null;
+if (extractedFacts && extractedFacts.length > 0) {
+  fingerprint = await this.detectFingerprintFromFacts(extractedFacts);
+}
+
+// If semantic detection found a fingerprint, use it for supersession
+if (fingerprint) {
+  return await storeWithSupersession(this.pool, {
+    ...memoryData,
+    factFingerprint: fingerprint
+  });
+}
+```
+
+#### New Function: `detectFingerprintFromFacts()`
+
+```javascript
+async detectFingerprintFromFacts(facts) {
+  const factsText = Array.isArray(facts) ? facts.join(' ') : facts;
+  
+  // Simple semantic patterns on CLEANED facts (not raw input)
+  const fingerprintPatterns = {
+    'user_salary': /salary|income|pay|compensation|earning|wage/i,
+    'user_email': /email|e-mail/i,
+    'user_phone': /phone|cell|mobile|telephone/i,
+    'user_name': /\bname\b/i,
+    'user_location': /live|reside|location|address|based in|from/i,
+    'user_job': /job|work|position|role|title|occupation|profession/i,
+    'user_employer': /company|employer|work at|work for/i,
+    'user_age': /age|years old|born|birthday/i,
+    'user_marital': /married|single|divorced|engaged|spouse|wife|husband/i,
+    'user_children': /child|kid|son|daughter/i,
+    'user_pet': /pet|dog|cat|bird|fish/i,
+    'user_meeting': /meeting|appointment|call|scheduled/i
+  };
+  
+  for (const [fingerprint, pattern] of Object.entries(fingerprintPatterns)) {
+    if (pattern.test(factsText)) {
+      console.log(`[SEMANTIC-FINGERPRINT] Detected ${fingerprint} from facts: "${factsText.substring(0, 50)}..."`);
+      return fingerprint;
+    }
+  }
+  
+  return null;
+}
+```
+
+#### Option B: Use AI for Fingerprint Classification
+
+For even better accuracy, use a quick AI call to classify:
+
+```javascript
+async detectFingerprintWithAI(facts) {
+  const prompt = `Classify this fact into ONE category. Reply with ONLY the category name.
+
+Categories:
+- user_salary (income, pay, compensation, earnings)
+- user_email
+- user_phone  
+- user_name
+- user_location (where they live)
+- user_job (job title, profession)
+- user_employer (company they work for)
+- user_age (age, birthday)
+- user_marital (married, single, spouse)
+- user_children
+- user_pet
+- user_meeting (appointments, scheduled calls)
+- none (doesn't fit any category)
+
+Fact: "${facts}"
+
+Category:`;
+
+  const response = await this.aiClassify(prompt);
+  return response === 'none' ? null : response;
+}
+```
+
+---
+
+## Files to Modify
+
+### Primary: `/api/memory/intelligent-storage.js`
+
+1. In `storeWithIntelligence()` (around line 150-250):
+   - AFTER fact extraction completes
+   - BEFORE deciding whether to use supersession
+   - Add call to new `detectFingerprintFromFacts()` function
+
+2. Add new function `detectFingerprintFromFacts()` (around line 300):
+   - Takes extracted facts as input
+   - Returns fingerprint string or null
+   - Uses simple keyword matching on CLEANED facts (not raw input)
+
+### Secondary: `/api/services/supersession.js`
+
+1. Keep `detectFactFingerprint()` as a fallback
+2. But the primary detection should happen in intelligent-storage.js AFTER fact extraction
+
+---
+
+## Key Principle
+
+**Intelligence over Keywords**
+
+The system should understand MEANING, not match PATTERNS. The compression already understands that "they're paying me $250K" means "salary = $250,000". The fingerprint detection should leverage that same understanding.
+
+---
+
+## Test Cases
+
+After this fix, ALL of these should trigger `user_salary` fingerprint and supersession:
+
+1. "My salary is $80,000" ✓
+2. "I make $80,000 a year" ✓
+3. "They're paying me $80,000" ✓ (currently fails)
+4. "I'm now at $80,000" ✓ (currently fails)
+5. "Got a raise to $95,000" ✓ (currently fails)
+6. "New compensation: $95,000" ✓ (currently fails)
+
+---
+
+## Acceptance Criteria
+
+- [ ] Fingerprint detection works on extracted facts, not just raw input
+- [ ] Natural language salary updates trigger `user_salary` fingerprint
+- [ ] Supersession correctly marks old salary as `is_current = false`
+- [ ] Query "What's my salary?" returns ONLY the latest value
+- [ ] MEM-003 test passes
+
+---
+
+## Doctrine Alignment
+
+This fix directly implements the core principle from the Master Specification:
+
+> "The system should understand conceptual equivalence and meaning similarity, not just identical text."
+
+And from the philosophical foundation:
+
+> "Intelligence over keywords - the system reasons about meaning, not patterns."
+
+---
+
+## Summary
+
+**Current:** Pattern match on raw input → fails on natural language → no supersession → wrong data returned
+
+**Fixed:** Extract facts → detect fingerprint from facts → supersession works → correct data returned
+
+This is a surgical fix that uses existing intelligence (fact extraction) to power fingerprint detection, rather than adding more brittle regex patterns.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
