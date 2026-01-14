@@ -460,6 +460,18 @@ CRITICAL RULES:
 8. If user says "My X is Y", output MUST contain Y exactly
 9. PRIORITIZE extracting from the USER's message - the AI response is context only
 10. Include searchable synonyms in parentheses for better retrieval matching
+11. UPDATE LANGUAGE means NEW VALUE IS PRIMARY:
+   - "increased to $X" → Current income: $X (not the old value)
+   - "raised to $X" → Current income: $X
+   - "bumped to $X" → Current income: $X
+   - "giving me $X now" → Current income: $X
+   - "now making $X" → Current income: $X
+   - "promoted... $X" → Current income: $X
+   - The word "now" or "increased/raised/bumped" signals the NEW value
+
+12. When message contains BOTH old and new values, extract ONLY the new:
+   - "Was $50k, now $70k" → Income: $70k (ignore $50k)
+   - "Increased from $60k to $80k" → Income: $80k (ignore $60k)
 
 Examples:
 Input User: "I make 55k a year" | AI: "That's a good starting salary..."
@@ -483,6 +495,18 @@ Output: "License plate: ABC-123-XYZ"
 
 Input: "Meeting moved to 4pm"
 Output: "Meeting: 4pm (moved rescheduled changed)"
+
+Input User: "My salary increased to $92,000 per year" | AI: "Congratulations..."
+Output: "Income: salary $92,000 (pay compensation earnings increased)"
+NOT: "Income: increased" or historical context
+
+Input User: "Just got promoted! They're giving me 90k now" | AI: "That's great..."
+Output: "Income: 90k ($90,000 salary pay compensation promoted)"
+NOT: "Got promoted" without the salary value
+
+Input User: "Was making 50k, now I'm at 75k" | AI: "Nice raise..."
+Output: "Income: 75k ($75,000 salary pay compensation)"
+NOT: Both values or just the old value
 
 Rules for compression:
 - Maximum 3-5 facts total
