@@ -2,6 +2,7 @@
 // persistent_memory.js - Main Orchestrator & Global Interface
 // Primary entry point and orchestration hub for Site Monkeys Memory System
 // ================================================================
+// Redeploy
 
 import coreSystem from "./core.js";
 import intelligenceSystem from "./intelligence.js";
