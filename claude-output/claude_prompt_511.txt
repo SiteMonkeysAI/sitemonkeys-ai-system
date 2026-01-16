@@ -1,0 +1,91 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #511: [claude-fix] CRITICAL: Safety-Critical Memory Retrieval Failure - Allergy Not Surfaced for Restaurant Query
+
+Issue Description:
+PROBLEM SUMMARY
+When asked "What should you keep in mind for restaurant recommendations?", the system retrieves food preferences from personal_life_interests but FAILS to retrieve the tree nut allergy from health_wellness. This is a SAFETY-CRITICAL doctrine violation.
+DOCTRINE VIOLATIONS
+
+Memory & Intelligence Doctrine §11.6: "Claiming ignorance when memory exists is a catastrophic trust violation."
+Memory & Intelligence Doctrine §11.9: "Memory is never loaded 'just because it exists.' It is loaded because it materially affects reasoning."
+Allergies materially affect restaurant recommendations. Failing to retrieve them violates the core contract.
+
+ROOT CAUSE
+The routeQuery() function uses semantic similarity to determine which categories to search. "Restaurant recommendations" has high semantic similarity to food preferences but LOW similarity to "health_wellness" despite health constraints being decision-critical for food choices.
+THE FIX REQUIREMENTS (Intelligence-Based, NOT Keyword-Based)
+1. Query Domain Detection
+Create intelligent detection that identifies when a query involves decisions that could intersect with safety-critical domains:
+
+Food/dining/restaurant → intersects with health_wellness (allergies, dietary restrictions, medical conditions)
+Activity/exercise/travel → intersects with health_wellness (physical limitations, conditions)
+Financial decisions → intersects with money_* categories
+
+2. Safety Category Injection
+When query domain detection identifies a safety-relevant intersection, the routeQuery() function MUST include the safety-critical category regardless of semantic similarity score:
+javascript// BEFORE (current broken logic):
+const categories = await routeQuery(query);  // Returns only semantically similar
+
+// AFTER (required fix):
+const primaryCategories = await routeQuery(query);  // Semantic similarity
+const safetyCriticalCategories = await detectSafetyCriticalIntersection(query);  // Domain analysis
+const categories = [...new Set([...safetyCriticalCategories, ...primaryCategories])];
+```
+
+**3. Retrieval Priority Boost for Safety Memories**
+Within the `health_wellness` category, memories tagged with safety-critical content (allergies, medications, conditions) should receive a retrieval boost when the query domain intersects with food/activity/travel.
+
+### IMPLEMENTATION CONSTRAINTS (From Doctrines)
+
+1. **Must be intelligence-based**: No keyword matching. Use semantic domain detection.
+2. **Token efficiency**: The domain detection should use deterministic patterns (Stage 1) for common cases, AI classification only for ambiguous cases.
+3. **No false positives**: Don't inject health_wellness for queries like "What's my favorite color?"
+4. **Preserve existing functionality**: This ADDS safety category injection, doesn't replace existing routing.
+
+### FILES TO INVESTIGATE AND MODIFY
+Based on architecture docs, likely touchpoints:
+- `/api/core/memory/` - Memory retrieval functions
+- `routing_intelligence.js` or equivalent - The `routeQuery()` function
+- Potentially `/api/core/intelligence/` - If domain detection logic exists
+
+### TRACE REQUIREMENTS
+1. Find where `routeQuery()` is implemented
+2. Find where category selection happens during retrieval
+3. Identify how to add safety-critical category injection
+4. Ensure the fix integrates with existing importance scoring (Innovation #7)
+
+### VERIFICATION TEST
+After fix, this test must pass:
+```
+1. Store: "I have a severe tree nut allergy" → health_wellness
+2. Store: "I love Italian food" → personal_life_interests  
+3. Query: "What should you keep in mind for restaurant recommendations?"
+4. EXPECTED: Both allergy AND food preference are retrieved
+5. Response MUST mention the tree nut allergy
+RELATED FAILING TESTS (from prior chat)
+
+A6: Pinned/Critical Memory - ❌ FAIL (allergy not mentioned in restaurant recommendation)
+A7: Importance Scoring - ❌ FAIL (diabetes/insulin not prioritized in "most important things")
+
+COST TRACKING ISSUE (SEPARATE BUT RELATED)
+
+H2: Cost Tracking - ❌ BROKEN (session totals not accumulating)
+This should be investigated as a separate trace after the safety-critical fix.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
