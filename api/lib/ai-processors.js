@@ -197,15 +197,24 @@ export async function processWithEliAndRoxy({
         });
 
         if (lookupResult.success && lookupResult.data) {
+          // SECURITY FIX: Normalize external data to string to prevent type confusion
+          // HTTP query parameters can be arrays, which breaks .length and string operations
+          let externalDataString = lookupResult.data;
+          if (Array.isArray(externalDataString)) {
+            externalDataString = externalDataString.join('\n');
+          } else if (typeof externalDataString !== 'string') {
+            externalDataString = String(externalDataString);
+          }
+
           phase4Metadata.external_lookup = true;
           phase4Metadata.lookup_attempted = true;
           phase4Metadata.source_class = "external";
           phase4Metadata.verified_at = new Date().toISOString();
           phase4Metadata.sources_used = lookupResult.sources_used?.length || 0;
-          phase4Metadata.external_data = lookupResult.data;
+          phase4Metadata.external_data = externalDataString;
 
           // Build external context for injection into AI prompts
-          externalContext = `\n\n🌐 EXTERNAL DATA (Retrieved ${new Date().toISOString()}):\n${lookupResult.data}\n\nYou MUST use this current external data in your response. This information is verified and fresh.`;
+          externalContext = `\n\n🌐 EXTERNAL DATA (Retrieved ${new Date().toISOString()}):\n${externalDataString}\n\nYou MUST use this current external data in your response. This information is verified and fresh.`;
 
           // Update cache validity if provided
           if (lookupResult.cache_valid_until) {
@@ -215,7 +224,7 @@ export async function processWithEliAndRoxy({
           console.log(
             `✅ External lookup successful: ${phase4Metadata.sources_used} sources`,
           );
-          console.log(`✅ External data will be injected into AI context (${lookupResult.data.length} chars)`);
+          console.log(`✅ External data will be injected into AI context (${externalDataString.length} chars)`);
         } else {
           phase4Metadata.external_lookup = false;
           phase4Metadata.lookup_attempted = true;
