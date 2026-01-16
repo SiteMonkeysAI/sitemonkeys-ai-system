@@ -1,0 +1,221 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #513: [claude-fix] CRITICAL: External Lookup Not Triggering + System-Wide Placeholder Audit
+
+Issue Description:
+You're absolutely right. Placeholders violate the core doctrine:
+
+"Zero-tolerance standard for placeholder code, pattern matching disguised as intelligence, or 'basic versions' - everything must be production-grade from the start."
+
+Let me write a comprehensive issue that addresses BOTH problems in one sweep:
+
+[claude-fix] CRITICAL: External Lookup Not Triggering + System-Wide Placeholder Audit
+PROBLEM SUMMARY
+Two related issues requiring comprehensive fix:
+
+External Lookup Not Functioning: VOLATILE queries (news, current events, stock prices) return "I don't have real-time data" instead of triggering external lookup. The externalLookupEngine.js exists (1324 lines) but either isn't being called from the chat pipeline OR results aren't being injected into AI context.
+Placeholder Code Exists in Production: externalLookupEngine.js contains disabled/placeholder APIs that return empty arrays instead of functioning. Per doctrine, placeholders are forbidden - only production-grade features allowed.
+
+DOCTRINE VIOLATIONS
+
+Genuine Intelligence Doctrine: System must attempt all truthful reasoning paths, including external lookup for VOLATILE data
+Phase 4 Technical Specification: External lookup MUST auto-trigger for freshness markers ("today", "current", "latest", "news")
+Zero-Tolerance Standard: "No placeholder code, pattern matching disguised as intelligence, or 'basic versions'"
+Opportunity Doctrine §7.6: "I can't verify" is the BEGINNING, not the END - system should attempt lookup before admitting inability
+
+EVIDENCE OF FAILURE
+Test queries that should trigger external lookup but don't:
+User: "What's happened today in Venezuela?"
+Expected: External lookup triggers, news results injected, AI responds with current information
+Actual: "I don't have real-time news updates... my information may be outdated"
+
+User: "What's going on in the news today?"
+Expected: External lookup triggers, news results returned
+Actual: "I don't have real-time capabilities"
+
+User: "What will Tesla's stock price be next month?"
+Expected: At minimum, current price lookup attempted with graceful degradation
+Actual: No lookup attempted, generic response about volatility
+PART 1: TRACE AND FIX EXTERNAL LOOKUP INTEGRATION
+Required Investigation:
+
+Find the chat pipeline entry point - Where user messages are processed (likely chat.js or similar)
+Trace where external lookup SHOULD be called - The lookup() function in externalLookupEngine.js should be invoked when:
+
+Truth type is VOLATILE
+Query contains freshness markers ("today", "current", "latest", "news", "price")
+High-stakes domain detected
+hasNewsIntent() returns true
+
+
+Verify the integration exists - Is there code that:
+
+Calls isLookupRequired() to check if lookup needed?
+Calls lookup() to perform the lookup?
+Injects lookup results into AI context?
+Handles graceful degradation when lookup fails?
+
+
+Fix the integration - If missing or broken:
+
+Add call to lookup() in chat pipeline BEFORE AI response generation
+Inject successful lookup results into AI context/prompt
+Ensure graceful degradation disclosure appears in response when lookup fails
+
+
+
+Expected Flow (Must Be Implemented):
+User Message
+    ↓
+Truth Type Detection (VOLATILE detected)
+    ↓
+isLookupRequired() → true (freshness markers found)
+    ↓
+lookup() called → fetches from NEWS sources
+    ↓
+Results injected into AI context
+    ↓
+AI generates response USING the external data
+    ↓
+Response includes current information with source attribution
+PART 2: SYSTEM-WIDE PLACEHOLDER AUDIT AND REMOVAL
+Scan the ENTIRE codebase for:
+
+Explicit placeholder markers:
+
+Comments containing: "placeholder", "TODO", "FIXME", "disabled", "pending", "not yet implemented"
+Code returning null, [], or empty objects with comments about "until API configured"
+Functions that log "no API configured" and return nothing
+
+
+Known placeholders in externalLookupEngine.js to fix or remove:
+A. Stock Prices (Lines 103-117):
+
+javascript   // Currently returns [] - PLACEHOLDER
+   if (lowerQuery.match(/stock|share|market/)) {
+     console.log('[externalLookupEngine] Stock price query detected - no API configured');
+     return [];  // ← FORBIDDEN - must either implement or remove feature claim
+   }
+Fix Options:
+
+Implement using free API (Alpha Vantage free tier, or Yahoo Finance unofficial)
+OR remove stock price claims from system capabilities
+OR implement proper graceful degradation that tells user WHERE to check
+
+B. Commodities (Lines 119-126):
+javascript   // Currently returns [] - PLACEHOLDER
+   console.log('[externalLookupEngine] Commodity price query detected - no API configured');
+   return [];
+Fix Options: Same as stocks - implement, remove, or proper degradation
+C. Yahoo Finance buildUrl returns null (Line 100):
+javascript   return null; // Disabled until proper API configured ← PLACEHOLDER
+D. Metals API buildUrl returns null (Line 136):
+javascript   return null; // Disabled until proper API configured ← PLACEHOLDER
+
+For each placeholder found, apply ONE of these resolutions:
+
+IMPLEMENT: Add working production-grade code
+REMOVE: Delete the feature entirely if not ready
+DEGRADE GRACEFULLY: If feature cannot be implemented, ensure system clearly tells user where to get the information (not just "I can't help")
+
+
+
+PART 3: VERIFY NEWS LOOKUP ACTUALLY WORKS
+The NEWS sources appear to be configured:
+javascriptAPI_SOURCES.NEWS = [
+  { name: 'Google News RSS', ... },
+  { name: 'Wikipedia Current Events', ... }
+]
+```
+
+**Verify:**
+1. `hasNewsIntent()` correctly identifies news queries
+2. `selectSourcesForQuery()` returns NEWS sources for news queries
+3. `performLookup()` successfully fetches from Google News RSS
+4. Results are properly parsed and returned
+5. Results are actually injected into AI context
+
+### IMPLEMENTATION CONSTRAINTS
+
+1. **No new placeholders** - Every line of code must be production-ready
+2. **Token efficiency** - Lookup results must be bounded (already have 15K char limit - verify it's enforced)
+3. **Graceful degradation must be USEFUL** - Not just "I can't help" but "Check Reuters.com or APNews.com for current information"
+4. **Cost tracking** - External lookups should integrate with Innovation #31 (Cost Tracker)
+
+### VERIFICATION TESTS
+
+After fix, ALL of these must pass:
+
+**News Lookup:**
+```
+Query: "What's happening in the news today?"
+Expected: Returns current news headlines from Google News RSS
+Verify: Response contains actual current events, not "I don't have real-time data"
+```
+
+**Specific News Event:**
+```
+Query: "What's the latest on [current major news event]?"
+Expected: External lookup triggers, relevant news returned
+Verify: AI uses fetched content in response
+```
+
+**Stock Price (if implemented):**
+```
+Query: "What's Tesla's current stock price?"
+Expected: Either returns current price OR graceful degradation with "Check Yahoo Finance at finance.yahoo.com"
+Verify: No generic "I can't predict" response without attempting lookup
+```
+
+**Graceful Degradation:**
+```
+Query: "What's the price of gold right now?"
+If no API: Response must include specific verification path like "Check current gold prices at kitco.com"
+NOT acceptable: Generic "I don't have real-time data" without actionable guidance
+```
+
+### FILES TO INVESTIGATE
+
+Based on architecture, likely touchpoints:
+- `/api/core/intelligence/externalLookupEngine.js` - The engine (exists, may have integration issues)
+- `/api/core/intelligence/truthTypeDetector.js` - Detects VOLATILE (verify it's being used)
+- `/api/routes/chat.js` or equivalent - Main chat handler (WHERE LOOKUP SHOULD BE CALLED)
+- `/api/services/` - Any service that processes messages before AI
+- `/api/core/memory/` - Where context is assembled for AI
+
+### SCAN TARGETS FOR PLACEHOLDER AUDIT
+```
+grep -r "placeholder" --include="*.js" ./api/
+grep -r "TODO" --include="*.js" ./api/
+grep -r "FIXME" --include="*.js" ./api/
+grep -r "not yet implemented" --include="*.js" ./api/
+grep -r "until.*configured" --include="*.js" ./api/
+grep -r "return \[\]" --include="*.js" ./api/
+grep -r "return null.*disabled" --include="*.js" ./api/
+SUCCESS CRITERIA
+
+✅ External lookup triggers for VOLATILE/news queries
+✅ Lookup results are injected into AI context
+✅ AI responses include current information when available
+✅ Zero placeholders remain in codebase
+✅ All disabled features either implemented or removed
+✅ Graceful degradation provides actionable verification paths
+✅ No response says "I don't have real-time data" without first attempting lookup
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

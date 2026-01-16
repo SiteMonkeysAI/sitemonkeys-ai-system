@@ -304,7 +304,20 @@ export function testCache(action, params = {}) {
       if (!params.query || !params.data || !params.truthType) {
         return { success: false, error: 'Missing required params: query, data, truthType' };
       }
-      const setResult = set(params.query, params.data, params.truthType, params.sources || [], params.confidence || 0.5);
+      // SECURITY FIX: Normalize data to string to prevent type confusion from HTTP query parameters
+      let normalizedData = params.data;
+      if (Array.isArray(normalizedData)) {
+        normalizedData = normalizedData.join('\n');
+      } else if (typeof normalizedData !== 'string') {
+        normalizedData = String(normalizedData);
+      }
+      const setResult = set(
+        params.query,
+        normalizedData,
+        params.truthType,
+        params.sources || [],
+        params.confidence || 0.5
+      );
       return { success: true, action: 'set', entry: setResult };
     
     case 'get':

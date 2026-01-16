@@ -74,74 +74,12 @@ export const API_SOURCES = {
       }
     }
   ],
-  STOCKS: [
-    {
-      name: 'Yahoo Finance',
-      buildUrl: (query) => {
-        // Extract stock symbol or company name
-        const symbolMatch = query.match(/\b([A-Z]{1,5})\b.*?(?:stock|share|price)/i) ||
-                          query.match(/(?:stock|share|price).*?\b([A-Z]{1,5})\b/i);
-
-        // Common company name to ticker mapping
-        const companyTickers = {
-          'apple': 'AAPL',
-          'microsoft': 'MSFT',
-          'google': 'GOOGL',
-          'amazon': 'AMZN',
-          'tesla': 'TSLA',
-          'meta': 'META',
-          'facebook': 'META',
-          'nvidia': 'NVDA'
-        };
-
-        let symbol = null;
-        if (symbolMatch) {
-          symbol = symbolMatch[1].toUpperCase();
-        } else {
-          // Try to extract company name
-          const lowerQuery = query.toLowerCase();
-          for (const [company, ticker] of Object.entries(companyTickers)) {
-            if (lowerQuery.includes(company)) {
-              symbol = ticker;
-              break;
-            }
-          }
-        }
-
-        if (!symbol) return null;
-
-        // Note: This is a placeholder - Yahoo Finance API requires authentication
-        // For production, use a proper financial data API
-        return null; // Disabled until proper API configured
-      },
-      parser: 'json',
-      type: 'api',
-      extract: (json) => {
-        // Placeholder for Yahoo Finance data extraction
-        return null;
-      }
-    }
-  ],
-  COMMODITIES: [
-    {
-      name: 'Metals API',
-      buildUrl: (query) => {
-        // Extract commodity name (gold, silver, oil, etc.)
-        const commodityMatch = query.match(/\b(gold|silver|platinum|palladium|crude oil|oil|natural gas)\b/i);
-        if (!commodityMatch) return null;
-
-        // Note: Metals API requires authentication
-        // For production, use a proper commodities API
-        return null; // Disabled until proper API configured
-      },
-      parser: 'json',
-      type: 'api',
-      extract: (json) => {
-        // Placeholder for commodities data extraction
-        return null;
-      }
-    }
-  ],
+  // STOCKS: Removed - no free API available without authentication
+  // Graceful degradation will direct users to finance.yahoo.com or similar
+  STOCKS: [],
+  // COMMODITIES: Removed - no free API available without authentication
+  // Graceful degradation will direct users to kitco.com or similar
+  COMMODITIES: [],
   GOVERNMENT: [
     {
       name: 'Wikipedia Political Leaders',

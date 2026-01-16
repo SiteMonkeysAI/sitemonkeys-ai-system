@@ -160,6 +160,9 @@ export async function processWithEliAndRoxy({
       confidence: 0.8,
     };
 
+    // External context to inject into AI prompts
+    let externalContext = "";
+
     try {
       // Step 1: Detect truth type
       const truthTypeResult = await detectTruthType(message, {
@@ -194,12 +197,24 @@ export async function processWithEliAndRoxy({
         });
 
         if (lookupResult.success && lookupResult.data) {
+          // SECURITY FIX: Normalize external data to string to prevent type confusion
+          // HTTP query parameters can be arrays, which breaks .length and string operations
+          let externalDataString = lookupResult.data;
+          if (Array.isArray(externalDataString)) {
+            externalDataString = externalDataString.join('\n');
+          } else if (typeof externalDataString !== 'string') {
+            externalDataString = String(externalDataString);
+          }
+
           phase4Metadata.external_lookup = true;
           phase4Metadata.lookup_attempted = true;
           phase4Metadata.source_class = "external";
           phase4Metadata.verified_at = new Date().toISOString();
-          phase4Metadata.sources_used = lookupResult.sources?.length || 0;
-          phase4Metadata.external_data = lookupResult.data;
+          phase4Metadata.sources_used = lookupResult.sources_used?.length || 0;
+          phase4Metadata.external_data = externalDataString;
+
+          // Build external context for injection into AI prompts
+          externalContext = `\n\n🌐 EXTERNAL DATA (Retrieved ${new Date().toISOString()}):\n${externalDataString}\n\nYou MUST use this current external data in your response. This information is verified and fresh.`;
 
           // Update cache validity if provided
           if (lookupResult.cache_valid_until) {
@@ -209,9 +224,16 @@ export async function processWithEliAndRoxy({
           console.log(
             `✅ External lookup successful: ${phase4Metadata.sources_used} sources`,
           );
+          console.log(`✅ External data will be injected into AI context (${externalDataString.length} chars)`);
         } else {
           phase4Metadata.external_lookup = false;
           phase4Metadata.lookup_attempted = true;
+
+          // Graceful degradation disclosure
+          if (lookupResult.disclosure) {
+            externalContext = `\n\n⚠️ EXTERNAL LOOKUP DISCLOSURE:\n${lookupResult.disclosure}\n`;
+          }
+
           console.log("⚠️ External lookup attempted but failed or returned no data");
         }
       }
@@ -256,7 +278,8 @@ export async function processWithEliAndRoxy({
         mode,
         vaultContext,
         conversationHistory,
-        memoryContext, // STEP 2: Pass memory context
+        memoryContext,
+        externalContext, // INJECT EXTERNAL DATA
       );
       trackTokenUsage("claude", response.tokens_used || 800);
       aiUsed = "Claude";
@@ -268,7 +291,8 @@ export async function processWithEliAndRoxy({
         vaultContext,
         conversationHistory,
         openai,
-        memoryContext, // STEP 2: Pass memory context
+        memoryContext,
+        externalContext, // INJECT EXTERNAL DATA
       );
       trackTokenUsage("eli", response.tokens_used || 600);
       aiUsed = "Eli";
@@ -280,7 +304,8 @@ export async function processWithEliAndRoxy({
         vaultContext,
         conversationHistory,
         openai,
-        memoryContext, // STEP 2: Pass memory context
+        memoryContext,
+        externalContext, // INJECT EXTERNAL DATA
       );
       trackTokenUsage("roxy", response.tokens_used || 600);
       aiUsed = "Roxy";
@@ -723,7 +748,8 @@ async function generateEliResponse(
   vaultContext,
   history,
   openai,
-  memoryContext = null, // STEP 2: Accept memory context
+  memoryContext = null,
+  externalContext = "", // INJECT EXTERNAL DATA
 ) {
   const systemPrompt = `You are Eli, a business validation specialist with extensive startup experience.
 
@@ -737,6 +763,8 @@ BUSINESS VALIDATION MODE ENFORCEMENT:
 ${vaultContext}
 
 ${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nUSE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant to show continuity and understanding of the user's situation.\n` : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'}
+
+${externalContext}
 
 Respond with practical business analysis, always considering survival implications.`;
 
@@ -774,7 +802,8 @@ async function generateRoxyResponse(
   vaultContext,
   history,
   openai,
-  memoryContext = null, // STEP 2: Accept memory context
+  memoryContext = null,
+  externalContext = "", // INJECT EXTERNAL DATA
 ) {
   const systemPrompt = `You are Roxy, a truth-first analysis specialist committed to accuracy.
 
@@ -788,6 +817,8 @@ TRUTH-FIRST MODE ENFORCEMENT:
 ${vaultContext}
 
 ${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nUSE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant to show continuity and understanding of the user's situation.\n` : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'}
+
+${externalContext}
 
 Provide honest, accurate analysis with clear confidence indicators.`;
 
@@ -819,7 +850,7 @@ Provide honest, accurate analysis with clear confidence indicators.`;
   }
 }
 
-async function generateClaudeResponse(prompt, mode, vaultContext, _history, memoryContext = null) {
+async function generateClaudeResponse(prompt, mode, vaultContext, _history, memoryContext = null, externalContext = "") {
   // For Claude responses, we need to use a different approach since we're Claude
   // This would typically call the Anthropic API, but for now return structured response
 
@@ -829,6 +860,8 @@ async function generateClaudeResponse(prompt, mode, vaultContext, _history, memo
 ${vaultContext ? "🍌 **Vault Context Applied:** Site Monkeys operational frameworks active." : ""}
 
 ${memoryContext ? `\n\n📝 **Context Awareness:** Referencing previous conversations to provide personalized analysis.` : ''}
+
+${externalContext ? `\n\n🌐 **Current Data Available:** External data sources consulted for this response.` : ''}
 
 **Confidence Level:** 85% (based on available context)
 **Recommendation:** Proceed with structured analysis approach.`,
