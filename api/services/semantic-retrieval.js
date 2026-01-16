@@ -31,6 +31,133 @@ const RETRIEVAL_CONFIG = {
 };
 
 // ============================================
+// SAFETY-CRITICAL DOMAIN DETECTION (Issue #511)
+// ============================================
+
+/**
+ * Domain patterns that indicate safety-critical intersections
+ * When queries involve food/dining/restaurants, we MUST also check health_wellness
+ * for allergies and dietary restrictions.
+ *
+ * DOCTRINE COMPLIANCE:
+ * - Memory & Intelligence Doctrine §11.6: "Claiming ignorance when memory exists is catastrophic"
+ * - Memory & Intelligence Doctrine §11.9: "Memory loaded because it materially affects reasoning"
+ */
+const SAFETY_CRITICAL_DOMAINS = {
+  food_dining: {
+    patterns: [
+      /\b(restaurant|dining|food|meal|eat|eating|dish|menu|cuisine|chef|cook|recipe)\b/i,
+      /\b(recommendation|suggest|recommend|where.*to.*eat|what.*to.*eat|keep.*in.*mind.*restaurant)\b/i,
+      /\b(lunch|dinner|breakfast|brunch|snack)\b/i,
+      /\b(italian|chinese|mexican|thai|indian|japanese|french)(\s+food|\s+restaurant|\s+cuisine)?\b/i
+    ],
+    safetyCriticalCategories: ['health_wellness'],
+    reason: 'food_decisions_intersect_allergies_dietary_restrictions'
+  },
+  physical_activity: {
+    patterns: [
+      /\b(activity|activities|exercise|workout|gym|sport|sports|physical|hike|hiking|climb|climbing)\b/i,
+      /\b(travel|trip|vacation|adventure|outdoor)\b/i,
+      /\b(run|running|swim|swimming|bike|biking|walk|walking)\b/i
+    ],
+    safetyCriticalCategories: ['health_wellness'],
+    reason: 'physical_activities_intersect_health_conditions'
+  },
+  medical_health: {
+    patterns: [
+      /\b(medical|health|doctor|medication|symptom|condition|treatment|therapy)\b/i,
+      /\b(appointment|hospital|clinic|prescription)\b/i
+    ],
+    safetyCriticalCategories: ['health_wellness'],
+    reason: 'medical_queries_require_health_context'
+  }
+};
+
+/**
+ * Detect if query involves safety-critical domains and return categories that MUST be checked
+ * This is Stage 1 deterministic detection (zero tokens)
+ *
+ * @param {string} query - User query text
+ * @returns {string[]} Array of safety-critical category names to inject
+ */
+function detectSafetyCriticalCategories(query) {
+  const safetyCat = new Set();
+
+  for (const [domainName, config] of Object.entries(SAFETY_CRITICAL_DOMAINS)) {
+    const matches = config.patterns.some(pattern => pattern.test(query));
+    if (matches) {
+      config.safetyCriticalCategories.forEach(cat => safetyCat.add(cat));
+      console.log(`[SAFETY-CRITICAL] 🚨 Domain "${domainName}" detected → injecting category: [${config.safetyCriticalCategories.join(', ')}]`);
+      console.log(`[SAFETY-CRITICAL]    Reason: ${config.reason}`);
+    }
+  }
+
+  return [...safetyCat];
+}
+
+/**
+ * Apply safety boost to memories containing allergies, medications, or critical health info
+ * This ensures safety-critical memories rise to the top even if semantic similarity is lower
+ *
+ * @param {object[]} memories - Array of memory objects with similarity scores
+ * @returns {object[]} Memories with safety boost applied
+ */
+function applySafetyCriticalBoost(memories) {
+  const SAFETY_MARKERS = {
+    allergy: {
+      patterns: [/\b(allerg(y|ic|ies))\b/i, /\b(cannot eat|can't eat|avoid eating)\b/i, /\b(intolerant|intolerance)\b/i],
+      boost: 0.25
+    },
+    medication: {
+      patterns: [/\b(medication|medicine|prescription|insulin|inhaler)\b/i, /\b(take daily|must take)\b/i],
+      boost: 0.20
+    },
+    condition: {
+      patterns: [/\b(diabetes|asthma|heart condition|chronic)\b/i, /\b(disability|limitation|restricted)\b/i],
+      boost: 0.15
+    }
+  };
+
+  let boostedCount = 0;
+
+  const result = memories.map(memory => {
+    if (memory.category_name !== 'health_wellness') {
+      return memory;
+    }
+
+    const content = memory.content || '';
+    let maxBoost = 0;
+    const markers = [];
+
+    for (const [markerName, config] of Object.entries(SAFETY_MARKERS)) {
+      if (config.patterns.some(p => p.test(content))) {
+        markers.push(markerName);
+        maxBoost = Math.max(maxBoost, config.boost);
+      }
+    }
+
+    if (maxBoost > 0) {
+      boostedCount++;
+      console.log(`[SAFETY-CRITICAL] 🛡️ Boosting memory ID ${memory.id} by +${maxBoost} (markers: ${markers.join(', ')})`);
+      return {
+        ...memory,
+        similarity: Math.min(memory.similarity + maxBoost, 1.0),
+        safety_boosted: true,
+        safety_markers: markers
+      };
+    }
+
+    return memory;
+  });
+
+  if (boostedCount > 0) {
+    console.log(`[SAFETY-CRITICAL] ⚡ Applied safety boost to ${boostedCount} health_wellness memories`);
+  }
+
+  return result;
+}
+
+// ============================================
 // QUERY EXPANSION (Issue #504)
 // ============================================
 
@@ -325,6 +452,26 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
   }
 
   try {
+    // STEP 0: Detect safety-critical domain intersections (Issue #511)
+    const safetyCriticalCategories = detectSafetyCriticalCategories(query);
+
+    // STEP 0.25: Merge safety-critical categories with requested categories
+    // IMPORTANT: When categories=null (search all), keep it null to search all categories
+    // The safety boost will ensure critical memories rise to top even with lower similarity
+    let effectiveCategories = categories;
+    if (safetyCriticalCategories.length > 0) {
+      if (categories && Array.isArray(categories) && categories.length > 0) {
+        // Merge with existing categories
+        effectiveCategories = [...new Set([...categories, ...safetyCriticalCategories])];
+        console.log(`[SAFETY-CRITICAL] 📋 Merged categories: ${JSON.stringify(categories)} + ${JSON.stringify(safetyCriticalCategories)} → ${JSON.stringify(effectiveCategories)}`);
+      } else {
+        // No categories specified - keep searching all categories but log detection
+        console.log(`[SAFETY-CRITICAL] 🔍 Safety-critical domains detected: ${JSON.stringify(safetyCriticalCategories)}`);
+        console.log(`[SAFETY-CRITICAL] 📋 Searching ALL categories but will boost safety-critical memories`);
+        // Keep effectiveCategories = null to search all
+      }
+    }
+
     // STEP 0.5: Expand query with synonyms for better matching (Issue #504)
     const { expanded: expandedQuery, isPersonal } = expandQuery(query);
 
@@ -356,12 +503,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       console.log(`[SEMANTIC RETRIEVAL] 🎯 Personal query detected - using lower threshold: ${effectiveMinSimilarity}`);
     }
 
-    // STEP 2: Prefilter candidates from DB
+    // STEP 2: Prefilter candidates from DB (using effectiveCategories with safety injection)
     const dbStart = Date.now();
     const { sql, params } = buildPrefilterQuery({
       userId,
       mode,
-      categories,
+      categories: effectiveCategories, // Use merged categories
       includeAllModes,
       allowCrossMode,
       limit: RETRIEVAL_CONFIG.maxCandidates
@@ -431,8 +578,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       similarity: cosineSimilarity(queryEmbedding, candidate.embedding)
     }));
 
+    // CRITICAL FIX #511: Apply safety-critical boost BEFORE hybrid scoring
+    // This ensures allergies and critical health info rise to the top
+    const safetyBoosted = applySafetyCriticalBoost(scored);
+
     // Apply hybrid scoring
-    const hybridScored = scored.map(memory => ({
+    const hybridScored = safetyBoosted.map(memory => ({
       ...memory,
       hybrid_score: calculateHybridScore(memory)
     }));
@@ -494,6 +645,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     telemetry.total_ms = Date.now() - startTime;
     telemetry.latency_ms = Date.now() - startTime;
+
+    // Add safety-critical telemetry (Issue #511)
+    telemetry.safety_critical_detected = safetyCriticalCategories.length > 0;
+    telemetry.safety_categories_injected = safetyCriticalCategories;
+    telemetry.safety_memories_boosted = results.filter(r => r.safety_boosted).length;
 
     // INNOVATION #7: Track semantic access to update importance scores
     // High-importance memories are those frequently semantically relevant to queries
