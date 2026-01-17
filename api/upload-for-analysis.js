@@ -359,6 +359,31 @@ async function processFile(file) {
   return processingResult;
 }
 
+// Multer error handler wrapper - returns JSON errors instead of HTML
+function handleMulterError(err, req, res, next) {
+  if (err) {
+    const timestamp = new Date().toISOString();
+    console.error(`[${timestamp}] [ANALYSIS] Multer error:`, err.message);
+
+    // Log field name for debugging
+    if (err.field) {
+      console.error(`[${timestamp}] [ANALYSIS] Unexpected field: "${err.field}"`);
+    }
+
+    return res.status(400).json({
+      success: false,
+      status: "error",
+      message: `Upload error: ${err.message}`,
+      error: err.message,
+      field: err.field || null,
+      successful_uploads: 0,
+      failed_uploads: 0,
+      files: [],
+    });
+  }
+  next();
+}
+
 // Main upload handler - EXACT COPY with analysis-specific logging
 async function handleAnalysisUpload(req, res) {
   const timestamp = new Date().toISOString();
@@ -544,5 +569,6 @@ async function handleAnalysisUpload(req, res) {
 }
 
 // Export with different names to avoid conflicts - EXACT PATTERN
-export const analysisMiddleware = upload.array("files", 10);
-export { handleAnalysisUpload };
+// Accept field name "file" to match test suite expectations
+export const analysisMiddleware = upload.array("file", 10);
+export { handleAnalysisUpload, handleMulterError };
