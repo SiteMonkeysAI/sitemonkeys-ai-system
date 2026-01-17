@@ -36,6 +36,7 @@ import { uploadMiddleware, handleFileUpload } from "./api/upload-file.js";
 import {
   analysisMiddleware,
   handleAnalysisUpload,
+  handleMulterError,
 } from "./api/upload-for-analysis.js";
 import repoSnapshotRoute from "./api/repo-snapshot.js";
 import { addInventoryEndpoint } from "./system-inventory-endpoint.js";
@@ -938,7 +939,14 @@ const migrateSemanticV2RateLimiter = rateLimit({
 
 // Upload endpoints
 app.post("/api/upload", uploadMiddleware, handleFileUpload);
-app.post("/api/upload-for-analysis", analysisMiddleware, handleAnalysisUpload);
+app.post("/api/upload-for-analysis", (req, res, next) => {
+  analysisMiddleware(req, res, (err) => {
+    if (err) {
+      return handleMulterError(err, req, res, next);
+    }
+    next();
+  });
+}, handleAnalysisUpload);
 
 // Debug endpoint (only in private/debug mode) - MUST come before catch-all routes
 app.use("/api/debug", debugRoutes);

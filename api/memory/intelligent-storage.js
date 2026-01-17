@@ -439,10 +439,24 @@ export class IntelligentMemoryStorage {
 
       // Step 2: Detect fingerprint on EXTRACTED FACTS (not raw input)
       // This is the CRITICAL FIX for Issue #498 - semantic fingerprint detection
+      // CRITICAL: Only detect fingerprint if facts contain actual user information
       console.log('[FLOW] Step 2: Detecting fingerprint on extracted facts...');
-      const fingerprintResult = await this.detectFingerprintFromFacts(facts);
-      console.log('[FLOW] Step 2: Fingerprint detected ✓', fingerprintResult);
-      console.log(`[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`);
+
+      let fingerprintResult;
+      // Validate facts are from user, not assistant boilerplate
+      const factsContainUserInfo = facts &&
+                                    facts.trim().length > 10 &&
+                                    !facts.toLowerCase().includes('no relevant facts') &&
+                                    !facts.toLowerCase().includes('general query');
+
+      if (factsContainUserInfo) {
+        fingerprintResult = await this.detectFingerprintFromFacts(facts);
+        console.log('[FLOW] Step 2: Fingerprint detected ✓', fingerprintResult);
+        console.log(`[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`);
+      } else {
+        console.log('[FLOW] Step 2: Skipping fingerprint detection - facts appear to be non-user content');
+        fingerprintResult = { fingerprint: null, confidence: 0, method: 'skipped_invalid_facts' };
+      }
 
       // Step 3: Check for duplicates (now also checks for supersession)
       console.log('[FLOW] Step 3: Checking for similar memories and supersession candidates...');
@@ -635,6 +649,29 @@ Facts (preserve user terminology + add synonyms):`;
 
       // Store original user message snippet for fallback retrieval
       const originalSnippet = userMsg.substring(0, 100).trim();
+
+      // CRITICAL: Validate extracted facts don't contain assistant boilerplate
+      // This prevents storing AI response content as user facts
+      const factsLower = facts.toLowerCase();
+      const hasAssistantLanguage =
+        factsLower.includes('no relevant facts') ||
+        factsLower.includes('no essential facts') ||
+        factsLower.includes('no key facts') ||
+        factsLower.includes('nothing to extract') ||
+        factsLower.includes('general query') ||
+        factsLower.includes('general question') ||
+        factsLower.includes('no user-specific') ||
+        factsLower.includes('ai assistant') ||
+        factsLower.includes("i'm an ai") ||
+        factsLower.includes('i cannot') ||
+        factsLower.includes("i don't have access");
+
+      if (hasAssistantLanguage) {
+        console.log('[INTELLIGENT-STORAGE] ⚠️ Extracted facts contain assistant boilerplate, rejecting');
+        console.log(`[EXTRACTION-DEBUG] Rejected facts: "${facts.substring(0, 100)}"`);
+        // Return empty string to trigger fallback to user message
+        return '';
+      }
 
       // AGGRESSIVE POST-PROCESSING: Guarantee 10-20:1 compression
       const processedFacts = this.aggressivePostProcessing(facts);

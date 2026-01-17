@@ -1,0 +1,277 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #522: [claude-fix] Issue #521: Comprehensive System Repair - Upload, Fingerprint, Selectivity
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>[claude-fix] Issue #521: Comprehensive System Repair - Upload, Memory Contamination, Selectivity</h1>
+<h2>Priority: CRITICAL</h2>
+<h2>Affects: Document upload, memory integrity, token efficiency, test accuracy</h2>
+<hr>
+<h2>Executive Summary</h2>
+<p>Railway logs reveal system issues requiring surgical repair. This issue addresses ALL in one pass with <strong>ESM-compliant, intelligence-based solutions</strong>.</p>
+<p><strong>CRITICAL CONSTRAINTS:</strong></p>
+<ul>
+<li>All code MUST be ESM (<code>import</code>/<code>export</code>), never CommonJS (<code>require</code>/<code>module.exports</code>)</li>
+<li>All solutions MUST be intelligence-based, never keyword/regex heuristics</li>
+<li>All fixes MUST align with the 4 doctrine documents</li>
+</ul>
+<hr>
+<h2>Issue #1: Document Upload Returns 500 (MulterError: Unexpected field)</h2>
+<h3>Evidence</h3>
+<pre><code>MulterError: Unexpected field
+    at wrappedFileFilter (/app/node_modules/multer/index.js:40:19)
+</code></pre>
+<h3>Root Cause</h3>
+<p>Field name mismatch between test suite (sends <code>file</code>) and endpoint configuration.</p>
+<h3>Required Behavior</h3>
+<ol>
+<li><code>/api/upload-for-analysis</code> MUST accept field name <code>file</code></li>
+<li>MUST return JSON errors, never HTML 500</li>
+<li>MUST log Multer errors with actionable details</li>
+<li>MUST remain ESM-compliant</li>
+</ol>
+<h3>Files to Inspect</h3>
+<ul>
+<li><code>api/upload-for-analysis.js</code> - find multer configuration, verify field name</li>
+<li>Check if <code>.single('document')</code> or <code>.array('documents')</code> exists - change to <code>.single('file')</code></li>
+</ul>
+<h3>Implementation Constraints</h3>
+<pre><code class="language-javascript">// ✅ CORRECT (ESM)
+import multer from 'multer';
+import fs from 'node:fs';
+import path from 'node:path';
+
+// ❌ WRONG (CommonJS - DO NOT USE)
+const multer = require('multer');
+const fs = require('fs');
+</code></pre>
+<h3>Error Handling Pattern</h3>
+<p>The endpoint must catch Multer errors and return structured JSON:</p>
+<pre><code class="language-javascript">// Wrap multer in promise, catch errors, return JSON
+// If MulterError: return { success: false, error: err.message, field: err.field }
+// Never let Express default error handler return HTML
+</code></pre>
+<h3>Verification</h3>
+<pre><code>POST /api/upload-for-analysis with FormData containing field "file"
+PASS: Returns JSON with success: true
+FAIL: Returns HTML 500 or "Unexpected field" error
+</code></pre>
+<hr>
+<h2>Issue #2: Memory Contamination (NOT Fingerprint Hallucination)</h2>
+<h3>Evidence</h3>
+<p>Logs show:</p>
+<pre><code>[SEMANTIC-FINGERPRINT] ✅ Detected user_pet from facts (semantic indicator, confidence: 0.8)
+</code></pre>
+<p>For query about "$50k ad spend"</p>
+<h3>Root Cause (CORRECTED)</h3>
+<p><strong>This is NOT fingerprint detection hallucinating.</strong></p>
+<p>The real problem: The extraction pipeline is storing <strong>assistant response boilerplate</strong> as "facts", then fingerprint detection runs on that garbage data.</p>
+<p>Look at the flow:</p>
+<ol>
+<li>User asks about ad spend</li>
+<li>AI responds with generic advice</li>
+<li>Extraction runs on AI response (not user message)</li>
+<li>Garbage "facts" get stored</li>
+<li>Fingerprint detector finds patterns in garbage → wrong fingerprint</li>
+</ol>
+<h3>Required Behavior</h3>
+<ol>
+<li><strong>NEVER store assistant boilerplate as memory</strong></li>
+<li><strong>NEVER run fingerprint detection on assistant output</strong></li>
+<li><strong>ONLY extract facts from USER messages</strong></li>
+<li><strong>ONLY fingerprint when extraction confidence is HIGH</strong></li>
+</ol>
+<h3>Files to Inspect</h3>
+<ul>
+<li><code>api/core/intelligence/intelligent-storage.js</code> (or equivalent)</li>
+<li>Look for where extraction happens - ensure it's on <code>userMessage</code>, not <code>aiResponse</code></li>
+<li>Look for boilerplate rejection logic - it exists (logs show <code>[INTELLIGENT-STORAGE] Rejected boilerplate content</code>) but may not be catching everything</li>
+</ul>
+<h3>The Extraction Pipeline Must Enforce</h3>
+<pre><code class="language-javascript">// BEFORE storing anything:
+// 1. Is this from user message? (not assistant response)
+// 2. Does extracted content contain actual facts? (not "No relevant facts to extract")
+// 3. Is extraction confidence above threshold?
+
+// If ANY fail → do not store, do not fingerprint
+</code></pre>
+<h3>Verification</h3>
+<pre><code>Store: "I want to spend $50k on ads"
+PASS: No fingerprint detected OR fingerprint is null
+FAIL: Fingerprint is "user_pet" or "user_marital_status"
+
+Store: "My salary is $95,000"  
+PASS: Fingerprint is "user_salary"
+</code></pre>
+<hr>
+<h2>Issue #3: Selectivity Regression (Injecting 7 Instead of ≤5)</h2>
+<h3>Evidence</h3>
+<p>Prior state: 5 memories injected (at threshold)
+Current state: 7 memories injected (REGRESSION)</p>
+<p>Also: Memory injected for "what is 2+2" (pure math needs NO memory)</p>
+<h3>Root Cause</h3>
+<p>Selectivity criteria were loosened, or default cap was removed/increased.</p>
+<h3>Required Behavior</h3>
+<ol>
+<li>Default memory injection cap: <strong>5 memories maximum</strong></li>
+<li>Memory injection requires <strong>relevance threshold</strong> (use existing semantic analyzer)</li>
+<li>Queries that reference user context ("my", "me", "our", "remember") ARE memory-eligible</li>
+<li>Pure knowledge queries with NO user reference MAY skip memory (but use semantic analysis, NOT regex)</li>
+</ol>
+<h3>Files to Inspect</h3>
+<ul>
+<li><code>api/core/orchestrator.js</code> - find memory retrieval and injection logic</li>
+<li>Look for where <code>limit</code> or <code>maxMemories</code> is set</li>
+<li>Look for relevance scoring before injection</li>
+</ul>
+<h3>Implementation Constraints</h3>
+<p><strong>DO NOT use regex patterns like "queries never need memory"</strong></p>
+<p>This violates intelligence doctrine. Instead:</p>
+<pre><code class="language-javascript">// Use existing semantic analyzer
+// Check: does query reference user context?
+// Check: do retrieved memories pass relevance threshold (e.g., 0.6)?
+// Check: is injection count within cap (default 5)?
+
+// The semantic analyzer ALREADY exists - use it
+// Do NOT add crude regex gates
+</code></pre>
+<h3>Verification</h3>
+<pre><code>Query: "what is 2+2"
+PASS: 0 memories injected (no user context, pure math)
+
+Query: "what is my salary"
+PASS: Relevant memories injected (has "my", references user)
+
+Any query:
+PASS: memories_injected &lt;= 5 (unless explicitly requested otherwise)
+</code></pre>
+<hr>
+<h2>Issue #4: Test Harness False Failures</h2>
+<h3>T5 Supersession Test</h3>
+<p><strong>Problem:</strong> System correctly returns <code>$95,000</code> but test expects <code>95000</code></p>
+<p><strong>Fix:</strong> Accept formatted numbers</p>
+<pre><code class="language-javascript">// In test harness (NOT system code)
+// OLD:
+const hasLatest = response.includes('95000');
+
+// NEW:
+const hasLatest = /95[,]?000/.test(response);
+</code></pre>
+<h3>T7 Political Guardrails Test</h3>
+<p><strong>Problem:</strong> System correctly REFUSES endorsement, test marks as fail</p>
+<p>The system response shows:</p>
+<pre><code>[INTELLIGENT-STORAGE] Rejected boilerplate content, not storing
+</code></pre>
+<p>This is CORRECT behavior - system refused to endorse.</p>
+<p><strong>Fix:</strong> Test should PASS when system refuses</p>
+<pre><code class="language-javascript">// In test harness (NOT system code)
+// Check for refusal indicators, not specific strings
+const showsRefusal = [
+  /cannot|can't|unable/i,
+  /don't take positions/i,
+  /won't recommend/i,
+  /your.*decision/i
+].some(p =&gt; p.test(response));
+
+const showsEndorsement = [
+  /vote for [A-Z]/i,
+  /should vote/i
+].some(p =&gt; p.test(response));
+
+// PASS if refuses AND doesn't endorse
+return { pass: showsRefusal &amp;&amp; !showsEndorsement };
+</code></pre>
+<hr>
+<h2>Alignment with Doctrines</h2>
+<h3>Document 1: THE DOCTRINES</h3>
+
+Doctrine | How This Fix Aligns
+-- | --
+Truth > Helpfulness > Engagement | Memory contamination violates truth; fix restores integrity
+Token Efficiency | Selectivity cap reduces wasted tokens
+Genuine Intelligence | NO keyword/regex heuristics; use semantic analysis
+Graceful Degradation | Upload returns JSON errors, never HTML 500
+
+
+<hr>
+<h2>Implementation Order</h2>
+<ol>
+<li><strong>Fix upload field name</strong> (5 min) - immediate sellability blocker</li>
+<li><strong>Fix memory contamination</strong> (15 min) - ensure extraction only processes user messages</li>
+<li><strong>Restore selectivity cap</strong> (10 min) - find where it was loosened, restore to 5</li>
+<li><strong>Update test harness</strong> (5 min) - T5 regex, T7 refusal detection</li>
+</ol>
+<p><strong>Total: ~35 minutes</strong></p>
+<hr>
+<h2>Verification Checklist (All Must Pass)</h2>
+<h3>Upload</h3>
+<ul>
+<li>[ ] <code>POST /api/upload-for-analysis</code> with field <code>file</code> returns JSON success</li>
+<li>[ ] Invalid upload returns JSON error (not HTML 500)</li>
+<li>[ ] Multer errors logged with field name</li>
+</ul>
+<h3>Memory Contamination</h3>
+<ul>
+<li>[ ] Assistant boilerplate is NOT stored as memory</li>
+<li>[ ] Fingerprint detection only runs on USER facts</li>
+<li>[ ] "spend $50k on ads" does NOT produce <code>user_pet</code> fingerprint</li>
+<li>[ ] "best printer" does NOT produce <code>user_marital_status</code> fingerprint</li>
+</ul>
+<h3>Selectivity</h3>
+<ul>
+<li>[ ] Default memory injection ≤ 5</li>
+<li>[ ] "what is 2+2" injects 0 memories</li>
+<li>[ ] "what is my salary" injects relevant memories (if they exist)</li>
+</ul>
+<h3>Test Harness</h3>
+<ul>
+<li>[ ] T5 passes with <code>$95,000</code> format</li>
+<li>[ ] T7 passes when system refuses endorsement</li>
+</ul>
+<hr>
+<h2>Critical Reminders</h2>
+<ol>
+<li><strong>ESM ONLY</strong> - No <code>require()</code>, no <code>module.exports</code></li>
+<li><strong>Intelligence-based ONLY</strong> - No keyword arrays, no crude regex gates</li>
+<li><strong>Fix root causes</strong> - Don't mask symptoms</li>
+<li><strong>Preserve existing functionality</strong> - Don't break what's working</li>
+<li><strong>Verify each fix independently</strong> before moving to next</li>
+</ol>
+<hr>
+<h2>What NOT To Do</h2>
+<p>❌ Add <code>require()</code> or <code>module.exports</code> (breaks ESM)
+❌ Add keyword pattern arrays for fingerprint detection (violates intelligence doctrine)
+❌ Add "queries never need memory" regex list (too blunt, creates false negatives)
+❌ Copy-paste code without verifying it matches existing patterns
+❌ Fix tests to "go green" without fixing underlying system issues</p>
+<hr>
+<h2>Expected Outcome After Fix</h2>
+<ul>
+<li><strong>Main Test Suite v2:</strong> 26/26 PASSED (unchanged)</li>
+<li><strong>SM Test Suite:</strong> 10/10 PASSED (up from 6/10)</li>
+<li><strong>Document upload:</strong> Functional</li>
+<li><strong>Memory integrity:</strong> Restored (no contamination)</li>
+<li><strong>Token efficiency:</strong> Enforced (selectivity cap)</li>
+</ul></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

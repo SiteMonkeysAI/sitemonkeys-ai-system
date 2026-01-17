@@ -2773,10 +2773,21 @@ class IntelligenceSystem {
       }
     }
 
+    // CRITICAL: Enforce strict memory count cap (default: 5 memories maximum)
+    // This prevents token-efficient memories from flooding the context
+    const MAX_MEMORIES = 5;
+    const cappedMemories = enforcedMemories.slice(0, MAX_MEMORIES);
+
+    if (cappedMemories.length < enforcedMemories.length) {
+      this.logger.log(
+        `Memory count cap enforced: ${cappedMemories.length}/${enforcedMemories.length} memories (max: ${MAX_MEMORIES})`,
+      );
+    }
+
     this.logger.log(
-      `Token enforcement: ${enforcedMemories.length}/${result.length} memories, ${budgetUsed}/${tokenBudget} tokens`,
+      `Token enforcement: ${cappedMemories.length}/${result.length} memories, ${budgetUsed}/${tokenBudget} tokens`,
     );
-    return enforcedMemories;
+    return cappedMemories;
   }
 
   // ================================================================
