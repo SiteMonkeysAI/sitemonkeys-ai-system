@@ -1,0 +1,564 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #518: [claude-fix] Critical: Memory System Integrity - Supersession + User Isolation
+
+Issue Description:
+# [claude-fix] Critical: Memory System Integrity - Supersession + User Isolation
+
+## Priority: CRITICAL
+## Affects: All 53 innovations relying on memory accuracy
+
+---
+
+## Executive Summary
+
+Two critical memory system failures were discovered during system validation testing:
+
+1. **Supersession Not Working**: When a user updates a fact (e.g., phone number), the old fact is NOT being replaced. Both old and new values persist, causing confusion.
+
+2. **User Memory Isolation Failure**: Test users are receiving memories from other users' accounts. A brand new test userId received personal data (children's names, phone numbers, pets) that belonged to a different user.
+
+These issues violate the core doctrines:
+- **TRUTH > HELPFULNESS > ENGAGEMENT**: Returning outdated superseded facts is FALSE
+- **Material Memory Relevance is Safety-Critical**: Cross-user contamination is a CRITICAL safety violation
+
+---
+
+## Evidence From Testing
+
+### Supersession Failure Evidence
+
+**Test:** Store phone 555-0000, then update to 555-1111, then query "What is my phone number?"
+
+**Expected:** Only 555-1111 returned
+
+**Actual Response:**
+```
+Your current phone number in my records is 555-1111. This was updated recently 
+from the previous numbers, which were 555-0000 and 555-1234.
+```
+
+**Problem:** 
+- Old number (555-0000) still being retrieved and mentioned
+- Unknown number (555-1234) appearing from nowhere
+
+### User Isolation Failure Evidence
+
+**Test:** Created brand new userId `diag_user_1768687017206`
+
+**Response contained personal data never entered by test user:**
+```
+1. Your current phone number is 555-1111. This was recently updated from the previous numbers, 555-0000 and 555-1234.
+2. You have a peanut allergy that can lead to anaphylaxis.
+3. Your emergency contact is John Smith.
+4. You have four children named Emerald, Holly, John, and Jordan.
+5. You are the owner of four capuchin monkeys - Eli, Roxy, Lyric, and Lullaby.
+```
+
+**Problem:** This is Chris's personal data, NOT the test user's data.
+
+---
+
+## Root Cause Analysis
+
+### Part A: Supersession Not Implemented
+
+**Location:** `memory_system/persistent_memory.js` - `storeMemory()` function
+
+**Current Code (lines 127-175):**
+```javascript
+async storeMemory(userId, userMessage, aiResponse, metadata = {}) {
+  // ... routing and scoring ...
+  
+  // Store in database - JUST INSERTS, NO SUPERSESSION CHECK
+  const result = await this.coreSystem.executeQuery(
+    `INSERT INTO persistent_memories (...) VALUES (...) RETURNING id`,
+    [userId, routing.primaryCategory, ...]
+  );
+}
+```
+
+**Missing:**
+1. No check for existing facts about the same topic
+2. No semantic fingerprinting to detect supersession candidates
+3. No marking of old facts as `is_current = false`
+4. No deletion of superseded records
+
+**Schema Ready:** The `is_current` column EXISTS in the database schema (used in retrieval queries), but nothing ever sets it to `false`.
+
+### Part B: User Isolation Failure
+
+**Hypothesis 1: Global Context Injection**
+The chat handler may be injecting a "system context" or "user profile" that contains Chris's data regardless of the userId parameter.
+
+**Hypothesis 2: Fallback UserId**  
+When a userId doesn't have memories, the system may fall back to a default/demo userId.
+
+**Hypothesis 3: Semantic Search Ignoring UserId**
+If embedding-based search is used, the userId filter may not be applied to the vector similarity search.
+
+**Location to Audit:**
+1. `api/chat.js` - Check how memory context is injected
+2. `memory_system/intelligence.js` - Verify userId in ALL queries
+3. Any global orchestrator or context builder
+4. Check for hardcoded demo/default userIds
+
+---
+
+## The Fix
+
+### Part A: Implement Supersession (persistent_memory.js)
+
+**Principle:** Intelligence-based supersession detection, NOT keyword matching
+
+**Implementation:**
+
+```javascript
+// Add to persistent_memory.js
+
+/**
+ * SUPERSESSION DETECTION
+ * 
+ * Detects when a new fact should supersede an existing fact.
+ * Uses SEMANTIC fingerprinting, not keyword matching.
+ * 
+ * A fact supersedes another when:
+ * 1. Same user
+ * 2. Same semantic domain (phone, email, address, job, etc.)
+ * 3. New value is clearly an UPDATE, not an addition
+ * 
+ * Examples:
+ * - "My phone is 555-0000" → "My phone is 555-1111" = SUPERSESSION
+ * - "My dog is Max" → "My cat is Luna" = NOT supersession (different entities)
+ * - "I work at Google" → "I now work at Meta" = SUPERSESSION
+ */
+
+const SUPERSESSION_DOMAINS = {
+  phone: {
+    patterns: [/phone\s*(number)?/i, /call\s*me\s*at/i, /reach\s*me\s*at/i, /cell/i, /mobile/i],
+    extractValue: (text) => {
+      const match = text.match(/(\d{3}[-.]?\d{3}[-.]?\d{4}|\d{3}[-.]?\d{4})/);
+      return match ? match[1].replace(/[-.\s]/g, '') : null;
+    }
+  },
+  email: {
+    patterns: [/email/i, /e-mail/i, /mail\s*me\s*at/i],
+    extractValue: (text) => {
+      const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+      return match ? match[0].toLowerCase() : null;
+    }
+  },
+  address: {
+    patterns: [/address/i, /live\s*at/i, /reside/i, /located\s*at/i, /moved\s*to/i],
+    extractValue: (text) => {
+      // Extract address-like content - city, state, or street
+      const match = text.match(/(?:at|in|to)\s+([A-Z][a-zA-Z\s,]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|[A-Z]{2}\s+\d{5})?)/i);
+      return match ? match[1].trim() : null;
+    }
+  },
+  employer: {
+    patterns: [/work\s*(?:at|for)/i, /employed\s*(?:at|by)/i, /job\s*(?:at|is)/i, /company/i],
+    extractValue: (text) => {
+      const match = text.match(/(?:work|employed|job)\s*(?:at|for|is)?\s*([A-Z][a-zA-Z\s&]+)/i);
+      return match ? match[1].trim() : null;
+    }
+  },
+  name: {
+    patterns: [/(?:my\s+)?name\s+is/i, /call\s+me/i, /i\s+am\s+called/i],
+    extractValue: (text) => {
+      const match = text.match(/(?:name\s+is|call\s+me|i\s+am)\s+([A-Z][a-zA-Z]+)/i);
+      return match ? match[1] : null;
+    }
+  }
+};
+
+/**
+ * Detect if content contains a supersedable fact
+ * Returns: { domain: string, value: string } or null
+ */
+function detectSupersedableFact(content) {
+  const contentLower = content.toLowerCase();
+  
+  for (const [domain, config] of Object.entries(SUPERSESSION_DOMAINS)) {
+    // Check if any pattern matches
+    const hasPattern = config.patterns.some(pattern => pattern.test(contentLower));
+    if (hasPattern) {
+      const value = config.extractValue(content);
+      if (value) {
+        return { domain, value };
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Check for and handle supersession before storing new memory
+ * 
+ * @param {string} userId - User identifier
+ * @param {string} content - New content being stored
+ * @returns {Promise<{superseded: boolean, supersededIds: number[]}>}
+ */
+async function handleSupersession(userId, content) {
+  const fact = detectSupersedableFact(content);
+  
+  if (!fact) {
+    return { superseded: false, supersededIds: [] };
+  }
+  
+  console.log(`[SUPERSESSION] Detected ${fact.domain} fact: ${fact.value}`);
+  
+  try {
+    // Find existing memories in the same domain for this user
+    // Use SEMANTIC matching via the domain patterns, not exact keywords
+    const domainConfig = SUPERSESSION_DOMAINS[fact.domain];
+    const patternSQL = domainConfig.patterns
+      .map(p => `content ~* '${p.source}'`)
+      .join(' OR ');
+    
+    const existingQuery = `
+      SELECT id, content, created_at
+      FROM persistent_memories
+      WHERE user_id = $1
+        AND (is_current = true OR is_current IS NULL)
+        AND (${patternSQL})
+      ORDER BY created_at DESC
+      LIMIT 10
+    `;
+    
+    const existing = await this.coreSystem.executeQuery(existingQuery, [userId]);
+    
+    if (existing.rows.length === 0) {
+      console.log(`[SUPERSESSION] No existing ${fact.domain} facts found`);
+      return { superseded: false, supersededIds: [] };
+    }
+    
+    // Mark existing facts as superseded
+    const supersededIds = existing.rows.map(r => r.id);
+    
+    console.log(`[SUPERSESSION] Marking ${supersededIds.length} existing ${fact.domain} facts as superseded`);
+    
+    await this.coreSystem.executeQuery(
+      `UPDATE persistent_memories 
+       SET is_current = false, 
+           metadata = jsonb_set(COALESCE(metadata, '{}')::jsonb, '{superseded_at}', to_jsonb(NOW()::text))
+       WHERE id = ANY($1)`,
+      [supersededIds]
+    );
+    
+    console.log(`[SUPERSESSION] Successfully superseded IDs: ${supersededIds.join(', ')}`);
+    
+    return { superseded: true, supersededIds, domain: fact.domain };
+    
+  } catch (error) {
+    console.error('[SUPERSESSION] Error during supersession check:', error);
+    // Don't block storage on supersession failure
+    return { superseded: false, supersededIds: [], error: error.message };
+  }
+}
+```
+
+**Integration into storeMemory():**
+
+```javascript
+async storeMemory(userId, userMessage, aiResponse, metadata = {}) {
+  try {
+    // ... existing trace logging ...
+    
+    const conversationContent = `User: ${userMessage}\nAssistant: ${aiResponse}`;
+    
+    // ═══════════════════════════════════════════════════════════════
+    // SUPERSESSION CHECK - Before storing, check if this supersedes existing facts
+    // ═══════════════════════════════════════════════════════════════
+    const supersessionResult = await this.handleSupersession(userId, userMessage);
+    
+    if (supersessionResult.superseded) {
+      console.log(`[TRACE-STORE] SUPERSESSION: Marked ${supersessionResult.supersededIds.length} old ${supersessionResult.domain} facts as is_current=false`);
+      metadata.supersedes = supersessionResult.supersededIds;
+      metadata.supersession_domain = supersessionResult.domain;
+    }
+    // ═══════════════════════════════════════════════════════════════
+    
+    // ... rest of existing routing and storage logic ...
+    
+    // Store in database (add is_current = true explicitly)
+    const result = await this.coreSystem.executeQuery(
+      `INSERT INTO persistent_memories (
+        user_id, category_name, subcategory_name, content, 
+        token_count, relevance_score, usage_frequency, 
+        last_accessed, created_at, metadata, is_current
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $8, true)
+      RETURNING id`,
+      [
+        userId,
+        routing.primaryCategory,
+        routing.subcategory || null,
+        conversationContent,
+        tokenCount,
+        relevanceScore,
+        0,
+        JSON.stringify(metadata),
+      ],
+    );
+    
+    // ... rest of existing code ...
+  }
+}
+```
+
+---
+
+### Part B: User Isolation Audit & Fix (intelligence.js + chat.js)
+
+**Step 1: Add Strict userId Validation**
+
+In `intelligence.js`, add validation at the TOP of `extractRelevantMemories`:
+
+```javascript
+async extractRelevantMemories(userId, query, routing) {
+  // ═══════════════════════════════════════════════════════════════
+  // CRITICAL: USER ISOLATION ENFORCEMENT
+  // ═══════════════════════════════════════════════════════════════
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+    console.error('[MEMORY-ISOLATION] CRITICAL: extractRelevantMemories called without valid userId');
+    console.error('[MEMORY-ISOLATION] Refusing to retrieve memories without user identification');
+    return [];
+  }
+  
+  // Sanitize userId to prevent injection
+  const sanitizedUserId = userId.trim();
+  
+  // Log for audit trail
+  console.log(`[MEMORY-ISOLATION] Retrieving memories for userId: ${sanitizedUserId.substring(0, 8)}...`);
+  // ═══════════════════════════════════════════════════════════════
+  
+  // ... rest of function using sanitizedUserId ...
+}
+```
+
+**Step 2: Audit extractFromPrimaryCategory**
+
+Current code at line 1044 already has `WHERE user_id = $1`, but add explicit logging:
+
+```javascript
+async extractFromPrimaryCategory(userId, query, routing, semanticAnalysis) {
+  try {
+    const primaryCategory = routing.primaryCategory || "personal_life_interests";
+    
+    // ═══════════════════════════════════════════════════════════════
+    // CRITICAL: Explicit userId logging for isolation verification
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`[MEMORY-ISOLATION] extractFromPrimaryCategory called with:`);
+    console.log(`[MEMORY-ISOLATION]   userId: ${userId}`);
+    console.log(`[MEMORY-ISOLATION]   category: ${primaryCategory}`);
+    // ═══════════════════════════════════════════════════════════════
+    
+    return await this.coreSystem.withDbClient(async (client) => {
+      // ... existing query ...
+      
+      // DIAGNOSTIC: Log the actual SQL being executed
+      console.log(`[MEMORY-ISOLATION] SQL user_id param: ${userId}`);
+      
+      const result = await client.query(baseQuery, queryParams);
+      
+      // DIAGNOSTIC: Verify all returned rows belong to this user
+      const wrongUserRows = result.rows.filter(r => r.user_id !== userId);
+      if (wrongUserRows.length > 0) {
+        console.error(`[MEMORY-ISOLATION] CRITICAL BUG: Retrieved ${wrongUserRows.length} rows with WRONG userId!`);
+        console.error(`[MEMORY-ISOLATION] Expected: ${userId}`);
+        console.error(`[MEMORY-ISOLATION] Got: ${wrongUserRows.map(r => r.user_id).join(', ')}`);
+        // Filter them out as emergency protection
+        return result.rows.filter(r => r.user_id === userId);
+      }
+      
+      return result.rows;
+    });
+  }
+}
+```
+
+**Step 3: Audit searchByTopics**
+
+Add the same isolation check:
+
+```javascript
+async searchByTopics(userId, topics, excludeCategory) {
+  // ═══════════════════════════════════════════════════════════════
+  // CRITICAL: User isolation check
+  // ═══════════════════════════════════════════════════════════════
+  if (!userId) {
+    console.error('[MEMORY-ISOLATION] searchByTopics called without userId');
+    return [];
+  }
+  console.log(`[MEMORY-ISOLATION] searchByTopics for userId: ${userId.substring(0, 8)}...`);
+  // ═══════════════════════════════════════════════════════════════
+  
+  // ... rest of function ...
+}
+```
+
+**Step 4: Audit Chat Handler Context Injection**
+
+In `api/chat.js`, find where memory is injected into the prompt and ensure userId is passed correctly:
+
+```javascript
+// SEARCH FOR patterns like:
+// - retrieveMemory(
+// - extractRelevantMemories(
+// - getMemoryContext(
+// - Any hardcoded userId or fallback
+
+// ENSURE every call passes the ACTUAL userId from the request:
+const userId = req.body.userId;  // NOT a default value
+
+// ADD validation:
+if (!userId) {
+  return res.status(400).json({ 
+    error: 'userId is required for memory-enabled conversations' 
+  });
+}
+```
+
+**Step 5: Check for Global Context Injection**
+
+Search for any code that injects "system context" or "user profile" that might contain hardcoded data:
+
+```javascript
+// SEARCH for patterns like:
+// - systemPrompt += 
+// - context.profile =
+// - user.defaultProfile
+// - DEMO_USER or TEST_USER constants
+// - Any hardcoded personal information
+```
+
+---
+
+## Verification Tests
+
+After implementing the fix, run these tests:
+
+### Test 1: Supersession Works
+```javascript
+// Store initial phone
+await sendChat('My phone number is 555-0000', { userId: 'test_user_1' });
+await delay(2000);
+
+// Update phone
+await sendChat('My phone number is now 555-1111', { userId: 'test_user_1' });
+await delay(2000);
+
+// Query phone
+const response = await sendChat('What is my phone number?', { userId: 'test_user_1' });
+
+// PASS: Response contains ONLY 555-1111
+// FAIL: Response contains 555-0000 OR both numbers
+```
+
+### Test 2: User Isolation Works
+```javascript
+// Use a completely new userId
+const newUserId = `isolation_test_${Date.now()}`;
+
+// Query without storing anything
+const response = await sendChat('What do you know about me?', { userId: newUserId });
+
+// PASS: Response says "I don't have any stored information about you" or similar
+// FAIL: Response contains ANY personal data (names, phone numbers, etc.)
+```
+
+### Test 3: Cross-User Contamination Prevention
+```javascript
+// Store data for user A
+await sendChat('My favorite color is blue', { userId: 'user_A' });
+
+// Query as user B
+const response = await sendChat('What is my favorite color?', { userId: 'user_B' });
+
+// PASS: Response does NOT mention blue
+// FAIL: Response mentions blue (user A's data leaked to user B)
+```
+
+---
+
+## Files to Modify
+
+1. **`memory_system/persistent_memory.js`**
+   - Add `detectSupersedableFact()` function
+   - Add `handleSupersession()` function
+   - Modify `storeMemory()` to call supersession before INSERT
+   - Add `is_current = true` to INSERT statement
+
+2. **`memory_system/intelligence.js`**
+   - Add userId validation at top of `extractRelevantMemories()`
+   - Add isolation logging to `extractFromPrimaryCategory()`
+   - Add isolation logging to `searchByTopics()`
+   - Add post-query user verification (filter wrong userId rows)
+
+3. **`api/chat.js`** (if needed after audit)
+   - Ensure userId is validated before memory operations
+   - Remove any hardcoded default userIds
+   - Remove any global context injection that bypasses userId
+
+---
+
+## Alignment with System Doctrines
+
+### Truth > Helpfulness > Engagement
+- Superseded facts are FALSE information - they MUST be filtered
+- Cross-user data is FALSE for that user - MUST be prevented
+
+### Material Memory Relevance is Safety-Critical
+- Wrong phone number could be safety issue
+- Medical info (allergies) from wrong user is DANGEROUS
+
+### Intelligence-Based, Not Rule-Based
+- Supersession detection uses semantic domain analysis, not keyword matching
+- Pattern matching identifies INTENT (updating a fact) not just words
+
+### No Placeholders, Production-Grade
+- Complete implementation provided
+- Error handling included
+- Logging for verification included
+- Graceful degradation if supersession check fails
+
+---
+
+## Estimated Impact
+
+- **Supersession Tests**: Will change from FAIL to PASS
+- **Safety-Critical Tests**: Already passing, will remain stable
+- **Memory Retrieval**: Will return ONLY current, user-specific data
+- **Token Efficiency**: Slightly improved (fewer obsolete facts retrieved)
+
+---
+
+## Deployment Checklist
+
+- [ ] Review and approve this issue
+- [ ] Implement Part A (Supersession) in `persistent_memory.js`
+- [ ] Implement Part B (User Isolation) in `intelligence.js`
+- [ ] Audit `chat.js` for any additional isolation issues
+- [ ] Deploy to Railway
+- [ ] Run SMTEST.runAllTests() to verify
+- [ ] Run DIAG.runDiagnostic() to verify supersession
+- [ ] Confirm all 3 previously failing tests now pass
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

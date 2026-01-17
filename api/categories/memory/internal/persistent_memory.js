@@ -134,6 +134,147 @@ class PersistentMemoryOrchestrator {
   }
 
   /**
+   * SUPERSESSION DETECTION
+   *
+   * Detects when a new fact should supersede an existing fact.
+   * Uses SEMANTIC fingerprinting, not keyword matching.
+   *
+   * A fact supersedes another when:
+   * 1. Same user
+   * 2. Same semantic domain (phone, email, address, job, etc.)
+   * 3. New value is clearly an UPDATE, not an addition
+   *
+   * Examples:
+   * - "My phone is 555-0000" → "My phone is 555-1111" = SUPERSESSION
+   * - "My dog is Max" → "My cat is Luna" = NOT supersession (different entities)
+   * - "I work at Google" → "I now work at Meta" = SUPERSESSION
+   */
+  static SUPERSESSION_DOMAINS = {
+    phone: {
+      patterns: [/phone\s*(number)?/i, /call\s*me\s*at/i, /reach\s*me\s*at/i, /cell/i, /mobile/i],
+      extractValue: (text) => {
+        const match = text.match(/(\d{3}[-.]?\d{3}[-.]?\d{4}|\d{3}[-.]?\d{4})/);
+        return match ? match[1].replace(/[-.\s]/g, '') : null;
+      }
+    },
+    email: {
+      patterns: [/email/i, /e-mail/i, /mail\s*me\s*at/i],
+      extractValue: (text) => {
+        const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
+        return match ? match[0].toLowerCase() : null;
+      }
+    },
+    address: {
+      patterns: [/address/i, /live\s*at/i, /reside/i, /located\s*at/i, /moved\s*to/i],
+      extractValue: (text) => {
+        // Extract address-like content - city, state, or street
+        const match = text.match(/(?:at|in|to)\s+([A-Z][a-zA-Z\s,]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|[A-Z]{2}\s+\d{5})?)/i);
+        return match ? match[1].trim() : null;
+      }
+    },
+    employer: {
+      patterns: [/work\s*(?:at|for)/i, /employed\s*(?:at|by)/i, /job\s*(?:at|is)/i, /company/i],
+      extractValue: (text) => {
+        const match = text.match(/(?:work|employed|job)\s*(?:at|for|is)?\s*([A-Z][a-zA-Z\s&]+)/i);
+        return match ? match[1].trim() : null;
+      }
+    },
+    name: {
+      patterns: [/(?:my\s+)?name\s+is/i, /call\s+me/i, /i\s+am\s+called/i],
+      extractValue: (text) => {
+        const match = text.match(/(?:name\s+is|call\s+me|i\s+am)\s+([A-Z][a-zA-Z]+)/i);
+        return match ? match[1] : null;
+      }
+    }
+  };
+
+  /**
+   * Detect if content contains a supersedable fact
+   * Returns: { domain: string, value: string } or null
+   */
+  detectSupersedableFact(content) {
+    const contentLower = content.toLowerCase();
+
+    for (const [domain, config] of Object.entries(PersistentMemoryOrchestrator.SUPERSESSION_DOMAINS)) {
+      // Check if any pattern matches
+      const hasPattern = config.patterns.some(pattern => pattern.test(contentLower));
+      if (hasPattern) {
+        const value = config.extractValue(content);
+        if (value) {
+          return { domain, value };
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Check for and handle supersession before storing new memory
+   *
+   * @param {string} userId - User identifier
+   * @param {string} content - New content being stored
+   * @returns {Promise<{superseded: boolean, supersededIds: number[], domain?: string, error?: string}>}
+   */
+  async handleSupersession(userId, content) {
+    const fact = this.detectSupersedableFact(content);
+
+    if (!fact) {
+      return { superseded: false, supersededIds: [] };
+    }
+
+    console.log(`[SUPERSESSION] Detected ${fact.domain} fact: ${fact.value}`);
+
+    try {
+      // Find existing memories in the same domain for this user
+      // Use SEMANTIC matching via the domain patterns, not exact keywords
+      const domainConfig = PersistentMemoryOrchestrator.SUPERSESSION_DOMAINS[fact.domain];
+      const patternSQL = domainConfig.patterns
+        .map(p => `content ~* '${p.source.replace(/\\/g, '\\\\')}'`)
+        .join(' OR ');
+
+      const existingQuery = `
+        SELECT id, content, created_at
+        FROM persistent_memories
+        WHERE user_id = $1
+          AND (is_current = true OR is_current IS NULL)
+          AND (${patternSQL})
+        ORDER BY created_at DESC
+        LIMIT 10
+      `;
+
+      const existing = await this.coreSystem.executeQuery(existingQuery, [userId]);
+
+      if (existing.rows.length === 0) {
+        console.log(`[SUPERSESSION] No existing ${fact.domain} facts found`);
+        return { superseded: false, supersededIds: [] };
+      }
+
+      // Mark existing facts as superseded
+      const supersededIds = existing.rows.map(r => r.id);
+
+      console.log(`[SUPERSESSION] Marking ${supersededIds.length} existing ${fact.domain} facts as superseded`);
+
+      await this.coreSystem.executeQuery(
+        `UPDATE persistent_memories
+         SET is_current = false,
+             metadata = jsonb_set(COALESCE(metadata, '{}')::jsonb, '{superseded_at}', to_jsonb(NOW()::text))
+         WHERE id = ANY($1)`,
+        [supersededIds]
+      );
+
+      console.log(`[SUPERSESSION] Successfully superseded IDs: ${supersededIds.join(', ')}`);
+
+      return { superseded: true, supersededIds, domain: fact.domain };
+
+    } catch (error) {
+      console.error('[SUPERSESSION] Error during supersession check:', error);
+      // Don't block storage on supersession failure
+      return { superseded: false, supersededIds: [], error: error.message };
+    }
+  }
+
+  /**
    * Store a conversation in memory
    * @param {string} userId - User identifier
    * @param {string} userMessage - User's message
@@ -158,6 +299,18 @@ class PersistentMemoryOrchestrator {
       // Combine user message and AI response
       const conversationContent = `User: ${userMessage}\nAssistant: ${aiResponse}`;
       console.log('[TRACE-STORE] A4. Combined content length:', conversationContent.length);
+
+      // ═══════════════════════════════════════════════════════════════
+      // SUPERSESSION CHECK - Before storing, check if this supersedes existing facts
+      // ═══════════════════════════════════════════════════════════════
+      const supersessionResult = await this.handleSupersession(userId, userMessage);
+
+      if (supersessionResult.superseded) {
+        console.log(`[TRACE-STORE] SUPERSESSION: Marked ${supersessionResult.supersededIds.length} old ${supersessionResult.domain} facts as is_current=false`);
+        metadata.supersedes = supersessionResult.supersededIds;
+        metadata.supersession_domain = supersessionResult.domain;
+      }
+      // ═══════════════════════════════════════════════════════════════
 
       // Route to determine category
       console.log('[TRACE-STORE] A5. About to call analyzeAndRoute...');
@@ -191,14 +344,14 @@ class PersistentMemoryOrchestrator {
       console.log('[TRACE-STORE] B5. tokenCount:', tokenCount);
       console.log('[TRACE-STORE] B6. relevanceScore:', relevanceScore);
 
-      // Store in database
+      // Store in database (add is_current = true explicitly)
       const result = await this.coreSystem.executeQuery(
         `
         INSERT INTO persistent_memories (
-          user_id, category_name, subcategory_name, content, 
-          token_count, relevance_score, usage_frequency, 
-          last_accessed, created_at, metadata
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $8)
+          user_id, category_name, subcategory_name, content,
+          token_count, relevance_score, usage_frequency,
+          last_accessed, created_at, metadata, is_current
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, $8, true)
         RETURNING id
       `,
         [
