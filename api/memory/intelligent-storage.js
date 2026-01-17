@@ -252,6 +252,60 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * PROBLEM 3 FIX: Detect non-user-specific queries that shouldn't be stored
+   * Memory is for information ABOUT the user, not general world information
+   * @param {string} content - User message to check
+   * @returns {object} - { shouldSkip: boolean, reason: string }
+   */
+  detectNonUserQuery(content) {
+    if (!content || typeof content !== 'string') {
+      return { shouldSkip: false, reason: null };
+    }
+
+    const contentLower = content.toLowerCase();
+
+    // News/current events queries (not about the user)
+    const newsPatterns = [
+      /what'?s (?:in|on) the news/i,
+      /what'?s happening (?:in|with|on|today)/i,
+      /tell me (?:about|the) (?:latest|current|today'?s) (?:news|headlines|stories)/i,
+      /(?:top|latest|recent) (?:news|headlines|stories)/i,
+      /what happened (?:with|to|in)/i  // "what happened with Tesla" - not about user
+    ];
+
+    for (const pattern of newsPatterns) {
+      if (pattern.test(content)) {
+        return { shouldSkip: true, reason: 'general_news_query_not_about_user' };
+      }
+    }
+
+    // Weather queries (unless personal context like "should I bring umbrella")
+    if (/what'?s the weather/i.test(content) && !/\b(i|my|should i|do i need)\b/i.test(content)) {
+      return { shouldSkip: true, reason: 'general_weather_query_not_about_user' };
+    }
+
+    // General information queries without personal context
+    const generalInfoPatterns = [
+      /^(?:what|who|when|where|why|how) (?:is|are|was|were|did|does|do)/i,  // "What is Bitcoin?"
+      /^define /i,
+      /^explain /i
+    ];
+
+    // Only skip if NO personal indicators
+    const hasPersonalIndicators = /\b(i|my|me|our|we|should i|can i|do i|am i)\b/i.test(content);
+
+    if (!hasPersonalIndicators) {
+      for (const pattern of generalInfoPatterns) {
+        if (pattern.test(content)) {
+          return { shouldSkip: true, reason: 'general_info_query_no_personal_context' };
+        }
+      }
+    }
+
+    return { shouldSkip: false, reason: null };
+  }
+
+  /**
    * Detect if user is expressing priorities (UX-049)
    * @param {string} content - Content to check
    * @returns {boolean} - True if priority language detected
@@ -296,6 +350,14 @@ export class IntelligentMemoryStorage {
       console.log('[TRACE-INTELLIGENT] I5. aiResponse length:', aiResponse?.length || 0);
 
       console.log('[INTELLIGENT-STORAGE] 🧠 Processing conversation for intelligent storage');
+
+      // PROBLEM 3 FIX: Filter out non-user-specific queries
+      // Storage should only keep information ABOUT the user, not general world information
+      const isNonUserQuery = this.detectNonUserQuery(userMessage);
+      if (isNonUserQuery.shouldSkip) {
+        console.log(`[INTELLIGENT-STORAGE] ⏭️ Skipping storage - ${isNonUserQuery.reason}`);
+        return { action: 'skipped', reason: isNonUserQuery.reason };
+      }
 
       // Step 0: Sanitize content before processing
       console.log('[TRACE-INTELLIGENT] I6. About to sanitize content...');
@@ -1086,9 +1148,12 @@ Facts (preserve user terminology + add synonyms):`;
         // Continue with normal storage
       }
 
-      // If fingerprint detected, route through supersession
-      if (fingerprintResult.fingerprint && fingerprintResult.confidence >= 0.7) {
-        console.log(`[INTELLIGENT-STORAGE] ✨ Routing through supersession for fingerprint: ${fingerprintResult.fingerprint}`);
+      // PROBLEM 2 FIX: Lower confidence threshold for supersession
+      // If fingerprint detected with ANY confidence > 0.5, route through supersession
+      // This ensures updates like "my phone is 555-1234" supersede "my phone is 555-0000"
+      // even when value patterns don't match perfectly (e.g., different formats)
+      if (fingerprintResult.fingerprint && fingerprintResult.confidence >= 0.5) {
+        console.log(`[INTELLIGENT-STORAGE] ✨ Routing through supersession for fingerprint: ${fingerprintResult.fingerprint} (confidence: ${fingerprintResult.confidence})`);
 
         const supersessionResult = await storeWithSupersession(this.db, {
           userId,

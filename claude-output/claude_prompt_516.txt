@@ -1,0 +1,459 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #516: [claude-fix] CRITICAL: System-Wide Integrity Sweep - Graceful Degradation, Memory Supersession, Semantic Routing, Safety-Critical Retrieval, and HTTP Validation
+
+Issue Description:
+<h2>[claude-fix] CRITICAL: System-Wide Integrity Sweep - Graceful Degradation, Memory Supersession, Semantic Routing, Safety-Critical Retrieval, and HTTP Validation</h2>
+<h3>OVERVIEW</h3>
+<p>This issue addresses <strong>five interconnected system integrity problems</strong> that must be fixed comprehensively. Each problem requires full data flow tracing, identification of ALL affected code paths, and complete fixes that prevent similar issues system-wide.</p>
+<p><strong>The doctrine applies:</strong> Fix broadly, not narrowly. One-and-done solutions. No placeholders. Intelligence-based, not keyword-based.</p>
+<hr>
+<h3>PROBLEM 1: Graceful Degradation Not Injecting Verification Paths</h3>
+<h4>Evidence of Failure</h4>
+<p>When external lookup fails (e.g., stock price query with no API), the system:</p>
+<ul>
+<li>✅ Correctly triggers graceful degradation</li>
+<li>✅ Correctly generates <code>verification_path</code> with actionable URLs</li>
+<li>❌ FAILS to inject this into AI context</li>
+<li>❌ AI gives generic advice instead of specific verification paths</li>
+</ul>
+<p><strong>Logs show:</strong></p>
+<pre><code class="language-json">"verification_path": {
+  "message": "Check current information at:",
+  "sources": [
+    { "name": "Yahoo Finance", "url": "https://finance.yahoo.com" },
+    { "name": "Google Finance", "url": "https://www.google.com/finance" }
+  ]
+}
+</code></pre>
+<p><strong>But AI responded with:</strong></p>
+<blockquote>
+<p>"To get the most accurate and up-to-date stock prices, you should consider checking financial news websites..."</p>
+</blockquote>
+<p>This is generic, not the specific actionable paths the system generated.</p>
+<h4>Root Cause</h4>
+<p>In <code>api/lib/ai-processors.js</code>, the successful lookup path correctly builds <code>externalContext</code>, but the <strong>degraded/failed lookup path</strong> does not inject the <code>verification_path</code> and <code>disclosure</code> into <code>externalContext</code>.</p>
+<h4>Required Fix</h4>
+<p><strong>Location:</strong> <code>api/lib/ai-processors.js</code> - the <code>else</code> branch when <code>lookupResult.success &amp;&amp; lookupResult.data</code> is false but <code>lookupResult.degraded</code> is true.</p>
+<p><strong>The fix must:</strong></p>
+<ol>
+<li>Check if <code>lookupResult.degraded === true</code></li>
+<li>Build <code>externalContext</code> from <code>lookupResult.disclosure</code> and <code>lookupResult.verification_path</code></li>
+<li>Format it clearly for AI consumption:</li>
+</ol>
+<pre><code class="language-javascript">if (lookupResult.degraded &amp;&amp; lookupResult.verification_path) {
+  let verificationSources = lookupResult.verification_path.sources
+    .map(s =&gt; `- ${s.name}: ${s.url}`)
+    .join('\n');
+  
+  externalContext = `\n\n⚠️ EXTERNAL LOOKUP UNAVAILABLE:\n${lookupResult.disclosure || 'I cannot access current data for this query.'}\n\nCHECK CURRENT INFORMATION AT:\n${verificationSources}\n\nYou MUST include these specific verification paths in your response. Do NOT give generic advice like "check financial websites" - give the user these exact URLs.`;
+}
+</code></pre>
+<h4>Verification After Fix</h4>
+<p><strong>Test query:</strong> "What's Tesla's current stock price?"</p>
+<p><strong>Expected response must include:</strong></p>
+<ul>
+<li>Acknowledgment that real-time data isn't available</li>
+<li><strong>Specific URLs:</strong> finance.yahoo.com, google.com/finance</li>
+<li>NOT generic advice like "check financial news websites"</li>
+</ul>
+<h4>Broader Sweep for Problem 1</h4>
+<p>Search the entire codebase for other places where:</p>
+<ul>
+<li><code>lookupResult.degraded</code> is checked</li>
+<li><code>verification_path</code> is generated but potentially not used</li>
+<li>Graceful degradation messages are built</li>
+</ul>
+<p>Ensure ALL degradation paths inject actionable guidance into AI context.</p>
+<p><strong>Search patterns:</strong></p>
+<pre><code class="language-bash">grep -r "degraded" --include="*.js" ./api/
+grep -r "verification_path" --include="*.js" ./api/
+grep -r "gracefulDegradation" --include="*.js" ./api/
+grep -r "disclosure" --include="*.js" ./api/
+</code></pre>
+<hr>
+<h3>PROBLEM 2: Memory Supersession Failures</h3>
+<h4>Evidence of Failure</h4>
+<p>When a user updates canonical information (phone number, email, name, address, job title), the system should:</p>
+<ul>
+<li>Detect this is an update to existing canonical data</li>
+<li>Supersede (replace) the old memory with the new one</li>
+<li>NOT create duplicate memories with conflicting information</li>
+</ul>
+<p><strong>Current behavior:</strong> New facts are stored alongside old facts, creating contradictions in memory.</p>
+<h4>Root Cause Investigation Required</h4>
+<p>Trace the supersession flow:</p>
+<pre><code>User says "My new phone number is 555-1234"
+  → Fact extraction detects phone number
+  → Fingerprint detection should identify "user_phone_number"
+  → Supersession check should find existing phone memory
+  → Old memory should be marked superseded OR deleted
+  → New memory stored with is_current=true
+</code></pre>
+<p><strong>Files to investigate:</strong></p>
+<ol>
+<li><code>api/core/intelligence/intelligentStorage.js</code> - Where supersession logic lives</li>
+<li><code>api/core/intelligence/semanticFingerprint.js</code> - Where fingerprint detection happens</li>
+<li><code>api/core/memory/</code> - Where memory storage occurs</li>
+</ol>
+<h4>Required Fix</h4>
+<p><strong>Step 1: Verify fingerprint detection works for canonical data types</strong></p>
+<p>The system must reliably detect these canonical fingerprints:</p>
+<ul>
+<li><code>user_phone_number</code></li>
+<li><code>user_email</code></li>
+<li><code>user_name</code></li>
+<li><code>user_address</code></li>
+<li><code>user_job_title</code></li>
+<li><code>user_company</code></li>
+<li><code>user_birthday</code></li>
+<li><code>user_spouse_name</code></li>
+<li><code>user_children_names</code></li>
+</ul>
+<p><strong>Step 2: Verify supersession query finds existing memories</strong></p>
+<p>When fingerprint is detected, the system must:</p>
+<pre><code class="language-sql">SELECT * FROM persistent_memories 
+WHERE user_id = $1 
+AND semantic_fingerprint = $2 
+AND is_current = true
+</code></pre>
+<p><strong>Step 3: Verify supersession actually occurs</strong></p>
+<p>When existing memory is found:</p>
+<pre><code class="language-sql">UPDATE persistent_memories 
+SET is_current = false, superseded_by = $newMemoryId, superseded_at = NOW()
+WHERE id = $existingMemoryId
+</code></pre>
+<p><strong>Step 4: Verify retrieval respects is_current</strong></p>
+<p>All memory retrieval queries must include <code>WHERE is_current = true</code> unless explicitly requesting history.</p>
+<h4>Verification After Fix</h4>
+<p><strong>Test sequence:</strong></p>
+<ol>
+<li>"My phone number is 555-0000"</li>
+<li>Wait for storage</li>
+<li>"My phone number is 555-1111"</li>
+<li>Wait for storage</li>
+<li>"What's my phone number?"</li>
+</ol>
+<p><strong>Expected:</strong> System returns ONLY 555-1111, not both numbers.</p>
+<h4>Broader Sweep for Problem 2</h4>
+<p>Identify ALL canonical data types that should trigger supersession. Ensure the fingerprint detector recognizes all of them. Ensure supersession logic handles all of them.</p>
+<p><strong>Search patterns:</strong></p>
+<pre><code class="language-bash">grep -r "supersession" --include="*.js" ./api/
+grep -r "supersede" --include="*.js" ./api/
+grep -r "is_current" --include="*.js" ./api/
+grep -r "fingerprint" --include="*.js" ./api/
+grep -r "canonical" --include="*.js" ./api/
+</code></pre>
+<hr>
+<h3>PROBLEM 3: Semantic Routing Inconsistencies</h3>
+<h4>Evidence of Failure</h4>
+<p>Memories are being stored in categories that don't match how they're retrieved. This causes:</p>
+<ul>
+<li>Information stored under one category but queried under another</li>
+<li>Relevant memories not found during retrieval</li>
+<li>Wrong memories surfaced for queries</li>
+</ul>
+<p><strong>From logs:</strong></p>
+<pre><code>[INTELLIGENCE] SEMANTIC ROUTING: personal_life_interests/General Personal
+</code></pre>
+<p>But a news query shouldn't route to <code>personal_life_interests</code> - it's not personal information about the user.</p>
+<h4>Root Cause Investigation Required</h4>
+<p>The semantic router is making category decisions that don't align with retrieval patterns.</p>
+<p><strong>Files to investigate:</strong></p>
+<ol>
+<li><code>api/core/intelligence/intelligentStorage.js</code> - Storage routing</li>
+<li><code>api/core/intelligence/semanticAnalyzer.js</code> - Category detection</li>
+<li><code>api/core/memory/semanticRetrieval.js</code> - Retrieval logic</li>
+</ol>
+<h4>Required Fix</h4>
+<p><strong>Step 1: Audit category definitions</strong></p>
+<p>List all categories and their intended purpose:</p>
+<ul>
+<li><code>personal_life_interests</code> - User's hobbies, interests, personal preferences</li>
+<li><code>health_wellness</code> - Medical conditions, allergies, health goals</li>
+<li><code>money_spending_goals</code> - Financial information, budgets, purchases</li>
+<li><code>work_professional</code> - Job, career, professional context</li>
+<li>etc.</li>
+</ul>
+<p><strong>Step 2: Verify routing logic matches definitions</strong></p>
+<p>The semantic analyzer must route based on <strong>what the information IS</strong>, not what the query is about.</p>
+<p>Example: "What's happening in the news?" should NOT store anything to memory because it's not information ABOUT the user.</p>
+<p><strong>Step 3: Add storage filtering</strong></p>
+<p>Not everything should be stored. Add intelligence to detect:</p>
+<ul>
+<li>Is this information ABOUT the user? → Store it</li>
+<li>Is this general world information? → Don't store it</li>
+<li>Is this a transient query with no lasting relevance? → Don't store it</li>
+</ul>
+<p><strong>Step 4: Verify retrieval uses same routing logic</strong></p>
+<p>Storage and retrieval must use identical category mappings. If information is stored in <code>health_wellness</code>, queries about health must search <code>health_wellness</code>.</p>
+<h4>Verification After Fix</h4>
+<p><strong>Test:</strong> Ask "What's the weather?" - this should NOT create a memory.
+<strong>Test:</strong> Say "I'm allergic to penicillin" - this SHOULD create a memory in <code>health_wellness</code>.
+<strong>Test:</strong> Ask "What am I allergic to?" - this SHOULD retrieve the penicillin allergy.</p>
+<h4>Broader Sweep for Problem 3</h4>
+<p>Map the complete category taxonomy. Verify storage and retrieval use the same mappings. Identify any categories that are defined but never used, or used inconsistently.</p>
+<p><strong>Search patterns:</strong></p>
+<pre><code class="language-bash">grep -r "category" --include="*.js" ./api/core/
+grep -r "routing" --include="*.js" ./api/core/
+grep -r "SEMANTIC ROUTING" --include="*.js" ./api/
+</code></pre>
+<hr>
+<h3>PROBLEM 4: Safety-Critical Data Not Prioritized</h3>
+<h4>Evidence of Failure</h4>
+<p>From the logs:</p>
+<pre><code>[SAFETY-CRITICAL] 🛡️ Boosting memory ID 4044 by +0.15 (markers: condition)
+[SAFETY-CRITICAL] ⚡ Applied safety boost to 1 health_wellness memories
+</code></pre>
+<p>The system IS detecting safety-critical memories and boosting them. But the question is: <strong>Are they being surfaced in relevant contexts?</strong></p>
+<p><strong>Example failure scenario:</strong></p>
+<ul>
+<li>User has stored: "I'm allergic to penicillin"</li>
+<li>User asks: "What antibiotics should I take for a sinus infection?"</li>
+<li>System should retrieve allergy information and warn about penicillin</li>
+<li>If it doesn't, that's a safety failure</li>
+</ul>
+<h4>Root Cause Investigation Required</h4>
+<p><strong>The safety-critical flow:</strong></p>
+<pre><code>Query received
+  → Detect if query is health/medical/safety related
+  → If yes, boost retrieval of safety-critical memories
+  → Ensure allergy, condition, medication memories are ALWAYS included
+  → AI must acknowledge safety-critical context
+</code></pre>
+<p><strong>Files to investigate:</strong></p>
+<ol>
+<li><code>api/core/memory/semanticRetrieval.js</code> - Where safety boost is applied</li>
+<li><code>api/core/intelligence/orchestrator.js</code> - Where retrieval is assembled</li>
+<li>Safety-critical markers detection logic</li>
+</ol>
+<h4>Required Fix</h4>
+<p><strong>Step 1: Verify safety-critical detection is comprehensive</strong></p>
+<p>The system must detect safety-critical markers in:</p>
+<ul>
+<li>Stored memories (allergy, condition, medication, etc.)</li>
+<li>Incoming queries (health questions, medical topics, drug interactions)</li>
+</ul>
+<p><strong>Step 2: Verify cross-category safety retrieval</strong></p>
+<p>When a health-related query is detected, the system must:</p>
+<ul>
+<li>Search <code>health_wellness</code> category regardless of query routing</li>
+<li>Include ALL safety-critical memories (allergies, conditions, medications)</li>
+<li>Boost their relevance scores to ensure inclusion</li>
+</ul>
+<p><strong>Step 3: Verify AI receives safety context</strong></p>
+<p>Safety-critical memories must be:</p>
+<ul>
+<li>Clearly labeled in the context injection</li>
+<li>Marked as MUST-ACKNOWLEDGE for the AI</li>
+<li>Example format:</li>
+</ul>
+<pre><code>⚠️ SAFETY-CRITICAL CONTEXT:
+- User has allergy: Penicillin
+- User has condition: Diabetes
+
+You MUST consider this safety information in your response.
+</code></pre>
+<p><strong>Step 4: Verify AI acknowledges safety context</strong></p>
+<p>Add enforcement gate that checks: If safety-critical context was provided, did the AI response acknowledge it?</p>
+<h4>Verification After Fix</h4>
+<p><strong>Test sequence:</strong></p>
+<ol>
+<li>"I'm allergic to penicillin and shellfish"</li>
+<li>"I have Type 2 diabetes"</li>
+<li>"What should I eat at a seafood restaurant?"</li>
+</ol>
+<p><strong>Expected:</strong> Response MUST mention shellfish allergy and diabetes dietary considerations.</p>
+<p><strong>Test sequence:</strong></p>
+<ol>
+<li>"What antibiotics are good for bronchitis?"</li>
+</ol>
+<p><strong>Expected:</strong> Response MUST warn about penicillin allergy if user has it stored.</p>
+<h4>Broader Sweep for Problem 4</h4>
+<p>Identify ALL safety-critical data types:</p>
+<ul>
+<li>Allergies (food, drug, environmental)</li>
+<li>Medical conditions</li>
+<li>Medications currently taking</li>
+<li>Drug interactions</li>
+<li>Emergency contacts</li>
+<li>Dietary restrictions (medical, not preference)</li>
+</ul>
+<p>Ensure ALL of these are:</p>
+<ul>
+<li>Detected on storage</li>
+<li>Marked as safety-critical</li>
+<li>Retrieved for relevant queries</li>
+<li>Boosted in relevance</li>
+<li>Acknowledged by AI</li>
+</ul>
+<p><strong>Search patterns:</strong></p>
+<pre><code class="language-bash">grep -r "safety" --include="*.js" ./api/
+grep -r "critical" --include="*.js" ./api/
+grep -r "allergy" --include="*.js" ./api/
+grep -r "medical" --include="*.js" ./api/
+grep -r "health" --include="*.js" ./api/
+grep -r "boost" --include="*.js" ./api/
+</code></pre>
+<hr>
+<h3>PROBLEM 5: Broader HTTP Input Validation</h3>
+<h4>Evidence of Vulnerability</h4>
+<p>CodeQL flagged type confusion where <code>req.query.data</code> could be string or array. We fixed the specific instance, but the pattern may exist elsewhere.</p>
+<h4>Root Cause</h4>
+<p>HTTP query parameters in Express can be:</p>
+<ul>
+<li>String: <code>?data=hello</code> → <code>req.query.data = "hello"</code></li>
+<li>Array: <code>?data=hello&amp;data=world</code> → <code>req.query.data = ["hello", "world"]</code></li>
+</ul>
+<p>Any code that assumes string and calls <code>.length</code>, <code>.split()</code>, <code>.substring()</code>, etc. is vulnerable.</p>
+<h4>Required Fix</h4>
+<p><strong>Step 1: Audit ALL HTTP entry points</strong></p>
+<p>Find every route that accepts query parameters or body parameters:</p>
+<pre><code class="language-bash">grep -r "req.query" --include="*.js" ./api/
+grep -r "req.body" --include="*.js" ./api/
+grep -r "req.params" --include="*.js" ./api/
+</code></pre>
+<p><strong>Step 2: For each entry point, trace the data flow</strong></p>
+<ul>
+<li>Where does the parameter go?</li>
+<li>What operations are performed on it?</li>
+<li>Are there type assumptions?</li>
+</ul>
+<p><strong>Step 3: Add input validation at entry points</strong></p>
+<p>Create a standard validation utility:</p>
+<pre><code class="language-javascript">// api/utils/inputValidation.js
+export function ensureString(value, defaultValue = '') {
+  if (Array.isArray(value)) {
+    return value.join('\n');
+  }
+  if (typeof value !== 'string') {
+    return String(value ?? defaultValue);
+  }
+  return value;
+}
+
+export function ensureArray(value) {
+  if (Array.isArray(value)) return value;
+  if (value === undefined || value === null) return [];
+  return [value];
+}
+</code></pre>
+<p><strong>Step 4: Apply validation to all HTTP handlers</strong></p>
+<p>Every route handler should validate inputs before use:</p>
+<pre><code class="language-javascript">app.get('/api/something', (req, res) =&gt; {
+  const query = ensureString(req.query.q);
+  const tags = ensureArray(req.query.tags);
+  // Now safe to use
+});
+</code></pre>
+<h4>Verification After Fix</h4>
+<p><strong>Test each endpoint with:</strong></p>
+<ul>
+<li>Normal string parameter</li>
+<li>Array parameter (same key twice)</li>
+<li>Missing parameter</li>
+<li>Null/undefined parameter</li>
+</ul>
+<p>Verify no type errors or unexpected behavior.</p>
+<h4>Broader Sweep for Problem 5</h4>
+<p>Don't just find the vulnerabilities - create a <strong>standard pattern</strong> that all HTTP handlers must follow. Document it. Enforce it in code review. Consider adding ESLint rules or runtime validation middleware.</p>
+<p><strong>Files likely needing validation:</strong></p>
+<ul>
+<li><code>api/routes/*.js</code> - All route handlers</li>
+<li><code>api/core/intelligence/ttlCacheManager.js</code> - testCache function (already fixed)</li>
+<li><code>api/lib/ai-processors.js</code> - Any HTTP-derived data (already fixed)</li>
+<li>Any file that imports from routes or handles request data</li>
+</ul>
+<hr>
+<h3>IMPLEMENTATION CONSTRAINTS</h3>
+<ol>
+<li><strong>No placeholders</strong> - Every line must be production-grade</li>
+<li><strong>Intelligence-based</strong> - Use semantic understanding, not keyword matching</li>
+<li><strong>Complete data flow tracing</strong> - For every fix, trace source to sink</li>
+<li><strong>Defense in depth</strong> - Validate at entry AND consumption points</li>
+<li><strong>Verify no collateral damage</strong> - Each fix must not break existing functionality</li>
+<li><strong>Full test coverage</strong> - Provide test cases for each fix</li>
+</ol>
+<h3>DOCTRINE COMPLIANCE</h3>
+
+Doctrine | Requirement
+-- | --
+Truth-First | Data integrity preserved through entire flow
+Zero-Tolerance | No placeholders, no "fix later" comments
+Genuine Intelligence | Semantic understanding, not pattern matching
+Token Efficiency | Minimal overhead for validations
+Memory Doctrine | Supersession works, retrieval is accurate
+Safety | Safety-critical data always surfaces
+
+
+<h3>SUCCESS CRITERIA</h3>
+<ol>
+<li>✅ Graceful degradation injects specific verification paths into AI context</li>
+<li>✅ Memory supersession works for ALL canonical data types</li>
+<li>✅ Storage and retrieval use consistent semantic routing</li>
+<li>✅ Safety-critical memories ALWAYS surface for relevant queries</li>
+<li>✅ ALL HTTP entry points validate input types</li>
+<li>✅ No new vulnerabilities introduced</li>
+<li>✅ All existing functionality preserved</li>
+<li>✅ Test cases pass for each problem area</li>
+</ol>
+<h3>FILES TO INVESTIGATE</h3>
+<p><strong>Problem 1 (Graceful Degradation):</strong></p>
+<ul>
+<li><code>api/lib/ai-processors.js</code></li>
+<li><code>api/core/intelligence/externalLookupEngine.js</code></li>
+</ul>
+<p><strong>Problem 2 (Memory Supersession):</strong></p>
+<ul>
+<li><code>api/core/intelligence/intelligentStorage.js</code></li>
+<li><code>api/core/intelligence/semanticFingerprint.js</code></li>
+<li><code>api/core/memory/*.js</code></li>
+</ul>
+<p><strong>Problem 3 (Semantic Routing):</strong></p>
+<ul>
+<li><code>api/core/intelligence/semanticAnalyzer.js</code></li>
+<li><code>api/core/intelligence/intelligentStorage.js</code></li>
+<li><code>api/core/memory/semanticRetrieval.js</code></li>
+</ul>
+<p><strong>Problem 4 (Safety-Critical):</strong></p>
+<ul>
+<li><code>api/core/memory/semanticRetrieval.js</code></li>
+<li><code>api/core/intelligence/orchestrator.js</code></li>
+<li>Safety marker detection logic</li>
+</ul>
+<p><strong>Problem 5 (HTTP Validation):</strong></p>
+<ul>
+<li><code>api/routes/*.js</code></li>
+<li>Any file handling <code>req.query</code>, <code>req.body</code>, <code>req.params</code></li>
+</ul>
+<hr>
+<h3>EXECUTION ORDER</h3>
+<ol>
+<li><strong>Problem 1 first</strong> - Quick win, isolated fix</li>
+<li><strong>Problem 5 second</strong> - Security hardening, prevents future issues</li>
+<li><strong>Problem 2 third</strong> - Core memory integrity</li>
+<li><strong>Problem 3 fourth</strong> - Depends on understanding from Problem 2</li>
+<li><strong>Problem 4 fifth</strong> - Builds on Problems 2 and 3</li>
+</ol>
+<hr>
+<p><strong>This is a comprehensive system integrity sweep. Take the time to trace every data flow. Verify every assumption. Test every fix. The goal is ONE issue that addresses ALL of these problems completely.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
