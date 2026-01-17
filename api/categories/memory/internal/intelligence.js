@@ -1624,6 +1624,45 @@ class IntelligenceSystem {
         `Starting extraction for user: ${sanitizedUserId}, query: "${query.substring(0, 50)}..."`,
       );
 
+      // ═══════════════════════════════════════════════════════════════
+      // ORDINAL FACT RETRIEVAL (Issue #520) - Check if query asks about ordered facts
+      // ═══════════════════════════════════════════════════════════════
+      const queryOrdinal = this.detectOrdinalFact(query);
+
+      if (queryOrdinal.hasOrdinal) {
+        console.log(`[ORDINAL-RETRIEVAL] Query asks for ordinal #${queryOrdinal.ordinal} of ${queryOrdinal.subject}`);
+
+        try {
+          // Search for memories with matching ordinal metadata
+          const ordinalQuery = `
+            SELECT * FROM persistent_memories
+            WHERE user_id = $1
+              AND (is_current = true OR is_current IS NULL)
+              AND metadata->>'ordinal' = $2
+              AND metadata->>'ordinal_subject' ILIKE $3
+            ORDER BY created_at DESC
+            LIMIT 5
+          `;
+
+          const ordinalResults = await this.coreSystem.executeQuery(ordinalQuery, [
+            sanitizedUserId,
+            String(queryOrdinal.ordinal),
+            `%${queryOrdinal.subject}%`
+          ]);
+
+          if (ordinalResults.rows.length > 0) {
+            console.log(`[ORDINAL-RETRIEVAL] ✅ Found ${ordinalResults.rows.length} memories with ordinal match`);
+            return ordinalResults.rows;
+          } else {
+            console.log(`[ORDINAL-RETRIEVAL] No memories found with ordinal metadata, falling through to normal retrieval`);
+          }
+        } catch (error) {
+          this.logger.error('[ORDINAL-RETRIEVAL] Ordinal query failed:', error);
+          // Fall through to normal retrieval
+        }
+      }
+      // ═══════════════════════════════════════════════════════════════
+
       // STEP 0: FIRST PASS - Exact match for high-entropy tokens (Issue #210 Fix 3)
       const HIGH_ENTROPY_PATTERN = /[A-Z]+-[A-Z]+-\d{4,}|[A-Za-z0-9]{12,}/g;
       const queryTokens = query.match(HIGH_ENTROPY_PATTERN) || [];
@@ -3772,6 +3811,56 @@ class IntelligenceSystem {
       // FINAL: Usage frequency
       return (b.usage_frequency || 0) - (a.usage_frequency || 0);
     });
+  }
+
+  // ================================================================
+  // ORDINAL FACT DETECTION (Issue #520)
+  // ================================================================
+
+  /**
+   * Detect if content contains an ordinal reference (first, second, third, etc.)
+   * Returns: { hasOrdinal: boolean, ordinal: number, subject: string, pattern: string } or { hasOrdinal: false }
+   */
+  detectOrdinalFact(content) {
+    if (!content || typeof content !== 'string') {
+      return { hasOrdinal: false };
+    }
+
+    const contentLower = content.toLowerCase();
+
+    // Ordinal mapping
+    const ORDINAL_PATTERNS = {
+      // Word ordinals
+      first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
+      sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+      // Number ordinals
+      '1st': 1, '2nd': 2, '3rd': 3, '4th': 4, '5th': 5,
+      '6th': 6, '7th': 7, '8th': 8, '9th': 9, '10th': 10,
+      // Numeric
+      one: 1, two: 2, three: 3, four: 4, five: 5,
+      six: 6, seven: 7, eight: 8, nine: 9, ten: 10
+    };
+
+    // Pattern: "my [ordinal] [subject]" or "the [ordinal] [subject]"
+    const ordinalRegex = /\b(my|the)\s+(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|one|two|three|four|five|six|seven|eight|nine|ten)\s+(\w+)/i;
+    const match = contentLower.match(ordinalRegex);
+
+    if (match) {
+      const ordinalWord = match[2].toLowerCase();
+      const ordinalNum = ORDINAL_PATTERNS[ordinalWord];
+      const subject = match[3];
+
+      console.log(`[ORDINAL-DETECT] Found ordinal: ${ordinalWord} ${subject} (#${ordinalNum})`);
+
+      return {
+        hasOrdinal: true,
+        ordinal: ordinalNum,
+        subject: subject,
+        pattern: `${ordinalWord} ${subject}`
+      };
+    }
+
+    return { hasOrdinal: false };
   }
 }
 
