@@ -312,6 +312,19 @@ class PersistentMemoryOrchestrator {
       }
       // ═══════════════════════════════════════════════════════════════
 
+      // ═══════════════════════════════════════════════════════════════
+      // ORDINAL FACT DETECTION (Issue #520) - Store ordering metadata for precise retrieval
+      // ═══════════════════════════════════════════════════════════════
+      const ordinalInfo = this.intelligenceSystem.detectOrdinalFact(userMessage);
+
+      if (ordinalInfo.hasOrdinal) {
+        console.log(`[ORDINAL] Detected ordinal fact: ${ordinalInfo.pattern} (#${ordinalInfo.ordinal})`);
+        metadata.ordinal = ordinalInfo.ordinal;
+        metadata.ordinal_subject = ordinalInfo.subject;
+        metadata.ordinal_pattern = ordinalInfo.pattern;
+      }
+      // ═══════════════════════════════════════════════════════════════
+
       // Route to determine category
       console.log('[TRACE-STORE] A5. About to call analyzeAndRoute...');
       const routing = await this.intelligenceSystem.analyzeAndRoute(
