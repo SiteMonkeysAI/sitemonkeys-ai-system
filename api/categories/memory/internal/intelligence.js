@@ -1604,8 +1604,24 @@ class IntelligenceSystem {
     const startTime = Date.now();
 
     try {
+      // ═══════════════════════════════════════════════════════════════
+      // CRITICAL: USER ISOLATION ENFORCEMENT
+      // ═══════════════════════════════════════════════════════════════
+      if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+        console.error('[MEMORY-ISOLATION] CRITICAL: extractRelevantMemories called without valid userId');
+        console.error('[MEMORY-ISOLATION] Refusing to retrieve memories without user identification');
+        return [];
+      }
+
+      // Sanitize userId to prevent injection
+      const sanitizedUserId = userId.trim();
+
+      // Log for audit trail
+      console.log(`[MEMORY-ISOLATION] Retrieving memories for userId: ${sanitizedUserId.substring(0, 8)}...`);
+      // ═══════════════════════════════════════════════════════════════
+
       this.logger.log(
-        `Starting extraction for user: ${userId}, query: "${query.substring(0, 50)}..."`,
+        `Starting extraction for user: ${sanitizedUserId}, query: "${query.substring(0, 50)}..."`,
       );
 
       // STEP 0: FIRST PASS - Exact match for high-entropy tokens (Issue #210 Fix 3)
@@ -1651,7 +1667,7 @@ class IntelligenceSystem {
               ORDER BY created_at DESC
               LIMIT 5
             `;
-            exactMatchParams = [userId, ...queryTokens.map(t => `%${t}%`)];
+            exactMatchParams = [sanitizedUserId, ...queryTokens.map(t => `%${t}%`)];
           } else {
             // Query asks about identifiers but doesn't contain one - search for any high-entropy content
             exactMatchQuery = `
@@ -1662,7 +1678,7 @@ class IntelligenceSystem {
               ORDER BY created_at DESC
               LIMIT 10
             `;
-            exactMatchParams = [userId];
+            exactMatchParams = [sanitizedUserId];
           }
 
           const exactMatches = await this.coreSystem.executeQuery(
@@ -1689,7 +1705,7 @@ class IntelligenceSystem {
 
       // STEP 1: Primary category extraction (existing logic)
       const primaryMemories = await this.extractFromPrimaryCategory(
-        userId,
+        sanitizedUserId,
         query,
         routing,
         semanticAnalysis,
@@ -1750,7 +1766,7 @@ class IntelligenceSystem {
           "Primary category yielded few relevant results, trying related categories...",
         );
         const relatedMemories = await this.tryRelatedCategories(
-          userId,
+          sanitizedUserId,
           query,
           routing,
           semanticAnalysis,
@@ -1781,7 +1797,7 @@ class IntelligenceSystem {
             
             // Search across ALL categories for these content topics
             const topicMemories = await this.searchByTopics(
-              userId,
+              sanitizedUserId,
               topics,
               routing.primaryCategory,
             );
@@ -1841,8 +1857,10 @@ class IntelligenceSystem {
       return finalMemories;
     } catch (error) {
       this.logger.error("Critical error in enhanced extraction:", error);
+      // Use the original userId if sanitizedUserId is not defined (error occurred before sanitization)
+      const errorUserId = typeof sanitizedUserId !== 'undefined' ? sanitizedUserId : userId;
       await this.coreSystem.logExtractionError(error, {
-        userId,
+        userId: errorUserId,
         query: query.substring(0, 100),
       });
       return [];
@@ -1851,10 +1869,18 @@ class IntelligenceSystem {
 
   async extractFromPrimaryCategory(userId, query, routing, semanticAnalysis) {
     try {
+      // ═══════════════════════════════════════════════════════════════
+      // CRITICAL: Explicit userId logging for isolation verification
+      // ═══════════════════════════════════════════════════════════════
+      console.log(`[MEMORY-ISOLATION] extractFromPrimaryCategory called with:`);
+      console.log(`[MEMORY-ISOLATION]   userId: ${userId}`);
+      console.log(`[MEMORY-ISOLATION]   category: ${routing.primaryCategory || "personal_life_interests"}`);
+      // ═══════════════════════════════════════════════════════════════
+
       const primaryCategory =
         routing.primaryCategory || "personal_life_interests";
       this.logger.log(`Extracting from primary category: ${primaryCategory} for user: ${userId}`);
-      
+
       // DIAGNOSTIC LOGGING: Track exact retrieval parameters
       console.log('[RETRIEVAL-DEBUG] Searching for memories:', {
         user_id: userId,
@@ -1976,8 +2002,11 @@ class IntelligenceSystem {
           all_params: queryParams
         });
         
+        // DIAGNOSTIC: Log the actual SQL being executed
+        console.log(`[MEMORY-ISOLATION] SQL user_id param: ${userId}`);
+
         const result = await client.query(baseQuery, queryParams);
-        
+
         // DIAGNOSTIC LOGGING: Track exact database results
         console.log('[RETRIEVAL-DEBUG] Raw DB results:', {
           count: result.rows.length,
@@ -1986,6 +2015,23 @@ class IntelligenceSystem {
           categories: result.rows.map(r => r.category_name).slice(0, 5),
           content_preview: result.rows.map(r => r.content?.substring(0, 50)).slice(0, 3)
         });
+
+        // ═══════════════════════════════════════════════════════════════
+        // CRITICAL: Verify all returned rows belong to this user
+        // ═══════════════════════════════════════════════════════════════
+        const wrongUserRows = result.rows.filter(r => r.user_id !== userId);
+        if (wrongUserRows.length > 0) {
+          console.error(`[MEMORY-ISOLATION] CRITICAL BUG: Retrieved ${wrongUserRows.length} rows with WRONG userId!`);
+          console.error(`[MEMORY-ISOLATION] Expected: ${userId}`);
+          console.error(`[MEMORY-ISOLATION] Got: ${wrongUserRows.map(r => r.user_id).join(', ')}`);
+          // Filter them out as emergency protection
+          const filteredRows = result.rows.filter(r => r.user_id === userId);
+          this.logger.log(
+            `Retrieved ${filteredRows.length} memories with intelligent content ordering (filtered ${wrongUserRows.length} wrong-user rows)`,
+          );
+          return filteredRows;
+        }
+        // ═══════════════════════════════════════════════════════════════
 
         this.logger.log(
           `Retrieved ${result.rows.length} memories with intelligent content ordering`,
@@ -2070,6 +2116,16 @@ class IntelligenceSystem {
    */
   async searchByTopics(userId, topics, excludeCategory) {
     try {
+      // ═══════════════════════════════════════════════════════════════
+      // CRITICAL: User isolation check
+      // ═══════════════════════════════════════════════════════════════
+      if (!userId) {
+        console.error('[MEMORY-ISOLATION] searchByTopics called without userId');
+        return [];
+      }
+      console.log(`[MEMORY-ISOLATION] searchByTopics for userId: ${userId.substring(0, 8)}...`);
+      // ═══════════════════════════════════════════════════════════════
+
       this.logger.log(
         `[TOPIC-SEARCH] Searching ${topics.length} topics across all categories (excluding ${excludeCategory})`,
       );
