@@ -1891,19 +1891,44 @@ export class Orchestrator {
 
       // Format memories into string for context injection
       // Apply PII sanitization (Innovation #34: Privacy Protection)
+      // PROBLEM 4 FIX: Detect and highlight safety-critical memories
       let memoryText = "";
       let memoryIds = [];
+      let hasSafetyCritical = false;
 
       if (result.memories && result.memories.length > 0) {
-        memoryText = result.memories
+        const formattedMemories = result.memories
           .map((m) => {
             if (m.id) memoryIds.push(m.id);
             const content = m.content || "";
+
+            // Check if this memory is safety-critical
+            const isSafetyCritical = m.safety_boosted ||
+              (m.category_name === 'health_wellness' && (
+                /allerg(y|ic|ies)|cannot eat|can't eat|intolerant/i.test(content) ||
+                /medication|medicine|prescription|insulin/i.test(content) ||
+                /diabetes|asthma|heart condition|chronic|disability/i.test(content)
+              ));
+
+            if (isSafetyCritical) {
+              hasSafetyCritical = true;
+              // Mark safety-critical memories with warning emoji and emphasis
+              return `⚠️ SAFETY-CRITICAL: ${sanitizePII(content)}`;
+            }
+
             // Sanitize PII before injection
             return sanitizePII(content);
           })
-          .filter(c => c.length > 0)
-          .join("\n\n");
+          .filter(c => c.length > 0);
+
+        // If safety-critical memories exist, add explicit instruction at the top
+        if (hasSafetyCritical) {
+          memoryText = "⚠️ CRITICAL SAFETY INFORMATION FOLLOWS - YOU MUST ACKNOWLEDGE THIS IN YOUR RESPONSE:\n\n" +
+                       formattedMemories.join("\n\n");
+          this.log(`[MEMORY] ⚠️ ${result.memories.filter(m => m.safety_boosted).length} safety-critical memories detected - emphasis added to context`);
+        } else {
+          memoryText = formattedMemories.join("\n\n");
+        }
       }
 
       const tokenCount = Math.ceil(memoryText.length / 4);

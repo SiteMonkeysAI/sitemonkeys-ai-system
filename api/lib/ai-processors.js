@@ -229,12 +229,35 @@ export async function processWithEliAndRoxy({
           phase4Metadata.external_lookup = false;
           phase4Metadata.lookup_attempted = true;
 
-          // Graceful degradation disclosure
-          if (lookupResult.disclosure) {
+          // PROBLEM 1 FIX: Graceful degradation with verification paths
+          // When lookup fails, inject BOTH disclosure AND verification_path into AI context
+          if (lookupResult.degraded && (lookupResult.disclosure || lookupResult.verification_path)) {
+            let degradationContext = '\n\n⚠️ EXTERNAL LOOKUP UNAVAILABLE:\n';
+
+            // Add disclosure message
+            if (lookupResult.disclosure) {
+              degradationContext += `${lookupResult.disclosure}\n`;
+            }
+
+            // Add specific verification paths (CRITICAL: These must be in the AI response)
+            if (lookupResult.verification_path && lookupResult.verification_path.sources) {
+              degradationContext += `\n${lookupResult.verification_path.message || 'CHECK CURRENT INFORMATION AT:'}\n`;
+              lookupResult.verification_path.sources.forEach(source => {
+                degradationContext += `- ${source.name}: ${source.url}\n`;
+              });
+              degradationContext += `\nYou MUST include these specific verification URLs in your response. Do NOT give generic advice like "check financial websites" - provide these EXACT URLs to the user.`;
+            }
+
+            externalContext = degradationContext;
+          } else if (lookupResult.disclosure) {
+            // Fallback for disclosure-only (no verification_path)
             externalContext = `\n\n⚠️ EXTERNAL LOOKUP DISCLOSURE:\n${lookupResult.disclosure}\n`;
           }
 
           console.log("⚠️ External lookup attempted but failed or returned no data");
+          if (lookupResult.verification_path) {
+            console.log(`✅ Verification path injected with ${lookupResult.verification_path.sources?.length || 0} sources`);
+          }
         }
       }
     } catch (phase4Error) {
