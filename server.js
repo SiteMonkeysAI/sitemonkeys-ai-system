@@ -939,7 +939,14 @@ const migrateSemanticV2RateLimiter = rateLimit({
 
 // Upload endpoints
 app.post("/api/upload", uploadMiddleware, handleFileUpload);
-app.post("/api/upload-for-analysis", analysisMiddleware, handleMulterError, handleAnalysisUpload);
+app.post("/api/upload-for-analysis", (req, res, next) => {
+  analysisMiddleware(req, res, (err) => {
+    if (err) {
+      return handleMulterError(err, req, res, next);
+    }
+    next();
+  });
+}, handleAnalysisUpload);
 
 // Debug endpoint (only in private/debug mode) - MUST come before catch-all routes
 app.use("/api/debug", debugRoutes);
