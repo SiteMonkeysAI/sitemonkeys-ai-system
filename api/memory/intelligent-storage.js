@@ -332,6 +332,121 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * ISSUE #529 FIX: Detect if message is a retrieval query (asking for information)
+   * Uses semantic analyzer to classify intent
+   * @param {string} message - User message to check
+   * @returns {Promise<{ isRetrievalQuery: boolean, intent: string, confidence: number }>}
+   */
+  async detectRetrievalQuery(message) {
+    if (!message || typeof message !== 'string') {
+      return { isRetrievalQuery: false, intent: 'unknown', confidence: 0 };
+    }
+
+    try {
+      // Use semantic analyzer's intent classification
+      const intentResult = await semanticAnalyzer.analyzeIntent(message);
+
+      // Retrieval query types: question, decision_making (asking for advice)
+      const retrievalIntents = ['question', 'decision_making', 'MEMORY_VISIBILITY'];
+      const isRetrievalQuery = retrievalIntents.includes(intentResult.intent);
+
+      // Additional pattern-based check for common retrieval phrases
+      const retrievalPatterns = [
+        /^what(?:'s| is| are)/i,
+        /^where(?:'s| is| are)/i,
+        /^when(?:'s| is| did)/i,
+        /^who(?:'s| is| are)/i,
+        /^how (?:much|many|do|can|should)/i,
+        /^tell me (?:about|what|my)/i,
+        /^show me/i,
+        /^do you (?:know|remember)/i,
+        /^can you (?:tell|show|remind)/i,
+        /what(?:'s| is) my/i
+      ];
+
+      const matchesRetrievalPattern = retrievalPatterns.some(pattern => pattern.test(message));
+
+      // Combine semantic and pattern-based detection
+      const finalIsRetrieval = isRetrievalQuery || (matchesRetrievalPattern && intentResult.confidence > 0.4);
+
+      return {
+        isRetrievalQuery: finalIsRetrieval,
+        intent: intentResult.intent,
+        confidence: intentResult.confidence
+      };
+    } catch (error) {
+      console.error('[INTELLIGENT-STORAGE] ⚠️ Intent detection failed:', error.message);
+      // Fallback to pattern-based detection only
+      const retrievalPatterns = [
+        /^what(?:'s| is| are)/i,
+        /^where(?:'s| is| are)/i,
+        /^when(?:'s| is| did)/i,
+        /^who(?:'s| is| are)/i,
+        /^how (?:much|many|do|can|should)/i,
+        /^tell me (?:about|what|my)/i,
+        /^show me/i,
+        /^do you (?:know|remember)/i,
+        /^can you (?:tell|show|remind)/i,
+        /what(?:'s| is) my/i
+      ];
+
+      const matchesPattern = retrievalPatterns.some(pattern => pattern.test(message));
+      return {
+        isRetrievalQuery: matchesPattern,
+        intent: 'question',
+        confidence: matchesPattern ? 0.7 : 0
+      };
+    }
+  }
+
+  /**
+   * ISSUE #529 FIX: Detect if message contains declarative facts (new information)
+   * Checks for statements vs questions
+   * @param {string} message - User message to check
+   * @returns {boolean} - True if message contains declarative facts
+   */
+  detectDeclarativeFacts(message) {
+    if (!message || typeof message !== 'string') {
+      return false;
+    }
+
+    const messageLower = message.toLowerCase();
+
+    // Declarative patterns - statements that provide new information
+    const declarativePatterns = [
+      /^i (?:am|have|work|live|like|prefer|need|want|got|moved|changed)/i,
+      /^my (?:name|job|salary|phone|email|address|wife|husband|spouse|partner|children|kids)/i,
+      /^actually,?\s+/i,  // Correction signal
+      /^just (?:got|moved|changed|started)/i,  // Update signal
+      /(?:increased|raised|bumped|promoted|changed|moved|updated|now)/i,  // Change signal
+    ];
+
+    // Check for declarative patterns
+    for (const pattern of declarativePatterns) {
+      if (pattern.test(message)) {
+        console.log(`[DECLARATIVE-DETECT] Declarative pattern matched: ${pattern.toString()}`);
+        return true;
+      }
+    }
+
+    // Additional heuristic: If message doesn't end with '?' and contains personal pronouns
+    const hasPersonalPronoun = /\b(i|my|me|mine)\b/i.test(message);
+    const isQuestion = message.trim().endsWith('?');
+
+    if (hasPersonalPronoun && !isQuestion) {
+      // Likely a statement about the user
+      // But exclude common question patterns without '?'
+      const questionWords = /^(what|where|when|who|how|why|which|can you|could you|would you|will you|do you|did you)/i;
+      if (!questionWords.test(message)) {
+        console.log('[DECLARATIVE-DETECT] Detected declarative statement (personal pronoun, not question format)');
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Main entry point - stores memory with compression and deduplication
    * @param {string} userId - User identifier
    * @param {string} userMessage - User's message
@@ -357,6 +472,29 @@ export class IntelligentMemoryStorage {
       if (isNonUserQuery.shouldSkip) {
         console.log(`[INTELLIGENT-STORAGE] ⏭️ Skipping storage - ${isNonUserQuery.reason}`);
         return { action: 'skipped', reason: isNonUserQuery.reason };
+      }
+
+      // ISSUE #529 FIX: Query-Type Gating
+      // Detect if user is asking a retrieval question without providing new information
+      // This prevents extracting historical references from AI responses as new facts
+      let queryTypeCheck = await this.detectRetrievalQuery(userMessage);
+      if (queryTypeCheck.isRetrievalQuery) {
+        console.log(`[INTELLIGENT-STORAGE] 🔍 Retrieval query detected (intent: ${queryTypeCheck.intent}, confidence: ${queryTypeCheck.confidence.toFixed(2)})`);
+
+        // Check if user message contains declarative facts (new information)
+        const hasDeclarativeFacts = this.detectDeclarativeFacts(userMessage);
+
+        if (!hasDeclarativeFacts) {
+          console.log('[INTELLIGENT-STORAGE] ⏭️ Skipping storage - retrieval query with no new facts');
+          console.log(`[INTELLIGENT-STORAGE]    User asked: "${userMessage.substring(0, 100)}..."`);
+          console.log('[INTELLIGENT-STORAGE]    No new user information to store');
+          return { action: 'skipped', reason: 'retrieval_query_no_new_facts' };
+        } else {
+          console.log('[INTELLIGENT-STORAGE] ✓ Retrieval query contains new facts, will extract from user message only');
+        }
+      } else {
+        // Not a retrieval query - set default value for use later
+        queryTypeCheck = { isRetrievalQuery: false, intent: 'information_sharing', confidence: 0 };
       }
 
       // Step 0: Sanitize content before processing
@@ -394,7 +532,17 @@ export class IntelligentMemoryStorage {
 
       // Step 1: Extract facts (compression)
       console.log('[FLOW] Step 1: Extracting key facts from conversation...');
-      let facts = await this.extractKeyFacts(userMessage, sanitizedResponse);
+
+      // ISSUE #529 FIX: For retrieval queries, only extract from user message
+      // This prevents AI's historical references from being stored as new facts
+      let facts;
+      if (queryTypeCheck.isRetrievalQuery) {
+        console.log('[INTELLIGENT-STORAGE] 📝 Extracting facts from USER MESSAGE ONLY (retrieval query)');
+        facts = await this.extractKeyFacts(userMessage, '');  // Empty AI response
+      } else {
+        // Normal case: extract from both user message and AI response
+        facts = await this.extractKeyFacts(userMessage, sanitizedResponse);
+      }
       console.log('[FLOW] Step 1: Facts extracted ✓');
 
       // Validation: Check if numeric values from input survived extraction
@@ -519,9 +667,14 @@ export class IntelligentMemoryStorage {
     // IDENTIFIER-PRESERVING PROMPT: Compress while retaining unique tokens
     // CRITICAL: Must preserve financial amounts, salaries, and numeric values for supersession
     // CRITICAL FIX #504: Handle casual formats like "55k", "make", "earn" and preserve user terminology
+    // CRITICAL FIX #529: Extract from USER MESSAGE only, ignore AI's historical references
     const prompt = `Extract ONLY the essential facts from this conversation. Be extremely brief but PRESERVE all identifiers, numeric values, and the USER'S EXACT TERMINOLOGY.
 
 CRITICAL RULES:
+0. EXTRACT FROM USER MESSAGE ONLY - Ignore any historical context mentioned by the Assistant
+   - If Assistant says "You were previously X, now you're Y", extract ONLY Y (the current state)
+   - DO NOT extract "previous", "former", "was", "used to be" facts
+   - Only extract what the USER is currently stating as true
 1. ALWAYS preserve exact alphanumeric identifiers (e.g., ECHO-123-ABC, ALPHA-456)
 2. ALWAYS preserve names exactly as written (e.g., Dr. Smith, Dr. FOXTROT-123)
 3. ALWAYS preserve numbers, codes, IDs, license plates, serial numbers VERBATIM
@@ -633,6 +786,10 @@ Facts (preserve user terminology + add synonyms):`;
       // CRITICAL: Post-processing protection - verify identifiers survived
       facts = this.protectHighEntropyTokens(userMsg, facts);
 
+      // ISSUE #529 FIX: Filter out historical/temporal markers from facts
+      // This is a safety net in case the extraction prompt didn't catch them
+      facts = this.filterHistoricalMarkers(facts);
+
       // CRITICAL FIX #504: Verify numeric values survived extraction
       const amountPattern = /\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\$\d+|\d{1,6}k/i;
       const inputHasAmount = amountPattern.test(userMsg);
@@ -687,6 +844,58 @@ Facts (preserve user terminology + add synonyms):`;
       const userKeywords = userMsg.split(/\s+/).slice(0, 5).join(' ');
       return this.protectHighEntropyTokens(userMsg, userKeywords);
     }
+  }
+
+  /**
+   * ISSUE #529 FIX: Filter out historical/temporal markers from extracted facts
+   * Removes lines that reference past states rather than current information
+   * @param {string} facts - Extracted facts to filter
+   * @returns {string} - Filtered facts without historical markers
+   */
+  filterHistoricalMarkers(facts) {
+    if (!facts || typeof facts !== 'string') {
+      return facts;
+    }
+
+    // Historical marker patterns to remove
+    const historicalPatterns = [
+      /\bprevious(?:ly)?\b.*?:/i,        // "Previous Job:", "Previously:"
+      /\bformer(?:ly)?\b.*?:/i,          // "Former Title:", "Formerly:"
+      /\bold\b.*?:/i,                    // "Old Job:", "Old Phone:"
+      /\bwas\s+a\b.*?:/i,                // "Was a Developer:"
+      /\bused to be\b.*?:/i,             // "Used to be:"
+      /\bbefore\b.*?:/i,                 // "Before:"
+      /\bearlier\b.*?:/i,                // "Earlier:"
+      /\bat one point\b.*?:/i,           // "At one point:"
+      /\bonce was\b.*?:/i                // "Once was:"
+    ];
+
+    // Split into lines and filter
+    const lines = facts.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const filteredLines = lines.filter(line => {
+      // Check if line contains historical markers
+      for (const pattern of historicalPatterns) {
+        if (pattern.test(line)) {
+          console.log(`[HISTORICAL-FILTER] Removed historical reference: "${line.substring(0, 60)}..."`);
+          return false; // Remove this line
+        }
+      }
+      return true; // Keep this line
+    });
+
+    // If we filtered out everything, return original (better to have something than nothing)
+    if (filteredLines.length === 0 && lines.length > 0) {
+      console.log('[HISTORICAL-FILTER] Warning: All lines filtered out, keeping original facts');
+      return facts;
+    }
+
+    const filtered = filteredLines.join('\n');
+
+    if (filtered !== facts) {
+      console.log(`[HISTORICAL-FILTER] Filtered ${lines.length - filteredLines.length} historical reference(s)`);
+    }
+
+    return filtered;
   }
 
   /**

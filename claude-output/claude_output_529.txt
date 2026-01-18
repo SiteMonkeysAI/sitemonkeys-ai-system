@@ -1,0 +1,127 @@
+Let me document the changes I've made in a summary:
+
+---SUMMARY---
+
+# Issue #529 Fix: A2 Supersession Failure - Fact Extraction Polluting Memory
+
+## Root Cause Analysis
+The system was extracting facts from **both** the user message and the AI response. When the AI mentioned historical context (e.g., "You were previously a Junior Developer, now you're a Senior Architect"), the fact extractor captured "Previous Job: Junior Developer" as a NEW fact, polluting memory with outdated information even after supersession correctly marked the old memory as not current.
+
+## Solution Implemented
+
+### 1. Query-Type Gating (Primary Fix)
+Added **Option A** from the issue specification: detect when the user is asking a retrieval question without providing new information.
+
+**New Methods Added to `intelligent-storage.js`:**
+
+#### `detectRetrievalQuery(message)`
+- Uses semantic analyzer's `analyzeIntent()` to classify message intent
+- Identifies retrieval query types: `question`, `decision_making`, `MEMORY_VISIBILITY`
+- Falls back to pattern-based detection for common retrieval phrases:
+  - "What's my...", "Where is...", "When did...", "Who is...", etc.
+- Returns: `{ isRetrievalQuery: boolean, intent: string, confidence: number }`
+
+#### `detectDeclarativeFacts(message)`
+- Detects if message contains declarative facts (new information)
+- Checks for statement patterns vs question patterns
+- Looks for:
+  - Declarative statements: "I am...", "My job is...", "I have..."
+  - Update signals: "increased", "raised", "bumped", "promoted", "changed", "moved"
+  - Personal pronouns without question format
+- Returns: `boolean` indicating if message contains new facts
+
+### 2. Storage Logic Updates
+
+**In `storeWithIntelligence()` method (lines 477-498):**
+- Added query-type gating BEFORE sanitization
+- If message is a retrieval query:
+  - Check if it contains declarative facts
+  - **Skip storage entirely** if no new facts detected
+  - If facts exist, extract from user message only
+- Logs the decision for debugging
+
+**In fact extraction section (lines 533-543):**
+- Modified to check if message is a retrieval query
+- For retrieval queries: pass empty string as AI response to `extractKeyFacts()`
+- For normal messages: extract from both user message and AI response as before
+- This prevents AI's historical references from being extracted as new facts
+
+### 3. Enhanced Fact Extraction Prompt
+
+**Updated `extractKeyFacts()` prompt (lines 674-677):**
+- Added Rule 0: "EXTRACT FROM USER MESSAGE ONLY"
+- Explicitly instructs to ignore historical context from Assistant
+- Examples: "If Assistant says 'You were previously X, now you're Y', extract ONLY Y"
+- Prevents extraction of "previous", "former", "was", "used to be" facts
+
+### 4. Post-Processing Safety Net
+
+**New Method: `filterHistoricalMarkers(facts)` (lines 855-899):**
+- Filters out lines containing historical/temporal markers
+- Removes patterns like:
+  - "Previous Job:", "Previously:", "Former Title:", "Formerly:"
+  - "Old Job:", "Was a...", "Used to be:", "Before:"
+  - "Earlier:", "At one point:", "Once was:"
+- Applied after fact extraction as a safety net
+- Logs filtered references for debugging
+
+### 5. Integration Points
+
+**Modified lines in `intelligent-storage.js`:**
+- Lines 334-447: Added new detection methods
+- Lines 477-498: Added query-type gating logic
+- Lines 533-543: Conditional fact extraction based on query type
+- Lines 674-677: Enhanced extraction prompt
+- Lines 789-791: Added historical marker filtering
+- Lines 855-899: Historical marker filter implementation
+
+## Expected Results
+
+### Tests That Should Pass:
+1. **A2.1: Supersession Basic**
+   - Store: "I work as a Junior Developer"
+   - Store: "I'm now a Senior Architect"
+   - Query: "What's my job title?"
+   - **Expected:** Response contains ONLY "Senior Architect"
+   - **Fix:** Query won't create new memory, supersession keeps only current info
+
+2. **A2.2: Supersession with Query**
+   - Store: "I work as a Junior Developer"
+   - Query: "What's my current role?"
+   - Store: "Actually, I got promoted to Senior Architect"
+   - Query: "What's my job title?"
+   - **Expected:** Response contains ONLY "Senior Architect"
+   - **Fix:** First query skipped, promotion stored, second query returns current only
+
+3. **A2.3: Retrieval Query No Storage**
+   - Store: "My name is Chris"
+   - Query: "What's my name?"
+   - **Expected:** No new memory created from query
+   - **Fix:** Query detection prevents storage of retrieval questions
+
+### No Regressions:
+- All 14 other passing tests should continue to pass
+- Fact extraction still works for genuine user-stated information
+- Supersession logic unchanged (already working correctly)
+- Fingerprint detection preserved
+- Semantic routing preserved
+
+## Compliance with Requirements
+
+✅ **Truth First:** Ensures only current, accurate information is stored  
+✅ **Intelligence-based:** Uses semantic intent detection, not just keyword matching  
+✅ **Zero degradation:** All other memory functions preserved  
+✅ **Token efficiency:** No additional API calls (uses existing intent detection)  
+✅ **One-and-done:** Fixes root cause, not symptoms  
+✅ **Neurosurgical precision:** Minimal code changes, maximum impact  
+
+## Files Modified
+- `/api/memory/intelligent-storage.js` - All changes made to this single file
+
+## Doctrine Alignment
+- Innovation #2 (Semantic De-Duplication): Only current state stored, not historical versions
+- Innovation #3 (Age + Relevance Weighted Overwrite): Historical references don't bypass age-based logic
+- Innovation #10 (Truth-Validated Injection): Memory retrieval returns only truthful current information
+- Core Principle: "A caring family member who genuinely wants your success" - doesn't confuse you with outdated information
+
+---END SUMMARY---

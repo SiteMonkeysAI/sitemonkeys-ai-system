@@ -1,0 +1,301 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #529: [claude-fix] A2 Supersession Failure: Fact Extraction Polluting Memory with Historical References from AI Responses
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>[claude-fix] A2 Supersession Failure: Fact Extraction Polluting Memory with Historical References from AI Responses</h1>
+<h2>Priority: HIGH | Category: Memory Architecture | Pass Rate Impact: 82% → 88%</h2>
+<hr>
+<h2>Executive Summary</h2>
+<p><strong>The supersession system is working correctly.</strong> The root cause is upstream: the fact extraction pipeline is extracting facts from BOTH the user message AND the AI response. When the AI mentions historical context (e.g., "You were previously a Junior Developer, now you're a Senior Architect"), the extractor captures "Previous Job: Junior Developer" as a NEW fact, polluting memory with outdated information even after supersession correctly marked the old memory as not current.</p>
+<hr>
+<h2>Evidence from Railway Logs</h2>
+<h3>Storage Phase - Supersession Working Correctly:</h3>
+<pre><code>[SUPERSESSION] Marked 1 old memories as not current
+[SUPERSESSION]    Superseded IDs: 4213
+[SUPERSESSION]    Memory 4213: ""Company: Acme Corp (employer organization)". "Job: Junior D..."
+[SUPERSESSION] ✅ Comprehensive supersession complete
+[SUPERSESSION]    New memory ID: 4215
+</code></pre>
+<h3>The Problem - Fact Extraction Output:</h3>
+<pre><code>[EXTRACTION-DEBUG] Original: "What's my current job title?"
+[EXTRACTION-DEBUG] Extracted: "Company: Acme Corp (employer organization).
+Job: Senior Architect (title position role).
+Previous Job: Junior Developer (title position role)."
+</code></pre>
+<p><strong>Critical Issue:</strong> The user asked "What's my current job title?" - they provided NO new information. Yet the extractor captured 3 facts including "Previous Job: Junior Developer" from the AI's response that referenced history.</p>
+<hr>
+<h2>Complete Data Flow Analysis</h2>
+<h3>Current Flow (BROKEN):</h3>
+<pre><code>1. USER MESSAGE: "What's my current job title?"
+   └─ Contains: Question only, NO new facts
+   
+2. MEMORY RETRIEVAL: Finds memories 4213, 4214 (Junior Developer, Senior Architect)
+   └─ Both are injected into AI context
+   
+3. AI RESPONSE: "Your current title is Senior Architect at Acme Corp. 
+                 You were previously a Junior Developer."
+   └─ Contains: Current fact + historical reference
+   
+4. FACT EXTRACTION: Processes userMessage + aiResponse
+   └─ Extracts: "Senior Architect" ✓
+   └─ Extracts: "Junior Developer" ✗ (historical reference, NOT a user-stated fact)
+   └─ Extracts: "Acme Corp" ✓
+   
+5. STORAGE: Stores all 3 facts including outdated "Junior Developer"
+   └─ Supersession marks old memory as is_current=false
+   └─ BUT new memory now contains "Previous Job: Junior Developer" as active fact
+   
+6. NEXT RETRIEVAL: Returns BOTH titles because new memory contains both
+   └─ Test fails: Response contains "Junior Developer" AND "Senior Architect"
+</code></pre>
+<h3>Expected Flow (CORRECT):</h3>
+<pre><code>1. USER MESSAGE: "What's my current job title?"
+   └─ Query-type detection: RETRIEVAL question (not information sharing)
+   
+2. FACT EXTRACTION DECISION:
+   └─ User message contains no declarative facts
+   └─ AI response references existing memory (not new user information)
+   └─ SKIP STORAGE or extract from user message only
+   
+3. STORAGE: Nothing stored (retrieval query, no new facts)
+   └─ Memory state unchanged
+   └─ Supersession not needed (no new competing fact)
+   
+4. NEXT RETRIEVAL: Returns only current fact (Senior Architect)
+   └─ Test passes: Response contains only latest information
+</code></pre>
+<hr>
+<h2>Root Cause Location</h2>
+<h3>Files to Investigate (in order of data flow):</h3>
+<ol>
+<li>
+<p><strong><code>/api/chat.js</code></strong> - Where conversation is passed to storage</p>
+<ul>
+<li>Look for: What content is passed to <code>storeWithIntelligence()</code></li>
+<li>Check: Is it <code>userMessage + aiResponse</code> or just <code>userMessage</code>?</li>
+</ul>
+</li>
+<li>
+<p><strong><code>/api/core/memory/intelligent-storage.js</code></strong> - Storage orchestration</p>
+<ul>
+<li>Look for: The <code>storeWithIntelligence()</code> function</li>
+<li>Check: What gets passed to fact extraction</li>
+<li>Check: Is there query-type awareness before extraction?</li>
+</ul>
+</li>
+<li>
+<p><strong><code>/api/core/intelligence/factExtractor.js</code></strong> (or equivalent)</p>
+<ul>
+<li>Look for: The GPT-4o-mini prompt that extracts facts</li>
+<li>Check: Does it distinguish between user-stated facts and AI-referenced history?</li>
+<li>Check: Does it filter out temporal markers like "previous", "former", "was"?</li>
+</ul>
+</li>
+<li>
+<p><strong><code>/api/core/intelligence/semanticAnalyzer.js</code></strong></p>
+<ul>
+<li>Look for: Intent classification logic</li>
+<li>Check: Can it detect "retrieval query" vs "information sharing"?</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2>Specification Alignment</h2>
+<h3>From Master Completion Ledger - Innovation #2 (Semantic De-Duplication Engine):</h3>
+<blockquote>
+<p>"When it recognizes that different phrasings express the same core fact or concept, it consolidates to a single stored representation."</p>
+</blockquote>
+<p><strong>Violation:</strong> The current system is storing "Job: Senior Architect" AND "Previous Job: Junior Developer" as separate facts when they represent the SAME semantic slot (user's job title) at different points in time. Only the CURRENT state should be stored.</p>
+<h3>From Master Completion Ledger - Innovation #3 (Age + Relevance Weighted Overwrite Logic):</h3>
+<blockquote>
+<p>"System continuously scores each memory entry based on two factors: age and relevance."</p>
+</blockquote>
+<p><strong>Violation:</strong> Historical references extracted from AI responses are being stored as if they were fresh user-stated facts, bypassing the age-based logic entirely.</p>
+<h3>From Complete Specification v1.1 - Section 2.2 (Injection/Retrieval System):</h3>
+<blockquote>
+<p>"Intelligence: Not just pattern matching - understands meaning"</p>
+</blockquote>
+<p><strong>Violation:</strong> The fact extractor is pattern-matching on content without understanding that "Previous Job" is a historical reference, not a current fact to store.</p>
+<h3>From 3rd Chat Architecture Document - The Core Principle:</h3>
+<blockquote>
+<p>"A fiercely loving, brutally honest family member who has world-class expertise... Never makes decisions for you (presents options, never chooses)... Empowers, never controls"</p>
+</blockquote>
+<p><strong>Violation:</strong> Storing outdated information and presenting it alongside current information violates the "brutally honest" principle - it creates confusion rather than clarity.</p>
+<hr>
+<h2>Proposed Fix Strategy</h2>
+<h3>Option A: Query-Type Gating (RECOMMENDED)</h3>
+<p><strong>Principle:</strong> If the user is ASKING a question (retrieval), don't extract facts from the response.</p>
+<pre><code class="language-javascript">// In intelligent-storage.js or chat.js before calling storage
+
+const queryIntent = semanticAnalyzer.detectIntent(userMessage);
+
+if (queryIntent.type === 'retrieval_query' || 
+    queryIntent.type === 'question' ||
+    queryIntent.type === 'decision_making') {
+  
+  // Check if user message contains declarative facts
+  const userFacts = extractFactsFromText(userMessage);
+  
+  if (userFacts.length === 0) {
+    // User asked a question, provided no new info
+    // Skip storage entirely
+    return { action: 'skipped', reason: 'retrieval_query_no_new_facts' };
+  }
+}
+</code></pre>
+<p><strong>Evidence this will work:</strong> The logs already show intent detection:</p>
+<pre><code>[SEMANTIC] Analysis complete: Intent=decision_making (0.62), Domain=general (0.61)
+</code></pre>
+<h3>Option B: Extract from User Message Only</h3>
+<p><strong>Principle:</strong> Only extract facts from what the USER said, never from AI responses.</p>
+<pre><code class="language-javascript">// In fact extraction call
+
+// BEFORE (broken):
+const factsToExtract = `${userMessage}\n\n${aiResponse}`;
+
+// AFTER (fixed):
+const factsToExtract = userMessage;
+</code></pre>
+<p><strong>Caveat:</strong> This may miss legitimate cases where the AI confirms/clarifies user information. Consider hybrid approach.</p>
+<h3>Option C: Temporal Marker Filtering</h3>
+<p><strong>Principle:</strong> Filter out facts containing temporal markers indicating past state.</p>
+<pre><code class="language-javascript">// In fact extraction post-processing
+
+const temporalMarkers = [
+  'previous', 'former', 'was a', 'used to be', 'had been',
+  'previously', 'before that', 'in the past', 'old job',
+  'earlier', 'at one point', 'once was'
+];
+
+const filteredFacts = extractedFacts.filter(fact =&gt; {
+  const lowerFact = fact.toLowerCase();
+  return !temporalMarkers.some(marker =&gt; lowerFact.includes(marker));
+});
+</code></pre>
+<h3>Option D: Fingerprint-Aware Extraction (Most Sophisticated)</h3>
+<p><strong>Principle:</strong> If a fingerprint (e.g., <code>user_job_title</code>) already exists and is marked as superseded, don't extract new facts for the same fingerprint from AI responses.</p>
+<pre><code class="language-javascript">// Before storing facts
+
+const existingFingerprints = await getSupersededFingerprints(userId);
+
+for (const fact of extractedFacts) {
+  const factFingerprint = detectFingerprint(fact);
+  
+  if (existingFingerprints.includes(factFingerprint) &amp;&amp; 
+      factSourcedFromAIResponse(fact)) {
+    // Skip - this is likely a historical reference
+    continue;
+  }
+}
+</code></pre>
+<hr>
+<h2>Implementation Requirements</h2>
+<h3>MUST Preserve:</h3>
+<ul>
+<li>✅ Fact extraction for genuine user-stated information</li>
+<li>✅ Supersession logic (already working correctly)</li>
+<li>✅ Fingerprint detection (already working correctly)</li>
+<li>✅ Semantic routing (already working correctly)</li>
+<li>✅ Embedding generation timing (already working correctly)</li>
+<li>✅ All 53 innovations' functionality</li>
+</ul>
+<h3>MUST NOT:</h3>
+<ul>
+<li>❌ Break storage of legitimate new facts from user messages</li>
+<li>❌ Introduce new race conditions</li>
+<li>❌ Add significant latency (current storage is ~500-600ms, acceptable)</li>
+<li>❌ Require database schema changes (if possible)</li>
+<li>❌ Create token budget issues</li>
+</ul>
+<h3>Testing Verification:</h3>
+<p>After fix, these tests must pass:</p>
+<pre><code>Test A2.1: Supersession Basic
+1. Store: "I work as a Junior Developer"
+2. Store: "I'm now a Senior Architect"  
+3. Query: "What's my job title?"
+Expected: Response contains ONLY "Senior Architect"
+Expected: Response does NOT contain "Junior Developer"
+
+Test A2.2: Supersession with Query
+1. Store: "I work as a Junior Developer"
+2. Query: "What's my current role?"
+3. Store: "Actually, I got promoted to Senior Architect"
+4. Query: "What's my job title?"
+Expected: Response contains ONLY "Senior Architect"
+
+Test A2.3: Retrieval Query No Storage
+1. Store: "My name is Chris"
+2. Query: "What's my name?"
+Expected: No new memory created from query
+Expected: Memory count unchanged
+</code></pre>
+<hr>
+<h2>Files Requiring Changes</h2>
+<p>Based on data flow analysis, changes likely needed in:</p>
+
+File | Change Type | Purpose
+-- | -- | --
+/api/core/memory/intelligent-storage.js | Modify | Add query-type gating before extraction
+/api/core/intelligence/factExtractor.js | Modify | Update extraction prompt or add temporal filtering
+/api/chat.js | Possibly modify | Ensure only appropriate content passed to storage
+
+
+<hr>
+<h2>Doctrine Compliance Checklist</h2>
+<ul>
+<li>[ ] Truth &gt; Helpfulness &gt; Engagement: Fix ensures truthful (current) information only</li>
+<li>[ ] Intelligence-based, not rule-based: Uses semantic intent detection, not keyword matching</li>
+<li>[ ] Zero degradation: All other memory functions preserved</li>
+<li>[ ] Token efficiency: No additional API calls required (uses existing intent detection)</li>
+<li>[ ] One-and-done: Fix addresses root cause, not symptoms</li>
+<li>[ ] Neurosurgical precision: Minimal code changes, maximum impact</li>
+</ul>
+<hr>
+<h2>Success Criteria</h2>
+<ol>
+<li><strong>A2 test passes:</strong> Supersession query returns ONLY current information</li>
+<li><strong>No regression:</strong> All other 14 passing tests continue to pass</li>
+<li><strong>Storage efficiency:</strong> Retrieval queries don't create unnecessary memories</li>
+<li><strong>Memory integrity:</strong> Historical references in AI responses don't pollute memory</li>
+</ol>
+<hr>
+<h2>Additional Context</h2>
+<h3>Related PRs:</h3>
+<ul>
+<li>#522: Upload fix, memory contamination, selectivity cap</li>
+<li>#527: Hard 5-memory cap at orchestrator, political regex fix</li>
+</ul>
+<h3>Related Innovations:</h3>
+<ul>
+<li>#2: Semantic De-Duplication Engine</li>
+<li>#3: Age + Relevance Weighted Overwrite Logic</li>
+<li>#7: Memory Importance Scoring</li>
+<li>#10: Truth-Validated Injection</li>
+</ul>
+<hr>
+<p><strong>Assigned to:</strong> Claude Code / Copilot
+<strong>Labels:</strong> <code>[claude-fix]</code>, <code>memory-architecture</code>, <code>high-priority</code>, <code>supersession</code>
+<strong>Milestone:</strong> 100% Test Pass Rate</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
