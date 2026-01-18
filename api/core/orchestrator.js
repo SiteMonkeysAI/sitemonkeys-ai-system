@@ -1897,7 +1897,21 @@ export class Orchestrator {
       let hasSafetyCritical = false;
 
       if (result.memories && result.memories.length > 0) {
-        const formattedMemories = result.memories
+        // ═══════════════════════════════════════════════════════════════
+        // HARD FINAL CAP - Absolute maximum memories before injection
+        // This is the LAST line of defense - enforced regardless of upstream logic
+        // ═══════════════════════════════════════════════════════════════
+        const MAX_MEMORIES_FINAL = 5;
+        const memoriesPreCap = result.memories.length;
+        const memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
+        const memoriesPostCap = memoriesToFormat.length;
+
+        // Log if cap was enforced
+        if (memoriesPreCap > memoriesPostCap) {
+          this.log(`[ORCHESTRATOR] Hard cap enforced: ${memoriesPreCap} → ${memoriesPostCap} memories`);
+        }
+
+        const formattedMemories = memoriesToFormat
           .map((m) => {
             if (m.id) memoryIds.push(m.id);
             const content = m.content || "";
@@ -1940,14 +1954,16 @@ export class Orchestrator {
         token_count: tokenCount
       });
 
+      // CRITICAL: Report post-cap count in logs and telemetry
+      const finalMemoryCount = memoryIds.length; // This reflects the actual injected count after cap
       this.log(
-        `[MEMORY] Semantic retrieval: ${result.memories.length} memories, ${tokenCount} tokens (method: ${telemetry.method})`
+        `[MEMORY] Semantic retrieval: ${finalMemoryCount} memories injected, ${tokenCount} tokens (method: ${telemetry.method})`
       );
 
       return {
         memories: memoryText,
         tokens: tokenCount,
-        count: result.memories.length,
+        count: finalMemoryCount, // MUST be post-cap count for accurate telemetry
         categories: [], // Semantic retrieval doesn't use category filtering
         hasMemory: tokenCount > 0,
         memory_ids: memoryIds,
