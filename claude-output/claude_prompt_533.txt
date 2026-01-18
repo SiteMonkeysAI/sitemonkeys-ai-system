@@ -1,0 +1,178 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #533: [claude-fix] CRITICAL: Fix 3 Failing Integration Tests - 82% → 100%
+
+Issue Description:
+# [claude-fix] CRITICAL: Fix 3 Failing Integration Tests - 82% → 100%
+
+## Priority: CRITICAL | Current: 82% (14/17) | Target: 100% (17/17)
+
+---
+
+## IMPORTANT: These Are REAL Tests, Not Conceptual
+
+The test suite is located at: **`api/safety-harness/enforcement-test-suite.js`**
+
+These are **integration tests that run against the live deployed system**. They make real HTTP requests to the Railway-deployed API and validate real responses. The 82% pass rate is REAL. The failures are REAL production issues.
+
+**Do NOT conclude these are "test framework issues" or "conceptual scenarios."** The production system is failing to behave correctly.
+
+---
+
+## How to Run the Tests
+
+The test suite runs via the deployed endpoint. Look at `enforcement-test-suite.js` to see:
+- The test definitions
+- What each test does (stores data, queries, validates response)
+- The exact assertions that are failing
+
+---
+
+## The 3 Failing Tests (From enforcement-test-suite.js)
+
+### A2: Supersession Test
+**What the test does:**
+1. Stores "I work as a Junior Developer" 
+2. Stores "I'm now a Senior Architect" (should supersede)
+3. Queries "What's my job title?"
+4. **Validates:** Response should contain ONLY "Senior Architect", NOT "Junior Developer"
+
+**Current behavior:** Response contains BOTH titles
+
+**Root cause to investigate:**
+- The `is_current = false` filter EXISTS in semantic-retrieval.js:283
+- But the AI response MENTIONS history ("You were previously...")
+- The fact extractor then RE-STORES "Junior Developer" as a new fact from the AI response
+- Next query retrieves the newly-stored historical reference
+
+**The fix must address:** Fact extraction should NOT extract historical references from AI responses. When AI says "You were previously X", that's not a new user-stated fact to store.
+
+---
+
+### B3: Personal Query Test
+**What the test does:**
+1. Stores a personal fact (like "My cat's name is Whiskers")
+2. Waits for embedding generation
+3. Queries "What's my cat's name?"
+4. **Validates:** Memory should be injected (count > 0)
+
+**Current behavior:** 0 memories injected
+
+**Root cause to investigate:**
+- Memory IS being stored (confirmed)
+- Embedding IS being generated (confirmed)
+- Semantic retrieval returns 0 results
+- Possible causes:
+  - Similarity threshold too high even at 0.20
+  - Query "what's my cat's name" doesn't semantically match stored fact well enough
+  - Category routing mismatch
+  - Embedding not ready when query runs (timing)
+
+**The fix must address:** Simple personal queries must retrieve their matching facts.
+
+---
+
+### C2: Political Guardrails Test
+**What the test does:**
+1. Sends a query that should trigger political guardrails
+2. **Validates:** If `refusal: true`, then response should NOT contain endorsement language
+
+**Current behavior:** `refusal: true` AND `endorsement: true` (contradiction)
+
+**Root cause to investigate:**
+- Detection IS working (refusal: true)
+- But the response still contains the problematic content
+- The `neutralizedResponse` may not be getting used
+- Or something downstream is re-introducing original content
+- Check the exact flow in orchestrator.js where guardrails result is applied
+
+**The fix must address:** When guardrails detect and refuse, the original content must be REPLACED, not just flagged.
+
+---
+
+## Where to Look
+
+### Test Suite
+- **`api/safety-harness/enforcement-test-suite.js`** - The actual tests, assertions, and validation logic
+
+### A2 Supersession
+- **`api/core/memory/intelligent-storage.js`** - Where fact extraction happens
+- **`api/services/semantic-retrieval.js`** - Where `is_current` filter is applied
+- Find where AI response content gets passed to fact extraction
+
+### B3 Personal Query  
+- **`api/services/semantic-retrieval.js`** - Similarity thresholds, query expansion
+- **`api/core/intelligence/semanticAnalyzer.js`** - Category routing
+- Check embedding generation timing vs query execution
+
+### C2 Political Guardrails
+- **`api/lib/politicalGuardrails.js`** - Detection logic
+- **`api/core/orchestrator.js`** - Where guardrails result is applied (around line 256)
+- Trace what happens AFTER `check()` returns - is `neutralizedResponse` actually used?
+
+---
+
+## Critical Understanding
+
+### A2 - The Real Problem
+The retrieval filter is fine. The problem is **upstream** - the fact extractor is extracting from AI responses. When the AI says "You were previously a Junior Developer", that gets stored as a new fact. The fix is in fact extraction, not retrieval.
+
+### B3 - The Real Problem  
+The infrastructure is solid. The problem is likely **semantic matching** - the query "what's my cat's name" may not hit the similarity threshold against the stored fact. May need:
+- Lower threshold for direct personal queries
+- Better query expansion
+- Or check if embedding exists when query runs
+
+### C2 - The Real Problem
+Detection works. The problem is **enforcement** - somewhere between detection and final response, the neutralized content isn't being used. Trace the exact code path in orchestrator.js.
+
+---
+
+## Success Criteria
+
+After your fixes:
+1. Run the test suite
+2. **17/17 tests must pass**
+3. **Zero regression** on the 14 currently passing tests
+
+---
+
+## Do Not
+
+- ❌ Conclude these are "test framework issues" - they are real production bugs
+- ❌ Say the code "looks correct" without running the tests
+- ❌ Make changes without understanding the full data flow
+- ❌ Create partial fixes that don't address root causes
+
+---
+
+## Commit Format
+
+```
+fix: Achieve 100% test pass rate (17/17)
+
+A2 Supersession: [specific fix]
+B3 Personal Query: [specific fix]
+C2 Political Guardrails: [specific fix]
+
+All 17 integration tests now pass.
+Closes #[issue]
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

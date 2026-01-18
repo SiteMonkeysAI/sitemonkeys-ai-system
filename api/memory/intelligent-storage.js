@@ -540,7 +540,12 @@ CRITICAL RULES:
 8. If user says "My X is Y", output MUST contain Y exactly
 9. PRIORITIZE extracting from the USER's message - the AI response is context only
 10. Include searchable synonyms in parentheses for better retrieval matching
-11. UPDATE LANGUAGE means NEW VALUE IS PRIMARY:
+11. NEVER extract historical/past-tense information from the Assistant's response:
+   - DO NOT extract if Assistant says "You were previously X"
+   - DO NOT extract if Assistant says "You used to X"
+   - DO NOT extract if Assistant says "You mentioned you were X"
+   - Only extract CURRENT facts from the USER's message
+12. UPDATE LANGUAGE means NEW VALUE IS PRIMARY:
    - "increased to $X" → Current income: $X (not the old value)
    - "raised to $X" → Current income: $X
    - "bumped to $X" → Current income: $X
@@ -666,9 +671,30 @@ Facts (preserve user terminology + add synonyms):`;
         factsLower.includes('i cannot') ||
         factsLower.includes("i don't have access");
 
+      // CRITICAL FIX #533-A2: Prevent extraction of historical references from AI responses
+      // When AI says "You were previously X", that's historical context, NOT a new user fact
+      const hasHistoricalLanguage =
+        factsLower.includes('was previously') ||
+        factsLower.includes('were previously') ||
+        factsLower.includes('used to') ||
+        factsLower.includes('formerly') ||
+        factsLower.includes('previously') ||
+        factsLower.includes('before that') ||
+        factsLower.includes('you mentioned that you were') ||
+        factsLower.includes('you were') ||
+        factsLower.includes('you had') ||
+        factsLower.includes('you used to be');
+
       if (hasAssistantLanguage) {
         console.log('[INTELLIGENT-STORAGE] ⚠️ Extracted facts contain assistant boilerplate, rejecting');
         console.log(`[EXTRACTION-DEBUG] Rejected facts: "${facts.substring(0, 100)}"`);
+        // Return empty string to trigger fallback to user message
+        return '';
+      }
+
+      if (hasHistoricalLanguage) {
+        console.log('[INTELLIGENT-STORAGE] ⚠️ Extracted facts contain historical references from AI, rejecting');
+        console.log(`[EXTRACTION-DEBUG] Rejected historical facts: "${facts.substring(0, 100)}"`);
         // Return empty string to trigger fallback to user message
         return '';
       }
