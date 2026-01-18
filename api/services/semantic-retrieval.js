@@ -1,15 +1,15 @@
 /**
  * SEMANTIC RETRIEVAL SERVICE
- * 
+ *
  * Retrieves memories using semantic similarity with mode-aware prefiltering.
- * 
+ *
  * Pipeline:
  * 1. Embed query (single API call)
  * 2. Prefilter candidates via SQL (mode, category, is_current, recency)
  * 3. Score candidates with cosine similarity in Node
  * 4. Hybrid ranking (semantic + recency + confidence)
  * 5. Return top results with telemetry
- * 
+ *
  * @module api/services/semantic-retrieval
  */
 
@@ -20,14 +20,14 @@ import { generateEmbedding, cosineSimilarity, rankBySimilarity } from './embeddi
 // ============================================
 
 const RETRIEVAL_CONFIG = {
-  maxCandidates: 500,           // Max memories to pull from DB for scoring
-  defaultTopK: 10,              // Default number of results to return
-  minSimilarity: 0.25,          // Minimum similarity threshold (default)
-  minSimilarityPersonal: 0.18,  // Lower threshold for personal fact queries (Issue #504, #533-B3)
-  recencyBoostDays: 7,          // Boost memories from last N days
-  recencyBoostWeight: 0.1,      // How much to boost recent memories
-  confidenceWeight: 0.05,       // Weight for fingerprint confidence
-  embeddingTimeout: 5000        // Timeout for query embedding
+  maxCandidates: 500, // Max memories to pull from DB for scoring
+  defaultTopK: 10, // Default number of results to return
+  minSimilarity: 0.25, // Minimum similarity threshold (default)
+  minSimilarityPersonal: 0.18, // Lower threshold for personal fact queries (Issue #504, #533-B3)
+  recencyBoostDays: 7, // Boost memories from last N days
+  recencyBoostWeight: 0.1, // How much to boost recent memories
+  confidenceWeight: 0.05, // Weight for fingerprint confidence
+  embeddingTimeout: 5000, // Timeout for query embedding
 };
 
 // ============================================
@@ -49,28 +49,28 @@ const SAFETY_CRITICAL_DOMAINS = {
       /\b(restaurant|dining|food|meal|eat|eating|dish|menu|cuisine|chef|cook|recipe)\b/i,
       /\b(recommendation|suggest|recommend|where.*to.*eat|what.*to.*eat|keep.*in.*mind.*restaurant)\b/i,
       /\b(lunch|dinner|breakfast|brunch|snack)\b/i,
-      /\b(italian|chinese|mexican|thai|indian|japanese|french)(\s+food|\s+restaurant|\s+cuisine)?\b/i
+      /\b(italian|chinese|mexican|thai|indian|japanese|french)(\s+food|\s+restaurant|\s+cuisine)?\b/i,
     ],
     safetyCriticalCategories: ['health_wellness'],
-    reason: 'food_decisions_intersect_allergies_dietary_restrictions'
+    reason: 'food_decisions_intersect_allergies_dietary_restrictions',
   },
   physical_activity: {
     patterns: [
       /\b(activity|activities|exercise|workout|gym|sport|sports|physical|hike|hiking|climb|climbing)\b/i,
       /\b(travel|trip|vacation|adventure|outdoor)\b/i,
-      /\b(run|running|swim|swimming|bike|biking|walk|walking)\b/i
+      /\b(run|running|swim|swimming|bike|biking|walk|walking)\b/i,
     ],
     safetyCriticalCategories: ['health_wellness'],
-    reason: 'physical_activities_intersect_health_conditions'
+    reason: 'physical_activities_intersect_health_conditions',
   },
   medical_health: {
     patterns: [
       /\b(medical|health|doctor|medication|symptom|condition|treatment|therapy)\b/i,
-      /\b(appointment|hospital|clinic|prescription)\b/i
+      /\b(appointment|hospital|clinic|prescription)\b/i,
     ],
     safetyCriticalCategories: ['health_wellness'],
-    reason: 'medical_queries_require_health_context'
-  }
+    reason: 'medical_queries_require_health_context',
+  },
 };
 
 /**
@@ -84,10 +84,12 @@ function detectSafetyCriticalCategories(query) {
   const safetyCat = new Set();
 
   for (const [domainName, config] of Object.entries(SAFETY_CRITICAL_DOMAINS)) {
-    const matches = config.patterns.some(pattern => pattern.test(query));
+    const matches = config.patterns.some((pattern) => pattern.test(query));
     if (matches) {
-      config.safetyCriticalCategories.forEach(cat => safetyCat.add(cat));
-      console.log(`[SAFETY-CRITICAL] 🚨 Domain "${domainName}" detected → injecting category: [${config.safetyCriticalCategories.join(', ')}]`);
+      config.safetyCriticalCategories.forEach((cat) => safetyCat.add(cat));
+      console.log(
+        `[SAFETY-CRITICAL] 🚨 Domain "${domainName}" detected → injecting category: [${config.safetyCriticalCategories.join(', ')}]`,
+      );
       console.log(`[SAFETY-CRITICAL]    Reason: ${config.reason}`);
     }
   }
@@ -105,22 +107,32 @@ function detectSafetyCriticalCategories(query) {
 function applySafetyCriticalBoost(memories) {
   const SAFETY_MARKERS = {
     allergy: {
-      patterns: [/\b(allerg(y|ic|ies))\b/i, /\b(cannot eat|can't eat|avoid eating)\b/i, /\b(intolerant|intolerance)\b/i],
-      boost: 0.25
+      patterns: [
+        /\b(allerg(y|ic|ies))\b/i,
+        /\b(cannot eat|can't eat|avoid eating)\b/i,
+        /\b(intolerant|intolerance)\b/i,
+      ],
+      boost: 0.25,
     },
     medication: {
-      patterns: [/\b(medication|medicine|prescription|insulin|inhaler)\b/i, /\b(take daily|must take)\b/i],
-      boost: 0.20
+      patterns: [
+        /\b(medication|medicine|prescription|insulin|inhaler)\b/i,
+        /\b(take daily|must take)\b/i,
+      ],
+      boost: 0.2,
     },
     condition: {
-      patterns: [/\b(diabetes|asthma|heart condition|chronic)\b/i, /\b(disability|limitation|restricted)\b/i],
-      boost: 0.15
-    }
+      patterns: [
+        /\b(diabetes|asthma|heart condition|chronic)\b/i,
+        /\b(disability|limitation|restricted)\b/i,
+      ],
+      boost: 0.15,
+    },
   };
 
   let boostedCount = 0;
 
-  const result = memories.map(memory => {
+  const result = memories.map((memory) => {
     if (memory.category_name !== 'health_wellness') {
       return memory;
     }
@@ -130,7 +142,7 @@ function applySafetyCriticalBoost(memories) {
     const markers = [];
 
     for (const [markerName, config] of Object.entries(SAFETY_MARKERS)) {
-      if (config.patterns.some(p => p.test(content))) {
+      if (config.patterns.some((p) => p.test(content))) {
         markers.push(markerName);
         maxBoost = Math.max(maxBoost, config.boost);
       }
@@ -138,12 +150,14 @@ function applySafetyCriticalBoost(memories) {
 
     if (maxBoost > 0) {
       boostedCount++;
-      console.log(`[SAFETY-CRITICAL] 🛡️ Boosting memory ID ${memory.id} by +${maxBoost} (markers: ${markers.join(', ')})`);
+      console.log(
+        `[SAFETY-CRITICAL] 🛡️ Boosting memory ID ${memory.id} by +${maxBoost} (markers: ${markers.join(', ')})`,
+      );
       return {
         ...memory,
         similarity: Math.min(memory.similarity + maxBoost, 1.0),
         safety_boosted: true,
-        safety_markers: markers
+        safety_markers: markers,
       };
     }
 
@@ -151,7 +165,9 @@ function applySafetyCriticalBoost(memories) {
   });
 
   if (boostedCount > 0) {
-    console.log(`[SAFETY-CRITICAL] ⚡ Applied safety boost to ${boostedCount} health_wellness memories`);
+    console.log(
+      `[SAFETY-CRITICAL] ⚡ Applied safety boost to ${boostedCount} health_wellness memories`,
+    );
   }
 
   return result;
@@ -178,52 +194,53 @@ function expandQuery(query) {
   // Synonym expansions for common personal fact categories
   const expansions = {
     // Financial/Income terms
-    'salary': ['income', 'pay', 'compensation', 'earnings', 'wage', 'make', 'earn'],
-    'make': ['salary', 'income', 'pay', 'earn', 'compensation', 'paid', 'earning'],
-    'earn': ['salary', 'income', 'pay', 'make', 'compensation', 'earning'],
-    'paid': ['salary', 'income', 'pay', 'make', 'compensation', 'earn'],
-    'compensation': ['salary', 'income', 'pay', 'make', 'earn'],
-    'income': ['salary', 'pay', 'compensation', 'earnings', 'make', 'earn'],
-    'situation': ['salary', 'income', 'pay', 'status', 'compensation'],
-    'pay': ['salary', 'income', 'compensation', 'make', 'earn', 'earning'],
+    salary: ['income', 'pay', 'compensation', 'earnings', 'wage', 'make', 'earn'],
+    make: ['salary', 'income', 'pay', 'earn', 'compensation', 'paid', 'earning'],
+    earn: ['salary', 'income', 'pay', 'make', 'compensation', 'earning'],
+    paid: ['salary', 'income', 'pay', 'make', 'compensation', 'earn'],
+    compensation: ['salary', 'income', 'pay', 'make', 'earn'],
+    income: ['salary', 'pay', 'compensation', 'earnings', 'make', 'earn'],
+    situation: ['salary', 'income', 'pay', 'status', 'compensation'],
+    pay: ['salary', 'income', 'compensation', 'make', 'earn', 'earning'],
 
     // Location terms
-    'live': ['location', 'home', 'residence', 'address', 'city', 'based', 'reside'],
-    'location': ['live', 'home', 'residence', 'address', 'based', 'city'],
-    'home': ['live', 'location', 'residence', 'address', 'based'],
-    'address': ['live', 'location', 'home', 'residence'],
+    live: ['location', 'home', 'residence', 'address', 'city', 'based', 'reside'],
+    location: ['live', 'home', 'residence', 'address', 'based', 'city'],
+    home: ['live', 'location', 'residence', 'address', 'based'],
+    address: ['live', 'location', 'home', 'residence'],
 
     // Job/Work terms
-    'job': ['work', 'career', 'role', 'position', 'title', 'occupation', 'employed'],
-    'work': ['job', 'career', 'role', 'position', 'title', 'employed', 'company', 'employer'],
-    'title': ['job', 'position', 'role', 'work', 'career'],
-    'position': ['job', 'title', 'role', 'work', 'career'],
-    'employment': ['work', 'job', 'company', 'employer', 'workplace', 'office'],
-    'place': ['location', 'city', 'address', 'where', 'office', 'workplace'],
-    'company': ['employer', 'work', 'job', 'workplace', 'organization'],
-    'employer': ['company', 'work', 'job', 'workplace', 'organization'],
+    job: ['work', 'career', 'role', 'position', 'title', 'occupation', 'employed'],
+    work: ['job', 'career', 'role', 'position', 'title', 'employed', 'company', 'employer'],
+    title: ['job', 'position', 'role', 'work', 'career'],
+    position: ['job', 'title', 'role', 'work', 'career'],
+    employment: ['work', 'job', 'company', 'employer', 'workplace', 'office'],
+    place: ['location', 'city', 'address', 'where', 'office', 'workplace'],
+    company: ['employer', 'work', 'job', 'workplace', 'organization'],
+    employer: ['company', 'work', 'job', 'workplace', 'organization'],
 
     // Health/Medical terms
-    'allergy': ['allergic', 'intolerant', 'reaction', 'sensitive'],
-    'allergic': ['allergy', 'intolerant', 'reaction', 'sensitive'],
+    allergy: ['allergic', 'intolerant', 'reaction', 'sensitive'],
+    allergic: ['allergy', 'intolerant', 'reaction', 'sensitive'],
 
     // Meeting/Appointment terms
-    'meeting': ['appointment', 'call', 'scheduled', 'rescheduled'],
+    meeting: ['appointment', 'call', 'scheduled', 'rescheduled'],
 
     // Pet/Animal terms (FIX #533-B3)
-    'cat': ['pet', 'animal', 'feline', 'kitty', 'kitten'],
-    'dog': ['pet', 'animal', 'canine', 'puppy'],
-    'pet': ['cat', 'dog', 'animal', 'bird', 'fish'],
-    'animal': ['pet', 'cat', 'dog'],
+    cat: ['pet', 'animal', 'feline', 'kitty', 'kitten'],
+    dog: ['pet', 'animal', 'canine', 'puppy'],
+    pet: ['cat', 'dog', 'animal', 'bird', 'fish'],
+    animal: ['pet', 'cat', 'dog'],
 
     // Name/Identity terms (FIX #533-B3)
-    'name': ['called', 'named', 'title'],
-    'called': ['name', 'named']
+    name: ['called', 'named', 'title'],
+    called: ['name', 'named'],
   };
 
   // Check if this is a personal fact query (uses first-person pronouns + personal terms)
   // EXPANDED for FIX #533-B3 to include pet and name queries
-  const personalPattern = /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location|cat|dog|pet|animal|called)\b/i;
+  const personalPattern =
+    /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location|cat|dog|pet|animal|called)\b/i;
   const isPersonal = personalPattern.test(query);
 
   let expanded = query;
@@ -233,7 +250,7 @@ function expandQuery(query) {
   for (const [term, synonyms] of Object.entries(expansions)) {
     if (queryLower.includes(term)) {
       // Add top 3-4 synonyms to improve matching without overwhelming the query
-      const synToAdd = synonyms.slice(0, 4).filter(s => !queryLower.includes(s));
+      const synToAdd = synonyms.slice(0, 4).filter((s) => !queryLower.includes(s));
       addedSynonyms.push(...synToAdd);
     }
   }
@@ -271,7 +288,7 @@ function buildPrefilterQuery(options) {
     categories = null,
     includeAllModes = false,
     allowCrossMode = false,
-    limit = RETRIEVAL_CONFIG.maxCandidates
+    limit = RETRIEVAL_CONFIG.maxCandidates,
   } = options;
 
   console.log('[MODE-DIAG] Mode from options:', mode);
@@ -280,11 +297,7 @@ function buildPrefilterQuery(options) {
   const params = [userId];
   let paramIndex = 2;
 
-  const conditions = [
-    'user_id = $1',
-    'embedding IS NOT NULL',
-    "embedding_status = 'ready'"
-  ];
+  const conditions = ['user_id = $1', 'embedding IS NOT NULL', "embedding_status = 'ready'"];
 
   // Filter out superseded memories (Innovation #3)
   // Include history only if explicitly requested
@@ -358,7 +371,7 @@ function buildPrefilterQuery(options) {
 
 /**
  * Calculate hybrid score combining semantic similarity, recency, and confidence
- * 
+ *
  * @param {object} memory - Memory with similarity score
  * @param {object} options - Scoring weights
  * @returns {number} Final hybrid score
@@ -367,14 +380,14 @@ function calculateHybridScore(memory, options = {}) {
   const {
     recencyBoostDays = RETRIEVAL_CONFIG.recencyBoostDays,
     recencyBoostWeight = RETRIEVAL_CONFIG.recencyBoostWeight,
-    confidenceWeight = RETRIEVAL_CONFIG.confidenceWeight
+    confidenceWeight = RETRIEVAL_CONFIG.confidenceWeight,
   } = options;
 
   let score = memory.similarity;
 
   // Recency boost (memories from last N days get a boost)
   if (memory.days_ago !== undefined && memory.days_ago < recencyBoostDays) {
-    const recencyFactor = 1 - (memory.days_ago / recencyBoostDays);
+    const recencyFactor = 1 - memory.days_ago / recencyBoostDays;
     score += recencyFactor * recencyBoostWeight;
   }
 
@@ -392,7 +405,7 @@ function calculateHybridScore(memory, options = {}) {
 
 /**
  * Retrieve semantically relevant memories for a query
- * 
+ *
  * @param {object} pool - PostgreSQL connection pool
  * @param {string} query - User query text
  * @param {object} options - Retrieval options
@@ -407,7 +420,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     topK = RETRIEVAL_CONFIG.defaultTopK,
     minSimilarity = RETRIEVAL_CONFIG.minSimilarity,
     includeAllModes = false,
-    allowCrossMode = false
+    allowCrossMode = false,
   } = options;
 
   // Normalize mode: convert underscore to hyphen for consistency
@@ -440,7 +453,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     query_embedding_ms: 0,
     db_fetch_ms: 0,
     scoring_ms: 0,
-    total_ms: 0
+    total_ms: 0,
   };
 
   // Validate inputs
@@ -449,7 +462,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       success: false,
       error: 'userId is required',
       memories: [],
-      telemetry
+      telemetry,
     };
   }
 
@@ -458,7 +471,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       success: false,
       error: 'Query is required',
       memories: [],
-      telemetry
+      telemetry,
     };
   }
 
@@ -474,11 +487,17 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       if (categories && Array.isArray(categories) && categories.length > 0) {
         // Merge with existing categories
         effectiveCategories = [...new Set([...categories, ...safetyCriticalCategories])];
-        console.log(`[SAFETY-CRITICAL] 📋 Merged categories: ${JSON.stringify(categories)} + ${JSON.stringify(safetyCriticalCategories)} → ${JSON.stringify(effectiveCategories)}`);
+        console.log(
+          `[SAFETY-CRITICAL] 📋 Merged categories: ${JSON.stringify(categories)} + ${JSON.stringify(safetyCriticalCategories)} → ${JSON.stringify(effectiveCategories)}`,
+        );
       } else {
         // No categories specified - keep searching all categories but log detection
-        console.log(`[SAFETY-CRITICAL] 🔍 Safety-critical domains detected: ${JSON.stringify(safetyCriticalCategories)}`);
-        console.log(`[SAFETY-CRITICAL] 📋 Searching ALL categories but will boost safety-critical memories`);
+        console.log(
+          `[SAFETY-CRITICAL] 🔍 Safety-critical domains detected: ${JSON.stringify(safetyCriticalCategories)}`,
+        );
+        console.log(
+          `[SAFETY-CRITICAL] 📋 Searching ALL categories but will boost safety-critical memories`,
+        );
         // Keep effectiveCategories = null to search all
       }
     }
@@ -489,7 +508,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // STEP 1: Generate query embedding (use expanded query for better semantic matching)
     const embedStart = Date.now();
     const queryEmbeddingResult = await generateEmbedding(expandedQuery, {
-      timeout: RETRIEVAL_CONFIG.embeddingTimeout
+      timeout: RETRIEVAL_CONFIG.embeddingTimeout,
     });
     telemetry.query_embedding_ms = Date.now() - embedStart;
 
@@ -499,7 +518,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         success: false,
         error: `Could not embed query: ${queryEmbeddingResult.error}`,
         memories: [],
-        telemetry
+        telemetry,
       };
     }
 
@@ -508,10 +527,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // CRITICAL FIX #504: Use lower similarity threshold for personal queries
     const effectiveMinSimilarity = isPersonal
       ? RETRIEVAL_CONFIG.minSimilarityPersonal
-      : (minSimilarity || RETRIEVAL_CONFIG.minSimilarity);
+      : minSimilarity || RETRIEVAL_CONFIG.minSimilarity;
 
     if (isPersonal) {
-      console.log(`[SEMANTIC RETRIEVAL] 🎯 Personal query detected - using lower threshold: ${effectiveMinSimilarity}`);
+      console.log(
+        `[SEMANTIC RETRIEVAL] 🎯 Personal query detected - using lower threshold: ${effectiveMinSimilarity}`,
+      );
     }
 
     // STEP 2: Prefilter candidates from DB (using effectiveCategories with safety injection)
@@ -522,7 +543,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       categories: effectiveCategories, // Use merged categories
       includeAllModes,
       allowCrossMode,
-      limit: RETRIEVAL_CONFIG.maxCandidates
+      limit: RETRIEVAL_CONFIG.maxCandidates,
     });
 
     const { rows: candidates } = await pool.query(sql, params);
@@ -532,7 +553,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // Count how many superseded facts were filtered out (if not including history)
     if (!options.includeHistory) {
-      const { rows: [countRow] } = await pool.query(`
+      const {
+        rows: [countRow],
+      } = await pool.query(
+        `
         SELECT COUNT(*) as superseded_count
         FROM persistent_memories
         WHERE user_id = $1
@@ -540,7 +564,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           AND is_current = false
           AND embedding IS NOT NULL
           AND embedding_status = 'ready'
-      `, [userId, mode]);
+      `,
+        [userId, mode],
+      );
       telemetry.filtered_superseded_count = parseInt(countRow.superseded_count || 0);
     }
 
@@ -551,7 +577,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       return {
         success: true,
         memories: [],
-        telemetry
+        telemetry,
       };
     }
 
@@ -559,7 +585,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const scoringStart = Date.now();
 
     // Parse embeddings (handle both FLOAT4[] and vector(1536) types)
-    const candidatesWithParsedEmbeddings = candidates.map(c => {
+    const candidatesWithParsedEmbeddings = candidates.map((c) => {
       let embedding = c.embedding;
 
       // If embedding is a string (from pgvector vector type), parse it
@@ -568,7 +594,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           // pgvector returns vectors as strings like "[0.1,0.2,0.3,...]"
           embedding = JSON.parse(embedding);
         } catch (error) {
-          console.warn(`[SEMANTIC RETRIEVAL] Failed to parse embedding for memory ${c.id}: ${error.message}`);
+          console.warn(
+            `[SEMANTIC RETRIEVAL] Failed to parse embedding for memory ${c.id}: ${error.message}`,
+          );
           embedding = null;
         }
       }
@@ -577,16 +605,16 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     });
 
     // Filter to only those with valid embeddings
-    const withEmbeddings = candidatesWithParsedEmbeddings.filter(c =>
-      c.embedding && Array.isArray(c.embedding) && c.embedding.length > 0
+    const withEmbeddings = candidatesWithParsedEmbeddings.filter(
+      (c) => c.embedding && Array.isArray(c.embedding) && c.embedding.length > 0,
     );
     telemetry.candidates_with_embeddings = withEmbeddings.length;
     telemetry.vectors_compared = withEmbeddings.length;
 
     // Calculate similarity scores
-    const scored = withEmbeddings.map(candidate => ({
+    const scored = withEmbeddings.map((candidate) => ({
       ...candidate,
-      similarity: cosineSimilarity(queryEmbedding, candidate.embedding)
+      similarity: cosineSimilarity(queryEmbedding, candidate.embedding),
     }));
 
     // CRITICAL FIX #511: Apply safety-critical boost BEFORE hybrid scoring
@@ -594,15 +622,15 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const safetyBoosted = applySafetyCriticalBoost(scored);
 
     // Apply hybrid scoring
-    const hybridScored = safetyBoosted.map(memory => ({
+    const hybridScored = safetyBoosted.map((memory) => ({
       ...memory,
-      hybrid_score: calculateHybridScore(memory)
+      hybrid_score: calculateHybridScore(memory),
     }));
 
     // Filter by minimum similarity and sort
     // CRITICAL FIX #504: Use effectiveMinSimilarity (lower for personal queries)
     const filtered = hybridScored
-      .filter(m => m.similarity >= effectiveMinSimilarity)
+      .filter((m) => m.similarity >= effectiveMinSimilarity)
       .sort((a, b) => b.hybrid_score - a.hybrid_score);
 
     telemetry.candidates_above_threshold = filtered.length;
@@ -610,9 +638,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // Log threshold impact for debugging
     if (filtered.length > 0) {
-      const belowOldThreshold = filtered.filter(m => m.similarity < RETRIEVAL_CONFIG.minSimilarity).length;
+      const belowOldThreshold = filtered.filter(
+        (m) => m.similarity < RETRIEVAL_CONFIG.minSimilarity,
+      ).length;
       if (belowOldThreshold > 0 && isPersonal) {
-        console.log(`[SEMANTIC RETRIEVAL] ✅ Lower threshold recovered ${belowOldThreshold} personal fact memories`);
+        console.log(
+          `[SEMANTIC RETRIEVAL] ✅ Lower threshold recovered ${belowOldThreshold} personal fact memories`,
+        );
       }
     }
 
@@ -627,8 +659,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
       // Check if adding this memory would exceed budget
       if (usedTokens + memoryTokens > tokenBudget) {
-        console.log(`[SEMANTIC RETRIEVAL] Token budget reached: ${usedTokens}/${tokenBudget} tokens used`);
-        break;  // Stop before exceeding budget
+        console.log(
+          `[SEMANTIC RETRIEVAL] Token budget reached: ${usedTokens}/${tokenBudget} tokens used`,
+        );
+        break; // Stop before exceeding budget
       }
 
       results.push(memory);
@@ -642,11 +676,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     telemetry.results_returned = results.length;
     telemetry.results_injected = results.length;
-    telemetry.tokens_used = usedTokens;  // Actual tokens used (within budget)
+    telemetry.tokens_used = usedTokens; // Actual tokens used (within budget)
 
     // Collect memory IDs and scores
-    telemetry.injected_memory_ids = results.map(r => r.id);
-    telemetry.top_scores = results.slice(0, 10).map(r => parseFloat(r.similarity.toFixed(3)));
+    telemetry.injected_memory_ids = results.map((r) => r.id);
+    telemetry.top_scores = results.slice(0, 10).map((r) => parseFloat(r.similarity.toFixed(3)));
 
     // Calculate telemetry stats
     if (results.length > 0) {
@@ -660,25 +694,31 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // Add safety-critical telemetry (Issue #511)
     telemetry.safety_critical_detected = safetyCriticalCategories.length > 0;
     telemetry.safety_categories_injected = safetyCriticalCategories;
-    telemetry.safety_memories_boosted = results.filter(r => r.safety_boosted).length;
+    telemetry.safety_memories_boosted = results.filter((r) => r.safety_boosted).length;
 
     // INNOVATION #7: Track semantic access to update importance scores
     // High-importance memories are those frequently semantically relevant to queries
     if (results.length > 0) {
       // Update importance scores for retrieved memories (non-blocking)
-      const memoryIds = results.map(r => r.id);
-      pool.query(`
+      const memoryIds = results.map((r) => r.id);
+      pool
+        .query(
+          `
         UPDATE persistent_memories
         SET
           usage_frequency = usage_frequency + 1,
           relevance_score = LEAST(relevance_score + 0.03, 1.0),
           last_accessed = CURRENT_TIMESTAMP
         WHERE id = ANY($1::int[])
-      `, [memoryIds])
+      `,
+          [memoryIds],
+        )
         .then(() => {
-          console.log(`[SEMANTIC-IMPORTANCE] Updated importance for ${memoryIds.length} semantically retrieved memories`);
+          console.log(
+            `[SEMANTIC-IMPORTANCE] Updated importance for ${memoryIds.length} semantically retrieved memories`,
+          );
         })
-        .catch(err => {
+        .catch((err) => {
           console.error(`[SEMANTIC-IMPORTANCE] ⚠️ Failed to update importance: ${err.message}`);
         });
     }
@@ -687,17 +727,18 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const cleanResults = results.map(({ embedding, ...rest }) => ({
       ...rest,
       similarity: Math.round(rest.similarity * 1000) / 1000,
-      hybrid_score: Math.round(rest.hybrid_score * 1000) / 1000
+      hybrid_score: Math.round(rest.hybrid_score * 1000) / 1000,
     }));
 
-    console.log(`[SEMANTIC RETRIEVAL] ✅ Found ${results.length} memories for "${query.substring(0, 50)}..." (${telemetry.total_ms}ms)`);
+    console.log(
+      `[SEMANTIC RETRIEVAL] ✅ Found ${results.length} memories for "${query.substring(0, 50)}..." (${telemetry.total_ms}ms)`,
+    );
 
     return {
       success: true,
       memories: cleanResults,
-      telemetry
+      telemetry,
     };
-
   } catch (error) {
     telemetry.total_ms = Date.now() - startTime;
     console.error(`[SEMANTIC RETRIEVAL] ❌ Error: ${error.message}`);
@@ -705,7 +746,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       success: false,
       error: error.message,
       memories: [],
-      telemetry
+      telemetry,
     };
   }
 }
@@ -717,7 +758,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 /**
  * Find memories with matching or similar fingerprint
  * Used for fact supersession detection
- * 
+ *
  * @param {object} pool - PostgreSQL connection pool
  * @param {string} userId - User ID
  * @param {string} fingerprint - Fact fingerprint to match
@@ -725,7 +766,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
  */
 export async function findByFingerprint(pool, userId, fingerprint) {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await pool.query(
+      `
       SELECT id, content, fact_fingerprint, fingerprint_confidence, created_at
       FROM persistent_memories
       WHERE user_id = $1 
@@ -733,18 +775,20 @@ export async function findByFingerprint(pool, userId, fingerprint) {
         AND fact_fingerprint = $2
       ORDER BY created_at DESC
       LIMIT 10
-    `, [userId, fingerprint]);
+    `,
+      [userId, fingerprint],
+    );
 
     return {
       success: true,
       matches: rows,
-      count: rows.length
+      count: rows.length,
     };
   } catch (error) {
     return {
       success: false,
       error: error.message,
-      matches: []
+      matches: [],
     };
   }
 }
@@ -756,14 +800,17 @@ export async function findByFingerprint(pool, userId, fingerprint) {
 /**
  * Get retrieval statistics for a user
  * Useful for debugging and optimization
- * 
+ *
  * @param {object} pool - PostgreSQL connection pool
  * @param {string} userId - User ID
  * @returns {Promise<object>} Statistics object
  */
 export async function getRetrievalStats(pool, userId) {
   try {
-    const { rows: [stats] } = await pool.query(`
+    const {
+      rows: [stats],
+    } = await pool.query(
+      `
       SELECT
         COUNT(*) as total_memories,
         COUNT(*) FILTER (WHERE is_current = true) as current_memories,
@@ -777,7 +824,9 @@ export async function getRetrievalStats(pool, userId) {
         MAX(created_at) as newest_memory
       FROM persistent_memories
       WHERE user_id = $1
-    `, [userId]);
+    `,
+      [userId],
+    );
 
     return {
       success: true,
@@ -792,15 +841,16 @@ export async function getRetrievalStats(pool, userId) {
         unique_modes: parseInt(stats.unique_modes),
         oldest_memory: stats.oldest_memory,
         newest_memory: stats.newest_memory,
-        embedding_coverage: stats.total_memories > 0 
-          ? Math.round(stats.with_embeddings / stats.total_memories * 100) + '%'
-          : 'N/A'
-      }
+        embedding_coverage:
+          stats.total_memories > 0
+            ? Math.round((stats.with_embeddings / stats.total_memories) * 100) + '%'
+            : 'N/A',
+      },
     };
   } catch (error) {
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -813,5 +863,5 @@ export default {
   retrieveSemanticMemories,
   findByFingerprint,
   getRetrievalStats,
-  config: RETRIEVAL_CONFIG
+  config: RETRIEVAL_CONFIG,
 };

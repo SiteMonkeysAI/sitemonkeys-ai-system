@@ -3,10 +3,10 @@
 // Primary entry point and orchestration hub for Site Monkeys Memory System
 // ================================================================
 
-import coreSystem from "./core.js";
-import intelligenceSystem from "./intelligence.js";
-import { logMemoryOperation } from "../../../routes/debug.js";
-import { embedMemoryNonBlocking } from "../../../services/embedding-service.js";
+import coreSystem from './core.js';
+import intelligenceSystem from './intelligence.js';
+import { logMemoryOperation } from '../../../routes/debug.js';
+import { embedMemoryNonBlocking } from '../../../services/embedding-service.js';
 
 class PersistentMemoryOrchestrator {
   constructor() {
@@ -34,19 +34,11 @@ class PersistentMemoryOrchestrator {
     };
 
     this.logger = {
-      log: (message) =>
-        console.log(
-          `[PERSISTENT_MEMORY] ${new Date().toISOString()} ${message}`,
-        ),
+      log: (message) => console.log(`[PERSISTENT_MEMORY] ${new Date().toISOString()} ${message}`),
       error: (message, error) =>
-        console.error(
-          `[PERSISTENT_MEMORY ERROR] ${new Date().toISOString()} ${message}`,
-          error,
-        ),
+        console.error(`[PERSISTENT_MEMORY ERROR] ${new Date().toISOString()} ${message}`, error),
       warn: (message) =>
-        console.warn(
-          `[PERSISTENT_MEMORY WARN] ${new Date().toISOString()} ${message}`,
-        ),
+        console.warn(`[PERSISTENT_MEMORY WARN] ${new Date().toISOString()} ${message}`),
     };
 
     // Set up global interface immediately for compatibility
@@ -70,10 +62,7 @@ class PersistentMemoryOrchestrator {
       );
 
       // Use intelligenceSystem to route and extract memories
-      const routing = await this.intelligenceSystem.analyzeAndRoute(
-        query,
-        userId,
-      );
+      const routing = await this.intelligenceSystem.analyzeAndRoute(query, userId);
       const memories = await this.intelligenceSystem.extractRelevantMemories(
         userId,
         query,
@@ -81,10 +70,10 @@ class PersistentMemoryOrchestrator {
       );
 
       if (!memories || memories.length === 0) {
-        this.logger.log("No relevant memories found");
+        this.logger.log('No relevant memories found');
         return {
           success: false,
-          memories: "",
+          memories: '',
           count: 0,
           memory_ids: [],
         };
@@ -93,26 +82,26 @@ class PersistentMemoryOrchestrator {
       // Format memories as a readable string
       const memoryText = memories
         .map((m, idx) => {
-          const category = m.category_name || "general";
-          const subcategory = m.subcategory_name || "";
-          const content = m.content || "";
-          return `[Memory ${idx + 1}] (${category}${subcategory ? "/" + subcategory : ""}): ${content}`;
+          const category = m.category_name || 'general';
+          const subcategory = m.subcategory_name || '';
+          const content = m.content || '';
+          return `[Memory ${idx + 1}] (${category}${subcategory ? '/' + subcategory : ''}): ${content}`;
         })
-        .join("\n\n");
+        .join('\n\n');
 
       this.logger.log(
         `Successfully retrieved ${memories.length} memories, ${memoryText.length} characters`,
       );
 
       // Extract memory IDs for telemetry
-      const memoryIds = memories.map(m => m.id).filter(id => id != null);
+      const memoryIds = memories.map((m) => m.id).filter((id) => id != null);
 
       // Debug logging hook for test harness
       logMemoryOperation(userId, 'retrieve', {
         memory_ids: memoryIds,
         query: query.substring(0, 100),
         category_searched: routing.primaryCategory,
-        results_count: memories.length
+        results_count: memories.length,
       });
 
       return {
@@ -123,10 +112,10 @@ class PersistentMemoryOrchestrator {
         routing: routing,
       };
     } catch (error) {
-      this.logger.error("Memory retrieval failed:", error);
+      this.logger.error('Memory retrieval failed:', error);
       return {
         success: false,
-        memories: "",
+        memories: '',
         count: 0,
         error: error.message,
       };
@@ -155,37 +144,39 @@ class PersistentMemoryOrchestrator {
       extractValue: (text) => {
         const match = text.match(/(\d{3}[-.]?\d{3}[-.]?\d{4}|\d{3}[-.]?\d{4})/);
         return match ? match[1].replace(/[-.\s]/g, '') : null;
-      }
+      },
     },
     email: {
       patterns: [/email/i, /e-mail/i, /mail\s*me\s*at/i],
       extractValue: (text) => {
         const match = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
         return match ? match[0].toLowerCase() : null;
-      }
+      },
     },
     address: {
       patterns: [/address/i, /live\s*at/i, /reside/i, /located\s*at/i, /moved\s*to/i],
       extractValue: (text) => {
         // Extract address-like content - city, state, or street
-        const match = text.match(/(?:at|in|to)\s+([A-Z][a-zA-Z\s,]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|[A-Z]{2}\s+\d{5})?)/i);
+        const match = text.match(
+          /(?:at|in|to)\s+([A-Z][a-zA-Z\s,]+(?:Street|St|Avenue|Ave|Road|Rd|Drive|Dr|Boulevard|Blvd|[A-Z]{2}\s+\d{5})?)/i,
+        );
         return match ? match[1].trim() : null;
-      }
+      },
     },
     employer: {
       patterns: [/work\s*(?:at|for)/i, /employed\s*(?:at|by)/i, /job\s*(?:at|is)/i, /company/i],
       extractValue: (text) => {
         const match = text.match(/(?:work|employed|job)\s*(?:at|for|is)?\s*([A-Z][a-zA-Z\s&]+)/i);
         return match ? match[1].trim() : null;
-      }
+      },
     },
     name: {
       patterns: [/(?:my\s+)?name\s+is/i, /call\s+me/i, /i\s+am\s+called/i],
       extractValue: (text) => {
         const match = text.match(/(?:name\s+is|call\s+me|i\s+am)\s+([A-Z][a-zA-Z]+)/i);
         return match ? match[1] : null;
-      }
-    }
+      },
+    },
   };
 
   /**
@@ -195,9 +186,11 @@ class PersistentMemoryOrchestrator {
   detectSupersedableFact(content) {
     const contentLower = content.toLowerCase();
 
-    for (const [domain, config] of Object.entries(PersistentMemoryOrchestrator.SUPERSESSION_DOMAINS)) {
+    for (const [domain, config] of Object.entries(
+      PersistentMemoryOrchestrator.SUPERSESSION_DOMAINS,
+    )) {
       // Check if any pattern matches
-      const hasPattern = config.patterns.some(pattern => pattern.test(contentLower));
+      const hasPattern = config.patterns.some((pattern) => pattern.test(contentLower));
       if (hasPattern) {
         const value = config.extractValue(content);
         if (value) {
@@ -230,7 +223,7 @@ class PersistentMemoryOrchestrator {
       // Use SEMANTIC matching via the domain patterns, not exact keywords
       const domainConfig = PersistentMemoryOrchestrator.SUPERSESSION_DOMAINS[fact.domain];
       const patternSQL = domainConfig.patterns
-        .map(p => `content ~* '${p.source.replace(/\\/g, '\\\\')}'`)
+        .map((p) => `content ~* '${p.source.replace(/\\/g, '\\\\')}'`)
         .join(' OR ');
 
       const existingQuery = `
@@ -251,22 +244,23 @@ class PersistentMemoryOrchestrator {
       }
 
       // Mark existing facts as superseded
-      const supersededIds = existing.rows.map(r => r.id);
+      const supersededIds = existing.rows.map((r) => r.id);
 
-      console.log(`[SUPERSESSION] Marking ${supersededIds.length} existing ${fact.domain} facts as superseded`);
+      console.log(
+        `[SUPERSESSION] Marking ${supersededIds.length} existing ${fact.domain} facts as superseded`,
+      );
 
       await this.coreSystem.executeQuery(
         `UPDATE persistent_memories
          SET is_current = false,
              metadata = jsonb_set(COALESCE(metadata, '{}')::jsonb, '{superseded_at}', to_jsonb(NOW()::text))
          WHERE id = ANY($1)`,
-        [supersededIds]
+        [supersededIds],
       );
 
       console.log(`[SUPERSESSION] Successfully superseded IDs: ${supersededIds.join(', ')}`);
 
       return { superseded: true, supersededIds, domain: fact.domain };
-
     } catch (error) {
       console.error('[SUPERSESSION] Error during supersession check:', error);
       // Don't block storage on supersession failure
@@ -306,7 +300,9 @@ class PersistentMemoryOrchestrator {
       const supersessionResult = await this.handleSupersession(userId, userMessage);
 
       if (supersessionResult.superseded) {
-        console.log(`[TRACE-STORE] SUPERSESSION: Marked ${supersessionResult.supersededIds.length} old ${supersessionResult.domain} facts as is_current=false`);
+        console.log(
+          `[TRACE-STORE] SUPERSESSION: Marked ${supersessionResult.supersededIds.length} old ${supersessionResult.domain} facts as is_current=false`,
+        );
         metadata.supersedes = supersessionResult.supersededIds;
         metadata.supersession_domain = supersessionResult.domain;
       }
@@ -318,7 +314,9 @@ class PersistentMemoryOrchestrator {
       const ordinalInfo = this.intelligenceSystem.detectOrdinalFact(userMessage);
 
       if (ordinalInfo.hasOrdinal) {
-        console.log(`[ORDINAL] Detected ordinal fact: ${ordinalInfo.pattern} (#${ordinalInfo.ordinal})`);
+        console.log(
+          `[ORDINAL] Detected ordinal fact: ${ordinalInfo.pattern} (#${ordinalInfo.ordinal})`,
+        );
         metadata.ordinal = ordinalInfo.ordinal;
         metadata.ordinal_subject = ordinalInfo.subject;
         metadata.ordinal_pattern = ordinalInfo.pattern;
@@ -327,19 +325,15 @@ class PersistentMemoryOrchestrator {
 
       // Route to determine category
       console.log('[TRACE-STORE] A5. About to call analyzeAndRoute...');
-      const routing = await this.intelligenceSystem.analyzeAndRoute(
-        userMessage,
-        userId,
-      );
+      const routing = await this.intelligenceSystem.analyzeAndRoute(userMessage, userId);
       console.log('[TRACE-STORE] A6. Routing complete, category:', routing.primaryCategory);
 
       // Calculate relevance score
       console.log('[TRACE-STORE] A7. About to calculate relevance score...');
-      const relevanceScore =
-        await this.intelligenceSystem.calculateRelevanceScore(
-          conversationContent,
-          metadata,
-        );
+      const relevanceScore = await this.intelligenceSystem.calculateRelevanceScore(
+        conversationContent,
+        metadata,
+      );
       console.log('[TRACE-STORE] A8. Relevance score calculated:', relevanceScore);
 
       // Calculate token count (approximate: 1 token ≈ 4 characters)
@@ -382,11 +376,14 @@ class PersistentMemoryOrchestrator {
       const memoryId = result.rows[0]?.id;
 
       // TRACE LOGGING - Insert complete
-      console.log('[TRACE-STORE] C. Insert complete! Result:', JSON.stringify({
-        memoryId: memoryId,
-        rowCount: result.rowCount,
-        success: !!memoryId
-      }));
+      console.log(
+        '[TRACE-STORE] C. Insert complete! Result:',
+        JSON.stringify({
+          memoryId: memoryId,
+          rowCount: result.rowCount,
+          success: !!memoryId,
+        }),
+      );
 
       this.logger.log(
         `Successfully stored memory ID: ${memoryId} in category: ${routing.primaryCategory}`,
@@ -397,16 +394,24 @@ class PersistentMemoryOrchestrator {
       if (memoryId && this.coreSystem.pool) {
         console.log(`[EMBEDDING] Generating embedding for memory ${memoryId}...`);
         // Use non-blocking embedding to avoid delaying the response
-        embedMemoryNonBlocking(this.coreSystem.pool, memoryId, conversationContent, { timeout: 3000 })
-          .then(embedResult => {
+        embedMemoryNonBlocking(this.coreSystem.pool, memoryId, conversationContent, {
+          timeout: 3000,
+        })
+          .then((embedResult) => {
             if (embedResult.success) {
-              console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+              console.log(
+                `[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`,
+              );
             } else {
-              console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+              console.log(
+                `[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`,
+              );
             }
           })
-          .catch(error => {
-            console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
+          .catch((error) => {
+            console.error(
+              `[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`,
+            );
           });
       }
 
@@ -417,7 +422,7 @@ class PersistentMemoryOrchestrator {
         category: routing.primaryCategory,
         dedup_triggered: false,
         dedup_merged_with: null,
-        stored: true
+        stored: true,
       });
 
       return {
@@ -429,7 +434,7 @@ class PersistentMemoryOrchestrator {
         relevanceScore: relevanceScore,
       };
     } catch (error) {
-      this.logger.error("Memory storage failed:", error);
+      this.logger.error('Memory storage failed:', error);
       return {
         success: false,
         error: error.message,
@@ -442,9 +447,7 @@ class PersistentMemoryOrchestrator {
    * @returns {boolean} - True if system is ready
    */
   isReady() {
-    return (
-      this.coreSystem?.isInitialized && this.intelligenceSystem?.isInitialized
-    );
+    return this.coreSystem?.isInitialized && this.intelligenceSystem?.isInitialized;
   }
 
   /**

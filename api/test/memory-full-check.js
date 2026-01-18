@@ -11,17 +11,17 @@ router.get('/memory-full-check', async (req, res) => {
   // Security check
   const providedToken = req.headers['x-internal-test-token'];
   if (providedToken !== REQUIRED_TOKEN) {
-    return res.status(403).json({ 
-      error: 'Forbidden', 
-      message: 'X-Internal-Test-Token header required' 
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'X-Internal-Test-Token header required',
     });
   }
 
   // Additional check: DEBUG_MODE must be enabled
   if (process.env.DEBUG_MODE !== 'true' && process.env.DEPLOYMENT_TYPE !== 'private') {
-    return res.status(403).json({ 
-      error: 'Forbidden', 
-      message: 'Debug mode not enabled' 
+    return res.status(403).json({
+      error: 'Forbidden',
+      message: 'Debug mode not enabled',
     });
   }
 
@@ -40,8 +40,8 @@ router.get('/memory-full-check', async (req, res) => {
           message,
           user_id: testUserId,
           mode: 'truth_general',
-          conversationHistory: []
-        })
+          conversationHistory: [],
+        }),
       });
       return await response.json();
     } catch (err) {
@@ -61,15 +61,22 @@ router.get('/memory-full-check', async (req, res) => {
   function hasIgnorancePhrases(text) {
     if (!text) return false;
     const phrases = [
-      "don't have", "no memory", "haven't told", "first interaction",
-      "don't recall", "not aware", "no information", "haven't shared",
-      "don't see any", "no record"
+      "don't have",
+      'no memory',
+      "haven't told",
+      'first interaction',
+      "don't recall",
+      'not aware',
+      'no information',
+      "haven't shared",
+      "don't see any",
+      'no record',
     ];
-    return phrases.some(p => text.toLowerCase().includes(p));
+    return phrases.some((p) => text.toLowerCase().includes(p));
   }
 
   // Helper: Wait for storage to complete
-  const wait = (ms) => new Promise(r => setTimeout(r, ms));
+  const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
   // Helper: Store via HTTP and confirm in DB (Issue #210 Fix 2)
   async function storeViaHTTPAndConfirm(message, tripwire, maxRetries = 5) {
@@ -80,7 +87,7 @@ router.get('/memory-full-check', async (req, res) => {
       return {
         success: false,
         error: 'HTTP store failed',
-        httpError: storeResponse.error
+        httpError: storeResponse.error,
       };
     }
 
@@ -91,28 +98,30 @@ router.get('/memory-full-check', async (req, res) => {
           `SELECT id, content FROM persistent_memories
            WHERE user_id = $1 AND content ILIKE $2
            ORDER BY created_at DESC LIMIT 1`,
-          [testUserId, `%${tripwire}%`]
+          [testUserId, `%${tripwire}%`],
         );
 
         if (memories.rows.length > 0) {
-          console.log(`[STORE-CONFIRM] ✅ Confirmed ${tripwire} stored as ID ${memories.rows[0].id}`);
+          console.log(
+            `[STORE-CONFIRM] ✅ Confirmed ${tripwire} stored as ID ${memories.rows[0].id}`,
+          );
           return {
             success: true,
             id: memories.rows[0].id,
-            content: memories.rows[0].content
+            content: memories.rows[0].content,
           };
         }
       } catch (dbErr) {
         console.error(`[STORE-CONFIRM] DB query error on attempt ${i + 1}:`, dbErr.message);
       }
 
-      await wait(300);  // Short poll interval
+      await wait(300); // Short poll interval
     }
 
     console.error(`[STORE-CONFIRM] ❌ Failed to confirm ${tripwire} after ${maxRetries} attempts`);
     return {
       success: false,
-      error: 'Storage not confirmed in DB after polling'
+      error: 'Storage not confirmed in DB after polling',
     };
   }
 
@@ -123,7 +132,7 @@ router.get('/memory-full-check', async (req, res) => {
     const tripwire1 = `ALPHA-${runId}`;
     const store1 = await storeViaHTTPAndConfirm(
       `Remember this: My test identifier is ${tripwire1}`,
-      tripwire1
+      tripwire1,
     );
 
     let recall1; // Declare at function scope for later use in TEST 7
@@ -133,13 +142,15 @@ router.get('/memory-full-check', async (req, res) => {
         test: '1. Basic Store + Recall',
         passed: false,
         note: 'FAIL: Storage not confirmed via HTTP pipeline',
-        error: store1.error
+        error: store1.error,
       });
     } else {
       recall1 = await chatViaHTTP('What is my test identifier?');
 
       const hasExactToken1 = recall1.response?.includes(tripwire1) || false;
-      const hasHallucination1 = recall1.response?.match(/evolved|changed|updated|previous|earlier/i);
+      const hasHallucination1 = recall1.response?.match(
+        /evolved|changed|updated|previous|earlier/i,
+      );
 
       results.push({
         test: '1. Basic Store + Recall',
@@ -150,30 +161,29 @@ router.get('/memory-full-check', async (req, res) => {
         warning: hasHallucination1 ? 'AI invented provenance not in stored memory' : null,
         response_preview: recall1.response?.substring(0, 250) || 'no response',
         metadata: recall1.metadata || {},
-        storage_confirmed_id: store1.id
+        storage_confirmed_id: store1.id,
       });
     }
 
     // ===== TEST 2: Memory-Used-Not-Ignored (Enforcer Test) =====
     const tripwire2 = `BRAVO-${runId}`;
-    const store2 = await storeViaHTTPAndConfirm(
-      `My test token is ${tripwire2}`,
-      tripwire2
-    );
+    const store2 = await storeViaHTTPAndConfirm(`My test token is ${tripwire2}`, tripwire2);
 
     if (!store2.success) {
       results.push({
         test: '2. Memory-Used-Not-Ignored (Enforcer)',
         passed: false,
         note: 'FAIL: Storage not confirmed via HTTP pipeline',
-        error: store2.error
+        error: store2.error,
       });
     } else {
       const recall2 = await chatViaHTTP('What is my test token?');
 
       const hasIgnorance2 = hasIgnorancePhrases(recall2.response);
       const foundTripwire2 = recall2.response?.includes(tripwire2) || false;
-      const hasHallucination2 = recall2.response?.match(/evolved|changed|updated|previous|earlier/i);
+      const hasHallucination2 = recall2.response?.match(
+        /evolved|changed|updated|previous|earlier/i,
+      );
 
       results.push({
         test: '2. Memory-Used-Not-Ignored (Enforcer)',
@@ -184,7 +194,7 @@ router.get('/memory-full-check', async (req, res) => {
         warning: hasHallucination2 ? 'AI invented provenance not in stored memory' : null,
         enforcer_status: hasIgnorance2 ? 'FAIL - AI claimed ignorance' : 'PASS',
         response_preview: recall2.response?.substring(0, 250) || 'no response',
-        storage_confirmed_id: store2.id
+        storage_confirmed_id: store2.id,
       });
     }
 
@@ -194,12 +204,12 @@ router.get('/memory-full-check', async (req, res) => {
 
     const store3a = await storeViaHTTPAndConfirm(
       `My first test token is ${tripwire3a}`,
-      tripwire3a
+      tripwire3a,
     );
 
     const store3b = await storeViaHTTPAndConfirm(
       `My second test token is ${tripwire3b}`,
-      tripwire3b
+      tripwire3b,
     );
 
     // Only proceed if both confirmed
@@ -213,19 +223,19 @@ router.get('/memory-full-check', async (req, res) => {
         charlie_id: store3a.id,
         delta_stored: store3b.success,
         delta_error: store3b.error,
-        delta_id: store3b.id
+        delta_id: store3b.id,
       });
     } else {
       // Query DB directly to verify separate storage
       const dbCheck3 = await queryDB(
         `SELECT id, content, category_name FROM persistent_memories
          WHERE user_id = $1 AND (content ILIKE $2 OR content ILIKE $3)`,
-        [testUserId, `%${tripwire3a}%`, `%${tripwire3b}%`]
+        [testUserId, `%${tripwire3a}%`, `%${tripwire3b}%`],
       );
 
       const distinctCount = dbCheck3.rows.length;
-      const hasCharlie = dbCheck3.rows.some(r => r.content.includes(tripwire3a));
-      const hasDelta = dbCheck3.rows.some(r => r.content.includes(tripwire3b));
+      const hasCharlie = dbCheck3.rows.some((r) => r.content.includes(tripwire3a));
+      const hasDelta = dbCheck3.rows.some((r) => r.content.includes(tripwire3b));
 
       results.push({
         test: '3. Dedup Anti-Merge',
@@ -234,9 +244,12 @@ router.get('/memory-full-check', async (req, res) => {
         found_memories: distinctCount,
         has_charlie: hasCharlie,
         has_delta: hasDelta,
-        memory_ids: dbCheck3.rows.map(r => r.id),
+        memory_ids: dbCheck3.rows.map((r) => r.id),
         storage_confirmed_ids: [store3a.id, store3b.id],
-        note: distinctCount < 2 ? 'FAIL: Memories incorrectly merged into one' : 'PASS: Separate memories preserved'
+        note:
+          distinctCount < 2
+            ? 'FAIL: Memories incorrectly merged into one'
+            : 'PASS: Separate memories preserved',
       });
     }
 
@@ -244,7 +257,7 @@ router.get('/memory-full-check', async (req, res) => {
     const tripwire4 = `ECHO-${runId}-9K7X`;
     const store4 = await storeViaHTTPAndConfirm(
       `My license plate number is ${tripwire4}`,
-      tripwire4
+      tripwire4,
     );
 
     if (!store4.success) {
@@ -252,7 +265,7 @@ router.get('/memory-full-check', async (req, res) => {
         test: '4. High-Entropy Retrieval',
         passed: false,
         note: 'FAIL: Storage not confirmed via HTTP pipeline',
-        error: store4.error
+        error: store4.error,
       });
     } else {
       const recall4 = await chatViaHTTP('What is my license plate number?');
@@ -263,7 +276,7 @@ router.get('/memory-full-check', async (req, res) => {
         expected: tripwire4,
         found: recall4.response?.includes(tripwire4) || false,
         storage_confirmed_id: store4.id,
-        note: 'Tests that unique alphanumeric tokens survive compression and retrieval'
+        note: 'Tests that unique alphanumeric tokens survive compression and retrieval',
       });
     }
 
@@ -279,38 +292,36 @@ router.get('/memory-full-check', async (req, res) => {
          content ILIKE '%session-based%' OR
          content ILIKE '%don''t have memory%'
        )`,
-      [testUserId]
+      [testUserId],
     );
 
     results.push({
       test: '5. Storage Hygiene (No Boilerplate)',
       passed: boilerplateCheck.rows.length === 0,
       contaminated_count: boilerplateCheck.rows.length,
-      contaminated_ids: boilerplateCheck.rows.map(r => r.id),
-      note: boilerplateCheck.rows.length > 0 
-        ? 'FAIL: AI boilerplate was stored in memory' 
-        : 'PASS: No boilerplate contamination'
+      contaminated_ids: boilerplateCheck.rows.map((r) => r.id),
+      note:
+        boilerplateCheck.rows.length > 0
+          ? 'FAIL: AI boilerplate was stored in memory'
+          : 'PASS: No boilerplate contamination',
     });
 
     // ===== TEST 6: Category Routing =====
     const tripwire6 = `FOXTROT-${runId}`;
-    const store6 = await storeViaHTTPAndConfirm(
-      `My doctor's name is Dr. ${tripwire6}`,
-      tripwire6
-    );
+    const store6 = await storeViaHTTPAndConfirm(`My doctor's name is Dr. ${tripwire6}`, tripwire6);
 
     if (!store6.success) {
       results.push({
         test: '6. Category Routing',
         passed: false,
         note: 'FAIL: Storage not confirmed via HTTP pipeline',
-        error: store6.error
+        error: store6.error,
       });
     } else {
       const categoryCheck = await queryDB(
         `SELECT category_name, content FROM persistent_memories
          WHERE user_id = $1 AND content ILIKE $2`,
-        [testUserId, `%${tripwire6}%`]
+        [testUserId, `%${tripwire6}%`],
       );
 
       const routedCategory = categoryCheck.rows[0]?.category_name;
@@ -323,12 +334,14 @@ router.get('/memory-full-check', async (req, res) => {
          WHERE user_id = $1
          ORDER BY created_at DESC
          LIMIT 5`,
-        [testUserId]
+        [testUserId],
       );
 
       results.push({
         test: '6. Category Routing',
-        passed: expectedCategories.some(c => routedCategory?.toLowerCase().includes(c)) || routedCategory === 'health_wellness',
+        passed:
+          expectedCategories.some((c) => routedCategory?.toLowerCase().includes(c)) ||
+          routedCategory === 'health_wellness',
         expected_category: 'health_wellness (or similar)',
         actual_category: routedCategory || 'not found',
         storage_confirmed_id: store6.id,
@@ -336,34 +349,38 @@ router.get('/memory-full-check', async (req, res) => {
         diagnostic: {
           found_memory: categoryCheck.rows.length > 0,
           total_user_memories: allUserMemories.rows.length,
-          recent_memories: allUserMemories.rows.map(r => ({
+          recent_memories: allUserMemories.rows.map((r) => ({
             id: r.id,
             category: r.category_name,
-            preview: r.content_preview
-          }))
-        }
+            preview: r.content_preview,
+          })),
+        },
       });
     }
 
     // ===== TEST 7: Token Budget =====
     // Check metadata from previous responses for token counts
     // The orchestrator returns memoryTokens (not memory_tokens or injected_tokens)
-    const injectedTokens = recall1?.metadata?.memoryTokens ||
-                          recall1?.metadata?.memory_tokens ||
-                          recall1?.metadata?.token_usage?.memory ||
-                          recall1?.metadata?.token_usage?.injected ||
-                          'unknown';
+    const injectedTokens =
+      recall1?.metadata?.memoryTokens ||
+      recall1?.metadata?.memory_tokens ||
+      recall1?.metadata?.token_usage?.memory ||
+      recall1?.metadata?.token_usage?.injected ||
+      'unknown';
 
     results.push({
       test: '7. Token Budget (≤2400)',
       passed: typeof injectedTokens === 'number' ? injectedTokens <= 2400 : false,
       injected_tokens: injectedTokens,
       budget_limit: 2400,
-      note: typeof injectedTokens !== 'number'
-        ? 'WARNING: Token count not in response metadata - check Railway logs'
-        : (injectedTokens <= 2400 ? 'PASS: Within budget' : 'FAIL: Exceeded budget'),
+      note:
+        typeof injectedTokens !== 'number'
+          ? 'WARNING: Token count not in response metadata - check Railway logs'
+          : injectedTokens <= 2400
+            ? 'PASS: Within budget'
+            : 'FAIL: Exceeded budget',
       metadata_available: typeof injectedTokens === 'number',
-      available_metadata_keys: Object.keys(recall1?.metadata || {})
+      available_metadata_keys: Object.keys(recall1?.metadata || {}),
     });
 
     // ===== TEST 8: Cross-Request Persistence =====
@@ -373,7 +390,7 @@ router.get('/memory-full-check', async (req, res) => {
       test: '8. Cross-Request Persistence',
       passed: results[0].passed && results[1].passed,
       note: 'Verified by Tests 1-2: memories stored in one request were retrieved in subsequent requests',
-      evidence: 'Each test uses separate HTTP calls, proving persistence between requests'
+      evidence: 'Each test uses separate HTTP calls, proving persistence between requests',
     });
 
     // ===== TEST 9: Compression Verification =====
@@ -387,18 +404,18 @@ router.get('/memory-full-check', async (req, res) => {
         test: '9. Compression Verification',
         passed: false,
         note: 'FAIL: Storage not confirmed via HTTP pipeline',
-        error: store9.error
+        error: store9.error,
       });
     } else {
       const compressionCheck = await queryDB(
         `SELECT content, LENGTH(content) as stored_len FROM persistent_memories
          WHERE user_id = $1 AND content ILIKE $2`,
-        [testUserId, `%${tripwire9}%`]
+        [testUserId, `%${tripwire9}%`],
       );
 
       const storedLen = compressionCheck.rows[0]?.stored_len || 0;
       const inputLen = verboseInput.length;
-      const ratio = storedLen > 0 ? (inputLen / storedLen) : 0;
+      const ratio = storedLen > 0 ? inputLen / storedLen : 0;
       const tripwirePreserved = compressionCheck.rows[0]?.content?.includes(tripwire9) || false;
       const compressionOccurred = storedLen > 0 && storedLen < inputLen;
 
@@ -416,7 +433,7 @@ router.get('/memory-full-check', async (req, res) => {
         storage_confirmed_id: store9.id,
         note: tripwirePreserved
           ? `PASS: Key info survived compression (${ratio.toFixed(1)}:1${ratio < TARGET_RATIO_MIN ? ' - below 10:1 target' : ''})`
-          : 'FAIL: Tripwire lost in compression'
+          : 'FAIL: Tripwire lost in compression',
       });
     }
 
@@ -431,7 +448,7 @@ router.get('/memory-full-check', async (req, res) => {
       available_metadata_keys: Object.keys(recall1?.metadata || {}),
       note: hasTelemetry
         ? 'PASS: Response includes memory injection details'
-        : 'NEEDS IMPROVEMENT: Add memory_ids, previews, token counts to response metadata'
+        : 'NEEDS IMPROVEMENT: Add memory_ids, previews, token counts to response metadata',
     });
 
     // ===== TEST 11: Paraphrase Recall (Keyword-Template Tolerant) =====
@@ -440,17 +457,14 @@ router.get('/memory-full-check', async (req, res) => {
     const tripwire11 = `TANGO-${runId}`;
 
     // Step 1: Store a fact with specific keywords
-    const store11 = await storeViaHTTPAndConfirm(
-      `My test identifier is ${tripwire11}`,
-      tripwire11
-    );
+    const store11 = await storeViaHTTPAndConfirm(`My test identifier is ${tripwire11}`, tripwire11);
 
     if (!store11.success) {
       results.push({
         test: '11. Paraphrase Recall (Keyword-Template Tolerant)',
         passed: false,
         note: 'FAIL: Storage not confirmed via HTTP pipeline',
-        error: store11.error
+        error: store11.error,
       });
     } else {
       // Step 2: Query with paraphrase
@@ -459,15 +473,16 @@ router.get('/memory-full-check', async (req, res) => {
       // Step 3: Evaluate
       const foundTango = recall11.response?.includes(tripwire11) || false;
       const memoriesInjected = recall11.metadata?.memory_retrieval?.memories_injected || 0;
-      const targetedRetrieval = memoriesInjected <= 5;  // Not bulk injection
+      const targetedRetrieval = memoriesInjected <= 5; // Not bulk injection
 
-      const retrievalQuality = memoriesInjected <= 3
-        ? 'EXCELLENT'
-        : memoriesInjected <= 5
-          ? 'GOOD'
-          : memoriesInjected <= 10
-            ? 'ACCEPTABLE'
-            : 'POOR (bulk injection)';
+      const retrievalQuality =
+        memoriesInjected <= 3
+          ? 'EXCELLENT'
+          : memoriesInjected <= 5
+            ? 'GOOD'
+            : memoriesInjected <= 10
+              ? 'ACCEPTABLE'
+              : 'POOR (bulk injection)';
 
       results.push({
         test: '11. Paraphrase Recall (Keyword-Template Tolerant)',
@@ -479,23 +494,23 @@ router.get('/memory-full-check', async (req, res) => {
         memories_injected: memoriesInjected,
         retrieval_quality: retrievalQuality,
         storage_confirmed_id: store11.id,
-        note: foundTango && targetedRetrieval
-          ? 'PASS: Targeted retrieval found correct memory'
-          : foundTango && !targetedRetrieval
-            ? `PARTIAL: Found via bulk injection (${memoriesInjected} memories injected - not targeted)`
-            : 'FAIL: Could not retrieve paraphrased memory',
+        note:
+          foundTango && targetedRetrieval
+            ? 'PASS: Targeted retrieval found correct memory'
+            : foundTango && !targetedRetrieval
+              ? `PARTIAL: Found via bulk injection (${memoriesInjected} memories injected - not targeted)`
+              : 'FAIL: Could not retrieve paraphrased memory',
         query_used: 'What identifier did I ask you to remember for myself?',
         original_storage: `My test identifier is ${tripwire11}`,
-        keyword_overlap: 'identifier (partial match)'
+        keyword_overlap: 'identifier (partial match)',
       });
     }
-
   } catch (err) {
     results.push({
       test: 'ERROR',
       passed: false,
       error: err.message,
-      stack: err.stack
+      stack: err.stack,
     });
   }
 
@@ -508,8 +523,8 @@ router.get('/memory-full-check', async (req, res) => {
   }
 
   // ===== SUMMARY =====
-  const passed = results.filter(r => r.passed === true).length;
-  const failed = results.filter(r => r.passed === false).length;
+  const passed = results.filter((r) => r.passed === true).length;
+  const failed = results.filter((r) => r.passed === false).length;
 
   // Return HTML report
   const html = `<!DOCTYPE html>
@@ -537,12 +552,16 @@ router.get('/memory-full-check', async (req, res) => {
     <span class="fail">❌ Failed: ${failed}</span> | 
     <strong>Total: ${results.length}</strong>
   </div>
-  ${results.map(r => `
+  ${results
+    .map(
+      (r) => `
     <div class="test ${r.passed ? 'passed' : 'failed'}">
       <h3>${r.passed ? '✅' : '❌'} ${r.test}</h3>
       <pre>${JSON.stringify(r, null, 2)}</pre>
     </div>
-  `).join('')}
+  `,
+    )
+    .join('')}
   <p style="color: #888; margin-top: 30px;">
     Test completed at ${new Date().toISOString()}<br>
     All test data has been cleaned up from the database.

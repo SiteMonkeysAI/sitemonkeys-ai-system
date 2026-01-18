@@ -26,24 +26,24 @@ export function addUncertaintyStructure(response, missingParts) {
   // Add explanation if missing
   if (missingParts.includes('explanation')) {
     // Find the uncertainty statement
-    const uncertaintyMatch = response.match(/(I don't know|I'm not sure|uncertain|unclear|cannot determine)[^.!?]*/i);
+    const uncertaintyMatch = response.match(
+      /(I don't know|I'm not sure|uncertain|unclear|cannot determine)[^.!?]*/i,
+    );
 
     if (uncertaintyMatch) {
       const uncertaintyStatement = uncertaintyMatch[0];
       const explanation = ' because my training data may not include this specific information';
 
       // Insert explanation after the uncertainty statement
-      enhanced = response.replace(
-        uncertaintyStatement,
-        uncertaintyStatement + explanation
-      );
+      enhanced = response.replace(uncertaintyStatement, uncertaintyStatement + explanation);
     }
   }
 
   // Add framework if missing
   if (missingParts.includes('framework')) {
     // Add framework at the end
-    const framework = '\n\nTo verify this information, you could:\n- Consult official documentation or authoritative sources\n- Seek expert advice from a qualified professional\n- Cross-reference multiple reliable sources';
+    const framework =
+      '\n\nTo verify this information, you could:\n- Consult official documentation or authoritative sources\n- Seek expert advice from a qualified professional\n- Cross-reference multiple reliable sources';
 
     enhanced += framework;
   }
@@ -60,26 +60,29 @@ export function addUncertaintyStructure(response, missingParts) {
  */
 export function addBlindSpots(response, context = {}) {
   // Detect where advice is given
-  const advicePatterns = [
-    /I recommend/i,
-    /you should/i,
-    /I suggest/i,
-    /the best approach/i,
-  ];
+  const advicePatterns = [/I recommend/i, /you should/i, /I suggest/i, /the best approach/i];
 
   let enhanced = response;
 
   // Check if this is high-stakes advice
-  const isHighStakes = /invest|stock|crypto|financial|medical|diagnosis|legal|lawsuit/i.test(response);
+  const isHighStakes = /invest|stock|crypto|financial|medical|diagnosis|legal|lawsuit/i.test(
+    response,
+  );
 
   // Prepare caveats based on context
   let caveats = [];
 
   if (isHighStakes) {
-    caveats.push('However, keep in mind that your specific situation may differ, and this advice may not apply universally.');
-    caveats.push('Consider consulting with a qualified professional who can evaluate your individual circumstances.');
+    caveats.push(
+      'However, keep in mind that your specific situation may differ, and this advice may not apply universally.',
+    );
+    caveats.push(
+      'Consider consulting with a qualified professional who can evaluate your individual circumstances.',
+    );
   } else {
-    caveats.push('That said, this approach may not work for every situation, so consider your specific context and constraints.');
+    caveats.push(
+      'That said, this approach may not work for every situation, so consider your specific context and constraints.',
+    );
   }
 
   // Find a good place to insert caveats (after the first advice statement)
@@ -177,7 +180,8 @@ export function improveExamples(response) {
   // Add note about examples if improvement is limited
   if (improved === response || /\[specific examples based on context\]/.test(improved)) {
     // Can't automatically improve - add note
-    improved += '\n\n_Note: For more specific guidance, please provide additional context about your use case._';
+    improved +=
+      '\n\n_Note: For more specific guidance, please provide additional context about your use case._';
   }
 
   return improved;
