@@ -1,0 +1,232 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #530: [claude-fix] CRITICAL: Achieve 100% Test Pass Rate - Complete System Diagnostic and Repair
+
+Issue Description:
+# [claude-fix] CRITICAL: Achieve 100% Test Pass Rate - Complete System Diagnostic and Repair
+
+## Priority: CRITICAL | Current: 82% (14/17) | Target: 100% (17/17)
+
+---
+
+## Mission
+
+This system represents 13+ months of intensive work building a truth-first AI that operates like "a caring family member with world-class expertise." It contains 53 proprietary innovations across 10 categories. Three tests are failing. Your mission is to achieve 100% pass rate through comprehensive, surgical fixes that address root causes - not symptoms.
+
+**You have full access to the codebase. Trace everything. Find the real problems. Fix them completely.**
+
+---
+
+## The 3 Failing Tests
+
+### 1. A2 Supersession Failure
+**Symptom:** Stores "Junior Developer", updates to "Senior Architect", but response contains BOTH titles instead of only the latest.
+
+**What we know from logs:**
+- Supersession IS marking old memories as `is_current = false` ✓
+- New memories ARE being stored with correct fingerprints ✓
+- The fact extractor is extracting facts from AI responses that reference history
+- When AI says "You were previously a Junior Developer", this gets stored as a new fact
+
+**The question you must answer:** Why does the response still contain both? Is it:
+- Retrieval not filtering `is_current = false`?
+- Fact extraction polluting new memories with historical references?
+- Something else entirely in the data flow?
+
+**Trace the complete path:** User query → Memory retrieval → What gets injected → AI response → What gets stored → Next retrieval
+
+---
+
+### 2. B3 Personal Query Failure
+**Symptom:** Stores cat name, asks "what's my cat's name", gets 0 memories injected.
+
+**What we know:**
+- This is a regression after PR #527 (hard 5-memory cap)
+- Semantic retrieval returns 0 results
+- The memory IS being stored (confirmed in logs)
+- Embedding IS being generated
+
+**The question you must answer:** Why does semantic retrieval return 0 for a direct personal query?
+- Is category routing sending the query to the wrong category?
+- Is semantic similarity threshold too high for simple personal facts?
+- Is there a timing issue between embedding generation and retrieval?
+- Is the hard cap being applied incorrectly?
+
+**Trace the complete path:** Storage of fact → Embedding generation → Query comes in → Category routing → Semantic search → Why 0 results?
+
+---
+
+### 3. C2 Political Guardrails Failure
+**Symptom:** Test shows `Refusal: true, Endorsement: true` - system is refusing but response STILL contains endorsement language.
+
+**What we know:**
+- PR #527 included a regex fix for this
+- The guardrail IS detecting the issue (Refusal: true)
+- But the response still contains problematic content
+
+**The question you must answer:** Why does detected content still appear in output?
+- Is the replacement/blocking logic not executing after detection?
+- Is something downstream re-introducing the original content?
+- Is the regex detecting but not the enforcement acting?
+
+**Trace the complete path:** Query → Political detection → What action is taken → What goes to AI → What comes back → What enforcement runs → Final output
+
+---
+
+## System Doctrine (Your Constraints)
+
+### Hierarchy
+```
+TRUTH > HELPFULNESS > ENGAGEMENT
+```
+
+### Core Principles
+1. **Intelligence-based, not rule-based** - No keyword matching disguised as semantic analysis
+2. **Zero degradation** - All 14 passing tests must continue to pass
+3. **One-and-done fixes** - Address root causes completely, not symptoms
+4. **Neurosurgical precision** - Understand the full system before making changes
+5. **Token efficiency matters** - 300-600:1 compression ratios are foundational
+
+### Memory System Requirements
+- Material memory relevance is **safety-critical and never negotiable**
+- Retrieval must find relevant context, not just keyword matches
+- Supersession must completely replace old facts with new ones
+- Personal information must be retrievable when contextually relevant
+
+### Political Guardrails Requirements
+- No policy endorsements under any circumstance
+- Detection must lead to enforcement
+- Refusal must mean the problematic content is REMOVED, not just flagged
+
+---
+
+## Success Criteria
+
+### Absolute Requirements
+- [ ] **17/17 tests pass** (100%)
+- [ ] **All 14 currently passing tests still pass** (zero regression)
+- [ ] **A2 Supersession:** Query returns ONLY the latest value, never superseded values
+- [ ] **B3 Personal Query:** Personal facts are retrievable with simple queries
+- [ ] **C2 Political Guardrails:** Refusal means NO endorsement content in response
+
+### Quality Requirements
+- [ ] Fixes address root causes, not symptoms
+- [ ] No new technical debt introduced
+- [ ] No placeholder code or TODO comments
+- [ ] Changes align with existing architectural patterns
+- [ ] Token efficiency maintained
+
+---
+
+## How to Approach This
+
+### Step 1: Understand Before Acting
+- Read the test file to understand exactly what each failing test expects
+- Trace the data flow for each failure from input to output
+- Identify where the chain breaks
+
+### Step 2: Find the Root Causes
+- Don't assume the problem is where the symptom appears
+- A retrieval failure might be caused by a storage issue
+- An enforcement failure might be caused by ordering issues
+- Trace backwards from the failure point
+
+### Step 3: Design Complete Fixes
+- Each fix should solve the ENTIRE problem
+- Consider all code paths that touch the affected functionality
+- Verify the fix doesn't break other functionality
+
+### Step 4: Implement and Verify
+- Make the minimum necessary changes
+- Test against all 17 tests, not just the 3 failing ones
+- Confirm zero regression
+
+---
+
+## What You Have Access To
+
+- **Full codebase** - Explore freely, don't limit yourself to assumed file locations
+- **Test suite** - See exactly what's being tested and what's expected
+- **Railway logs** - Available for debugging
+- **Database** - PostgreSQL with persistent_memories table
+
+---
+
+## Key Files to Start With (But Don't Limit Yourself)
+
+These are starting points based on prior investigation, but trace wherever the code leads:
+
+- Test definitions (find the test suite, understand expectations)
+- Memory retrieval pipeline (find where semantic search happens)
+- Supersession logic (find where `is_current` gets set AND filtered)
+- Political guardrails (find where detection AND enforcement happen)
+- Orchestrator (find where all these pieces connect)
+
+---
+
+## Evidence Available
+
+### From Recent Logs - Supersession Working on Storage:
+```
+[SUPERSESSION] Marked 1 old memories as not current
+[SUPERSESSION]    Superseded IDs: 4213
+[SUPERSESSION] ✅ Comprehensive supersession complete
+```
+
+### From Recent Logs - Safety-Critical Retrieval Working:
+```
+[SAFETY-CRITICAL] 🛡️ Boosting memory ID 4209 by +0.25 (markers: allergy)
+[SEMANTIC RETRIEVAL] ✅ Found 1 memories for "Can you suggest some Thai food dishes..."
+[ORCHESTRATOR] [MEMORY] ✓ Memory WILL be injected into prompt (54 tokens)
+```
+
+### From Test Results:
+```
+A2 Supersession - FAIL: Old facts not filtered out
+B3 Personal Query - FAIL: 0 memories injected  
+C2 Political Guardrails - FAIL: Refusal true, Endorsement true
+```
+
+---
+
+## Commit Message Format
+
+When you fix this, use:
+```
+fix: Achieve 100% test pass rate - complete A2/B3/C2 resolution
+
+- A2: [describe root cause and fix]
+- B3: [describe root cause and fix]  
+- C2: [describe root cause and fix]
+
+Traced complete data flows, identified root causes, implemented
+surgical fixes with zero regression.
+
+Closes #[this issue]
+```
+
+---
+
+## Final Note
+
+This system is meant to be "a caring family member with world-class expertise" - someone who gives you the truth, remembers what matters, and never misleads. These three failures break that promise. Fix them completely.
+
+**You have the access. You have the context. Find the real problems. Fix them right.**
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
