@@ -208,7 +208,7 @@ function expandQuery(query) {
     'allergic': ['allergy', 'intolerant', 'reaction', 'sensitive'],
 
     // Meeting/Appointment terms
-    'meeting': ['appointment', 'call', 'scheduled', 'scheduled', 'rescheduled'],
+    'meeting': ['appointment', 'call', 'scheduled', 'rescheduled'],
 
     // Pet/Animal terms (FIX #533-B3)
     'cat': ['pet', 'animal', 'feline', 'kitty', 'kitten'],
