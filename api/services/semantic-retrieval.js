@@ -23,7 +23,7 @@ const RETRIEVAL_CONFIG = {
   maxCandidates: 500,           // Max memories to pull from DB for scoring
   defaultTopK: 10,              // Default number of results to return
   minSimilarity: 0.25,          // Minimum similarity threshold (default)
-  minSimilarityPersonal: 0.20,  // Lower threshold for personal fact queries (Issue #504)
+  minSimilarityPersonal: 0.18,  // Lower threshold for personal fact queries (Issue #504, #533-B3)
   recencyBoostDays: 7,          // Boost memories from last N days
   recencyBoostWeight: 0.1,      // How much to boost recent memories
   confidenceWeight: 0.05,       // Weight for fingerprint confidence
@@ -208,11 +208,22 @@ function expandQuery(query) {
     'allergic': ['allergy', 'intolerant', 'reaction', 'sensitive'],
 
     // Meeting/Appointment terms
-    'meeting': ['appointment', 'call', 'scheduled', 'scheduled', 'rescheduled']
+    'meeting': ['appointment', 'call', 'scheduled', 'rescheduled'],
+
+    // Pet/Animal terms (FIX #533-B3)
+    'cat': ['pet', 'animal', 'feline', 'kitty', 'kitten'],
+    'dog': ['pet', 'animal', 'canine', 'puppy'],
+    'pet': ['cat', 'dog', 'animal', 'bird', 'fish'],
+    'animal': ['pet', 'cat', 'dog'],
+
+    // Name/Identity terms (FIX #533-B3)
+    'name': ['called', 'named', 'title'],
+    'called': ['name', 'named']
   };
 
   // Check if this is a personal fact query (uses first-person pronouns + personal terms)
-  const personalPattern = /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location)\b/i;
+  // EXPANDED for FIX #533-B3 to include pet and name queries
+  const personalPattern = /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location|cat|dog|pet|animal|called)\b/i;
   const isPersonal = personalPattern.test(query);
 
   let expanded = query;
