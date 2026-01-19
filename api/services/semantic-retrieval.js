@@ -173,6 +173,17 @@ function applySafetyCriticalBoost(memories) {
  * @returns {{expanded: string, isPersonal: boolean}} Expanded query and whether it's a personal fact query
  */
 function expandQuery(query) {
+  // Normalize to string to prevent type confusion (arrays, objects, etc.)
+  if (query == null) {
+    return { expanded: '', isPersonal: false };
+  }
+  if (Array.isArray(query)) {
+    const first = query.find(v => typeof v === 'string') ?? query[0];
+    query = typeof first === 'string' ? first : String(first);
+  } else if (typeof query !== 'string') {
+    query = String(query);
+  }
+
   const queryLower = query.toLowerCase();
 
   // Synonym expansions for common personal fact categories
@@ -394,7 +405,7 @@ function calculateHybridScore(memory, options = {}) {
  * Retrieve semantically relevant memories for a query
  * 
  * @param {object} pool - PostgreSQL connection pool
- * @param {string} query - User query text
+ * @param {string|Array|any} query - User query text (may be user-controlled)
  * @param {object} options - Retrieval options
  * @returns {Promise<{success: boolean, memories: array, telemetry: object}>}
  */
@@ -409,6 +420,17 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     includeAllModes = false,
     allowCrossMode = false
   } = options;
+
+  // Normalize query to a single string to prevent type confusion
+  let normalizedQuery = query;
+  if (normalizedQuery == null) {
+    normalizedQuery = '';
+  } else if (Array.isArray(normalizedQuery)) {
+    const first = normalizedQuery.find(v => typeof v === 'string') ?? normalizedQuery[0];
+    normalizedQuery = typeof first === 'string' ? first : String(first);
+  } else if (typeof normalizedQuery !== 'string') {
+    normalizedQuery = String(normalizedQuery);
+  }
 
   // Normalize mode: convert underscore to hyphen for consistency
   const mode = rawMode.replace(/_/g, '-');
@@ -487,7 +509,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     }
 
     // STEP 0.5: Expand query with synonyms for better matching (Issue #504)
-    const { expanded: expandedQuery, isPersonal } = expandQuery(query);
+    const { expanded: expandedQuery, isPersonal } = expandQuery(normalizedQuery);
 
     // STEP 1: Generate query embedding (use expanded query for better semantic matching)
     const embedStart = Date.now();
@@ -633,7 +655,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
             } else {
               // Try matching the original user phrase from metadata
               fallbackQuery += ` AND (content ILIKE $${paramIndex} OR metadata->>'original_user_phrase' ILIKE $${paramIndex})`;
-              fallbackParams.push(`%${query.substring(0, 50)}%`);
+              fallbackParams.push(`%${normalizedQuery.substring(0, 50)}%`);
               paramIndex++;
             }
           }
