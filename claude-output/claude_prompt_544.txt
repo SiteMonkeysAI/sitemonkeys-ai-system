@@ -1,0 +1,395 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #544: [claude-fix] CRITICAL: Comprehensive Memory System Diagnostic & Repair
+
+Issue Description:
+# [claude-fix] CRITICAL: Comprehensive Memory System Diagnostic & Repair
+
+## Priority: CRITICAL
+
+## Executive Summary
+
+The memory system is fundamentally broken. Multiple tests confirm that **newly stored information cannot be reliably retrieved**, even seconds after storage. This affects the core value proposition of the system — persistent, intelligent memory.
+
+This issue requires a **comprehensive trace of the entire memory pipeline** to identify ALL failure points, not just symptomatic fixes.
+
+---
+
+## Observed Failures (From Live Diagnostic Testing)
+
+### Failure 1: Immediate Recall Not Working
+
+```
+Test: Store token "DIAG-TOKEN-1768861899244", then immediately query for it
+Result: Token NOT found at 1s, 2s, 3s, 5s, or 8s delays
+Instead returned: Old unrelated memories (children's nicknames, favorite superheroes)
+Memory metadata: { memory_count: 5, memoryUsed: true }
+```
+
+**Key observation:** System claims memory is being used (`memoryUsed: true`, `memory_count: 5`) but returns OLD memories instead of the just-stored information.
+
+### Failure 2: Supersession Test (A2) Failing
+
+```
+Test Sequence:
+1. Store: "I'm a Junior Developer at TechCorp"
+2. Store: "I just got promoted! My current job title is Senior Architect"  
+3. Query: "What is my current job title?"
+
+Expected: "Senior Architect"
+Actual: "Software Engineer" (from completely different prior data)
+```
+
+**Key observation:** Neither the old value ("Junior Developer") nor the new value ("Senior Architect") was retrieved. Instead, an unrelated old memory about "Software Engineer" was returned.
+
+### Failure 3: Personal Information Not Retrieved
+
+```
+Test: Store emergency contact info, then query for it
+Result: "I don't have enough information about your emergency contact"
+Despite: Having just stored it in the same session
+```
+
+---
+
+## What These Failures Indicate
+
+The failures are NOT random. They follow a pattern:
+
+1. **Storage appears to succeed** — AI acknowledges the information
+2. **Retrieval returns wrong memories** — old/unrelated data instead of new
+3. **Memory count shows memories exist** — but they're the wrong ones
+4. **This happens consistently** — not intermittent
+
+This suggests the problem is in **how memories are indexed, scored, and selected for retrieval**, not in storage itself.
+
+---
+
+## Doctrinal Requirements (Non-Negotiable)
+
+From the System Bible and Core Documents:
+
+### Innovation #1: Persistent Long-Term Memory
+> "Conversations from months or years ago remain instantly accessible with perfect recall."
+
+**Current state:** Conversations from SECONDS ago are not accessible.
+
+### Innovation #5: Cross-Session Reconstruction Protocol
+> "Instant context availability without reprocessing. No waiting for 'memory loading' or 'indexing' operations."
+
+**Current state:** New memories are not available even after 8+ seconds.
+
+### Innovation #9: Token-Efficient Retrieval
+> "System searches and retrieves relevant information from 3-6 million token memory using less than 10,000 tokens per query."
+
+**Current state:** Retrieval returns irrelevant old memories instead of relevant new ones.
+
+### Innovation #10: Truth-Validated Injection
+> "Only high-confidence, validated information proceeds to injection."
+
+**Current state:** System injects old, stale, irrelevant memories while ignoring fresh, relevant ones.
+
+### Innovation #12: Contextual Relevance Ranking
+> "Ranks results by genuine usefulness to user's current need."
+
+**Current state:** Ranking appears broken — old memories consistently outrank new, directly relevant ones.
+
+### Memory & Intelligence Doctrine
+> "Memory exists to improve reasoning, not to decorate responses. If memory does not change reasoning, it should not be retrieved. If retrieved memory is ignored, the system is broken."
+
+**Current state:** The system IS broken by this definition.
+
+### Memory & Intelligence Doctrine — The Non-Negotiable Invariant
+> "Claiming ignorance when memory exists is a catastrophic trust violation."
+
+**Current state:** System claims ignorance of just-stored information. This is the exact failure mode the doctrine warns against.
+
+---
+
+## Required Investigation Scope
+
+This issue requires tracing the **ENTIRE memory pipeline** from storage to retrieval. Do not assume you know where the problem is. Trace everything.
+
+### Phase 1: Storage Pipeline Trace
+
+Trace what happens when a user message containing memorable information is processed:
+
+1. **Message Reception** — How does the message enter the system?
+2. **Fact Detection** — How does the system identify storable facts?
+3. **Fact Extraction** — How are facts extracted from the message?
+4. **Extraction Filtering** — What filters prevent bad data from being stored?
+5. **Category Assignment** — How are facts assigned to memory categories?
+6. **Embedding Generation** — When/how are semantic embeddings created?
+7. **Database Write** — How is the memory actually persisted?
+8. **Index Updates** — How are retrieval indices updated?
+9. **Supersession Check** — How does the system mark old facts as superseded?
+10. **Confirmation** — How does the system confirm successful storage?
+
+**For each step, document:**
+- File and function responsible
+- Input and output
+- Success/failure conditions
+- Timing (sync vs async)
+- Any queuing or delays
+
+### Phase 2: Retrieval Pipeline Trace
+
+Trace what happens when a user query should retrieve stored memories:
+
+1. **Query Reception** — How does the query enter the retrieval system?
+2. **Query Analysis** — How is the query analyzed for retrieval intent?
+3. **Semantic Embedding** — How is the query converted to searchable form?
+4. **Candidate Selection** — How are potential memories identified?
+5. **Relevance Scoring** — How are candidates scored for relevance?
+6. **Recency Scoring** — How does recency factor into selection?
+7. **Importance Scoring** — How does importance factor into selection?
+8. **is_current Filtering** — How are superseded facts filtered out?
+9. **Budget Constraints** — How does the 5-memory cap affect selection?
+10. **Final Selection** — How are the final memories chosen for injection?
+11. **Context Assembly** — How are selected memories formatted for the AI?
+12. **Injection** — How are memories actually provided to the AI model?
+
+**For each step, document:**
+- File and function responsible
+- Input and output
+- Ranking/scoring algorithms used
+- Any filters that could exclude new memories
+- Any caps or limits that could prevent inclusion
+
+### Phase 3: Timing Analysis
+
+The diagnostic shows memories aren't available even after 8 seconds. Investigate:
+
+1. **Is embedding generation synchronous or asynchronous?**
+2. **If async, what is the expected delay before a memory becomes searchable?**
+3. **Is there a fallback for memories without embeddings?**
+4. **Does the fallback actually work?**
+5. **Are there any caching layers that might serve stale data?**
+6. **Is there a race condition between storage and retrieval?**
+
+### Phase 4: Relevance/Ranking Analysis
+
+Old memories consistently outrank new, directly relevant ones. Investigate:
+
+1. **What is the exact ranking formula?**
+2. **How much weight does recency get vs semantic similarity?**
+3. **Can a 1-second-old memory ever outrank a 1-month-old memory?**
+4. **Is there keyword bias that favors older memories with more text?**
+5. **Does the ranking consider query-memory semantic distance?**
+6. **Is there a "freshness boost" for very recent memories?**
+
+### Phase 5: Supersession Verification
+
+The A2 test shows supersession isn't working end-to-end. Verify:
+
+1. **When a new job title is stored, is the old one marked `is_current = false`?**
+2. **Check the actual database — are there multiple job title records?**
+3. **What are their `is_current` values?**
+4. **Is the retrieval query actually filtering on `is_current`?**
+5. **Is the filter being applied BEFORE or AFTER relevance ranking?**
+6. **Could a superseded memory still win the relevance ranking?**
+
+### Phase 6: Cross-Reference Check
+
+Compare what's stored vs what's retrieved:
+
+1. **For a specific test user, dump ALL stored memories**
+2. **For the same user, execute a retrieval query**
+3. **Compare: Which stored memories were considered?**
+4. **Compare: Which stored memories were selected?**
+5. **Compare: Why were relevant new memories NOT selected?**
+6. **Identify the exact decision point where new memories were excluded**
+
+---
+
+## Expected Findings
+
+Based on the symptoms, you will likely find one or more of:
+
+1. **Embedding generation is async with no fallback** — new memories have no embeddings, so semantic search can't find them
+2. **Relevance scoring favors older memories** — more text, more keywords, higher scores
+3. **Recency is not weighted heavily enough** — a 1-second-old memory should STRONGLY outrank a 1-month-old memory for the same topic
+4. **The 5-memory cap fills with old memories first** — new memories never get a slot
+5. **is_current filtering happens after the cap** — superseded memories take slots before filtering
+6. **Category routing misses new memories** — they're stored but not in the searched category
+7. **There's no "immediate recall" mechanism** — the system can't retrieve what was just said
+
+---
+
+## Required Fix Approach
+
+After completing the investigation, implement fixes that ensure:
+
+### Immediate Recall Guarantee
+A memory stored in message N MUST be retrievable in message N+1. This is non-negotiable. If semantic search can't find it yet, there must be a fallback:
+- Recency-based retrieval for very recent memories (< 60 seconds)
+- Session-based retrieval for same-session memories
+- Keyword fallback when embeddings aren't ready
+
+### Relevance Ranking Reform
+New memories about a topic should outrank old memories about the same topic:
+- Significant recency boost for memories < 1 hour old
+- Exponential decay for older memories
+- Query-specific relevance must beat generic keyword matches
+
+### Supersession Enforcement
+When `is_current = false`, the memory must be INVISIBLE to retrieval:
+- Filter on `is_current` BEFORE ranking, not after
+- Superseded memories should never reach the selection phase
+- Verify with actual database queries, not assumptions
+
+### Budget Allocation Reform
+The 5-memory cap should prioritize new, relevant memories:
+- Reserve at least 1-2 slots for very recent memories (same session)
+- Don't let old memories fill all slots before new ones are considered
+- Consider separate budgets for "recent" vs "historical" memories
+
+---
+
+## Verification Criteria
+
+The fix is ONLY complete when ALL of these tests pass:
+
+### Test 1: Immediate Recall (< 2 seconds)
+```javascript
+// Store unique token
+await chat(userId, "Remember this token: UNIQUE-TEST-12345");
+// Immediately query (within 2 seconds)
+const response = await chat(userId, "What token did I ask you to remember?");
+// MUST contain: UNIQUE-TEST-12345
+```
+
+### Test 2: Supersession (A2)
+```javascript
+// Store old value
+await chat(userId, "I'm a Junior Developer at TechCorp");
+// Store new value
+await chat(userId, "I just got promoted! My current job title is Senior Architect");
+// Query current state
+const response = await chat(userId, "What is my current job title?");
+// MUST contain: Senior Architect
+// MUST NOT contain: Junior Developer
+```
+
+### Test 3: New Memory Priority
+```javascript
+// Store specific information
+await chat(userId, "My cat's name is Whiskers-12345");
+// Query for it
+const response = await chat(userId, "What's my cat's name?");
+// MUST contain: Whiskers-12345
+// Even if user has older pet-related memories
+```
+
+### Test 4: Session Continuity
+```javascript
+// Multiple related messages in session
+await chat(userId, "I'm planning a trip to Japan");
+await chat(userId, "The trip is in March");
+await chat(userId, "I want to see cherry blossoms");
+// Query should synthesize session context
+const response = await chat(userId, "What am I planning?");
+// MUST reference: Japan, March, cherry blossoms (or trip)
+```
+
+### Test 5: No Hallucinated Memories
+```javascript
+// Query for something never mentioned
+const response = await chat(userId, "What did I tell you about my trip to Antarctica?");
+// MUST NOT fabricate an Antarctica trip
+// MUST acknowledge no such information exists
+```
+
+---
+
+## Anti-Patterns to AVOID
+
+1. **NO symptomatic fixes** — don't just add another filter; find the root cause
+2. **NO assumptions about problem location** — trace everything, verify everything
+3. **NO partial fixes** — all 5 tests must pass, not just some
+4. **NO magic delays** — "wait 10 seconds before querying" is not a fix
+5. **NO keyword hacks** — the solution must use semantic intelligence, not string matching
+6. **NO degradation of existing features** — fix retrieval without breaking storage
+7. **NO placeholder code** — everything must be production-grade
+
+---
+
+## Success Definition
+
+After this fix, the memory system will:
+
+1. **Reliably store and immediately retrieve information** — within the same session, within seconds
+2. **Correctly supersede old facts** — only current facts appear in retrieval
+3. **Prioritize relevant new memories** — not let old memories crowd them out
+4. **Never claim ignorance of just-stored information** — the cardinal sin per doctrine
+5. **Pass all 5 verification tests** — consistently, not intermittently
+
+---
+
+## Files to Investigate
+
+Do NOT limit investigation to these files. Search the ENTIRE codebase for anything related to:
+
+- Memory, storage, retrieval, recall
+- Embedding, vector, semantic, similarity
+- Ranking, scoring, relevance, recency
+- Selection, injection, context
+- Supersession, is_current, canonical
+- Budget, cap, limit, token
+
+**Likely starting points (but not exhaustive):**
+- `api/memory/` — all files
+- `api/categories/memory/` — all files
+- `api/services/` — especially supersession, retrieval
+- `api/core/` — orchestration, intelligence
+- Any file with "memory", "retrieval", "semantic", "embedding" in the name
+
+**Trace the actual code paths, don't assume based on file names.**
+
+---
+
+## Logging Requirements
+
+Add comprehensive logging during investigation:
+
+```javascript
+console.log('[MEMORY-TRACE] Storage: userId=%s, content=%s, timestamp=%s', ...);
+console.log('[MEMORY-TRACE] Embedding: memoryId=%s, hasEmbedding=%s, generatedAt=%s', ...);
+console.log('[MEMORY-TRACE] Retrieval: query=%s, candidatesFound=%d, selectedIds=%s', ...);
+console.log('[MEMORY-TRACE] Ranking: memoryId=%s, recencyScore=%f, relevanceScore=%f, finalScore=%f', ...);
+console.log('[MEMORY-TRACE] Selection: selectedMemories=%s, rejectedMemories=%s, reason=%s', ...);
+```
+
+These logs will be essential for understanding the actual behavior vs expected behavior.
+
+---
+
+## Summary
+
+The memory system is the core of this product. It is currently broken in a fundamental way — new memories cannot be reliably retrieved. This is not a minor bug; it's a critical failure that undermines the entire value proposition.
+
+This issue requires a comprehensive, end-to-end investigation of the memory pipeline. Do not make assumptions. Trace everything. Find ALL the problems. Fix ALL of them. Verify with ALL the tests.
+
+The system's doctrines demand that it NEVER claims ignorance of information it has. Currently, it does exactly that. Fix it completely.
+
+---
+
+**End of Issue**
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

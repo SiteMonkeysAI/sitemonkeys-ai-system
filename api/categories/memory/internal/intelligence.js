@@ -1751,7 +1751,7 @@ class IntelligenceSystem {
       );
 
       // STEP 2: Apply multi-dimensional relevance scoring (Issue #210 Fix 3: Match-first)
-      const scoredPrimary = primaryMemories.map((memory) => {
+      const scoredPrimary = primaryMemories.map((memory, idx) => {
         const content = memory.content.toLowerCase();
 
         // Issue #210 Fix 3: Calculate exact match scores (HIGHEST priority)
@@ -1777,6 +1777,15 @@ class IntelligenceSystem {
           importanceScore,
           usageScore
         );
+
+        // ISSUE #544 FIX: Comprehensive trace logging for ranking analysis
+        const ageInSeconds = (Date.now() - new Date(memory.created_at).getTime()) / 1000;
+        if (idx < 3 || ageInSeconds < 300) {  // Log first 3 AND any very recent memories
+          console.log(`[MEMORY-TRACE] Memory ${memory.id} scoring:`);
+          console.log(`  Age: ${ageInSeconds.toFixed(1)}s | Recency: ${recencyScore.toFixed(3)} | Semantic: ${semanticScore.toFixed(3)} | Keyword: ${keywordScore.toFixed(3)}`);
+          console.log(`  Base relevance: ${baseRelevance.toFixed(3)} | Match-first: ${matchFirstScore} | FINAL: ${(matchFirstScore + baseRelevance).toFixed(3)}`);
+          console.log(`  Content preview: ${memory.content.substring(0, 80)}...`);
+        }
 
         return {
           ...memory,
@@ -1862,6 +1871,16 @@ class IntelligenceSystem {
         return (b.relevanceScore || 0) - (a.relevanceScore || 0);
       });
 
+      // ISSUE #544 FIX: Comprehensive logging of ranked results
+      console.log(`[MEMORY-TRACE] ========== RANKING RESULTS (Top 5) ==========`);
+      rankedMemories.slice(0, 5).forEach((mem, idx) => {
+        const ageInSeconds = (Date.now() - new Date(mem.created_at).getTime()) / 1000;
+        console.log(`[MEMORY-TRACE] #${idx + 1}: ID ${mem.id} | Score: ${mem.relevanceScore.toFixed(3)} | Age: ${ageInSeconds.toFixed(1)}s`);
+        console.log(`[MEMORY-TRACE]      Recency: ${mem.recencyScore?.toFixed(3)} | Semantic: ${mem.semanticScore?.toFixed(3)} | Keyword: ${mem.keywordScore?.toFixed(3)}`);
+        console.log(`[MEMORY-TRACE]      Content: ${mem.content.substring(0, 100)}...`);
+      });
+      console.log(`[MEMORY-TRACE] ================================================`);
+
       // Issue #210 Fix 3: Log match-first scoring results
       const matchedMemories = rankedMemories.filter(m => m.exactTokenMatch || m.keyTermMatches > 0);
       if (matchedMemories.length > 0) {
@@ -1881,6 +1900,15 @@ class IntelligenceSystem {
         diverseMemories,
         2400,
       );
+
+      // ISSUE #544 FIX: Log final selected memories
+      console.log(`[MEMORY-TRACE] ========== FINAL SELECTION ==========`);
+      console.log(`[MEMORY-TRACE] Selected ${finalMemories.length} memories for injection`);
+      finalMemories.forEach((mem, idx) => {
+        const ageInSeconds = (Date.now() - new Date(mem.created_at).getTime()) / 1000;
+        console.log(`[MEMORY-TRACE] Selected #${idx + 1}: ID ${mem.id} | Age: ${ageInSeconds.toFixed(1)}s | Score: ${mem.relevanceScore?.toFixed(3)}`);
+      });
+      console.log(`[MEMORY-TRACE] ==========================================`);
 
       // Update analytics
       this.updateExtractionAnalytics(
@@ -3338,15 +3366,18 @@ class IntelligenceSystem {
 
   /**
    * Calculate multi-dimensional relevance score as specified in requirements
-   * Weights: semantic (0.4) + keyword (0.3) + recency (0.1) + importance (0.1) + usage (0.1)
+   * ISSUE #544 FIX: Dramatically increased recency weight to prioritize new memories
+   * Old: recency=0.1 (10%) - new memories couldn't compete with old ones
+   * New: recency=0.4 (40%) - recent memories now dominate ranking
+   * Weights: semantic (0.3) + keyword (0.2) + recency (0.4) + importance (0.05) + usage (0.05)
    */
   calculateMultiDimensionalRelevance(semanticScore, keywordScore, recencyScore, importanceScore, usageScore) {
     return (
-      (semanticScore * 0.4) +
-      (keywordScore * 0.3) +
-      (recencyScore * 0.1) +
-      (importanceScore * 0.1) +
-      (usageScore * 0.1)
+      (semanticScore * 0.3) +      // Reduced from 0.4
+      (keywordScore * 0.2) +        // Reduced from 0.3
+      (recencyScore * 0.4) +        // INCREASED from 0.1 - THIS IS THE KEY FIX
+      (importanceScore * 0.05) +    // Reduced from 0.1
+      (usageScore * 0.05)           // Reduced from 0.1
     );
   }
 
@@ -3430,6 +3461,7 @@ class IntelligenceSystem {
 
   /**
    * Calculate recency boost score
+   * ISSUE #544 FIX: EXPONENTIAL boost for brand-new memories to ensure immediate recall
    */
   calculateRecencyBoost(createdAt, lastAccessed) {
     try {
@@ -3437,24 +3469,68 @@ class IntelligenceSystem {
       const created = new Date(createdAt).getTime();
       const accessed = new Date(lastAccessed || createdAt).getTime();
 
-      const ageInDays = (now - created) / (1000 * 60 * 60 * 24);
-      const accessedDaysAgo = (now - accessed) / (1000 * 60 * 60 * 24);
+      const ageInSeconds = (now - created) / 1000;
+      const ageInMinutes = ageInSeconds / 60;
+      const ageInHours = ageInMinutes / 60;
+      const ageInDays = ageInHours / 24;
 
-      // Recency score based on creation and last access
+      // ISSUE #544 FIX: EXPONENTIAL recency boost for very recent memories
+      // This ensures memories stored seconds/minutes ago ALWAYS outrank old ones
       let recencyScore = 0;
 
-      // Recent creation bonus
-      if (ageInDays < 7) recencyScore += 0.5;
-      else if (ageInDays < 30) recencyScore += 0.3;
-      else if (ageInDays < 90) recencyScore += 0.2;
-      else recencyScore += 0.1;
+      // IMMEDIATE RECALL ZONE (< 60 seconds) - MAXIMUM PRIORITY
+      if (ageInSeconds < 60) {
+        recencyScore = 1.0;  // Perfect score - guarantees top ranking
+        console.log(`[RECENCY-BOOST] IMMEDIATE: Memory ${ageInSeconds.toFixed(1)}s old - score: 1.0 (MAXIMUM)`);
+      }
+      // VERY RECENT (1-5 minutes) - EXTREMELY HIGH PRIORITY
+      else if (ageInMinutes < 5) {
+        recencyScore = 0.95;  // Near-perfect - should beat all old memories
+        console.log(`[RECENCY-BOOST] VERY_RECENT: Memory ${ageInMinutes.toFixed(1)}m old - score: 0.95`);
+      }
+      // RECENT (5-60 minutes) - HIGH PRIORITY
+      else if (ageInMinutes < 60) {
+        recencyScore = 0.85;  // Very high - strong preference
+        console.log(`[RECENCY-BOOST] RECENT: Memory ${ageInMinutes.toFixed(1)}m old - score: 0.85`);
+      }
+      // SAME DAY (< 1 hour - 24 hours) - MODERATE PRIORITY
+      else if (ageInHours < 24) {
+        recencyScore = 0.7;  // Good score - should win over week-old
+        console.log(`[RECENCY-BOOST] SAME_DAY: Memory ${ageInHours.toFixed(1)}h old - score: 0.7`);
+      }
+      // THIS WEEK (< 7 days) - NORMAL PRIORITY
+      else if (ageInDays < 7) {
+        recencyScore = 0.5;  // Moderate boost
+      }
+      // THIS MONTH (< 30 days) - LOW PRIORITY
+      else if (ageInDays < 30) {
+        recencyScore = 0.3;  // Small boost
+      }
+      // OLDER (30-90 days) - MINIMAL PRIORITY
+      else if (ageInDays < 90) {
+        recencyScore = 0.2;  // Very small boost
+      }
+      // ANCIENT (> 90 days) - NO PRIORITY
+      else {
+        recencyScore = 0.1;  // Baseline score
+      }
 
-      // Recent access bonus
-      if (accessedDaysAgo < 7) recencyScore += 0.3;
-      else if (accessedDaysAgo < 30) recencyScore += 0.2;
+      // Additional bonus for recently accessed (but not as strong as creation recency)
+      const accessedSecondsAgo = (now - accessed) / 1000;
+      const accessedMinutesAgo = accessedSecondsAgo / 60;
+      const accessedDaysAgo = accessedMinutesAgo / (60 * 24);
+
+      if (accessedSecondsAgo < 60) {
+        recencyScore += 0.1;  // Small bonus for just-accessed
+      } else if (accessedMinutesAgo < 60) {
+        recencyScore += 0.05;
+      } else if (accessedDaysAgo < 7) {
+        recencyScore += 0.03;
+      }
 
       return Math.min(recencyScore, 1.0);
-    } catch {
+    } catch (error) {
+      console.error('[RECENCY-BOOST] Error calculating recency:', error);
       return 0.5; // Default middle value
     }
   }
