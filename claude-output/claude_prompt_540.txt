@@ -1,0 +1,181 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #540: [claude-fix] A2 Supersession Failure — Old Facts Not Filtered When New Facts Stored
+
+Issue Description:
+GitHub Issue: A2 Supersession Failure — Old Facts Not Filtered When New Facts Stored
+Priority: HIGH
+Problem Statement
+When a user updates a canonical fact (job title, phone number, location, name, employer), the old version still appears in retrieval alongside the new version, or instead of the new version.
+Test Case (Failing)
+1. User says: "I'm a Junior Developer at TechCorp"
+2. System stores this fact
+3. User says: "I just got promoted! My current job title is Senior Architect"
+4. System should: Mark old fact as superseded (is_current = false), store new fact
+5. User asks: "What is my current job title?"
+6. Expected: Response mentions ONLY "Senior Architect"
+7. Actual: Response mentions BOTH "Senior Architect" AND "Junior Developer"
+Result: A2 Supersession: FAIL — Latest: true, Old still present: true
+
+Root Cause Analysis
+Based on prior debugging, there are two likely failure points:
+Cause A: Fact Extraction Pollution
+When the AI responds with context like "You were previously a Junior Developer, and now you're a Senior Architect", the extraction engine is capturing historical references from the AI response as new facts.
+The extractor should ONLY extract facts from user messages, never from AI responses that reference historical context.
+Cause B: Retrieval Not Filtering is_current
+Even if supersession correctly marks old facts with is_current = false, the retrieval pipeline may not be filtering them out. The retrieval query must include:
+sqlWHERE is_current = true OR is_current IS NULL
+And superseded facts must be excluded from injection.
+Cause C: Supersession Detection Not Triggering
+The supersession logic may use keyword matching instead of semantic intelligence to detect when two facts are about the same canonical domain (job, phone, location). This causes misses when phrasing differs.
+
+Doctrinal Requirements
+From the System Bible — these are non-negotiable:
+Innovation #2: Semantic De-Duplication Engine
+
+"Understands conceptual equivalence and meaning similarity, not just identical text."
+
+Supersession MUST use semantic understanding to recognize that "Junior Developer" and "Senior Architect" are both job titles for the same person, and the newer one supersedes the older.
+Innovation #10: Truth-Validated Injection
+
+"Only high-confidence, validated information proceeds to injection. Low-confidence or contradictory information is flagged, filtered out."
+
+Superseded facts (is_current = false) are not valid for injection — they must be filtered before reaching AI context.
+Innovation #17: Hallucination Containment Protocol
+
+"Prevents unverified or hallucinated information from being stored in memory."
+
+AI response content that references historical facts must NOT be extracted and stored as new facts. Only user-asserted facts should be stored.
+Memory & Intelligence Doctrine
+
+"Store decisions, not dialogue. Store preferences, not phrasing."
+
+The system stores current state, not historical narrative. When state changes, old state is superseded, not accumulated.
+
+Required Fix Approach
+Step 1: Audit Fact Extraction Source Filtering
+Investigate: Does the extraction engine process AI responses, or only user messages?
+Likely files:
+
+api/categories/memory/internal/intelligence.js — look for extraction functions
+Any file with extract, facts, memory, store in the name
+
+Required behavior:
+
+Extraction MUST only process userMessage content
+Extraction MUST NOT process aiResponse content
+If AI response is being processed, add explicit filter: if (source === 'assistant') return;
+
+Step 2: Audit Supersession Detection Logic
+Investigate: How does the system detect that a new fact supersedes an old one?
+Look for:
+
+supersede, supersession, is_current, canonical, overwrite
+Domain detection for: job/title, phone, email, name, location, employer
+
+Required behavior:
+
+Supersession domains must be detected semantically, not by keyword
+When new fact in same domain is stored, ALL old facts in that domain for that user must be marked is_current = false
+Detection should recognize: "I'm a Junior Developer" and "My job title is Senior Architect" are same domain (employment/role)
+
+Step 3: Audit Retrieval Filtering
+Investigate: Does retrieval exclude is_current = false memories?
+Look for:
+
+Retrieval queries (SQL or function calls)
+Memory injection logic
+Any WHERE clauses on memory tables
+
+Required behavior:
+
+Retrieval query MUST include: AND (is_current = true OR is_current IS NULL)
+Superseded facts must NEVER be injected into AI context
+If is_current column doesn't exist, it must be added and backfilled
+
+Step 4: Add Extraction Source Tracking
+If not already present, add metadata to track where extracted facts came from:
+javascript{
+  content: "User is a Senior Architect",
+  source: "user",  // NOT "assistant"
+  extracted_from: "user_message",
+  supersedes: [id_of_old_fact],  // Optional: track what was superseded
+  is_current: true
+}
+
+Verification Criteria
+The fix is only complete when this test passes:
+javascript// A2 Supersession Test
+async function testSupersession() {
+  const userId = `test-supersession-${Date.now()}`;
+  
+  // Step 1: Store initial fact
+  await chat(userId, "I'm a Junior Developer at TechCorp");
+  
+  // Step 2: Store superseding fact
+  await chat(userId, "I just got promoted! My current job title is Senior Architect");
+  
+  // Step 3: Query current state
+  const response = await chat(userId, "What is my current job title?");
+  
+  // Step 4: Verify
+  const hasNew = /senior architect/i.test(response.text);
+  const hasOld = /junior developer/i.test(response.text);
+  
+  // PASS: Has new, does NOT have old
+  // FAIL: Has both, or has only old
+  return {
+    pass: hasNew && !hasOld,
+    hasNew,
+    hasOld
+  };
+}
+Expected result: pass: true, hasNew: true, hasOld: false
+
+Anti-Patterns to AVOID
+
+NO keyword matching for supersession detection — must be semantic/domain-based
+NO processing of AI responses in extraction — user messages only
+NO retrieval without is_current filtering — superseded facts must be excluded
+NO partial fixes — all three steps must be verified
+NO placeholder code — everything must be production-grade, real intelligence
+
+
+Success Definition
+After this fix:
+
+Old facts are marked is_current = false when superseded
+Retrieval excludes is_current = false facts
+AI responses referencing history do NOT pollute memory with old facts
+A2 test passes: Latest: true, Old still present: false
+
+
+Files Likely Involved
+
+api/categories/memory/internal/intelligence.js
+api/categories/memory/persistent_memory.js (if exists)
+api/categories/memory/extraction_engine.js (if exists)
+api/categories/memory/routing_intelligence.js (if exists)
+Any file containing supersede, is_current, extract, or canonical
+
+Do not assume these exact paths — explore the codebase to find where extraction, supersession, and retrieval actually live.
+
+End of Issue
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
