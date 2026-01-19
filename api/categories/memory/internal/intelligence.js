@@ -1896,8 +1896,8 @@ class IntelligenceSystem {
       return finalMemories;
     } catch (error) {
       this.logger.error("Critical error in enhanced extraction:", error);
-      // Use the original userId if sanitizedUserId is not defined (error occurred before sanitization)
-      const errorUserId = typeof sanitizedUserId !== 'undefined' ? sanitizedUserId : userId;
+      // Use the original userId (sanitizedUserId may not exist in error path)
+      const errorUserId = userId;
       await this.coreSystem.logExtractionError(error, {
         userId: errorUserId,
         query: query.substring(0, 100),
