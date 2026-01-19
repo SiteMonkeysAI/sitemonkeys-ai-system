@@ -519,6 +519,7 @@ export class IntelligentMemoryStorage {
     // IDENTIFIER-PRESERVING PROMPT: Compress while retaining unique tokens
     // CRITICAL: Must preserve financial amounts, salaries, and numeric values for supersession
     // CRITICAL FIX #504: Handle casual formats like "55k", "make", "earn" and preserve user terminology
+    // CRITICAL FIX #540: NEVER extract historical context from AI responses
     const prompt = `Extract ONLY the essential facts from this conversation. Be extremely brief but PRESERVE all identifiers, numeric values, and the USER'S EXACT TERMINOLOGY.
 
 CRITICAL RULES:
@@ -540,11 +541,27 @@ CRITICAL RULES:
 8. If user says "My X is Y", output MUST contain Y exactly
 9. PRIORITIZE extracting from the USER's message - the AI response is context only
 10. Include searchable synonyms in parentheses for better retrieval matching
-11. NEVER extract historical/past-tense information from the Assistant's response:
-   - DO NOT extract if Assistant says "You were previously X"
-   - DO NOT extract if Assistant says "You used to X"
-   - DO NOT extract if Assistant says "You mentioned you were X"
-   - Only extract CURRENT facts from the USER's message
+
+11. *** CRITICAL: NEVER EXTRACT HISTORICAL CONTEXT FROM ASSISTANT RESPONSES ***
+   The Assistant's response often includes historical context for continuity.
+   This historical context is NOT new information and must NOT be stored.
+
+   FORBIDDEN PATTERNS - DO NOT EXTRACT:
+   - "You were previously X" → DO NOT extract "previously X"
+   - "You used to be X" → DO NOT extract "used to be X"
+   - "Before, you were X" → DO NOT extract "before, you were X"
+   - "Your old X was Y" → DO NOT extract "old X was Y"
+   - "Earlier you mentioned X" → DO NOT extract historical X
+   - "You had mentioned X" → DO NOT extract historical X
+   - "You told me X" → DO NOT extract if it's past tense
+   - "Previously you worked at X" → DO NOT extract old employer
+   - "You lived in X before" → DO NOT extract old location
+
+   ONLY extract CURRENT facts from the USER's message.
+   If the Assistant says something like "You were previously a Junior Developer,
+   and now you're a Senior Architect" - extract ONLY "Senior Architect" from
+   the USER's message, NOT "Junior Developer" from the Assistant's response.
+
 12. UPDATE LANGUAGE means NEW VALUE IS PRIMARY:
    - "increased to $X" → Current income: $X (not the old value)
    - "raised to $X" → Current income: $X
@@ -554,17 +571,17 @@ CRITICAL RULES:
    - "promoted... $X" → Current income: $X
    - The word "now" or "increased/raised/bumped" signals the NEW value
 
-12. When message contains BOTH old and new values, extract ONLY the new:
+13. When message contains BOTH old and new values, extract ONLY the new:
    - "Was $50k, now $70k" → Income: $70k (ignore $50k)
    - "Increased from $60k to $80k" → Income: $80k (ignore $60k)
 
-13. LOCATION UPDATES supersede old locations:
+14. LOCATION UPDATES supersede old locations:
    - "moved to Austin" → Current location: Austin (not previous city)
    - "relocated to Denver" → Current location: Denver
    - "now living in Seattle" → Current location: Seattle
    - The words "moved", "relocated", "now living" signal NEW location
 
-14. SALARY VALUES without $ are still salary:
+15. SALARY VALUES without $ are still salary:
    - "90k" = $90,000
    - "75k a year" = $75,000/year
    - "making 85" in salary context = $85,000
@@ -612,6 +629,21 @@ NOT: Historical context about previous location
 Input User: "They're giving me 90k now" | AI: "Congratulations..."
 Output: "Income: 90k ($90,000 salary pay compensation)"
 NOT: "Got promoted" without the salary value
+
+*** CRITICAL ANTI-PATTERN - Issue #540 Fix ***
+Input User: "I just got promoted! My current job title is Senior Architect" |
+AI: "Congratulations! You were previously a Junior Developer, and now you're a Senior Architect..."
+Output: "Job: Senior Architect (title position role promoted current)"
+FORBIDDEN: "Job: Junior Developer" or "previously Junior Developer"
+REASON: The AI's historical context ("You were previously a Junior Developer") is NOT new information.
+        Only extract CURRENT facts from the USER's message: "Senior Architect"
+
+Input User: "My new salary is $95,000" |
+AI: "That's great! Your previous salary was $80,000, so that's a nice increase..."
+Output: "Income: $95,000 (salary pay compensation new current)"
+FORBIDDEN: "$80,000" or "previous salary $80,000"
+REASON: The AI's historical reference is NOT new information from the user.
+        Only extract the NEW value from the USER's message.
 
 Rules for compression:
 - Maximum 3-5 facts total
@@ -671,19 +703,30 @@ Facts (preserve user terminology + add synonyms):`;
         factsLower.includes('i cannot') ||
         factsLower.includes("i don't have access");
 
-      // CRITICAL FIX #533-A2: Prevent extraction of historical references from AI responses
+      // CRITICAL FIX #533-A2 + #540: Prevent extraction of historical references from AI responses
       // When AI says "You were previously X", that's historical context, NOT a new user fact
       const hasHistoricalLanguage =
         factsLower.includes('was previously') ||
         factsLower.includes('were previously') ||
         factsLower.includes('used to') ||
+        factsLower.includes('used to be') ||
         factsLower.includes('formerly') ||
         factsLower.includes('previously') ||
         factsLower.includes('before that') ||
+        factsLower.includes('before you') ||
+        factsLower.includes('earlier you') ||
         factsLower.includes('you mentioned that you were') ||
         factsLower.includes('you were') ||
         factsLower.includes('you had') ||
-        factsLower.includes('you used to be');
+        factsLower.includes('your old') ||
+        factsLower.includes('old job') ||
+        factsLower.includes('old title') ||
+        factsLower.includes('old position') ||
+        factsLower.includes('old employer') ||
+        factsLower.includes('old salary') ||
+        factsLower.includes('old location') ||
+        factsLower.includes('worked at') && !factsLower.includes('now work') ||
+        factsLower.includes('lived in') && !factsLower.includes('now live');
 
       if (hasAssistantLanguage) {
         console.log('[INTELLIGENT-STORAGE] ⚠️ Extracted facts contain assistant boilerplate, rejecting');
