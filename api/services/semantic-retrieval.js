@@ -431,6 +431,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     token_budget: options.tokenBudget || 2000,
     tokens_used: 0,
     fallback_reason: null,
+    fallback_used: false,  // #536: Track when embedding-lag fallback is used
+    fallback_candidates: 0,  // #536: Count of candidates from fallback
+    semantic_candidates: 0,  // #536: Count of candidates from semantic search
     latency_ms: 0,
     // Legacy telemetry (for compatibility)
     candidates_fetched: 0,
@@ -546,6 +549,174 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     if (candidates.length === 0) {
       console.log(`[SEMANTIC RETRIEVAL] No candidates found for user ${userId} in mode ${mode}`);
+
+      // ═══════════════════════════════════════════════════════════════
+      // CRITICAL FIX #536: EMBEDDING-LAG FALLBACK
+      // When semantic returns 0, check if recent memories exist WITHOUT embeddings
+      // This handles the async embedding generation lag on immediate recall
+      // ═══════════════════════════════════════════════════════════════
+      try {
+        console.log('[EMBEDDING-FALLBACK] Checking for recent memories without embeddings...');
+
+        // Check for recent memories (last 5 minutes) without embeddings
+        const { rows: recentWithoutEmbeddings } = await pool.query(`
+          SELECT COUNT(*) as count
+          FROM persistent_memories
+          WHERE user_id = $1
+            AND created_at > NOW() - INTERVAL '5 minutes'
+            AND (embedding IS NULL OR embedding_status != 'ready')
+            AND (is_current = true OR is_current IS NULL)
+        `, [userId]);
+
+        const hasRecentUnembedded = parseInt(recentWithoutEmbeddings[0]?.count || 0) > 0;
+
+        if (hasRecentUnembedded) {
+          console.log(`[EMBEDDING-FALLBACK] ✅ Found ${recentWithoutEmbeddings[0].count} recent memories without embeddings - using fallback retrieval`);
+
+          // Run bounded fallback retrieval: recent memories + basic text matching
+          let fallbackQuery = `
+            SELECT
+              id,
+              content,
+              category_name,
+              mode,
+              NULL as embedding,
+              fact_fingerprint,
+              fingerprint_confidence,
+              relevance_score,
+              created_at,
+              EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400 as days_ago,
+              metadata
+            FROM persistent_memories
+            WHERE user_id = $1
+              AND (is_current = true OR is_current IS NULL)
+              AND created_at > NOW() - INTERVAL '5 minutes'
+          `;
+
+          const fallbackParams = [userId];
+          let paramIndex = 2;
+
+          // Apply mode filter if not site-monkeys
+          if (mode !== 'site-monkeys' && !includeAllModes) {
+            if (allowCrossMode) {
+              fallbackQuery += ` AND (mode = $${paramIndex} OR mode = 'truth-general')`;
+              fallbackParams.push(mode);
+              paramIndex++;
+            } else {
+              fallbackQuery += ` AND mode = $${paramIndex}`;
+              fallbackParams.push(mode);
+              paramIndex++;
+            }
+          }
+
+          // Apply category filter if specified
+          if (effectiveCategories && Array.isArray(effectiveCategories) && effectiveCategories.length > 0) {
+            fallbackQuery += ` AND category_name = ANY($${paramIndex}::text[])`;
+            fallbackParams.push(effectiveCategories);
+            paramIndex++;
+          }
+
+          // For "remember exactly" queries, try to match unique phrases
+          const hasRememberExactly = /remember\s+(this\s+)?exactly/i.test(expandedQuery);
+          if (hasRememberExactly) {
+            // Extract potential unique tokens (alphanumeric sequences)
+            const uniqueTokens = expandedQuery.match(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+|[A-Z]{4,}-[0-9]+/gi);
+            if (uniqueTokens && uniqueTokens.length > 0) {
+              console.log(`[EMBEDDING-FALLBACK] Matching unique tokens: ${uniqueTokens.join(', ')}`);
+              const tokenFilters = uniqueTokens.map((_, i) => `content ILIKE $${paramIndex + i}`).join(' OR ');
+              fallbackQuery += ` AND (${tokenFilters})`;
+              fallbackParams.push(...uniqueTokens.map(t => `%${t}%`));
+              paramIndex += uniqueTokens.length;
+            } else {
+              // Try matching the original user phrase from metadata
+              fallbackQuery += ` AND (content ILIKE $${paramIndex} OR metadata->>'original_user_phrase' ILIKE $${paramIndex})`;
+              fallbackParams.push(`%${query.substring(0, 50)}%`);
+              paramIndex++;
+            }
+          }
+
+          fallbackQuery += ` ORDER BY created_at DESC LIMIT 50`;
+
+          const { rows: fallbackCandidates } = await pool.query(fallbackQuery, fallbackParams);
+
+          telemetry.fallback_used = true;
+          telemetry.fallback_reason = 'embedding_missing';
+          telemetry.semantic_candidates = 0;
+          telemetry.fallback_candidates = fallbackCandidates.length;
+
+          console.log(`[EMBEDDING-FALLBACK] Retrieved ${fallbackCandidates.length} candidates via fallback`);
+
+          if (fallbackCandidates.length > 0) {
+            // Apply basic text similarity scoring
+            const scoredFallback = fallbackCandidates.map(candidate => {
+              // Simple text-based similarity (contains query terms)
+              const queryTerms = expandedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 3);
+              const contentLower = (candidate.content || '').toLowerCase();
+              const matchedTerms = queryTerms.filter(term => contentLower.includes(term)).length;
+              const textSimilarity = queryTerms.length > 0 ? matchedTerms / queryTerms.length : 0;
+
+              return {
+                ...candidate,
+                similarity: textSimilarity,
+                hybrid_score: textSimilarity,
+                fallback_matched: true
+              };
+            });
+
+            // Filter by a lower threshold for fallback (0.1 for text matching)
+            const filtered = scoredFallback
+              .filter(m => m.similarity >= 0.1 || hasRememberExactly)  // Lower threshold for fallback
+              .sort((a, b) => b.hybrid_score - a.hybrid_score)
+              .slice(0, Math.min(topK, 5));  // Limit fallback to 5 results max
+
+            telemetry.candidates_above_threshold = filtered.length;
+            telemetry.results_returned = filtered.length;
+            telemetry.results_injected = filtered.length;
+            telemetry.injected_memory_ids = filtered.map(r => r.id);
+            telemetry.top_scores = filtered.slice(0, 10).map(r => parseFloat(r.similarity.toFixed(3)));
+
+            // Calculate tokens used
+            let usedTokens = 0;
+            const tokenBudget = options.tokenBudget || 2000;
+            const results = [];
+            for (const memory of filtered) {
+              const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
+              if (usedTokens + memoryTokens > tokenBudget) break;
+              results.push(memory);
+              usedTokens += memoryTokens;
+            }
+
+            telemetry.tokens_used = usedTokens;
+
+            if (results.length > 0) {
+              telemetry.top_similarity = results[0].similarity;
+              telemetry.avg_similarity = results.reduce((sum, r) => sum + r.similarity, 0) / results.length;
+            }
+
+            telemetry.total_ms = Date.now() - startTime;
+            telemetry.latency_ms = Date.now() - startTime;
+
+            const cleanResults = results.map(({ embedding, ...rest }) => ({
+              ...rest,
+              similarity: Math.round(rest.similarity * 1000) / 1000,
+              hybrid_score: Math.round(rest.hybrid_score * 1000) / 1000
+            }));
+
+            console.log(`[EMBEDDING-FALLBACK] ✅ Returning ${results.length} memories via fallback (${telemetry.total_ms}ms)`);
+
+            return {
+              success: true,
+              memories: cleanResults,
+              telemetry
+            };
+          }
+        }
+      } catch (fallbackError) {
+        console.error(`[EMBEDDING-FALLBACK] ⚠️ Fallback check failed: ${fallbackError.message}`);
+        // Continue to return empty results
+      }
+      // ═══════════════════════════════════════════════════════════════
+
       telemetry.total_ms = Date.now() - startTime;
       telemetry.latency_ms = Date.now() - startTime;
       return {
@@ -582,6 +753,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     );
     telemetry.candidates_with_embeddings = withEmbeddings.length;
     telemetry.vectors_compared = withEmbeddings.length;
+    telemetry.semantic_candidates = withEmbeddings.length;  // #536: Track semantic candidates for comparison with fallback
 
     // Calculate similarity scores
     const scored = withEmbeddings.map(candidate => ({
