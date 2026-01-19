@@ -617,10 +617,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           }
 
           // For "remember exactly" queries, try to match unique phrases
-          const hasRememberExactly = /remember\s+(this\s+)?exactly/i.test(expandedQuery);
+          // SECURITY FIX: Limit input length to prevent ReDoS
+          const safeQuery = expandedQuery.slice(0, 500);
+          const hasRememberExactly = /remember\s+(this\s+)?exactly/i.test(safeQuery);
           if (hasRememberExactly) {
             // Extract potential unique tokens (alphanumeric sequences)
-            const uniqueTokens = expandedQuery.match(/[A-Z0-9]+-[A-Z0-9]+-[A-Z0-9]+|[A-Z]{4,}-[0-9]+/gi);
+            // SECURITY FIX: Constrain token-matching regex to prevent ReDoS
+            const uniqueTokens = safeQuery.match(/[A-Z0-9]{1,20}-[A-Z0-9]{1,20}-[A-Z0-9]{1,20}|[A-Z]{4,20}-[0-9]{1,20}/gi);
             if (uniqueTokens && uniqueTokens.length > 0) {
               console.log(`[EMBEDDING-FALLBACK] Matching unique tokens: ${uniqueTokens.join(', ')}`);
               const tokenFilters = uniqueTokens.map((_, i) => `content ILIKE $${paramIndex + i}`).join(' OR ');
