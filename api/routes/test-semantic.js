@@ -44,6 +44,15 @@ export default async function handler(req, res) {
   });
 
   const { action = 'retrieve', userId, query, mode = 'truth-general', limit = 10 } = req.query;
+  // Normalize query to a single string to prevent type confusion (array vs string)
+  let normalizedQuery = query;
+  if (Array.isArray(normalizedQuery)) {
+    // Take the first string element, or fall back to the first element coerced to string
+    const first = normalizedQuery.find(v => typeof v === 'string') ?? normalizedQuery[0];
+    normalizedQuery = typeof first === 'string' ? first : String(first);
+  } else if (normalizedQuery != null && typeof normalizedQuery !== 'string') {
+    normalizedQuery = String(normalizedQuery);
+  }
 
   try {
     switch (action) {
@@ -58,7 +67,7 @@ export default async function handler(req, res) {
           });
         }
 
-        const result = await retrieveSemanticMemories(pool, query, {
+        const result = await retrieveSemanticMemories(pool, normalizedQuery, {
           userId,
           mode,
           topK: parseInt(limit)

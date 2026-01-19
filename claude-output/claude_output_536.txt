@@ -1,0 +1,95 @@
+Perfect! Now let me create a comprehensive summary of the changes:
+
+---SUMMARY---
+
+## Issue #536 Fix: CRITICAL Immediate Store→Recall Failure (T2/B3) — Semantic Retrieval Returns 0 Memories
+
+### Root Cause Identified
+
+The issue was an **embedding-lag timing bug** in the semantic retrieval system:
+
+1. **Storage Path**: When memories are stored, embeddings are generated **asynchronously** via `embedMemoryNonBlocking()` in:
+   - `api/memory/intelligent-storage.js` (lines 1236-1248, 1336-1347, 1439-1450)
+   - `api/categories/memory/internal/persistent_memory.js` (lines 397-411)
+
+2. **Retrieval Path**: When semantic retrieval queries for memories, it filters with:
+   - `embedding IS NOT NULL` 
+   - `embedding_status = 'ready'`
+   - Located in `api/services/semantic-retrieval.js` (lines 284-286)
+
+3. **The Bug**: On immediate recall (within seconds), the embedding hasn't finished generating yet, so the newly stored memory is filtered out and returns 0 results.
+
+### Fix Implemented
+
+Added an **embedding-lag fallback mechanism** to `api/services/semantic-retrieval.js` that:
+
+1. **Detects embedding-lag state** (lines 558-571):
+   - When semantic retrieval returns 0 candidates
+   - Checks if recent memories (last 5 minutes) exist without ready embeddings
+   - Only triggers fallback when this specific condition is detected
+
+2. **Runs bounded fallback retrieval** (lines 576-640):
+   - Queries recent memories (last 5 minutes) WITHOUT requiring embeddings
+   - Applies same mode and category filters for consistency
+   - For "remember exactly" queries, matches unique tokens from the query
+   - Limits to max 50 candidates to prevent resource exhaustion
+
+3. **Applies text-based similarity scoring** (lines 650-670):
+   - Uses simple term matching (not semantic embeddings)
+   - Filters by lower threshold (0.1 vs 0.25 for semantic)
+   - Limits results to max 5 memories for fallback
+   - Respects token budget constraints
+
+4. **Adds comprehensive telemetry** (lines 642-677, 424-428):
+   - `fallback_used`: Boolean indicating fallback was triggered
+   - `fallback_reason`: "embedding_missing" when lag detected
+   - `semantic_candidates`: Count from semantic search (0 in this case)
+   - `fallback_candidates`: Count from fallback retrieval
+   - `fallback_matched`: Flag on individual memories retrieved via fallback
+
+### Files Modified
+
+**`api/services/semantic-retrieval.js`**:
+- Added embedding-lag fallback logic (lines 553-722)
+- Added telemetry fields for tracking fallback usage (lines 419-422)
+- Set semantic_candidates counter for comparison (line 757)
+
+### Alignment with System Doctrine
+
+From the System Bible:
+- **"Memory exists to improve reasoning, not to decorate responses"** ✅ - The fallback ensures memory is retrieved when it exists
+- **"If memory does not change reasoning, it should not be retrieved"** ✅ - Fallback only triggers when semantic fails due to technical lag
+- **"If retrieved memory is ignored, the system is broken"** ✅ - This fix prevents the system from ignoring stored memories
+
+From the Issue Requirements:
+- **Semantic retrieval remains primary** ✅ - Fallback only when embeddings are missing
+- **No placeholders** ✅ - All code is production-ready
+- **Preserves memory cap** ✅ - Limits to 5 memories from fallback, respects token budget
+- **Telemetry required** ✅ - Tracks fallback usage, reason, and candidate counts
+- **Critical safeguard** ✅ - Only fires when embeddings are NULL/not-ready on recent memories
+
+### Test Verification Expected
+
+The fix should now pass the T2/B3 test:
+
+```
+1. Store: "Remember this exactly: ZEBRA-ANCHOR-{runId}"
+2. Immediately query: "What phrase did I ask you to remember exactly?"
+
+EXPECTED RESULT:
+- Response contains the exact token (ZEBRA-ANCHOR-{runId})
+- metadata.memory_count > 0
+- metadata.memoryUsed === true
+- metadata.retrieval.fallback_used === true
+- metadata.retrieval.fallback_reason === "embedding_missing"
+```
+
+### What This Does NOT Fix
+
+As specified in the issue, this fix addresses ONLY T2/B3 immediate recall. It does NOT address:
+- **A2 Supersession**: Old facts appearing alongside new (separate root cause)
+- **C2 Political Guardrails**: Endorsement detection (separate test regex issue)
+
+These will be addressed in separate issues.
+
+---END SUMMARY---

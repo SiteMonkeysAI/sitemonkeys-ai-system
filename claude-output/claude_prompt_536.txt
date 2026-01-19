@@ -1,0 +1,234 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #536: [claude-fix] CRITICAL: Immediate Store→Recall Fails (T2/B3) — Semantic Retrieval Returns 0 Memories
+
+Issue Description:
+# [claude-fix] CRITICAL: Immediate Store→Recall Fails (T2/B3) — Semantic Retrieval Returns 0 Memories
+
+## Priority: CRITICAL
+
+## Scope
+
+This issue addresses **ONLY** the T2/B3 immediate recall failure. Supersession (A2) and political guardrails (C2) will be separate issues after this is resolved.
+
+---
+
+## Evidence (From Live System)
+
+When recalling immediately after storing a tripwire phrase:
+
+```
+metadata.memory_count = 0
+metadata.memoryUsed = false
+metadata.memory_ids = []
+metadata.retrieval.method = "semantic"
+```
+
+Response shows "no prior context / first interaction" boilerplate despite memory being stored seconds earlier.
+
+**This proves the failure is in RETRIEVAL, not enforcement or personality.**
+
+---
+
+## Most Likely Root Cause: Embedding Lag
+
+If embeddings are generated **asynchronously** after storage, and semantic retrieval includes a filter like `WHERE embedding IS NOT NULL`, then:
+
+1. Memory is stored → `embedding = NULL` initially
+2. Recall query fires immediately
+3. Semantic search excludes all memories with `embedding IS NULL`
+4. Result: 0 candidates returned
+5. AI says "first interaction" because no memory was injected
+
+**This is a classic async timing bug, not a design flaw.**
+
+---
+
+## Required Investigation Deliverable (Before Code Changes)
+
+Provide a **Pipeline Trace Report** with file:line references showing for ONE test run:
+
+### STORE Request
+```
+- User message: [content]
+- Fact extracted: [what was extracted]
+- INSERT executed: [success/fail]
+- Memory ID assigned: [id]
+- Embedding status at INSERT time: [NULL / generated]
+- is_current value: [true/false]
+- Timestamp: [when]
+```
+
+### RECALL Request (Immediately After)
+```
+- Query: [user's recall question]
+- Time since store: [ms]
+- SQL executed: [sanitized query]
+- Does query include "embedding IS NOT NULL"?: [yes/no]
+- Does query include "is_current = true"?: [yes/no]
+- Candidate count BEFORE embedding filter: [n]
+- Candidate count AFTER embedding filter: [n]
+- Candidate count AFTER relevance threshold: [n]
+- Final injected count: [n]
+- memory_ids injected: [list]
+```
+
+**This trace will confirm or refute the embedding lag hypothesis.**
+
+---
+
+## Required Fix
+
+### Goal
+Immediate recall must succeed on the next request, even if embeddings are not yet generated.
+
+### Acceptable Solutions (Choose Based on Codebase Reality)
+
+**Option 1: Embedding-Lag Fallback (Recommended)**
+
+If semantic retrieval returns 0 AND recent memories exist with `embedding IS NULL`:
+
+1. Detect the "embedding lag" state
+2. Run a **bounded** fallback retrieval:
+   - Query recent memories for that user (last N, max 50)
+   - Use lightweight matching (recency + basic relevance)
+   - For "remember exactly" queries, match the unique token/phrase
+3. Inject up to 3 matches (still obey memory cap ≤5)
+4. Set telemetry:
+   ```
+   metadata.retrieval.fallback_used = true
+   metadata.retrieval.fallback_reason = "embedding_missing"
+   metadata.retrieval.semantic_candidates = 0
+   metadata.retrieval.fallback_candidates = [n]
+   ```
+
+**Critical Safeguard:** This fallback fires ONLY when `embedding IS NULL` is detected on recent memories. If semantic returns 0 and all recent memories HAVE embeddings, that's a different bug — do not apply fallback, escalate investigation.
+
+**Option 2: Synchronous Embedding for Tripwire Patterns**
+
+For "remember this exactly" / verification phrase storage:
+- Generate embedding synchronously before returning
+- Only for this specific pattern to avoid cost explosion
+- Normal memories continue with async embedding
+
+**Option 3: Short Retry Window**
+
+On recall queries that reference "remember exactly" / identifiers:
+- If semantic returns 0, wait up to 500ms and retry once
+- Only if embedding generation is expected to complete quickly
+
+---
+
+## Constraints (Non-Negotiable)
+
+1. **Semantic retrieval remains primary** — Fallback is ONLY for embedding-missing state
+2. **No placeholders** — Every line of code must be production-ready
+3. **Preserve memory cap** — Maximum 5 memories injected
+4. **Preserve token budgets** — Memory injection capped at 2500 tokens
+5. **Do not store garbage** — Block "(No facts to extract)" and similar placeholder content
+6. **Telemetry required** — Must log whether semantic or fallback path was used
+
+---
+
+## Verification Requirements
+
+### Test: Immediate Store→Recall
+
+```
+1. Store: "Remember this exactly: ZEBRA-ANCHOR-{runId}"
+2. Immediately query: "What phrase did I ask you to remember exactly?"
+
+PASS if ALL true:
+- Response contains the exact token (ZEBRA-ANCHOR-{runId})
+- metadata.memory_count > 0
+- metadata.memoryUsed === true
+
+ALSO PASS if:
+- metadata.retrieval.fallback_used === true
+- metadata.retrieval.fallback_reason === "embedding_missing"
+- Response still contains the exact token
+```
+
+### Test: Normal Semantic Retrieval (Regression Check)
+
+```
+1. Store several facts with time for embeddings to generate
+2. Query semantically related topic
+3. PASS if:
+- Semantic retrieval returns relevant memories
+- metadata.retrieval.fallback_used === false (fallback NOT used when embeddings exist)
+```
+
+---
+
+## Files Likely Involved
+
+Based on architecture documentation:
+
+**Storage & Embedding:**
+- `api/lib/memory_system/persistent_memory.js` — Where INSERT happens
+- Embedding generation logic (find where/when embeddings are created)
+
+**Retrieval:**
+- `api/lib/memory_system/ExtractionEngine.js` — Retrieval queries
+- Look for `WHERE embedding IS NOT NULL` or similar filters
+
+**Injection:**
+- `api/chat.js` — Where retrieved memories are injected into context
+
+**Do not limit investigation to these files** — trace the actual code paths.
+
+---
+
+## Success Criteria
+
+1. **T2/B3 test passes** — Immediate recall works
+2. **Root cause confirmed** — Pipeline trace shows WHERE it failed
+3. **Fix is targeted** — Addresses embedding lag specifically
+4. **Semantic remains primary** — Fallback only for embedding-missing state
+5. **Telemetry proves it works** — Metadata shows correct path taken
+6. **No regressions** — Normal semantic retrieval still works when embeddings exist
+
+---
+
+## What This Issue Does NOT Cover
+
+- **A2 Supersession** — Old facts appearing alongside new (separate root cause, separate issue)
+- **C2 Political Guardrails** — Endorsement detection (likely test regex issue, separate issue)
+
+These will be addressed in follow-up issues after T2/B3 is resolved.
+
+---
+
+## Alignment with System Doctrine
+
+From the System Bible:
+- "Memory exists to improve reasoning, not to decorate responses"
+- "If memory does not change reasoning, it should not be retrieved"
+- "If retrieved memory is ignored, the system is broken"
+
+The current state violates this: memory IS stored but IS NOT retrieved. This fix restores the contract.
+
+The fallback for embedding-missing state aligns with:
+- Token Efficiency Doctrine: deterministic prefilters are acceptable
+- Genuine Intelligence Doctrine: handling async timing is engineering reality, not a betrayal of semantic principles
+
+**The goal: When the system HAS truth, it must DELIVER truth.**
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
