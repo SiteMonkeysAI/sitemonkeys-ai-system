@@ -349,7 +349,7 @@ async function queryDebug(query) {
   return response.json();
 }
 
-function checkExpectations(result, expect, testName) {
+function checkExpectations(result, expect, _testName) {
   const failures = [];
   
   // Check response contains expected token
@@ -501,7 +501,7 @@ async function runTests() {
     if (!health || !health.ok) {
       console.log('⚠️  Warning: /api/health not responding. Server may be down.\n');
     }
-  } catch (e) {
+  } catch {
     console.log('⚠️  Warning: Could not reach API. Continuing anyway...\n');
   }
   

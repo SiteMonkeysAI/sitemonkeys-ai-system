@@ -842,7 +842,7 @@ class IntelligenceSystem {
   // Maps SemanticAnalyzer domains to memory categories using genuine intelligence
   // ================================================================
 
-  mapDomainToCategory(domain, domainConfidence, intent, query) {
+  mapDomainToCategory(domain, domainConfidence, intent, _query) {
     // Primary mapping: Domain → Category
     // Uses semantic domain from embedding-based classification
     const domainCategoryMap = {
@@ -905,7 +905,7 @@ class IntelligenceSystem {
     };
   }
 
-  selectSubcategoryFromSemantic(category, semanticResult, query) {
+  selectSubcategoryFromSemantic(category, semanticResult, _query) {
     // Map categories to subcategories based on semantic analysis
     const subcategoryMap = {
       tools_tech_workflow: "Digital Tools",
@@ -2618,7 +2618,7 @@ class IntelligenceSystem {
       if (lastAccessDays < 1) score += 0.3;
       else if (lastAccessDays < 7) score += 0.2;
       else if (lastAccessDays < 30) score += 0.1;
-    } catch (_error) {
+    } catch {
       score = 0.1;
     }
 
@@ -3454,7 +3454,7 @@ class IntelligenceSystem {
       else if (accessedDaysAgo < 30) recencyScore += 0.2;
 
       return Math.min(recencyScore, 1.0);
-    } catch (error) {
+    } catch {
       return 0.5; // Default middle value
     }
   }
