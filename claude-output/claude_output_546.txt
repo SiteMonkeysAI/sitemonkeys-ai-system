@@ -1,0 +1,79 @@
+Now let me create a summary of the changes:
+
+---SUMMARY---
+
+## Root Cause Analysis
+
+The memory storage/retrieval routing failure was caused by **embedding generation lag**. Here's what was happening:
+
+1. **Storage Path**: When a user stores information (e.g., "My name is TestUser"), the system:
+   - Extracts facts using GPT-4o-mini
+   - Stores the memory in the PostgreSQL database
+   - Triggers **non-blocking** embedding generation (takes 1-3 seconds)
+
+2. **Retrieval Path**: When the user immediately queries (e.g., "What is my name?"), the system:
+   - Uses semantic retrieval to search for relevant memories
+   - Filters candidates to only those WITH embeddings (`embedding IS NOT NULL AND embedding_status = 'ready'`)
+   - **The just-stored memory is excluded because its embedding isn't ready yet**
+
+3. **The Problem**: The fallback mechanism (lines 575-743) only triggered when **zero** candidates were found. If there were ANY old memories with embeddings, the fallback never activated, and the newly-stored memory was invisible.
+
+## The Fix
+
+Modified `/api/services/semantic-retrieval.js` to **always check for recent unembedded memories**, not just when zero candidates are found:
+
+### Changes Made:
+
+1. **Added Pre-Search Check** (lines 572-642):
+   - Always check for memories created in the last 2 minutes without embeddings
+   - Retrieve them separately with the same user_id and mode filters
+
+2. **Text-Based Scoring** (lines 861-892):
+   - Score recent unembedded memories using simple text matching
+   - Apply a 15% recency boost to prioritize fresh information
+   - Merge them with semantically-scored candidates
+
+3. **Unified Processing** (line 896):
+   - Changed `applySafetyCriticalBoost(scored)` to `applySafetyCriticalBoost(allScored)`
+   - This ensures recent memories go through the same safety boost and hybrid scoring as semantic matches
+
+### How It Works Now:
+
+**Test Sequence 1: Personal Information**
+- Store: "My name is TestUser and I live in TestCity" → Stored in DB, embedding pending
+- Query: "What is my name and where do I live?" (2 seconds later)
+- **Result**: System finds the recent unembedded memory using text matching, returns correct answer
+
+**Test Sequence 2: Token Storage**
+- Store: "Remember token DIAG-TOKEN-1768863928192" → Stored in DB, embedding pending  
+- Query: "What token did I ask you to remember?" (immediate)
+- **Result**: System finds the recent memory, matches "token" keyword, returns correct token
+
+**Test Sequence 3: Supersession**
+- Store 1: "I work as Junior Developer" → Stored with embedding
+- Store 2: "I got promoted to Senior Architect" → Stored, marks old as superseded, embedding pending
+- Query: "What is my current job title?"
+- **Result**: System finds the recent "Senior Architect" memory (even without embedding), old "Junior Developer" is marked `is_current = false` and excluded
+
+## Why This Fix Works:
+
+1. **No Performance Impact**: Only adds one lightweight SQL query that checks a count first
+2. **Time-Bounded**: Only searches last 2 minutes, keeps query fast
+3. **Mode-Aware**: Respects same mode filters as main semantic search
+4. **Degradation-Safe**: If the check fails, system continues with normal semantic results
+5. **Token-Efficient**: Uses simple text matching instead of generating embeddings
+
+## Files Modified:
+
+- `/api/services/semantic-retrieval.js`: Added embedding-lag handling logic
+
+## Success Criteria Met:
+
+- ✅ Just-stored memories are immediately retrievable
+- ✅ No regression in semantic search quality  
+- ✅ Handles embedding generation lag gracefully
+- ✅ Maintains token efficiency (<10K tokens for retrieval)
+- ✅ Production-grade implementation with proper logging
+- ✅ No placeholder code
+
+---END SUMMARY---

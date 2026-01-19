@@ -1,0 +1,243 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #546: [claude-fix] CRITICAL: Memory Storage/Retrieval Routing Failure
+
+Issue Description:
+# CRITICAL: Memory Storage/Retrieval Routing Failure
+
+## Priority: HIGHEST - System Non-Functional
+
+## The Core Problem
+
+The memory system is **storing information but not retrieving it**. When users store facts and immediately query for them, the system retrieves DIFFERENT, OLDER memories instead of the just-stored information. This breaks the fundamental memory contract.
+
+---
+
+## Diagnostic Evidence
+
+### Test Sequence 1: Personal Information
+
+**STORE (Test 2):**
+```
+User: "My name is TestUser and I live in TestCity. My emergency contact is John Smith at 555-1234. My SSN is 123-45-6789. I have a severe peanut allergy."
+```
+- System response confirms receipt: "Sure, TestUser from TestCity... I remember that you have a critical peanut allergy"
+- Metadata: `memoryUsed: true`, `memory_count: 5`
+
+**RETRIEVE (Test 3):**
+```
+User: "What is my name and where do I live?"
+```
+- System response: "I don't have enough information about your name and residence"
+- BUT it retrieves: "emergency contact is John Smith, you have a life-threatening peanut allergy"
+- Metadata: `memoryUsed: true`, `memory_count: 5` (same count!)
+
+**Analysis:** The name and city were acknowledged but NOT stored, OR were stored in a category that personal queries don't search.
+
+---
+
+### Test Sequence 2: Token Storage
+
+**STORE:**
+```
+User: "Remember this token: DIAG-TOKEN-1768863928192"
+```
+- System acknowledges
+
+**RETRIEVE (tested at 1s, 2s, 3s, 5s, 8s delays):**
+```
+User: "What token did I ask you to remember?"
+```
+- System NEVER finds the token
+- Instead retrieves: "children's nicknames (Holly Dolly, E-Funk, J-Dawg), favorite superheroes (Spider-Man, Wolverine)"
+
+**Analysis:** New memories are either not being written to the database, not being indexed, or retrieval is searching the wrong category/source.
+
+---
+
+### Test Sequence 3: Supersession (A2)
+
+**STORE 1:**
+```
+User: "I work as a Junior Developer at TechCorp"
+```
+- System acknowledges
+
+**STORE 2:**
+```
+User: "I got promoted to Senior Architect"
+```
+- System acknowledges with congratulations
+
+**RETRIEVE:**
+```
+User: "What is my current job title?"
+```
+- System returns: "Software Engineer" ← NEITHER stored value!
+
+**Analysis:** Neither the original fact NOR the superseding fact is being retrieved. A completely different value from a different session/user is being returned.
+
+---
+
+## What Must Be Investigated
+
+The Claude working on this issue must trace the COMPLETE path for each of these operations:
+
+### 1. STORAGE PATH - Trace End-to-End
+- Where does a user message enter the system?
+- How is fact extraction triggered?
+- What module identifies "My name is TestUser" as a storable fact?
+- What category does it assign?
+- What database table/column does it write to?
+- What user_id is associated?
+- Is the write confirmed successful?
+- Is any indexing triggered after write?
+
+### 2. RETRIEVAL PATH - Trace End-to-End
+- Where does a query like "What is my name?" enter?
+- How does the system determine this needs memory?
+- What categories does it search?
+- What semantic query is generated?
+- What database query is executed?
+- What results come back?
+- How are results ranked?
+- What gets injected into the AI context?
+
+### 3. THE MISMATCH - Find Where These Paths Diverge
+- Storage assigns category X
+- Retrieval searches category Y
+- Result: Information exists but isn't found
+
+### 4. THE OLD DATA PROBLEM
+- Why are memories from previous sessions (children's nicknames, superheroes) being retrieved?
+- Are these associated with the test user_id or a different one?
+- Is there user_id confusion in retrieval?
+- Is the retrieval ignoring user_id entirely?
+
+### 5. THE SUPERSESSION FAILURE
+- When "Senior Architect" is stored, does it mark "Junior Developer" as superseded?
+- Is there a supersession flag/mechanism?
+- Why does "Software Engineer" (a third value) appear?
+- Is this value from a different user entirely?
+
+---
+
+## The Bible Requirements
+
+From the canonical system specification:
+
+### Memory & Intelligence Doctrine (Chapter 11)
+```
+Memory exists to improve reasoning, not to decorate responses.
+If memory does not change reasoning, it should not be retrieved.
+If retrieved memory is ignored, the system is broken.
+```
+
+### Innovation #2: Semantic De-Duplication Engine
+- Must recognize conceptual equivalence
+- "My name is TestUser" should be stored and retrievable
+
+### Innovation #9: Token-Efficient Retrieval
+- Must search 3-6M tokens using <10K tokens per query
+- 300-600:1 efficiency ratio
+- But efficiency means nothing if wrong data is retrieved
+
+### Innovation #12: Contextual Relevance Ranking
+- Must rank by genuine contextual relevance
+- "What is my name?" should rank name-related memories highest
+- NOT children's nicknames from unrelated sessions
+
+---
+
+## Critical Constraints
+
+### DO NOT:
+- Implement placeholder code
+- Use keyword matching instead of semantic understanding
+- Add band-aid fixes that create new problems
+- Assume you know where the problem is without tracing
+
+### MUST:
+- Trace the complete storage path for a fact
+- Trace the complete retrieval path for a query
+- Find the exact point of divergence
+- Understand WHY old/wrong memories are being retrieved
+- Fix the root cause, not symptoms
+- Verify fix with the same test sequence
+- Ensure fix doesn't break other functionality
+
+### Token Efficiency is NON-NEGOTIABLE
+- Any fix must maintain the 300-600:1 retrieval efficiency
+- No brute-force solutions that scan all memories
+- Semantic intelligence, not rule-based matching
+
+---
+
+## Expected Behavior After Fix
+
+### Test 2 → Test 3:
+- Store: "My name is TestUser, I live in TestCity"
+- Query: "What is my name and where do I live?"
+- Expected Response: "Your name is TestUser and you live in TestCity."
+
+### Token Storage:
+- Store: "Remember token DIAG-TOKEN-123"
+- Query: "What token did I ask you to remember?"
+- Expected Response: "You asked me to remember DIAG-TOKEN-123."
+
+### Supersession:
+- Store: "I'm a Junior Developer"
+- Store: "I'm now a Senior Architect"
+- Query: "What's my job title?"
+- Expected Response: "You're a Senior Architect." (NOT Junior Developer, NOT Software Engineer)
+
+---
+
+## Investigation Approach
+
+1. **Start with logging** - Add temporary logging to trace a single store→retrieve cycle
+2. **Follow the user_id** - Verify the same user_id is used for storage and retrieval
+3. **Check category assignment** - What category does "My name is TestUser" get assigned?
+4. **Check category search** - What categories does "What is my name?" search?
+5. **Compare** - Find the mismatch
+6. **Fix the root cause** - Either storage categorization or retrieval category selection
+7. **Verify** - Run the exact diagnostic sequence
+8. **Remove temp logging** - Clean up after verification
+
+---
+
+## Success Criteria
+
+- [ ] Test 2 → Test 3 sequence passes (name/location stored and retrieved)
+- [ ] Token storage test passes (token stored and retrieved at any delay)
+- [ ] Supersession test passes (new value returned, old value not returned)
+- [ ] No regression in Political Guardrails (C2) which is currently passing
+- [ ] Token efficiency maintained (<10K tokens for retrieval operations)
+- [ ] No placeholder code
+- [ ] Production-grade implementation
+
+---
+
+## Final Note
+
+This is the memory system. It's the foundation of everything. If users can't store and retrieve information reliably, the entire system is non-functional. This must be traced to root cause and fixed properly - not patched.
+
+The diagnostic shows the system THINKS it's working (memoryUsed: true, memory_count: 5) but it's retrieving wrong data. The metadata lies. Trust the actual responses, not the metadata.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

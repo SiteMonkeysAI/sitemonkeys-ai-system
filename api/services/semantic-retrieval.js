@@ -569,7 +569,79 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       telemetry.filtered_superseded_count = parseInt(countRow.superseded_count || 0);
     }
 
-    if (candidates.length === 0) {
+    // ═══════════════════════════════════════════════════════════════
+    // CRITICAL FIX #546: Check for recent memories without embeddings
+    // Even when we have SOME candidates, we need to include recently-stored
+    // memories that don't have embeddings yet (embedding generation lag)
+    // ═══════════════════════════════════════════════════════════════
+    let recentUnembeddedMemories = [];
+    try {
+      console.log('[EMBEDDING-LAG-CHECK] Checking for recent memories without embeddings...');
+
+      const { rows: recentWithoutEmbeddings } = await pool.query(`
+        SELECT COUNT(*) as count
+        FROM persistent_memories
+        WHERE user_id = $1
+          AND created_at > NOW() - INTERVAL '2 minutes'
+          AND (embedding IS NULL OR embedding_status != 'ready')
+          AND (is_current = true OR is_current IS NULL)
+      `, [userId]);
+
+      const hasRecentUnembedded = parseInt(recentWithoutEmbeddings[0]?.count || 0) > 0;
+
+      if (hasRecentUnembedded) {
+        console.log(`[EMBEDDING-LAG-CHECK] ✅ Found ${recentWithoutEmbeddings[0].count} recent memories without embeddings - including in search`);
+
+        // Build query for recent unembedded memories
+        let recentQuery = `
+          SELECT
+            id,
+            content,
+            category_name,
+            mode,
+            NULL as embedding,
+            fact_fingerprint,
+            fingerprint_confidence,
+            relevance_score,
+            created_at,
+            EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400 as days_ago,
+            metadata
+          FROM persistent_memories
+          WHERE user_id = $1
+            AND (is_current = true OR is_current IS NULL)
+            AND created_at > NOW() - INTERVAL '2 minutes'
+            AND (embedding IS NULL OR embedding_status != 'ready')
+        `;
+
+        const recentParams = [userId];
+        let paramIdx = 2;
+
+        // Apply same mode filter as main query
+        if (mode !== 'site-monkeys' && !includeAllModes) {
+          if (allowCrossMode) {
+            recentQuery += ` AND (mode = $${paramIdx} OR mode = 'truth-general')`;
+            recentParams.push(mode);
+            paramIdx++;
+          } else {
+            recentQuery += ` AND mode = $${paramIdx}`;
+            recentParams.push(mode);
+            paramIdx++;
+          }
+        }
+
+        recentQuery += ` ORDER BY created_at DESC LIMIT 20`;
+
+        const { rows: recentRows } = await pool.query(recentQuery, recentParams);
+        recentUnembeddedMemories = recentRows;
+
+        console.log(`[EMBEDDING-LAG-CHECK] Retrieved ${recentUnembeddedMemories.length} recent unembedded memories`);
+      }
+    } catch (lagCheckError) {
+      console.error(`[EMBEDDING-LAG-CHECK] ⚠️ Check failed: ${lagCheckError.message}`);
+      // Continue without recent memories
+    }
+
+    if (candidates.length === 0 && recentUnembeddedMemories.length === 0) {
       console.log(`[SEMANTIC RETRIEVAL] No candidates found for user ${userId} in mode ${mode}`);
 
       // ═══════════════════════════════════════════════════════════════
@@ -786,9 +858,42 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       similarity: cosineSimilarity(queryEmbedding, candidate.embedding)
     }));
 
+    // ═══════════════════════════════════════════════════════════════
+    // CRITICAL FIX #546: Score recent unembedded memories using text matching
+    // This handles the embedding generation lag for just-stored memories
+    // ═══════════════════════════════════════════════════════════════
+    const recentScoredMemories = recentUnembeddedMemories.map(memory => {
+      // Use simple text-based similarity scoring
+      const queryTerms = normalizedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 3);
+      const contentLower = (memory.content || '').toLowerCase();
+      const matchedTerms = queryTerms.filter(term => contentLower.includes(term)).length;
+      const textSimilarity = queryTerms.length > 0 ? matchedTerms / queryTerms.length : 0;
+
+      // Boost recent memories slightly to prioritize fresh information
+      const recencyBoost = 0.15; // 15% boost for very recent memories
+      const finalSimilarity = Math.min(textSimilarity + recencyBoost, 1.0);
+
+      console.log(`[EMBEDDING-LAG-SCORE] Memory ${memory.id}: text similarity ${textSimilarity.toFixed(3)} + recency boost ${recencyBoost} = ${finalSimilarity.toFixed(3)}`);
+
+      return {
+        ...memory,
+        similarity: finalSimilarity,
+        from_recent_unembedded: true,
+        embedding: null // No embedding yet
+      };
+    });
+
+    // Merge scored semantic memories with recent unembedded memories
+    const allScored = [...scored, ...recentScoredMemories];
+
+    if (recentScoredMemories.length > 0) {
+      console.log(`[EMBEDDING-LAG-FIX] ✅ Merged ${scored.length} semantic candidates + ${recentScoredMemories.length} recent unembedded = ${allScored.length} total`);
+      telemetry.recent_unembedded_included = recentScoredMemories.length;
+    }
+
     // CRITICAL FIX #511: Apply safety-critical boost BEFORE hybrid scoring
     // This ensures allergies and critical health info rise to the top
-    const safetyBoosted = applySafetyCriticalBoost(scored);
+    const safetyBoosted = applySafetyCriticalBoost(allScored);
 
     // Apply hybrid scoring
     const hybridScored = safetyBoosted.map(memory => ({
