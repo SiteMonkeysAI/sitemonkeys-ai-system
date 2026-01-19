@@ -623,7 +623,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           if (hasRememberExactly) {
             // Extract potential unique tokens (alphanumeric sequences)
             // SECURITY FIX: Constrain token-matching regex to prevent ReDoS
-            const uniqueTokens = safeQuery.match(/[A-Z0-9]{1,20}-[A-Z0-9]{1,20}-[A-Z0-9]{1,20}/gi);
+            const uniqueTokens = safeQuery.match(/[A-Z0-9]{1,20}-[A-Z0-9]{1,20}-[A-Z0-9]{1,20}|[A-Z]{4,20}-[0-9]{1,20}/gi);
             if (uniqueTokens && uniqueTokens.length > 0) {
               console.log(`[EMBEDDING-FALLBACK] Matching unique tokens: ${uniqueTokens.join(', ')}`);
               const tokenFilters = uniqueTokens.map((_, i) => `content ILIKE $${paramIndex + i}`).join(' OR ');
