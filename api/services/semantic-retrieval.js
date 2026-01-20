@@ -160,6 +160,7 @@ function applySafetyCriticalBoost(memories) {
 /**
  * Apply ordinal-aware boost to memories for queries with ordinal indicators
  * FIX #555-T3: When query asks for "first" and content says "first", boost that memory
+ * FIX #557-T3: Increased boost strength to 0.40 to overcome semantic similarity
  * This solves the semantic ranking issue where "first code" and "second code" are too similar
  *
  * @param {object[]} memories - Array of memory objects with similarity scores
@@ -184,7 +185,7 @@ function applyOrdinalBoost(memories, query) {
   for (const [ordinalName, pattern] of Object.entries(ORDINAL_PATTERNS)) {
     if (pattern.test(query)) {
       queryOrdinal = ordinalName;
-      console.log(`[ORDINAL-BOOST] Query contains ordinal: "${ordinalName}"`);
+      console.log(`[ORDINAL-BOOST] 🎯 Query contains ordinal: "${ordinalName}"`);
       break;
     }
   }
@@ -194,8 +195,18 @@ function applyOrdinalBoost(memories, query) {
     return memories;
   }
 
-  const ORDINAL_BOOST = 0.25; // 25% boost for matching ordinal
+  // FIX #557-T3: Increased from 0.25 to 0.40 to overcome high semantic similarity
+  // When "first code" and "second code" have ~0.85 similarity, need strong boost to separate them
+  const ORDINAL_BOOST = 0.40;
+  const ORDINAL_PENALTY = -0.20; // Penalize memories with DIFFERENT ordinals (FIX #557-T3)
   let boostedCount = 0;
+  let penalizedCount = 0;
+  let nonMatchCount = 0;
+
+  // Build list of OTHER ordinals (not the query ordinal) for penalty detection
+  const otherOrdinals = Object.entries(ORDINAL_PATTERNS)
+    .filter(([name, _]) => name !== queryOrdinal)
+    .map(([_, pattern]) => pattern);
 
   const result = memories.map(memory => {
     const content = (memory.content || '').toLowerCase();
@@ -204,21 +215,52 @@ function applyOrdinalBoost(memories, query) {
     // Check if memory content contains the same ordinal
     if (pattern.test(content)) {
       boostedCount++;
-      const newSimilarity = Math.min(memory.similarity + ORDINAL_BOOST, 1.0);
-      console.log(`[ORDINAL-BOOST] Memory ${memory.id}: "${queryOrdinal}" match detected, boosting ${memory.similarity.toFixed(3)} → ${newSimilarity.toFixed(3)}`);
+      const originalScore = memory.similarity;
+      const newSimilarity = Math.min(originalScore + ORDINAL_BOOST, 1.0);
+      console.log(`[ORDINAL-BOOST] ✅ Memory ${memory.id}: "${queryOrdinal}" MATCH - boosting ${originalScore.toFixed(3)} → ${newSimilarity.toFixed(3)} (+${ORDINAL_BOOST})`);
+      console.log(`[ORDINAL-BOOST]    Content preview: "${content.substring(0, 60)}..."`);
       return {
         ...memory,
         similarity: newSimilarity,
         ordinal_boosted: true,
         ordinal_matched: queryOrdinal
       };
+    } else {
+      // Check if memory contains a DIFFERENT ordinal (e.g., query asks "first" but content has "second")
+      const hasDifferentOrdinal = otherOrdinals.some(otherPattern => otherPattern.test(content));
+
+      if (hasDifferentOrdinal) {
+        penalizedCount++;
+        const originalScore = memory.similarity;
+        const newSimilarity = Math.max(originalScore + ORDINAL_PENALTY, 0.0);
+        console.log(`[ORDINAL-BOOST] ⬇️  Memory ${memory.id}: DIFFERENT ordinal detected - penalizing ${originalScore.toFixed(3)} → ${newSimilarity.toFixed(3)} (${ORDINAL_PENALTY})`);
+        console.log(`[ORDINAL-BOOST]    Content preview: "${content.substring(0, 60)}..."`);
+        return {
+          ...memory,
+          similarity: newSimilarity,
+          ordinal_penalized: true,
+          ordinal_mismatch: true
+        };
+      } else {
+        nonMatchCount++;
+        // Log non-matches for debugging ordinal detection issues
+        if (nonMatchCount <= 3) {  // Only log first 3 non-matches to avoid spam
+          console.log(`[ORDINAL-BOOST] ❌ Memory ${memory.id}: No ordinal in content - score stays ${memory.similarity.toFixed(3)}`);
+          console.log(`[ORDINAL-BOOST]    Content preview: "${content.substring(0, 60)}..."`);
+        }
+      }
     }
 
     return memory;
   });
 
-  if (boostedCount > 0) {
-    console.log(`[ORDINAL-BOOST] ⚡ Applied ordinal boost to ${boostedCount} memories matching "${queryOrdinal}"`);
+  if (boostedCount > 0 || penalizedCount > 0) {
+    console.log(`[ORDINAL-BOOST] ⚡ Applied ordinal adjustments for "${queryOrdinal}":`);
+    console.log(`[ORDINAL-BOOST]    ✅ Boosted: ${boostedCount} memories (+${ORDINAL_BOOST})`);
+    console.log(`[ORDINAL-BOOST]    ⬇️  Penalized: ${penalizedCount} memories (${ORDINAL_PENALTY})`);
+    console.log(`[ORDINAL-BOOST]    ➖ Neutral: ${nonMatchCount} memories (no ordinal in content)`);
+  } else {
+    console.log(`[ORDINAL-BOOST] ⚠️ Query has "${queryOrdinal}" but NO memories matched - possible detection issue`);
   }
 
   return result;
@@ -255,6 +297,12 @@ function expandQuery(query) {
 
   // Synonym expansions for common personal fact categories
   const expansions = {
+    // Memory recall terms (FIX #557-T2: Handle "What did I ask you to remember?")
+    'remember': ['asked', 'told', 'said', 'mentioned', 'phrase', 'token', 'code', 'identifier'],
+    'asked': ['remember', 'told', 'said', 'mentioned', 'requested'],
+    'phrase': ['token', 'code', 'identifier', 'remember', 'asked'],
+    'token': ['phrase', 'code', 'identifier', 'remember', 'asked'],
+
     // Financial/Income terms
     'salary': ['income', 'pay', 'compensation', 'earnings', 'wage', 'make', 'earn'],
     'make': ['salary', 'income', 'pay', 'earn', 'compensation', 'paid', 'earning'],
@@ -301,7 +349,8 @@ function expandQuery(query) {
 
   // Check if this is a personal fact query (uses first-person pronouns + personal terms)
   // EXPANDED for FIX #533-B3 to include pet and name queries
-  const personalPattern = /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location|cat|dog|pet|animal|called)\b/i;
+  // EXPANDED for FIX #557-T2 to include explicit recall queries
+  const personalPattern = /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location|cat|dog|pet|animal|called|remember|asked|told|phrase|token|code)\b/i;
   const isPersonal = personalPattern.test(query);
 
   let expanded = query;

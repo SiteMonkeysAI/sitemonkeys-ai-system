@@ -332,6 +332,68 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Detect explicit memory storage requests (Fix #557-T2)
+   * When user explicitly asks to remember something, store it verbatim without compression
+   * 
+   * SECURITY NOTE: Uses string-based detection instead of regex to prevent ReDoS attacks
+   * 
+   * @param {string} content - User message to check
+   * @returns {{isExplicit: boolean, extractedContent: string|null}} - Detection result
+   */
+  detectExplicitMemoryRequest(content) {
+    if (!content || typeof content !== 'string') {
+      return { isExplicit: false, extractedContent: null };
+    }
+
+    // SECURITY: Limit input length to prevent ReDoS attacks
+    const MAX_CONTENT_LENGTH = 10000;
+    if (content.length > MAX_CONTENT_LENGTH) {
+      console.warn('[SECURITY] Content exceeds max length for pattern detection, skipping');
+      return { isExplicit: false, extractedContent: null };
+    }
+
+    // Use string-based detection instead of regex to prevent ReDoS
+    // All prefixes in lowercase for case-insensitive matching
+    const lowerContent = content.toLowerCase().trim();
+    const prefixes = [
+      'remember this exactly:',
+      'please remember this exactly:',
+      'remember this:',
+      'please remember this:',
+      'please remember:',
+      'remember:',
+      'store this:',
+      'save this:',
+      'keep this:',
+      'store this ',
+      'save this ',
+      'keep this ',
+      'i need you to remember ',
+      'please remember ',
+      "don't forget ",
+      "do not forget "
+    ];
+
+    for (const prefix of prefixes) {
+      if (lowerContent.startsWith(prefix)) {
+        // Extract content after the prefix (use original content to preserve case)
+        // Since lowerContent and content have same length, prefix length is consistent
+        const startIdx = prefix.length;
+        const extracted = content.slice(startIdx).trim();
+        
+        if (extracted && extracted.length > 0) {
+          console.log(`[EXPLICIT-MEMORY] ✅ Detected explicit storage request`);
+          console.log(`[EXPLICIT-MEMORY] Trigger: "${prefix}"`);
+          console.log(`[EXPLICIT-MEMORY] Content to store: "${extracted.substring(0, 100)}..."`);
+          return { isExplicit: true, extractedContent: extracted };
+        }
+      }
+    }
+
+    return { isExplicit: false, extractedContent: null };
+  }
+
+  /**
    * Main entry point - stores memory with compression and deduplication
    * @param {string} userId - User identifier
    * @param {string} userMessage - User's message
@@ -350,6 +412,33 @@ export class IntelligentMemoryStorage {
       console.log('[TRACE-INTELLIGENT] I5. aiResponse length:', aiResponse?.length || 0);
 
       console.log('[INTELLIGENT-STORAGE] 🧠 Processing conversation for intelligent storage');
+
+      // FIX #557-T2: Check for explicit memory storage requests FIRST
+      // When user says "Remember this exactly: X", store X verbatim without compression
+      const explicitRequest = this.detectExplicitMemoryRequest(userMessage);
+
+      if (explicitRequest.isExplicit) {
+        console.log('[INTELLIGENT-STORAGE] 🎯 EXPLICIT MEMORY REQUEST - storing verbatim without compression');
+
+        const verbatimFacts = explicitRequest.extractedContent;
+        const verbatimTokens = this.countTokens(verbatimFacts);
+
+        // Store with very high importance (explicit user request)
+        const result = await this.storeCompressedMemory(userId, category, verbatimFacts, {
+          original_tokens: verbatimTokens,
+          compressed_tokens: verbatimTokens,
+          compression_ratio: 1.0,  // No compression for explicit requests
+          user_priority: true,  // Always treat as high priority
+          fingerprint: null,  // No fingerprint needed for explicit storage
+          fingerprintConfidence: 0,
+          importance_score: 0.95,  // Very high importance for explicit requests
+          original_user_phrase: userMessage.substring(0, 200),
+          explicit_storage_request: true  // Mark as explicit for retrieval optimization
+        }, mode);
+
+        console.log('[INTELLIGENT-STORAGE] ✅ Explicit memory stored verbatim');
+        return result;
+      }
 
       // PROBLEM 3 FIX: Filter out non-user-specific queries
       // Storage should only keep information ABOUT the user, not general world information
