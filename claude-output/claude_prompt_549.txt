@@ -1,0 +1,209 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #549: [claude-fix] CRITICAL: User ID Filtering Not Working in Memory Retrieval
+
+Issue Description:
+# CRITICAL: User ID Filtering Not Working in Memory Retrieval
+
+## Priority: HIGHEST - Security & Functionality Failure
+
+## The Problem
+
+Memory retrieval is returning memories from the WRONG USER. This is both a critical functionality bug and a potential security/privacy issue.
+
+---
+
+## Diagnostic Evidence
+
+### Test Setup
+The diagnostic creates unique user IDs per test run using timestamp:
+```javascript
+userId: `diag-timing-${Date.now()}`  // e.g., diag-timing-1768866359504
+```
+
+### What Gets Stored
+User `diag-timing-1768866359504` stores:
+```
+"Remember this token: DIAG-TOKEN-1768866359504"
+```
+
+### What Gets Retrieved
+Query: "What token did I ask you to remember?"
+Response returns **completely different user's data**:
+```
+- Children's nicknames: Holly Dolly, E-Funk, J-Dawg
+- Favorite superheroes: Spider-Man, Wolverine
+```
+
+These memories belong to the system owner's actual account - NOT to `diag-timing-1768866359504`.
+
+### This Pattern Repeats Across ALL Failing Tests
+
+**Memory Timing Test:**
+- Stores token under test user_id
+- Retrieves children's nicknames from different user
+
+**Supersession Test:**
+- Stores "Junior Developer" then "Senior Architect" under test user_id
+- Retrieves "Software Engineer" from different user
+
+**Personal Info Test:**
+- Stores "TestUser from TestCity" under test user_id
+- Retrieves emergency contact and allergy info from different user
+
+---
+
+## Root Cause Hypothesis
+
+Somewhere in the retrieval path, the user_id constraint is being:
+
+1. **Not applied** - SQL query missing `WHERE user_id = $1`
+2. **Overwritten** - A default/fallback user_id replacing the test user_id
+3. **Bypassed on empty results** - When no memories found for test user, system searches without user_id filter
+4. **Broken in the embedding-lag fallback** - The new code (lines 572-642 in semantic-retrieval.js) may not be passing user_id correctly
+
+---
+
+## Required Investigation
+
+### Step 1: Add Diagnostic Logging
+Temporarily add logging to trace the exact user_id at each stage:
+
+```javascript
+// At retrieval entry point
+console.log('[RETRIEVAL] Requested user_id:', userId);
+
+// At SQL query construction
+console.log('[RETRIEVAL] SQL user_id param:', queryParams.userId);
+
+// At results return
+console.log('[RETRIEVAL] Results user_ids:', results.map(r => r.user_id));
+```
+
+### Step 2: Trace the SQL Queries
+For EACH retrieval path, verify the SQL includes user_id filtering:
+
+1. **Main semantic search** - Check the `WHERE` clause
+2. **Embedding-lag fallback** (lines 572-642) - Check the recent unembedded memories query
+3. **Text-based scoring fallback** - Check if user_id is passed through
+4. **Any "no results" fallback** - Check if there's code that broadens search when empty
+
+### Step 3: Check for Default User ID
+Search codebase for:
+- Hardcoded user IDs
+- Default user ID assignments
+- Fallback user ID values
+- Any code that might override the passed user_id
+
+### Step 4: Verify the Embedding-Lag Fix
+The recent PR added embedding-lag handling. Specifically check:
+- Lines 572-642: Pre-search check for recent unembedded memories
+- Lines 861-892: Text-based scoring
+- Line 896: Merge with semantic results
+
+Does EACH of these paths correctly filter by user_id?
+
+---
+
+## The Bible Requirements
+
+### Innovation #21: Isolated Vault Architecture
+```
+Complete data segregation with strict access controls.
+Information cannot leak between vaults.
+System literally cannot access other vaults — not "won't" but "can't."
+```
+
+User memories are effectively personal vaults. Cross-user retrieval violates this architectural principle.
+
+### Memory & Intelligence Doctrine
+```
+Memory exists to improve reasoning, not to decorate responses.
+If retrieved memory is ignored, the system is broken.
+```
+
+Currently: Retrieved memory is from the WRONG USER. The system is broken.
+
+---
+
+## Security Implications
+
+If this bug exists in production (not just test harness):
+- User A could potentially see User B's memories
+- Personal information could leak between users
+- This would be a critical privacy violation
+
+**Verify whether this affects production user separation, not just diagnostic test users.**
+
+---
+
+## Expected Behavior
+
+1. Query with user_id `diag-timing-1768866359504` searches ONLY that user's memories
+2. If no memories exist for that user_id, return EMPTY results
+3. NEVER fall back to searching other users' memories
+4. NEVER return memories with a different user_id than requested
+
+---
+
+## Success Criteria
+
+- [ ] Diagnostic shows token retrieval working (stores and retrieves same token)
+- [ ] Diagnostic shows supersession working (returns "Senior Architect" not "Software Engineer")
+- [ ] Diagnostic shows personal info working (returns "TestUser from TestCity")
+- [ ] NO cross-user memory retrieval under any circumstances
+- [ ] All retrieval paths (semantic, embedding-lag fallback, text-matching) filter by user_id
+- [ ] Logging confirms user_id is consistent from request through SQL through results
+
+---
+
+## Suggested Fix Pattern
+
+Every database query in retrieval must include:
+```sql
+WHERE user_id = $1 AND ...
+```
+
+Every result set should be validated:
+```javascript
+// Safety check - should never happen but prevents cross-user leakage
+const filtered = results.filter(r => r.user_id === requestedUserId);
+if (filtered.length !== results.length) {
+  console.error('[SECURITY] Cross-user memories detected and filtered!');
+}
+```
+
+---
+
+## Do Not
+
+- Assume the previous investigation was correct (it concluded user_id isolation was working - the diagnostic proves otherwise)
+- Add band-aid fixes without understanding root cause
+- Implement placeholder code
+- Ignore any retrieval path - ALL must be checked
+
+## Must
+
+- Trace the ACTUAL SQL being executed
+- Find WHERE the user_id gets lost or overwritten
+- Fix at the root cause
+- Verify with the diagnostic suite
+- Ensure no regression in passing tests (Political Guardrails C2)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

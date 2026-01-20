@@ -344,6 +344,7 @@ function buildPrefilterQuery(options) {
   const sql = `
     SELECT
       id,
+      user_id,
       content,
       category_name,
       mode,
@@ -359,6 +360,12 @@ function buildPrefilterQuery(options) {
     LIMIT $${paramIndex}
   `;
   params.push(limit);
+
+  // DIAGNOSTIC LOGGING #549: Log SQL params for user_id verification
+  console.log(`[SQL-PARAMS] ════════════════════════════════════════`);
+  console.log(`[SQL-PARAMS] userId (param $1): "${params[0]}"`);
+  console.log(`[SQL-PARAMS] Total params: ${params.length}`);
+  console.log(`[SQL-PARAMS] ════════════════════════════════════════`);
 
   return { sql, params };
 }
@@ -468,8 +475,19 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     total_ms: 0
   };
 
+  // ═══════════════════════════════════════════════════════════════
+  // CRITICAL DIAGNOSTIC LOGGING #549: Track userId through retrieval
+  // ═══════════════════════════════════════════════════════════════
+  console.log(`[RETRIEVAL-ENTRY] ════════════════════════════════════════`);
+  console.log(`[RETRIEVAL-ENTRY] userId from options: "${userId}"`);
+  console.log(`[RETRIEVAL-ENTRY] mode: ${mode}`);
+  console.log(`[RETRIEVAL-ENTRY] query: "${normalizedQuery.substring(0, 50)}..."`);
+  console.log(`[RETRIEVAL-ENTRY] ════════════════════════════════════════`);
+  // ═══════════════════════════════════════════════════════════════
+
   // Validate inputs
   if (!userId) {
+    console.error(`[RETRIEVAL-ENTRY] ❌ REJECTED: userId is missing or empty`);
     return {
       success: false,
       error: 'userId is required',
@@ -479,6 +497,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
   }
 
   if (!query || query.trim().length === 0) {
+    console.error(`[RETRIEVAL-ENTRY] ❌ REJECTED: query is missing or empty`);
     return {
       success: false,
       error: 'Query is required',
@@ -555,6 +574,40 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     telemetry.candidates_fetched = candidates.length;
     telemetry.candidates_considered = candidates.length;
 
+    // ═══════════════════════════════════════════════════════════════
+    // CRITICAL SECURITY FIX #549: Validate user_id isolation
+    // Ensure NO cross-user memory leakage
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`[USER-ISOLATION] ════════════════════════════════════════`);
+    console.log(`[USER-ISOLATION] Requested userId: ${userId}`);
+    console.log(`[USER-ISOLATION] Retrieved ${candidates.length} candidates`);
+
+    // Check if any candidates have wrong user_id
+    const wrongUserCandidates = candidates.filter(c => c.user_id !== userId);
+    if (wrongUserCandidates.length > 0) {
+      console.error(`[USER-ISOLATION] 🚨 CRITICAL SECURITY VIOLATION: Found ${wrongUserCandidates.length} memories from wrong users!`);
+      console.error(`[USER-ISOLATION] Wrong user_ids:`, [...new Set(wrongUserCandidates.map(c => c.user_id))]);
+      console.error(`[USER-ISOLATION] Expected userId: ${userId}`);
+      console.error(`[USER-ISOLATION] SQL params:`, params);
+
+      // Filter out wrong-user memories (safety check - should never happen)
+      const beforeCount = candidates.length;
+      const filteredCandidates = candidates.filter(c => c.user_id === userId);
+      console.error(`[USER-ISOLATION] ⚠️ Filtered ${beforeCount - filteredCandidates.length} cross-user memories`);
+
+      // Replace candidates array with filtered version
+      candidates.length = 0;
+      candidates.push(...filteredCandidates);
+
+      telemetry.candidates_fetched = candidates.length;
+      telemetry.candidates_considered = candidates.length;
+      telemetry.security_violation_detected = true;
+      telemetry.wrong_user_memories_filtered = wrongUserCandidates.length;
+    } else {
+      console.log(`[USER-ISOLATION] ✅ All candidates belong to correct user`);
+    }
+    // ═══════════════════════════════════════════════════════════════
+
     // Count how many superseded facts were filtered out (if not including history)
     if (!options.includeHistory) {
       const { rows: [countRow] } = await pool.query(`
@@ -596,6 +649,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         let recentQuery = `
           SELECT
             id,
+            user_id,
             content,
             category_name,
             mode,
@@ -632,7 +686,16 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         recentQuery += ` ORDER BY created_at DESC LIMIT 20`;
 
         const { rows: recentRows } = await pool.query(recentQuery, recentParams);
-        recentUnembeddedMemories = recentRows;
+
+        // SECURITY FIX #549: Validate user_id isolation for recent memories
+        const wrongUserRecent = recentRows.filter(r => r.user_id !== userId);
+        if (wrongUserRecent.length > 0) {
+          console.error(`[USER-ISOLATION] 🚨 SECURITY: Found ${wrongUserRecent.length} wrong-user recent memories!`);
+          console.error(`[USER-ISOLATION] Expected: ${userId}, Found: ${[...new Set(wrongUserRecent.map(r => r.user_id))]}`);
+          recentUnembeddedMemories = recentRows.filter(r => r.user_id === userId);
+        } else {
+          recentUnembeddedMemories = recentRows;
+        }
 
         console.log(`[EMBEDDING-LAG-CHECK] Retrieved ${recentUnembeddedMemories.length} recent unembedded memories`);
       }
@@ -671,6 +734,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           let fallbackQuery = `
             SELECT
               id,
+              user_id,
               content,
               category_name,
               mode,
@@ -736,16 +800,24 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
           const { rows: fallbackCandidates } = await pool.query(fallbackQuery, fallbackParams);
 
+          // SECURITY FIX #549: Validate user_id isolation for fallback results
+          const wrongUserFallback = fallbackCandidates.filter(f => f.user_id !== userId);
+          if (wrongUserFallback.length > 0) {
+            console.error(`[USER-ISOLATION] 🚨 SECURITY: Found ${wrongUserFallback.length} wrong-user fallback memories!`);
+            console.error(`[USER-ISOLATION] Expected: ${userId}, Found: ${[...new Set(wrongUserFallback.map(f => f.user_id))]}`);
+          }
+          const validFallbackCandidates = fallbackCandidates.filter(f => f.user_id === userId);
+
           telemetry.fallback_used = true;
           telemetry.fallback_reason = 'embedding_missing';
           telemetry.semantic_candidates = 0;
-          telemetry.fallback_candidates = fallbackCandidates.length;
+          telemetry.fallback_candidates = validFallbackCandidates.length;
 
-          console.log(`[EMBEDDING-FALLBACK] Retrieved ${fallbackCandidates.length} candidates via fallback`);
+          console.log(`[EMBEDDING-FALLBACK] Retrieved ${validFallbackCandidates.length} candidates via fallback`);
 
-          if (fallbackCandidates.length > 0) {
+          if (validFallbackCandidates.length > 0) {
             // Apply basic text similarity scoring
-            const scoredFallback = fallbackCandidates.map(candidate => {
+            const scoredFallback = validFallbackCandidates.map(candidate => {
               // Simple text-based similarity (contains query terms)
               const queryTerms = expandedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 3);
               const contentLower = (candidate.content || '').toLowerCase();
@@ -1028,9 +1100,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 export async function findByFingerprint(pool, userId, fingerprint) {
   try {
     const { rows } = await pool.query(`
-      SELECT id, content, fact_fingerprint, fingerprint_confidence, created_at
+      SELECT id, user_id, content, fact_fingerprint, fingerprint_confidence, created_at
       FROM persistent_memories
-      WHERE user_id = $1 
+      WHERE user_id = $1
         AND is_current = true
         AND fact_fingerprint = $2
       ORDER BY created_at DESC
