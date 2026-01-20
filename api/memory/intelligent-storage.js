@@ -353,32 +353,39 @@ export class IntelligentMemoryStorage {
     }
 
     // Use string-based detection instead of regex to prevent ReDoS
-    // Define trigger prefixes (all lowercase for case-insensitive matching)
+    // All prefixes in lowercase for case-insensitive matching
     const lowerContent = content.toLowerCase().trim();
-    const triggers = [
-      ['remember this exactly:', 'remember this:'],
-      ['please remember this exactly:', 'please remember this:'],
-      ['please remember:', 'remember:'],
-      ['store this:', 'save this:', 'keep this:'],
-      ['store this ', 'save this ', 'keep this '],
-      ['i need you to remember ', 'please remember '],
-      ["don't forget ", "do not forget "]
+    const prefixes = [
+      'remember this exactly:',
+      'please remember this exactly:',
+      'remember this:',
+      'please remember this:',
+      'please remember:',
+      'remember:',
+      'store this:',
+      'save this:',
+      'keep this:',
+      'store this ',
+      'save this ',
+      'keep this ',
+      'i need you to remember ',
+      'please remember ',
+      "don't forget ",
+      "do not forget "
     ];
 
-    for (const prefixList of triggers) {
-      for (const prefix of prefixList) {
-        if (lowerContent.startsWith(prefix)) {
-          // Extract content after the prefix (use original content to preserve case)
-          // Since we matched on lowercase, we know the prefix length matches
-          const startIdx = prefix.length;
-          const extracted = content.slice(startIdx).trim();
-          
-          if (extracted && extracted.length > 0) {
-            console.log(`[EXPLICIT-MEMORY] ✅ Detected explicit storage request`);
-            console.log(`[EXPLICIT-MEMORY] Trigger: "${prefix}"`);
-            console.log(`[EXPLICIT-MEMORY] Content to store: "${extracted.substring(0, 100)}..."`);
-            return { isExplicit: true, extractedContent: extracted };
-          }
+    for (const prefix of prefixes) {
+      if (lowerContent.startsWith(prefix)) {
+        // Extract content after the prefix (use original content to preserve case)
+        // Since lowerContent and content have same length, prefix length is consistent
+        const startIdx = prefix.length;
+        const extracted = content.slice(startIdx).trim();
+        
+        if (extracted && extracted.length > 0) {
+          console.log(`[EXPLICIT-MEMORY] ✅ Detected explicit storage request`);
+          console.log(`[EXPLICIT-MEMORY] Trigger: "${prefix}"`);
+          console.log(`[EXPLICIT-MEMORY] Content to store: "${extracted.substring(0, 100)}..."`);
+          return { isExplicit: true, extractedContent: extracted };
         }
       }
     }
