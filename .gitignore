@@ -12,3 +12,4 @@ test-vault-fixes.js
 test-vault-endpoint.js
 verify-fixes.js
 test-user-priority-learning.js
+test-explicit-memory-security.js
