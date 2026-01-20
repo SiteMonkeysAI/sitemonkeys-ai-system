@@ -334,6 +334,9 @@ export class IntelligentMemoryStorage {
   /**
    * Detect explicit memory storage requests (Fix #557-T2)
    * When user explicitly asks to remember something, store it verbatim without compression
+   * 
+   * SECURITY NOTE: Uses string-based detection instead of regex to prevent ReDoS attacks
+   * 
    * @param {string} content - User message to check
    * @returns {{isExplicit: boolean, extractedContent: string|null}} - Detection result
    */
@@ -342,23 +345,40 @@ export class IntelligentMemoryStorage {
       return { isExplicit: false, extractedContent: null };
     }
 
-    // Patterns for explicit memory storage requests
-    const EXPLICIT_PATTERNS = [
-      /^(?:please )?remember this(?: exactly)?:\s*(.+)$/i,
-      /^(?:please )?remember(?: this)?:?\s+(.+)$/i,
-      /^(?:please )?(?:store|save|keep)(?: this)?\s+(?:in memory|for me)?:?\s*(.+)$/i,
-      /^(?:i need you to|please) remember(?:that)?\s+(.+)$/i,
-      /^(?:don't forget|do not forget)(?:that)?\s+(.+)$/i
+    // SECURITY: Limit input length to prevent ReDoS attacks
+    const MAX_CONTENT_LENGTH = 10000;
+    if (content.length > MAX_CONTENT_LENGTH) {
+      console.warn('[SECURITY] Content exceeds max length for pattern detection, skipping');
+      return { isExplicit: false, extractedContent: null };
+    }
+
+    // Use string-based detection instead of regex to prevent ReDoS
+    // Each trigger defines a prefix pattern and optional colon requirement
+    const lowerContent = content.toLowerCase().trim();
+    const triggers = [
+      { prefixes: ['remember this exactly:', 'remember this:'], delimiter: ':' },
+      { prefixes: ['please remember this exactly:', 'please remember this:'], delimiter: ':' },
+      { prefixes: ['please remember:', 'remember:'], delimiter: ':' },
+      { prefixes: ['store this:', 'save this:', 'keep this:'], delimiter: ':' },
+      { prefixes: ['store this ', 'save this ', 'keep this '], delimiter: null },
+      { prefixes: ['i need you to remember ', 'please remember '], delimiter: null },
+      { prefixes: ["don't forget ", "do not forget "], delimiter: null }
     ];
 
-    for (const pattern of EXPLICIT_PATTERNS) {
-      const match = content.match(pattern);
-      if (match && match[1]) {
-        const extracted = match[1].trim();
-        console.log(`[EXPLICIT-MEMORY] ✅ Detected explicit storage request`);
-        console.log(`[EXPLICIT-MEMORY] Pattern: ${pattern.toString()}`);
-        console.log(`[EXPLICIT-MEMORY] Content to store: "${extracted.substring(0, 100)}..."`);
-        return { isExplicit: true, extractedContent: extracted };
+    for (const trigger of triggers) {
+      for (const prefix of trigger.prefixes) {
+        if (lowerContent.startsWith(prefix)) {
+          // Extract content after the prefix
+          const startIdx = prefix.length;
+          const extracted = content.slice(startIdx).trim();
+          
+          if (extracted && extracted.length > 0) {
+            console.log(`[EXPLICIT-MEMORY] ✅ Detected explicit storage request`);
+            console.log(`[EXPLICIT-MEMORY] Trigger: "${prefix}"`);
+            console.log(`[EXPLICIT-MEMORY] Content to store: "${extracted.substring(0, 100)}..."`);
+            return { isExplicit: true, extractedContent: extracted };
+          }
+        }
       }
     }
 
