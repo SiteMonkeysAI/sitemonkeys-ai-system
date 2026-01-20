@@ -933,11 +933,61 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ═══════════════════════════════════════════════════════════════
     // CRITICAL FIX #546: Score recent unembedded memories using text matching
     // This handles the embedding generation lag for just-stored memories
+    // CRITICAL FIX #551: Enhanced scoring to detect exact tokens/identifiers
     // ═══════════════════════════════════════════════════════════════
     const recentScoredMemories = recentUnembeddedMemories.map(memory => {
-      // Use simple text-based similarity scoring
-      const queryTerms = normalizedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 3);
       const contentLower = (memory.content || '').toLowerCase();
+      const queryLower = normalizedQuery.toLowerCase();
+
+      // Strategy 1: Check for exact unique tokens (high-entropy alphanumeric patterns)
+      // Extract potential tokens from query (patterns like ZEBRA-ANCHOR-123, ABC-123, etc.)
+      const uniqueTokenPattern = /\b[A-Z0-9]{3,}(?:-[A-Z0-9]{2,})+\b/gi;
+      const queryTokens = normalizedQuery.match(uniqueTokenPattern) || [];
+      const contentTokens = (memory.content || '').match(uniqueTokenPattern) || [];
+
+      // If query is asking about a token and content contains that exact token
+      const hasExactTokenMatch = queryTokens.some(qt =>
+        contentTokens.some(ct => ct.toUpperCase() === qt.toUpperCase())
+      );
+
+      if (hasExactTokenMatch) {
+        console.log(`[EMBEDDING-LAG-SCORE] Memory ${memory.id}: EXACT TOKEN MATCH - boosting to 0.95`);
+        return {
+          ...memory,
+          similarity: 0.95, // Very high score for exact token match
+          from_recent_unembedded: true,
+          embedding: null,
+          match_reason: 'exact_token_match'
+        };
+      }
+
+      // Strategy 2: Check for content-based exact substring match
+      // If the query asks about something and the content contains those exact words
+      const significantQueryTerms = normalizedQuery
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(t => t.length > 4 && !['what', 'where', 'when', 'which', 'remember', 'asked'].includes(t));
+
+      if (significantQueryTerms.length > 0) {
+        const exactMatches = significantQueryTerms.filter(term => contentLower.includes(term)).length;
+        if (exactMatches > 0) {
+          const exactMatchRatio = exactMatches / significantQueryTerms.length;
+          if (exactMatchRatio >= 0.5) {
+            const exactMatchScore = 0.70 + (exactMatchRatio * 0.20); // 0.70-0.90 range
+            console.log(`[EMBEDDING-LAG-SCORE] Memory ${memory.id}: ${exactMatches}/${significantQueryTerms.length} exact term matches - score ${exactMatchScore.toFixed(3)}`);
+            return {
+              ...memory,
+              similarity: exactMatchScore,
+              from_recent_unembedded: true,
+              embedding: null,
+              match_reason: 'exact_term_match'
+            };
+          }
+        }
+      }
+
+      // Strategy 3: Original text-based similarity scoring (fallback)
+      const queryTerms = queryLower.split(/\s+/).filter(t => t.length > 3);
       const matchedTerms = queryTerms.filter(term => contentLower.includes(term)).length;
       const textSimilarity = queryTerms.length > 0 ? matchedTerms / queryTerms.length : 0;
 
@@ -951,7 +1001,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         ...memory,
         similarity: finalSimilarity,
         from_recent_unembedded: true,
-        embedding: null // No embedding yet
+        embedding: null,
+        match_reason: 'text_similarity'
       };
     });
 

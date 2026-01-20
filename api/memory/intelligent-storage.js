@@ -1266,7 +1266,7 @@ Facts (preserve user terminology + add synonyms):`;
           content: facts,
           factFingerprint: fingerprintResult.fingerprint,
           fingerprintConfidence: fingerprintResult.confidence,
-          mode,
+          mode: normalizedMode,  // CRITICAL FIX: Use normalized mode (hyphen, not underscore)
           categoryName: category,
           tokenCount
         });
