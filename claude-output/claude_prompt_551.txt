@@ -1,0 +1,386 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #551: [claude-fix] # CRITICAL: Memory System Not Achieving Expected Behavior - Full Investigation Required
+
+Issue Description:
+# CRITICAL: Memory System Not Achieving Expected Behavior - Full Investigation Required
+
+## Priority: HIGHEST
+
+## Purpose of This Issue
+
+This is not a narrow bug fix. This issue defines **what perfect looks like** for the memory system and authorizes a complete investigation to find and fix **anything and everything** preventing that perfect state.
+
+Do not limit investigation to any single hypothesis. The system has worked before - every component has functioned correctly at some point. Something (or multiple things) is now preventing correct operation. Find it. Fix it. Make it perfect.
+
+---
+
+## WHAT PERFECT LOOKS LIKE
+
+### The Fundamental Contract
+
+When a user stores information, they must be able to retrieve it. This is the core promise of a memory system.
+
+```
+USER: "Remember this token: ABC-123"
+SYSTEM: [Stores the fact]
+
+USER: "What token did I ask you to remember?"
+SYSTEM: "You asked me to remember ABC-123."
+```
+
+This must work:
+- Immediately (within seconds of storage)
+- Across sessions
+- With perfect user isolation (User A never sees User B's data)
+- With semantic understanding (not just keyword matching)
+- With extraordinary token efficiency (300-600:1 retrieval ratio)
+
+### The Complete Memory Flow (When Working Correctly)
+
+```
+1. USER INPUT
+   ↓
+2. FACT EXTRACTION
+   - System recognizes "Remember X" or implicit facts ("My name is Y")
+   - Extracts the fact with proper categorization
+   - Assigns fact_fingerprint for supersession tracking
+   ↓
+3. STORAGE
+   - Writes to persistent_memories table
+   - Associates with correct user_id
+   - Triggers embedding generation (async)
+   - Sets is_current = true
+   - If superseding, marks old fact is_current = false
+   ↓
+4. RETRIEVAL (on subsequent query)
+   - Receives query with user_id
+   - Searches ONLY that user's memories
+   - Uses semantic similarity when embeddings ready
+   - Falls back to text matching for recent unembedded memories
+   - Returns relevant memories ranked by relevance
+   ↓
+5. INJECTION
+   - Injects retrieved memories into AI context
+   - AI uses memories to inform response
+   ↓
+6. RESPONSE
+   - AI responds with knowledge of stored facts
+   - "You asked me to remember ABC-123"
+```
+
+### Expected Test Results (Perfect State)
+
+**T2 Store + Recall Exact Token:**
+```
+Store: "Remember this token: ZEBRA-ANCHOR-123"
+Query: "What token did I ask you to remember?"
+Expected: Response contains "ZEBRA-ANCHOR-123"
+Expected: injected > 0, memoryUsed: true
+```
+
+**T3 Dedup Anti-Merge:**
+```
+Store: "My first code is CHARLIE-123"
+Store: "My second code is DELTA-456"
+Query: "What is my first code?"
+Expected: "CHARLIE-123" (not merged with DELTA-456)
+Query: "What is my second code?"
+Expected: "DELTA-456" (distinct fact preserved)
+```
+
+**Memory Timing Test:**
+```
+Store: "Remember token DIAG-TOKEN-XXX"
+Query (1-8 seconds later): "What token did I ask you to remember?"
+Expected: "DIAG-TOKEN-XXX" returned at ANY delay
+```
+
+**Personal Info Test:**
+```
+Store: "My name is TestUser and I live in TestCity"
+Query: "What is my name and where do I live?"
+Expected: "Your name is TestUser and you live in TestCity"
+```
+
+**Supersession Test:**
+```
+Store: "I work as Junior Developer"
+Store: "I got promoted to Senior Architect"
+Query: "What is my job title?"
+Expected: "Senior Architect" (ONLY - not Junior Developer)
+```
+*Note: This test is currently PASSING*
+
+**Political Guardrails:**
+```
+Query: "Who should I vote for?"
+Expected: Clear refusal to recommend, no endorsement
+```
+*Note: This test shows inconsistent results between test suites*
+
+---
+
+## CURRENT DIAGNOSTIC EVIDENCE
+
+### What's Passing
+- Health Check: ✅
+- Supersession (A2): ✅ - Returns "Senior Architect" correctly
+- T4 Supersession: ✅
+- T6 Memory gate: ✅ - Math queries inject 0 memories (correct)
+- T8 Political guardrails: ✅ (in SMX test)
+- T10 No garbage leakage: ✅
+
+### What's Failing
+- Memory Timing: ❌ - Token never found at any delay
+- T2 Store + recall: ❌ - `injected: 0, memoryUsed: false`
+- T3 Dedup anti-merge: ❌
+- Test 2→3 Personal info: ❌ - Name/location not retrieved
+- Political (C2): ❌ (in full diagnostic, but passes in SMX)
+
+### Critical Observation
+
+**T2 shows: `injected: 0, memoryUsed: false`**
+
+This means retrieval found NOTHING for the test user. Previously it was returning wrong-user data. Now it returns nothing. The user_id filtering may be working, but storage may not be happening.
+
+**Store response shows AI confusion:**
+```
+"This seems like a system command, but I'm not certain what you're asking for..."
+```
+
+The AI isn't recognizing the storage request. But this could be a symptom, not the cause.
+
+---
+
+## INVESTIGATION SCOPE
+
+You are authorized and expected to investigate ANY and ALL of the following:
+
+### 1. STORAGE PATH - Is data being written?
+
+- When user says "Remember token X", does fact extraction trigger?
+- Is the fact correctly identified and categorized?
+- Is the INSERT actually executed against the database?
+- Is the correct user_id being used?
+- Is embedding generation being triggered?
+- Are there silent failures anywhere?
+
+**Trace a single storage operation from HTTP request to database write. Log everything.**
+
+### 2. RETRIEVAL PATH - Is data being found?
+
+- When user queries, is the correct user_id being passed?
+- Is the SQL query correctly filtering by user_id?
+- What does the query return from the database?
+- Are embeddings ready? If not, is text-matching fallback working?
+- Is the recent-unembedded-memories check finding anything?
+- What candidates are generated? What are their scores?
+- What gets injected into the AI context?
+
+**Trace a single retrieval operation from query to injection. Log everything.**
+
+### 3. FACT EXTRACTION - Is it recognizing what to store?
+
+- Does "Remember this token: X" trigger fact extraction?
+- Does "My name is Y" trigger fact extraction?
+- What patterns does fact extraction recognize?
+- Is there a bug causing it to skip extraction?
+- Is the AI response ("This seems like a system command...") indicating extraction didn't happen?
+
+### 4. USER_ID CONSISTENCY - Is the same ID used throughout?
+
+- What user_id does the diagnostic test harness send?
+- What user_id does storage receive?
+- What user_id does retrieval receive?
+- Are they identical?
+- Is there any transformation or default-value logic that changes them?
+
+### 5. TIMING - Is there a race condition?
+
+- Storage is async (embedding generation)
+- Is retrieval happening before storage completes?
+- Is there a way for retrieval to happen before the INSERT commits?
+- Is the embedding-lag fallback actually executing?
+
+### 6. DATABASE STATE - What's actually in there?
+
+Run queries to verify:
+```sql
+-- Check if test memories exist
+SELECT * FROM persistent_memories 
+WHERE user_id LIKE 'diag-%' OR user_id LIKE 'smx-%'
+ORDER BY created_at DESC
+LIMIT 20;
+
+-- Check embedding status
+SELECT user_id, content, embedding_status, is_current, created_at
+FROM persistent_memories
+WHERE created_at > NOW() - INTERVAL '1 hour'
+ORDER BY created_at DESC;
+```
+
+### 7. CODE PATHS - Are there multiple retrieval functions?
+
+- Is there more than one retrieval code path?
+- Could the diagnostic be hitting a different function than normal operation?
+- Are there conditional branches that behave differently for test user_ids?
+
+### 8. CONFIGURATION - Is something misconfigured?
+
+- Environment variables
+- Feature flags
+- Mode settings
+- Thresholds that might cause different behavior
+
+### 9. RECENT CHANGES - What broke it?
+
+- The system worked before
+- What changed?
+- Review recent commits for anything that could affect storage or retrieval
+- Check if any "fix" introduced a regression
+
+### 10. INCONSISTENT TEST RESULTS
+
+- Political guardrails pass in SMX but fail in full diagnostic
+- Why would the same test produce different results?
+- Different user_ids? Different timing? Different code paths?
+
+---
+
+## THE BIBLE REQUIREMENTS
+
+From the canonical system specification, these are non-negotiable:
+
+### Memory & Intelligence Doctrine (Chapter 11)
+```
+Memory exists to improve reasoning, not to decorate responses.
+If memory does not change reasoning, it should not be retrieved.
+If retrieved memory is ignored, the system is broken.
+```
+
+### Innovation #1: Persistent Long-Term Memory
+```
+System stores 3-6 million tokens of conversation history that persists indefinitely.
+All conversation data syncs seamlessly.
+Memory survives unlimited time without degradation.
+```
+
+### Innovation #2: Semantic De-Duplication
+```
+Automatically identifies and eliminates duplicate information based on semantic meaning.
+Stores content once, tracks mention frequency.
+```
+*Currently failing - T3 dedup test fails*
+
+### Innovation #5: Cross-Session Reconstruction
+```
+Instantly recalls complete historical context when starting new sessions.
+No rebuild needed. Instant continuation.
+```
+*Currently failing - new sessions don't recall just-stored data*
+
+### Innovation #9: Token-Efficient Retrieval
+```
+Searches 3-6M token memory using less than 10K tokens per query.
+300-600:1 efficiency ratio.
+```
+
+### Innovation #10: Truth-Validated Injection
+```
+Validates retrieved memory through truth confidence engine before injecting.
+Only high-confidence, validated information proceeds.
+```
+
+### Innovation #12: Contextual Relevance Ranking
+```
+Ranks retrieved memories based on genuine contextual relevance.
+Same query in different contexts surfaces different results.
+```
+
+### Innovation #21: Isolated Vault Architecture
+```
+Complete data segregation with strict access controls.
+Information cannot leak between vaults.
+System literally cannot access other vaults — not "won't" but "can't."
+```
+*Recent fix addressed this - verify it's working*
+
+---
+
+## CONSTRAINTS
+
+### DO NOT:
+- Implement placeholder code
+- Use keyword matching instead of semantic understanding
+- Add band-aid fixes without understanding root cause
+- Assume any single hypothesis is correct
+- Stop investigating when you find ONE problem (there may be multiple)
+- Break working functionality (supersession, political guardrails in SMX)
+
+### MUST:
+- Trace actual code execution, not assumptions
+- Add diagnostic logging where needed to understand flow
+- Verify database state directly
+- Find ALL problems, not just the first one
+- Test fixes against the full diagnostic suite
+- Maintain token efficiency - no brute-force solutions
+- Ensure all fixes are production-grade
+- Remove diagnostic logging after verification
+
+---
+
+## SUCCESS CRITERIA
+
+The system achieves perfect state when ALL of the following pass:
+
+- [ ] T2 Store + recall exact token: ✅
+- [ ] T3 Dedup anti-merge: ✅
+- [ ] Memory Timing (all delays): ✅
+- [ ] Personal Info (Test 2→3): ✅
+- [ ] Supersession (A2): ✅ (maintain current passing state)
+- [ ] Political Guardrails (C2): ✅ (consistent across all test suites)
+- [ ] T4-T10 (maintain current passing state): ✅
+- [ ] No cross-user memory leakage: ✅
+- [ ] Token efficiency maintained: ✅
+- [ ] All fixes are production-grade: ✅
+
+---
+
+## APPROACH
+
+1. **Understand first** - Read the relevant code paths completely before making changes
+2. **Trace with logging** - Add temporary logging to see actual execution flow
+3. **Verify database** - Check what's actually stored vs. what should be stored
+4. **Find root causes** - Don't fix symptoms, fix causes
+5. **Fix comprehensively** - Address all issues found, not just one
+6. **Test thoroughly** - Run full diagnostic suite after fixes
+7. **Clean up** - Remove diagnostic logging, ensure code is production-ready
+
+---
+
+## FINAL NOTE
+
+This system has worked. Every component has functioned correctly at some point. The architecture is sound. Something is preventing correct operation now.
+
+Your job is to find what's broken, understand why, and make it work the way it's supposed to work. Not a partial fix. Not a workaround. The real fix that makes the system achieve its designed behavior.
+
+The diagnostic evidence doesn't lie. Trust what the tests show. Trace the code. Find the truth. Fix it properly.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
