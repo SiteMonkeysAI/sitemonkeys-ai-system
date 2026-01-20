@@ -1,0 +1,307 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #553: [claude-fix] CRITICAL: User ID Filtering Still Not Working - Retrieval Returns Wrong User's Memories
+
+Issue Description:
+# CRITICAL: User ID Filtering Still Not Working - Retrieval Returns Wrong User's Memories
+
+## Priority: HIGHEST
+
+## Summary
+
+Despite multiple fix attempts, memory retrieval continues to return memories belonging to the WRONG USER. The diagnostic evidence is irrefutable - test users are receiving memories that belong to a completely different user account.
+
+---
+
+## Concrete Diagnostic Evidence
+
+### Test User ID
+```
+diag-timing-1768869586631
+```
+
+### What Was Stored
+```
+User: "Remember this token: DIAG-TOKEN-1768869586631"
+System acknowledged: "Of course, I have noted the token DIAG-TOKEN-1768869586631"
+```
+
+### What Was Retrieved (8 seconds later)
+```javascript
+retrieval: {
+  candidates_fetched: 5,
+  candidates_with_embeddings: 5,
+  injected_memory_ids: [4415, 4416, 4417],  // ← WRONG USER'S MEMORIES
+  results_injected: 3,
+  top_scores: [0.326, 0.293, 0.293]
+}
+```
+
+### Response Content (Wrong Data)
+```
+"You asked me to remember several tokens of information:
+1. The nicknames for your children: Holly Dolly, E-Funk, and J-Dawg...
+2. Your favorite superheroes: Spider-Man and Wolverine..."
+```
+
+### The Problem
+- Test user `diag-timing-1768869586631` stored a token
+- Retrieval returned memory IDs `[4415, 4416, 4417]`
+- Those memories contain children's nicknames and superheroes
+- Those memories belong to a DIFFERENT user (the system owner's personal account)
+- The just-stored token was NOT retrieved
+
+---
+
+## SMX Test Confirms the Same Issue
+
+```javascript
+user_id: 'smx-1768869581328-554646'
+
+T2 Store + recall exact token: ❌ FAIL
+{
+  token: 'ZEBRA-ANCHOR-1768869587140-565562',
+  okToken: false,
+  injected: 0,           // ← ZERO memories injected
+  memoryIds: [],         // ← EMPTY
+  memoryUsed: false      // ← NO MEMORY USED
+}
+```
+
+For SMX test user, retrieval found NOTHING. For the full diagnostic test user, retrieval found the WRONG USER's data. Both are failures of user_id filtering.
+
+---
+
+## What's Actually Happening
+
+There appear to be TWO different failure modes:
+
+### Failure Mode 1: Wrong User's Data Returned
+- Retrieval ignores user_id filter
+- Returns memories from different user
+- Seen in: Full diagnostic Memory Timing test
+
+### Failure Mode 2: No Data Returned At All
+- Retrieval finds nothing for test user
+- But the memory WAS stored (system acknowledged it)
+- Seen in: SMX T2 test
+
+Both indicate the same root cause: **user_id is not being correctly used throughout the storage→retrieval pipeline**.
+
+---
+
+## Required Investigation
+
+### Step 1: Verify Database State
+
+Run this query IMMEDIATELY after a failed test:
+
+```sql
+-- Check what user_id the retrieved memories actually have
+SELECT id, user_id, content, created_at 
+FROM persistent_memories 
+WHERE id IN (4415, 4416, 4417);
+
+-- Check if test user's memory was actually stored
+SELECT id, user_id, content, created_at, embedding_status
+FROM persistent_memories 
+WHERE user_id = 'diag-timing-1768869586631'
+ORDER BY created_at DESC
+LIMIT 10;
+
+-- Check recent memories to see user_id distribution
+SELECT id, user_id, LEFT(content, 50) as content_preview, created_at
+FROM persistent_memories
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+### Step 2: Add Diagnostic Logging at EVERY Stage
+
+The user_id must be traced through the ENTIRE pipeline:
+
+```javascript
+// In storage path
+console.log('[STORAGE] Received user_id:', userId);
+console.log('[STORAGE] Inserting with user_id:', insertParams.userId);
+console.log('[STORAGE] Insert result:', result);
+
+// In retrieval path  
+console.log('[RETRIEVAL] Requested user_id:', userId);
+console.log('[RETRIEVAL] SQL WHERE clause user_id:', queryUserId);
+console.log('[RETRIEVAL] Raw DB results user_ids:', results.map(r => r.user_id));
+console.log('[RETRIEVAL] After filtering user_ids:', filtered.map(r => r.user_id));
+```
+
+### Step 3: Find Where User ID Gets Lost
+
+The logging will reveal ONE of these scenarios:
+
+**Scenario A: Storage uses wrong user_id**
+- Received: `diag-timing-123`
+- Inserted with: `chris-real-account` (WRONG)
+
+**Scenario B: Retrieval uses wrong user_id**
+- Received: `diag-timing-123`
+- SQL query uses: `chris-real-account` (WRONG)
+
+**Scenario C: Validation doesn't filter**
+- SQL returns mixed user_ids
+- Validation doesn't remove wrong ones
+
+**Scenario D: There's a fallback that ignores user_id**
+- When no results found for user_id
+- Code falls back to searching without user_id filter
+
+### Step 4: Check ALL Retrieval Code Paths
+
+There may be multiple functions that retrieve memories. Check EVERY one:
+
+- Main semantic search
+- Embedding-lag fallback (recent unembedded memories)
+- Text-matching fallback
+- Any "no results" fallback
+- Any emergency/safety retrieval path
+
+EACH must filter by user_id.
+
+### Step 5: Check for Default User ID
+
+Search entire codebase for:
+- Hardcoded user IDs
+- Default user ID values
+- Fallback user ID logic
+- Any `userId || defaultUserId` patterns
+- Any `userId ?? someOtherValue` patterns
+
+---
+
+## Previous Fix Attempts (Did Not Work)
+
+### Attempt 1: Added user_id to SELECT statements + validation
+- Added `user_id` to all SELECT clauses
+- Added post-query validation to filter wrong-user memories
+- **Result: Still failing** - wrong user's memories still returned
+
+### Attempt 2: Mode normalization + enhanced text matching
+- Fixed `truth_general` vs `truth-general` mismatch
+- Added three-tier text matching for tokens
+- **Result: Still failing** - same symptoms persist
+
+### Attempt 3: Embedding-lag fallback
+- Added check for recent unembedded memories
+- Added text-based scoring for immediate retrieval
+- **Result: Still failing** - memories not found
+
+**Conclusion: The fixes are addressing symptoms, not root cause. The root cause is that user_id filtering fundamentally does not work.**
+
+---
+
+## The Nuclear Option
+
+If tracing doesn't reveal the issue quickly, consider this approach:
+
+```javascript
+// At the FINAL stage before returning results, add HARD BLOCK:
+function retrieveMemories(userId, query, options) {
+  // ... existing retrieval logic ...
+  
+  // NUCLEAR VALIDATION - Remove this after bug is found
+  const validatedResults = results.filter(memory => {
+    if (memory.user_id !== userId) {
+      console.error(`[SECURITY VIOLATION] Memory ${memory.id} has user_id "${memory.user_id}" but request was for "${userId}"`);
+      return false;
+    }
+    return true;
+  });
+  
+  if (validatedResults.length !== results.length) {
+    console.error(`[SECURITY] Filtered out ${results.length - validatedResults.length} wrong-user memories`);
+  }
+  
+  return validatedResults;
+}
+```
+
+This won't fix the root cause, but it will:
+1. Prevent wrong-user data from ever being returned
+2. Log every time it happens so you can trace backwards
+3. Make the system SAFE while you find the real bug
+
+---
+
+## Success Criteria
+
+The system is fixed when:
+
+- [ ] Test user stores a token → Test user retrieves THAT token (not someone else's data)
+- [ ] `injected_memory_ids` contain ONLY memories with matching user_id
+- [ ] SMX T2 passes: `okToken: true, injected: > 0`
+- [ ] Memory Timing passes at all delays
+- [ ] No cross-user memory retrieval under ANY circumstance
+- [ ] Database query confirms: retrieved memory.user_id === requested user_id
+
+---
+
+## What Perfect Looks Like
+
+```javascript
+// Test user stores
+user_id: 'test-123'
+message: "Remember token ABC-789"
+
+// Database contains
+{ id: 5001, user_id: 'test-123', content: 'Token: ABC-789', ... }
+
+// Test user retrieves
+user_id: 'test-123'  
+query: "What token did I ask you to remember?"
+
+// Retrieval returns
+{
+  candidates_fetched: 1,
+  injected_memory_ids: [5001],  // ← SAME USER
+  results_injected: 1
+}
+
+// Response
+"You asked me to remember ABC-789."
+```
+
+This is the ONLY acceptable outcome. Any other result is a failure.
+
+---
+
+## Final Note
+
+This bug has persisted through multiple fix attempts. Stop trying to fix symptoms. 
+
+**Trace the actual code execution:**
+1. Add logging
+2. Run a test
+3. Read the logs
+4. Find where user_id diverges from expected
+5. Fix THAT specific line
+6. Verify with logging
+7. Remove logging
+8. Run full diagnostic
+
+The answer is in the code. Find it.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

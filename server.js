@@ -346,6 +346,31 @@ app.post("/api/chat", async (req, res) => {
       claude_confirmed = false, // BIBLE FIX: User confirmation for Claude escalation
     } = req.body;
 
+    // ═══════════════════════════════════════════════════════════════
+    // CRITICAL FIX #553: User ID Isolation - Root Cause & Solution
+    // ═══════════════════════════════════════════════════════════════
+    //
+    // ROOT CAUSE:
+    // The server was defaulting to userId = "anonymous" when no user_id was provided.
+    // This caused CRITICAL cross-user memory leakage:
+    //
+    // 1. Test user sends request WITHOUT user_id → userId becomes "anonymous"
+    // 2. Retrieval queries: WHERE user_id = 'anonymous'
+    // 3. Returns memories stored under "anonymous" (system owner's early test data)
+    // 4. Test user receives WRONG USER'S personal data (children's nicknames, etc.)
+    //
+    // The SQL queries themselves were CORRECT (using parameterized WHERE user_id = $1).
+    // The parameter VALUE was wrong due to the "anonymous" fallback.
+    //
+    // SOLUTION:
+    // 1. Remove "anonymous" fallback - require explicit user_id
+    // 2. Reject requests without valid user_id with 400 error
+    // 3. Enhanced validation (non-empty string, trimmed)
+    //
+    // This ensures STRICT user isolation - no request can proceed without
+    // a valid, explicit user identifier.
+    // ═══════════════════════════════════════════════════════════════
+
     // Map user_id to userId for internal use
     // Check all possible sources for consistency (UX-044)
     console.log('[SESSION-DIAG] ════════════════════════════════════════');
@@ -353,12 +378,25 @@ app.post("/api/chat", async (req, res) => {
     console.log('[SESSION-DIAG] Body user_id:', user_id);
     console.log('[SESSION-DIAG] Query userId:', req.query?.userId);
 
-    const userId = user_id || req.headers['x-user-id'] || req.query?.userId || "anonymous";
+    // CRITICAL FIX #553: Do NOT default to "anonymous" - require explicit user_id
+    const userId = user_id || req.headers['x-user-id'] || req.query?.userId;
 
     // TRACE LOGGING - Step 1 & 2
     console.log("[TRACE] 1. Received user_id from request:", user_id);
     console.log("[TRACE] 2. Mapped to userId:", userId);
     console.log('[SESSION-DIAG] Final userId:', userId);
+
+    // CRITICAL VALIDATION #553: Reject requests without valid user_id
+    // This prevents cross-user memory retrieval when user_id is missing
+    if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+      console.error('[SECURITY] ❌ REJECTED: Request missing required user_id');
+      console.error('[SECURITY] This is required to prevent cross-user memory leakage');
+      return res.status(400).json({
+        success: false,
+        error: "user_id is required for memory isolation",
+        details: "Please provide user_id in request body, x-user-id header, or userId query parameter"
+      });
+    }
 
     // SECURITY: Input validation - message is required
     // Prevents processing empty/invalid requests
