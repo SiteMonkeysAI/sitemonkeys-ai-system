@@ -353,22 +353,23 @@ export class IntelligentMemoryStorage {
     }
 
     // Use string-based detection instead of regex to prevent ReDoS
-    // Each trigger defines a prefix pattern and optional colon requirement
+    // Define trigger prefixes (all lowercase for case-insensitive matching)
     const lowerContent = content.toLowerCase().trim();
     const triggers = [
-      { prefixes: ['remember this exactly:', 'remember this:'], delimiter: ':' },
-      { prefixes: ['please remember this exactly:', 'please remember this:'], delimiter: ':' },
-      { prefixes: ['please remember:', 'remember:'], delimiter: ':' },
-      { prefixes: ['store this:', 'save this:', 'keep this:'], delimiter: ':' },
-      { prefixes: ['store this ', 'save this ', 'keep this '], delimiter: null },
-      { prefixes: ['i need you to remember ', 'please remember '], delimiter: null },
-      { prefixes: ["don't forget ", "do not forget "], delimiter: null }
+      ['remember this exactly:', 'remember this:'],
+      ['please remember this exactly:', 'please remember this:'],
+      ['please remember:', 'remember:'],
+      ['store this:', 'save this:', 'keep this:'],
+      ['store this ', 'save this ', 'keep this '],
+      ['i need you to remember ', 'please remember '],
+      ["don't forget ", "do not forget "]
     ];
 
-    for (const trigger of triggers) {
-      for (const prefix of trigger.prefixes) {
+    for (const prefixList of triggers) {
+      for (const prefix of prefixList) {
         if (lowerContent.startsWith(prefix)) {
-          // Extract content after the prefix
+          // Extract content after the prefix (use original content to preserve case)
+          // Since we matched on lowercase, we know the prefix length matches
           const startIdx = prefix.length;
           const extracted = content.slice(startIdx).trim();
           
