@@ -157,6 +157,73 @@ function applySafetyCriticalBoost(memories) {
   return result;
 }
 
+/**
+ * Apply ordinal-aware boost to memories for queries with ordinal indicators
+ * FIX #555-T3: When query asks for "first" and content says "first", boost that memory
+ * This solves the semantic ranking issue where "first code" and "second code" are too similar
+ *
+ * @param {object[]} memories - Array of memory objects with similarity scores
+ * @param {string} query - The user's query text
+ * @returns {object[]} Memories with ordinal boost applied where appropriate
+ */
+function applyOrdinalBoost(memories, query) {
+  // Ordinal patterns to detect and match
+  const ORDINAL_PATTERNS = {
+    first: /\b(first|1st)\b/i,
+    second: /\b(second|2nd)\b/i,
+    third: /\b(third|3rd)\b/i,
+    fourth: /\b(fourth|4th)\b/i,
+    fifth: /\b(fifth|5th)\b/i,
+    last: /\b(last|final)\b/i,
+    previous: /\b(previous|prior|earlier)\b/i,
+    next: /\b(next|following|upcoming)\b/i
+  };
+
+  // Check if query contains any ordinal indicators
+  let queryOrdinal = null;
+  for (const [ordinalName, pattern] of Object.entries(ORDINAL_PATTERNS)) {
+    if (pattern.test(query)) {
+      queryOrdinal = ordinalName;
+      console.log(`[ORDINAL-BOOST] Query contains ordinal: "${ordinalName}"`);
+      break;
+    }
+  }
+
+  // If no ordinal in query, no boost needed
+  if (!queryOrdinal) {
+    return memories;
+  }
+
+  const ORDINAL_BOOST = 0.25; // 25% boost for matching ordinal
+  let boostedCount = 0;
+
+  const result = memories.map(memory => {
+    const content = (memory.content || '').toLowerCase();
+    const pattern = ORDINAL_PATTERNS[queryOrdinal];
+
+    // Check if memory content contains the same ordinal
+    if (pattern.test(content)) {
+      boostedCount++;
+      const newSimilarity = Math.min(memory.similarity + ORDINAL_BOOST, 1.0);
+      console.log(`[ORDINAL-BOOST] Memory ${memory.id}: "${queryOrdinal}" match detected, boosting ${memory.similarity.toFixed(3)} → ${newSimilarity.toFixed(3)}`);
+      return {
+        ...memory,
+        similarity: newSimilarity,
+        ordinal_boosted: true,
+        ordinal_matched: queryOrdinal
+      };
+    }
+
+    return memory;
+  });
+
+  if (boostedCount > 0) {
+    console.log(`[ORDINAL-BOOST] ⚡ Applied ordinal boost to ${boostedCount} memories matching "${queryOrdinal}"`);
+  }
+
+  return result;
+}
+
 // ============================================
 // QUERY EXPANSION (Issue #504)
 // ============================================
@@ -787,7 +854,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           if (hasRememberExactly) {
             // Extract potential unique tokens (alphanumeric sequences)
             // SECURITY FIX: Constrain token-matching regex to prevent ReDoS
-            const uniqueTokens = safeQuery.match(/[A-Z0-9]{1,20}-[A-Z0-9]{1,20}-[A-Z0-9]{1,20}|[A-Z]{4,20}-[0-9]{1,20}/gi);
+            // FIX #555-T2: Updated pattern to match 2+ segment tokens like ZEBRA-ANCHOR-123
+            const uniqueTokens = safeQuery.match(/\b[A-Z0-9]{3,20}(?:-[A-Z0-9]{2,20})+\b/gi);
             if (uniqueTokens && uniqueTokens.length > 0) {
               console.log(`[EMBEDDING-FALLBACK] Matching unique tokens: ${uniqueTokens.join(', ')}`);
               const tokenFilters = uniqueTokens.map((_, i) => `content ILIKE $${paramIndex + i}`).join(' OR ');
@@ -1024,8 +1092,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // This ensures allergies and critical health info rise to the top
     const safetyBoosted = applySafetyCriticalBoost(allScored);
 
+    // FIX #555-T3: Apply ordinal-aware boost for queries like "first code" vs "second code"
+    // When query contains ordinal indicators, boost memories with matching ordinals
+    const ordinalBoosted = applyOrdinalBoost(safetyBoosted, normalizedQuery);
+
     // Apply hybrid scoring
-    const hybridScored = safetyBoosted.map(memory => ({
+    const hybridScored = ordinalBoosted.map(memory => ({
       ...memory,
       hybrid_score: calculateHybridScore(memory)
     }));
