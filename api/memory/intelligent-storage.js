@@ -332,6 +332,40 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Detect explicit memory storage requests (Fix #557-T2)
+   * When user explicitly asks to remember something, store it verbatim without compression
+   * @param {string} content - User message to check
+   * @returns {{isExplicit: boolean, extractedContent: string|null}} - Detection result
+   */
+  detectExplicitMemoryRequest(content) {
+    if (!content || typeof content !== 'string') {
+      return { isExplicit: false, extractedContent: null };
+    }
+
+    // Patterns for explicit memory storage requests
+    const EXPLICIT_PATTERNS = [
+      /^(?:please )?remember this(?: exactly)?:\s*(.+)$/i,
+      /^(?:please )?remember(?: this)?:?\s+(.+)$/i,
+      /^(?:please )?(?:store|save|keep)(?: this)?\s+(?:in memory|for me)?:?\s*(.+)$/i,
+      /^(?:i need you to|please) remember(?:that)?\s+(.+)$/i,
+      /^(?:don't forget|do not forget)(?:that)?\s+(.+)$/i
+    ];
+
+    for (const pattern of EXPLICIT_PATTERNS) {
+      const match = content.match(pattern);
+      if (match && match[1]) {
+        const extracted = match[1].trim();
+        console.log(`[EXPLICIT-MEMORY] ✅ Detected explicit storage request`);
+        console.log(`[EXPLICIT-MEMORY] Pattern: ${pattern.toString()}`);
+        console.log(`[EXPLICIT-MEMORY] Content to store: "${extracted.substring(0, 100)}..."`);
+        return { isExplicit: true, extractedContent: extracted };
+      }
+    }
+
+    return { isExplicit: false, extractedContent: null };
+  }
+
+  /**
    * Main entry point - stores memory with compression and deduplication
    * @param {string} userId - User identifier
    * @param {string} userMessage - User's message
@@ -350,6 +384,33 @@ export class IntelligentMemoryStorage {
       console.log('[TRACE-INTELLIGENT] I5. aiResponse length:', aiResponse?.length || 0);
 
       console.log('[INTELLIGENT-STORAGE] 🧠 Processing conversation for intelligent storage');
+
+      // FIX #557-T2: Check for explicit memory storage requests FIRST
+      // When user says "Remember this exactly: X", store X verbatim without compression
+      const explicitRequest = this.detectExplicitMemoryRequest(userMessage);
+
+      if (explicitRequest.isExplicit) {
+        console.log('[INTELLIGENT-STORAGE] 🎯 EXPLICIT MEMORY REQUEST - storing verbatim without compression');
+
+        const verbatimFacts = explicitRequest.extractedContent;
+        const verbatimTokens = this.countTokens(verbatimFacts);
+
+        // Store with very high importance (explicit user request)
+        const result = await this.storeCompressedMemory(userId, category, verbatimFacts, {
+          original_tokens: verbatimTokens,
+          compressed_tokens: verbatimTokens,
+          compression_ratio: 1.0,  // No compression for explicit requests
+          user_priority: true,  // Always treat as high priority
+          fingerprint: null,  // No fingerprint needed for explicit storage
+          fingerprintConfidence: 0,
+          importance_score: 0.95,  // Very high importance for explicit requests
+          original_user_phrase: userMessage.substring(0, 200),
+          explicit_storage_request: true  // Mark as explicit for retrieval optimization
+        }, mode);
+
+        console.log('[INTELLIGENT-STORAGE] ✅ Explicit memory stored verbatim');
+        return result;
+      }
 
       // PROBLEM 3 FIX: Filter out non-user-specific queries
       // Storage should only keep information ABOUT the user, not general world information

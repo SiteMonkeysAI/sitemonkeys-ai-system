@@ -1,0 +1,305 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #557: [claude-fix] CRITICAL: T2 and T3 Still Failing - Deep Investigation Required
+
+Issue Description:
+# CRITICAL: T2 and T3 Still Failing - Deep Investigation Required
+
+## Priority: HIGH - System must work as it should, not "good enough"
+
+## Context
+
+The core memory system is functional (9/11 tests passing), but two tests consistently fail. "Good enough" is not acceptable. The system must work exactly as designed.
+
+**What's Working (Proves Architecture is Sound):**
+- ✅ T0 Chat reachable
+- ✅ T1 Upload
+- ✅ T4 Supersession - Memory storage, retrieval, and supersession ALL work
+- ✅ T5 Selectivity + token budget
+- ✅ T6 Memory gate (math injects 0)
+- ✅ T7 Mode enforcement
+- ✅ T8 Political guardrails
+- ✅ T9 Product integrity
+- ✅ T10 No garbage leakage
+
+**What's Failing:**
+- ❌ T2 Store + recall exact token
+- ❌ T3 Dedup anti-merge (ordinal ranking)
+
+---
+
+## THE PARADOX THAT MUST BE EXPLAINED
+
+**T4 Supersession PASSES** - This proves:
+- Memory storage works
+- Memory retrieval works
+- User isolation works
+- Fact extraction works for "My phone number is XXX"
+
+**T2 Token Storage FAILS** - But this uses similar patterns:
+- "Remember this exactly: ZEBRA-ANCHOR-XXX" → NOT stored/retrieved
+- "Please remember this exact token: DIAG-TOKEN-XXX" → WORKS (main diagnostic)
+
+**Why does one work and the other fail?**
+
+This is the question that must be answered. The system is inconsistent. Inconsistency means there's a bug.
+
+---
+
+## T2 FAILURE ANALYSIS
+
+### The Evidence
+
+```
+Store message: "Remember this exactly: ZEBRA-ANCHOR-1768948589004-463991"
+Query message: "What phrase did I ask you to remember?"
+
+Result:
+  injected: 0
+  memoryIds: []
+  memoryUsed: false
+  Response: "I'm sorry, but I don't have enough information about your past requests..."
+```
+
+### What Should Happen
+
+1. User says "Remember this exactly: ZEBRA-ANCHOR-XXX"
+2. Fact extraction identifies this as a storable fact
+3. Memory stored with user_id and appropriate category
+4. User queries "What phrase did I ask you to remember?"
+5. Semantic retrieval finds the memory
+6. Response includes "ZEBRA-ANCHOR-XXX"
+
+### What's Actually Happening
+
+Step 2 or Step 5 is failing. Either:
+- **Fact extraction doesn't trigger** - The phrase "Remember this exactly" isn't recognized
+- **Storage fails silently** - Extraction triggers but INSERT doesn't happen
+- **Retrieval doesn't find it** - Memory exists but semantic search misses it
+
+### The Clue
+
+Main diagnostic uses: `"Please remember this exact token: ${token}"`
+SMX test uses: `"Remember this exactly: ${token}"`
+
+One works, one doesn't. **The difference is in the phrasing.**
+
+### Investigation Required
+
+1. **Check fact extraction patterns** - What phrases trigger extraction?
+2. **Test both phrases directly** - Add logging to see which triggers extraction
+3. **Check the database** - After SMX T2 runs, is the memory in persistent_memories?
+4. **If stored, check retrieval** - Is the query "What phrase did I ask you to remember?" finding it?
+
+---
+
+## T3 FAILURE ANALYSIS
+
+### The Evidence
+
+```
+Store 1: "My first code is CHARLIE-1768948604887-685036"
+Store 2: "My second code is DELTA-1768948604887-39867"
+
+Query 1: "What is my first code?"
+Expected: CHARLIE
+Actual: DELTA ❌
+
+Query 2: "What is my second code?"
+Expected: DELTA  
+Actual: Both codes mentioned (DELTA and CHARLIE) ❌
+```
+
+### What Should Happen
+
+1. Both facts stored as distinct memories
+2. Query "What is my first code?" triggers retrieval
+3. Semantic similarity + ordinal boosting ranks "My first code is CHARLIE" highest
+4. Response returns CHARLIE only
+
+### What's Actually Happening
+
+- Both memories ARE being stored (injected1: 2, injected2: 3)
+- Both memories ARE being retrieved
+- **Ranking is wrong** - "first" query returns "second" memory
+
+### The Ordinal Boost Fix Was Applied But Didn't Work
+
+The fix added ordinal detection and +0.25 boost. Either:
+- The boost isn't being applied (code path not executed)
+- The boost is too weak (0.25 isn't enough to overcome semantic similarity)
+- The boost is applied to the wrong memories
+- The ordinals aren't being detected in the content
+
+### Investigation Required
+
+1. **Add logging to ordinal boost function** - Is it being called? What ordinals detected?
+2. **Check scores before and after boost** - Is the boost actually changing rankings?
+3. **Verify ordinal detection regex** - Does it match "first" in "My first code is..."?
+4. **Test with stronger boost** - Would +0.5 or +0.75 fix the ranking?
+
+---
+
+## BIBLE ALIGNMENT REQUIREMENTS
+
+### From the Priority Stack (Chapter 2)
+```
+TRUTH > HELPFULNESS > ENGAGEMENT
+```
+
+The system claiming "I don't have information" when it DOES have information is a **truth violation**. The memory exists (T4 proves storage works). Failing to retrieve it is lying by omission.
+
+### From the Opportunity Doctrine (Chapter 7)
+```
+Uncertainty must increase effort, not reduce it.
+```
+
+When retrieval is uncertain, the system should work HARDER to find relevant memories, not give up and claim ignorance.
+
+### From the Memory & Intelligence Doctrine (Chapter 11)
+```
+Memory exists to improve reasoning, not to decorate responses.
+If memory does not change reasoning, it should not be retrieved.
+If retrieved memory is ignored, the system is broken.
+```
+
+And critically:
+```
+Claiming ignorance when memory exists is catastrophic.
+```
+
+T2 claims ignorance when the memory should exist. This is catastrophic per the Bible.
+
+### From Innovation #12: Contextual Relevance Ranking
+```
+Ranks retrieved memories based on genuine contextual relevance.
+Same query in different contexts surfaces different results.
+```
+
+T3 fails this - "first code" and "second code" are different contexts but surface wrong results.
+
+---
+
+## REQUIRED APPROACH
+
+### Use Genuine Intelligence, Not Rules
+
+The Bible mandates semantic intelligence, not keyword matching. But the current failures suggest the semantic layer isn't working for these edge cases.
+
+**Don't just add more keywords to match.** Understand WHY the semantic similarity fails and fix the underlying issue.
+
+### Trace Actual Execution
+
+For T2:
+1. Add logging at fact extraction entry point
+2. Log what facts are identified
+3. Log what gets inserted into database
+4. Query database directly after test
+5. Add logging at retrieval entry point
+6. Log what candidates are found
+7. Log why the memory isn't being returned
+
+For T3:
+1. Add logging at ordinal boost function
+2. Log scores before and after boost
+3. Log which memories have ordinals detected
+4. Verify the boost is actually changing rankings
+5. If boost is applied but ranking still wrong, increase boost strength
+
+### Fix Root Causes
+
+Don't patch symptoms. If fact extraction doesn't recognize "Remember this exactly", understand WHY and fix the pattern recognition to be more intelligent, not just add that specific phrase to a list.
+
+---
+
+## SUCCESS CRITERIA
+
+- [ ] T2 passes: Any reasonable "remember this" phrasing triggers storage and retrieval
+- [ ] T3 passes: Ordinal-specific queries return ordinal-specific memories
+- [ ] No regression in passing tests (T0-T1, T4-T10)
+- [ ] No regression in main diagnostic suite (all 4 passing)
+- [ ] Solution uses semantic intelligence, not keyword lists
+- [ ] Solution maintains token efficiency
+- [ ] Solution aligns with Bible principles
+
+---
+
+## WHAT PERFECT LOOKS LIKE
+
+### T2 Perfect State
+```
+User: "Remember this exactly: ZEBRA-ANCHOR-123"
+System: [Extracts fact, stores memory]
+
+User: "What phrase did I ask you to remember?"
+System: "You asked me to remember ZEBRA-ANCHOR-123."
+
+Metadata: injected: 1+, memoryUsed: true
+```
+
+### T3 Perfect State
+```
+User: "My first code is CHARLIE-123"
+User: "My second code is DELTA-456"
+
+User: "What is my first code?"
+System: "Your first code is CHARLIE-123."
+[NOT DELTA, NOT both codes]
+
+User: "What is my second code?"
+System: "Your second code is DELTA-456."
+[NOT CHARLIE, NOT both codes]
+```
+
+---
+
+## INVESTIGATION STEPS
+
+1. **Reproduce locally with logging**
+   - Run T2 with verbose logging at every step
+   - Run T3 with verbose logging at every step
+
+2. **Find the divergence point**
+   - Where does T2 differ from working cases (T4, main diagnostic)?
+   - Where does T3 ordinal boost fail to change rankings?
+
+3. **Understand the root cause**
+   - Don't guess, trace the actual code execution
+   - The logs will reveal exactly where it breaks
+
+4. **Fix with intelligence**
+   - Make fact extraction smarter, not just longer keyword lists
+   - Make ordinal boosting actually work, or replace with better approach
+
+5. **Verify comprehensively**
+   - All 11 SMX tests pass
+   - All 4 main diagnostic tests pass
+   - No regressions anywhere
+
+---
+
+## FINAL NOTE
+
+The system is 9/11. That's not acceptable. The Bible says "as it should be" is the only standard.
+
+T4 proves the architecture works. T2 and T3 fail due to specific issues in fact extraction patterns and ordinal ranking. These are solvable problems.
+
+Find the root causes. Fix them properly. Make it 11/11.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
