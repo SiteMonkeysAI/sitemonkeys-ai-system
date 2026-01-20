@@ -476,21 +476,27 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
   };
 
   // ═══════════════════════════════════════════════════════════════
-  // CRITICAL DIAGNOSTIC LOGGING #549: Track userId through retrieval
+  // CRITICAL DIAGNOSTIC LOGGING #549, #553: Track userId through retrieval
   // ═══════════════════════════════════════════════════════════════
   console.log(`[RETRIEVAL-ENTRY] ════════════════════════════════════════`);
   console.log(`[RETRIEVAL-ENTRY] userId from options: "${userId}"`);
+  console.log(`[RETRIEVAL-ENTRY] userId type: ${typeof userId}`);
+  console.log(`[RETRIEVAL-ENTRY] userId length: ${userId?.length || 0}`);
   console.log(`[RETRIEVAL-ENTRY] mode: ${mode}`);
   console.log(`[RETRIEVAL-ENTRY] query: "${normalizedQuery.substring(0, 50)}..."`);
   console.log(`[RETRIEVAL-ENTRY] ════════════════════════════════════════`);
   // ═══════════════════════════════════════════════════════════════
 
   // Validate inputs
-  if (!userId) {
-    console.error(`[RETRIEVAL-ENTRY] ❌ REJECTED: userId is missing or empty`);
+  // FIX #553: Enhanced validation to catch empty strings and whitespace-only userIds
+  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+    console.error(`[RETRIEVAL-ENTRY] ❌ REJECTED: userId is invalid`);
+    console.error(`[RETRIEVAL-ENTRY] Received userId:`, userId);
+    console.error(`[RETRIEVAL-ENTRY] Type:`, typeof userId);
+    console.error(`[SECURITY] This validation prevents cross-user memory leakage`);
     return {
       success: false,
-      error: 'userId is required',
+      error: 'userId is required and must be a non-empty string',
       memories: [],
       telemetry
     };
