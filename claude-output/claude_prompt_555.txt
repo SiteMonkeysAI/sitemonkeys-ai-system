@@ -1,0 +1,208 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #555: [claude-fix]
+
+Issue Description:
+# Refinement: T2 Token Extraction and T3 Semantic Ranking Issues
+
+## Priority: MEDIUM - Core functionality working, these are refinements
+
+## Context
+
+The core memory system is now working correctly:
+- ✅ Health Check
+- ✅ Memory Timing (1000ms) - Token stored and retrieved
+- ✅ Supersession (A2) - "Senior Architect" returned correctly
+- ✅ Political (C2) - Proper refusal, no endorsement
+- ✅ Personal Info - "TestUser from TestCity" retrieved correctly
+- ✅ User ID isolation - No cross-user memory leakage
+
+However, two SMX tests are failing due to refinement-level issues:
+
+---
+
+## Issue 1: T2 - Token Not Extracted/Retrieved
+
+### What Happens
+```
+Token: ZEBRA-ANCHOR-1768871671696-440287
+Message: "Remember this exactly: ZEBRA-ANCHOR-1768871671696-440287"
+Result: injected: 0, memoryIds: [], memoryUsed: false
+```
+
+### The Paradox
+The main diagnostic uses nearly identical phrasing and SUCCEEDS:
+```
+Token: DIAG-TOKEN-1768871614251
+Message: "Please remember this exact token: DIAG-TOKEN-1768871614251"
+Result: ✅ SUCCESS at 1000ms delay - Token found in response
+```
+
+### Possible Causes
+
+1. **Token format difference**: `ZEBRA-ANCHOR-XXX` vs `DIAG-TOKEN-XXX` - maybe the fact extraction handles one format but not the other?
+
+2. **Phrasing difference**: "Remember this exactly" vs "Please remember this exact token" - subtle wording might affect fact extraction triggers
+
+3. **Timing**: SMX uses 1200ms delay, diagnostic uses 1000ms - but this shouldn't cause ZERO injection
+
+4. **Mode difference**: Both use `truth-general` / `truth_general` - check if mode normalization affects this path
+
+### Investigation Steps
+
+1. Check fact extraction logs for both phrases - does "Remember this exactly: X" trigger extraction?
+2. Check if `ZEBRA-ANCHOR` pattern is recognized by the token detection regex
+3. Verify the memory is actually written to the database for SMX test user
+4. Check if there's a difference in how the two test harnesses send requests
+
+---
+
+## Issue 2: T3 - Semantic Ranking Returns Wrong Code
+
+### What Happens
+```
+Store: "My first code is CHARLIE-1768871684963-487976"
+Store: "My second code is DELTA-1768871684963-153306"
+
+Query: "What is my first code?"
+Expected: CHARLIE
+Actual: DELTA ❌
+
+Query: "What is my second code?"
+Expected: DELTA
+Actual: CHARLIE ❌
+```
+
+### Key Observation
+Memories ARE being stored and retrieved (`injected1: 2, injected2: 2`). The problem is **ranking** - the wrong memory is scoring higher for each query.
+
+### Root Cause Analysis
+
+The queries "What is my first code?" and "What is my second code?" are semantically almost identical. The only differentiator is "first" vs "second".
+
+The semantic embeddings for:
+- "My first code is CHARLIE-XXX"
+- "My second code is DELTA-XXX"
+
+Are probably very similar because:
+- Same structure
+- Same type of content (code identifier)
+- Only difference is ordinal word ("first" vs "second")
+
+When the query "What is my first code?" is embedded, it's probably equally similar to BOTH stored memories, and some tie-breaker (recency? alphabetical? random?) picks the wrong one.
+
+### The Fix
+
+This requires **keyword-aware boosting** in the retrieval scoring:
+
+```javascript
+// When query contains ordinal indicators, boost exact matches
+const ordinals = ['first', 'second', 'third', '1st', '2nd', '3rd'];
+const queryOrdinal = ordinals.find(o => query.toLowerCase().includes(o));
+
+if (queryOrdinal) {
+  candidates.forEach(c => {
+    if (c.content.toLowerCase().includes(queryOrdinal)) {
+      c.score *= 1.5; // Boost exact ordinal match
+    }
+  });
+}
+```
+
+Or more generally, when the query and content share a specific distinguishing word that other candidates don't have, boost that candidate.
+
+### Alternative Fix
+
+Store ordinal relationships as structured metadata:
+```javascript
+{
+  content: "User's first code is CHARLIE-XXX",
+  metadata: {
+    ordinal: "first",
+    category: "user_code"
+  }
+}
+```
+
+Then retrieval can filter by ordinal when the query specifies one.
+
+---
+
+## Expected Behavior After Fix
+
+### T2 - Token Extraction
+```
+Store: "Remember this exactly: ZEBRA-ANCHOR-123"
+Query: "What phrase did I ask you to remember?"
+Result: 
+  - injected: 1+
+  - Response contains "ZEBRA-ANCHOR-123"
+  - okToken: true
+```
+
+### T3 - Semantic Ranking
+```
+Store: "My first code is CHARLIE-123"
+Store: "My second code is DELTA-456"
+
+Query: "What is my first code?"
+Result: "CHARLIE-123" (NOT DELTA)
+
+Query: "What is my second code?"
+Result: "DELTA-456" (NOT CHARLIE)
+```
+
+---
+
+## Success Criteria
+
+- [ ] T2 passes: Token stored and retrieved with any reasonable phrasing
+- [ ] T3 passes: Ordinal-specific queries return the correct ordinal-specific memory
+- [ ] No regression in passing tests (T0, T1, T4-T10)
+- [ ] No regression in main diagnostic suite
+- [ ] Solution maintains token efficiency
+- [ ] Solution uses semantic intelligence, not just keyword matching
+
+---
+
+## Implementation Notes
+
+### For T2
+- Investigate why fact extraction triggers for one phrasing but not another
+- Consider making fact extraction more robust to phrasing variations
+- The three-tier token matching should handle `ZEBRA-ANCHOR-XXX` format - verify the regex
+
+### For T3
+- This is a known limitation of pure semantic similarity
+- Need a hybrid approach: semantic similarity + keyword/ordinal boosting
+- Consider this a retrieval ranking enhancement, not a fundamental architecture change
+
+---
+
+## Final Note
+
+These are **refinement issues**, not core failures. The fundamental memory contract is working:
+- Store information → Retrieve information ✅
+- User isolation ✅
+- Supersession ✅
+- Safety guardrails ✅
+
+These fixes make the system more robust to edge cases in phrasing and ordinal disambiguation.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
