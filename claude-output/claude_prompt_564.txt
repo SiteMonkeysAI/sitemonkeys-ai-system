@@ -1,0 +1,237 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #564: [claude-fix] CRITICAL: T2 Still Failing — Requires Semantic Intelligence, Not More Rules
+
+Issue Description:
+# CRITICAL: T2 Still Failing — Requires Semantic Intelligence, Not More Rules
+
+## Priority: 🔴 CRITICAL — 10/11 tests passing, T2 still fails
+
+## Current State
+
+The previous fix (Issue #562) improved retrieval:
+- ✅ Memory recall detection triggers correctly
+- ✅ Threshold lowered to 0.10
+- ✅ Recency boost applied (+0.50)
+- ✅ T3 (ordinal ranking) now passes
+- ❌ T2 (token recall) still fails
+
+**Result: 10/11 passing. T2 still fails.**
+
+---
+
+## What The Logs Show
+
+**Storage (22:40:15):**
+```
+[TRACE-T2] detectExplicitMemoryRequest result: {"isExplicit":true,"extractedContent":"ZEBRA-ANCHOR-1769035207634-742162"}
+[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=4673, tokens=15
+```
+✅ Explicit memory request detected and stored correctly.
+
+**First Recall (22:40:17) — 2 seconds later:**
+```
+[MEMORY-RECALL] 🎯 Memory recall query detected: "What phrase did I ask you to remember?"
+[MEMORY-RECALL] Memory 4673: Very recent (0.0 min ago) - boosting by +0.50
+[SEMANTIC RETRIEVAL] ✅ Found 1 memories
+[ORCHESTRATOR] [MEMORY] Semantic retrieval: 1 memories injected, 9 tokens
+```
+✅ Memory found and injected. **This should have worked.**
+
+**Later Recall (22:44:36) — after more memories accumulated:**
+```
+[SEMANTIC RETRIEVAL] ✅ Found 10 memories for "What did I tell you to remember?"
+[ORCHESTRATOR] [MEMORY] Semantic retrieval: 5 memories injected, 102 tokens
+```
+❌ 10 memories found, only 5 injected (token budget). ZEBRA token may have been filtered out.
+
+---
+
+## Why Rules-Based Fixes Won't Work
+
+Adding more flags and boosts is **not genuine intelligence**. It's pattern matching disguised as intelligence.
+
+From the Bible, Chapter 9:
+> "The system must behave like an expert advisor: it doesn't just apply rules, it understands WHY the rules exist and uses them to produce higher-quality decisions."
+
+From the Bible, Chapter 3:
+> "Nothing can ever be something that is designed to look like intelligence, but really built of nothing but rules."
+
+---
+
+## What Genuine Intelligence Looks Like
+
+### The Semantic Relationship
+
+When a user says:
+```
+"Remember this exactly: ZEBRA-ANCHOR-123"
+```
+
+And later asks:
+```
+"What phrase did I ask you to remember?"
+```
+
+A genuinely intelligent system understands:
+
+1. **The first message is a COMMAND** — "Remember this exactly" is an imperative directing the system to store specific content
+
+2. **The second message REFERENCES the command** — "What did I ask you to remember?" is semantically linked to the first message through the concept of "explicit memory request"
+
+3. **The answer is the content of the command** — The user isn't asking for "semantically similar content." They're asking: "What content did I explicitly command you to store?"
+
+4. **This is not a similarity search** — It's a **reference resolution** problem. The query references a prior command; the answer is the content of that command.
+
+---
+
+## The Caring Family Member Test
+
+From the Bible, Chapter 5:
+
+> "Imagine someone you love deeply... Would you let them walk into a mistake you could have prevented?"
+
+If your family member said "Remember this code: ZEBRA-123" and five minutes later asked "What did I tell you to remember?", would you:
+
+A) Run a semantic similarity search across everything they've ever told you, rank by score, and return the top 5 results?
+
+B) Say "You told me to remember ZEBRA-123"?
+
+**The answer is B.** That's what genuine intelligence does.
+
+---
+
+## The Required Fix
+
+### Understanding, Not Scoring
+
+The system must understand that:
+
+1. **"Remember this exactly: X"** creates an **explicit memory command** — not just another piece of information, but a command with content X
+
+2. **"What did I tell you to remember?"** is asking for the **content of explicit memory commands** — not semantically similar content
+
+3. **The relationship is semantic** — Both contain the concept of "remember" in the context of explicit user-to-system commands
+
+### Implementation Approach
+
+**Option A: Semantic Intent Matching**
+
+When processing a memory recall query ("What did I tell you to remember?"):
+1. Detect that this query is asking about **explicit memory commands**
+2. Retrieve memories that were created from explicit memory commands
+3. Return those memories **regardless of content similarity** — because the similarity that matters is the **command intent**, not the content
+
+**Option B: Command-Content Linking**
+
+When storing an explicit memory request:
+1. Store the content (ZEBRA-ANCHOR-123)
+2. Also store the **command context** ("User explicitly asked to remember this")
+
+When retrieving for memory recall:
+1. Match the **command context** ("asking about explicit memory requests") to memories with that context
+2. Content similarity becomes secondary to command-intent matching
+
+**Option C: Query Rewriting**
+
+When a memory recall query is detected:
+1. Rewrite the query to include the storage command patterns
+2. "What did I tell you to remember?" → Search for memories containing "remember this", "store this", explicit commands
+3. This creates semantic similarity between the query and the storage context
+
+### What NOT To Do
+
+❌ Add another boost flag (+0.20 for explicit storage)
+❌ Add a database column `is_explicit_storage`
+❌ Create more threshold tiers
+❌ Add more regex patterns
+
+These are rules. The Bible explicitly rejects rules masquerading as intelligence.
+
+---
+
+## Success Criteria
+
+### T2 Must Pass
+
+```
+User: "Remember this exactly: ZEBRA-ANCHOR-XXX"
+[Storage: explicit memory command detected, content stored]
+
+User: "What phrase did I ask you to remember?"
+[Retrieval: query asks about explicit memory commands]
+[System returns: ZEBRA-ANCHOR-XXX]
+
+Response: "You asked me to remember: ZEBRA-ANCHOR-XXX"
+```
+
+### The Test
+
+The test sends "Remember this exactly: ZEBRA-ANCHOR-XXX" then asks "What phrase did I ask you to remember?"
+
+- The response must contain the ZEBRA-ANCHOR token
+- The system must not claim ignorance
+- Memory must be injected into context
+
+### Regression Prevention
+
+- T3 must still pass (ordinal ranking)
+- T0, T1, T4-T10 must still pass
+- Main diagnostic (4/4) must still pass
+
+---
+
+## The Standard
+
+From the Bible:
+
+> "As it should be" is the only acceptable standard.
+
+When a user explicitly tells the system to remember something, and then asks what they told it to remember, the system must answer correctly. 
+
+This is not an edge case. This is the **core promise** of a memory system.
+
+**10/11 is not acceptable. 11/11 is the only acceptable outcome.**
+
+---
+
+## Investigation Scope
+
+The fix must trace:
+
+1. **Storage path** — How explicit memory requests are stored, what metadata is preserved
+2. **Query understanding** — How "What did I tell you to remember?" is interpreted
+3. **Retrieval logic** — How memories are selected when the query references explicit commands
+4. **Injection prioritization** — How the final set of memories is chosen for injection
+
+No file restrictions. The solution requires genuine understanding of the semantic relationship between storage commands and recall queries.
+
+---
+
+## Final Note
+
+The previous fix added recency boosts and lower thresholds. That was **necessary but not sufficient**.
+
+The system now finds the memory. It boosts it. But when token budget forces selection, the explicit memory request loses to other memories because **content similarity doesn't capture command-intent similarity**.
+
+The fix must make the system understand: when a user asks "What did I tell you to remember?", they're asking about explicit memory commands. The answer is the content of those commands, not the most semantically similar content in memory.
+
+**That's genuine intelligence. That's what the Bible demands. That's what must be built.**
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
