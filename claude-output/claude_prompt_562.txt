@@ -1,0 +1,265 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #562: [claude-fix] CRITICAL: Memory Recall Retrieval Failure — T2 and T3 Tests
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>CRITICAL: Memory Recall Retrieval Failure — T2 and T3 Tests</h1>
+<h2>Priority: 🔴 CRITICAL — System violates core doctrine</h2>
+<h2>The Failure</h2>
+<p>The memory system <strong>stores information correctly</strong> but <strong>fails to retrieve it</strong> when users ask for what they stored. This is a <strong>catastrophic trust violation</strong> per the System Bible.</p>
+<p><strong>Evidence from logs:</strong></p>
+<ul>
+<li>Memory 4648 contains <code>ZEBRA-ANCHOR-1769029324790-473957</code> ✅ STORED</li>
+<li>Query "What did I tell you to remember?" returns <strong>0 memories</strong> ❌ RETRIEVAL FAILED</li>
+<li>Same user, 9 memories exist, all pass user isolation — but <strong>none pass relevance threshold</strong></li>
+</ul>
+<hr>
+<h2>Why This Is Critical (From the Bible)</h2>
+<h3>The Priority Stack Violation</h3>
+<pre><code>TRUTH &gt; HELPFULNESS &gt; ENGAGEMENT
+</code></pre>
+<p>The system is <strong>lying by omission</strong>. It has the information. It knows what the user told it. It refuses to provide it. This is not truth-first — this is information suppression.</p>
+<h3>The Trust Continuity Violation (Chapter 6)</h3>
+<blockquote>
+<p>"A system feels broken when it... Refuses to use information it already has"</p>
+</blockquote>
+<p>The user stored "ZEBRA-ANCHOR-XXX". The system stored it. The user asks "What did I tell you to remember?" The system says "I don't have that information." <strong>That is exactly the behavior the Bible says breaks trust.</strong></p>
+<h3>The Memory Doctrine Violation (Chapter 11)</h3>
+<blockquote>
+<p>"Memory exists to improve reasoning, not to decorate responses. If memory does not change reasoning, it should not be retrieved. <strong>If retrieved memory is ignored, the system is broken.</strong>"</p>
+</blockquote>
+<p>But this is worse — the memory isn't even being retrieved. The system has it, can't find it, and claims ignorance.</p>
+<h3>The Catastrophic Trust Violation</h3>
+<p>From the System Bible:</p>
+<blockquote>
+<p>"Claiming ignorance of stored information constitutes a <strong>catastrophic trust violation</strong> that undermines the entire trust framework."</p>
+</blockquote>
+<p><strong>This is exactly what's happening.</strong></p>
+<hr>
+<h2>Root Cause Analysis (From Logs)</h2>
+<h3>The Paradox</h3>
+
+Query | Memories Found | Result
+-- | -- | --
+"ok" | 1 (Memory 4648: ZEBRA-ANCHOR token) | ✅ Token retrieved
+"What did I tell you to remember?" | 0 | ❌ Nothing retrieved
+
+
+<p><strong>Same user. Same memories. Different queries. Different results.</strong></p>
+<h3>What The Logs Show</h3>
+<pre><code>[USER-ISOLATION] Retrieved 9 candidates
+[USER-ISOLATION] ✅ All candidates belong to correct user
+[TRACE-T3] Final ranked memories (top 5) after hybrid scoring:
+[SEMANTIC RETRIEVAL] ✅ Found 0 memories for "What did I tell you to remember?..." (452ms)
+</code></pre>
+<p><strong>9 memories exist. 0 pass the relevance threshold.</strong> The semantic similarity between "What did I tell you to remember?" and "ZEBRA-ANCHOR-XXX" is too low.</p>
+<h3>The T3 Ordinal Problem</h3>
+<pre><code>Store: "My first code is CHARLIE-XXX"
+Store: "My second code is DELTA-XXX"
+Query: "What is my first code?"
+Result: Returns DELTA (WRONG)
+</code></pre>
+<p>The ordinal boosting exists (<code>[TRACE-T3] applyOrdinalBoost called</code>) but either:</p>
+<ol>
+<li>Isn't detecting ordinals correctly</li>
+<li>Isn't boosting enough</li>
+<li>Is being overridden by other scoring</li>
+</ol>
+<hr>
+<h2>What The System MUST Do (From the Bible)</h2>
+<h3>Memory Recall Queries Must Work</h3>
+<p>When a user asks variations of:</p>
+<ul>
+<li>"What did I tell you to remember?"</li>
+<li>"What phrase did I ask you to remember?"</li>
+<li>"What did I store?"</li>
+<li>"What do you know about me?"</li>
+</ul>
+<p>The system MUST:</p>
+<ol>
+<li><strong>Recognize this as a memory recall query</strong> (not a semantic similarity search)</li>
+<li><strong>Return relevant stored memories</strong> (not filter them out due to low similarity)</li>
+<li><strong>Prioritize recent explicit storage requests</strong> (user said "remember this")</li>
+</ol>
+<h3>The Caring Family Member Test</h3>
+<blockquote>
+<p>"Imagine someone you love deeply... Would you let them walk into a mistake you could have prevented?"</p>
+</blockquote>
+<p>A caring family member who was told "Remember this code: ZEBRA-ANCHOR-123" would not, when asked "What did I ask you to remember?", respond with "I don't have that information."</p>
+<p>They would say: "You asked me to remember ZEBRA-ANCHOR-123."</p>
+<h3>The Genuine Intelligence Requirement (Chapter 9)</h3>
+<blockquote>
+<p>"The system must behave like an expert advisor: it doesn't just apply rules, it understands WHY the rules exist and uses them to produce higher-quality decisions."</p>
+</blockquote>
+<p>Pure semantic similarity is a rule. Understanding that "What did you remember?" should retrieve recently-stored explicit memories is <strong>intelligence</strong>.</p>
+<hr>
+<h2>Investigation Requirements</h2>
+<h3>Scope: FULL SYSTEM — No File Restrictions</h3>
+<p>This investigation must trace the COMPLETE path from storage to retrieval without being limited to specific files. The problem could be in:</p>
+<ol>
+<li><strong>Fact Extraction</strong> — Is "Remember this exactly: XXX" being recognized as storable?</li>
+<li><strong>Storage Tagging</strong> — Is explicit memory request being tagged differently?</li>
+<li><strong>Query Classification</strong> — Is "What did I tell you to remember?" being classified correctly?</li>
+<li><strong>Retrieval Strategy Selection</strong> — Should memory recall queries use different retrieval?</li>
+<li><strong>Relevance Scoring</strong> — Is the threshold too high for recall queries?</li>
+<li><strong>Ordinal Detection</strong> — Is "first/second" being detected in queries?</li>
+<li><strong>Ordinal Boosting</strong> — Is the boost strong enough to change rankings?</li>
+<li><strong>Hybrid Scoring</strong> — Is something overriding the ordinal boost?</li>
+</ol>
+<h3>Evidence Trail Requirements</h3>
+<p>For each component investigated, document:</p>
+<ol>
+<li>What the code currently does</li>
+<li>What the Bible says it should do</li>
+<li>The gap between current and required behavior</li>
+<li>The specific fix with before/after behavior</li>
+</ol>
+<hr>
+<h2>T2 Specific Requirements</h2>
+<h3>What Must Work</h3>
+<pre><code>User: "Remember this exactly: ZEBRA-ANCHOR-123"
+[System stores Memory X with content "ZEBRA-ANCHOR-123"]
+
+User: "What phrase did I ask you to remember?"
+[System retrieves Memory X]
+Response: "You asked me to remember: ZEBRA-ANCHOR-123"
+</code></pre>
+<h3>Detection Patterns That Must Trigger Explicit Storage</h3>
+<ul>
+<li>"Remember this exactly: [content]"</li>
+<li>"Remember this: [content]"</li>
+<li>"Please remember: [content]"</li>
+<li>"Store this: [content]"</li>
+<li>"Don't forget: [content]"</li>
+<li>"Keep this in memory: [content]"</li>
+<li>Any variation that explicitly requests storage</li>
+</ul>
+<h3>Retrieval Patterns That Must Trigger Memory Recall Mode</h3>
+<ul>
+<li>"What did I tell you to remember?"</li>
+<li>"What did I ask you to remember?"</li>
+<li>"What phrase did I ask you to remember?"</li>
+<li>"What did I store?"</li>
+<li>"What do you remember about [topic]?"</li>
+<li>"Recall what I told you about [topic]"</li>
+</ul>
+<p>When these patterns are detected, the system must:</p>
+<ol>
+<li>Lower or bypass semantic similarity threshold</li>
+<li>Prioritize memories flagged as explicit storage requests</li>
+<li>Include recent memories regardless of semantic similarity</li>
+</ol>
+<hr>
+<h2>T3 Specific Requirements</h2>
+<h3>What Must Work</h3>
+<pre><code>User: "My first code is CHARLIE-123"
+[System stores with ordinal marker "first"]
+
+User: "My second code is DELTA-456"
+[System stores with ordinal marker "second"]
+
+User: "What is my first code?"
+Response: "CHARLIE-123" (NOT DELTA)
+
+User: "What is my second code?"
+Response: "DELTA-456" (NOT CHARLIE)
+</code></pre>
+<h3>Ordinal Detection Must Identify</h3>
+<p>In queries:</p>
+<ul>
+<li>"first", "1st", "one"</li>
+<li>"second", "2nd", "two"</li>
+<li>"third", "3rd", "three"</li>
+<li>etc.</li>
+</ul>
+<p>In stored memories:</p>
+<ul>
+<li>Same patterns in the content itself</li>
+</ul>
+<h3>Ordinal Boosting Must</h3>
+<ol>
+<li>Detect ordinal in query</li>
+<li>Find memories containing matching ordinal</li>
+<li>Boost those memories SIGNIFICANTLY (not marginally)</li>
+<li>Ensure boosted memories rank above non-matching ordinals</li>
+</ol>
+<hr>
+<h2>Success Criteria</h2>
+<h3>T2 — Token Recall</h3>
+<ul>
+<li>[ ] "Remember this exactly: ZEBRA-ANCHOR-XXX" stores with explicit_memory flag</li>
+<li>[ ] "What phrase did I ask you to remember?" triggers memory recall mode</li>
+<li>[ ] Memory recall mode retrieves explicit memories regardless of semantic similarity</li>
+<li>[ ] Response contains the exact token stored</li>
+</ul>
+<h3>T3 — Ordinal Ranking</h3>
+<ul>
+<li>[ ] "My first code is CHARLIE" stores with ordinal="first" marker</li>
+<li>[ ] "What is my first code?" detects ordinal="first" in query</li>
+<li>[ ] Memories with matching ordinal are boosted above non-matching</li>
+<li>[ ] Response contains CHARLIE, not DELTA</li>
+</ul>
+<h3>Regression Prevention</h3>
+<ul>
+<li>[ ] All currently passing tests (T0, T1, T4-T10) continue to pass</li>
+<li>[ ] Main diagnostic suite (4/4) continues to pass</li>
+<li>[ ] Token efficiency maintained (no bloat to context window)</li>
+<li>[ ] No new placeholder code — production-grade only</li>
+</ul>
+<hr>
+<h2>Implementation Standards (From the Bible)</h2>
+<h3>No Placeholders</h3>
+<blockquote>
+<p>"Zero-tolerance standard for placeholder code, pattern matching disguised as intelligence, or degraded functionality"</p>
+</blockquote>
+<p>The fix must be production-grade. If it compiles but doesn't work correctly, it's garbage.</p>
+<h3>Semantic Intelligence Required</h3>
+<blockquote>
+<p>"Nothing can ever be something that is designed to look like intelligence, but really built of nothing but rules."</p>
+</blockquote>
+<p>The solution must use genuine semantic understanding, not just keyword matching. However, keyword matching can AUGMENT semantic retrieval — it cannot replace it.</p>
+<h3>Token Efficiency</h3>
+<blockquote>
+<p>"Token efficiency isn't a nice-to-have; it's what makes the system scalable, fast, affordable, less hallucination-prone"</p>
+</blockquote>
+<p>The fix cannot bloat retrieval. Memory recall mode should be efficient, not dump everything into context.</p>
+<hr>
+<h2>Verification Protocol</h2>
+<p>After implementation, run:</p>
+<pre><code class="language-javascript">// Main diagnostic (must remain 4/4)
+await SiteMonkeysDiagnostic.runAll()
+
+// Full suite (must achieve 11/11)
+await SMX.runAll()
+</code></pre>
+<p><strong>Only 11/11 is acceptable.</strong> 9/11 is not "good enough" — it means the system still lies to users about information it has.</p>
+<hr>
+<h2>Final Note: The Standard</h2>
+<p>From the System Bible:</p>
+<blockquote>
+<p>"As it should be" is the only acceptable standard.</p>
+</blockquote>
+<p>The system should work like a caring family member with perfect recall. When you tell them something important and ask about it later, they remember. They don't claim ignorance because of "low semantic similarity."</p>
+<p><strong>Fix this. Make it work. No compromises.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

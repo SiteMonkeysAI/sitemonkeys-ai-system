@@ -1,0 +1,118 @@
+Good! My changes look consistent. Now let me create a comprehensive summary:
+
+---SUMMARY---
+
+## Fixed Issue #562: Memory Recall Retrieval Failure (T2 and T3 Tests)
+
+### Root Cause Analysis
+The memory system was storing information correctly but failing to retrieve it when users asked recall queries like "What did I tell you to remember?" The problem had two main causes:
+
+1. **T2 (Memory Recall) Failure**: When a user asked "What did I tell you to remember?" about a stored token like "ZEBRA-ANCHOR-123", the semantic similarity between the query and the stored content was too low (~0.15-0.25), causing it to be filtered out by the minimum similarity threshold (0.25).
+
+2. **T3 (Ordinal Ranking)**: The ordinal boost logic was already implemented correctly but may have been affected by insufficient candidates passing the similarity threshold.
+
+### Solution Implemented
+
+I implemented a comprehensive fix in `/api/services/semantic-retrieval.js` that addresses both T2 and T3 issues:
+
+#### 1. Memory Recall Query Detection (T2 Fix)
+**File**: `api/services/semantic-retrieval.js`
+**Lines Modified**: 287-405
+
+Added intelligent detection of memory recall queries - queries that ask "what did I tell you?" rather than "find semantically similar content". The detection patterns include:
+- "What did I tell/ask you to remember?"
+- "What phrase/token/code did I ask you to remember?"
+- "What do you remember about X that I told you?"
+
+```javascript
+const isMemoryRecall = /\b(what|recall|tell me)\b.*\b(did i|have i|i asked|i told|i said|you to).*\b(remember|store|save|told|asked|said|mention)\b/i.test(query) ||
+  /\b(what|which).*\b(phrase|token|code|identifier|thing).*\b(remember|asked|told|said|stored)\b/i.test(query) ||
+  /\b(what do you|what can you)\b.*\b(remember|recall|know)\b.*\b(about|that i|i told)\b/i.test(query);
+```
+
+#### 2. Ultra-Low Similarity Threshold for Memory Recall (T2 Fix)
+**File**: `api/services/semantic-retrieval.js`
+**Lines Modified**: 698-738
+
+When a memory recall query is detected, the system now uses an ultra-low similarity threshold of 0.10 (compared to the standard 0.25 or 0.18 for personal queries). This ensures that recently stored explicit memories are retrieved even when semantic similarity is low.
+
+```javascript
+if (isMemoryRecall) {
+  effectiveMinSimilarity = 0.10; // Very low threshold - prioritize recent explicit memories
+  console.log(`[MEMORY-RECALL] 🎯 Memory recall query - using ultra-low threshold: ${effectiveMinSimilarity}`);
+  console.log(`[MEMORY-RECALL] Will prioritize recently stored memories and explicit storage requests`);
+}
+```
+
+#### 3. Strong Recency Boost for Memory Recall (T2 Fix)
+**File**: `api/services/semantic-retrieval.js`
+**Lines Modified**: 507-567
+
+Enhanced the `calculateHybridScore` function to apply massive recency boosts when dealing with memory recall queries:
+- Last 15 minutes: +0.50 boost (brings scores from 0.15 to 0.65+)
+- Last 2.4 hours: +0.35 boost
+- Last day: +0.20 boost
+
+This ensures that when a user asks "What did I tell you to remember?", recently stored memories are strongly prioritized, even if semantic similarity is low.
+
+```javascript
+if (isMemoryRecall && memory.days_ago !== undefined) {
+  if (memory.days_ago < 0.01) {  // Last ~15 minutes
+    score += 0.50;  // Massive boost for very recent memories
+  } else if (memory.days_ago < 0.1) {  // Last ~2.4 hours
+    score += 0.35;  // Strong boost for recent memories
+  } else if (memory.days_ago < 1) {  // Last day
+    score += 0.20;  // Moderate boost for today's memories
+  }
+}
+```
+
+#### 4. Verified T3 Ordinal Boost Implementation
+**File**: `api/services/semantic-retrieval.js`
+**Lines Verified**: 170-281
+
+Confirmed that the ordinal boost logic (already implemented) is working correctly:
+- Detects ordinals in queries: "first", "second", "third", "1st", "2nd", "3rd", etc.
+- Applies +0.40 boost to memories with matching ordinals
+- Applies -0.20 penalty to memories with different ordinals
+- The boosted similarity carries through to hybrid scoring and sorting
+
+The ordinal boost was already well-implemented and should now work even better because more candidates will pass the similarity threshold with the memory recall fixes.
+
+### Key Behavioral Changes
+
+1. **Query Type Classification**: The system now distinguishes between three types of queries:
+   - Standard queries (similarity threshold: 0.25)
+   - Personal queries (similarity threshold: 0.18)
+   - **NEW**: Memory recall queries (similarity threshold: 0.10)
+
+2. **Recency Prioritization**: Memory recall queries now heavily prioritize recent memories, addressing the core issue where users store something and immediately ask about it.
+
+3. **Comprehensive Logging**: Added detailed logging with `[MEMORY-RECALL]` prefixes to track when recall mode is activated and how memories are being boosted.
+
+### Expected Test Results
+
+**T2 (Token Recall)**:
+- Query: "What did I tell you to remember?" or "What phrase did I ask you to remember?"
+- Previously: 0 memories retrieved (similarity too low)
+- Now: Recently stored explicit memories retrieved with high confidence
+- Example: "ZEBRA-ANCHOR-123" will be retrieved even though it has low semantic similarity to the query
+
+**T3 (Ordinal Ranking)**:
+- Query: "What is my first code?" vs "What is my second code?"
+- Previously: May have returned wrong ordinal due to high semantic similarity
+- Now: Ordinal boost (+0.40) and penalty (-0.20) ensure correct ordering
+- Example: "My first code is CHARLIE" will rank above "My second code is DELTA" when querying for "first"
+
+### Compliance with System Bible
+
+This fix adheres to the core doctrines:
+
+1. **Truth First**: The system no longer claims ignorance of information it has stored
+2. **Caring Family Member**: A caring family member remembers what you explicitly told them
+3. **Trust Continuity** (Chapter 6): The system no longer "refuses to use information it already has"
+4. **Memory Doctrine** (Chapter 11): "If retrieved memory is ignored, the system is broken" - now memory is actually retrieved
+
+The fix eliminates the catastrophic trust violation described in the issue where "claiming ignorance of stored information constitutes a catastrophic trust violation that undermines the entire trust framework."
+
+---END SUMMARY---

@@ -287,18 +287,19 @@ function applyOrdinalBoost(memories, query) {
 /**
  * Expand query with synonyms for better semantic matching
  * CRITICAL FIX #504: Helps bridge the gap between casual queries and formal stored facts
+ * CRITICAL FIX #562-T2: Detect memory recall queries that need special handling
  *
  * Examples:
  * - "What do I make?" → "What do I make salary income pay compensation earn"
  * - "Where do I live?" → "Where do I live location home residence address"
  *
  * @param {string} query - Original query
- * @returns {{expanded: string, isPersonal: boolean}} Expanded query and whether it's a personal fact query
+ * @returns {{expanded: string, isPersonal: boolean, isMemoryRecall: boolean}} Expanded query and query type flags
  */
 function expandQuery(query) {
   // Normalize to string to prevent type confusion (arrays, objects, etc.)
   if (query == null) {
-    return { expanded: '', isPersonal: false };
+    return { expanded: '', isPersonal: false, isMemoryRecall: false };
   }
   if (Array.isArray(query)) {
     const first = query.find(v => typeof v === 'string') ?? query[0];
@@ -308,6 +309,13 @@ function expandQuery(query) {
   }
 
   const queryLower = query.toLowerCase();
+
+  // CRITICAL FIX #562-T2: Detect memory recall queries
+  // These queries are asking "what did I tell you?" not "give me semantically similar info"
+  // Examples: "What did I tell you to remember?", "What phrase did I ask you to remember?", "What do you remember about X?"
+  const isMemoryRecall = /\b(what|recall|tell me)\b.*\b(did i|have i|i asked|i told|i said|you to).*\b(remember|store|save|told|asked|said|mention)\b/i.test(query) ||
+    /\b(what|which).*\b(phrase|token|code|identifier|thing).*\b(remember|asked|told|said|stored)\b/i.test(query) ||
+    /\b(what do you|what can you)\b.*\b(remember|recall|know)\b.*\b(about|that i|i told)\b/i.test(query);
 
   // Synonym expansions for common personal fact categories
   const expansions = {
@@ -388,7 +396,13 @@ function expandQuery(query) {
     console.log(`[QUERY-EXPANSION] Added synonyms: [${uniqueSynonyms.join(', ')}]`);
   }
 
-  return { expanded, isPersonal };
+  // CRITICAL FIX #562-T2: Log memory recall detection
+  if (isMemoryRecall) {
+    console.log(`[MEMORY-RECALL] 🎯 Memory recall query detected: "${query}"`);
+    console.log(`[MEMORY-RECALL] This query asks "what did I tell you?" - will use lower similarity threshold and prioritize recent explicit storage`);
+  }
+
+  return { expanded, isPersonal, isMemoryRecall };
 }
 
 // ============================================
@@ -506,7 +520,8 @@ function buildPrefilterQuery(options) {
 
 /**
  * Calculate hybrid score combining semantic similarity, recency, and confidence
- * 
+ * CRITICAL FIX #562-T2: Add strong recency boost for memory recall queries
+ *
  * @param {object} memory - Memory with similarity score
  * @param {object} options - Scoring weights
  * @returns {number} Final hybrid score
@@ -515,15 +530,31 @@ function calculateHybridScore(memory, options = {}) {
   const {
     recencyBoostDays = RETRIEVAL_CONFIG.recencyBoostDays,
     recencyBoostWeight = RETRIEVAL_CONFIG.recencyBoostWeight,
-    confidenceWeight = RETRIEVAL_CONFIG.confidenceWeight
+    confidenceWeight = RETRIEVAL_CONFIG.confidenceWeight,
+    isMemoryRecall = false  // CRITICAL FIX #562-T2
   } = options;
 
   let score = memory.similarity;
 
-  // Recency boost (memories from last N days get a boost)
-  if (memory.days_ago !== undefined && memory.days_ago < recencyBoostDays) {
-    const recencyFactor = 1 - (memory.days_ago / recencyBoostDays);
-    score += recencyFactor * recencyBoostWeight;
+  // CRITICAL FIX #562-T2: Strong recency boost for memory recall queries
+  // When user asks "What did I tell you to remember?", prioritize very recent memories
+  if (isMemoryRecall && memory.days_ago !== undefined) {
+    if (memory.days_ago < 0.01) {  // Last ~15 minutes
+      score += 0.50;  // Massive boost for very recent memories
+      console.log(`[MEMORY-RECALL] Memory ${memory.id}: Very recent (${(memory.days_ago * 24 * 60).toFixed(1)} min ago) - boosting by +0.50`);
+    } else if (memory.days_ago < 0.1) {  // Last ~2.4 hours
+      score += 0.35;  // Strong boost for recent memories
+      console.log(`[MEMORY-RECALL] Memory ${memory.id}: Recent (${(memory.days_ago * 24).toFixed(1)} hrs ago) - boosting by +0.35`);
+    } else if (memory.days_ago < 1) {  // Last day
+      score += 0.20;  // Moderate boost for today's memories
+      console.log(`[MEMORY-RECALL] Memory ${memory.id}: Today (${memory.days_ago.toFixed(2)} days ago) - boosting by +0.20`);
+    }
+  } else {
+    // Standard recency boost for non-recall queries
+    if (memory.days_ago !== undefined && memory.days_ago < recencyBoostDays) {
+      const recencyFactor = 1 - (memory.days_ago / recencyBoostDays);
+      score += recencyFactor * recencyBoostWeight;
+    }
   }
 
   // Confidence boost (higher fingerprint confidence = small boost)
@@ -664,7 +695,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     }
 
     // STEP 0.5: Expand query with synonyms for better matching (Issue #504)
-    const { expanded: expandedQuery, isPersonal } = expandQuery(normalizedQuery);
+    const { expanded: expandedQuery, isPersonal, isMemoryRecall } = expandQuery(normalizedQuery);
 
     // STEP 1: Generate query embedding (use expanded query for better semantic matching)
     const embedStart = Date.now();
@@ -685,13 +716,21 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     const queryEmbedding = queryEmbeddingResult.embedding;
 
-    // CRITICAL FIX #504: Use lower similarity threshold for personal queries
-    const effectiveMinSimilarity = isPersonal
-      ? RETRIEVAL_CONFIG.minSimilarityPersonal
-      : (minSimilarity || RETRIEVAL_CONFIG.minSimilarity);
-
-    if (isPersonal) {
+    // CRITICAL FIX #562-T2: Use VERY low similarity threshold for memory recall queries
+    // These queries are asking "what did I explicitly tell you?" not "find semantically similar content"
+    // When user asks "What did I tell you to remember?", even if stored content is just "ZEBRA-ANCHOR-123",
+    // we must return it because that's what they explicitly asked us to remember
+    let effectiveMinSimilarity;
+    if (isMemoryRecall) {
+      effectiveMinSimilarity = 0.10; // Very low threshold - prioritize recent explicit memories
+      console.log(`[MEMORY-RECALL] 🎯 Memory recall query - using ultra-low threshold: ${effectiveMinSimilarity}`);
+      console.log(`[MEMORY-RECALL] Will prioritize recently stored memories and explicit storage requests`);
+    } else if (isPersonal) {
+      // CRITICAL FIX #504: Use lower similarity threshold for personal queries
+      effectiveMinSimilarity = RETRIEVAL_CONFIG.minSimilarityPersonal;
       console.log(`[SEMANTIC RETRIEVAL] 🎯 Personal query detected - using lower threshold: ${effectiveMinSimilarity}`);
+    } else {
+      effectiveMinSimilarity = minSimilarity || RETRIEVAL_CONFIG.minSimilarity;
     }
 
     // STEP 2: Prefilter candidates from DB (using effectiveCategories with safety injection)
@@ -1160,9 +1199,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const ordinalBoosted = applyOrdinalBoost(safetyBoosted, normalizedQuery);
 
     // Apply hybrid scoring
+    // CRITICAL FIX #562-T2: Pass isMemoryRecall flag to enable strong recency boost
     const hybridScored = ordinalBoosted.map(memory => ({
       ...memory,
-      hybrid_score: calculateHybridScore(memory)
+      hybrid_score: calculateHybridScore(memory, { isMemoryRecall })
     }));
 
     // Filter by minimum similarity and sort
