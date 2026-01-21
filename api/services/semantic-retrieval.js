@@ -1110,10 +1110,36 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // CRITICAL FIX #546: Score recent unembedded memories using text matching
     // This handles the embedding generation lag for just-stored memories
     // CRITICAL FIX #551: Enhanced scoring to detect exact tokens/identifiers
+    // CRITICAL FIX #564-T2: Check for explicit storage requests first
     // ═══════════════════════════════════════════════════════════════
     const recentScoredMemories = recentUnembeddedMemories.map(memory => {
       const contentLower = (memory.content || '').toLowerCase();
       const queryLower = normalizedQuery.toLowerCase();
+
+      // CRITICAL FIX #564-T2: Priority Strategy - Check for explicit storage request
+      // When user asks "What did I tell you to remember?" and this memory was explicitly stored,
+      // give it absolute priority regardless of semantic similarity
+      if (isMemoryRecall) {
+        try {
+          const metadata = typeof memory.metadata === 'string'
+            ? JSON.parse(memory.metadata)
+            : memory.metadata;
+
+          if (metadata?.explicit_storage_request === true) {
+            console.log(`[EMBEDDING-LAG-SCORE] Memory ${memory.id}: EXPLICIT STORAGE REQUEST for memory recall - boosting to 0.99`);
+            return {
+              ...memory,
+              similarity: 0.99, // Maximum priority for explicit recall
+              from_recent_unembedded: true,
+              embedding: null,
+              match_reason: 'explicit_storage_recall',
+              explicit_storage_request: true
+            };
+          }
+        } catch (parseError) {
+          console.warn(`[EMBEDDING-LAG-SCORE] Failed to parse metadata for memory ${memory.id}: ${parseError.message}`);
+        }
+      }
 
       // Strategy 1: Check for exact unique tokens (high-entropy alphanumeric patterns)
       // Extract potential tokens from query (patterns like ZEBRA-ANCHOR-123, ABC-123, etc.)
@@ -1198,9 +1224,46 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // When query contains ordinal indicators, boost memories with matching ordinals
     const ordinalBoosted = applyOrdinalBoost(safetyBoosted, normalizedQuery);
 
+    // ═══════════════════════════════════════════════════════════════
+    // CRITICAL FIX #564-T2: Apply explicit memory recall boost
+    // When user asks "What did I tell you to remember?", prioritize memories
+    // where metadata.explicit_storage_request === true
+    // This is NOT a similarity problem - it's a command-intent matching problem
+    // ═══════════════════════════════════════════════════════════════
+    const explicitMemoryBoosted = ordinalBoosted.map(memory => {
+      // Check if this is a memory recall query AND memory has explicit storage flag
+      if (isMemoryRecall) {
+        try {
+          const metadata = typeof memory.metadata === 'string'
+            ? JSON.parse(memory.metadata)
+            : memory.metadata;
+
+          if (metadata?.explicit_storage_request === true) {
+            const originalScore = memory.similarity;
+            const boostedScore = Math.min(originalScore + 0.70, 1.0); // Massive boost for explicit storage
+            console.log(`[EXPLICIT-RECALL] Memory ${memory.id}: explicit_storage_request=true - boosting ${originalScore.toFixed(3)} → ${boostedScore.toFixed(3)} (+0.70)`);
+            console.log(`[EXPLICIT-RECALL]    Content preview: "${(memory.content || '').substring(0, 60)}"`);
+            return {
+              ...memory,
+              similarity: boostedScore,
+              explicit_recall_boosted: true,
+              explicit_storage_request: true
+            };
+          }
+        } catch (parseError) {
+          // Metadata parse failed, continue without boost
+          console.warn(`[EXPLICIT-RECALL] Failed to parse metadata for memory ${memory.id}: ${parseError.message}`);
+        }
+      }
+      return memory;
+    });
+
+    console.log('[SEMANTIC RETRIEVAL] Applied scoring pipeline: semantic → safety → ordinal → explicit-recall');
+    // ═══════════════════════════════════════════════════════════════
+
     // Apply hybrid scoring
     // CRITICAL FIX #562-T2: Pass isMemoryRecall flag to enable strong recency boost
-    const hybridScored = ordinalBoosted.map(memory => ({
+    const hybridScored = explicitMemoryBoosted.map(memory => ({
       ...memory,
       hybrid_score: calculateHybridScore(memory, { isMemoryRecall })
     }));
@@ -1216,6 +1279,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     filtered.slice(0, 5).forEach((m, idx) => {
       console.log(`[TRACE-T3]   ${idx+1}. Memory ${m.id}: hybrid_score=${m.hybrid_score?.toFixed(3)}, similarity=${m.similarity?.toFixed(3)}`);
       console.log(`[TRACE-T3]      ordinal_boosted=${m.ordinal_boosted || false}, ordinal_penalized=${m.ordinal_penalized || false}`);
+      console.log(`[TRACE-T3]      explicit_recall_boosted=${m.explicit_recall_boosted || false}, explicit_storage=${m.explicit_storage_request || false}`);
       console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
     });
 
