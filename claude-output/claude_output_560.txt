@@ -1,0 +1,103 @@
+Let me provide you with a summary without writing the file:
+
+---SUMMARY---
+
+## Critical Trace Logging Added for Issue #560
+
+### Problem
+PR #558 was merged and deployed but tests show the fixes aren't working:
+- **T2**: "Remember this exactly: ZEBRA-ANCHOR-XXX" not being stored/retrieved
+- **T3**: "first code" query still returning "second code" (reversed)
+
+The code from #558 exists but behavior hasn't changed, indicating the functions may not be called, may return wrong results, or may be overridden downstream.
+
+### Solution: Comprehensive Trace Logging
+
+Added detailed trace logging at critical decision points to identify the EXACT failure location.
+
+### Files Modified
+
+#### 1. api/memory/intelligent-storage.js (Lines 414-423)
+Added T2 trace logging for explicit memory detection:
+- Log actual user message input
+- Log before calling detectExplicitMemoryRequest
+- Log the function result (isExplicit, extractedContent)
+
+This will reveal:
+- Is the function being called?
+- Is the pattern matching "Remember this exactly:" correctly?
+- Is isExplicit being set to true?
+
+#### 2. api/services/semantic-retrieval.js (Multiple locations)
+
+**Lines 171-203**: Function entry and ordinal detection
+- Log when applyOrdinalBoost is called
+- Log query text and memory count
+- Log detected ordinal (e.g., "first")
+- Log when no ordinal is detected
+
+**Lines 273-278**: After boost application
+- Log top 5 memories with their scores
+- Show which memories were boosted/penalized
+- Show memory content preview
+
+**Lines 1174-1180**: Final ranking
+- Log top 5 memories after hybrid scoring
+- Show hybrid_score vs similarity
+- Show ordinal_boosted/ordinal_penalized flags
+- Show final content preview
+
+This will reveal:
+- Is applyOrdinalBoost being called?
+- Is "first" being detected in "What is my first code?"?
+- Are boost/penalty flags being set?
+- Are scores actually changing?
+- What is the final ranking?
+
+### Expected Log Output
+
+**For T2** (if working):
+```
+[TRACE-T2] User message: Remember this exactly: ZEBRA-ANCHOR-...
+[TRACE-T2] Calling detectExplicitMemoryRequest...
+[TRACE-T2] detectExplicitMemoryRequest result: {"isExplicit":true,"extractedContent":"ZEBRA-ANCHOR-..."}
+[INTELLIGENT-STORAGE] 🎯 EXPLICIT MEMORY REQUEST - storing verbatim
+```
+
+**For T3** (if working):
+```
+[TRACE-T3] applyOrdinalBoost called
+[TRACE-T3] Query: What is my first code?
+[TRACE-T3] Detected ordinal: "first"
+[ORDINAL-BOOST] ✅ Memory 123: "first" MATCH - boosting 0.850 → 1.000 (+0.40)
+[ORDINAL-BOOST] ⬇️  Memory 456: DIFFERENT ordinal - penalizing 0.850 → 0.650 (-0.20)
+[TRACE-T3] Memories after ordinal boost (top 5):
+[TRACE-T3]   1. Memory 123: score=1.000, boosted=true
+[TRACE-T3]      Content: "My first code is CHARLIE-XXX"
+```
+
+### Next Steps
+
+1. Deploy these changes to Railway
+2. Run T2 test → Check Railway logs for `[TRACE-T2]`
+3. Run T3 test → Check Railway logs for `[TRACE-T3]`
+4. Analyze logs to find exact failure point
+5. Fix the specific issue identified
+6. Re-test until both pass
+
+### What These Logs Will Reveal
+
+**Possible T2 Failures:**
+- Pattern not matching → Fix string detection
+- Function not called → Fix integration
+- Stored but not retrieved → Fix retrieval path
+
+**Possible T3 Failures:**
+- Function not called → Fix integration
+- Ordinal not detected → Fix pattern matching
+- Boost applied but ranking wrong → Fix hybrid scoring
+- Ranking correct but response wrong → Fix response building
+
+The trace logging adds no functionality changes - it only observes the existing code path to identify where behavior diverges from expected.
+
+---END SUMMARY---

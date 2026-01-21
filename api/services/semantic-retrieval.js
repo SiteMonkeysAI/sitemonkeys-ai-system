@@ -168,6 +168,11 @@ function applySafetyCriticalBoost(memories) {
  * @returns {object[]} Memories with ordinal boost applied where appropriate
  */
 function applyOrdinalBoost(memories, query) {
+  // CRITICAL TRACE #560-T3: Log function entry
+  console.log('[TRACE-T3] applyOrdinalBoost called');
+  console.log('[TRACE-T3] Query:', query?.substring(0, 100));
+  console.log('[TRACE-T3] Memories count:', memories?.length || 0);
+
   // Ordinal patterns to detect and match
   const ORDINAL_PATTERNS = {
     first: /\b(first|1st)\b/i,
@@ -186,12 +191,14 @@ function applyOrdinalBoost(memories, query) {
     if (pattern.test(query)) {
       queryOrdinal = ordinalName;
       console.log(`[ORDINAL-BOOST] 🎯 Query contains ordinal: "${ordinalName}"`);
+      console.log(`[TRACE-T3] Detected ordinal: "${ordinalName}"`);
       break;
     }
   }
 
   // If no ordinal in query, no boost needed
   if (!queryOrdinal) {
+    console.log('[TRACE-T3] No ordinal detected in query, returning memories unchanged');
     return memories;
   }
 
@@ -262,6 +269,13 @@ function applyOrdinalBoost(memories, query) {
   } else {
     console.log(`[ORDINAL-BOOST] ⚠️ Query has "${queryOrdinal}" but NO memories matched - possible detection issue`);
   }
+
+  // CRITICAL TRACE #560-T3: Log all memory scores after boost
+  console.log('[TRACE-T3] Memories after ordinal boost (top 5):');
+  result.slice(0, 5).forEach((m, idx) => {
+    console.log(`[TRACE-T3]   ${idx+1}. Memory ${m.id}: score=${m.similarity?.toFixed(3)}, boosted=${m.ordinal_boosted || false}, penalized=${m.ordinal_penalized || false}`);
+    console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
+  });
 
   return result;
 }
@@ -1156,6 +1170,14 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const filtered = hybridScored
       .filter(m => m.similarity >= effectiveMinSimilarity)
       .sort((a, b) => b.hybrid_score - a.hybrid_score);
+
+    // CRITICAL TRACE #560-T3: Log final ranking after all boosts
+    console.log('[TRACE-T3] Final ranked memories (top 5) after hybrid scoring:');
+    filtered.slice(0, 5).forEach((m, idx) => {
+      console.log(`[TRACE-T3]   ${idx+1}. Memory ${m.id}: hybrid_score=${m.hybrid_score?.toFixed(3)}, similarity=${m.similarity?.toFixed(3)}`);
+      console.log(`[TRACE-T3]      ordinal_boosted=${m.ordinal_boosted || false}, ordinal_penalized=${m.ordinal_penalized || false}`);
+      console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
+    });
 
     telemetry.candidates_above_threshold = filtered.length;
     telemetry.scoring_ms = Date.now() - scoringStart;

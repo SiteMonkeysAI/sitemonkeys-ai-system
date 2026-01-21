@@ -411,11 +411,16 @@ export class IntelligentMemoryStorage {
       console.log('[TRACE-INTELLIGENT] I4. userMessage length:', userMessage?.length || 0);
       console.log('[TRACE-INTELLIGENT] I5. aiResponse length:', aiResponse?.length || 0);
 
+      // CRITICAL TRACE #560: Log the actual user message for T2 debugging
+      console.log('[TRACE-T2] User message:', userMessage?.substring(0, 200));
+
       console.log('[INTELLIGENT-STORAGE] 🧠 Processing conversation for intelligent storage');
 
       // FIX #557-T2: Check for explicit memory storage requests FIRST
       // When user says "Remember this exactly: X", store X verbatim without compression
+      console.log('[TRACE-T2] Calling detectExplicitMemoryRequest...');
       const explicitRequest = this.detectExplicitMemoryRequest(userMessage);
+      console.log('[TRACE-T2] detectExplicitMemoryRequest result:', JSON.stringify(explicitRequest));
 
       if (explicitRequest.isExplicit) {
         console.log('[INTELLIGENT-STORAGE] 🎯 EXPLICIT MEMORY REQUEST - storing verbatim without compression');

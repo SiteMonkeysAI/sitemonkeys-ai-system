@@ -1,0 +1,197 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #560: [claude-fix] CRITICAL: Issue #558 Fix Deployed But Not Working - Trace Required
+
+Issue Description:
+# CRITICAL: Issue #558 Fix Deployed But Not Working - Trace Required
+
+## Priority: HIGHEST
+
+## Summary
+
+PR #558 was merged and deployed to Railway. The fix claimed to add:
+1. Explicit memory request detection for "Remember this exactly:" patterns
+2. Ordinal boost (+0.40) and penalty (-0.20) for first/second disambiguation
+
+**Neither fix is working.** Test results are identical to before the fix.
+
+---
+
+## Evidence
+
+### T2 - Explicit Memory Detection NOT Working
+
+**Input:** `"Remember this exactly: ZEBRA-ANCHOR-1768954133296-84106"`
+
+**Expected after #558:** Memory stored verbatim, retrieved on query
+
+**Actual:**
+```
+"I'm sorry, but I don't have enough information about the specific phrase you're referring to..."
+```
+
+The `detectExplicitMemoryRequest()` function added in #558 is either:
+- Not being called
+- Not detecting the pattern
+- Not storing the result
+- Storing but retrieval not finding it
+
+### T3 - Ordinal Boost/Penalty NOT Working
+
+**Input:**
+- Store: "My first code is CHARLIE-XXX"
+- Store: "My second code is DELTA-XXX"
+- Query: "What is my first code?"
+
+**Expected after #558:** CHARLIE returned (ordinal boost makes it rank higher)
+
+**Actual:**
+```
+"your first code is DELTA-..."
+"your second code is CHARLIE-..."
+```
+
+Still reversed. The ordinal boost (+0.40) and penalty (-0.20) are either:
+- Not being applied
+- Being applied but not changing rankings
+- Applied to wrong memories
+
+---
+
+## Required Investigation
+
+### Step 1: Verify Code Is Actually Deployed
+
+Check that the changes from #558 are in the running code:
+
+```javascript
+// In intelligent-storage.js, detectExplicitMemoryRequest should exist
+// Search for: "detectExplicitMemoryRequest"
+// Search for: "EXPLICIT_PATTERNS" or "Remember this exactly"
+
+// In semantic-retrieval.js, ordinal boost should be +0.40
+// Search for: "0.40" or "ordinalBoost"
+// Search for: "-0.20" or "ordinalPenalty"
+```
+
+If these don't exist in the deployed code, there's a deployment issue.
+
+### Step 2: Add Trace Logging to Explicit Memory Detection
+
+In `intelligent-storage.js`, add logging at the START of `storeWithIntelligence()`:
+
+```javascript
+console.log('[TRACE-T2] storeWithIntelligence called with message:', userMessage?.substring(0, 100));
+const explicitRequest = this.detectExplicitMemoryRequest(userMessage);
+console.log('[TRACE-T2] detectExplicitMemoryRequest result:', JSON.stringify(explicitRequest));
+```
+
+Then run T2 and check Railway logs. We need to see:
+- Is `detectExplicitMemoryRequest` being called?
+- What does it return for "Remember this exactly: ZEBRA-ANCHOR-XXX"?
+
+### Step 3: Add Trace Logging to Ordinal Boost
+
+In `semantic-retrieval.js`, add logging in the ordinal boost function:
+
+```javascript
+console.log('[TRACE-T3] applyOrdinalBoost called');
+console.log('[TRACE-T3] Query ordinals detected:', queryOrdinals);
+console.log('[TRACE-T3] Candidates before boost:', candidates.map(c => ({
+  content: c.content?.substring(0, 50),
+  score: c.similarity_score || c.score
+})));
+// ... after boost applied ...
+console.log('[TRACE-T3] Candidates after boost:', candidates.map(c => ({
+  content: c.content?.substring(0, 50),
+  score: c.similarity_score || c.score,
+  boosted: c.ordinalBoosted
+})));
+```
+
+Then run T3 and check Railway logs. We need to see:
+- Is `applyOrdinalBoost` being called?
+- What ordinals are detected in the query?
+- Are scores actually changing?
+
+### Step 4: Find the Actual Failure Point
+
+Based on trace logs, identify exactly WHERE it fails:
+
+**T2 Possible Failure Points:**
+1. `detectExplicitMemoryRequest()` not called → Fix: ensure it's in the code path
+2. Pattern not matching → Fix: adjust regex
+3. Returns `isExplicit: false` → Fix: debug the pattern matching
+4. Returns `isExplicit: true` but not stored → Fix: check storage logic
+5. Stored but not retrieved → Fix: check retrieval for explicit memories
+
+**T3 Possible Failure Points:**
+1. `applyOrdinalBoost()` not called → Fix: ensure it's in the retrieval pipeline
+2. Query ordinals not detected → Fix: adjust ordinal patterns
+3. Memory ordinals not detected → Fix: adjust content ordinal detection
+4. Boost applied but too weak → Fix: increase boost strength
+5. Boost applied to wrong memories → Fix: check matching logic
+
+---
+
+## What #558 Claimed to Change
+
+### intelligent-storage.js
+- Added `detectExplicitMemoryRequest()` method (lines 333-364)
+- Integrated into storage flow (lines 385-410)
+- Should detect "Remember this exactly:", "Please remember:", etc.
+
+### semantic-retrieval.js
+- Added memory-recall synonyms to query expansion (lines 260-263)
+- Updated personal query pattern (line 307)
+- Increased ordinal boost from +0.25 to +0.40 (line 191)
+- Added ordinal penalty -0.20 for mismatches (lines 192, 214-228)
+
+**Verify each of these changes exists in the deployed code.**
+
+---
+
+## Success Criteria
+
+- [ ] Trace logs added to both code paths
+- [ ] Logs show whether functions are being called
+- [ ] Root cause identified from logs
+- [ ] Fix applied to actual failure point
+- [ ] T2 passes: "Remember this exactly: X" → stores and retrieves X
+- [ ] T3 passes: "first code" query returns first code, not second
+- [ ] All other tests still pass (9/11 → 11/11)
+
+---
+
+## Do Not
+
+- Assume the code is deployed correctly without verifying
+- Assume the functions are being called without logging
+- Add more fixes without understanding why current fixes don't work
+- Remove existing functionality
+
+## Must
+
+- Add trace logging FIRST
+- Check Railway logs after running tests
+- Find the EXACT line where behavior diverges from expected
+- Fix that specific issue
+- Verify with full test suite
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
