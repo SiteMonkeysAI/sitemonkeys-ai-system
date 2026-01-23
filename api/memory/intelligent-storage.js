@@ -778,7 +778,9 @@ Facts (preserve user terminology + add synonyms):`;
       
       // FIX #566-STR1: Protect brand names and proper nouns (capitalized multi-word phrases)
       // Matches: Tesla Model 3, iPhone 15, Google Pixel, MacBook Pro, etc.
-      const brandNamePattern = /\b[A-Z][a-z]+(?:\s+(?:[A-Z][a-z]*|[a-z]+)\d*)+\b/g;  // Capitalized words + optional numbers
+      // Pattern: Captures multi-word brand names with capitals or numbers, but avoids common words
+      // Strategy: Match sequences where each word starts with capital OR is a number
+      const brandNamePattern = /\b(?:[A-Z][a-zA-Z]*|[a-z]*[A-Z][a-zA-Z]*)(?:\s+(?:[A-Z][a-zA-Z]*|\d+))+\b/g;
 
       const inputAmounts = userMsg.match(amountPattern) || [];
       const factsAmounts = facts.match(amountPattern) || [];
