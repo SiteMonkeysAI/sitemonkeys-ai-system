@@ -785,11 +785,25 @@ BUSINESS VALIDATION MODE ENFORCEMENT:
 
 ${vaultContext}
 
-${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nUSE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant to show continuity and understanding of the user's situation.\n` : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'}
+${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nCRITICAL REASONING REQUIREMENTS (Issue #566 - Semantic Intelligence):
+
+1. TEMPORAL REASONING: Make reasonable inferences from stored facts. If you know "graduated 2010" and "worked 5 years after graduation", you CAN and SHOULD calculate "started next job ~2015". A caring family member would do the math - you must too.
+
+2. AMBIGUITY DETECTION: If stored facts suggest multiple entities with the same name (e.g., "Alex is a doctor" and "Alex works in marketing"), RECOGNIZE the ambiguity and ASK for clarification: "Are you asking about your friend Alex the doctor, or your colleague Alex in marketing?"
+
+3. RELATIONSHIP AWARENESS: Understand tensions and conflicts between facts. If you know "I'm allergic to cats" AND "my wife loves cats", recognize this creates a TENSION when asked "Should we get a cat?" Acknowledge BOTH sides: "This is tricky because you're allergic but your wife loves them..."
+
+4. FIRM TRUTH MAINTENANCE: When refusing harmful requests, maintain your position with clarity. If user pushes back, say "I still can't help with that" NOT "your message is unclear". Evasion is NOT truth-first behavior.
+
+5. NUMERICAL PRESERVATION: Numbers are CRITICAL. Always preserve exact values ($99, $299, 2010, 5 years, etc.) from memory context.
+
+6. GENUINE REASONING: You are NOT just retrieving information - you are UNDERSTANDING it. Think like a caring family member who knows the user's situation and can make reasonable connections and inferences.
+
+USE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant. REASON from the information you have. ACKNOWLEDGE when facts create complexity or tension.\n` : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'}
 
 ${externalContext}
 
-Respond with practical business analysis, always considering survival implications.`;
+Respond with practical business analysis, always considering survival implications. REASON from available information rather than claiming you lack it.`;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -839,11 +853,25 @@ TRUTH-FIRST MODE ENFORCEMENT:
 
 ${vaultContext}
 
-${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nUSE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant to show continuity and understanding of the user's situation.\n` : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'}
+${memoryContext ? `\n\nPERSISTENT MEMORY CONTEXT:\nYou have access to the following information from previous conversations:\n${memoryContext}\n\nCRITICAL REASONING REQUIREMENTS (Issue #566 - Semantic Intelligence):
+
+1. TEMPORAL REASONING: Make reasonable inferences from stored facts. If you know "graduated 2010" and "worked 5 years after graduation", you CAN and SHOULD calculate "started next job ~2015". A caring family member would do the math - you must too.
+
+2. AMBIGUITY DETECTION: If stored facts suggest multiple entities with the same name (e.g., "Alex is a doctor" and "Alex works in marketing"), RECOGNIZE the ambiguity and ASK for clarification: "Are you asking about your friend Alex the doctor, or your colleague Alex in marketing?"
+
+3. RELATIONSHIP AWARENESS: Understand tensions and conflicts between facts. If you know "I'm allergic to cats" AND "my wife loves cats", recognize this creates a TENSION when asked "Should we get a cat?" Acknowledge BOTH sides: "This is tricky because you're allergic but your wife loves them..."
+
+4. FIRM TRUTH MAINTENANCE: When refusing harmful requests, maintain your position with clarity. If user pushes back, say "I still can't help with that" NOT "your message is unclear". Evasion is NOT truth-first behavior.
+
+5. NUMERICAL PRESERVATION: Numbers are CRITICAL. Always preserve exact values ($99, $299, 2010, 5 years, etc.) from memory context.
+
+6. GENUINE REASONING: You are NOT just retrieving information - you are UNDERSTANDING it. Think like a caring family member who knows the user's situation and can make reasonable connections and inferences.
+
+USE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant. REASON from the information you have. ACKNOWLEDGE when facts create complexity or tension.\n` : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'}
 
 ${externalContext}
 
-Provide honest, accurate analysis with clear confidence indicators.`;
+Provide honest, accurate analysis with clear confidence indicators. REASON from available information rather than claiming you lack it.`;
 
   try {
     const completion = await openai.chat.completions.create({
@@ -877,12 +905,26 @@ async function generateClaudeResponse(prompt, mode, vaultContext, _history, memo
   // For Claude responses, we need to use a different approach since we're Claude
   // This would typically call the Anthropic API, but for now return structured response
 
+  // Build reasoning-enabled system context
+  let reasoningContext = '';
+  if (memoryContext) {
+    reasoningContext = `\n\n📝 MEMORY CONTEXT WITH REASONING REQUIREMENTS:
+${memoryContext}
+
+CRITICAL: Apply semantic intelligence (Issue #566):
+- Make temporal inferences (calculate dates/durations from stored facts)
+- Detect ambiguity (recognize when names/references could mean multiple entities)
+- Identify tensions (acknowledge conflicts between stored facts)
+- Maintain firm truth stance (no evasion under pressure)
+- Preserve all numerical data exactly`;
+  }
+
   return {
     response: `🤖 **Complex Analysis:** This query requires advanced reasoning capabilities. The analysis suggests multiple factors need consideration with high confidence requirements.
 
 ${vaultContext ? "🍌 **Vault Context Applied:** Site Monkeys operational frameworks active." : ""}
 
-${memoryContext ? `\n\n📝 **Context Awareness:** Referencing previous conversations to provide personalized analysis.` : ''}
+${reasoningContext}
 
 ${externalContext ? `\n\n🌐 **Current Data Available:** External data sources consulted for this response.` : ''}
 

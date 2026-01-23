@@ -743,8 +743,10 @@ Rules for compression:
 - Maximum 3-5 facts total
 - Each fact: Include user's exact terminology + synonyms in parentheses
 - Include ONLY: Names, numbers, specific entities, user statements, amounts, times
+- PRESERVE ALL NUMBERS EXACTLY: Years (2010), durations (5 years), prices ($99, $299), quantities, dates
 - EXCLUDE: Questions, greetings, explanations, AI responses
 - Format: "Category: user_exact_term (synonym1 synonym2 synonym3)"
+- CRITICAL: Numbers are MORE important than descriptions - always preserve exact numerical values
 
 User: ${userMsg}
 Assistant: ${aiResponse}
@@ -764,18 +766,46 @@ Facts (preserve user terminology + add synonyms):`;
       // CRITICAL: Post-processing protection - verify identifiers survived
       facts = this.protectHighEntropyTokens(userMsg, facts);
 
-      // CRITICAL FIX #504: Verify numeric values survived extraction
+      // CRITICAL FIX #504 + #566: Verify ALL numeric values survived extraction
+      // Enhanced to protect ALL numbers: prices, years, durations, quantities
       const amountPattern = /\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\$\d+|\d{1,6}k/i;
-      const inputHasAmount = amountPattern.test(userMsg);
-      const factsHaveAmount = amountPattern.test(facts);
+      const yearPattern = /\b(19|20)\d{2}\b/g;  // Years like 2010, 2015
+      const durationPattern = /\b\d+\s*(year|years|month|months|week|weeks|day|days|hour|hours)\b/gi;  // 5 years, 3 months
+      const generalNumberPattern = /\b\d+(?:\.\d+)?(?:,\d{3})*\b/g;  // Any number including decimals
 
-      if (inputHasAmount && !factsHaveAmount) {
-        console.warn('[EXTRACTION-FIX] Input had amount but extraction lost it - injecting from original');
-        const amounts = userMsg.match(amountPattern);
-        if (amounts && amounts.length > 0) {
-          // Inject the lost amount back into facts
-          facts += `\nAmount: ${amounts[0]}`;
-        }
+      const inputAmounts = userMsg.match(amountPattern) || [];
+      const factsAmounts = facts.match(amountPattern) || [];
+
+      const inputYears = userMsg.match(yearPattern) || [];
+      const factsYears = facts.match(yearPattern) || [];
+
+      const inputDurations = userMsg.match(durationPattern) || [];
+      const factsDurations = facts.match(durationPattern) || [];
+
+      let missingNumbers = [];
+
+      // Check for missing amounts
+      if (inputAmounts.length > factsAmounts.length) {
+        console.warn('[EXTRACTION-FIX #566] Input had amounts but extraction lost some');
+        missingNumbers.push(...inputAmounts.filter(amt => !facts.includes(amt)));
+      }
+
+      // Check for missing years
+      if (inputYears.length > factsYears.length) {
+        console.warn('[EXTRACTION-FIX #566] Input had years but extraction lost some');
+        missingNumbers.push(...inputYears.filter(yr => !facts.includes(yr)));
+      }
+
+      // Check for missing durations
+      if (inputDurations.length > factsDurations.length) {
+        console.warn('[EXTRACTION-FIX #566] Input had durations but extraction lost some');
+        missingNumbers.push(...inputDurations.filter(dur => !facts.includes(dur)));
+      }
+
+      // Inject ALL missing numbers back into facts
+      if (missingNumbers.length > 0) {
+        console.warn(`[EXTRACTION-FIX #566] Re-injecting ${missingNumbers.length} lost numbers:`, missingNumbers);
+        facts += '\n' + missingNumbers.join(', ');
       }
 
       // Store original user message snippet for fallback retrieval
