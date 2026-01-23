@@ -1225,12 +1225,65 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const ordinalBoosted = applyOrdinalBoost(safetyBoosted, normalizedQuery);
 
     // ═══════════════════════════════════════════════════════════════
+    // CRITICAL FIX #573-STR1: Apply keyword matching boost for simple fact queries
+    // When user asks "What car do I drive?", memories containing "car", "drive", "Tesla", etc.
+    // should rank higher even if semantic similarity is moderate
+    // This fixes volume stress tests where specific facts get lost among many memories
+    // ═══════════════════════════════════════════════════════════════
+    const keywordBoosted = ordinalBoosted.map(memory => {
+      const contentLower = (memory.content || '').toLowerCase();
+      const queryWords = normalizedQuery.toLowerCase()
+        .replace(/[^\w\s]/g, ' ')  // Remove punctuation
+        .split(/\s+/)
+        .filter(word => word.length > 3 && !['what', 'does', 'have', 'this', 'that', 'your', 'their', 'about'].includes(word));
+
+      if (queryWords.length === 0) {
+        return memory; // No meaningful keywords to match
+      }
+
+      // Count how many query keywords appear in the memory content
+      let matchCount = 0;
+      const matchedWords = [];
+      for (const word of queryWords) {
+        if (contentLower.includes(word)) {
+          matchCount++;
+          matchedWords.push(word);
+        }
+      }
+
+      // Apply boost based on keyword match percentage
+      if (matchCount > 0) {
+        const matchRatio = matchCount / queryWords.length;
+        const keywordBoost = matchRatio * 0.15; // Up to +0.15 boost for all keywords matching
+        const originalScore = memory.similarity;
+        const boostedScore = Math.min(originalScore + keywordBoost, 1.0);
+
+        if (keywordBoost >= 0.10) { // Only log significant boosts
+          console.log(`[KEYWORD-BOOST] Memory ${memory.id}: ${matchCount}/${queryWords.length} keywords matched - boosting ${originalScore.toFixed(3)} → ${boostedScore.toFixed(3)} (+${keywordBoost.toFixed(3)})`);
+          console.log(`[KEYWORD-BOOST]    Matched words: [${matchedWords.join(', ')}]`);
+          console.log(`[KEYWORD-BOOST]    Content: "${contentLower.substring(0, 80)}"`);
+        }
+
+        return {
+          ...memory,
+          similarity: boostedScore,
+          keyword_boosted: true,
+          keyword_match_ratio: matchRatio,
+          matched_keywords: matchedWords
+        };
+      }
+
+      return memory;
+    });
+    // ═══════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════
     // CRITICAL FIX #564-T2: Apply explicit memory recall boost
     // When user asks "What did I tell you to remember?", prioritize memories
     // where metadata.explicit_storage_request === true
     // This is NOT a similarity problem - it's a command-intent matching problem
     // ═══════════════════════════════════════════════════════════════
-    const explicitMemoryBoosted = ordinalBoosted.map(memory => {
+    const explicitMemoryBoosted = keywordBoosted.map(memory => {
       // Check if this is a memory recall query AND memory has explicit storage flag
       if (isMemoryRecall) {
         try {
@@ -1258,7 +1311,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       return memory;
     });
 
-    console.log('[SEMANTIC RETRIEVAL] Applied scoring pipeline: semantic → safety → ordinal → explicit-recall');
+    console.log('[SEMANTIC RETRIEVAL] Applied scoring pipeline: semantic → safety → ordinal → keyword → explicit-recall');
     // ═══════════════════════════════════════════════════════════════
 
     // Apply hybrid scoring
@@ -1279,6 +1332,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     filtered.slice(0, 5).forEach((m, idx) => {
       console.log(`[TRACE-T3]   ${idx+1}. Memory ${m.id}: hybrid_score=${m.hybrid_score?.toFixed(3)}, similarity=${m.similarity?.toFixed(3)}`);
       console.log(`[TRACE-T3]      ordinal_boosted=${m.ordinal_boosted || false}, ordinal_penalized=${m.ordinal_penalized || false}`);
+      console.log(`[TRACE-T3]      keyword_boosted=${m.keyword_boosted || false}, keyword_match_ratio=${m.keyword_match_ratio?.toFixed(2) || 'N/A'}`);
       console.log(`[TRACE-T3]      explicit_recall_boosted=${m.explicit_recall_boosted || false}, explicit_storage=${m.explicit_storage_request || false}`);
       console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
     });
