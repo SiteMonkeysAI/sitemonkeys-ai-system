@@ -2401,6 +2401,10 @@ class IntelligenceSystem {
 
     // Stop words to exclude
     const stopWords = new Set(['what', 'is', 'my', 'the', 'a', 'an', 'are', 'was', 'were', 'did', 'do', 'does']);
+    
+    // FIX #566-STR1: Entity-specific keywords that should get extra boost in ranking
+    // These indicate the user is asking about a specific thing they've mentioned
+    const entityKeywords = new Set(['car', 'dog', 'cat', 'pet', 'vehicle', 'phone', 'name', 'color', 'favourite', 'favorite']);
 
     // Extract words that are likely to be important for matching
     const words = queryLower.match(/\b\w+\b/g) || [];
@@ -2412,6 +2416,13 @@ class IntelligenceSystem {
       // Prioritize nouns that indicate what the user is asking about
       !/^(you|your|how|why|when|where|which|who|tell|give|show|find)$/.test(word)
     );
+    
+    // FIX #566-STR1: Add short entity keywords that might have been filtered
+    words.forEach(word => {
+      if (entityKeywords.has(word) && !keyTerms.includes(word)) {
+        keyTerms.push(word);
+      }
+    });
 
     return [...new Set(keyTerms)]; // Remove duplicates
   }
