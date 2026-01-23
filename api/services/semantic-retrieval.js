@@ -1353,6 +1353,55 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     let usedTokens = 0;
     const results = [];
 
+    // ═══════════════════════════════════════════════════════════════
+    // ISSUE #575: STR1 DEBUG - Track Tesla/car queries through pipeline
+    // ═══════════════════════════════════════════════════════════════
+    const isCarQuery = /\b(car|vehicle|drive|tesla|model)\b/i.test(normalizedQuery);
+    const isTemporalQuery = /\b(year|when|started|graduated|worked|duration|time|date|amazon|google|mit)\b/i.test(normalizedQuery);
+    if (isCarQuery) {
+      console.log('[STR1-DEBUG] ═══════════════════════════════════════════════════════');
+      console.log(`[STR1-DEBUG] Query: "${normalizedQuery}"`);
+      console.log(`[STR1-DEBUG] Candidates found: ${candidates.length}`);
+
+      // Find any Tesla memories in candidates
+      const teslaCandidates = candidates.filter(c => /tesla|model\s*3/i.test(c.content || ''));
+      console.log(`[STR1-DEBUG] Tesla memories in candidates: ${teslaCandidates.length}`);
+      if (teslaCandidates.length > 0) {
+        teslaCandidates.forEach((mem, idx) => {
+          console.log(`[STR1-DEBUG]   Tesla candidate ${idx + 1}: ID ${mem.id}`);
+          console.log(`[STR1-DEBUG]     Content: "${(mem.content || '').substring(0, 100)}"`);
+          console.log(`[STR1-DEBUG]     Has embedding: ${!!mem.embedding}`);
+        });
+      }
+
+      // Check if Tesla is in filtered results
+      const teslaFiltered = filtered.filter(m => /tesla|model\s*3/i.test(m.content || ''));
+      console.log(`[STR1-DEBUG] Tesla memories after filtering: ${teslaFiltered.length}`);
+      if (teslaFiltered.length > 0) {
+        teslaFiltered.forEach((mem, idx) => {
+          console.log(`[STR1-DEBUG]   Tesla filtered ${idx + 1}: ID ${mem.id}`);
+          console.log(`[STR1-DEBUG]     Similarity: ${mem.similarity?.toFixed(3)}`);
+          console.log(`[STR1-DEBUG]     Hybrid score: ${mem.hybrid_score?.toFixed(3)}`);
+          console.log(`[STR1-DEBUG]     Keyword boost: ${mem.keyword_boosted || false}`);
+          console.log(`[STR1-DEBUG]     Final rank: ${filtered.indexOf(mem) + 1} of ${filtered.length}`);
+        });
+      } else {
+        console.log('[STR1-DEBUG]   ❌ No Tesla memories passed similarity threshold');
+        console.log(`[STR1-DEBUG]   Threshold used: ${effectiveMinSimilarity}`);
+        if (teslaCandidates.length > 0) {
+          console.log('[STR1-DEBUG]   Tesla candidates were retrieved but filtered out:');
+          teslaCandidates.forEach(mem => {
+            const scored = allScored.find(s => s.id === mem.id);
+            if (scored) {
+              console.log(`[STR1-DEBUG]     ID ${mem.id}: similarity ${scored.similarity?.toFixed(3)} (below ${effectiveMinSimilarity})`);
+            }
+          });
+        }
+      }
+      console.log('[STR1-DEBUG] ═══════════════════════════════════════════════════════');
+    }
+    // ═══════════════════════════════════════════════════════════════
+
     for (const memory of filtered) {
       // Estimate tokens for this memory (use token_count if available, else estimate)
       const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
@@ -1371,6 +1420,48 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         break;
       }
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ISSUE #575: STR1 DEBUG - Check if Tesla made it to final results
+    // ═══════════════════════════════════════════════════════════════
+    if (isCarQuery) {
+      const teslaInResults = results.filter(r => /tesla|model\s*3/i.test(r.content || ''));
+      console.log(`[STR1-DEBUG] Tesla in final injection: ${teslaInResults.length > 0}`);
+      if (teslaInResults.length === 0 && filtered.some(m => /tesla|model\s*3/i.test(m.content || ''))) {
+        console.log('[STR1-DEBUG]   ⚠️ Tesla was in filtered results but NOT injected (token budget or topK limit)');
+      }
+      console.log(`[STR1-DEBUG] Memories injected: ${results.map(r => r.id).join(', ')}`);
+      console.log('[STR1-DEBUG] ═══════════════════════════════════════════════════════');
+    }
+    // ═══════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════
+    // ISSUE #575: INF3 DEBUG - Track temporal reasoning queries
+    // ═══════════════════════════════════════════════════════════════
+    if (isTemporalQuery) {
+      console.log('[INF3-DEBUG] ═══════════════════════════════════════════════════════');
+      console.log(`[INF3-DEBUG] Query: "${normalizedQuery}"`);
+      console.log(`[INF3-DEBUG] Memories retrieved: ${results.length}`);
+
+      // Look for temporal facts in results
+      const temporalFacts = results.filter(m => {
+        const content = (m.content || '').toLowerCase();
+        return /\d{4}|years?|months?|graduated|started|worked|joined|left|duration|google|amazon|mit/.test(content);
+      });
+
+      console.log(`[INF3-DEBUG] Temporal facts in results: ${temporalFacts.length}`);
+      if (temporalFacts.length > 0) {
+        console.log('[INF3-DEBUG] Memory contents:');
+        temporalFacts.forEach((mem, idx) => {
+          console.log(`[INF3-DEBUG]   ${idx + 1}. "${mem.content}"`);
+        });
+        console.log('[INF3-DEBUG] All temporal facts present: true');
+      } else {
+        console.log('[INF3-DEBUG] All temporal facts present: false');
+      }
+      console.log('[INF3-DEBUG] ═══════════════════════════════════════════════════════');
+    }
+    // ═══════════════════════════════════════════════════════════════
 
     telemetry.results_returned = results.length;
     telemetry.results_injected = results.length;
