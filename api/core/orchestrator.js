@@ -3162,6 +3162,18 @@ export class Orchestrator {
         console.log(`[PHASE4] Injected external content: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content.length} chars`);
       }
 
+      // ========== ISSUE #575: DIAGNOSTIC LOGGING - PROMPT DEBUG ==========
+      console.log('[PROMPT-DEBUG] ═══════════════════════════════════════════════════════');
+      console.log(`[PROMPT-DEBUG] System prompt length: ${systemPrompt.length} chars`);
+      console.log(`[PROMPT-DEBUG] Memory context present: ${hasMemoryContext}`);
+      console.log(`[PROMPT-DEBUG] Memory context length: ${context.memory ? context.memory.length : 0} chars`);
+      console.log(`[PROMPT-DEBUG] Semantic intelligence instructions present: ${hasMemoryContext && systemPrompt.includes('CRITICAL REASONING REQUIREMENTS')}`);
+      console.log(`[PROMPT-DEBUG] External context length: ${externalContext.length} chars`);
+      console.log(`[PROMPT-DEBUG] Context string length: ${contextString.length} chars`);
+      console.log(`[PROMPT-DEBUG] Full system prompt (first 500 chars):\n${systemPrompt.substring(0, 500)}...`);
+      console.log(`[PROMPT-DEBUG] Context string (first 500 chars):\n${contextString.substring(0, 500)}...`);
+      console.log('[PROMPT-DEBUG] ═══════════════════════════════════════════════════════');
+
       // VAULT-ONLY MODE: Pure vault queries bypass contamination
       const isVaultQuery =
         context.sources?.hasVault &&

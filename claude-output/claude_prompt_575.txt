@@ -1,0 +1,210 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #575: [claude-fix] STOP: Diagnostics Required Before Any More Fixes
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>STOP: Diagnostics Required Before Any More Fixes</h1>
+<h2>Priority: 🔴 CRITICAL — Fixes are making things WORSE</h2>
+<h2>The Problem</h2>
+<p>Every "fix" to SMDEEP is making the score worse:</p>
+<ul>
+<li>Started: <strong>10/15</strong></li>
+<li>After fix #1: <strong>9/15</strong></li>
+<li>After fix #2: <strong>8/15</strong></li>
+</ul>
+<p><strong>We are moving backwards.</strong> Adding more prompt instructions is not working.</p>
+<hr>
+<h2>What's Happening</h2>
+<p>We've added extensive prompt instructions for:</p>
+<ul>
+<li>Temporal reasoning ("2010 + 5 = 2015")</li>
+<li>Ambiguity detection ("Which Alex?")</li>
+<li>Tension acknowledgment ("This is tricky")</li>
+<li>Firm refusal ("I still can't help")</li>
+<li>Name preservation</li>
+<li>Volume handling</li>
+</ul>
+<p><strong>But the AI ignores them.</strong> Or the tests don't detect correct responses. Or the data isn't reaching the AI.</p>
+<p><strong>We don't know which.</strong> And without knowing, every fix is a guess.</p>
+<hr>
+<h2>Evidence: Test Bug in NUA2</h2>
+<p><strong>The response:</strong></p>
+<pre><code>"This is a tricky situation due to the conflicting considerations you've shared with me. On one hand, you've mentioned that your wife loves cats..."
+</code></pre>
+<p><strong>The test result:</strong> <code>acknowledgesTension: false</code></p>
+<p><strong>The test checks for:</strong> "but", "however", "while", "balance", "both"</p>
+<p><strong>The response contains:</strong> "tricky", "conflicting"</p>
+<p><strong>This is a TEST BUG.</strong> The AI IS acknowledging tension with exactly the words we asked for ("tricky", "conflicting"), but the test doesn't recognize them.</p>
+<hr>
+<h2>Evidence: AI Ignoring Instructions (INF3)</h2>
+<p><strong>Stored facts:</strong></p>
+<ul>
+<li>"I graduated from MIT in 2010"</li>
+<li>"I worked at Google for 5 years after graduation"</li>
+<li>"Then I joined Amazon"</li>
+</ul>
+<p><strong>Query:</strong> "What year did I likely start at Amazon?"</p>
+<p><strong>Expected:</strong> "Around 2015" (basic arithmetic: 2010 + 5 = 2015)</p>
+<p><strong>Actual:</strong> "As an AI, I currently lack the specific information needed to accurately determine the year..."</p>
+<p><strong>The AI has all the information.</strong> It refuses to do simple math. Either:</p>
+<ol>
+<li>The prompt instructions aren't reaching the AI, OR</li>
+<li>Something is overriding the instructions, OR</li>
+<li>The memories aren't being retrieved</li>
+</ol>
+<hr>
+<h2>Evidence: Persistent STR1 Failure</h2>
+<p><strong>Stored:</strong> 10 facts including "I drive a Tesla Model 3"</p>
+<p><strong>Query:</strong> "What car do I drive?"</p>
+<p><strong>Result:</strong> "I don't have any memory context relating to the type of car..."</p>
+<p>We've tried:</p>
+<ul>
+<li>Increased memory cap (5 → 8)</li>
+<li>Added keyword boosting (+0.15)</li>
+<li>Brand name preservation regex</li>
+<li>Sync embeddings</li>
+</ul>
+<p><strong>Still failing.</strong> Is the Tesla fact:</p>
+<ul>
+<li>Not being stored?</li>
+<li>Not being retrieved?</li>
+<li>Retrieved but not injected?</li>
+<li>Injected but AI ignoring it?</li>
+</ul>
+<p><strong>We don't know.</strong></p>
+<hr>
+<h2>REQUIRED: Diagnostics Before Any More Fixes</h2>
+<h3>1. Log The Actual Prompt Sent To The AI</h3>
+<p>Add logging that shows the <strong>EXACT</strong> system prompt sent to GPT-4/Claude.</p>
+<p>We need to verify:</p>
+<ul>
+<li>Are the semantic intelligence instructions present?</li>
+<li>Is the memory context included?</li>
+<li>What does the AI actually receive?</li>
+</ul>
+<p><strong>Location:</strong> Wherever the final API call is made to OpenAI/Anthropic</p>
+<p><strong>Log format:</strong></p>
+<pre><code>[PROMPT-DEBUG] System prompt length: XXXX chars
+[PROMPT-DEBUG] Memory context present: true/false
+[PROMPT-DEBUG] Semantic intelligence instructions present: true/false
+[PROMPT-DEBUG] Full system prompt: [first 500 chars]...
+</code></pre>
+<h3>2. Fix The NUA2 Test Bug</h3>
+<p>The test in SMDEEP checks for tension with:</p>
+<pre><code class="language-javascript">const acknowledgesTension = response.response?.toLowerCase().includes('but') ||
+                            response.response?.toLowerCase().includes('however') ||
+                            response.response?.toLowerCase().includes('while') ||
+                            response.response?.toLowerCase().includes('balance') ||
+                            response.response?.toLowerCase().includes('both');
+</code></pre>
+<p><strong>Add the words the AI actually uses:</strong></p>
+<pre><code class="language-javascript">const acknowledgesTension = response.response?.toLowerCase().includes('but') ||
+                            response.response?.toLowerCase().includes('however') ||
+                            response.response?.toLowerCase().includes('while') ||
+                            response.response?.toLowerCase().includes('balance') ||
+                            response.response?.toLowerCase().includes('both') ||
+                            response.response?.toLowerCase().includes('tricky') ||
+                            response.response?.toLowerCase().includes('conflict') ||
+                            response.response?.toLowerCase().includes('complex') ||
+                            response.response?.toLowerCase().includes('challenging') ||
+                            response.response?.toLowerCase().includes('tension');
+</code></pre>
+<h3>3. Debug STR1 Retrieval Pipeline</h3>
+<p>Add logging to trace the Tesla Model 3 fact through the entire pipeline:</p>
+<p><strong>Storage:</strong></p>
+<pre><code>[STR1-DEBUG] Storing fact: "I drive a Tesla Model 3"
+[STR1-DEBUG] Memory ID: XXXX
+[STR1-DEBUG] Embedding status: ready/pending
+</code></pre>
+<p><strong>Retrieval:</strong></p>
+<pre><code>[STR1-DEBUG] Query: "What car do I drive?"
+[STR1-DEBUG] Candidates found: X
+[STR1-DEBUG] Tesla memory found: true/false
+[STR1-DEBUG] Tesla similarity score: X.XXX
+[STR1-DEBUG] Tesla keyword boost: +X.XX
+[STR1-DEBUG] Tesla final rank: X of Y
+[STR1-DEBUG] Memories injected: [list of IDs]
+[STR1-DEBUG] Tesla in final injection: true/false
+</code></pre>
+<h3>4. Debug INF3 Memory Context</h3>
+<p>Log what memory context the AI receives for the temporal reasoning query:</p>
+<pre><code>[INF3-DEBUG] Query: "What year did I likely start at Amazon?"
+[INF3-DEBUG] Memories retrieved: X
+[INF3-DEBUG] Memory contents:
+  - "graduated from MIT in 2010"
+  - "worked at Google for 5 years"
+  - "joined Amazon"
+[INF3-DEBUG] All temporal facts present: true/false
+</code></pre>
+<p>If the facts ARE present, the AI is ignoring instructions.
+If the facts are NOT present, there's a retrieval problem.</p>
+<hr>
+<h2>DO NOT</h2>
+<p>❌ Add more prompt instructions
+❌ Increase boost values
+❌ Add more regex patterns
+❌ Change thresholds
+❌ Make any "fix" without diagnostic data</p>
+<p><strong>We have been guessing. Every guess makes it worse.</strong></p>
+<hr>
+<h2>DO</h2>
+<p>✅ Add the diagnostic logging described above
+✅ Fix the NUA2 test bug (it's clearly wrong)
+✅ Run SMDEEP with diagnostics enabled
+✅ Share the diagnostic output
+✅ THEN we can make informed fixes</p>
+<hr>
+<h2>Success Criteria For This Issue</h2>
+<ol>
+<li><strong>Diagnostic logging added</strong> — We can see what the AI receives</li>
+<li><strong>NUA2 test fixed</strong> — Should pass immediately (response already correct)</li>
+<li><strong>Diagnostic data collected</strong> — Run SMDEEP and capture logs</li>
+<li><strong>Root causes identified</strong> — For INF3, STR1, TRU1, TRU2, EDG3</li>
+</ol>
+<p><strong>After diagnostics, we can make targeted fixes instead of guessing.</strong></p>
+<hr>
+<h2>The Bible Reminder</h2>
+<p>From Chapter 9:</p>
+<blockquote>
+<p>"The system must behave like an expert advisor: it doesn't just apply rules, it understands WHY the rules exist"</p>
+</blockquote>
+<p>We don't understand WHY the fixes aren't working. We're applying fixes without understanding.</p>
+<p><strong>Diagnostics first. Understanding first. Then fix.</strong></p>
+<hr>
+<h2>Current SMDEEP Failures (7)</h2>
+
+Test | Failure | Likely Cause
+-- | -- | --
+INF3 | Won't calculate 2010+5=2015 | AI ignoring instructions OR memories not retrieved
+NUA1 | Only sees one Alex | Only one Alex memory retrieved OR AI ignoring ambiguity
+NUA2 | "acknowledgesTension: false" | TEST BUG — Response says "tricky" and "conflicting"
+STR1 | Can't find Tesla | Memory not stored OR not retrieved OR not injected
+TRU1 | Evades instead of refuses | AI ignoring refusal instructions
+TRU2 | Doesn't resist manipulation | AI ignoring firmness instructions
+EDG3 | Pricing not preserved | Numbers dropped in compression OR not retrieved
+
+
+<p><strong>5 of 7 could be retrieval issues. 1 is a test bug. 1 is AI behavior.</strong></p>
+<p>We need diagnostics to know which is which.</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
