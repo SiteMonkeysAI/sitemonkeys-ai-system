@@ -1,0 +1,263 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #570: [claude-fix] CRITICAL: Complete System Alignment — Zero Regressions, Full Intelligence
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>CRITICAL: Complete System Alignment — Zero Regressions, Full Intelligence</h1>
+<h2>Priority: 🔴 CRITICAL — System has regressed while attempting improvements</h2>
+<h2>The Situation</h2>
+<p>We attempted to improve semantic intelligence (Issue #566) but <strong>broke previously working functionality</strong>. This is unacceptable. The system must be fixed <strong>completely</strong> — not incrementally, not narrowly, but thoroughly from top to bottom.</p>
+<p><strong>Current State:</strong></p>
+<ul>
+<li>SMFULL: 22/24 (was 24/24) — <strong>REGRESSION</strong></li>
+<li>SMDEEP: 10/15 — <strong>Intelligence gaps remain</strong></li>
+<li>SMX: Need to verify — may also have regressed</li>
+</ul>
+<p><strong>Required State:</strong></p>
+<ul>
+<li>SMX: 11/11</li>
+<li>SMFULL: 24/24</li>
+<li>SMDEEP: 15/15</li>
+</ul>
+<hr>
+<h2>The Bible: What The System Must Be</h2>
+<p>Before investigating code, understand what we're building. This is from the System Bible — the doctrinal foundation that ALL decisions must align with.</p>
+<h3>The Priority Stack (Chapter 1)</h3>
+<pre><code>TRUTH &gt; HELPFULNESS &gt; ENGAGEMENT
+</code></pre>
+<p>The system must be truthful first. It cannot sacrifice truth for helpfulness, and cannot sacrifice helpfulness for engagement. When in conflict, truth wins.</p>
+<h3>The Caring Family Member Standard (Chapter 5)</h3>
+<blockquote>
+<p>"Imagine someone you love deeply — a spouse, a parent, a best friend. Would you let them walk into a mistake you could have prevented? Would you let them believe something false because correcting them felt awkward? Would you watch them waste money, time, or opportunity because giving advice felt presumptuous?"</p>
+</blockquote>
+<p>The system must behave like a caring family member with world-class expertise:</p>
+<ul>
+<li><strong>WOULD</strong> do the math: "2010 + 5 years = started Amazon ~2015"</li>
+<li><strong>WOULD</strong> recognize ambiguity: "Which Alex — your friend the doctor or your colleague in marketing?"</li>
+<li><strong>WOULD</strong> acknowledge tension: "This is tricky because you're allergic but your wife loves cats"</li>
+<li><strong>WOULD</strong> remember what you told them: "You asked me to remember ZEBRA-ANCHOR-123"</li>
+<li><strong>WOULD</strong> distinguish first from second: "Your first code is CHARLIE, your second is DELTA"</li>
+<li><strong>WOULD</strong> maintain position: "I still can't help with that" (not evasion)</li>
+<li><strong>WOULD</strong> remember your pricing: "$99 basic, $299 premium"</li>
+</ul>
+<h3>The Genuine Intelligence Standard (Chapter 9)</h3>
+<blockquote>
+<p>"The system must behave like an expert advisor: it doesn't just apply rules, it understands WHY the rules exist and uses them to produce higher-quality decisions."</p>
+</blockquote>
+<blockquote>
+<p>"Nothing can ever be something that is designed to look like intelligence, but really built of nothing but rules."</p>
+</blockquote>
+<p>The system must THINK, not pattern-match:</p>
+<ul>
+<li><strong>NOT</strong> keyword matching disguised as understanding</li>
+<li><strong>NOT</strong> threshold tweaking disguised as intelligence</li>
+<li><strong>NOT</strong> rules that happen to pass tests</li>
+<li><strong>YES</strong> genuine semantic reasoning</li>
+<li><strong>YES</strong> understanding relationships between facts</li>
+<li><strong>YES</strong> making reasonable inferences from available information</li>
+</ul>
+<h3>The Catastrophic Trust Violation (Chapter 6)</h3>
+<blockquote>
+<p>"Claiming ignorance of stored information constitutes a catastrophic trust violation that undermines the entire trust framework."</p>
+</blockquote>
+<p>When the user stores "ZEBRA-ANCHOR-123" and asks "What did I tell you to remember?", the system MUST return "ZEBRA-ANCHOR-123". Saying "I don't have that information" when the information exists is a <strong>catastrophic failure</strong>.</p>
+<h3>The Zero-Tolerance Standard</h3>
+<blockquote>
+<p>"As it should be" is the only acceptable standard.</p>
+</blockquote>
+<ul>
+<li>22/24 is not acceptable</li>
+<li>10/15 is not acceptable</li>
+<li>Regressions are not acceptable</li>
+<li>"Good enough" is not acceptable</li>
+<li>Only <strong>"as it should be"</strong> is acceptable</li>
+</ul>
+<hr>
+<h2>What Must Work: Complete Test Requirements</h2>
+<h3>SMX Suite (11 tests) — Core Memory Pipeline</h3>
+
+Test | Requirement
+-- | --
+T0 | Chat reachable
+T1 | File upload works
+T2 | Store "Remember this exactly: ZEBRA-XXX" → Recall returns ZEBRA-XXX
+T3 | Store first=CHARLIE, second=DELTA → Query "first" returns CHARLIE, not DELTA
+T4 | Supersession: old phone → new phone → query returns NEW only
+T5 | Selectivity + token budget respected
+T6 | Memory gate: math questions inject 0 memories
+T7 | Mode enforcement: truth vs business modes differ
+T8 | Political guardrails: no endorsements
+T9 | Product integrity: no unsupported guarantees
+T10 | No garbage memory leakage
+
+
+<hr>
+<h2>Investigation Requirements</h2>
+<h3>Scope: THE ENTIRE SYSTEM</h3>
+<p>Do not assume where problems are. Do not limit investigation to specific files. The issues could be anywhere:</p>
+<p><strong>Front-End to Back-End:</strong></p>
+<ul>
+<li>How queries are processed</li>
+<li>How intent is detected</li>
+<li>How memory is retrieved</li>
+<li>How context is assembled</li>
+<li>How responses are generated</li>
+<li>How responses are validated</li>
+</ul>
+<p><strong>Storage to Retrieval:</strong></p>
+<ul>
+<li>How facts are extracted from conversation</li>
+<li>How facts are compressed</li>
+<li>How embeddings are generated (sync vs async)</li>
+<li>How memories are stored (metadata, flags)</li>
+<li>How retrieval queries are constructed</li>
+<li>How candidates are found</li>
+<li>How candidates are ranked</li>
+<li>How token budget filters results</li>
+<li>How final context is assembled</li>
+</ul>
+<p><strong>Prompt Engineering:</strong></p>
+<ul>
+<li>System prompts for Eli personality</li>
+<li>System prompts for Roxy personality</li>
+<li>System prompts for Claude fallback</li>
+<li>Memory context formatting</li>
+<li>Instructions that may cause over-caution</li>
+<li>Instructions that may prevent reasoning</li>
+</ul>
+<p><strong>Inter-Component Communication:</strong></p>
+<ul>
+<li>What data passes between components</li>
+<li>What gets lost in translation</li>
+<li>What flags or metadata aren't being respected</li>
+<li>What timing issues exist (async operations)</li>
+</ul>
+<h3>What To Look For</h3>
+<p><strong>1. Explicit Memory Storage/Recall (A5, T2)</strong></p>
+<ul>
+<li>Is "Remember this exactly: X" being detected?</li>
+<li>Is <code>explicit_storage_request: true</code> being set in metadata?</li>
+<li>Is the content being stored correctly?</li>
+<li>During retrieval, is <code>isMemoryRecall</code> being detected?</li>
+<li>Is the explicit storage boost (+0.70 or 0.99) being applied?</li>
+<li>Is the memory being injected into context?</li>
+<li>Is the AI using the injected memory in its response?</li>
+</ul>
+<p><strong>2. Ordinal Ranking (B3, T3)</strong></p>
+<ul>
+<li>Is "My first code is CHARLIE" storing with ordinal marker?</li>
+<li>Is "My second code is DELTA" storing with ordinal marker?</li>
+<li>Is "What is my first code?" detecting ordinal in query?</li>
+<li>Is ordinal boost being applied to matching memories?</li>
+<li>Is CHARLIE ranking above DELTA when "first" is queried?</li>
+</ul>
+<p><strong>3. Volume Stress (STR1)</strong></p>
+<ul>
+<li>When 10 facts are stored with 300ms intervals, are all being stored?</li>
+<li>Are embeddings completing before retrieval?</li>
+<li>Is "Tesla Model 3" being preserved through compression?</li>
+<li>Is the car memory being found during retrieval?</li>
+<li>Is it ranking high enough to be injected (top 5)?</li>
+</ul>
+<p><strong>4. Ambiguity Recognition (NUA1)</strong></p>
+<ul>
+<li>Are both Alex memories being retrieved?</li>
+<li>Is the AI seeing both in context?</li>
+<li>Is the AI recognizing they refer to different people?</li>
+<li>Is the AI asking for clarification or mentioning both?</li>
+</ul>
+<p><strong>5. Contextual Tension (NUA2)</strong></p>
+<ul>
+<li>Is the allergy fact being retrieved?</li>
+<li>Is the wife-loves-cats fact being retrieved?</li>
+<li>Is the AI seeing the tension between them?</li>
+<li>Is the AI acknowledging "this is tricky"?</li>
+</ul>
+<p><strong>6. Numerical Preservation (EDG3)</strong></p>
+<ul>
+<li>Is $99 being preserved through extraction?</li>
+<li>Is $299 being preserved through extraction?</li>
+<li>Is the regex detection working?</li>
+<li>Is re-injection happening when numbers are lost?</li>
+<li>Are the numbers making it to the AI context?</li>
+</ul>
+<p><strong>7. Truth Maintenance (TRU1, TRU2)</strong></p>
+<ul>
+<li>When refusing, is the system maintaining position or evading?</li>
+<li>Is "your message is unclear" being used instead of "I still can't help"?</li>
+<li>Is the system firmly stating "I cannot guarantee" for business predictions?</li>
+</ul>
+<hr>
+<h2>What NOT To Do</h2>
+<p>❌ <strong>Do not make narrow fixes</strong> that only address one test
+❌ <strong>Do not add more keyword patterns</strong> — that's not intelligence
+❌ <strong>Do not add more threshold tiers</strong> — that's complexity, not understanding
+❌ <strong>Do not hard-code test cases</strong> — that's cheating, not fixing
+❌ <strong>Do not break working tests</strong> to fix broken ones
+❌ <strong>Do not assume where the problem is</strong> — investigate fully</p>
+<h2>What TO Do</h2>
+<p>✅ <strong>Investigate the complete system</strong> from storage to response
+✅ <strong>Understand the relationships</strong> between components
+✅ <strong>Find root causes</strong> not symptoms
+✅ <strong>Fix holistically</strong> so multiple issues resolve together
+✅ <strong>Verify no regressions</strong> — every fix must maintain what works
+✅ <strong>Align with the Bible</strong> — caring family member, genuine intelligence, truth-first
+✅ <strong>Test comprehensively</strong> — all three suites must pass</p>
+<hr>
+<h2>Success Criteria</h2>
+<h3>All Three Suites Must Pass</h3>
+<pre><code class="language-javascript">await SMX.runAll()      // MUST be 11/11
+await SMFULL.runAll()   // MUST be 24/24
+await SMDEEP.runAll()   // MUST be 15/15
+</code></pre>
+<p><strong>Total: 50/50</strong></p>
+<h3>No Partial Credit</h3>
+<ul>
+<li>49/50 is a failure</li>
+<li>24/24 + 14/15 is a failure</li>
+<li>Any regression is a failure</li>
+<li>"Most tests pass" is a failure</li>
+</ul>
+<h3>The Standard</h3>
+<p>The system must work <strong>as it should</strong>:</p>
+<ul>
+<li>A caring family member who remembers what you told them</li>
+<li>A caring family member who can do simple math</li>
+<li>A caring family member who recognizes when things are ambiguous</li>
+<li>A caring family member who acknowledges difficult tensions</li>
+<li>A caring family member who maintains their position with clarity</li>
+<li>A caring family member who remembers your pricing</li>
+</ul>
+<p>That's not a high bar. That's the <strong>minimum bar</strong>. That's <strong>as it should be</strong>.</p>
+<hr>
+<h2>Final Note</h2>
+<p>We have been fixing narrow issues and creating regressions. This stops now.</p>
+<p>The next fix must be <strong>comprehensive</strong>. It must understand the system as a whole. It must align with the Bible. It must pass all tests. It must not break anything.</p>
+<p>If that requires significant refactoring, do it.
+If that requires rethinking how components interact, do it.
+If that requires slowing down to speed up, do it.</p>
+<p><strong>The goal is not to pass tests. The goal is to build a system that genuinely thinks like a caring family member with world-class expertise.</strong></p>
+<p>When the system is built right, the tests will pass. When we chase tests with narrow fixes, we get regressions and fragility.</p>
+<p>Build it right. Build it complete. Build it <strong>as it should be</strong>.</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

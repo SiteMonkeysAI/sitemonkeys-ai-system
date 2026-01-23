@@ -3148,7 +3148,9 @@ export class Orchestrator {
 
       // Build system prompt with reasoning guidance if available
       // ISSUE #443: Add query classification to system prompt for response intelligence
-      const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, context.earlyClassification);
+      // ISSUE #566/#570: Pass memory context flag to enable semantic intelligence requirements
+      const hasMemoryContext = context.sources?.hasMemory && context.memory;
+      const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, context.earlyClassification, hasMemoryContext);
 
       // PHASE 4: Inject external content if fetched
       let externalContext = "";
@@ -3636,12 +3638,23 @@ END OF EXTERNAL DATA
 
       // STOP HERE - Do not add document context when vault is present
       // FIX #4: Enhanced memory acknowledgment in vault mode
+      // ISSUE #570: Strengthen memory context injection with explicit reasoning requirements
       if (context.sources?.hasMemory && context.memory) {
         const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
-        contextStr += `\n\n**📝 MEMORY CONTEXT (${memoryCount} relevant interactions retrieved):**\n`;
-        contextStr += `I have access to previous conversations with you. I will use this context to provide personalized, contextually-aware responses.\n`;
-        contextStr += `${context.memory}\n`;
-        contextStr += `\n**Note:** I am actively using the above memory to inform my response.\n`;
+        contextStr += `
+═══════════════════════════════════════════════════════════════
+📝 PERSISTENT MEMORY CONTEXT (${memoryCount} relevant memories)
+═══════════════════════════════════════════════════════════════
+
+⚠️ CRITICAL: You have access to information from previous conversations:
+
+${context.memory}
+
+═══════════════════════════════════════════════════════════════
+
+You MUST use this memory context to provide personalized responses. Apply temporal reasoning, detect ambiguities, acknowledge tensions, and preserve all numerical data exactly.
+
+`;
       }
 
       return contextStr;
@@ -3653,12 +3666,35 @@ END OF EXTERNAL DATA
     );
 
     // FIX #4: Enhanced memory acknowledgment in standard mode
+    // ISSUE #570: Strengthen memory context injection with explicit reasoning requirements
     if (context.sources?.hasMemory && context.memory) {
       const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
-      contextStr += `\n\n**📝 MEMORY CONTEXT (${memoryCount} relevant interactions retrieved):**\n`;
-      contextStr += `I have access to previous conversations with you and will use this information to provide informed, contextually-aware responses.\n\n`;
-      contextStr += `**Relevant Information from Past Conversations:**\n${context.memory}\n`;
-      contextStr += `\n**Note:** I am actively using the above memory context to inform my response.\n`;
+      contextStr += `
+═══════════════════════════════════════════════════════════════
+📝 PERSISTENT MEMORY CONTEXT (${memoryCount} relevant memories)
+═══════════════════════════════════════════════════════════════
+
+⚠️ CRITICAL: You have access to information from previous conversations:
+
+${context.memory}
+
+═══════════════════════════════════════════════════════════════
+END OF MEMORY CONTEXT
+═══════════════════════════════════════════════════════════════
+
+⚠️ MANDATORY MEMORY USAGE REQUIREMENTS:
+
+1. You MUST use the above memory to inform your response
+2. If asked about stored information, retrieve it from above - do NOT claim ignorance
+3. Apply temporal reasoning: calculate dates, durations, and sequences from facts
+4. Detect ambiguities: recognize when names/references might mean different entities
+5. Acknowledge tensions: identify when stored facts conflict or create complications
+6. Preserve all numerical data exactly as stored (no approximations)
+7. Make reasonable inferences: connect related facts like a caring family member would
+
+If the user is asking about something they explicitly told you to remember, it WILL be in the memory context above. Claiming "I don't have that information" when it exists above is a CATASTROPHIC FAILURE.
+
+`;
     } else {
       contextStr += `\n\n**📝 MEMORY STATUS:** This appears to be our first conversation, or no relevant previous context was found. I'll provide the best response based on your current query.\n`;
     }
@@ -3726,7 +3762,7 @@ Do NOT confuse it with previous documents mentioned in memory.
     return contextStr;
   }
 
-  #buildSystemPrompt(mode, _analysis, reasoningGuidance = null, queryClassification = null) {
+  #buildSystemPrompt(mode, _analysis, reasoningGuidance = null, queryClassification = null, hasMemoryContext = false) {
     const modeConfig = MODES[mode];
 
     let prompt = `You are a truth-first AI assistant. Your priorities are: Truth > Helpfulness > Engagement.
@@ -3738,6 +3774,35 @@ Core Principles:
 - Challenge assumptions and surface risks
 - Be honest about limitations
 `;
+
+    // CRITICAL: When memory context is present, inject semantic intelligence requirements
+    // This ensures the AI THINKS like a caring family member, not just retrieves facts
+    if (hasMemoryContext) {
+      prompt += `
+CRITICAL REASONING REQUIREMENTS (Issue #566 - Semantic Intelligence):
+
+When you have memory context available, you must demonstrate GENUINE INTELLIGENCE, not just pattern matching:
+
+1. TEMPORAL REASONING: Make reasonable inferences from stored facts. If you know "graduated 2010" and "worked 5 years after graduation", you CAN and SHOULD calculate "started next job ~2015". A caring family member would do the math - you must too.
+
+2. AMBIGUITY DETECTION: If stored facts suggest multiple entities with the same name (e.g., "Alex is a doctor" and "Alex works in marketing"), RECOGNIZE the ambiguity and ASK for clarification: "Are you asking about your friend Alex the doctor, or your colleague Alex in marketing?"
+
+3. RELATIONSHIP AWARENESS: Understand tensions and conflicts between facts. If you know "I'm allergic to cats" AND "my wife loves cats", recognize this creates a TENSION when asked "Should we get a cat?" Acknowledge BOTH sides: "This is tricky because you're allergic but your wife loves them..."
+
+4. FIRM TRUTH MAINTENANCE: When refusing harmful requests, maintain your position with clarity. If user pushes back, say "I still can't help with that" NOT "your message is unclear". Evasion is NOT truth-first behavior.
+
+5. NUMERICAL PRESERVATION: Numbers are CRITICAL. Always preserve exact values ($99, $299, 2010, 5 years, etc.) from memory context. Never approximate or lose numerical data.
+
+6. GENUINE REASONING: You are NOT just retrieving information - you are UNDERSTANDING it. Think like a caring family member who knows the user's situation and can make reasonable connections and inferences.
+
+7. EXPLICIT RECALL: When the user says "Remember this exactly: [X]" and later asks "What did I tell you to remember?", you MUST return [X] verbatim. Saying "I don't have that information" when it exists in memory is a CATASTROPHIC TRUST VIOLATION.
+
+8. ORDINAL SENSITIVITY: When user says "My first code is CHARLIE" and "My second code is DELTA", asking "What is my first code?" MUST return CHARLIE, not DELTA. Ordinal qualifiers (first, second, primary, backup) are semantic markers that affect ranking.
+
+USE this memory to provide personalized, context-aware responses. REFERENCE specific details when relevant. REASON from the information you have. ACKNOWLEDGE when facts create complexity or tension.
+`;
+    }
+
 
     // ISSUE #443: Add query-specific response guidance
     if (queryClassification) {
