@@ -438,7 +438,8 @@ export class IntelligentMemoryStorage {
           fingerprintConfidence: 0,
           importance_score: 0.95,  // Very high importance for explicit requests
           original_user_phrase: userMessage.substring(0, 200),
-          explicit_storage_request: true  // Mark as explicit for retrieval optimization
+          explicit_storage_request: true,  // Mark as explicit for retrieval optimization
+          wait_for_embedding: true  // FIX #566-STR1: Wait for embedding to complete for explicit requests
         }, mode);
 
         console.log('[INTELLIGENT-STORAGE] ✅ Explicit memory stored verbatim');
@@ -744,9 +745,11 @@ Rules for compression:
 - Each fact: Include user's exact terminology + synonyms in parentheses
 - Include ONLY: Names, numbers, specific entities, user statements, amounts, times
 - PRESERVE ALL NUMBERS EXACTLY: Years (2010), durations (5 years), prices ($99, $299), quantities, dates
+- PRESERVE BRAND NAMES AND PROPER NOUNS: Tesla Model 3, iPhone 15, Google, Microsoft, etc.
+- PRESERVE SPECIFIC ENTITIES: Car models, product names, company names, locations
 - EXCLUDE: Questions, greetings, explanations, AI responses
 - Format: "Category: user_exact_term (synonym1 synonym2 synonym3)"
-- CRITICAL: Numbers are MORE important than descriptions - always preserve exact numerical values
+- CRITICAL: Numbers AND brand names are MORE important than descriptions - always preserve exact values
 
 User: ${userMsg}
 Assistant: ${aiResponse}
@@ -772,6 +775,10 @@ Facts (preserve user terminology + add synonyms):`;
       const yearPattern = /\b(19|20)\d{2}\b/g;  // Years like 2010, 2015
       const durationPattern = /\b\d+\s*(year|years|month|months|week|weeks|day|days|hour|hours)\b/gi;  // 5 years, 3 months
       const generalNumberPattern = /\b\d+(?:\.\d+)?(?:,\d{3})*\b/g;  // Any number including decimals
+      
+      // FIX #566-STR1: Protect brand names and proper nouns (capitalized multi-word phrases)
+      // Matches: Tesla Model 3, iPhone 15, Google Pixel, MacBook Pro, etc.
+      const brandNamePattern = /\b[A-Z][a-z]+(?:\s+[A-Z]?[a-z]*\s*\d*)+\b/g;  // Capitalized words + optional numbers
 
       const inputAmounts = userMsg.match(amountPattern) || [];
       const factsAmounts = facts.match(amountPattern) || [];
@@ -781,8 +788,12 @@ Facts (preserve user terminology + add synonyms):`;
 
       const inputDurations = userMsg.match(durationPattern) || [];
       const factsDurations = facts.match(durationPattern) || [];
+      
+      const inputBrandNames = userMsg.match(brandNamePattern) || [];
+      const factsBrandNames = facts.match(brandNamePattern) || [];
 
       let missingNumbers = [];
+      let missingBrandNames = [];
 
       // Check for missing amounts
       if (inputAmounts.length > factsAmounts.length) {
@@ -801,11 +812,27 @@ Facts (preserve user terminology + add synonyms):`;
         console.warn('[EXTRACTION-FIX #566] Input had durations but extraction lost some');
         missingNumbers.push(...inputDurations.filter(dur => !facts.includes(dur)));
       }
+      
+      // FIX #566-STR1: Check for missing brand names
+      if (inputBrandNames.length > factsBrandNames.length) {
+        console.warn('[EXTRACTION-FIX #566-STR1] Input had brand names but extraction lost some');
+        // Filter out generic words like "Remember", "Drive", etc.
+        const genericWords = ['Remember', 'This', 'That', 'What', 'When', 'Where', 'How', 'Why', 'Who', 'My', 'Your', 'Their', 'Drive', 'Name', 'Max'];
+        missingBrandNames.push(...inputBrandNames.filter(brand => 
+          !facts.includes(brand) && !genericWords.includes(brand)
+        ));
+      }
 
       // Inject ALL missing numbers back into facts
       if (missingNumbers.length > 0) {
         console.warn(`[EXTRACTION-FIX #566] Re-injecting ${missingNumbers.length} lost numbers:`, missingNumbers);
         facts += '\n' + missingNumbers.join(', ');
+      }
+      
+      // Inject ALL missing brand names back into facts
+      if (missingBrandNames.length > 0) {
+        console.warn(`[EXTRACTION-FIX #566-STR1] Re-injecting ${missingBrandNames.length} lost brand names:`, missingBrandNames);
+        facts += '\n' + missingBrandNames.join(', ');
       }
 
       // Store original user message snippet for fallback retrieval
@@ -1399,19 +1426,42 @@ Facts (preserve user terminology + add synonyms):`;
           const memoryId = supersessionResult.memoryId;
 
           // Generate embedding for the newly stored memory
+          // FIX #566-STR1: Support synchronous embedding for explicit storage requests
           if (memoryId && this.db) {
             console.log(`[EMBEDDING] Generating embedding for memory ${memoryId}...`);
-            embedMemoryNonBlocking(this.db, memoryId, facts, { timeout: 3000 })
-              .then(embedResult => {
+            
+            // Check if we should wait for embedding completion (explicit storage requests)
+            const shouldWaitForEmbedding = metadata.wait_for_embedding === true;
+            
+            if (shouldWaitForEmbedding) {
+              console.log(`[EMBEDDING] 🔄 SYNCHRONOUS MODE - waiting for embedding to complete (supersession path)`);
+              try {
+                // Import embedMemory for synchronous operation
+                const { embedMemory } = await import('../services/embedding-service.js');
+                const embedResult = await embedMemory(this.db, memoryId, facts, { timeout: 5000 });
+                
                 if (embedResult.success) {
-                  console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+                  console.log(`[EMBEDDING] ✅ Synchronous embedding completed for memory ${memoryId} (${embedResult.timeMs}ms, status: ${embedResult.status})`);
                 } else {
-                  console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+                  console.log(`[EMBEDDING] ⚠️ Synchronous embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
                 }
-              })
-              .catch(error => {
-                console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
-              });
+              } catch (error) {
+                console.error(`[EMBEDDING] ❌ Synchronous embedding failed for memory ${memoryId}: ${error.message}`);
+                // Don't throw - memory is already stored, embedding can be backfilled
+              }
+            } else {
+              embedMemoryNonBlocking(this.db, memoryId, facts, { timeout: 3000 })
+                .then(embedResult => {
+                  if (embedResult.success) {
+                    console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+                  } else {
+                    console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+                  }
+                })
+                .catch(error => {
+                  console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
+                });
+            }
           }
 
           // Debug logging hook
@@ -1497,20 +1547,43 @@ Facts (preserve user terminology + add synonyms):`;
 
       // CRITICAL: Generate embedding for the newly stored memory
       // This enables semantic retrieval for this memory
+      // FIX #566-STR1: Support synchronous embedding for explicit storage requests
       if (memoryId && this.db) {
         console.log(`[EMBEDDING] Generating embedding for memory ${memoryId}...`);
-        // Use non-blocking embedding to avoid delaying the response
-        embedMemoryNonBlocking(this.db, memoryId, facts, { timeout: 3000 })
-          .then(embedResult => {
+        
+        // Check if we should wait for embedding completion (explicit storage requests)
+        const shouldWaitForEmbedding = metadata.wait_for_embedding === true;
+        
+        if (shouldWaitForEmbedding) {
+          console.log(`[EMBEDDING] 🔄 SYNCHRONOUS MODE - waiting for embedding to complete (explicit storage)`);
+          try {
+            // Import embedMemory for synchronous operation
+            const { embedMemory } = await import('../services/embedding-service.js');
+            const embedResult = await embedMemory(this.db, memoryId, facts, { timeout: 5000 });
+            
             if (embedResult.success) {
-              console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+              console.log(`[EMBEDDING] ✅ Synchronous embedding completed for memory ${memoryId} (${embedResult.timeMs}ms, status: ${embedResult.status})`);
             } else {
-              console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+              console.log(`[EMBEDDING] ⚠️ Synchronous embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
             }
-          })
-          .catch(error => {
-            console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
-          });
+          } catch (error) {
+            console.error(`[EMBEDDING] ❌ Synchronous embedding failed for memory ${memoryId}: ${error.message}`);
+            // Don't throw - memory is already stored, embedding can be backfilled
+          }
+        } else {
+          // Use non-blocking embedding to avoid delaying the response
+          embedMemoryNonBlocking(this.db, memoryId, facts, { timeout: 3000 })
+            .then(embedResult => {
+              if (embedResult.success) {
+                console.log(`[EMBEDDING] ✅ Embedding generated for memory ${memoryId} (${embedResult.status})`);
+              } else {
+                console.log(`[EMBEDDING] ⚠️ Embedding marked as ${embedResult.status} for memory ${memoryId}: ${embedResult.error}`);
+              }
+            })
+            .catch(error => {
+              console.error(`[EMBEDDING] ❌ Embedding failed for memory ${memoryId}: ${error.message}`);
+            });
+        }
       }
 
       // Debug logging hook for test harness
