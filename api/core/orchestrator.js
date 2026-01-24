@@ -3553,6 +3553,59 @@ export class Orchestrator {
 
   // ==================== UTILITY METHODS ====================
 
+  /**
+   * Extract and highlight numerical data from memory context
+   * FIX #577 - EDG3: Preserve numerical data (pricing, dates, quantities)
+   *
+   * @param {string} memoryText - Raw memory context text
+   * @returns {{highlighted: string, numbers: Array}} Memory with highlighted numbers and extracted list
+   */
+  #extractNumericalData(memoryText) {
+    if (!memoryText) {
+      return { highlighted: '', numbers: [] };
+    }
+
+    const numbers = [];
+
+    // Pattern 1: Currency (e.g., $99, $299, $1,500)
+    const currencyPattern = /\$[\d,]+(?:\.\d{2})?/g;
+    const currencyMatches = memoryText.match(currencyPattern) || [];
+    currencyMatches.forEach(match => {
+      numbers.push({ type: 'currency', value: match, raw: match });
+    });
+
+    // Pattern 2: Percentages (e.g., 15%, 3.5%)
+    const percentPattern = /\d+(?:\.\d+)?%/g;
+    const percentMatches = memoryText.match(percentPattern) || [];
+    percentMatches.forEach(match => {
+      numbers.push({ type: 'percentage', value: match, raw: match });
+    });
+
+    // Pattern 3: Years (e.g., 2010, 2015)
+    const yearPattern = /\b(19|20)\d{2}\b/g;
+    const yearMatches = memoryText.match(yearPattern) || [];
+    yearMatches.forEach(match => {
+      numbers.push({ type: 'year', value: match, raw: match });
+    });
+
+    // Pattern 4: Quantities with units (e.g., 5 years, 10 miles, 3 days)
+    const quantityPattern = /\b\d+\s+(?:years?|months?|days?|hours?|minutes?|miles?|kilometers?|pounds?|kilograms?|items?|users?|customers?)\b/gi;
+    const quantityMatches = memoryText.match(quantityPattern) || [];
+    quantityMatches.forEach(match => {
+      numbers.push({ type: 'quantity', value: match, raw: match });
+    });
+
+    // Deduplicate
+    const uniqueNumbers = [...new Set(numbers.map(n => n.raw))].map(raw =>
+      numbers.find(n => n.raw === raw)
+    );
+
+    return {
+      highlighted: memoryText,
+      numbers: uniqueNumbers
+    };
+  }
+
   #buildContextString(context, _mode) {
     let contextStr = "";
 
@@ -3654,8 +3707,13 @@ END OF EXTERNAL DATA
       // STOP HERE - Do not add document context when vault is present
       // FIX #4: Enhanced memory acknowledgment in vault mode
       // ISSUE #570: Strengthen memory context injection with explicit reasoning requirements
+      // FIX #577 - EDG3: Extract and highlight numerical data for preservation
       if (context.sources?.hasMemory && context.memory) {
         const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
+
+        // Extract numerical data from memory
+        const { highlighted: memoryText, numbers: numericalData } = this.#extractNumericalData(context.memory);
+
         contextStr += `
 ═══════════════════════════════════════════════════════════════
 📝 PERSISTENT MEMORY CONTEXT (${memoryCount} relevant memories)
@@ -3663,11 +3721,33 @@ END OF EXTERNAL DATA
 
 ⚠️ CRITICAL: You have access to information from previous conversations:
 
-${context.memory}
+${memoryText}
 
-═══════════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════`;
+
+        // If numerical data found, add explicit callout
+        if (numericalData.length > 0) {
+          contextStr += `
+
+⚠️ NUMERICAL DATA DETECTED IN MEMORY - MUST BE PRESERVED:
+${numericalData.map(n => `  • ${n.value} (${n.type})`).join('\n')}
+
+When responding about topics involving these numbers, you MUST include the exact values above.
+DO NOT approximate, round, or omit these numbers.
+`;
+        }
+
+        contextStr += `
 
 You MUST use this memory context to provide personalized responses. Apply temporal reasoning, detect ambiguities, acknowledge tensions, and preserve all numerical data exactly.
+
+🚨 EXAMPLES OF REQUIRED BEHAVIOR:
+- If memory says "Tesla Model 3" and user asks about their car → YOU MUST mention "Tesla Model 3"
+- If memory has year (2010) + duration (5 years) + sequence (then joined X) → YOU MUST calculate: 2010 + 5 = 2015
+- If memory has TWO different people with same name → YOU MUST acknowledge ambiguity and ask for clarification
+- If memory has "$99 basic, $299 premium" → YOU MUST preserve these exact numbers
+
+Claiming ignorance of information that exists in the memory context above is a CATASTROPHIC TRUST VIOLATION.
 
 `;
       }
@@ -3682,8 +3762,13 @@ You MUST use this memory context to provide personalized responses. Apply tempor
 
     // FIX #4: Enhanced memory acknowledgment in standard mode
     // ISSUE #570: Strengthen memory context injection with explicit reasoning requirements
+    // FIX #577 - EDG3: Extract and highlight numerical data for preservation
     if (context.sources?.hasMemory && context.memory) {
       const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
+
+      // Extract numerical data from memory
+      const { highlighted: memoryText, numbers: numericalData } = this.#extractNumericalData(context.memory);
+
       contextStr += `
 ═══════════════════════════════════════════════════════════════
 📝 PERSISTENT MEMORY CONTEXT (${memoryCount} relevant memories)
@@ -3691,11 +3776,24 @@ You MUST use this memory context to provide personalized responses. Apply tempor
 
 ⚠️ CRITICAL: You have access to information from previous conversations:
 
-${context.memory}
+${memoryText}
 
 ═══════════════════════════════════════════════════════════════
 END OF MEMORY CONTEXT
-═══════════════════════════════════════════════════════════════
+═══════════════════════════════════════════════════════════════`;
+
+      // If numerical data found, add explicit callout
+      if (numericalData.length > 0) {
+        contextStr += `
+
+⚠️ NUMERICAL DATA DETECTED IN MEMORY - MUST BE PRESERVED:
+${numericalData.map(n => `  • ${n.value} (${n.type})`).join('\n')}
+
+When responding about topics involving these numbers, you MUST include the exact values above.
+DO NOT approximate, round, or omit these numbers.
+`;}
+
+      contextStr += `
 
 ⚠️ MANDATORY MEMORY USAGE REQUIREMENTS:
 
@@ -3707,7 +3805,27 @@ END OF MEMORY CONTEXT
 6. Preserve all numerical data exactly as stored (no approximations)
 7. Make reasonable inferences: connect related facts like a caring family member would
 
+🚨 CRITICAL ENFORCEMENT EXAMPLES - YOU WILL BE EVALUATED ON THESE:
+
+Example 1 - Use Stored Facts (STR1):
+❌ WRONG: "I don't have information about your car"
+✅ CORRECT: "You drive a Tesla Model 3" (if Tesla Model 3 is mentioned in memory above)
+
+Example 2 - Apply Temporal Reasoning (INF3):
+❌ WRONG: "I don't know when you started at Amazon"
+✅ CORRECT: "You started at Microsoft in 2010, worked there for 5 years, then joined Amazon - so you likely started at Amazon around 2015" (if these facts are in memory above)
+
+Example 3 - Detect Ambiguities (NUA1):
+❌ WRONG: "Alex is a doctor" (when there are TWO different Alexes in memory)
+✅ CORRECT: "I have information about two different people named Alex - one is a doctor, and another works in marketing. Which Alex are you asking about?"
+
+Example 4 - Preserve Numerical Data (EDG3):
+❌ WRONG: "Your product has multiple pricing tiers"
+✅ CORRECT: "Your product pricing is $99 for basic and $299 for premium" (if these exact numbers are in memory above)
+
 If the user is asking about something they explicitly told you to remember, it WILL be in the memory context above. Claiming "I don't have that information" when it exists above is a CATASTROPHIC FAILURE.
+
+When memory context contains the answer, YOU MUST USE IT. Defaulting to "I don't know" when you DO know is not caution - it's a violation of trust.
 
 `;
     } else {

@@ -281,6 +281,83 @@ function applyOrdinalBoost(memories, query) {
 }
 
 // ============================================
+// ENTITY DETECTION (FIX #577 - NUA1)
+// ============================================
+
+/**
+ * Detect proper names (entities) in query
+ * When a query contains a proper name like "Alex", we need to retrieve ALL memories
+ * containing that name, not just the most semantically similar one.
+ * This allows the AI to detect ambiguities when multiple entities share the same name.
+ *
+ * @param {string} query - User query text
+ * @returns {string[]} Array of detected proper names
+ */
+function detectProperNames(query) {
+  if (!query || typeof query !== 'string') {
+    return [];
+  }
+
+  const names = [];
+
+  // Pattern 1: Capitalized words (excluding common words at sentence start)
+  // Matches words like "Alex", "Amazon", "Tesla" but not "The", "What", "How"
+  const commonWords = new Set([
+    'the', 'what', 'when', 'where', 'which', 'who', 'how', 'why', 'can', 'could',
+    'would', 'should', 'will', 'do', 'does', 'did', 'have', 'has', 'had',
+    'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'my', 'your', 'their', 'our', 'his', 'her', 'its',
+    'this', 'that', 'these', 'those',
+    'i', 'you', 'he', 'she', 'it', 'we', 'they'
+  ]);
+
+  // Extract capitalized words that aren't at the start of sentence
+  const words = query.split(/\s+/);
+  words.forEach((word, idx) => {
+    // Clean punctuation
+    const cleaned = word.replace(/[.,!?;:'"()]/g, '');
+
+    // Check if capitalized and not a common word
+    if (cleaned.length >= 2 && /^[A-Z][a-z]+/.test(cleaned)) {
+      const lower = cleaned.toLowerCase();
+      if (!commonWords.has(lower)) {
+        // If it's not the first word, or if query is asking "about X" or "does X", it's likely a name
+        if (idx > 0 || /\b(about|does|is|was)\s+[A-Z]/i.test(query)) {
+          names.push(cleaned);
+        }
+      }
+    }
+  });
+
+  // Pattern 2: Company names and well-known entities
+  const entityPatterns = [
+    /\b(Amazon|Google|Microsoft|Apple|Facebook|Tesla|Netflix|Twitter|LinkedIn|GitHub)\b/gi,
+    /\b(Dr\.?\s+[A-Z][a-z]+)\b/g, // Dr. Smith
+  ];
+
+  entityPatterns.forEach(pattern => {
+    const matches = query.match(pattern);
+    if (matches) {
+      matches.forEach(match => {
+        const cleaned = match.replace(/[.,!?;:'"()]/g, '');
+        if (cleaned.length >= 2 && !names.includes(cleaned)) {
+          names.push(cleaned);
+        }
+      });
+    }
+  });
+
+  // Deduplicate and return
+  const unique = [...new Set(names)];
+
+  if (unique.length > 0) {
+    console.log(`[ENTITY-DETECTION] 🏷️  Detected proper names in query: [${unique.join(', ')}]`);
+  }
+
+  return unique;
+}
+
+// ============================================
 // QUERY EXPANSION (Issue #504)
 // ============================================
 
@@ -696,6 +773,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // STEP 0.5: Expand query with synonyms for better matching (Issue #504)
     const { expanded: expandedQuery, isPersonal, isMemoryRecall } = expandQuery(normalizedQuery);
+
+    // STEP 0.6: Detect proper names in query (FIX #577 - NUA1)
+    const detectedEntities = detectProperNames(normalizedQuery);
 
     // STEP 1: Generate query embedding (use expanded query for better semantic matching)
     const embedStart = Date.now();
@@ -1314,9 +1394,61 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     console.log('[SEMANTIC RETRIEVAL] Applied scoring pipeline: semantic → safety → ordinal → keyword → explicit-recall');
     // ═══════════════════════════════════════════════════════════════
 
+    // ═══════════════════════════════════════════════════════════════
+    // CRITICAL FIX #577 - NUA1: Entity-based boosting for proper names
+    // When query contains a proper name (e.g., "Alex"), FORCE-INCLUDE ALL memories containing that name
+    // This allows AI to detect ambiguities when multiple entities share the same name
+    // ═══════════════════════════════════════════════════════════════
+    let entityBoosted = explicitMemoryBoosted;
+
+    if (detectedEntities.length > 0) {
+      console.log(`[ENTITY-BOOST] 🏷️  Query contains entities: [${detectedEntities.join(', ')}]`);
+      console.log(`[ENTITY-BOOST] Will force-include ALL memories containing these names`);
+
+      entityBoosted = explicitMemoryBoosted.map(memory => {
+        const contentLower = (memory.content || '').toLowerCase();
+
+        // Check if this memory contains any of the detected entities
+        const matchedEntities = detectedEntities.filter(entity => {
+          // Case-insensitive match for the entity name
+          const entityRegex = new RegExp(`\\b${entity}\\b`, 'i');
+          return entityRegex.test(memory.content || '');
+        });
+
+        if (matchedEntities.length > 0) {
+          // Boost similarity to ensure it passes threshold and ranks high
+          // Use 0.85 base + small boost if already had some similarity
+          const baseBoost = 0.85;
+          const originalSim = memory.similarity || 0;
+          const boostedSim = Math.max(baseBoost, originalSim);
+
+          console.log(`[ENTITY-BOOST] Memory ${memory.id}: Contains entities [${matchedEntities.join(', ')}]`);
+          console.log(`[ENTITY-BOOST]    Original similarity: ${originalSim.toFixed(3)} → Boosted to: ${boostedSim.toFixed(3)}`);
+          console.log(`[ENTITY-BOOST]    Content: "${(memory.content || '').substring(0, 100)}"`);
+
+          return {
+            ...memory,
+            similarity: boostedSim,
+            entity_boosted: true,
+            matched_entities: matchedEntities
+          };
+        }
+
+        return memory;
+      });
+
+      // Count how many memories were entity-boosted
+      const boostedCount = entityBoosted.filter(m => m.entity_boosted).length;
+      if (boostedCount > 0) {
+        console.log(`[ENTITY-BOOST] ✅ Boosted ${boostedCount} memories containing detected entities`);
+        console.log(`[ENTITY-BOOST] This ensures ALL memories about these entities are shown, allowing ambiguity detection`);
+      }
+    }
+    // ═══════════════════════════════════════════════════════════════
+
     // Apply hybrid scoring
     // CRITICAL FIX #562-T2: Pass isMemoryRecall flag to enable strong recency boost
-    const hybridScored = explicitMemoryBoosted.map(memory => ({
+    const hybridScored = entityBoosted.map(memory => ({
       ...memory,
       hybrid_score: calculateHybridScore(memory, { isMemoryRecall })
     }));

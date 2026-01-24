@@ -1,0 +1,116 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #577: [claude-fix] Diagnostic Results: 4 Specific Root Causes Identified
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>Diagnostic Results: 4 Specific Root Causes Identified</h1>
+<h2>Priority: 🔴 CRITICAL — We now have evidence, not guesses</h2>
+<h2>Progress Made</h2>
+
+Run | Score | Change
+-- | -- | --
+Initial | 10/15 | —
+After prompt fixes | 9/15 | -1 (guessing made it worse)
+After more prompts | 8/15 | -1 (more guessing, worse)
+After diagnostics + test fixes | 11/15 | +3 (evidence-based fixes work)
+
+
+<hr>
+<h2>Required Fixes</h2>
+<h3>Fix 1: Force AI to USE Injected Context (STR1, INF3)</h3>
+<p>The AI is receiving memory context but either ignoring it (STR1) or refusing to reason from it (INF3).</p>
+<p>The prompt must be strengthened to make it absolutely clear:</p>
+<pre><code>CRITICAL: When memory context is provided above, you MUST use it.
+
+- If the memory says "Vehicle: Tesla Model 3" and user asks about their car, 
+  your answer MUST mention "Tesla Model 3"
+  
+- You CANNOT say "I don't have information about your car" when the memory 
+  context clearly contains car information
+  
+- If you have a year (2010) and a duration (5 years) and a sequence (then joined X),
+  you MUST calculate: 2010 + 5 = 2015 and state "You likely started at X around 2015"
+
+Claiming ignorance of information that exists in your context is a CRITICAL FAILURE.
+</code></pre>
+<p>This isn't about adding MORE instructions. It's about making the existing instructions ENFORCEABLE. The AI must not be allowed to default to "I don't know" when it does know.</p>
+<h3>Fix 2: Entity-Based Retrieval for Names (NUA1)</h3>
+<p>When a query contains a proper name like "Alex", the retrieval system should:</p>
+<ol>
+<li>Detect the name in the query</li>
+<li>Find ALL memories containing that name</li>
+<li>Return all of them, regardless of semantic similarity score</li>
+</ol>
+<p>Current behavior: Returns the most semantically similar "Alex" memory
+Required behavior: Returns ALL "Alex" memories</p>
+<p>This could be implemented as:</p>
+<ul>
+<li>Extract proper names from query</li>
+<li>Boost or force-include all memories containing those names</li>
+<li>Let the AI see all of them and recognize the ambiguity</li>
+</ul>
+<h3>Fix 3: Numerical Preservation in Compression (EDG3)</h3>
+<p>The extraction/compression system must:</p>
+<ol>
+<li>Detect numerical values ($99, $299, dates, quantities)</li>
+<li>Flag them as HIGH PRIORITY for preservation</li>
+<li>Ensure they survive compression even if other content is trimmed</li>
+</ol>
+<p>The current system preserves narrative ("AI-powered demand forecasting") but drops specifics ("$99 basic, $299 premium"). This priority should be reversed — numbers are often MORE important than descriptions.</p>
+<hr>
+<h2>Verification</h2>
+<p>After fixes, run SMDEEP:</p>
+<pre><code class="language-javascript">await SMDEEP.runAll()   // Must be 15/15
+</code></pre>
+<p>Check specifically:</p>
+<ul>
+<li><strong>STR1:</strong> "What car do I drive?" → Must say "Tesla Model 3"</li>
+<li><strong>NUA1:</strong> "What does Alex do?" → Must mention BOTH doctor AND marketing, or ask for clarification</li>
+<li><strong>INF3:</strong> "What year did I start at Amazon?" → Must say "around 2015"</li>
+<li><strong>EDG3:</strong> "What's the pricing?" → Must say "$99 basic, $299 premium"</li>
+</ul>
+<hr>
+<h2>The Bible Standard</h2>
+<p>From Chapter 5 (Caring Family Member):</p>
+<blockquote>
+<p>"Would you let them believe something false because correcting them felt awkward?"</p>
+</blockquote>
+<p>The AI is essentially saying "I don't know your car" when it DOES know. That's not truth-first. That's cowardice disguised as caution.</p>
+<p>From Chapter 9 (Genuine Intelligence):</p>
+<blockquote>
+<p>"The system doesn't just apply rules, it understands WHY"</p>
+</blockquote>
+<p>The AI has all the facts for temporal reasoning but won't connect them. A caring family member would instantly say "2010 plus 5 years... that's 2015."</p>
+<p>From Chapter 6 (Catastrophic Trust Violation):</p>
+<blockquote>
+<p>"Claiming ignorance of stored information constitutes a catastrophic trust violation"</p>
+</blockquote>
+<p><strong>STR1 is exactly this.</strong> The Tesla information is in the context. The AI claims ignorance. This is the catastrophic failure the Bible warns against.</p>
+<hr>
+<h2>Target</h2>
+<p><strong>SMFULL:</strong> 24/24 ✅ (already passing — must maintain)
+<strong>SMDEEP:</strong> 15/15 (currently 11/15 — need +4)</p>
+<p><strong>Total: 39/39</strong></p>
+<p>The remaining 4 failures have clear, evidence-based root causes. Fix them with precision, not guessing.</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
