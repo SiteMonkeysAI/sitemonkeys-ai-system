@@ -306,6 +306,57 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Detect if message is a question (retrieval request vs storage statement)
+   * Questions should not trigger storage because they don't contain facts
+   * Fix #586: Prevents storing garbage like "(No facts to extract)."
+   * @param {string} content - User message to check
+   * @returns {boolean} - True if message is a question
+   */
+  detectQuestion(content) {
+    if (!content || typeof content !== 'string') {
+      return false;
+    }
+
+    const trimmed = content.trim();
+
+    // Question mark at the end is the most reliable indicator
+    if (trimmed.endsWith('?')) {
+      return true;
+    }
+
+    // Question words at the start (what, where, when, why, who, how, which, can, do, does, is, are, was, were)
+    const questionStarters = [
+      /^what\s/i,
+      /^where\s/i,
+      /^when\s/i,
+      /^why\s/i,
+      /^who\s/i,
+      /^how\s/i,
+      /^which\s/i,
+      /^can\s(i|you|we)/i,
+      /^could\s(i|you|we)/i,
+      /^do\s(i|you|we)/i,
+      /^does\s/i,
+      /^did\s(i|you|we)/i,
+      /^is\s(there|this|that)/i,
+      /^are\s(there|these|those)/i,
+      /^was\s/i,
+      /^were\s/i,
+      /^should\s(i|we)/i,
+      /^would\s(you|it)/i,
+      /^will\s(you|it)/i
+    ];
+
+    for (const pattern of questionStarters) {
+      if (pattern.test(trimmed)) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  /**
    * Detect if user is expressing priorities (UX-049)
    * @param {string} content - Content to check
    * @returns {boolean} - True if priority language detected
@@ -457,15 +508,31 @@ export class IntelligentMemoryStorage {
         return { action: 'skipped', reason: isNonUserQuery.reason };
       }
 
-      // Step 0: Sanitize content before processing
+      // CRITICAL FIX #586: Skip storage for questions (retrieval requests)
+      // Questions ask for information, they don't provide it
+      // Extraction on questions produces garbage like "(No facts to extract)."
+      const isQuestion = this.detectQuestion(userMessage);
+      if (isQuestion) {
+        console.log(`[INTELLIGENT-STORAGE] ⏭️ Skipping storage - message is a question (retrieval request, not storage)`);
+        return { action: 'skipped', reason: 'question_no_facts_to_store' };
+      }
+
+      // Step 0: Sanitize AI response before processing
+      // CRITICAL FIX #586: Don't reject storage if AI response is boilerplate
+      // The USER MESSAGE may contain facts even if AI response is generic
       console.log('[TRACE-INTELLIGENT] I6. About to sanitize content...');
       const sanitizedResponse = this.sanitizeForStorage(aiResponse);
-      if (!sanitizedResponse) {
-        console.log('[TRACE-INTELLIGENT] I7. Content rejected as boilerplate');
-        console.log('[INTELLIGENT-STORAGE] Rejected boilerplate content, not storing');
-        return { action: 'rejected', reason: 'boilerplate_rejected' };
+      const hasBoilerplate = !sanitizedResponse || sanitizedResponse.length < 10;
+
+      if (hasBoilerplate) {
+        console.log('[TRACE-INTELLIGENT] I7. AI response contains boilerplate, will extract from user message only');
+        console.log('[INTELLIGENT-STORAGE] AI response is boilerplate, but proceeding with user message extraction');
+      } else {
+        console.log('[TRACE-INTELLIGENT] I8. Content sanitized, length:', sanitizedResponse.length);
       }
-      console.log('[TRACE-INTELLIGENT] I8. Content sanitized, length:', sanitizedResponse.length);
+
+      // Use sanitized response if available, otherwise use empty string for extraction
+      const responseForExtraction = sanitizedResponse || '';
 
       // CRITICAL FIX: Detect fingerprint and importance BEFORE extraction
       // This preserves original content for analysis instead of analyzing compressed garbage
@@ -492,7 +559,7 @@ export class IntelligentMemoryStorage {
 
       // Step 1: Extract facts (compression)
       console.log('[FLOW] Step 1: Extracting key facts from conversation...');
-      let facts = await this.extractKeyFacts(userMessage, sanitizedResponse);
+      let facts = await this.extractKeyFacts(userMessage, responseForExtraction);
       console.log('[FLOW] Step 1: Facts extracted ✓');
 
       // Validation: Check if numeric values from input survived extraction
@@ -513,7 +580,9 @@ export class IntelligentMemoryStorage {
                            facts.trim().length === 0 ||
                            facts.toLowerCase().includes('no essential facts') ||
                            facts.toLowerCase().includes('no key facts') ||
-                           facts.toLowerCase().includes('nothing to extract');
+                           facts.toLowerCase().includes('nothing to extract') ||
+                           facts.toLowerCase().includes('no facts to extract') ||
+                           /^\(no facts/i.test(facts.trim());
 
       if (isMeaningless) {
         console.log('[INTELLIGENT-STORAGE] ⚠️ No meaningful facts extracted, using fallback to original message');
@@ -529,7 +598,7 @@ export class IntelligentMemoryStorage {
         console.log('[INTELLIGENT-STORAGE] ✅ Using original user message as facts:', facts.substring(0, 80));
       }
 
-      const originalTokens = this.countTokens(userMessage + aiResponse);
+      const originalTokens = this.countTokens(userMessage + (responseForExtraction || ''));
       const compressedTokens = this.countTokens(facts);
       const ratio = originalTokens > 0 ? (originalTokens / compressedTokens).toFixed(1) : 1;
 
@@ -851,6 +920,8 @@ Facts (preserve user terminology + add synonyms):`;
         factsLower.includes('no essential facts') ||
         factsLower.includes('no key facts') ||
         factsLower.includes('nothing to extract') ||
+        factsLower.includes('no facts to extract') ||
+        /^\(no facts/i.test(facts.trim()) ||
         factsLower.includes('general query') ||
         factsLower.includes('general question') ||
         factsLower.includes('no user-specific') ||

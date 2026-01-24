@@ -1,0 +1,84 @@
+Perfect! Now let me create a comprehensive summary of the changes:
+
+---SUMMARY---
+
+## Root Cause Analysis
+
+The issue was caused by **two separate bugs** working together:
+
+### Bug 1: AI Response Boilerplate Rejection
+In `api/memory/intelligent-storage.js` (line 462-467), the code was rejecting storage if the AI response contained boilerplate patterns. This meant:
+- Message 1: "My favorite color is blue" → AI responds with boilerplate → Storage rejected → No extraction runs → Nothing stored
+
+### Bug 2: Questions Triggering Storage
+There was no detection for questions vs statements. This meant:
+- Message 2: "What is my favorite color?" → AI responds → Extraction runs on the QUESTION → Returns "(No facts to extract)." → Garbage stored
+
+The combination created the observed behavior:
+1. User statement (Message 1) didn't store because AI response was boilerplate
+2. User question (Message 2) DID store, but extracted garbage from the question
+
+## Changes Made
+
+### File: `api/memory/intelligent-storage.js`
+
+**1. Added `detectQuestion()` method (after line 306)**
+- Detects questions by checking for "?" at end
+- Detects questions by checking for question word starters (what, where, when, why, who, how, can, do, does, is, are, was, were, should, would, will)
+- Returns `true` if message is a question, `false` otherwise
+
+**2. Skip storage for questions (line ~459-465)**
+- Added check: `const isQuestion = this.detectQuestion(userMessage);`
+- If question detected, return early with: `{ action: 'skipped', reason: 'question_no_facts_to_store' }`
+- Questions are retrieval requests, not storage requests - they don't contain facts
+
+**3. Fixed guards to catch "(No facts to extract)." pattern**
+
+**Guard 1 (line ~512-518):** Added two new patterns to the meaningless content check:
+- `.includes('no facts to extract')`
+- `/^\(no facts/i.test(facts.trim())`
+
+**Guard 2 (line ~851-864):** Added two new patterns to the assistant language check:
+- `.includes('no facts to extract')`
+- `/^\(no facts/i.test(facts.trim())`
+
+These prevent storing garbage extraction results.
+
+**4. Fixed AI response boilerplate handling (line ~472-485)**
+- Changed from **rejecting storage** when AI response is boilerplate
+- To **proceeding with extraction** using only the user message
+- Added variable `responseForExtraction` which is empty string if AI response is boilerplate
+- Updated extraction call to use `responseForExtraction` instead of `sanitizedResponse`
+
+This ensures statements like "My favorite color is blue" get extracted and stored even if the AI responds with generic boilerplate like "I've noted that" or "I don't retain memory."
+
+## Expected Behavior After Fix
+
+### Message 1: "My favorite color is blue"
+1. Not a question → proceed with storage ✓
+2. AI response may contain boilerplate → extract from user message only ✓
+3. Extraction runs: "My favorite color is blue" + "" → "favorite_color: blue" ✓
+4. Store extracted fact to database ✓
+
+### Message 2: "What is my favorite color?"
+1. **IS a question** → skip storage entirely ✓
+2. No extraction runs ✓
+3. No storage happens ✓
+4. Retrieval finds "favorite_color: blue" from Message 1 ✓
+5. AI responds: "Your favorite color is blue" ✓
+
+## Verification
+
+The fix ensures that:
+- ✅ Statements containing facts trigger extraction and storage
+- ✅ Questions (retrieval requests) skip storage entirely
+- ✅ Storage proceeds even if AI response contains boilerplate
+- ✅ Garbage patterns like "(No facts to extract)." are caught and rejected
+- ✅ The database never stores meaningless extraction results
+
+The system will now correctly:
+1. **Remember what the user tells it** (statements)
+2. **Not try to extract facts from questions** (retrieval requests)
+3. **Not reject storage based on AI response quality** (focus on user message)
+
+---END SUMMARY---
