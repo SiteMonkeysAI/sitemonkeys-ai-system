@@ -1,0 +1,99 @@
+Let me create a comprehensive summary of the changes:
+
+---SUMMARY---
+
+## Root Cause Analysis
+
+The issue was a **time-based retrieval gap** in the embedding fallback mechanism. Here's what was happening:
+
+### The Storage → Retrieval Flow
+
+1. **Storage** (api/memory/intelligent-storage.js:1577-1662):
+   - Memory is inserted into database WITHOUT an embedding
+   - Then `embedMemoryNonBlocking()` is called asynchronously
+   - If embedding generation fails or times out, the memory is marked as `embedding_status = 'pending'` or `'failed'`
+
+2. **Retrieval** (api/services/semantic-retrieval.js:515-519):
+   - Main query requires: `embedding IS NOT NULL` AND `embedding_status = 'ready'`
+   - Memories without embeddings are excluded from primary results
+
+3. **Fallback Mechanism** (api/services/semantic-retrieval.js:886-964, 966-1154):
+   - **First check** (lines 886-964): Includes recent unembedded memories (last 2 minutes)
+   - **Second check** (lines 966-1154): If ZERO candidates, runs fallback query for memories created in last **5 minutes**
+
+### The Problem
+
+**If memories were stored more than 5 minutes ago and their embeddings failed/timed out, they would NEVER be retrieved.**
+
+This caused the "0 candidates" issue when:
+- Test data (memories 5303, 5304) was created in a previous test run
+- Embeddings failed or are still pending
+- More than 5 minutes have passed since storage
+
+### The Fix
+
+**File Modified**: `api/services/semantic-retrieval.js`
+
+**Change 1** (Lines 969-998): Updated fallback check to look for ALL memories without embeddings
+```javascript
+// BEFORE: Only checked for memories created in last 5 minutes
+AND created_at > NOW() - INTERVAL '5 minutes'
+
+// AFTER: Checks for ALL memories without embeddings, regardless of age
+// (no time restriction)
+```
+
+**Change 2** (Lines 1000-1021): Updated fallback query to retrieve ALL unembedded memories
+```javascript
+// BEFORE:
+WHERE user_id = $1
+  AND (is_current = true OR is_current IS NULL)
+  AND created_at > NOW() - INTERVAL '5 minutes'  // ❌ Time restriction
+
+// AFTER:
+WHERE user_id = $1
+  AND (is_current = true OR is_current IS NULL)
+  AND (embedding IS NULL OR embedding_status != 'ready')  // ✅ No time restriction
+```
+
+**Change 3** (Lines 974-981): Updated comments to reflect the broader scope
+- Changed "recent memories" to "memories without embeddings"
+- Added documentation explaining this fixes cases where embeddings failed or are old
+
+### What This Fixes
+
+✅ **Memories stored > 5 minutes ago** without embeddings are now retrievable
+✅ **Failed embedding generation** no longer causes permanent retrieval failure  
+✅ **Test data from previous runs** can be retrieved even without embeddings
+✅ **Pending embeddings** don't block retrieval indefinitely
+
+### Safety Preserved
+
+The fix maintains all existing safety mechanisms:
+- ✅ User isolation (user_id filtering)
+- ✅ Mode filtering (truth-general, site-monkeys, etc.)
+- ✅ Category filtering
+- ✅ is_current filtering (no superseded memories)
+- ✅ Text-based similarity scoring for unembedded memories
+- ✅ Token budget limits
+
+### Expected Behavior After Fix
+
+**Scenario 1**: Memories stored, embeddings pending
+- **Before**: 0 candidates after 5 minutes
+- **After**: Memories retrieved via fallback with text-based scoring
+
+**Scenario 2**: Memories stored, embeddings failed
+- **Before**: 0 candidates after 5 minutes
+- **After**: Memories retrieved via fallback with text-based scoring
+
+**Scenario 3**: Test data from previous runs
+- **Before**: 0 candidates (too old for time window)
+- **After**: Memories retrieved if they match query terms
+
+The system now fulfills the Bible's promise (Chapter 5):
+> "A caring family member remembers what you tell them"
+
+Even when the technical infrastructure (embeddings) fails, the system will still retrieve stored memories using text-based fallback.
+
+---END SUMMARY---
