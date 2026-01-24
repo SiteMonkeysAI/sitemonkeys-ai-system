@@ -1,0 +1,47 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #588: [claude-fix] Retrieval Returns 0 Candidates Despite Stored Memories
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>Retrieval Returns 0 Candidates Despite Stored Memories</h1>
+<h2>Priority: 🔴 CRITICAL — Final piece of the puzzle</h2>
+<h2>Progress Made</h2>
+<p>Issue #586 fixed extraction and storage:</p>
+
+Step | Before #586 | After #586
+-- | -- | --
+Extraction | "(No facts to extract)" | ✅ "Color: blue (favorite hue shade)."
+Storage | Garbage stored | ✅ Memory IDs 5303, 5304 created
+Retrieval | 0 candidates | ❌ Still 0 candidates
+
+
+<hr>
+<h2>The Standard</h2>
+<p>From the Bible, Chapter 5 (Caring Family Member):</p>
+<blockquote>
+<p>"A caring family member remembers what you tell them"</p>
+</blockquote>
+<p>The system now stores what it's told. It just can't retrieve it yet.</p>
+<p><strong>Fix retrieval. Complete the pipeline. Make it work.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

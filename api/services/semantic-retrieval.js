@@ -963,33 +963,43 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       // Continue without recent memories
     }
 
+    // CRITICAL FIX #588: When ZERO candidates with embeddings exist, check for memories without embeddings
+    // This handles the case where memories exist but embeddings failed, timed out, or are still pending
     if (candidates.length === 0 && recentUnembeddedMemories.length === 0) {
-      console.log(`[SEMANTIC RETRIEVAL] No candidates found for user ${userId} in mode ${mode}`);
+      console.log(`[SEMANTIC RETRIEVAL] No candidates with embeddings found for user ${userId} in mode ${mode}`);
 
       // ═══════════════════════════════════════════════════════════════
-      // CRITICAL FIX #536: EMBEDDING-LAG FALLBACK
-      // When semantic returns 0, check if recent memories exist WITHOUT embeddings
-      // This handles the async embedding generation lag on immediate recall
+      // CRITICAL FIX #536, #588: EMBEDDING-LAG FALLBACK
+      // When semantic returns 0, check if memories exist WITHOUT embeddings
+      // This handles:
+      // 1. Async embedding generation lag on immediate recall (#536)
+      // 2. Failed/timed-out embedding generation (#588)
+      // 3. Old memories that never got embeddings (#588)
       // ═══════════════════════════════════════════════════════════════
       try {
-        console.log('[EMBEDDING-FALLBACK] Checking for recent memories without embeddings...');
+        console.log('[EMBEDDING-FALLBACK] Checking for memories without embeddings...');
 
-        // Check for recent memories (last 5 minutes) without embeddings
-        const { rows: recentWithoutEmbeddings } = await pool.query(`
+        // CRITICAL FIX #588: Check for ALL memories without embeddings (not just recent ones)
+        // When semantic search returns 0 candidates, we should include memories that don't have
+        // embeddings yet, regardless of when they were created. This fixes the case where:
+        // 1. Memories were stored but embeddings failed/timed out
+        // 2. Memories were stored more than 5 minutes ago and embeddings are still pending
+        // 3. Test data was created in a previous run without embeddings
+        const { rows: memoriesWithoutEmbeddings } = await pool.query(`
           SELECT COUNT(*) as count
           FROM persistent_memories
           WHERE user_id = $1
-            AND created_at > NOW() - INTERVAL '5 minutes'
             AND (embedding IS NULL OR embedding_status != 'ready')
             AND (is_current = true OR is_current IS NULL)
         `, [userId]);
 
-        const hasRecentUnembedded = parseInt(recentWithoutEmbeddings[0]?.count || 0) > 0;
+        const hasUnembedded = parseInt(memoriesWithoutEmbeddings[0]?.count || 0) > 0;
 
-        if (hasRecentUnembedded) {
-          console.log(`[EMBEDDING-FALLBACK] ✅ Found ${recentWithoutEmbeddings[0].count} recent memories without embeddings - using fallback retrieval`);
+        if (hasUnembedded) {
+          console.log(`[EMBEDDING-FALLBACK] ✅ Found ${memoriesWithoutEmbeddings[0].count} memories without embeddings - using fallback retrieval`);
 
-          // Run bounded fallback retrieval: recent memories + basic text matching
+          // Run bounded fallback retrieval: all unembedded memories + basic text matching
+          // IMPORTANT: No time restriction here - if embeddings are missing, we should still retrieve
           let fallbackQuery = `
             SELECT
               id,
@@ -1007,7 +1017,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
             FROM persistent_memories
             WHERE user_id = $1
               AND (is_current = true OR is_current IS NULL)
-              AND created_at > NOW() - INTERVAL '5 minutes'
+              AND (embedding IS NULL OR embedding_status != 'ready')
           `;
 
           const fallbackParams = [userId];
@@ -1073,7 +1083,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           telemetry.semantic_candidates = 0;
           telemetry.fallback_candidates = validFallbackCandidates.length;
 
-          console.log(`[EMBEDDING-FALLBACK] Retrieved ${validFallbackCandidates.length} candidates via fallback`);
+          console.log(`[EMBEDDING-FALLBACK] Retrieved ${validFallbackCandidates.length} candidates via fallback (from ${fallbackCandidates.length} total unembedded)`);
 
           if (validFallbackCandidates.length > 0) {
             // Apply basic text similarity scoring
