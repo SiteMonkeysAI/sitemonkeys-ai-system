@@ -1,0 +1,161 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #590: [claude-fix] JavaScript Error: 'isCarQuery' Used Before Initialization
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>JavaScript Error: 'isCarQuery' Used Before Initialization</h1>
+<h2>Priority: 🔴 CRITICAL — This is the final blocker</h2>
+<h2>The Evidence</h2>
+<p>Retrieval <strong>works</strong> — memory found with excellent score:</p>
+<pre><code>[USER-ISOLATION] Retrieved 1 candidates
+[KEYWORD-BOOST] Memory 5307: 2/2 keywords matched - boosting 0.608 → 0.758 (+0.150)
+[TRACE-T3]   1. Memory 5307: hybrid_score=0.898, similarity=0.758
+</code></pre>
+<p>Then it <strong>crashes</strong>:</p>
+<pre><code>[SEMANTIC RETRIEVAL] ❌ Error: Cannot access 'isCarQuery' before initialization
+[ORCHESTRATOR] [MEMORY] Semantic retrieval: 0 memories injected, 0 tokens
+[ORCHESTRATOR] [MEMORY] ✗ No memory to inject
+</code></pre>
+<p><strong>The memory is found, scored, ranked — then lost due to a JavaScript error.</strong></p>
+<hr>
+<h2>The Bug</h2>
+<p>A variable <code>isCarQuery</code> is being accessed before it's declared. This is a standard JavaScript temporal dead zone error.</p>
+<p><strong>Example of the bug pattern:</strong></p>
+<pre><code class="language-javascript">// BROKEN - causes "Cannot access 'isCarQuery' before initialization"
+if (isCarQuery) {
+  // do something
+}
+const isCarQuery = query.toLowerCase().includes('car');
+</code></pre>
+<p><strong>The fix:</strong></p>
+<pre><code class="language-javascript">// FIXED - declare before use
+const isCarQuery = query.toLowerCase().includes('car');
+if (isCarQuery) {
+  // do something
+}
+</code></pre>
+<hr>
+<h2>Location</h2>
+<p>File: <code>api/services/semantic-retrieval.js</code></p>
+<p>Search for <code>isCarQuery</code> and ensure it's declared BEFORE any code that uses it.</p>
+<hr>
+<h2>The Fix Requirements</h2>
+<h3>DO:</h3>
+<ul>
+<li>✅ Find where <code>isCarQuery</code> is declared</li>
+<li>✅ Find where <code>isCarQuery</code> is used</li>
+<li>✅ Move the declaration BEFORE the usage</li>
+<li>✅ That's it — nothing else</li>
+</ul>
+<h3>DO NOT:</h3>
+<ul>
+<li>❌ Change any logic</li>
+<li>❌ Add new features</li>
+<li>❌ Modify boost values</li>
+<li>❌ Change thresholds</li>
+<li>❌ Touch any other code</li>
+<li>❌ "Improve" anything</li>
+</ul>
+<p><strong>This is a one-line fix. Move a variable declaration. Nothing else.</strong></p>
+<hr>
+<h2>Verification</h2>
+<h3>Step 1: Verify the fix compiles</h3>
+<p>The code should not throw any errors on startup.</p>
+<h3>Step 2: Run the diagnostic test</h3>
+<pre><code class="language-javascript">const testUserId = `diag_test_${Date.now()}`;
+console.log('Test User ID:', testUserId);
+
+// Store
+await fetch('/api/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    user_id: testUserId,
+    message: 'My favorite color is blue',
+    mode: 'truth_general',
+    personality: 'eli'
+  })
+});
+
+await new Promise(r =&gt; setTimeout(r, 5000));
+
+// Retrieve
+const response = await fetch('/api/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    user_id: testUserId,
+    message: 'What is my favorite color?',
+    mode: 'truth_general',
+    personality: 'eli'
+  })
+});
+
+const result = await response.json();
+console.log('RESPONSE:', result.response);
+// MUST contain "blue"
+</code></pre>
+<h3>Step 3: Check logs</h3>
+<p><strong>Must see:</strong></p>
+<pre><code>[USER-ISOLATION] Retrieved 1 candidates
+[ORCHESTRATOR] [MEMORY] Retrieved X tokens from 1 memories
+[PROMPT-DEBUG] Memory context present: true
+[PROMPT-DEBUG] Memory context length: XXX chars  ← NOT 0
+</code></pre>
+<p><strong>Must NOT see:</strong></p>
+<pre><code>❌ Error: Cannot access 'isCarQuery' before initialization
+</code></pre>
+<h3>Step 4: Verify response</h3>
+<p>The AI response MUST contain "blue".</p>
+<hr>
+<h2>Success Criteria</h2>
+
+Check | Required
+-- | --
+No JavaScript errors in logs | YES
+Memory retrieved (1+ candidates) | YES
+Memory injected (tokens > 0) | YES
+Memory context present | YES
+Response contains "blue" | YES
+
+
+<hr>
+<h2>Why This Matters</h2>
+<p>We have fixed:</p>
+<ol>
+<li>✅ Extraction (Issue #586) — "Color: blue (favorite hue shade)."</li>
+<li>✅ Storage (Issue #586) — Memory ID 5307 created</li>
+<li>✅ Retrieval query (Issue #588) — Found 1 candidate, score 0.898</li>
+<li>❌ Retrieval injection — <strong>Crashes before injecting</strong></li>
+</ol>
+<p>This is the LAST bug. Fix this one variable declaration and the pipeline is complete.</p>
+<hr>
+<h2>The Standard</h2>
+<p>From the Bible:</p>
+<blockquote>
+<p>"As it should be"</p>
+</blockquote>
+<p>The memory was found. The memory was scored. The memory should be injected. A typo-level bug is preventing it.</p>
+<p><strong>Fix the typo. Complete the pipeline. Make it work.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
