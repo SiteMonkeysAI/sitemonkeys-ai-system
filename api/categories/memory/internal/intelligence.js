@@ -2812,9 +2812,13 @@ class IntelligenceSystem {
       }
     }
 
-    // CRITICAL: Enforce strict memory count cap (default: 5 memories maximum)
+    // CRITICAL: Enforce strict memory count cap (default: 15 memories maximum)
+    // INCREASED FROM 5 (Issue #582): System needs 10-15 memories for:
+    // - Multiple entities with same name (NUA1: two different "Alex")
+    // - Volume stress (STR1: 10+ facts stored, need to find Tesla at rank #9)
+    // - Complex queries requiring full context
     // This prevents token-efficient memories from flooding the context
-    const MAX_MEMORIES = 5;
+    const MAX_MEMORIES = 15;
     const cappedMemories = enforcedMemories.slice(0, MAX_MEMORIES);
 
     if (cappedMemories.length < enforcedMemories.length) {

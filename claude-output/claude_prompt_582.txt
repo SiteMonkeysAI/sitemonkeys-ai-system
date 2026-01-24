@@ -1,0 +1,82 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #582: [claude-fix] EMERGENCY: Complete System Restoration Required — Memory Pipeline Destroyed
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>EMERGENCY: Complete System Restoration Required — Memory Pipeline Destroyed</h1>
+<h2>Priority: 🔴🔴🔴 SYSTEM NON-FUNCTIONAL</h2>
+<h2>The Situation</h2>
+<p>The system has been destroyed by incremental "fixes" that didn't address root causes:</p>
+
+State | SMFULL | SMDEEP | Total
+-- | -- | -- | --
+Before fixes | 24/24 | 10/15 | 34/39
+After all "fixes" | 17/24 | 6/15 | 23/39
+Destruction | -7 | -4 | -11 tests
+
+
+<hr>
+<h2>What NOT To Do</h2>
+<p>❌ <strong>Do NOT add more prompt instructions</strong> — The AI has no memory to reason about
+❌ <strong>Do NOT adjust boost values</strong> — There's nothing to boost
+❌ <strong>Do NOT change memory caps</strong> — Memories aren't being retrieved at all
+❌ <strong>Do NOT add more threshold tiers</strong> — The pipeline is broken
+❌ <strong>Do NOT create incremental patches</strong> — Fix the root causes completely</p>
+<h2>What TO Do</h2>
+<p>✅ <strong>Trace the complete pipeline</strong> — Storage → Database → Retrieval → Context → AI
+✅ <strong>Find every break point</strong> — Document each place where data is lost
+✅ <strong>Fix all break points</strong> — Not one at a time, ALL of them
+✅ <strong>Verify end-to-end</strong> — Store a fact, retrieve it, see it in response
+✅ <strong>Run full test suites</strong> — Only declare success at 39/39</p>
+<hr>
+<h2>The Standard</h2>
+<p>From the Bible:</p>
+<blockquote>
+<p>"As it should be" — the ONLY acceptable standard.</p>
+</blockquote>
+<p>The system should:</p>
+<ol>
+<li><strong>Store</strong> what the user tells it</li>
+<li><strong>Retrieve</strong> it when relevant</li>
+<li><strong>Include</strong> it in context for the AI</li>
+<li><strong>Use</strong> it in the response</li>
+</ol>
+<p>This is basic functionality. This is the minimum. This is <strong>"as it should be."</strong></p>
+<p>A system that stores nothing, retrieves nothing, and responds "I don't have enough information" to everything is <strong>not a memory system</strong>. It's a broken system pretending to work.</p>
+<hr>
+<h2>Deliverables</h2>
+<ol>
+<li><strong>Investigation log</strong> — Complete trace of storage, retrieval, and context assembly</li>
+<li><strong>Root cause document</strong> — Every break point identified with evidence</li>
+<li><strong>Unified fix</strong> — Single PR that fixes ALL identified issues</li>
+<li><strong>Verification</strong> — SMFULL 24/24, SMDEEP 15/15</li>
+</ol>
+<hr>
+<h2>Final Note</h2>
+<p>The system worked (24/24, 10/15) before the "fixes" began.</p>
+<p>Something specific broke the memory pipeline. Find it. Fix it. Restore the system.</p>
+<p>Do not add features. Do not optimize. Do not improve.</p>
+<p><strong>Make. It. Work. Again.</strong></p>
+<p>39/39 or it's not done.</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

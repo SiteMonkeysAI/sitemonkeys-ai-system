@@ -14,6 +14,9 @@ import { lookup } from "../core/intelligence/externalLookupEngine.js";
 import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
 import { classifyQueryComplexity } from "../core/intelligence/queryComplexityClassifier.js";
 
+// MEMORY USAGE ENFORCER - Issue #582: Prevents AI from claiming ignorance when memory was provided
+import { memoryUsageEnforcer } from "../lib/validators/memory-usage-enforcer.js";
+
 // STEP 5: Response quality consolidation
 import {
   removeEngagementBait,
@@ -561,6 +564,44 @@ export async function processWithEliAndRoxy({
           vaultEnforcement.modifications,
           "vault_rule_violation_blocked",
         );
+      }
+    }
+
+    // 7. Memory Usage Enforcement (Issue #582: CRITICAL FIX)
+    // Prevents AI from claiming ignorance when memory context was provided
+    if (memoryContext && memoryContext.length > 0) {
+      try {
+        const memoryTokens = Math.ceil(memoryContext.length / 4); // Estimate tokens
+        const memoryEnforcement = await memoryUsageEnforcer.enforce({
+          response: response.response,
+          context: {
+            sources: { hasMemory: true },
+            tokenBreakdown: { memory: memoryTokens },
+            mode: mode,
+            userId: "session", // We don't have userId here, use session identifier
+          },
+        });
+
+        if (memoryEnforcement.modified) {
+          console.log(
+            "🧠 Memory usage enforcer triggered:",
+            memoryEnforcement.reason,
+            "| Matched phrase:",
+            memoryEnforcement.matchedPhrase,
+          );
+          response.response = memoryEnforcement.response;
+          overridePatterns.memory_usage_violations =
+            (overridePatterns.memory_usage_violations || 0) + 1;
+          trackOverride(
+            "MEMORY_USAGE_ENFORCEMENT",
+            [memoryEnforcement.matchedPhrase],
+            memoryEnforcement.memoryTokens,
+            "ignorance_claim_corrected",
+          );
+        }
+      } catch (memoryEnforcerError) {
+        console.error("⚠️ Memory usage enforcer failed:", memoryEnforcerError);
+        // Continue without enforcement - don't crash the system
       }
     }
 
