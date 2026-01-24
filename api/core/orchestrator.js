@@ -588,11 +588,12 @@ export class Orchestrator {
       }
 
       // STEP 1: Conditionally retrieve memory context (up to 2,500 tokens)
-      // Skip memory for greetings and simple factual queries - they don't need context
+      // Skip memory ONLY for pure greetings - NOT for simple factual queries
+      // CRITICAL FIX (Issue #579, INF3): Simple factual queries may need memory for temporal reasoning
+      // Example: "What year did I start at Amazon?" needs "graduated 2010" + "worked 5 years" = 2015
       let memoryContext = null;
       const skipMemoryForSimpleQuery = earlyClassification &&
-        (earlyClassification.classification === 'greeting' ||
-         (earlyClassification.classification === 'simple_factual' && message.length < 50));
+        earlyClassification.classification === 'greeting' && message.length < 50;
 
       // Define memoryDuration at higher scope (Issue #446 fix)
       let memoryDuration = 0;
@@ -1900,11 +1901,13 @@ export class Orchestrator {
         // ═══════════════════════════════════════════════════════════════
         // HARD FINAL CAP - Absolute maximum memories before injection
         // This is the LAST line of defense - enforced regardless of upstream logic
-        // CRITICAL (Issue #573 - STR1): Increased from 5 to 8 to handle volume stress tests
-        // When user stores 10 facts rapidly, system needs to retrieve at least top 8
-        // to ensure specific queries (car, dog, color) can find their facts
+        // CRITICAL (Issue #579 - NUA1, STR1): Increased from 8 to 15 to handle:
+        // - Multiple entities with same name (NUA1: two different "Alex")
+        // - Volume stress (STR1: 10+ facts stored, need to find Tesla at rank #9)
+        // - Complex international names (CMP2: Dr. Xiaoying Zhang-Müller preserved)
+        // - Ordinal queries (A5: first code vs second code disambiguation)
         // ═══════════════════════════════════════════════════════════════
-        const MAX_MEMORIES_FINAL = 8; // Increased from 5 for STR1 volume stress
+        const MAX_MEMORIES_FINAL = 15; // Increased from 8 for Issue #579 comprehensive fix
         const memoriesPreCap = result.memories.length;
         const memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
         const memoriesPostCap = memoriesToFormat.length;
@@ -2718,23 +2721,53 @@ export class Orchestrator {
     // Enforce memory budget (≤2,500 tokens)
     let memoryText = memory?.memories || "";
     let memoryTokens = memory?.tokens || 0;
-    
+
     if (memoryTokens > BUDGET.MEMORY) {
       this.log(`[TOKEN-BUDGET] Memory exceeds limit: ${memoryTokens} > ${BUDGET.MEMORY}, truncating...`);
       const targetChars = BUDGET.MEMORY * 4;
-      memoryText = memoryText.substring(0, targetChars);
-      memoryTokens = BUDGET.MEMORY;
+      // CRITICAL FIX (Issue #579, CMP2, EDG3): Truncate at sentence boundary, not mid-word
+      // Preserve names (Dr. Xiaoying Zhang-Müller) and numbers ($99, $299)
+      let truncated = memoryText.substring(0, targetChars);
+      // Find last complete sentence within budget
+      const lastSentence = Math.max(
+        truncated.lastIndexOf('. '),
+        truncated.lastIndexOf('.\n'),
+        truncated.lastIndexOf('\n\n')
+      );
+      if (lastSentence > targetChars * 0.8) {
+        // If we can keep >80% by truncating at sentence, do it
+        memoryText = truncated.substring(0, lastSentence + 1);
+      } else {
+        // Otherwise truncate at word boundary
+        const lastSpace = truncated.lastIndexOf(' ');
+        memoryText = lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
+      }
+      memoryTokens = Math.ceil(memoryText.length / 4);
+      this.log(`[TOKEN-BUDGET] Truncated memory to ${memoryText.length} chars (${memoryTokens} tokens) at safe boundary`);
     }
 
     // Enforce document budget (≤3,000 tokens)
     let documentText = documents?.content || "";
     let documentTokens = documents?.tokens || 0;
-    
+
     if (documentTokens > BUDGET.DOCUMENTS) {
       this.log(`[TOKEN-BUDGET] Documents exceed limit: ${documentTokens} > ${BUDGET.DOCUMENTS}, truncating...`);
       const targetChars = BUDGET.DOCUMENTS * 4;
-      documentText = documentText.substring(0, targetChars);
-      documentTokens = BUDGET.DOCUMENTS;
+      // CRITICAL FIX (Issue #579): Truncate at sentence boundary to preserve complete info
+      let truncated = documentText.substring(0, targetChars);
+      const lastSentence = Math.max(
+        truncated.lastIndexOf('. '),
+        truncated.lastIndexOf('.\n'),
+        truncated.lastIndexOf('\n\n')
+      );
+      if (lastSentence > targetChars * 0.8) {
+        documentText = truncated.substring(0, lastSentence + 1);
+      } else {
+        const lastSpace = truncated.lastIndexOf(' ');
+        documentText = lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
+      }
+      documentTokens = Math.ceil(documentText.length / 4);
+      this.log(`[TOKEN-BUDGET] Truncated documents to ${documentText.length} chars (${documentTokens} tokens) at safe boundary`);
     }
 
     // Enforce vault budget (≤9,000 tokens) - should already be enforced by selection
