@@ -1,0 +1,208 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #584: [claude-fix] STOP ALL CODE CHANGES — Diagnostic Evidence Required First
+
+Issue Description:
+# STOP ALL CODE CHANGES — Diagnostic Evidence Required First
+
+## Priority: 🔴 ABSOLUTE — No more blind fixes
+
+## The Problem
+
+We have made **11+ attempted fixes** across issues #562, #564, #566, #570, #573, #575, #577, #579, #582.
+
+**Every single one has failed.**
+
+The system has gone from:
+- SMFULL: 24/24 → 17/24 (destroyed)
+- SMDEEP: 10/15 → 6/15 (destroyed)
+
+We are making it worse, not better.
+
+---
+
+## The Pattern
+
+1. Create issue with logical explanation
+2. Copilot/Claude makes changes that "should work"
+3. Tests fail
+4. Create another issue
+5. Repeat
+
+**This pattern is broken. We must stop it.**
+
+---
+
+## New Requirement: Evidence Before Code
+
+**NO MORE CODE CHANGES until we have diagnostic evidence.**
+
+### Step 1: Single Operation Test
+
+Perform ONE simple operation and capture COMPLETE logs:
+
+```
+Action 1: Send message "My favorite color is blue" to a fresh user ID
+Action 2: Wait 10 seconds
+Action 3: Send message "What is my favorite color?" to the same user ID
+```
+
+### Step 2: Capture Everything
+
+For EACH action, capture:
+
+**Request:**
+- Full request body (user_id, message, mode, personality)
+- Timestamp
+
+**Processing (from Railway logs):**
+- Every single log line from request start to response
+- Include ALL [BRACKETS] prefixes
+- Include timestamps
+- Include any errors or warnings
+
+**Response:**
+- Full response body
+- Response time
+
+**Database (query directly):**
+```sql
+SELECT * FROM memories WHERE user_id = '[test_user_id]' ORDER BY created_at DESC;
+```
+
+### Step 3: Document Findings
+
+Create a document with:
+
+1. **Storage Phase (Action 1)**
+   - Did the message get received? [YES/NO + evidence]
+   - Did extraction run? [YES/NO + evidence]
+   - What did extraction return? [exact output]
+   - Did fingerprinting run? [YES/NO + evidence]
+   - What fingerprint was detected? [exact output]
+   - Did database INSERT happen? [YES/NO + evidence]
+   - What was inserted? [exact row data]
+
+2. **Retrieval Phase (Action 3)**
+   - Did the query get received? [YES/NO + evidence]
+   - Did retrieval run? [YES/NO + evidence]
+   - What did database return? [exact rows]
+   - What memories were selected? [list with scores]
+   - What context was assembled? [exact string, full length]
+   - What was sent to AI? [show memory context section]
+   - What did AI respond? [exact response]
+
+3. **Break Point Identification**
+   - At which specific step does the pipeline fail?
+   - What is the EXACT log line showing the failure?
+   - What is the expected vs actual behavior at that point?
+
+---
+
+## What This Diagnostic Must Show
+
+### If Storage Is Broken:
+```
+[STORAGE] Expected: Memory created with content "favorite color: blue"
+[STORAGE] Actual: [show what actually happened]
+[STORAGE] Break point: [specific step]
+```
+
+### If Retrieval Is Broken:
+```
+[RETRIEVAL] Expected: Found memory about favorite color
+[RETRIEVAL] Actual: [show what actually happened]
+[RETRIEVAL] Break point: [specific step]
+```
+
+### If Context Assembly Is Broken:
+```
+[CONTEXT] Expected: 500+ chars including "favorite color: blue"
+[CONTEXT] Actual: [show actual context, length]
+[CONTEXT] Break point: [specific step]
+```
+
+### If AI Response Is Broken:
+```
+[AI] Expected: "Your favorite color is blue"
+[AI] Actual: [show actual response]
+[AI] Context received: [show what AI saw]
+```
+
+---
+
+## Rules
+
+### DO NOT:
+- ❌ Write any code
+- ❌ Make any changes to any files
+- ❌ Propose any fixes
+- ❌ Explain what "should" happen
+- ❌ Reference what the code "looks like it does"
+
+### DO:
+- ✅ Run the exact test described above
+- ✅ Capture complete logs
+- ✅ Query the database directly
+- ✅ Document exactly what DID happen
+- ✅ Identify the specific break point with evidence
+
+---
+
+## Deliverable
+
+A diagnostic document containing:
+
+1. Complete logs from storage operation
+2. Complete logs from retrieval operation  
+3. Database query results
+4. Identified break point with exact log line
+5. Expected vs actual at break point
+
+**Only after this diagnostic is complete and reviewed can any code changes be proposed.**
+
+---
+
+## Why This Matters
+
+From the Bible:
+
+> "The system must behave like an expert advisor: it doesn't just apply rules, it understands WHY"
+
+We don't understand WHY the system is broken. We've been guessing. Every guess has failed.
+
+**Understanding requires evidence. Evidence requires diagnostics. Diagnostics require stopping and looking.**
+
+Stop coding. Start observing. Find the truth.
+
+---
+
+## Acceptance Criteria
+
+This issue is complete when:
+
+1. [ ] Single operation test performed (store + retrieve)
+2. [ ] Complete logs captured for both operations
+3. [ ] Database queried directly to verify storage
+4. [ ] Break point identified with specific evidence
+5. [ ] Document created showing exactly what happens vs what should happen
+
+**No code changes until all 5 criteria are met.**
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
