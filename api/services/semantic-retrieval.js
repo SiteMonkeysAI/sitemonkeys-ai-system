@@ -1482,7 +1482,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       console.log(`[TRACE-T3]      explicit_recall_boosted=${m.explicit_recall_boosted || false}, explicit_storage=${m.explicit_storage_request || false}`);
       console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
     });
-    
+
+    // ═══════════════════════════════════════════════════════════════
+    // ISSUE #575: STR1 DEBUG - Detect car/temporal queries for diagnostics
+    // ═══════════════════════════════════════════════════════════════
+    const isCarQuery = /\b(car|vehicle|drive|tesla|model)\b/i.test(normalizedQuery);
+    const isTemporalQuery = /\b(year|when|started|graduated|worked|duration|time|date|amazon|google|mit)\b/i.test(normalizedQuery);
+
     // FOUNDER DIAGNOSTIC #579-STR1: Log ALL ranks for car-related queries
     if (isCarQuery && filtered.length > 0) {
       console.log('[FOUNDER-STR1] ═══════════════════════════════════════════════════════');
@@ -1532,8 +1538,6 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ═══════════════════════════════════════════════════════════════
     // ISSUE #575: STR1 DEBUG - Track Tesla/car queries through pipeline
     // ═══════════════════════════════════════════════════════════════
-    const isCarQuery = /\b(car|vehicle|drive|tesla|model)\b/i.test(normalizedQuery);
-    const isTemporalQuery = /\b(year|when|started|graduated|worked|duration|time|date|amazon|google|mit)\b/i.test(normalizedQuery);
     if (isCarQuery) {
       console.log('[STR1-DEBUG] ═══════════════════════════════════════════════════════');
       console.log(`[STR1-DEBUG] Query: "${normalizedQuery}"`);
