@@ -1,0 +1,236 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #586: [claude-fix]
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>ROOT CAUSE FOUND: Extraction Runs on Wrong Message</h1>
+<h2>Priority: 🔴 CRITICAL — This is THE bug</h2>
+<h2>The Evidence</h2>
+<p>Diagnostic test performed with user ID: <code>diag_test_1769227338734</code></p>
+<h3>Test Performed:</h3>
+<ol>
+<li>Sent: "My favorite color is blue"</li>
+<li>Waited 10 seconds</li>
+<li>Sent: "What is my favorite color?"</li>
+</ol>
+<h3>What The Logs Show:</h3>
+<p><strong>During the RETRIEVAL phase (second message), extraction ran:</strong></p>
+<pre><code>[EXTRACTION-DEBUG] Original: "What is my favorite color?"
+[EXTRACTION-DEBUG] Extracted: "(No facts to extract)."
+</code></pre>
+<p><strong>What got stored in the database:</strong></p>
+<pre><code>[STORAGE-DEBUG] Memory stored: {
+  id: 5302,
+  user_id: 'diag_test_1769227338734',
+  category: 'personal_life_interests',
+  content: '(No facts to extract).',
+  ...
+}
+</code></pre>
+<p><strong>The database literally contains the string "(No facts to extract)."</strong></p>
+<hr>
+<h2>The Root Cause</h2>
+<p><strong>Extraction is running on the QUESTION, not on the STATEMENT.</strong></p>
+<p>When user said "My favorite color is blue":</p>
+<ul>
+<li>This should have been extracted as: <code>favorite_color: blue</code></li>
+<li>This should have been stored in the database</li>
+</ul>
+<p>Instead:</p>
+<ul>
+<li>Nothing meaningful was extracted from the first message</li>
+<li>When the second message came ("What is my favorite color?"), extraction ran on THAT</li>
+<li>Extraction correctly said "no facts to extract" from a question</li>
+<li>That garbage string was stored</li>
+</ul>
+<hr>
+<h2>The Flow That's Broken</h2>
+<h3>What SHOULD Happen:</h3>
+<pre><code>Message 1: "My favorite color is blue"
+  → EXTRACTION: "favorite_color: blue"
+  → STORAGE: {content: "favorite_color: blue", fingerprint: "preferences"}
+  → DATABASE: Real fact stored
+
+Message 2: "What is my favorite color?"
+  → RETRIEVAL: Finds "favorite_color: blue"
+  → AI RESPONSE: "Your favorite color is blue"
+</code></pre>
+<h3>What IS Happening:</h3>
+<pre><code>Message 1: "My favorite color is blue"
+  → AI responds (extraction skipped or failed?)
+  → STORAGE: Nothing meaningful stored
+
+Message 2: "What is my favorite color?"
+  → EXTRACTION runs on the question: "(No facts to extract)"
+  → STORAGE: Saves "(No facts to extract)." to database
+  → RETRIEVAL: Finds garbage
+  → AI RESPONSE: "I don't have enough information"
+</code></pre>
+<hr>
+<h2>Additional Evidence</h2>
+<p><strong>STORE RESPONSE metadata (first message):</strong></p>
+<pre><code class="language-javascript">metadata: {
+  memoryUsed: false, 
+  memoryTokens: 0, 
+  memory_ids: Array(0), 
+  memory_count: 0
+}
+</code></pre>
+<p>Zero memories created from "My favorite color is blue".</p>
+<p><strong>RETRIEVE RESPONSE (second message):</strong></p>
+<pre><code>"I don't have enough information about your personal preferences to give you a definitive answer, and being honest with you matters more than appear..."
+</code></pre>
+<p>Because the database contains "(No facts to extract)." instead of actual facts.</p>
+<hr>
+<h2>The Investigation Needed</h2>
+<p>Find where extraction is called and verify:</p>
+<h3>Question 1: Is extraction called on Message 1?</h3>
+<p>When "My favorite color is blue" arrives:</p>
+<ul>
+<li>Does extraction run AT ALL?</li>
+<li>If yes, what is the input to extraction?</li>
+<li>If yes, what does extraction return?</li>
+<li>If no, WHY is it skipped?</li>
+</ul>
+<p><strong>Add logging:</strong></p>
+<pre><code>[EXTRACTION-ENTRY] Message received: "My favorite color is blue"
+[EXTRACTION-ENTRY] Calling extraction: YES/NO
+[EXTRACTION-ENTRY] Extraction input: "[show input]"
+[EXTRACTION-ENTRY] Extraction output: "[show output]"
+</code></pre>
+<h3>Question 2: Is extraction running on the wrong content?</h3>
+<p>The log shows extraction running on the QUESTION during Message 2:</p>
+<pre><code>[EXTRACTION-DEBUG] Original: "What is my favorite color?"
+</code></pre>
+<p>But during Message 1, we should see:</p>
+<pre><code>[EXTRACTION-DEBUG] Original: "My favorite color is blue"
+</code></pre>
+<p><strong>Check:</strong> Is there an <code>[EXTRACTION-DEBUG]</code> log for Message 1? If not, extraction isn't running on statements.</p>
+<h3>Question 3: What triggers extraction?</h3>
+<p>Find the code that decides WHEN to run extraction:</p>
+<ul>
+<li>Is there a condition that skips extraction for certain message types?</li>
+<li>Is extraction only running on AI responses, not user messages?</li>
+<li>Is extraction accidentally bound to retrieval instead of storage?</li>
+</ul>
+<hr>
+<h2>The Fix Required</h2>
+<p><strong>Extraction must run on EVERY user message that contains facts.</strong></p>
+<p>When user says "My favorite color is blue":</p>
+<ol>
+<li>Detect this is a factual statement (not a question)</li>
+<li>Run extraction: <code>favorite_color: blue</code></li>
+<li>Store the extraction in the database</li>
+<li>Confirm storage with real content</li>
+</ol>
+<p><strong>The fix is NOT:</strong></p>
+<ul>
+<li>Adjusting memory caps</li>
+<li>Changing boost values</li>
+<li>Modifying prompts</li>
+<li>Adding enforcement</li>
+</ul>
+<p><strong>The fix IS:</strong></p>
+<ul>
+<li>Ensuring extraction runs on user statements</li>
+<li>Ensuring extracted content is stored (not "(No facts to extract)")</li>
+</ul>
+<hr>
+<h2>Verification</h2>
+<p>After the fix, run the same diagnostic:</p>
+<pre><code class="language-javascript">const testUserId = `diag_test_${Date.now()}`;
+
+// Store
+await fetch('/api/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    user_id: testUserId,
+    message: 'My favorite color is blue',
+    mode: 'truth_general',
+    personality: 'eli'
+  })
+});
+
+// Wait
+await new Promise(r =&gt; setTimeout(r, 5000));
+
+// Retrieve
+const response = await fetch('/api/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    user_id: testUserId,
+    message: 'What is my favorite color?',
+    mode: 'truth_general',
+    personality: 'eli'
+  })
+});
+
+const result = await response.json();
+console.log(result.response);
+// MUST contain "blue"
+</code></pre>
+<p><strong>Expected logs for Message 1:</strong></p>
+<pre><code>[EXTRACTION-DEBUG] Original: "My favorite color is blue"
+[EXTRACTION-DEBUG] Extracted: "favorite_color: blue"
+[STORAGE-DEBUG] Memory stored: {
+  content: 'favorite_color: blue',
+  ...
+}
+</code></pre>
+<p><strong>Expected response for Message 2:</strong></p>
+<pre><code>"Your favorite color is blue."
+</code></pre>
+<hr>
+<h2>Success Criteria</h2>
+
+Check | Required
+-- | --
+Message 1 extraction runs | YES
+Message 1 extracts "favorite_color: blue" | YES
+Database contains real fact | YES, not "(No facts to extract)"
+Message 2 retrieves the fact | YES
+AI response contains "blue" | YES
+
+
+<hr>
+<h2>The Bible Standard</h2>
+<p>From Chapter 6:</p>
+<blockquote>
+<p>"Claiming ignorance of stored information constitutes a catastrophic trust violation"</p>
+</blockquote>
+<p>The system is claiming ignorance because <strong>nothing is being stored</strong>. The extraction pipeline is broken at the very first step.</p>
+<p>From Chapter 5 (Caring Family Member):</p>
+<blockquote>
+<p>A caring family member remembers what you tell them</p>
+</blockquote>
+<p>The system doesn't remember because it never stores. Fix extraction → fix everything.</p>
+<hr>
+<h2>Summary</h2>
+<p><strong>Root cause:</strong> Extraction doesn't run on user statements containing facts.</p>
+<p><strong>Evidence:</strong> Database contains "(No facts to extract)." instead of "favorite_color: blue"</p>
+<p><strong>Fix:</strong> Make extraction run on "My favorite color is blue" and store the result.</p>
+<p><strong>This is THE bug. Fix this one thing and the system will work.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
