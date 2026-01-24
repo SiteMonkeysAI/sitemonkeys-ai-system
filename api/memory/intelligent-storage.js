@@ -421,6 +421,7 @@ export class IntelligentMemoryStorage {
       console.log('[TRACE-T2] Calling detectExplicitMemoryRequest...');
       const explicitRequest = this.detectExplicitMemoryRequest(userMessage);
       console.log('[TRACE-T2] detectExplicitMemoryRequest result:', JSON.stringify(explicitRequest));
+      console.log(`[A5-DEBUG] Storage: detectExplicitMemoryRequest returned: ${JSON.stringify(explicitRequest)}`);
 
       if (explicitRequest.isExplicit) {
         console.log('[INTELLIGENT-STORAGE] 🎯 EXPLICIT MEMORY REQUEST - storing verbatim without compression');
@@ -441,6 +442,8 @@ export class IntelligentMemoryStorage {
           explicit_storage_request: true,  // Mark as explicit for retrieval optimization
           wait_for_embedding: true  // FIX #566-STR1: Wait for embedding to complete for explicit requests
         }, mode);
+        console.log(`[A5-DEBUG] Storage: Set explicit_storage_request=true in metadata`);
+        console.log(`[A5-DEBUG] Storage: Set wait_for_embedding=true in metadata`);
 
         console.log('[INTELLIGENT-STORAGE] ✅ Explicit memory stored verbatim');
         return result;

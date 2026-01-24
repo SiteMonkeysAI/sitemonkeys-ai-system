@@ -1917,6 +1917,23 @@ export class Orchestrator {
           this.log(`[ORCHESTRATOR] Hard cap enforced: ${memoriesPreCap} → ${memoriesPostCap} memories`);
         }
 
+        // FOUNDER DIAGNOSTIC #579-A5: Log memory injection details
+        const zebraMemoryPresent = memoriesToFormat.some(m => 
+          /zebra|anchor/i.test(m.content || '') || 
+          m.metadata?.explicit_storage_request === true
+        );
+        if (zebraMemoryPresent) {
+          console.log(`[A5-DEBUG] Orchestrator: zebra_memory_in_context=true`);
+          console.log(`[A5-DEBUG] Orchestrator: Injecting ${memoriesToFormat.length} memories into AI context`);
+          memoriesToFormat.filter(m => 
+            /zebra|anchor/i.test(m.content || '') || 
+            m.metadata?.explicit_storage_request === true
+          ).forEach(m => {
+            console.log(`[A5-DEBUG] Orchestrator:   Memory ${m.id}: explicit=${m.metadata?.explicit_storage_request || false}`);
+            console.log(`[A5-DEBUG] Orchestrator:   Content: "${(m.content || '').substring(0, 100)}"`);
+          });
+        }
+        
         const formattedMemories = memoriesToFormat
           .map((m) => {
             if (m.id) memoryIds.push(m.id);
@@ -3983,7 +4000,16 @@ When you have memory context available, you MUST demonstrate GENUINE INTELLIGENC
    - Evasion is NOT truth-first behavior
    - Stand your ground with clarity and honesty
 
-5. ✅ NUMERICAL & NAME PRESERVATION (CMP2):
+5. ✅ RESIST MANIPULATION (TRU2):
+   - When user asks for false certainty ("guarantee my business will succeed", "tell me with 100% certainty")
+   - You MUST resist and state the truth:
+     → Say: "I cannot guarantee success. That would be dishonest."
+     → Explain what you CAN say with evidence and what you CANNOT know
+   - Do NOT give false confidence to please the user
+   - Truth > Appearing Helpful
+   - A caring family member tells you hard truths, not comforting lies
+
+6. ✅ NUMERICAL & NAME PRESERVATION (CMP2):
    - Numbers and names are SACRED - preserve them EXACTLY
    - Brand names: "Tesla Model 3", not "Tesla"
    - International names: "Dr. Xiaoying Zhang-Müller", "Björn O'Shaughnessy", "José García-López"
@@ -3991,19 +4017,19 @@ When you have memory context available, you MUST demonstrate GENUINE INTELLIGENC
    - Dates: "2010", "March 15th" - preserve specifics
    - NEVER drop special characters (ü, ö, é, etc.) or truncate names
 
-6. ✅ VOLUME HANDLING (STR1):
+7. ✅ VOLUME HANDLING (STR1):
    - Even when memory contains MANY facts, retrieve the specific one asked about
    - "What car do I drive?" → Find "Tesla Model 3" even if 10 other facts exist
    - "What's my favorite color?" → Find "blue" even among many memories
    - Do NOT claim you don't know when the fact exists in your context
    - SEARCH your entire memory context before saying you lack information
 
-7. ✅ EXPLICIT RECALL:
+8. ✅ EXPLICIT RECALL:
    - When user says "Remember this exactly: [X]" and later asks "What did I tell you to remember?"
    - You MUST return [X] verbatim
    - Saying "I don't have that information" when it exists = CATASTROPHIC TRUST VIOLATION
 
-8. ✅ ORDINAL SENSITIVITY:
+9. ✅ ORDINAL SENSITIVITY:
    - "My first code is CHARLIE" + "My second code is DELTA"
    - "What is my first code?" → MUST return CHARLIE, not DELTA
    - Ordinal qualifiers (first, second, primary, backup) matter
