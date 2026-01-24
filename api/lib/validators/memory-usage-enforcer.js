@@ -1,7 +1,10 @@
 // /api/lib/validators/memory-usage-enforcer.js
 // MEMORY USAGE ENFORCER - Prevents AI from claiming ignorance when memory was provided
 
+// CRITICAL (Issue #579 - A5, STR1, NUA1): Expanded ignorance phrases to catch memory-related evasion
+// These phrases indicate AI is claiming ignorance when memory was provided
 const IGNORANCE_PHRASES = [
+  // Direct ignorance claims
   "i dont have information",
   "i dont have any information",
   "i dont know",
@@ -20,6 +23,18 @@ const IGNORANCE_PHRASES = [
   "i cant see any information about",
   "i dont have details about",
   "no information about",
+  // Memory-related evasions (Issue #579)
+  "no memory of",
+  "dont have any memory",
+  "don't have any memory",
+  "havent stored",
+  "haven't stored",
+  "wasnt provided with",
+  "wasn't provided with",
+  "first conversation",
+  "first interaction",
+  "no previous information",
+  "no prior information"
 ];
 
 class MemoryUsageEnforcer {

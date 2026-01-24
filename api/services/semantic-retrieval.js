@@ -773,6 +773,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // STEP 0.5: Expand query with synonyms for better matching (Issue #504)
     const { expanded: expandedQuery, isPersonal, isMemoryRecall } = expandQuery(normalizedQuery);
+    if (isMemoryRecall) {
+      console.log(`[A5-DEBUG] Retrieval: Memory recall query detected`);
+      console.log(`[A5-DEBUG] Retrieval: Original query: "${normalizedQuery}"`);
+    }
 
     // STEP 0.6: Detect proper names in query (FIX #577 - NUA1)
     const detectedEntities = detectProperNames(normalizedQuery);
@@ -1468,6 +1472,36 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       console.log(`[TRACE-T3]      explicit_recall_boosted=${m.explicit_recall_boosted || false}, explicit_storage=${m.explicit_storage_request || false}`);
       console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
     });
+    
+    // FOUNDER DIAGNOSTIC #579-STR1: Log ALL ranks for car-related queries
+    if (isCarQuery && filtered.length > 0) {
+      console.log('[FOUNDER-STR1] ═══════════════════════════════════════════════════════');
+      console.log('[FOUNDER-STR1] COMPLETE RANKING for car query:');
+      filtered.forEach((m, idx) => {
+        const isTesla = /tesla|model\s*3/i.test(m.content || '');
+        const marker = isTesla ? '🚗 TESLA' : '   ';
+        console.log(`[FOUNDER-STR1]   ${marker} Rank #${idx+1}: Memory ${m.id}`);
+        console.log(`[FOUNDER-STR1]      Score: ${m.hybrid_score?.toFixed(3)}, Similarity: ${m.similarity?.toFixed(3)}`);
+        console.log(`[FOUNDER-STR1]      Keyword boost: ${m.keyword_boosted || false}`);
+        console.log(`[FOUNDER-STR1]      Entity boost: ${m.entity_boosted || false}`);
+        console.log(`[FOUNDER-STR1]      Content: "${(m.content || '').substring(0, 100)}"`);
+      });
+      const teslaRanks = filtered
+        .map((m, idx) => ({ m, idx }))
+        .filter(({ m }) => /tesla|model\s*3/i.test(m.content || ''))
+        .map(({ idx }) => idx + 1);
+      if (teslaRanks.length > 0) {
+        console.log(`[FOUNDER-STR1] 🎯 TESLA FOUND AT RANKS: ${teslaRanks.join(', ')}`);
+        if (teslaRanks[0] <= 3) {
+          console.log('[FOUNDER-STR1] ✅ Tesla ranks in TOP 3 - ranking is working correctly');
+        } else {
+          console.log(`[FOUNDER-STR1] ⚠️  Tesla ranks at #${teslaRanks[0]} - RANKING MAY NEED FIX`);
+        }
+      } else {
+        console.log('[FOUNDER-STR1] ❌ Tesla NOT FOUND in ranked results - investigate why');
+      }
+      console.log('[FOUNDER-STR1] ═══════════════════════════════════════════════════════');
+    }
 
     telemetry.candidates_above_threshold = filtered.length;
     telemetry.scoring_ms = Date.now() - scoringStart;
