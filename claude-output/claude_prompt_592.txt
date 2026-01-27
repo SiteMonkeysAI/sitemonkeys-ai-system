@@ -1,0 +1,76 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #592: [claude-fix] FINAL ISSUE: Complete SMDEEP Intelligence — 39/39 Required
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>FINAL ISSUE: Complete SMDEEP Intelligence — 39/39 Required</h1>
+<h2>Priority: 🔴 CRITICAL — Complete the mission</h2>
+<h2>Current State</h2>
+
+Suite | Status
+-- | --
+SMFULL | 24/24 ✅ Complete
+SMDEEP | 10/15 (5 remaining)
+Total | 34/39
+
+
+<hr>
+<h2>Success Criteria</h2>
+<h3>Tests Pass</h3>
+<ul>
+<li>SMFULL: 24/24 (maintain)</li>
+<li>SMDEEP: 15/15 (improve from 10/15)</li>
+<li>Total: 39/39</li>
+</ul>
+<h3>No Regressions</h3>
+<ul>
+<li>All previously passing tests still pass</li>
+<li>Core pipeline remains functional</li>
+<li>No new errors introduced</li>
+</ul>
+<h3>Bible Alignment</h3>
+<ul>
+<li>Temporal reasoning performs calculations</li>
+<li>Ambiguity is recognized and clarified</li>
+<li>Volume doesn't cause memory loss</li>
+<li>Names are preserved exactly</li>
+<li>Refusals are maintained under pressure</li>
+</ul>
+<hr>
+<h2>The Standard</h2>
+<p>From the Bible:</p>
+<blockquote>
+<p>"As it should be" — the ONLY acceptable standard.</p>
+</blockquote>
+<p>A system that:</p>
+<ul>
+<li>Won't calculate 2020 - 5</li>
+<li>Forgets one of two Alexes</li>
+<li>Loses your car in a sea of facts</li>
+<li>Mangles international names</li>
+<li>Caves to pushback</li>
+</ul>
+<p>...is NOT "as it should be."</p>
+<p><strong>Fix these 5 intelligence gaps. Complete the mission. 39/39.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
