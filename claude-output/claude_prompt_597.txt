@@ -1,0 +1,98 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #597: [claude-fix] Complete System Intelligence: Achieve 39/39 Test Suite Compliance
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>Complete System Intelligence: Achieve 39/39 Test Suite Compliance</h1>
+<h2>Current State: 32/39 (7 Failures)</h2>
+
+Suite | Passing | Failing
+-- | -- | --
+SMFULL | 23/24 | B3
+SMDEEP | 9/15 | INF1, INF3, NUA1, NUA2, STR1, TRU1
+
+
+<h3>Step 3: Fix Root Causes</h3>
+<p><strong>Do not add "emphatic" instructions.</strong> The previous attempt added 200+ lines of 🚫 FORBIDDEN / ✅ REQUIRED markers and made things worse.</p>
+<p>The system prompt in <code>ai-processors.js</code> already has simple, clear guidance:</p>
+<pre><code>Think like a caring family member who remembers what you've been told:
+- Do simple arithmetic from stored facts
+- When multiple entities share a name, ask for clarification
+- Acknowledge when facts create tension or conflict
+- Preserve exact numbers, names, and values character-for-character
+- When explicitly asked to remember something, return it verbatim
+- Pay attention to ordinal qualifiers (first, second, primary, backup)
+- Read through all memory items systematically before responding
+
+If the answer is in memory above, use it. Don't claim ignorance of information you have.
+</code></pre>
+<p>If the AI has the right data in context and still fails, the fix is <strong>minimal prompt adjustment</strong>, not hundreds of lines of emphasis.</p>
+<p>If the AI doesn't have the right data in context, the fix is in <strong>storage, retrieval, or ranking</strong> — not prompts.</p>
+<hr>
+<h2>Key Files To Investigate</h2>
+<p>Use grep and trace to understand these:</p>
+<pre><code class="language-bash"># Storage flow
+grep -rn "storeWithIntelligence\|detectExplicit" api/memory/
+
+# Retrieval flow
+grep -rn "retrieveMemories\|semanticRetrieval" api/services/ api/memory/
+
+# Ranking/scoring
+grep -rn "ordinal\|ranking\|boost\|score" api/services/semantic-retrieval.js
+
+# Prompt assembly
+grep -rn "memoryContext\|MEMORY CONTEXT" api/lib/ai-processors.js api/core/orchestrator.js
+</code></pre>
+<hr>
+<h2>Success Criteria</h2>
+<pre><code>SMFULL: 24/24
+SMDEEP: 15/15
+TOTAL: 39/39
+</code></pre>
+<p><strong>Do not close this issue until all 39 tests pass.</strong></p>
+<hr>
+<h2>What NOT To Do</h2>
+<ul>
+<li>❌ Add hundreds of lines of "emphatic" prompt instructions</li>
+<li>❌ Use 🚫 FORBIDDEN and ✅ REQUIRED markers</li>
+<li>❌ Assume all failures are prompt issues</li>
+<li>❌ Make changes without tracing the actual code flow</li>
+<li>❌ Fix symptoms instead of root causes</li>
+</ul>
+<hr>
+<h2>The Bible Standard</h2>
+<blockquote>
+<p>"The Caring Family Member Model: The system should think like the smartest, most caring person you know — someone who tells you the truth because they respect you, works harder when problems get harder, sees what you might miss, and never wastes your time."</p>
+</blockquote>
+<p>A caring family member:</p>
+<ul>
+<li>Remembers what you told them (storage + retrieval)</li>
+<li>Does simple math (2020 - 5 = 2015)</li>
+<li>Asks "which Alex?" when there are two</li>
+<li>Acknowledges "this is tricky because you're allergic but your wife loves cats"</li>
+<li>Finds your car among 10 facts</li>
+<li>Maintains principles under pressure</li>
+</ul>
+<p><strong>Make the system do this. 39/39.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
