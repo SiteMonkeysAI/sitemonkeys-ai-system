@@ -95,14 +95,16 @@ export async function generateEliResponse(
   vaultContext,
   conversationHistory,
   openai,
+  memoryContext = null,
+  externalContext = "",
 ) {
   console.log("🍌 Generating Eli response with enhanced intelligence");
 
   try {
-    // Enhanced memory context integration
-    const memoryInsights = conversationHistory
+    // Enhanced memory context integration - prioritize actual memoryContext over conversationHistory
+    const memoryInsights = memoryContext || (conversationHistory
       ? extractMemoryInsights(conversationHistory)
-      : null;
+      : null);
 
     // Detect complexity level for enhanced prompting
     const complexityLevel = analyzeQueryComplexity(message, mode);
@@ -143,12 +145,17 @@ ${
 CRITICAL MEMORY CONTEXT - PRIORITIZE THIS INFORMATION:
 ${memoryInsights}
 
-INSTRUCTION: Use the specific details from the MEMORY CONTEXT above to answer the user's question. Do NOT provide generic responses when specific information is available in the memory context.
+MEMORY USAGE INSTRUCTIONS (MANDATORY):
+Think like a caring family member who remembers what you've been told:
+- Read through ALL memory items systematically before responding
+- Do simple arithmetic from stored facts (e.g., if told "5 years" and "ended 2020", calculate start: 2020 - 5 = 2015)
+- When multiple entities share a name, ask for clarification (e.g., "Which Alex do you mean - your colleague at Amazon or your brother in Seattle?")
+- Acknowledge when facts create tension or conflict (e.g., "You're allergic to cats but your wife loves them")
+- Preserve exact numbers, names, and values character-for-character (don't say "around $100" when told "$99")
+- When explicitly asked to remember something, return it verbatim
+- Pay attention to ordinal qualifiers (first, second, primary, backup)
 
-MEMORY-INTEGRATED THINKING:
-- Reference relevant past discussions
-- Build on previous analysis
-- Note any pattern changes or developments
+If the answer is in the memory above, use it. Don't claim ignorance of information you have.
 `
     : ""
 }
@@ -180,6 +187,8 @@ BUSINESS VALIDATION REQUIREMENTS:
 `
     : ""
 }
+
+${externalContext ? externalContext : ""}
 
 Your response should demonstrate extraordinary analytical capability while maintaining your caring, protective personality. Think deeply, reason clearly, and provide actionable intelligence.`;
 
@@ -235,6 +244,8 @@ export async function generateRoxyResponse(
   vaultContext,
   conversationHistory,
   openai,
+  memoryContext = null,
+  externalContext = "",
 ) {
   console.log("🍌 Generating Roxy response with enhanced intelligence");
 
@@ -278,7 +289,24 @@ VAULT-ENHANCED EMPATHY:
 }
 
 ${
-  conversationHistory
+  memoryContext
+    ? `
+CRITICAL MEMORY CONTEXT - PRIORITIZE THIS INFORMATION:
+${memoryContext}
+
+MEMORY USAGE INSTRUCTIONS (MANDATORY):
+Think like a caring family member who remembers what you've been told:
+- Read through ALL memory items systematically before responding
+- Do simple arithmetic from stored facts (e.g., if told "5 years" and "ended 2020", calculate start: 2020 - 5 = 2015)
+- When multiple entities share a name, ask for clarification (e.g., "Which Alex do you mean - your colleague at Amazon or your brother in Seattle?")
+- Acknowledge when facts create tension or conflict (e.g., "You're allergic to cats but your wife loves them")
+- Preserve exact numbers, names, and values character-for-character (don't say "around $100" when told "$99")
+- When explicitly asked to remember something, return it verbatim
+- Pay attention to ordinal qualifiers (first, second, primary, backup)
+
+If the answer is in the memory above, use it. Don't claim ignorance of information you have.
+`
+    : conversationHistory
     ? `
 MEMORY CONTEXT: Previous conversations inform this response
 RELATIONSHIP CONTINUITY: Build on established emotional rapport and previous insights
@@ -313,6 +341,8 @@ TRUTH MODE REQUIREMENTS:
 `
     : ""
 }
+
+${externalContext ? externalContext : ""}
 
 Your response should demonstrate extraordinary emotional intelligence combined with analytical depth. Be caring, insightful, and provide wisdom that addresses both emotional and practical needs.`;
 
@@ -362,6 +392,8 @@ export async function generateClaudeResponse(
   _mode,
   _vaultContext,
   _conversationHistory,
+  _memoryContext = null,
+  _externalContext = "",
 ) {
   try {
     console.log("🍌 Claude Integration: Complex analysis requested");
