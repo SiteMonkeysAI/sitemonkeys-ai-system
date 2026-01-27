@@ -1582,24 +1582,91 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     }
     // ═══════════════════════════════════════════════════════════════
 
+    // ═══════════════════════════════════════════════════════════════
+    // CRITICAL FIX #597: Group related memories together
+    // When entity-boosted or explicit-recall memories exist, ensure ALL related memories
+    // are retrieved together, even if it means exceeding topK slightly
+    // This fixes NUA1 (both Alexes), NUA2 (allergy + wife), INF3 (both temporal facts)
+    // ═══════════════════════════════════════════════════════════════
+    
+    // Separate high-priority memories that MUST be included together
+    const entityBoostedMemories = filtered.filter(m => m.entity_boosted);
+    const explicitRecallMemories = filtered.filter(m => m.explicit_recall_boosted);
+    const ordinalBoostedMemories = filtered.filter(m => m.ordinal_boosted);
+    
+    // Collect IDs of high-priority memories to track what we've already added
+    const highPriorityIds = new Set([
+      ...entityBoostedMemories.map(m => m.id),
+      ...explicitRecallMemories.map(m => m.id),
+      ...ordinalBoostedMemories.map(m => m.id)
+    ]);
+    
+    // Group related memories by detected entities
+    const relatedGroups = new Map();
+    if (detectedEntities.length > 0) {
+      detectedEntities.forEach(entity => {
+        const relatedMemories = filtered.filter(m => {
+          const entityRegex = new RegExp(`\\b${entity}\\b`, 'i');
+          return entityRegex.test(m.content || '');
+        });
+        if (relatedMemories.length > 0) {
+          relatedGroups.set(entity, relatedMemories);
+          console.log(`[RELATED-GROUP] Entity "${entity}": ${relatedMemories.length} related memories`);
+        }
+      });
+    }
+    
+    console.log(`[RETRIEVAL-GROUPING] High-priority memories:`);
+    console.log(`  Entity-boosted: ${entityBoostedMemories.length}`);
+    console.log(`  Explicit-recall: ${explicitRecallMemories.length}`);
+    console.log(`  Ordinal-boosted: ${ordinalBoostedMemories.length}`);
+    console.log(`  Related groups: ${relatedGroups.size}`);
+    
+    // First pass: Add ALL high-priority memories together (they come as a group)
     for (const memory of filtered) {
-      // Estimate tokens for this memory (use token_count if available, else estimate)
+      if (highPriorityIds.has(memory.id)) {
+        const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
+        
+        // For high-priority memories, be more lenient with token budget
+        // Allow up to 20% overflow to ensure related memories stay together
+        const allowedOverflow = tokenBudget * 0.2;
+        if (usedTokens + memoryTokens > tokenBudget + allowedOverflow) {
+          console.log(`[RETRIEVAL-GROUPING] ⚠️  High-priority memory ${memory.id} would exceed budget + overflow`);
+          break;
+        }
+        
+        results.push(memory);
+        usedTokens += memoryTokens;
+        console.log(`[RETRIEVAL-GROUPING] ✅ Added high-priority memory ${memory.id} (${memoryTokens} tokens)`);
+      }
+    }
+    
+    // Second pass: Fill remaining space with other memories
+    for (const memory of filtered) {
+      // Skip if already added
+      if (results.find(r => r.id === memory.id)) {
+        continue;
+      }
+      
       const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
-
+      
       // Check if adding this memory would exceed budget
       if (usedTokens + memoryTokens > tokenBudget) {
         console.log(`[SEMANTIC RETRIEVAL] Token budget reached: ${usedTokens}/${tokenBudget} tokens used`);
-        break;  // Stop before exceeding budget
+        break;
       }
-
+      
       results.push(memory);
       usedTokens += memoryTokens;
-
-      // Also respect topK limit
-      if (results.length >= topK) {
+      
+      // For non-high-priority memories, respect strict topK limit
+      // But allow high-priority memories to have pushed us over topK
+      if (results.length >= topK && results.filter(r => !highPriorityIds.has(r.id)).length >= topK) {
+        console.log(`[SEMANTIC RETRIEVAL] TopK limit reached (${topK}), high-priority additions: ${results.filter(r => highPriorityIds.has(r.id)).length}`);
         break;
       }
     }
+    // ═══════════════════════════════════════════════════════════════
 
     // ═══════════════════════════════════════════════════════════════
     // ISSUE #575: STR1 DEBUG - Check if Tesla made it to final results

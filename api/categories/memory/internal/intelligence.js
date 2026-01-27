@@ -1633,25 +1633,36 @@ class IntelligenceSystem {
         console.log(`[ORDINAL-RETRIEVAL] Query asks for ordinal #${queryOrdinal.ordinal} of ${queryOrdinal.subject}`);
 
         try {
-          // Search for memories with matching ordinal metadata
+          // CRITICAL FIX #597: Retrieve ALL related ordinal memories, not just the specific ordinal requested
+          // When user asks "what's the second code?", they need to see BOTH first and second codes
+          // This allows the AI to provide proper context and detect if there are multiple items
           const ordinalQuery = `
             SELECT * FROM persistent_memories
             WHERE user_id = $1
               AND (is_current = true OR is_current IS NULL)
-              AND metadata->>'ordinal' = $2
-              AND metadata->>'ordinal_subject' ILIKE $3
-            ORDER BY created_at DESC
-            LIMIT 5
+              AND metadata->>'ordinal_subject' ILIKE $2
+            ORDER BY 
+              CASE 
+                WHEN metadata->>'ordinal' = $3 THEN 0
+                ELSE (metadata->>'ordinal')::int
+              END,
+              created_at DESC
+            LIMIT 20
           `;
 
           const ordinalResults = await this.coreSystem.executeQuery(ordinalQuery, [
             sanitizedUserId,
-            String(queryOrdinal.ordinal),
-            `%${queryOrdinal.subject}%`
+            `%${queryOrdinal.subject}%`,
+            String(queryOrdinal.ordinal)
           ]);
 
           if (ordinalResults.rows.length > 0) {
-            console.log(`[ORDINAL-RETRIEVAL] ✅ Found ${ordinalResults.rows.length} memories with ordinal match`);
+            console.log(`[ORDINAL-RETRIEVAL] ✅ Found ${ordinalResults.rows.length} memories with ordinal subject "${queryOrdinal.subject}"`);
+            console.log(`[ORDINAL-RETRIEVAL] Retrieving ALL related ordinals so AI can see full context`);
+            ordinalResults.rows.forEach((row, idx) => {
+              const ord = row.metadata?.ordinal || 'N/A';
+              console.log(`[ORDINAL-RETRIEVAL]   #${idx + 1}: Ordinal ${ord} - "${row.content?.substring(0, 60)}"`);
+            });
             return ordinalResults.rows;
           } else {
             console.log(`[ORDINAL-RETRIEVAL] No memories found with ordinal metadata, falling through to normal retrieval`);
