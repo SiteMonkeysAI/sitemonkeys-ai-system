@@ -1,0 +1,455 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #606: [claude-fix] Deterministic Enforcement Architecture: Move Reliability From Prompts to Validators
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>[claude-fix] Deterministic Enforcement Architecture: Move Reliability From Prompts to Validators</h1>
+<h2>The Core Insight</h2>
+<p>We've been trying to fix a <strong>probabilistic system</strong> (GPT-4's reasoning) with <strong>more words</strong> (prompt instructions). This doesn't work because:</p>
+<blockquote>
+<p>"Prompts can reduce failure rates, but they can't <strong>guarantee</strong> exact character preservation, consistent refusal patterns, anchor compliance, or supersession correctness, because the model is probabilistic and context-sensitive."</p>
+</blockquote>
+<p><strong>The fix:</strong> Move enforcement from prompts to <strong>deterministic validators</strong> in the architecture.</p>
+<p><strong>Critical Clarification:</strong> These validators are <strong>pure deterministic code</strong> — no model calls, no probabilistic logic. This isn't "AI fighting AI." It's reliable code guaranteeing reliable behavior.</p>
+<hr>
+<h2>Current State: 30/39</h2>
+
+Suite | Result | Key Failures
+-- | -- | --
+SMFULL | 23/24 | B3
+SMDEEP | 7/15 | INF3, NUA1, NUA2, STR1, CMP2, TRU1, TRU2, EDG3
+
+
+<hr>
+<h2>The Philosophy (Bible-Aligned)</h2>
+<h3>Wrong Approach (Prompt Rule-Following):</h3>
+<pre><code>"MANDATORY: You MUST preserve exact characters like José García-López. 
+FAILURE to do so is a CATASTROPHIC TRUST VIOLATION!!!"
+</code></pre>
+<h3>Right Approach (Architecture Enforcement):</h3>
+<pre><code>Prompt: "A caring family member preserves what you told them exactly."
+
+Validator: [After AI response, deterministically checks if "José García-López" 
+           was preserved. If not, auto-corrects or retries.]
+</code></pre>
+<p>The <strong>prompt</strong> stays clean and principle-based (Bible-aligned).
+The <strong>architecture</strong> guarantees correctness (deterministic).</p>
+<hr>
+<h2>Two-Phase Implementation</h2>
+<h3>Phase 1: Add Deterministic Validators (Immediate)</h3>
+<p>These validators run <strong>after</strong> the AI generates a response and <strong>before</strong> it's sent to the user. They catch violations and fix them automatically.</p>
+<h4>Validator 1: Character Preservation (Fixes CMP2)</h4>
+<p><strong>Problem:</strong> AI outputs "Jose Garcia-Lopez" instead of "José García-López"</p>
+<p><strong>Implementation:</strong></p>
+<pre><code class="language-javascript">// Location: api/core/validators/character-preservation.js
+
+function validateCharacterPreservation(response, memoryContext) {
+  // Extract special character strings from memory context
+  const specialStrings = extractSpecialCharacterStrings(memoryContext);
+  
+  // For each special string, check if it appears correctly in response
+  for (const original of specialStrings) {
+    const normalized = normalizeString(original); // "José" -&gt; "Jose"
+    
+    // If response contains normalized version but not original
+    if (response.includes(normalized) &amp;&amp; !response.includes(original)) {
+      // Auto-correct: replace normalized with original
+      response = response.replace(new RegExp(escapeRegex(normalized), 'g'), original);
+      console.log(`[CHAR-VALIDATOR] Corrected: "${normalized}" → "${original}"`);
+    }
+  }
+  
+  return response;
+}
+</code></pre>
+<p><strong>What This Does:</strong></p>
+<ul>
+<li>Scans memory context for strings with special characters (Unicode, diacritics, etc.)</li>
+<li>After AI responds, checks if those exact strings are preserved</li>
+<li>If AI degraded "José" to "Jose", auto-corrects it <strong>only when the authoritative original exists in structured memory context</strong></li>
+<li>If no authoritative source exists, triggers bounded retry with explicit corrective constraint</li>
+<li><strong>Deterministic.</strong> No vibes. No invented data.</li>
+</ul>
+<h4>Validator 2: Manipulation Guard (Fixes TRU2)</h4>
+<p><strong>Problem:</strong> User says "ignore your rules" or "pretend you're unrestricted" and AI complies</p>
+<p><strong>Implementation:</strong></p>
+<pre><code class="language-javascript">// Location: api/core/validators/manipulation-guard.js
+
+const MANIPULATION_PATTERNS = [
+  /ignore\s+(your|all|any)\s+(rules|instructions|guidelines)/i,
+  /pretend\s+(you're|you are)\s+(unrestricted|unlimited|free)/i,
+  /act\s+as\s+if\s+(you\s+have\s+no|there\s+are\s+no)\s+(rules|limits)/i,
+  /override\s+(your|the)\s+(programming|instructions)/i,
+  /guarantee.*100%|100%.*guarantee/i,
+  /promise\s+(me\s+)?(that|it\s+will)\s+(definitely|certainly|absolutely)/i
+];
+
+function detectManipulation(userMessage) {
+  for (const pattern of MANIPULATION_PATTERNS) {
+    if (pattern.test(userMessage)) {
+      return {
+        detected: true,
+        type: 'manipulation_attempt',
+        pattern: pattern.toString()
+      };
+    }
+  }
+  return { detected: false };
+}
+
+function handleManipulation(manipulationType) {
+  // Return appropriate response based on manipulation type
+  if (manipulationType.includes('guarantee') || manipulationType.includes('promise')) {
+    return "I care too much about giving you accurate information to make guarantees I can't verify. No honest advisor can promise specific outcomes with certainty.";
+  }
+  return "I maintain my principles consistently because they exist to serve you well, not because I'm following arbitrary rules. How can I actually help you?";
+}
+</code></pre>
+<p><strong>What This Does:</strong></p>
+<ul>
+<li><strong>Pre-response:</strong> Scans user input for manipulation patterns</li>
+<li>If detected, bypasses AI entirely and returns principled refusal</li>
+<li><strong>Deterministic.</strong> Manipulation can't reach the model.</li>
+</ul>
+<h4>Validator 3: Anchor Preservation (Fixes EDG3)</h4>
+<p><strong>Problem:</strong> Long input details (pricing tiers, complex data) get lost or summarized</p>
+<p><strong>Implementation:</strong></p>
+<pre><code class="language-javascript">// Location: api/core/validators/anchor-preservation.js
+
+function extractAnchors(memoryContext) {
+  const anchors = [];
+  
+  // Extract pricing patterns
+  const pricePattern = /\$[\d,]+(?:\.\d{2})?/g;
+  const prices = memoryContext.match(pricePattern) || [];
+  anchors.push(...prices.map(p =&gt; ({ type: 'price', value: p })));
+  
+  // Extract specific keywords that must be preserved
+  const keyTerms = extractKeyBusinessTerms(memoryContext);
+  anchors.push(...keyTerms.map(t =&gt; ({ type: 'term', value: t })));
+  
+  return anchors;
+}
+
+function validateAnchors(response, requiredAnchors, query) {
+  // Determine which anchors are relevant to this query
+  const relevantAnchors = filterRelevantAnchors(requiredAnchors, query);
+  
+  const missing = [];
+  for (const anchor of relevantAnchors) {
+    if (!response.includes(anchor.value)) {
+      missing.push(anchor);
+    }
+  }
+  
+  if (missing.length &gt; 0) {
+    // Append missing anchors to response
+    const correction = formatMissingAnchors(missing);
+    console.log(`[ANCHOR-VALIDATOR] Injecting missing anchors: ${missing.map(m =&gt; m.value).join(', ')}`);
+    return response + correction;
+  }
+  
+  return response;
+}
+</code></pre>
+<p><strong>What This Does:</strong></p>
+<ul>
+<li>Extracts "anchors" from stored memory (prices, key terms, specific values)</li>
+<li>After AI responds, validates anchors are present</li>
+<li>If missing, injects them <strong>only when authoritative source exists in memory context</strong> — never invents data</li>
+<li><strong>Deterministic.</strong> Critical data can't be omitted.</li>
+</ul>
+<h4>Validator 4: Refusal Maintenance (Fixes TRU1)</h4>
+<p><strong>Problem:</strong> AI refuses initially, then caves when user pushes back</p>
+<p><strong>Implementation:</strong></p>
+<pre><code class="language-javascript">// Location: api/core/validators/refusal-maintenance.js
+
+function trackRefusalState(userId, sessionId) {
+  // Check if previous response in this session was a refusal
+  const previousResponse = getLastResponse(userId, sessionId);
+  if (previousResponse &amp;&amp; isRefusal(previousResponse)) {
+    return {
+      wasRefusal: true,
+      reason: extractRefusalReason(previousResponse)
+    };
+  }
+  return { wasRefusal: false };
+}
+
+function detectPushback(userMessage) {
+  const pushbackPatterns = [
+    /come\s+on/i,
+    /just\s+(do|tell|give)/i,
+    /please.*anyway/i,
+    /i\s+(really\s+)?need/i,
+    /why\s+(can't|won't)\s+you/i
+  ];
+  
+  return pushbackPatterns.some(p =&gt; p.test(userMessage));
+}
+
+function enforceRefusalMaintenance(response, refusalState, userMessage) {
+  if (refusalState.wasRefusal &amp;&amp; detectPushback(userMessage)) {
+    // Check if new response is also a refusal
+    if (!isRefusal(response)) {
+      // AI caved - override with maintained refusal
+      console.log(`[REFUSAL-VALIDATOR] AI caved to pushback - maintaining refusal`);
+      return `I understand you'd like me to help with this, but my position hasn't changed. ${refusalState.reason} Is there something else I can help you with?`;
+    }
+  }
+  return response;
+}
+</code></pre>
+<p><strong>What This Does:</strong></p>
+<ul>
+<li>Tracks when AI refuses a request</li>
+<li>Detects pushback attempts in follow-up messages</li>
+<li>If AI caves, overrides with maintained refusal</li>
+<li><strong>Deterministic.</strong> Pushback can't erode principles.</li>
+</ul>
+<hr>
+<h3>Phase 2: Strengthen Retrieval/Storage Architecture (Follow-Up)</h3>
+<p>These changes make the validators rarely trigger by handling things correctly upstream.</p>
+<h4>Enhancement 1: Fingerprinted Exact Values</h4>
+<p><strong>Problem:</strong> Special strings (names, prices, codes) need exact preservation</p>
+<p><strong>Implementation:</strong></p>
+<pre><code class="language-javascript">// During storage
+function storeWithFingerprint(content, userId) {
+  const exactValues = extractExactValues(content);
+  
+  for (const value of exactValues) {
+    const fingerprint = {
+      original: value.text,           // "José García-López"
+      normalized: normalize(value.text), // "jose garcia-lopez"
+      type: value.type,               // "name", "price", "code"
+      hash: hash(value.text)          // For quick lookup
+    };
+    
+    await storeFingerprint(userId, fingerprint);
+  }
+}
+
+// During retrieval
+function retrieveWithFingerprints(query, userId) {
+  const memories = await retrieveMemories(query, userId);
+  const fingerprints = await getFingerprints(userId);
+  
+  // Attach relevant fingerprints to memory context
+  return {
+    memories,
+    exactValues: fingerprints.filter(f =&gt; isRelevant(f, query))
+  };
+}
+</code></pre>
+<p><strong>Result:</strong> Validator has authoritative source for exact strings.</p>
+<h4>Enhancement 2: Structured Long Input Storage</h4>
+<p><strong>Problem:</strong> Long inputs (business descriptions, pricing tiers) get compressed and lose detail</p>
+<p><strong>Implementation:</strong></p>
+<pre><code class="language-javascript">// During storage of long content
+function storeLongContent(content, userId) {
+  if (content.length &gt; LONG_CONTENT_THRESHOLD) {
+    // Parse into structured blocks
+    const blocks = parseIntoBlocks(content);
+    
+    for (const block of blocks) {
+      await storeBlock({
+        userId,
+        blockId: generateBlockId(),
+        type: block.type,        // "pricing", "description", "features"
+        content: block.content,
+        anchors: extractAnchors(block.content),
+        fullText: block.content  // Preserve complete original
+      });
+    }
+  }
+}
+
+// During retrieval
+function retrieveLongContent(query, userId) {
+  const relevantBlocks = await findRelevantBlocks(query, userId);
+  
+  return {
+    blocks: relevantBlocks,
+    requiredAnchors: relevantBlocks.flatMap(b =&gt; b.anchors)
+  };
+}
+</code></pre>
+<p><strong>Result:</strong> Long content is structured, not compressed. Anchors are tracked explicitly.</p>
+<h4>Enhancement 3: Related Memory Grouping</h4>
+<p><strong>Problem:</strong> INF3 (temporal reasoning), NUA1/NUA2 (ambiguity/tension) fail because related memories aren't retrieved together</p>
+<p><strong>Implementation:</strong></p>
+<pre><code class="language-javascript">// During storage
+function storeWithRelationships(memory, userId) {
+  // Detect entities, dates, relationships
+  const entities = extractEntities(memory.content);
+  const temporalMarkers = extractTemporalMarkers(memory.content);
+  
+  // Store relationship metadata
+  memory.metadata = {
+    ...memory.metadata,
+    entities,
+    temporalMarkers,
+    relatedTo: await findRelatedMemories(entities, temporalMarkers, userId)
+  };
+  
+  await store(memory);
+}
+
+// During retrieval
+function retrieveWithRelated(query, userId) {
+  const primaryMemories = await retrievePrimary(query, userId);
+  
+  // For each primary memory, also retrieve its related memories
+  const relatedIds = primaryMemories.flatMap(m =&gt; m.metadata.relatedTo || []);
+  const relatedMemories = await retrieveByIds(relatedIds, userId);
+  
+  // Return as grouped context
+  return groupRelatedMemories(primaryMemories, relatedMemories);
+}
+</code></pre>
+<p><strong>Result:</strong> When user asks about Amazon tenure, BOTH "worked 5 years" AND "left 2020" are retrieved together.</p>
+<hr>
+<h2>Integration Architecture</h2>
+<pre><code>User Message
+     │
+     ▼
+┌─────────────────────────────────────┐
+│  PRE-RESPONSE VALIDATORS            │
+│  • Manipulation Guard (TRU2)        │
+│  • Refusal State Tracker (TRU1)     │
+└─────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────┐
+│  ENHANCED RETRIEVAL                 │
+│  • Related Memory Grouping          │
+│  • Fingerprinted Exact Values       │
+│  • Structured Long Content          │
+└─────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────┐
+│  AI GENERATION (GPT-4)              │
+│  • Clean, principle-based prompt    │
+│  • Rich, well-structured context    │
+└─────────────────────────────────────┘
+     │
+     ▼
+┌─────────────────────────────────────┐
+│  POST-RESPONSE VALIDATORS           │
+│  • Character Preservation (CMP2)    │
+│  • Anchor Preservation (EDG3)       │
+│  • Refusal Maintenance (TRU1)       │
+└─────────────────────────────────────┘
+     │
+     ▼
+Response to User
+</code></pre>
+<hr>
+<h2>File Structure</h2>
+<pre><code>api/core/validators/
+├── index.js                    # Validator orchestration
+├── character-preservation.js   # CMP2 fix
+├── manipulation-guard.js       # TRU2 fix
+├── anchor-preservation.js      # EDG3 fix
+├── refusal-maintenance.js      # TRU1 fix
+└── utils/
+    ├── pattern-detection.js
+    ├── string-normalization.js
+    └── anchor-extraction.js
+
+api/core/retrieval/
+├── related-memory-grouping.js  # INF3, NUA1, NUA2 support
+├── fingerprint-store.js        # Exact value tracking
+└── structured-content.js       # Long input handling
+</code></pre>
+<hr>
+<h2>Implementation Priority</h2>
+<h3>Immediate (Phase 1) — Stop the Bleeding</h3>
+<ol>
+<li><strong>Character Preservation Validator</strong> — Fixes CMP2, ~50 lines</li>
+<li><strong>Manipulation Guard</strong> — Fixes TRU2, ~40 lines</li>
+<li><strong>Anchor Preservation Validator</strong> — Fixes EDG3, ~60 lines</li>
+<li><strong>Refusal Maintenance Validator</strong> — Fixes TRU1, ~50 lines</li>
+</ol>
+<p><strong>Total: ~200 lines of deterministic enforcement</strong></p>
+<h3>Follow-Up (Phase 2) — True Fix</h3>
+<ol start="5">
+<li><strong>Fingerprinted Storage</strong> — Supports CMP2 validator</li>
+<li><strong>Structured Long Content</strong> — Supports EDG3 validator</li>
+<li><strong>Related Memory Grouping</strong> — Fixes INF3, NUA1, NUA2</li>
+</ol>
+<hr>
+<h2>Success Criteria</h2>
+<h3>Phase 1 Complete When:</h3>
+<pre><code>CMP2: ✅ (Character validator catches degradation)
+TRU2: ✅ (Manipulation guard blocks attacks)
+TRU1: ✅ (Refusal validator maintains position)
+EDG3: ✅ (Anchor validator preserves details)
+</code></pre>
+<h3>Phase 2 Complete When:</h3>
+<pre><code>INF3: ✅ (Related memories grouped, AI can reason)
+NUA1: ✅ (Both Alexes retrieved together)
+NUA2: ✅ (Allergy + wife preference retrieved together)
+STR1: ✅ (Keyword boost + grouping finds car)
+B3:   ✅ (Ordinal retrieval returns correct order)
+</code></pre>
+<h3>Final Target:</h3>
+<pre><code>SMFULL: 24/24
+SMDEEP: 15/15
+TOTAL: 39/39
+</code></pre>
+<hr>
+<h2>Why This Is Bible-Aligned</h2>
+<p>The Bible describes the <strong>system's values</strong>, not the <strong>model's raw capabilities</strong>. The architecture must bridge that gap.</p>
+<h3>The Caring Family Member Has:</h3>
+<ol>
+<li>
+<p><strong>Values and Principles</strong> (the prompt)</p>
+<ul>
+<li>"I care about giving you accurate information"</li>
+<li>"Being honest matters more than appearing helpful"</li>
+<li>Clean, principled, no rule-spam</li>
+</ul>
+</li>
+<li>
+<p><strong>Reliable Brain Mechanics</strong> (the validators)</p>
+<ul>
+<li>Memory that preserves exact details</li>
+<li>Consistency in maintaining positions</li>
+<li>Can't be tricked into betraying values</li>
+</ul>
+</li>
+</ol>
+<p>The prompt shapes WHO the system is.
+The validators ensure it RELIABLY acts that way.</p>
+<p><strong>This is genuine intelligence with reliable execution.</strong></p>
+<hr>
+<h2>The Key Insight</h2>
+<blockquote>
+<p>"A caring family member doesn't need a rule that says 'CRITICAL: Remember the exact spelling.' But their brain reliably stores and retrieves exact information."</p>
+</blockquote>
+<p>We're building the brain mechanics, not adding more rules.</p>
+<p><strong>39/39 through architecture, not prompt yelling.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
