@@ -699,19 +699,39 @@ export class Orchestrator {
       // CRITICAL FIX (Issue #579, INF3): Simple factual queries may need memory for temporal reasoning
       // Example: "What year did I start at Amazon?" needs "graduated 2010" + "worked 5 years" = 2015
       // CRITICAL FIX (Issue #612): BUT skip memory for pure math like "What is 2+2?"
+      // CRITICAL FIX (Issue #612 Refinement 2): Protect short personal queries
+      // - Check if user has ANY existing memories before skipping
+      // - Enhance personal-intent detection to catch possessive patterns ("cat's name", "salary")
       let memoryContext = null;
+      
+      // Enhanced personal-intent detection (catches possessive and implicit personal queries)
+      const hasPersonalIntent = message.match(/\b(my|your|our|their|I|you|we|they|me|us|them)\b/i) ||  // Personal pronouns
+                                message.match(/\b(name|work|job|salary|age|birthday|address|phone|email|company|boss|team|project)\b/i) ||  // Personal topics
+                                message.match(/\b(when|where|who|which)\b.*\b(I|you|we|my|your|our)\b/i) ||  // Temporal/location + personal
+                                message.match(/['']s\s+(name|age|birthday|job|salary|phone|email|color|breed|model)/i);  // Possessive patterns ("cat's name")
+      
       const skipMemoryForSimpleQuery = earlyClassification && (
         (earlyClassification.classification === 'greeting' && message.length < 50) ||
         (earlyClassification.classification === 'simple_factual' &&
          earlyClassification.confidence > 0.70 &&
          message.length < 50 &&
-         !message.match(/\b(my|your|our|their|I|you|we|they|name|work|job|start|year|when|where|who)\b/i))
+         !hasPersonalIntent)  // Use enhanced personal-intent detection
       );
+
+      // Issue #612 Refinement 2: Additional safety check
+      // Even if we think we can skip, check if user has memories first
+      let userHasMemories = false;
+      if (skipMemoryForSimpleQuery) {
+        userHasMemories = await this.#hasUserMemories(userId);
+        if (userHasMemories) {
+          this.log(`[MEMORY] ⚠️  User has existing memories - will NOT skip retrieval even for simple query`);
+        }
+      }
 
       // Define memoryDuration at higher scope (Issue #446 fix)
       let memoryDuration = 0;
 
-      if (skipMemoryForSimpleQuery) {
+      if (skipMemoryForSimpleQuery && !userHasMemories) {
         this.log(`[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)}) - user needs direct answer, not biography`);
         memoryContext = {
           hasMemory: false,
@@ -1975,6 +1995,32 @@ export class Orchestrator {
   }
 
   // ==================== STEP 1: RETRIEVE MEMORY CONTEXT ====================
+
+  /**
+   * Quick check if user has ANY memories at all (lightweight count query)
+   * Used to prevent skipping retrieval for users with existing memory context
+   * Issue #612 Refinement 2: Protect short personal queries from incorrect skipping
+   * @param {string} userId - User ID to check
+   * @returns {Promise<boolean>} - True if user has any memories
+   */
+  async #hasUserMemories(userId) {
+    try {
+      const pool = global.memorySystem?.pool || this.pool;
+      if (!pool) {
+        return false; // No pool = no memories
+      }
+
+      const result = await pool.query(
+        'SELECT EXISTS(SELECT 1 FROM persistent_memories WHERE user_id = $1 LIMIT 1) as has_memories',
+        [userId]
+      );
+
+      return result.rows[0]?.has_memories || false;
+    } catch (error) {
+      this.error('[MEMORY] Error checking user memories:', error);
+      return false; // Fail safe: assume no memories on error
+    }
+  }
 
   async #retrieveMemoryContext(userId, message, options = {}) {
     const { mode = 'truth-general', tokenBudget = 2000, previousMode = null } = options;
@@ -4587,6 +4633,14 @@ Mode: ${modeConfig?.display_name || mode}
         return { correctionApplied: false, response };
       }
 
+      // Issue #612 Refinement 1: Slot-Scoping Safety
+      // If response already contains correct value for requested ordinal, return early
+      // This prevents unnecessary replacements when response is already correct
+      if (response.includes(correctValue)) {
+        this.debug(`[ORDINAL-VALIDATOR] ✓ Response already contains correct value: ${correctValue}`);
+        return { correctionApplied: false, response };
+      }
+
       // Check for wrong values first (Issue #612: don't return early if correct value is present alongside wrong value)
       const wrongValues = ordinalMemories
         .filter(m => m.ordinal !== ordinalNum)
@@ -4596,19 +4650,13 @@ Mode: ${modeConfig?.display_name || mode}
       let adjustedResponse = response;
       let corrected = false;
 
-      // Replace wrong values with correct value (Issue #612: check this BEFORE checking if correct value is present)
+      // Replace wrong values with correct value
       for (const wrongValue of wrongValues) {
         if (adjustedResponse.includes(wrongValue)) {
           adjustedResponse = adjustedResponse.replace(new RegExp(wrongValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), correctValue);
           corrected = true;
           this.debug(`[ORDINAL-VALIDATOR] ❌ Corrected: "${wrongValue}" → "${correctValue}"`);
         }
-      }
-
-      // After replacement, check if response is now correct
-      if (!corrected && adjustedResponse.includes(correctValue)) {
-        this.debug(`[ORDINAL-VALIDATOR] ✓ Response correctly includes: ${correctValue}`);
-        return { correctionApplied: false, response };
       }
 
       // Inject if missing and no correction was made
