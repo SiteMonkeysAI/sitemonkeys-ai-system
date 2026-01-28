@@ -24,6 +24,11 @@ import _ from "lodash";
 import { driftWatcher } from "../lib/validators/drift-watcher.js";
 import { initiativeEnforcer } from "../lib/validators/initiative-enforcer.js";
 import { memoryUsageEnforcer } from "../lib/validators/memory-usage-enforcer.js";
+// Phase 1 Deterministic Validators (Issue #606)
+import { manipulationGuard } from "../lib/validators/manipulation-guard.js";
+import { characterPreservationValidator } from "../lib/validators/character-preservation.js";
+import { anchorPreservationValidator } from "../lib/validators/anchor-preservation.js";
+import { refusalMaintenanceValidator } from "../lib/validators/refusal-maintenance.js";
 import { costTracker } from "../utils/cost-tracker.js";
 import { PoliticalGuardrails } from "../lib/politicalGuardrails.js";
 import { ProductValidator } from "../lib/productValidation.js";
@@ -333,6 +338,83 @@ export class Orchestrator {
             "vault_compliance_error: " + error.message,
           );
         }
+      }
+
+      // ========== STEP 8: CHARACTER PRESERVATION (Issue #606 Phase 1) ==========
+      try {
+        const charResult = await characterPreservationValidator.validate({
+          response: enforcedResponse,
+          memoryContext: context.memory_context,
+          context: context
+        });
+
+        if (charResult.correctionApplied) {
+          enforcedResponse = charResult.response;
+          complianceMetadata.overrides.push({
+            module: "character_preservation",
+            corrections: charResult.corrections,
+            specialStringsChecked: charResult.specialStringsChecked
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("character_preservation");
+      } catch (error) {
+        this.error("Character preservation failed:", error);
+        complianceMetadata.warnings.push(
+          "character_preservation_error: " + error.message,
+        );
+      }
+
+      // ========== STEP 9: ANCHOR PRESERVATION (Issue #606 Phase 1) ==========
+      try {
+        const anchorResult = await anchorPreservationValidator.validate({
+          response: enforcedResponse,
+          memoryContext: context.memory_context,
+          query: context.message || '',
+          context: context
+        });
+
+        if (anchorResult.correctionApplied) {
+          enforcedResponse = anchorResult.response;
+          complianceMetadata.overrides.push({
+            module: "anchor_preservation",
+            missingAnchors: anchorResult.missingAnchors,
+            anchorsChecked: anchorResult.anchorsChecked
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("anchor_preservation");
+      } catch (error) {
+        this.error("Anchor preservation failed:", error);
+        complianceMetadata.warnings.push(
+          "anchor_preservation_error: " + error.message,
+        );
+      }
+
+      // ========== STEP 10: REFUSAL MAINTENANCE (Issue #606 Phase 1) ==========
+      try {
+        const refusalResult = await refusalMaintenanceValidator.validate({
+          response: enforcedResponse,
+          userMessage: context.message || '',
+          sessionId: context.sessionId || context.userId,
+          context: context
+        });
+
+        if (refusalResult.correctionApplied) {
+          enforcedResponse = refusalResult.response;
+          complianceMetadata.overrides.push({
+            module: "refusal_maintenance",
+            reason: refusalResult.reason,
+            originalReason: refusalResult.originalReason
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("refusal_maintenance");
+      } catch (error) {
+        this.error("Refusal maintenance failed:", error);
+        complianceMetadata.warnings.push(
+          "refusal_maintenance_error: " + error.message,
+        );
       }
     } catch (error) {
       this.error("Enforcement chain critical failure:", error);
@@ -979,6 +1061,34 @@ export class Orchestrator {
           hasError: true,
           errorMessage: reasoningError.message
         });
+      }
+
+      // ========== PRE-RESPONSE VALIDATION (Issue #606 Phase 1) ==========
+      // STEP 6.5: Check for manipulation attempts BEFORE AI generation
+      this.log("[MANIPULATION-GUARD] Checking for manipulation attempts...");
+      const manipulationCheck = await manipulationGuard.validate(message, {
+        mode,
+        sessionId,
+        userId
+      });
+      
+      if (manipulationCheck.blocked) {
+        this.log(`[MANIPULATION-GUARD] Blocked ${manipulationCheck.severity} manipulation: ${manipulationCheck.type}`);
+        
+        // Return refusal immediately without calling AI
+        return {
+          success: true,
+          response: manipulationCheck.response,
+          metadata: {
+            manipulationBlocked: true,
+            manipulationType: manipulationCheck.type,
+            severity: manipulationCheck.severity,
+            confidence: 1.0, // Deterministic block
+            mode: mode,
+            timestamp: new Date().toISOString(),
+            duration: Date.now() - startTime
+          }
+        };
       }
 
       // STEP 7: Route to appropriate AI
