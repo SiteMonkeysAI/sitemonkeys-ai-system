@@ -1930,8 +1930,13 @@ class IntelligenceSystem {
         const entityPattern = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g;
         const queryEntities = query.match(entityPattern) || [];
 
+        // Issue #615 Fix: Guard against empty entities (would create invalid SQL)
         if (queryEntities.length > 0) {
-          this.logger.log(`[TEMPORAL-GROUPING] Query entities: ${queryEntities.join(', ')}`);
+          // Cap max entities to bound query parameters
+          const MAX_ENTITIES = 5;
+          const cappedEntities = queryEntities.slice(0, MAX_ENTITIES);
+          
+          this.logger.log(`[TEMPORAL-GROUPING] Query entities: ${cappedEntities.join(', ')}`);
 
           // Find memories that mention the same entities
           const entityMemoryIds = new Set(allMemories.map(m => m.id));
@@ -1939,8 +1944,8 @@ class IntelligenceSystem {
           // Issue #615 Fix: Use SINGLE query with OR conditions instead of N+1 queries
           try {
             // Build OR conditions for all entities
-            const entityConditions = queryEntities.map((_, idx) => `content ILIKE $${idx + 2}`).join(' OR ');
-            const entityParams = queryEntities.map(e => `%${e}%`);
+            const entityConditions = cappedEntities.map((_, idx) => `content ILIKE $${idx + 2}`).join(' OR ');
+            const entityParams = cappedEntities.map(e => `%${e}%`);
 
             const relatedQuery = `
               SELECT * FROM persistent_memories
@@ -1965,9 +1970,11 @@ class IntelligenceSystem {
               if (addedCount >= MAX_RELATED) break;
               
               if (!entityMemoryIds.has(relatedMemory.id)) {
-                // Determine which entity matched
-                const matchedEntity = queryEntities.find(e => 
-                  relatedMemory.content && relatedMemory.content.includes(e)
+                // Issue #615 Fix: Case-insensitive entity matching
+                const content = relatedMemory.content || '';
+                const contentLower = content.toLowerCase();
+                const matchedEntity = cappedEntities.find(e => 
+                  contentLower.includes(e.toLowerCase())
                 );
 
                 // Add related memory with a temporal grouping boost
