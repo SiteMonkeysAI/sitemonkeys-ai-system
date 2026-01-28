@@ -85,7 +85,7 @@ async function initializeConceptAnchors() {
       ),
       
       simple_factual: await getCachedEmbedding(
-        "What is the answer to this simple question, basic fact lookup, simple definition, what does this word mean, simple math calculation like 2+2 or 5*3, unit conversion, straightforward factual information, basic knowledge question"
+        "What is the answer to this simple question, basic fact lookup, simple definition, what does this word mean, simple math calculation like 2+2 or 5*3 or what is 10 divided by 2, basic arithmetic, unit conversion, straightforward factual information, basic knowledge question, elementary mathematics, simple addition subtraction multiplication division"
       ),
       
       news_current_events: await getCachedEmbedding(

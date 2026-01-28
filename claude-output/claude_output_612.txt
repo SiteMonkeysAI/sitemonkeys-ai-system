@@ -1,0 +1,53 @@
+Perfect! Let me provide a summary of all the changes made:
+
+---SUMMARY---
+
+## Fixed Issue #612: Cohesion Guard Regression + Complete Ordinal Enforcement
+
+Successfully implemented all three required fixes to address test regressions and improve ordinal handling:
+
+### 1. Fixed Cohesion Guard Regression (CMP2/NUA1/TRU2)
+**File:** `api/services/semantic-retrieval.js` (lines 1727, 1732)
+
+**Changes:**
+- Lowered `MIN_COHESION` threshold from `0.15` to `0.05` to prevent dropping valid memories
+- Changed pruning activation condition from `results.length > 3` to `results.length > 5` to only prune when we have MORE than needed
+- Added explanatory comment about Issue #612 fix
+
+**Rationale:** The 0.15 threshold was too aggressive and was dropping memories that had low cohesion scores but were still relevant. The new 0.05 threshold is more permissive while still preventing truly incoherent memory sets.
+
+### 2. Completed Ordinal Enforcement (Fixed B3)
+**File:** `api/core/orchestrator.js` (lines 4584-4613)
+
+**Changes:**
+- Reordered validation logic to check for WRONG values BEFORE checking if correct value is present
+- This ensures that when "second code" query returns "CHARLIE" (the first code), the validator will replace it with "DELTA" (the second code)
+- Moved the "response already correct" check to AFTER replacement logic
+- Added Issue #612 comments explaining the fix
+
+**Rationale:** The original logic would return early if the correct value was already present, but wouldn't catch cases where a wrong value was present and needed replacement. The new logic prioritizes finding and replacing wrong values first.
+
+### 3. Fixed Pure Math Queries Triggering Memory
+**Files:** 
+- `api/core/intelligence/queryComplexityClassifier.js` (line 87-88)
+- `api/core/orchestrator.js` (lines 697-710, 716)
+
+**Changes:**
+- Enhanced the `simple_factual` concept anchor to include more math-related terms ("basic arithmetic", "elementary mathematics", "simple addition subtraction multiplication division")
+- Updated memory skip logic to also skip for `simple_factual` queries that:
+  - Have high confidence (> 0.70)
+  - Are short (< 50 chars)
+  - Don't contain personal/temporal keywords (my, your, when, where, etc.)
+- Updated log message to show classification confidence
+
+**Rationale:** Queries like "What is 2+2?" don't need memory retrieval since they're pure computational questions. However, queries like "What year did I start?" still need memory even though they're factual, so the filter specifically excludes queries with personal pronouns or temporal keywords.
+
+## Expected Results
+- **SMDEEP CMP2:** Should return to 2/3 names (regression fixed)
+- **SMDEEP NUA1/TRU2:** Should pass again (regressions fixed)  
+- **SMFULL B3:** Should pass with ordinal queries returning correct values (24/24 possible)
+- **Pure math queries:** "What is 2+2?" should skip memory retrieval entirely
+
+All changes are minimal, surgical fixes that preserve existing functionality while addressing the specific regressions identified in the issue.
+
+---END SUMMARY---
