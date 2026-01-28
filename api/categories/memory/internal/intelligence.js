@@ -3954,6 +3954,7 @@ class IntelligenceSystem {
 
     // Pattern: "my [ordinal] [subject]" or "the [ordinal] [subject]"
     // Use matchAll to find ALL ordinals in the content (Issue #603 - B3 fix)
+    // FIX #609-B3: Also capture the value after "is/was/are" for precise retrieval
     const ordinalRegex = /\b(my|the)\s+(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|one|two|three|four|five|six|seven|eight|nine|ten)\s+(\w+)/gi;
     const matches = [...contentLower.matchAll(ordinalRegex)];
 
@@ -3963,13 +3964,24 @@ class IntelligenceSystem {
         const ordinalNum = ORDINAL_PATTERNS[ordinalWord];
         const subject = match[3];
 
-        console.log(`[ORDINAL-DETECT] Found ordinal: ${ordinalWord} ${subject} (#${ordinalNum})`);
+        // FIX #609-B3: Try to extract the value after "is/was/are"
+        // Example: "My first code is CHARLIE-123" → extract "CHARLIE-123"
+        let value = null;
+        const valuePattern = new RegExp(`${match[0]}\\s+(?:is|was|are|:)\\s+([A-Z0-9][A-Z0-9-_]{2,})`, 'i');
+        const valueMatch = content.match(valuePattern);
+        if (valueMatch) {
+          value = valueMatch[1];
+          console.log(`[ORDINAL-DETECT] Found ordinal with value: ${ordinalWord} ${subject} = ${value} (#${ordinalNum})`);
+        } else {
+          console.log(`[ORDINAL-DETECT] Found ordinal: ${ordinalWord} ${subject} (#${ordinalNum})`);
+        }
 
         return {
           ordinal: ordinalNum,
           subject: subject,
           pattern: `${ordinalWord} ${subject}`,
-          fullMatch: match[0]
+          fullMatch: match[0],
+          value: value  // NEW: The actual value (e.g., "CHARLIE-123")
         };
       });
 
@@ -3979,6 +3991,7 @@ class IntelligenceSystem {
         ordinal: ordinals[0].ordinal,
         subject: ordinals[0].subject,
         pattern: ordinals[0].pattern,
+        value: ordinals[0].value,  // NEW: Include the value
         ordinals: ordinals // NEW: Array of all detected ordinals
       };
     }

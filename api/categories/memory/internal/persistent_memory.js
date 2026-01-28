@@ -322,6 +322,11 @@ class PersistentMemoryOrchestrator {
         metadata.ordinal = ordinalInfo.ordinal;
         metadata.ordinal_subject = ordinalInfo.subject;
         metadata.ordinal_pattern = ordinalInfo.pattern;
+        // FIX #609-B3: Also store the value if detected (e.g., "CHARLIE-123")
+        if (ordinalInfo.value) {
+          metadata.ordinal_value = ordinalInfo.value;
+          console.log(`[ORDINAL] Detected value: ${ordinalInfo.value}`);
+        }
       }
       // ═══════════════════════════════════════════════════════════════
 

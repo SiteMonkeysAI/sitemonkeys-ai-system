@@ -22,8 +22,8 @@ import { generateEmbedding, cosineSimilarity, rankBySimilarity } from './embeddi
 const RETRIEVAL_CONFIG = {
   maxCandidates: 500,           // Max memories to pull from DB for scoring
   defaultTopK: 10,              // Default number of results to return
-  minSimilarity: 0.25,          // Minimum similarity threshold (default)
-  minSimilarityPersonal: 0.18,  // Lower threshold for personal fact queries (Issue #504, #533-B3)
+  minSimilarity: 0.20,          // Minimum similarity threshold (default) - LOWERED from 0.25 for #609
+  minSimilarityPersonal: 0.15,  // Lower threshold for personal fact queries - LOWERED from 0.18 for #609
   recencyBoostDays: 7,          // Boost memories from last N days
   recencyBoostWeight: 0.1,      // How much to boost recent memories
   confidenceWeight: 0.05,       // Weight for fingerprint confidence
@@ -452,13 +452,20 @@ function expandQuery(query) {
 
     // Name/Identity terms (FIX #533-B3)
     'name': ['called', 'named', 'title'],
-    'called': ['name', 'named']
+    'called': ['name', 'named'],
+
+    // Vehicle/Transportation terms (FIX #609-STR1)
+    'car': ['vehicle', 'drive', 'automobile', 'tesla', 'model', 'driving'],
+    'vehicle': ['car', 'drive', 'automobile', 'driving'],
+    'drive': ['car', 'vehicle', 'automobile', 'driving', 'drove'],
+    'driving': ['drive', 'car', 'vehicle']
   };
 
   // Check if this is a personal fact query (uses first-person pronouns + personal terms)
   // EXPANDED for FIX #533-B3 to include pet and name queries
   // EXPANDED for FIX #557-T2 to include explicit recall queries
-  const personalPattern = /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location|cat|dog|pet|animal|called|remember|asked|told|phrase|token|code)\b/i;
+  // EXPANDED for FIX #609-STR1 to include vehicle queries
+  const personalPattern = /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location|cat|dog|pet|animal|called|remember|asked|told|phrase|token|code|car|vehicle|drive|driving)\b/i;
   const isPersonal = personalPattern.test(query);
 
   let expanded = query;
