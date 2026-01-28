@@ -1633,19 +1633,17 @@ class IntelligenceSystem {
         console.log(`[ORDINAL-RETRIEVAL] Query asks for ordinal #${queryOrdinal.ordinal} of ${queryOrdinal.subject}`);
 
         try {
-          // CRITICAL FIX #597: Retrieve ALL related ordinal memories, not just the specific ordinal requested
+          // CRITICAL FIX #597/#600: Retrieve ALL related ordinal memories in NATURAL ORDER
           // When user asks "what's the second code?", they need to see BOTH first and second codes
           // This allows the AI to provide proper context and detect if there are multiple items
+          // FIX #600-B3: Sort by ordinal ascending (1, 2, 3...) so AI sees them in natural order
           const ordinalQuery = `
             SELECT * FROM persistent_memories
             WHERE user_id = $1
               AND (is_current = true OR is_current IS NULL)
               AND metadata->>'ordinal_subject' ILIKE $2
-            ORDER BY 
-              CASE 
-                WHEN metadata->>'ordinal' = $3 THEN 0
-                ELSE (metadata->>'ordinal')::int
-              END,
+            ORDER BY
+              (metadata->>'ordinal')::int ASC,
               created_at DESC
             LIMIT 20
           `;
@@ -1658,10 +1656,10 @@ class IntelligenceSystem {
 
           if (ordinalResults.rows.length > 0) {
             console.log(`[ORDINAL-RETRIEVAL] ✅ Found ${ordinalResults.rows.length} memories with ordinal subject "${queryOrdinal.subject}"`);
-            console.log(`[ORDINAL-RETRIEVAL] Retrieving ALL related ordinals so AI can see full context`);
+            console.log(`[ORDINAL-RETRIEVAL] Returning in NATURAL ORDER (1st, 2nd, 3rd...) for AI context`);
             ordinalResults.rows.forEach((row, idx) => {
               const ord = row.metadata?.ordinal || 'N/A';
-              console.log(`[ORDINAL-RETRIEVAL]   #${idx + 1}: Ordinal ${ord} - "${row.content?.substring(0, 60)}"`);
+              console.log(`[ORDINAL-RETRIEVAL]   Position #${idx + 1}: Ordinal ${ord} - "${row.content?.substring(0, 60)}"`);
             });
             return ordinalResults.rows;
           } else {

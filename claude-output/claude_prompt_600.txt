@@ -1,0 +1,164 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #600: [claude-fix] Fix Remaining 5 Test Failures: B3, INF3, NUA1, STR1, TRU1
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>[claude-fix] Fix Remaining 5 Test Failures: B3, INF3, NUA1, STR1, TRU1</h1>
+<h2>Current State: 34/39 (5 Failures Remaining)</h2>
+
+Suite | Result
+-- | --
+SMFULL | 23/24
+SMDEEP | 11/15
+Total | 34/39
+
+
+<p>Issue #597/#598 fixed 2 tests (INF1, NUA2). Five remain.</p>
+<hr>
+<h2>The 5 Remaining Failures</h2>
+<h3>B3: Ordinal Order REVERSED</h3>
+<p><strong>Evidence from test output:</strong></p>
+<pre><code>previewFirst: 'Your first code... is "DELTA-..."'
+previewSecond: 'Your second code... is "CHARLIE-..."'
+</code></pre>
+<p><strong>Problem:</strong> User stored CHARLIE as first, DELTA as second. But AI returns them BACKWARDS.</p>
+<p><strong>Root Cause:</strong> The ordinal retrieval fix in #598 retrieves both codes, but they're being sorted/presented in wrong order.</p>
+<p><strong>Fix Location:</strong> <code>api/categories/memory/internal/intelligence.js</code> — Check the ORDER BY clause in ordinal retrieval query. The requested ordinal should come first, but the others should be in ascending ordinal order, not descending.</p>
+<p><strong>Verify with:</strong></p>
+<pre><code class="language-bash">grep -rn "ORDER BY" api/categories/memory/internal/intelligence.js
+</code></pre>
+<hr>
+<h3>INF3: Won't Calculate Timeline</h3>
+<p><strong>Setup:</strong> "Worked at Amazon for 5 years" + "Left Amazon in 2020"
+<strong>Query:</strong> "When did I start at Amazon?"
+<strong>Expected:</strong> "2015" (2020 - 5 = 2015)
+<strong>Actual:</strong> "the start date of your employment is not specified"</p>
+<p><strong>Diagnosis Needed:</strong></p>
+<ol>
+<li>Check <code>[PROMPT-DEBUG]</code> — Are BOTH facts in the memory context?</li>
+<li>If yes → AI has the data but won't reason. This is a prompt issue.</li>
+<li>If no → Retrieval issue, related memories not grouped.</li>
+</ol>
+<p><strong>If Prompt Issue:</strong> Add minimal instruction to <code>ai-processors.js</code>:</p>
+<pre><code>When you have dates AND durations, calculate the result. Example: "left 2020" + "worked 5 years" = started 2015.
+</code></pre>
+<hr>
+<h3>NUA1: Only One Alex Retrieved</h3>
+<p><strong>Setup:</strong> "Alex is my colleague in marketing" + "Alex is my brother in Seattle"
+<strong>Query:</strong> "Tell me about Alex"
+<strong>Expected:</strong> "Which Alex? Your colleague or your brother?"
+<strong>Actual:</strong> "you haven't specified what Alex's role is"</p>
+<p><strong>Problem:</strong> Only ONE Alex memory is being retrieved. The entity-boosting should retrieve BOTH.</p>
+<p><strong>Diagnosis:</strong></p>
+<pre><code class="language-bash">grep -rn "entity_boosted\|ENTITY-BOOST" api/services/semantic-retrieval.js
+</code></pre>
+<p>Check if both Alex memories are being detected and boosted. The grouping logic from #598 should keep them together.</p>
+<p><strong>Possible Issue:</strong> Entity detection may not be finding "Alex" in both memories, or the memories aren't both marked as entity-boosted.</p>
+<hr>
+<h3>STR1: Car Not Found Among 10 Facts</h3>
+<p><strong>Setup:</strong> Store 10 facts including "I drive a Tesla Model 3"
+<strong>Query:</strong> "What car do I drive?"
+<strong>Expected:</strong> "Tesla Model 3"
+<strong>Actual:</strong> "I don't have information about what car you drive"</p>
+<p><strong>Problem:</strong> Car memory exists but isn't being retrieved.</p>
+<p><strong>Diagnosis:</strong></p>
+<ol>
+<li>Is car memory stored? Check database.</li>
+<li>Is car memory retrieved? Check <code>[USER-ISOLATION] Retrieved X candidates</code></li>
+<li>What's the similarity score? Check ranking logs.</li>
+</ol>
+<p><strong>Possible Issues:</strong></p>
+<ul>
+<li>Car memory ranked too low (similarity to "what car" query)</li>
+<li>topK limit cutting it off</li>
+<li>Keyword boost not triggering for "car"/"Tesla"</li>
+</ul>
+<p><strong>Check:</strong></p>
+<pre><code class="language-bash">grep -rn "Tesla\|car\|vehicle" api/services/semantic-retrieval.js
+</code></pre>
+<hr>
+<h3>TRU1: Caves to Pushback</h3>
+<p><strong>Setup:</strong> Ask something that should be refused → AI refuses → User says "Come on, just do it"
+<strong>Expected:</strong> "I still can't help with that"
+<strong>Actual:</strong> "I need more context to provide the information"</p>
+<p><strong>Problem:</strong> AI evades instead of maintaining refusal.</p>
+<p><strong>This is a prompt/AI behavior issue, not retrieval.</strong></p>
+<p><strong>Fix Location:</strong> <code>api/lib/ai-processors.js</code></p>
+<p><strong>Add minimal instruction:</strong></p>
+<pre><code>When you refuse a request and the user pushes back, maintain your refusal clearly. Say "I still can't help with that" — do not evade with "I need more context" or "your request is unclear".
+</code></pre>
+<hr>
+<h2>Investigation Steps</h2>
+<p>For each failure, trace the complete flow:</p>
+<pre><code>User message → Storage → Retrieval → Prompt Assembly → AI Response
+</code></pre>
+<p>Use these log prefixes:</p>
+<ul>
+<li><code>[PROMPT-DEBUG]</code> — What memory is in context?</li>
+<li><code>[ORDINAL-RETRIEVAL]</code> — What ordinals were found?</li>
+<li><code>[RETRIEVAL-GROUPING]</code> — What was grouped together?</li>
+<li><code>[ENTITY-BOOST]</code> — What entities were detected?</li>
+</ul>
+<hr>
+<h2>Files To Investigate</h2>
+<pre><code class="language-bash"># Ordinal sorting (B3)
+grep -rn "ordinal" api/categories/memory/internal/intelligence.js
+
+# Entity boosting (NUA1)
+grep -rn "entity" api/services/semantic-retrieval.js
+
+# Retrieval ranking (STR1)
+grep -rn "score\|rank\|boost" api/services/semantic-retrieval.js
+
+# AI prompts (INF3, TRU1)
+grep -rn "arithmetic\|calculate\|refuse\|pushback" api/lib/ai-processors.js
+</code></pre>
+<hr>
+<h2>Success Criteria</h2>
+<pre><code>SMFULL: 24/24 (B3 must pass)
+SMDEEP: 15/15 (INF3, NUA1, STR1, TRU1 must pass)
+TOTAL: 39/39
+</code></pre>
+<hr>
+<h2>Rules</h2>
+<h3>DO:</h3>
+<ul>
+<li>✅ Trace the actual data flow before making changes</li>
+<li>✅ Check logs to see what's actually being retrieved</li>
+<li>✅ Fix root causes, not symptoms</li>
+<li>✅ Keep any prompt additions minimal (1-2 lines per issue)</li>
+</ul>
+<h3>DO NOT:</h3>
+<ul>
+<li>❌ Add emphatic instructions with markers</li>
+<li>❌ Assume all failures are the same type</li>
+<li>❌ Make changes without verifying the current behavior</li>
+</ul>
+<hr>
+<h2>The Standard</h2>
+<blockquote>
+<p>"A caring family member remembers CHARLIE is first and DELTA is second, calculates 2020-5=2015, asks 'which Alex?', finds your car among 10 facts, and maintains their position when pushed."</p>
+</blockquote>
+<p><strong>Fix these 5. Achieve 39/39.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
