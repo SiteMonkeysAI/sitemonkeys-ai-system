@@ -416,6 +416,30 @@ export class Orchestrator {
         );
       }
 
+      // ========== STEP 9.6: TEMPORAL REASONING CALCULATOR (Issue #615-INF3) ==========
+      try {
+        const temporalResult = this.#calculateTemporalInference({
+          response: enforcedResponse,
+          memoryContext: context.memory_context,
+          query: context.message || ''
+        });
+
+        if (temporalResult.calculationApplied) {
+          enforcedResponse = temporalResult.response;
+          complianceMetadata.overrides.push({
+            module: "temporal_calculator",
+            calculation: temporalResult.calculation
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("temporal_calculator");
+      } catch (error) {
+        this.error("Temporal calculator failed:", error);
+        complianceMetadata.warnings.push(
+          "temporal_calculator_error: " + error.message,
+        );
+      }
+
       // ========== STEP 10: REFUSAL MAINTENANCE (Issue #606 Phase 1) ==========
       try {
         const refusalResult = await refusalMaintenanceValidator.validate({
@@ -4630,46 +4654,76 @@ Mode: ${modeConfig?.display_name || mode}
       // Extract correct value
       const correctValue = targetMemory.value || this.#extractValueFromContent(targetMemory.content);
       if (!correctValue) {
+        this.debug(`[ORDINAL-VALIDATOR] ❌ Could not extract value from target ordinal`);
         return { correctionApplied: false, response };
       }
 
-      // Issue #612 Refinement 1: Slot-Scoping Safety
-      // If response already contains correct value for requested ordinal, return early
-      // This prevents unnecessary replacements when response is already correct
-      if (response.includes(correctValue)) {
-        this.debug(`[ORDINAL-VALIDATOR] ✓ Response already contains correct value: ${correctValue}`);
-        return { correctionApplied: false, response };
-      }
-
-      // Check for wrong values first (Issue #612: don't return early if correct value is present alongside wrong value)
+      // Gather all wrong values (other ordinals)
       const wrongValues = ordinalMemories
         .filter(m => m.ordinal !== ordinalNum)
         .map(m => m.value || this.#extractValueFromContent(m.content))
         .filter(v => v);
 
+      // Issue #615 Fix: Check for wrong values BEFORE early return
+      // If response contains BOTH correct and wrong values, we must correct
+      const hasWrongValue = wrongValues.some(wrong => response.includes(wrong));
+      const hasCorrectValue = response.includes(correctValue);
+
+      // Enhanced telemetry (Issue #615 requirement)
+      const telemetry = {
+        detectedOrdinal: ordinalNum,
+        subject: subject,
+        candidatesFound: ordinalMemories.length,
+        selectedValue: correctValue,
+        wrongValuesInResponse: wrongValues.filter(wrong => response.includes(wrong)),
+        hasCorrectValue,
+        hasWrongValue
+      };
+      
+      this.debug(`[ORDINAL-VALIDATOR] Telemetry:`, JSON.stringify(telemetry, null, 2));
+
+      // Only return early if correct value is present AND no wrong values exist
+      if (hasCorrectValue && !hasWrongValue) {
+        this.debug(`[ORDINAL-VALIDATOR] ✓ Response already correct: contains "${correctValue}", no wrong values`);
+        return { 
+          correctionApplied: false, 
+          response,
+          telemetry 
+        };
+      }
+
       let adjustedResponse = response;
       let corrected = false;
+      const replacements = [];
 
       // Replace wrong values with correct value
       for (const wrongValue of wrongValues) {
         if (adjustedResponse.includes(wrongValue)) {
           adjustedResponse = adjustedResponse.replace(new RegExp(wrongValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), correctValue);
           corrected = true;
-          this.debug(`[ORDINAL-VALIDATOR] ❌ Corrected: "${wrongValue}" → "${correctValue}"`);
+          replacements.push({ from: wrongValue, to: correctValue });
+          this.debug(`[ORDINAL-VALIDATOR] ❌ Replaced wrong value: "${wrongValue}" → "${correctValue}"`);
         }
       }
 
       // Inject if missing and no correction was made
+      let injectedMissingValue = false;
       if (!corrected && !adjustedResponse.includes(correctValue)) {
         adjustedResponse = correctValue;
         corrected = true;
-        this.debug(`[ORDINAL-VALIDATOR] ✅ Injected: ${correctValue}`);
+        injectedMissingValue = true;
+        this.debug(`[ORDINAL-VALIDATOR] ✅ Injected missing value: ${correctValue}`);
       }
+
+      telemetry.replacedWrongValue = replacements.length > 0;
+      telemetry.injectedMissingValue = injectedMissingValue;
+      telemetry.replacements = replacements;
 
       return {
         correctionApplied: corrected,
         response: adjustedResponse,
-        ordinalCorrected: corrected ? { ordinal: ordinalNum, subject, correctValue } : null
+        ordinalCorrected: corrected ? { ordinal: ordinalNum, subject, correctValue } : null,
+        telemetry
       };
 
     } catch (error) {
@@ -4683,6 +4737,82 @@ Mode: ${modeConfig?.display_name || mode}
     const valuePattern = /(?:is|was|are|:)\s+([A-Z0-9][A-Z0-9-_]{2,})/i;
     const match = content.match(valuePattern);
     return match ? match[1] : null;
+  }
+
+  /**
+   * Deterministic Temporal Reasoning Calculator (Issue #615 - INF3)
+   * 
+   * When both duration and end date are present in memory, calculate start date.
+   * This is pure math, not AI inference.
+   * 
+   * Example: "worked 5 years" + "left in 2020" → started in 2015
+   */
+  #calculateTemporalInference({ response, memoryContext = [], query = '' }) {
+    try {
+      // Only activate for temporal queries
+      const temporalKeywords = /\b(when|start|began|join|year|date)\b/i;
+      if (!temporalKeywords.test(query)) {
+        return { calculationApplied: false, response };
+      }
+
+      const memories = Array.isArray(memoryContext) ? memoryContext : (memoryContext.memories || []);
+      if (memories.length === 0) {
+        return { calculationApplied: false, response };
+      }
+
+      // Extract duration and end date from memories
+      let duration = null;
+      let endYear = null;
+      let entity = null;
+
+      for (const memory of memories) {
+        const content = memory.content || '';
+        
+        // Match duration: "worked X years", "X years at", "for X years"
+        const durationMatch = content.match(/(?:worked|for|spent)\s+(\d+)\s+years?/i);
+        if (durationMatch) {
+          duration = parseInt(durationMatch[1]);
+        }
+
+        // Match end year: "left in YYYY", "until YYYY", "ended YYYY"
+        const endYearMatch = content.match(/(?:left|until|ended|quit).*?(\d{4})/i);
+        if (endYearMatch) {
+          endYear = parseInt(endYearMatch[1]);
+        }
+
+        // Extract entity (company/place name)
+        const entityMatch = content.match(/\bat\s+([A-Z][a-zA-Z]+)/);
+        if (entityMatch) {
+          entity = entityMatch[1];
+        }
+      }
+
+      // If we have both duration and end year, calculate start year
+      if (duration && endYear) {
+        const startYear = endYear - duration;
+        
+        // Check if response is missing the calculated year
+        if (!response.includes(startYear.toString())) {
+          const injection = entity 
+            ? `Based on the facts that you worked ${duration} years and left in ${endYear}, you started at ${entity} in ${startYear}.`
+            : `Based on ${duration} years duration ending in ${endYear}, the start year was ${startYear}.`;
+          
+          this.debug(`[TEMPORAL-CALCULATOR] ✅ Calculated: ${endYear} - ${duration} = ${startYear}`);
+          
+          return {
+            calculationApplied: true,
+            response: response + '\n\n' + injection,
+            calculation: { duration, endYear, startYear, entity }
+          };
+        }
+      }
+
+      return { calculationApplied: false, response };
+      
+    } catch (error) {
+      this.error('[TEMPORAL-CALCULATOR] Error:', error);
+      return { calculationApplied: false, response };
+    }
   }
 }
 

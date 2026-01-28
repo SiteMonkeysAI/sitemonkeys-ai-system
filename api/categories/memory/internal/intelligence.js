@@ -1936,41 +1936,57 @@ class IntelligenceSystem {
           // Find memories that mention the same entities
           const entityMemoryIds = new Set(allMemories.map(m => m.id));
 
-          for (const entity of queryEntities) {
-            // Search for other memories mentioning this entity
-            try {
-              const relatedQuery = `
-                SELECT * FROM persistent_memories
-                WHERE user_id = $1
-                  AND (is_current = true OR is_current IS NULL)
-                  AND content ILIKE $2
-                  AND relevance_score > 0
-                ORDER BY created_at DESC
-                LIMIT 5
-              `;
+          // Issue #615 Fix: Use SINGLE query with OR conditions instead of N+1 queries
+          try {
+            // Build OR conditions for all entities
+            const entityConditions = queryEntities.map((_, idx) => `content ILIKE $${idx + 2}`).join(' OR ');
+            const entityParams = queryEntities.map(e => `%${e}%`);
 
-              const relatedResult = await this.coreSystem.executeQuery(relatedQuery, [
-                sanitizedUserId,
-                `%${entity}%`
-              ]);
+            const relatedQuery = `
+              SELECT * FROM persistent_memories
+              WHERE user_id = $1
+                AND (is_current = true OR is_current IS NULL)
+                AND (${entityConditions})
+                AND relevance_score > 0
+              ORDER BY created_at DESC
+              LIMIT 10
+            `;
 
-              for (const relatedMemory of relatedResult.rows) {
-                if (!entityMemoryIds.has(relatedMemory.id)) {
-                  // Add related memory with a temporal grouping boost
-                  allMemories.push({
-                    ...relatedMemory,
-                    relevanceScore: (relatedMemory.relevance_score || 0) + 0.4,
-                    temporalGrouping: true,
-                    groupedEntity: entity,
-                    source: "temporal_grouping"
-                  });
-                  entityMemoryIds.add(relatedMemory.id);
-                  this.logger.log(`[TEMPORAL-GROUPING] Added related fact for entity "${entity}": memory ${relatedMemory.id}`);
-                }
+            const relatedResult = await this.coreSystem.executeQuery(relatedQuery, [
+              sanitizedUserId,
+              ...entityParams
+            ]);
+
+            // Cap added memories to avoid breaking selectivity (max 5 related facts)
+            let addedCount = 0;
+            const MAX_RELATED = 5;
+
+            for (const relatedMemory of relatedResult.rows) {
+              if (addedCount >= MAX_RELATED) break;
+              
+              if (!entityMemoryIds.has(relatedMemory.id)) {
+                // Determine which entity matched
+                const matchedEntity = queryEntities.find(e => 
+                  relatedMemory.content && relatedMemory.content.includes(e)
+                );
+
+                // Add related memory with a temporal grouping boost
+                allMemories.push({
+                  ...relatedMemory,
+                  relevanceScore: (relatedMemory.relevance_score || 0) + 0.4,
+                  temporalGrouping: true,
+                  groupedEntity: matchedEntity,
+                  source: "temporal_grouping"
+                });
+                entityMemoryIds.add(relatedMemory.id);
+                addedCount++;
+                this.logger.log(`[TEMPORAL-GROUPING] Added related fact for entity "${matchedEntity}": memory ${relatedMemory.id}`);
               }
-            } catch (error) {
-              this.logger.error(`[TEMPORAL-GROUPING] Error finding related facts for ${entity}:`, error);
             }
+            
+            this.logger.log(`[TEMPORAL-GROUPING] Added ${addedCount} related facts (capped at ${MAX_RELATED})`);
+          } catch (error) {
+            this.logger.error(`[TEMPORAL-GROUPING] Error finding related facts:`, error);
           }
         }
       }
@@ -4153,6 +4169,11 @@ class IntelligenceSystem {
       return { unicode: [], pricing: [], identifiers: [] };
     }
 
+    // SECURITY FIX: Limit input length to prevent ReDoS (Issue #615 comment)
+    // Regex patterns have potential for polynomial backtracking on malicious input
+    const MAX_CONTENT_LENGTH = 10000;
+    const sanitizedContent = content.slice(0, MAX_CONTENT_LENGTH);
+
     const anchors = {
       unicode: [],
       pricing: [],
@@ -4162,7 +4183,7 @@ class IntelligenceSystem {
     // Extract Unicode/diacritics names (characters outside ASCII range)
     // Matches names with diacritics like José, Björn, François, etc.
     const unicodeNamePattern = /\b[A-ZÀ-ÿ][a-zà-ÿ]+(?:[- ][A-ZÀ-ÿ][a-zà-ÿ]+)*\b/g;
-    const names = content.match(unicodeNamePattern) || [];
+    const names = sanitizedContent.match(unicodeNamePattern) || [];
     for (const name of names) {
       // Only include if it has non-ASCII characters
       if (/[À-ÿ]/.test(name)) {
@@ -4180,13 +4201,13 @@ class IntelligenceSystem {
     ];
 
     for (const pattern of pricingPatterns) {
-      const matches = content.match(pattern) || [];
+      const matches = sanitizedContent.match(pattern) || [];
       anchors.pricing.push(...matches);
     }
 
     // Extract high-entropy identifiers (already captured for exact match)
     const identifierPattern = /[A-Z0-9][A-Z0-9-_]{4,}/g;
-    const identifiers = content.match(identifierPattern) || [];
+    const identifiers = sanitizedContent.match(identifierPattern) || [];
     anchors.identifiers.push(...identifiers);
 
     // Deduplicate
