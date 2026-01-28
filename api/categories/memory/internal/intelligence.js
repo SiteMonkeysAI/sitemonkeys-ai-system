@@ -3967,11 +3967,36 @@ class IntelligenceSystem {
         // FIX #609-B3: Try to extract the value after "is/was/are"
         // Example: "My first code is CHARLIE-123" → extract "CHARLIE-123"
         let value = null;
-        const valuePattern = new RegExp(`${match[0]}\\s+(?:is|was|are|:)\\s+([A-Z0-9][A-Z0-9-_]{2,})`, 'i');
-        const valueMatch = content.match(valuePattern);
-        if (valueMatch) {
-          value = valueMatch[1];
-          console.log(`[ORDINAL-DETECT] Found ordinal with value: ${ordinalWord} ${subject} = ${value} (#${ordinalNum})`);
+        // Avoid dynamic RegExp with user-controlled content. Instead, parse using indices.
+        // We'll look for "[matched phrase] <whitespace> (is|was|are|:) <whitespace> <VALUE>"
+        if (typeof match.index === 'number') {
+          const afterMatchIndex = match.index + match[0].length;
+          const remainder = content.slice(afterMatchIndex);
+
+          // Skip leading whitespace
+          const wsMatch = remainder.match(/^\s+/);
+          const startAfterWs = wsMatch ? wsMatch[0].length : 0;
+          const afterWs = remainder.slice(startAfterWs);
+
+          // Check for "is", "was", "are" or ":"
+          const verbMatch = afterWs.match(/^(is|was|are|:)\b/i);
+          if (verbMatch) {
+            const afterVerb = afterWs.slice(verbMatch[0].length);
+            const wsAfterVerbMatch = afterVerb.match(/^\s+/);
+            const startValue = wsAfterVerbMatch ? wsAfterVerbMatch[0].length : 0;
+            const valueCandidate = afterVerb.slice(startValue);
+
+            // Extract and validate the value using a static regex
+            const staticValueMatch = valueCandidate.match(/^([A-Z0-9][A-Z0-9-_]{2,})/i);
+            if (staticValueMatch) {
+              value = staticValueMatch[1];
+              console.log(`[ORDINAL-DETECT] Found ordinal with value: ${ordinalWord} ${subject} = ${value} (#${ordinalNum})`);
+            } else {
+              console.log(`[ORDINAL-DETECT] Found ordinal: ${ordinalWord} ${subject} (#${ordinalNum})`);
+            }
+          } else {
+            console.log(`[ORDINAL-DETECT] Found ordinal: ${ordinalWord} ${subject} (#${ordinalNum})`);
+          }
         } else {
           console.log(`[ORDINAL-DETECT] Found ordinal: ${ordinalWord} ${subject} (#${ordinalNum})`);
         }
