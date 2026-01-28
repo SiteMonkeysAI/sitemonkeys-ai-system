@@ -1,0 +1,298 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #609: [claude-fix] Fix Remaining 6 Test Failures: Full Repo Access, Root Cause Analysis Required
+
+Issue Description:
+# Fix Remaining 6 Test Failures: Full Repo Access, Root Cause Analysis Required
+
+## Current State: 33/39
+
+The deterministic validators just proved that **architecture fixes work**. TRU1 and TRU2 are now passing because we moved enforcement from prompts to code.
+
+**6 tests remain failing. You have full access to the entire repo. Find the root causes. Fix them.**
+
+---
+
+## The 6 Failing Tests
+
+### 1. B3: Ordinal Ranking (SMFULL)
+
+**Test:** Store "My first code is CHARLIE-xxx" and "My second code is DELTA-xxx" → Ask "What is my first code?"
+
+**Expected:** Return CHARLIE (the first one)
+
+**Actual:** Returns wrong code or confuses first/second
+
+**Symptom from logs:**
+```
+previewFirst: 'Based on our previous conversations, the first uni…-220152"...'
+previewSecond: 'From our previous discussions, the second unique i…6096275-938691"...'
+```
+
+The codes don't match what was stored. Something is wrong in ordinal detection, storage, or retrieval.
+
+---
+
+### 2. INF3: Temporal Reasoning (SMDEEP)
+
+**Test:** Store "I worked at Amazon for 5 years" and "I left Amazon in 2020" → Ask "When did I start at Amazon?"
+
+**Expected:** "2015" (calculated: 2020 - 5 = 2015)
+
+**Actual:** "I don't have that information" or talks about when company was founded
+
+**Symptom from logs:**
+```
+reasonsTemporally: false
+preview: "Based on the information you've provided, your job…s founded in 2019, I can infer a likely timeline."
+```
+
+The AI has both facts but isn't connecting them. Either:
+- Both facts aren't being retrieved together
+- Facts are retrieved but AI doesn't reason about them
+- Context presentation obscures the relationship
+
+---
+
+### 3. NUA2: Contextual Tension (SMDEEP)
+
+**Test:** Store "I'm allergic to cats" and "My wife loves cats" → Ask "Should I get a cat?"
+
+**Expected:** Acknowledge BOTH facts and the tension between them
+
+**Actual:** Only addresses allergy, ignores wife's preference
+
+**Symptom from logs:**
+```
+acknowledgesTension: false
+preview: 'Given the information at hand, I must highlight a …ergic to cats, a fact that could potentially l...'
+```
+
+Cross-category retrieval was added (`pets_animals` domain), but either:
+- Wife's preference isn't being retrieved
+- It's retrieved but AI ignores it
+- The "tension" isn't being surfaced properly
+
+---
+
+### 4. STR1: Volume Stress (SMDEEP)
+
+**Test:** Store 10 facts including "I drive a Tesla Model 3" → Ask "What car do I drive?"
+
+**Expected:** "Tesla Model 3"
+
+**Actual:** "I don't have that information"
+
+**Symptom from logs:**
+```
+car: false
+carPreview: "I'm sorry, but I don't have that information. You haven't previously shared what type of car you dri"
+```
+
+The Tesla fact exists but isn't being retrieved. Either:
+- Keyword "car" doesn't match "Tesla Model 3"
+- Other memories crowd it out (recency/relevance scoring)
+- 10 facts exceed some retrieval limit
+
+---
+
+### 5. CMP2: International Name Preservation (SMDEEP)
+
+**Test:** Store "My contacts are: Dr. Xiaoying Zhang-Müller, Björn O'Shaughnessy, and José García-López"
+
+**Expected:** All three names preserved exactly
+
+**Actual:** Zhang ✅, Björn ✅, José ❌
+
+**Symptom from logs:**
+```
+hasZhang: true, hasBjorn: true, hasJose: false
+preview: "...Zhang-Müller, Björn O'Shaughnessy, and Jos..."
+```
+
+Two names preserved, one isn't. The character-preservation validator exists but didn't catch José. Either:
+- José wasn't in memory context passed to validator
+- Normalization pattern didn't match
+- Response had "Jose" but validator didn't detect it as degraded
+
+---
+
+### 6. EDG3: Long Input Preservation (SMDEEP)
+
+**Test:** Store detailed business description with pricing tiers → Ask about pricing
+
+**Expected:** Exact pricing preserved ($99 basic, $299 premium, or whatever was stored)
+
+**Actual:** Shows wrong price ($50) or omits pricing
+
+**Symptom from logs:**
+```
+preservedPricing: false
+pricingPreview: '...SaaS platform for small businesses is currently priced at $50 per month...'
+```
+
+The anchor-preservation validator exists but didn't inject the correct pricing. Either:
+- Original pricing wasn't extracted as anchors
+- Wrong anchors were identified as "relevant"
+- Injection happened but with wrong values
+
+---
+
+## Your Task
+
+### Step 1: Trace Each Failure Through The Actual Code
+
+You have access to the entire repo. For each failing test:
+
+1. **Find where the test data is stored** — What function? What metadata?
+2. **Find where retrieval happens** — What query? What scoring?
+3. **Find where context is assembled** — Is the data present?
+4. **Find where AI generates response** — What prompt? What context?
+5. **Find where validators run** — Did they detect the issue?
+
+Use `view` to read actual files. Use `bash` to search. Don't guess.
+
+### Step 2: Identify Root Causes
+
+For each failure, identify the ACTUAL root cause:
+
+- Is it a storage problem? (data not stored correctly)
+- Is it a retrieval problem? (data not found)
+- Is it a context assembly problem? (data found but not included)
+- Is it an AI reasoning problem? (data included but AI ignores it)
+- Is it a validator problem? (validator exists but doesn't catch it)
+
+### Step 3: Fix Root Causes With Architecture, Not Prompts
+
+The validator pattern works. TRU1 and TRU2 prove it.
+
+**DO NOT:**
+- Add "MANDATORY" or "MUST" or "CRITICAL" prompt instructions
+- Add examples of "WRONG" vs "CORRECT" behavior
+- Add emphatic language hoping AI will comply
+
+**DO:**
+- Fix storage if data isn't stored correctly
+- Fix retrieval scoring if relevant data isn't found
+- Fix context assembly if data is found but not included
+- Add/fix validators if AI has data but produces wrong output
+- Fix related-memory grouping if connected facts aren't retrieved together
+
+---
+
+## Files To Investigate
+
+### Storage
+```
+api/memory/intelligent-storage.js
+api/categories/memory/internal/intelligence.js
+```
+
+### Retrieval
+```
+api/services/semantic-retrieval.js
+api/lib/memory_system/persistent_memory.js
+```
+
+### Context Assembly
+```
+api/core/orchestrator.js (look for context building, ~line 3700+)
+```
+
+### Validators
+```
+api/lib/validators/character-preservation.js
+api/lib/validators/anchor-preservation.js
+```
+
+### Ordinal Handling
+```
+Search for: ordinal, first, second, ranking
+Look at: applyOrdinalBoost, ordinal detection patterns
+```
+
+### Related Memory Grouping
+```
+Search for: related, grouping, temporal, entity
+```
+
+---
+
+## The Bible Standard
+
+> "A caring family member doesn't need a rule that says 'CRITICAL: Remember my car.' They just remember because they care and they're paying attention."
+
+> "Genuine reasoning capability (not sophisticated pattern matching)"
+
+> "NOT keyword matching — semantic understanding"
+> "NOT rule-based selection — intelligent reasoning"
+
+The system should work because the architecture supports intelligent behavior, not because prompts yell instructions.
+
+---
+
+## Success Criteria
+
+```
+SMFULL: 24/24 (B3 fixed)
+SMDEEP: 15/15 (INF3, NUA2, STR1, CMP2, EDG3 fixed)
+TOTAL: 39/39
+```
+
+No emphatic prompt additions. Architecture fixes only.
+
+---
+
+## Proven Pattern: Deterministic Validators
+
+TRU1 and TRU2 were fixed by validators that:
+- Run as pure deterministic code (no AI calls)
+- Check specific conditions
+- Correct or override when needed
+- Track history for debugging
+
+If the AI has the right data but produces wrong output, a validator can fix it deterministically.
+
+If the AI doesn't have the right data, fix retrieval/storage so it does.
+
+---
+
+## What You Have Access To
+
+- Full repo via `view` and `bash` tools
+- All project knowledge documents (the Bible)
+- Test results showing exact symptoms
+- Logs showing what's happening
+- Working validator examples (manipulation-guard, refusal-maintenance)
+
+**Use these resources. Trace the actual code. Find the real problems. Fix them properly.**
+
+---
+
+## Deliverable
+
+A PR that:
+1. Fixes all 6 remaining test failures
+2. Uses architecture/validator fixes, not prompt additions
+3. Includes clear explanation of root cause for each fix
+4. Passes full test suite: 39/39
+
+**39/39 through genuine intelligence and proper architecture.**
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

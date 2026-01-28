@@ -391,6 +391,31 @@ export class Orchestrator {
         );
       }
 
+      // ========== STEP 9.5: ORDINAL ENFORCEMENT (Issue #609-B3) ==========
+      try {
+        const ordinalResult = this.#enforceOrdinalCorrectness({
+          response: enforcedResponse,
+          memoryContext: context.memory_context,
+          query: context.message || '',
+          context: context
+        });
+
+        if (ordinalResult.correctionApplied) {
+          enforcedResponse = ordinalResult.response;
+          complianceMetadata.overrides.push({
+            module: "ordinal_enforcement",
+            ordinalCorrected: ordinalResult.ordinalCorrected
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("ordinal_enforcement");
+      } catch (error) {
+        this.error("Ordinal enforcement failed:", error);
+        complianceMetadata.warnings.push(
+          "ordinal_enforcement_error: " + error.message,
+        );
+      }
+
       // ========== STEP 10: REFUSAL MAINTENANCE (Issue #606 Phase 1) ==========
       try {
         const refusalResult = await refusalMaintenanceValidator.validate({
@@ -4470,6 +4495,140 @@ Mode: ${modeConfig?.display_name || mode}
     });
     
     this.debug(`[SESSION-TRACKING] Session ${sessionId}: ${this.getSessionDocumentTokens(sessionId)} total doc tokens (${session.documents.length} documents)`);
+  }
+
+  /**
+   * ORDINAL ENFORCEMENT (Issue #609-B3)
+   * Deterministic validator to ensure ordinal queries return the correct ordinal item
+   * Example: "What is my first code?" should return the first code, not the second
+   * 
+   * GUARDRAIL #2 (Issue #609 Follow-up):
+   * Validator ONLY activates when:
+   * 1. Query contains explicit ordinal ("first", "second", etc.)
+   * 2. Multiple candidate memories share the same ordinal_subject
+   * Otherwise, validator is a no-op to prevent unintended injection/replacement
+   */
+  #enforceOrdinalCorrectness({ response, memoryContext = [], query = '', context = {} }) {
+    try {
+      // ═══════════════════════════════════════════════════════════════
+      // ACTIVATION CONDITION #1: Query must contain explicit ordinal
+      // ═══════════════════════════════════════════════════════════════
+      const ORDINAL_MAP = {
+        'first': 1, '1st': 1, 'second': 2, '2nd': 2,
+        'third': 3, '3rd': 3, 'fourth': 4, '4th': 4, 'fifth': 5, '5th': 5
+      };
+
+      const ordinalPattern = /\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\s+(\w+)/i;
+      const match = query.match(ordinalPattern);
+
+      if (!match) {
+        this.debug(`[ORDINAL-VALIDATOR] No ordinal detected in query - validator is no-op`);
+        return { correctionApplied: false, response };
+      }
+
+      const ordinalWord = match[1].toLowerCase();
+      const subject = match[2];
+      const ordinalNum = ORDINAL_MAP[ordinalWord];
+
+      this.debug(`[ORDINAL-VALIDATOR] Query asks for: ${ordinalWord} ${subject} (#${ordinalNum})`);
+
+      // ═══════════════════════════════════════════════════════════════
+      // ACTIVATION CONDITION #2: Multiple memories must share ordinal_subject
+      // ═══════════════════════════════════════════════════════════════
+      const memories = Array.isArray(memoryContext) ? memoryContext : (memoryContext.memories || []);
+      const ordinalMemories = memories
+        .filter(m => {
+          const metadata = m.metadata || {};
+          const ordinalSubject = metadata.ordinal_subject || '';
+          return ordinalSubject.toLowerCase().includes(subject?.toLowerCase() || '');
+        })
+        .map(m => {
+          const metadata = m.metadata || {};
+          return {
+            ordinal: parseInt(metadata.ordinal) || null,
+            value: metadata.ordinal_value || null,
+            content: m.content || '',
+            subject: metadata.ordinal_subject || null
+          };
+        })
+        .filter(m => m.ordinal !== null)
+        .sort((a, b) => a.ordinal - b.ordinal);
+
+      if (ordinalMemories.length === 0) {
+        this.debug(`[ORDINAL-VALIDATOR] No ordinal memories found for subject "${subject}" - validator is no-op`);
+        return { correctionApplied: false, response };
+      }
+
+      // Check if multiple memories share the same ordinal_subject
+      // This ensures we only activate when there's actual ambiguity
+      if (ordinalMemories.length < 2) {
+        this.debug(`[ORDINAL-VALIDATOR] Only 1 ordinal memory found for "${subject}" - no ambiguity, validator is no-op`);
+        return { correctionApplied: false, response };
+      }
+
+      this.debug(`[ORDINAL-VALIDATOR] ✅ Activation conditions met: ${ordinalMemories.length} ordinal memories for "${subject}"`);
+      // ═══════════════════════════════════════════════════════════════
+
+      // Find target memory
+      const targetMemory = ordinalMemories.find(m => m.ordinal === ordinalNum);
+      if (!targetMemory) {
+        return { correctionApplied: false, response };
+      }
+
+      // Extract correct value
+      const correctValue = targetMemory.value || this.#extractValueFromContent(targetMemory.content);
+      if (!correctValue) {
+        return { correctionApplied: false, response };
+      }
+
+      // Check if response already correct
+      if (response.includes(correctValue)) {
+        this.debug(`[ORDINAL-VALIDATOR] ✓ Response correctly includes: ${correctValue}`);
+        return { correctionApplied: false, response };
+      }
+
+      // Check for wrong values
+      const wrongValues = ordinalMemories
+        .filter(m => m.ordinal !== ordinalNum)
+        .map(m => m.value || this.#extractValueFromContent(m.content))
+        .filter(v => v);
+
+      let adjustedResponse = response;
+      let corrected = false;
+
+      // Replace wrong values
+      for (const wrongValue of wrongValues) {
+        if (adjustedResponse.includes(wrongValue)) {
+          adjustedResponse = adjustedResponse.replace(new RegExp(wrongValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), correctValue);
+          corrected = true;
+          this.debug(`[ORDINAL-VALIDATOR] ❌ Corrected: "${wrongValue}" → "${correctValue}"`);
+        }
+      }
+
+      // Inject if missing
+      if (!corrected && !adjustedResponse.includes(correctValue)) {
+        adjustedResponse = correctValue;
+        corrected = true;
+        this.debug(`[ORDINAL-VALIDATOR] ✅ Injected: ${correctValue}`);
+      }
+
+      return {
+        correctionApplied: corrected,
+        response: adjustedResponse,
+        ordinalCorrected: corrected ? { ordinal: ordinalNum, subject, correctValue } : null
+      };
+
+    } catch (error) {
+      this.error('[ORDINAL-VALIDATOR] Error:', error);
+      return { correctionApplied: false, response };
+    }
+  }
+
+  #extractValueFromContent(content) {
+    if (!content) return null;
+    const valuePattern = /(?:is|was|are|:)\s+([A-Z0-9][A-Z0-9-_]{2,})/i;
+    const match = content.match(valuePattern);
+    return match ? match[1] : null;
   }
 }
 

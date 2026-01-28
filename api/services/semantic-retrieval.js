@@ -22,8 +22,8 @@ import { generateEmbedding, cosineSimilarity, rankBySimilarity } from './embeddi
 const RETRIEVAL_CONFIG = {
   maxCandidates: 500,           // Max memories to pull from DB for scoring
   defaultTopK: 10,              // Default number of results to return
-  minSimilarity: 0.25,          // Minimum similarity threshold (default)
-  minSimilarityPersonal: 0.18,  // Lower threshold for personal fact queries (Issue #504, #533-B3)
+  minSimilarity: 0.20,          // Minimum similarity threshold (default) - LOWERED from 0.25 for #609
+  minSimilarityPersonal: 0.15,  // Lower threshold for personal fact queries - LOWERED from 0.18 for #609
   recencyBoostDays: 7,          // Boost memories from last N days
   recencyBoostWeight: 0.1,      // How much to boost recent memories
   confidenceWeight: 0.05,       // Weight for fingerprint confidence
@@ -452,13 +452,20 @@ function expandQuery(query) {
 
     // Name/Identity terms (FIX #533-B3)
     'name': ['called', 'named', 'title'],
-    'called': ['name', 'named']
+    'called': ['name', 'named'],
+
+    // Vehicle/Transportation terms (FIX #609-STR1)
+    'car': ['vehicle', 'drive', 'automobile', 'tesla', 'model', 'driving'],
+    'vehicle': ['car', 'drive', 'automobile', 'driving'],
+    'drive': ['car', 'vehicle', 'automobile', 'driving', 'drove'],
+    'driving': ['drive', 'car', 'vehicle']
   };
 
   // Check if this is a personal fact query (uses first-person pronouns + personal terms)
   // EXPANDED for FIX #533-B3 to include pet and name queries
   // EXPANDED for FIX #557-T2 to include explicit recall queries
-  const personalPattern = /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location|cat|dog|pet|animal|called|remember|asked|told|phrase|token|code)\b/i;
+  // EXPANDED for FIX #609-STR1 to include vehicle queries
+  const personalPattern = /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location|cat|dog|pet|animal|called|remember|asked|told|phrase|token|code|car|vehicle|drive|driving)\b/i;
   const isPersonal = personalPattern.test(query);
 
   let expanded = query;
@@ -1685,6 +1692,104 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       if (results.length >= topK && results.filter(r => !highPriorityIds.has(r.id)).length >= topK) {
         console.log(`[SEMANTIC RETRIEVAL] TopK limit reached (${topK}), high-priority additions: ${results.filter(r => highPriorityIds.has(r.id)).length}`);
         break;
+      }
+    }
+    // ═══════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════
+    // GUARDRAIL #1: SEMANTIC COHESION CHECK (Issue #609 Follow-up)
+    // After lowering similarity thresholds, ensure retrieved memories maintain
+    // semantic cohesion to prevent over-retrieval in dense memory profiles
+    // ═══════════════════════════════════════════════════════════════
+    if (results.length > 1) {
+      // Calculate pairwise cohesion between results
+      // Cohesion = average similarity between all pairs of memories
+      let totalPairwiseSimilarity = 0;
+      let pairCount = 0;
+      
+      for (let i = 0; i < Math.min(results.length, 10); i++) {
+        for (let j = i + 1; j < Math.min(results.length, 10); j++) {
+          const mem1 = results[i];
+          const mem2 = results[j];
+          
+          // Only check cohesion between memories that have embeddings
+          if (mem1.embedding && mem2.embedding && 
+              Array.isArray(mem1.embedding) && Array.isArray(mem2.embedding)) {
+            const similarity = cosineSimilarity(mem1.embedding, mem2.embedding);
+            totalPairwiseSimilarity += similarity;
+            pairCount++;
+          }
+        }
+      }
+      
+      if (pairCount > 0) {
+        const avgCohesion = totalPairwiseSimilarity / pairCount;
+        const MIN_COHESION = 0.15; // Minimum average cohesion threshold
+        
+        console.log(`[SEMANTIC-COHESION] Checking cohesion: ${pairCount} pairs, avg=${avgCohesion.toFixed(3)}`);
+        
+        // If cohesion is below threshold, drop lowest-scoring memories until restored
+        if (avgCohesion < MIN_COHESION && results.length > 3) {
+          console.log(`[SEMANTIC-COHESION] ⚠️  Cohesion ${avgCohesion.toFixed(3)} below threshold ${MIN_COHESION}`);
+          console.log(`[SEMANTIC-COHESION] Dropping lowest-scoring memories to restore cohesion`);
+          
+          // Keep high-priority memories (entity-boosted, explicit-recall, ordinal-boosted)
+          const highPriorityResults = results.filter(r => 
+            r.entity_boosted || r.explicit_recall_boosted || r.ordinal_boosted
+          );
+          
+          // Sort non-high-priority by score
+          const normalResults = results
+            .filter(r => !r.entity_boosted && !r.explicit_recall_boosted && !r.ordinal_boosted)
+            .sort((a, b) => b.hybrid_score - a.hybrid_score);
+          
+          // Gradually drop low-scoring memories and recalculate cohesion
+          let prunedResults = [...highPriorityResults];
+          let bestCohesion = 0;
+          
+          for (let keepCount = Math.min(normalResults.length, 7); keepCount >= 2; keepCount--) {
+            const testResults = [...highPriorityResults, ...normalResults.slice(0, keepCount)];
+            
+            // Recalculate cohesion for this subset
+            let testPairwiseSim = 0;
+            let testPairCount = 0;
+            
+            for (let i = 0; i < testResults.length; i++) {
+              for (let j = i + 1; j < testResults.length; j++) {
+                if (testResults[i].embedding && testResults[j].embedding) {
+                  testPairwiseSim += cosineSimilarity(testResults[i].embedding, testResults[j].embedding);
+                  testPairCount++;
+                }
+              }
+            }
+            
+            const testCohesion = testPairCount > 0 ? testPairwiseSim / testPairCount : 0;
+            
+            if (testCohesion >= MIN_COHESION) {
+              prunedResults = testResults;
+              bestCohesion = testCohesion;
+              console.log(`[SEMANTIC-COHESION] ✅ Restored cohesion at ${testResults.length} memories: ${testCohesion.toFixed(3)}`);
+              break;
+            }
+          }
+          
+          // If we found a better cohesion, use pruned results
+          if (prunedResults.length < results.length && bestCohesion >= MIN_COHESION) {
+            const droppedCount = results.length - prunedResults.length;
+            console.log(`[SEMANTIC-COHESION] Dropped ${droppedCount} low-coherence memories`);
+            console.log(`[SEMANTIC-COHESION] Final: ${prunedResults.length} memories with cohesion ${bestCohesion.toFixed(3)}`);
+            
+            // Update results and recalculate tokens
+            results.length = 0;
+            results.push(...prunedResults.sort((a, b) => b.hybrid_score - a.hybrid_score));
+            
+            usedTokens = results.reduce((sum, m) => {
+              return sum + (m.token_count || Math.ceil((m.content?.length || 0) / 4));
+            }, 0);
+          }
+        } else if (avgCohesion >= MIN_COHESION) {
+          console.log(`[SEMANTIC-COHESION] ✅ Cohesion check passed: ${avgCohesion.toFixed(3)} >= ${MIN_COHESION}`);
+        }
       }
     }
     // ═══════════════════════════════════════════════════════════════
