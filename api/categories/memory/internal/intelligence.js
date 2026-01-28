@@ -3934,7 +3934,7 @@ class IntelligenceSystem {
    */
   detectOrdinalFact(content) {
     if (!content || typeof content !== 'string') {
-      return { hasOrdinal: false };
+      return { hasOrdinal: false, ordinals: [] };
     }
 
     const contentLower = content.toLowerCase();
@@ -3953,25 +3953,37 @@ class IntelligenceSystem {
     };
 
     // Pattern: "my [ordinal] [subject]" or "the [ordinal] [subject]"
-    const ordinalRegex = /\b(my|the)\s+(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|one|two|three|four|five|six|seven|eight|nine|ten)\s+(\w+)/i;
-    const match = contentLower.match(ordinalRegex);
+    // Use matchAll to find ALL ordinals in the content (Issue #603 - B3 fix)
+    const ordinalRegex = /\b(my|the)\s+(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|one|two|three|four|five|six|seven|eight|nine|ten)\s+(\w+)/gi;
+    const matches = [...contentLower.matchAll(ordinalRegex)];
 
-    if (match) {
-      const ordinalWord = match[2].toLowerCase();
-      const ordinalNum = ORDINAL_PATTERNS[ordinalWord];
-      const subject = match[3];
+    if (matches.length > 0) {
+      const ordinals = matches.map(match => {
+        const ordinalWord = match[2].toLowerCase();
+        const ordinalNum = ORDINAL_PATTERNS[ordinalWord];
+        const subject = match[3];
 
-      console.log(`[ORDINAL-DETECT] Found ordinal: ${ordinalWord} ${subject} (#${ordinalNum})`);
+        console.log(`[ORDINAL-DETECT] Found ordinal: ${ordinalWord} ${subject} (#${ordinalNum})`);
 
+        return {
+          ordinal: ordinalNum,
+          subject: subject,
+          pattern: `${ordinalWord} ${subject}`,
+          fullMatch: match[0]
+        };
+      });
+
+      // Return first ordinal for backward compatibility, but include all in ordinals array
       return {
         hasOrdinal: true,
-        ordinal: ordinalNum,
-        subject: subject,
-        pattern: `${ordinalWord} ${subject}`
+        ordinal: ordinals[0].ordinal,
+        subject: ordinals[0].subject,
+        pattern: ordinals[0].pattern,
+        ordinals: ordinals // NEW: Array of all detected ordinals
       };
     }
 
-    return { hasOrdinal: false };
+    return { hasOrdinal: false, ordinals: [] };
   }
 }
 

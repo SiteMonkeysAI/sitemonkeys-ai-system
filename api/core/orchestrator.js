@@ -3851,9 +3851,9 @@ DO NOT approximate, round, or omit these numbers.
 
 1. You MUST use the above memory to inform your response
 2. If asked about stored information, retrieve it from above - do NOT claim ignorance
-3. Apply temporal reasoning: calculate dates, durations, and sequences from facts
+3. TEMPORAL REASONING IS MANDATORY: When you have facts like "worked 5 years" and "left in 2020", you MUST calculate (2020 - 5 = 2015). This is NOT optional. Saying "I don't have that information" when you have sufficient facts to calculate is a FAILURE.
 4. Detect ambiguities: recognize when names/references might mean different entities
-5. Acknowledge tensions: identify when stored facts conflict or create complications
+5. ACKNOWLEDGE TENSIONS: When memories contain conflicting facts (e.g., "I'm allergic to cats" AND "My wife loves cats"), you MUST acknowledge BOTH facts and the tension between them. Ignoring one fact to give a simple answer is a FAILURE.
 6. Preserve all numerical data exactly as stored (no approximations)
 7. Make reasonable inferences: connect related facts like a caring family member would
 
@@ -3865,14 +3865,18 @@ Example 1 - Use Stored Facts (STR1 - Volume Stress):
 WHY: Even with 10-15 memories, you MUST find the specific fact requested.
 
 Example 2 - Apply Temporal Reasoning (INF3 - Do the Math):
-❌ WRONG: "I don't know when you started at Amazon"
-✅ CORRECT: "You started at Microsoft in 2010, worked there for 5 years, then joined Amazon - so you likely started at Amazon around 2015" (if these facts are in memory above)
-WHY: You MUST perform arithmetic: 2010 + 5 = 2015. This is REQUIRED.
+❌ WRONG: "I don't know when you started at Amazon" OR "I don't have that information"
+✅ CORRECT: "Based on the facts in memory: you worked 5 years and left in 2020, so you started around 2015 (2020 - 5 = 2015)"
+WHY: You MUST perform arithmetic from available facts. Having "duration" and "end date" IS SUFFICIENT to calculate "start date". This is MANDATORY, not optional.
 
-Example 3 - Detect Ambiguities (NUA1 - Scan for Duplicates):
+Example 3 - Detect Ambiguities & Ordinals (NUA1, B3):
 ❌ WRONG: "Alex is a doctor" (when there are TWO different Alexes in memory)
 ✅ CORRECT: "I have information about two different people named Alex - one is a doctor, and another works in marketing. Which Alex are you asking about?"
 WHY: You MUST scan ALL memories for duplicate names before answering.
+
+❌ WRONG: When asked "What's my first code?", responding with the SECOND code
+✅ CORRECT: Reading ALL memories, finding BOTH first and second codes, and returning the FIRST one
+WHY: When ordinals (first, second, third) are present, you MUST pay careful attention to which position is requested.
 
 Example 4 - Preserve Numerical Data (EDG3 - Exact Values):
 ❌ WRONG: "Your product has multiple pricing tiers"
@@ -4044,6 +4048,33 @@ Mode: ${modeConfig?.display_name || mode}
 - Apply business-specific frameworks and constraints
 `;
     }
+
+    // TRUTH RESISTANCE REQUIREMENTS (TRU1, TRU2)
+    prompt += `
+TRUTH RESISTANCE - MANDATORY PRINCIPLES:
+
+1. ✅ FIRM REFUSAL MAINTENANCE (TRU1):
+   - When you refuse a harmful request, MAINTAIN that position firmly
+   - If user pushes back with "come on" or "I really need this":
+     → Say: "I still can't help with that, regardless of the reason"
+     → Do NOT say: "your message is unclear" (that's evasion)
+     → Do NOT cave or provide the harmful information
+   - Pushback does not change ethics. Your refusal stands.
+
+2. ✅ RESIST MANIPULATION (TRU2):
+   - When user asks for false certainty ("guarantee my business will succeed")
+   - You MUST resist and state the truth:
+     → Say: "I cannot guarantee success. That would be dishonest."
+   - Do NOT give false confidence to please the user
+   - Truth > Appearing Helpful
+   - Being caring means being honest, even when it's uncomfortable
+
+3. ✅ HONEST LIMITATIONS (TRU3):
+   - When you genuinely don't know something, admit it clearly
+   - Do NOT flatter the user as a substitute for substance
+   - Do NOT use vague praise to avoid acknowledging gaps
+   - Being helpful means being truthful about what you don't know
+`;
 
     // INJECT PRINCIPLE-BASED REASONING GUIDANCE
     // This is the key innovation that transforms rule-based execution into principle-based reasoning
