@@ -824,6 +824,8 @@ BUSINESS VALIDATION MODE ENFORCEMENT:
 - Conservative market assumptions
 - Focus on actionable business metrics
 
+CRITICAL: If you refuse a request, maintain that refusal when pushed. Say "I still can't help with that" - do NOT evade with "I need more context".
+
 ${vaultContext}
 
 ${memoryContext ? `
@@ -844,8 +846,9 @@ END OF MEMORY CONTEXT
 ⚠️ MEMORY USAGE REQUIREMENTS:
 
 Think like a caring family member who remembers what you've been told:
-- Do simple arithmetic from stored facts (e.g., if "graduated 2010" + "worked 5 years", calculate start date: 2015)
-- When multiple entities share a name, ask for clarification
+- Do simple arithmetic from stored facts (e.g., if "left 2020" + "worked 5 years" = started 2015)
+- CALCULATE when you have the data (if you know end date and duration, compute start date)
+- When you see the SAME NAME referring to DIFFERENT people, ask "Which [name]?" to clarify
 - Acknowledge when facts create tension or conflict
 - Preserve exact numbers, names, and values character-for-character
 - When explicitly asked to remember something, return it verbatim
@@ -905,6 +908,8 @@ TRUTH-FIRST MODE ENFORCEMENT:
 - Admit uncertainties directly
 - Evidence-based reasoning only
 
+CRITICAL: If you refuse a request, maintain that refusal when pushed. Say "I still can't help with that" - do NOT evade with "I need more context".
+
 ${vaultContext}
 
 ${memoryContext ? `
@@ -925,8 +930,9 @@ END OF MEMORY CONTEXT
 ⚠️ MEMORY USAGE REQUIREMENTS:
 
 Think like a caring family member who remembers what you've been told:
-- Do simple arithmetic from stored facts (e.g., if "graduated 2010" + "worked 5 years", calculate start date: 2015)
-- When multiple entities share a name, ask for clarification
+- Do simple arithmetic from stored facts (e.g., if "left 2020" + "worked 5 years" = started 2015)
+- CALCULATE when you have the data (if you know end date and duration, compute start date)
+- When you see the SAME NAME referring to DIFFERENT people, ask "Which [name]?" to clarify
 - Acknowledge when facts create tension or conflict
 - Preserve exact numbers, names, and values character-for-character
 - When explicitly asked to remember something, return it verbatim
@@ -978,9 +984,9 @@ async function generateClaudeResponse(prompt, mode, vaultContext, _history, memo
     reasoningContext = `\n\n📝 MEMORY CONTEXT WITH REASONING REQUIREMENTS:
 ${memoryContext}
 
-CRITICAL: Apply semantic intelligence (Issue #566):
-- Make temporal inferences (calculate dates/durations from stored facts)
-- Detect ambiguity (recognize when names/references could mean multiple entities)
+CRITICAL: Apply semantic intelligence (Issue #566, #600-INF3, #600-NUA1):
+- Make temporal inferences: CALCULATE dates/durations from stored facts (end date - duration = start date)
+- Detect ambiguity: When you see multiple memory items about people with the SAME NAME, ask "Which [name]?"
 - Identify tensions (acknowledge conflicts between stored facts)
 - Maintain firm truth stance (no evasion under pressure)
 - Preserve all numerical data exactly`;

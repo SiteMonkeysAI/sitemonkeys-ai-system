@@ -1326,10 +1326,20 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ═══════════════════════════════════════════════════════════════
     const keywordBoosted = ordinalBoosted.map(memory => {
       const contentLower = (memory.content || '').toLowerCase();
+
+      // Extract meaningful query words
+      // Include important 3-letter words like "car", "dog", "job", "who"
+      const meaningfulShortWords = new Set(['car', 'dog', 'cat', 'pet', 'job', 'who', 'age', 'old', 'new']);
+      const stopwords = new Set(['what', 'does', 'have', 'this', 'that', 'your', 'their', 'about', 'the', 'and', 'for']);
+
       const queryWords = normalizedQuery.toLowerCase()
         .replace(/[^\w\s]/g, ' ')  // Remove punctuation
         .split(/\s+/)
-        .filter(word => word.length > 3 && !['what', 'does', 'have', 'this', 'that', 'your', 'their', 'about'].includes(word));
+        .filter(word => {
+          if (stopwords.has(word)) return false;
+          if (meaningfulShortWords.has(word)) return true;
+          return word.length > 3;
+        });
 
       if (queryWords.length === 0) {
         return memory; // No meaningful keywords to match
