@@ -4764,32 +4764,64 @@ Mode: ${modeConfig?.display_name || mode}
       let duration = null;
       let endYear = null;
       let entity = null;
+      let durationMemory = null;
+      let endYearMemory = null;
 
       for (const memory of memories) {
         const content = memory.content || '';
         
         // Match duration: "worked X years", "X years at", "for X years"
         const durationMatch = content.match(/(?:worked|for|spent)\s+(\d+)\s+years?/i);
-        if (durationMatch) {
+        if (durationMatch && !duration) {
           duration = parseInt(durationMatch[1]);
+          durationMemory = memory;
         }
 
         // Match end year: "left in YYYY", "until YYYY", "ended YYYY"
         const endYearMatch = content.match(/(?:left|until|ended|quit).*?(\d{4})/i);
-        if (endYearMatch) {
+        if (endYearMatch && !endYear) {
           endYear = parseInt(endYearMatch[1]);
+          endYearMemory = memory;
         }
 
-        // Extract entity (company/place name)
-        const entityMatch = content.match(/\bat\s+([A-Z][a-zA-Z]+)/);
-        if (entityMatch) {
+        // Extract entity (company/place name) - improved pattern for multi-word names
+        const entityMatch = content.match(/\bat\s+([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*)/);
+        if (entityMatch && !entity) {
           entity = entityMatch[1];
         }
       }
 
-      // If we have both duration and end year, calculate start year
+      // If we have both duration and end year, validate they're reasonable and calculate
       if (duration && endYear) {
+        const currentYear = new Date().getFullYear();
+        
+        // Validation: end year should be between 1980 and current year
+        if (endYear < 1980 || endYear > currentYear) {
+          this.debug(`[TEMPORAL-CALCULATOR] ❌ Invalid end year: ${endYear} (must be 1980-${currentYear})`);
+          return { calculationApplied: false, response };
+        }
+
+        // Validation: duration should be between 0 and 60 years
+        if (duration <= 0 || duration > 60) {
+          this.debug(`[TEMPORAL-CALCULATOR] ❌ Invalid duration: ${duration} years (must be 1-60)`);
+          return { calculationApplied: false, response };
+        }
+
         const startYear = endYear - duration;
+        
+        // Validation: start year should be reasonable (after 1950)
+        if (startYear < 1950) {
+          this.debug(`[TEMPORAL-CALCULATOR] ❌ Invalid calculated start year: ${startYear} (too far in past)`);
+          return { calculationApplied: false, response };
+        }
+
+        // Check if both values came from memories mentioning same entity
+        const sameContext = !entity || 
+          (durationMemory?.content?.includes(entity) && endYearMemory?.content?.includes(entity));
+        
+        if (!sameContext) {
+          this.debug(`[TEMPORAL-CALCULATOR] ⚠️ Duration and end year may be from different contexts`);
+        }
         
         // Check if response is missing the calculated year
         if (!response.includes(startYear.toString())) {
@@ -4802,7 +4834,7 @@ Mode: ${modeConfig?.display_name || mode}
           return {
             calculationApplied: true,
             response: response + '\n\n' + injection,
-            calculation: { duration, endYear, startYear, entity }
+            calculation: { duration, endYear, startYear, entity, validated: true }
           };
         }
       }

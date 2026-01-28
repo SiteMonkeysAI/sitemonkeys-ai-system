@@ -126,7 +126,7 @@ function enforceOrdinalCorrectness({ response, memoryContext = [], query = '' })
 
 // Test cases
 console.log('Testing Ordinal Enforcement Logic\n');
-console.log('=' .repeat(70));
+console.log('=' + '.repeat(70));
 
 // Test 1: Replace wrong value with correct value
 console.log('\n TEST 1: Replace CHARLIE with DELTA (second code query)');
