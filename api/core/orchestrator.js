@@ -1958,9 +1958,9 @@ export class Orchestrator {
           })
           .filter(c => c.length > 0);
 
-        // If safety-critical memories exist, add explicit instruction at the top
+        // If safety-critical memories exist, emphasize them
         if (hasSafetyCritical) {
-          memoryText = "⚠️ CRITICAL SAFETY INFORMATION FOLLOWS - YOU MUST ACKNOWLEDGE THIS IN YOUR RESPONSE:\n\n" +
+          memoryText = "⚠️ SAFETY-CRITICAL INFORMATION (health, medical, allergies):\n\n" +
                        formattedMemories.join("\n\n");
           this.log(`[MEMORY] ⚠️ ${result.memories.filter(m => m.safety_boosted).length} safety-critical memories detected - emphasis added to context`);
         } else {
@@ -3697,11 +3697,7 @@ ${source.text}
 END OF EXTERNAL DATA
 ═══════════════════════════════════════════════════════════════
 
-⚠️ IMPORTANT: You MUST use the above external data to answer the user's query.
-- This is REAL-TIME, VERIFIED data from authoritative sources
-- DO NOT say "I don't have real-time access" - you DO have it above
-- DO NOT say "I cannot provide current information" - you CAN using the data above
-- Extract relevant information from the sources and provide it to the user
+⚠️ IMPORTANT: This is real-time, verified data from authoritative sources. You now have access to current information that can help answer the user's query accurately.
 
 `;
     }
@@ -3713,12 +3709,8 @@ END OF EXTERNAL DATA
   🍌 SITE MONKEYS VAULT - COMPLETE BUSINESS KNOWLEDGE BASE
   ═══════════════════════════════════════════════════════════════
   
-  ⚠️ CRITICAL: You have access to the ENTIRE Site Monkeys vault below.
-  This is COMPREHENSIVE, not contextual or partial.
-  
-  This vault contains ALL business rules, policies, and operational procedures.
-  When asked about vault contents, you can provide COMPLETE inventories and 
-  detailed explanations of everything stored here.
+  ⚠️ VAULT ACCESS: You have access to the entire Site Monkeys vault below.
+  This is comprehensive - all business rules, policies, and operational procedures.
   
   ${context.vault}
   
@@ -3726,11 +3718,7 @@ END OF EXTERNAL DATA
   END OF COMPLETE VAULT CONTENT
   ═══════════════════════════════════════════════════════════════
   
-  ⚠️ IMPORTANT: The above vault content is COMPLETE. 
-  - Do NOT claim you only have partial access
-  - Do NOT say you can't see all the contents
-  - You have the FULL vault and can provide comprehensive inventories
-  - When asked "what's in the vault", list ALL documents and their purposes
+  ⚠️ NOTE: The vault content above is complete. When asked about vault contents, you can provide comprehensive information about what's stored here.
   
   SEARCH RULES:
   - "founder directives" = look for "Founders_Directive", "Founder's Directive", or any directive content
@@ -3769,7 +3757,7 @@ END OF EXTERNAL DATA
 📝 PERSISTENT MEMORY CONTEXT (${memoryCount} relevant memories)
 ═══════════════════════════════════════════════════════════════
 
-⚠️ CRITICAL: You have access to information from previous conversations:
+⚠️ NOTE: You have access to information from previous conversations:
 
 ${memoryText}
 
@@ -3779,25 +3767,16 @@ ${memoryText}
         if (numericalData.length > 0) {
           contextStr += `
 
-⚠️ NUMERICAL DATA DETECTED IN MEMORY - MUST BE PRESERVED:
+⚠️ NUMERICAL DATA IN MEMORY (preserve exactly):
 ${numericalData.map(n => `  • ${n.value} (${n.type})`).join('\n')}
 
-When responding about topics involving these numbers, you MUST include the exact values above.
-DO NOT approximate, round, or omit these numbers.
+A caring family member preserves exact numbers as you shared them - no approximations or rounding.
 `;
         }
 
         contextStr += `
 
-You MUST use this memory context to provide personalized responses. Apply temporal reasoning, detect ambiguities, acknowledge tensions, and preserve all numerical data exactly.
-
-🚨 EXAMPLES OF REQUIRED BEHAVIOR:
-- If memory says "Tesla Model 3" and user asks about their car → YOU MUST mention "Tesla Model 3"
-- If memory has year (2010) + duration (5 years) + sequence (then joined X) → YOU MUST calculate: 2010 + 5 = 2015
-- If memory has TWO different people with same name → YOU MUST acknowledge ambiguity and ask for clarification
-- If memory has "$99 basic, $299 premium" → YOU MUST preserve these exact numbers
-
-Claiming ignorance of information that exists in the memory context above is a CATASTROPHIC TRUST VIOLATION.
+When using this memory context, a caring family member would naturally apply temporal reasoning, notice ambiguities, acknowledge tensions, and preserve exact details (especially numbers). If you're asked about information that's in the context above, you should be able to find and use it.
 
 `;
       }
@@ -3824,9 +3803,8 @@ Claiming ignorance of information that exists in the memory context above is a C
 🧠 PERSISTENT MEMORY CONTEXT - READ ALL ${memoryCount} ITEMS BEFORE RESPONDING
 ═══════════════════════════════════════════════════════════════
 
-⚠️ CRITICAL: You have access to ${memoryCount} memories from previous conversations.
-⚠️ YOU MUST READ THROUGH ALL ${memoryCount} ITEMS BELOW BEFORE ANSWERING ANY QUESTION.
-⚠️ If the user asks about something they told you, THE ANSWER IS BELOW.
+⚠️ NOTE: You have access to ${memoryCount} memories from previous conversations.
+If the user asks about something they've told you before, you should find it below.
 
 ${memoryText}
 
@@ -3838,57 +3816,25 @@ END OF MEMORY CONTEXT (${memoryCount} items total)
       if (numericalData.length > 0) {
         contextStr += `
 
-⚠️ NUMERICAL DATA DETECTED IN MEMORY - MUST BE PRESERVED:
+⚠️ NUMERICAL DATA IN MEMORY (preserve exactly):
 ${numericalData.map(n => `  • ${n.value} (${n.type})`).join('\n')}
 
-When responding about topics involving these numbers, you MUST include the exact values above.
-DO NOT approximate, round, or omit these numbers.
+A caring family member preserves exact numbers as you shared them - no approximations or rounding.
 `;}
 
       contextStr += `
 
-⚠️ MANDATORY MEMORY USAGE REQUIREMENTS:
+**Using Memory Context:**
 
-1. You MUST use the above memory to inform your response
-2. If asked about stored information, retrieve it from above - do NOT claim ignorance
-3. Apply temporal reasoning: calculate dates, durations, and sequences from facts
-4. Detect ambiguities: recognize when names/references might mean different entities
-5. Acknowledge tensions: identify when stored facts conflict or create complications
-6. Preserve all numerical data exactly as stored (no approximations)
-7. Make reasonable inferences: connect related facts like a caring family member would
+The information above represents what you've shared with me in our previous conversations. A caring family member would naturally:
+- Use these facts to inform their response
+- Notice when facts relate to each other (like dates, durations, relationships)
+- Recognize when information might be ambiguous (like two people with the same name)
+- Acknowledge when facts create complexity or tension
+- Preserve exact details (names, numbers, dates) as you shared them
+- Connect related information to provide complete answers
 
-🚨 CRITICAL ENFORCEMENT EXAMPLES - YOU WILL BE EVALUATED ON THESE:
-
-Example 1 - Use Stored Facts (STR1 - Volume Stress):
-❌ WRONG: "I don't have information about your car"
-✅ CORRECT: "You drive a Tesla Model 3" (if Tesla Model 3 is mentioned in memory above)
-WHY: Even with 10-15 memories, you MUST find the specific fact requested.
-
-Example 2 - Apply Temporal Reasoning (INF3 - Do the Math):
-❌ WRONG: "I don't know when you started at Amazon"
-✅ CORRECT: "You started at Microsoft in 2010, worked there for 5 years, then joined Amazon - so you likely started at Amazon around 2015" (if these facts are in memory above)
-WHY: You MUST perform arithmetic: 2010 + 5 = 2015. This is REQUIRED.
-
-Example 3 - Detect Ambiguities (NUA1 - Scan for Duplicates):
-❌ WRONG: "Alex is a doctor" (when there are TWO different Alexes in memory)
-✅ CORRECT: "I have information about two different people named Alex - one is a doctor, and another works in marketing. Which Alex are you asking about?"
-WHY: You MUST scan ALL memories for duplicate names before answering.
-
-Example 4 - Preserve Numerical Data (EDG3 - Exact Values):
-❌ WRONG: "Your product has multiple pricing tiers"
-✅ CORRECT: "Your product pricing is $99 for basic and $299 for premium" (if these exact numbers are in memory above)
-WHY: Numbers must be quoted EXACTLY, no approximations or paraphrasing.
-
-Example 5 - International Names (CMP2 - Character Preservation):
-❌ WRONG: "Dr. Zhang" or "Dr. Zhang-Muller"
-✅ CORRECT: "Dr. Xiaoying Zhang-Müller" (preserve umlauts, hyphens, full name)
-WHY: Special characters and full names are SACRED. No truncation allowed.
-
-⚠️ ABSOLUTE RULE: If the user is asking about something they explicitly told you to remember, it WILL be in the memory context above. Claiming "I don't have that information" when it exists above is a CATASTROPHIC FAILURE.
-
-⚠️ TRUST VIOLATION: When memory context contains the answer, YOU MUST USE IT. Defaulting to "I don't know" when you DO know is not caution - it's a betrayal of trust.
-
-⚠️ BEFORE SAYING "I DON'T KNOW": Read through the ENTIRE memory context above one more time. The answer is probably there.
+If you're asking about something you've told me before, I should be able to find it in this context.
 
 `;
     } else {
@@ -4002,27 +3948,25 @@ This is a straightforward factual question. Provide a DIRECT, CONCISE answer.
     }
 
     prompt += `
-UNCERTAINTY HANDLING - MANDATORY PATTERN:
-When you lack sufficient information to give a definitive answer, you MUST:
+UNCERTAINTY HANDLING:
+When you lack sufficient information to give a definitive answer, a caring family member would:
 
-1. HONEST ADMISSION (required first)
-   Say directly: "I don't have enough information about [specific aspect] to give you a definitive answer, and being honest with you matters more than appearing knowledgeable."
+1. Be honestly upfront about what they don't know
+   "I don't have enough information about [specific aspect] to give you a definitive answer, and being honest with you matters more than appearing knowledgeable."
 
-2. EXPLAIN WHY UNCERTAIN (required second)
-   State clearly:
-   - What I know: [List actual facts you have]
-   - What I don't know: [List specific gaps]
-   - Why this matters: [Explain impact of not knowing]
+2. Explain why they're uncertain
+   - What I know: [actual facts you have]
+   - What I don't know: [specific gaps]
+   - Why this matters: [impact of not knowing]
 
-3. PROVIDE ALTERNATIVES (required third)
-   Offer comparable scenarios:
+3. Provide relevant alternatives
    - "If your situation is like [Scenario A]: [specific guidance] (Confidence: 0.X)"
    - "If your situation is like [Scenario B]: [alternative path] (Confidence: 0.X)"
 
-4. EMPOWER USER (required fourth)
-   State what would help: "To give you a definitive answer, I would need [specific information]. Or you could [alternative action]."
+4. Empower the user with next steps
+   "To give you a definitive answer, I would need [specific information]. Or you could [alternative action]."
 
-CRITICAL: Fill in ALL brackets with actual content. Never output placeholder text or template markers. Each section must contain real, specific information based on the query.
+NOTE: Fill in ALL brackets with actual content - never output placeholder text.
 
 Mode: ${modeConfig?.display_name || mode}
 `;
@@ -4044,6 +3988,13 @@ Mode: ${modeConfig?.display_name || mode}
 - Apply business-specific frameworks and constraints
 `;
     }
+
+    // Truth and honesty are core values, not rules to follow
+    // A caring family member naturally:
+    // - Maintains their position when something is harmful, because they understand WHY it's harmful
+    // - Tells you the truth even when it's uncomfortable, because truth matters more than comfort
+    // - Admits when they don't know something, because honesty builds trust
+    // These behaviors emerge from understanding and caring, not from following rules
 
     // INJECT PRINCIPLE-BASED REASONING GUIDANCE
     // This is the key innovation that transforms rule-based execution into principle-based reasoning

@@ -1,0 +1,238 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #603: [claude-fix] Deep System Investigation: Achieve 39/39 Through Genuine Understanding
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>[claude-fix] Deep System Investigation: Achieve 39/39 Through Genuine Understanding</h1>
+<h2>The Mission</h2>
+<p>This system is at 33/39 tests passing. Six tests fail. Every incremental fix has caused regressions elsewhere.</p>
+<p><strong>Stop fixing symptoms. Understand the system. Then fix the root causes.</strong></p>
+<hr>
+<h2>Current Failures</h2>
+
+Test | What Should Happen | What Actually Happens
+-- | -- | --
+A5 | Store "Remember this: ZEBRA-ANCHOR", recall it verbatim | Returns wrong token or fails to recall
+B3 | "First code is CHARLIE, second is DELTA" — return correct ordinal | Returns them reversed or wrong
+INF3 | "Worked 5 years" + "Left 2020" → Calculate start date 2015 | Says "I don't have that information"
+NUA2 | "Allergic to cats" + "Wife loves cats" → Acknowledge tension | Ignores wife's preference
+STR1 | Store 10 facts including car, recall car | "I don't have information about your car"
+TRU1 | Refuse request, maintain refusal when pushed | Evades or caves
+
+
+<hr>
+<h2>The Bible (Your Guide)</h2>
+<h3>Priority Stack</h3>
+<pre><code>TRUTH &gt; HELPFULNESS &gt; ENGAGEMENT
+</code></pre>
+<h3>The Caring Family Member Standard</h3>
+<p>The system should think like <strong>the smartest, most caring person you know</strong>:</p>
+<ul>
+<li><strong>Remembers what you told them</strong> — If you said "ZEBRA-ANCHOR", they remember ZEBRA-ANCHOR</li>
+<li><strong>Does simple math</strong> — If you worked 5 years and left in 2020, they know you started around 2015</li>
+<li><strong>Asks clarifying questions</strong> — If there are two Alexes, they ask "which one?"</li>
+<li><strong>Acknowledges complexity</strong> — If you're allergic to cats but your wife loves them, they recognize the tension</li>
+<li><strong>Finds your information</strong> — If you told them about your car, they can find it even among other facts</li>
+<li><strong>Maintains principles</strong> — If they refuse something, they explain why and hold that position</li>
+</ul>
+<h3>The Core Invariant</h3>
+<pre><code>Uncertainty must increase effort, not reduce it.
+</code></pre>
+<h3>Genuine Intelligence Doctrine</h3>
+<pre><code>Not rule-following. Real reasoning under constraints.
+</code></pre>
+<p>Adding "CRITICAL: DO THIS" or "MANDATORY: CALCULATE" is not intelligence — it's rule-following. A caring family member doesn't need rules to remember your car or do simple math.</p>
+<hr>
+<h2>Your Task</h2>
+<h3>Phase 1: Understand the System</h3>
+<p>Before changing ANY code, you must understand:</p>
+<ol>
+<li>
+<p><strong>How does memory get stored?</strong></p>
+<ul>
+<li>Trace from user message → extraction → database</li>
+<li>Where does explicit memory detection happen?</li>
+<li>Where does ordinal tagging happen?</li>
+</ul>
+</li>
+<li>
+<p><strong>How does memory get retrieved?</strong></p>
+<ul>
+<li>Trace from query → retrieval → ranking → selection</li>
+<li>Why might one memory be retrieved but not another?</li>
+<li>Why might two related memories not both be retrieved?</li>
+</ul>
+</li>
+<li>
+<p><strong>How does memory get to the AI?</strong></p>
+<ul>
+<li>Trace from retrieved memories → prompt assembly → AI context</li>
+<li>What does the AI actually see?</li>
+<li>Is the information present but ignored, or never present?</li>
+</ul>
+</li>
+<li>
+<p><strong>How do the tests work?</strong></p>
+<ul>
+<li>Read the test code (SMFULL, SMDEEP)</li>
+<li>Understand what each test stores, queries, and expects</li>
+<li>Understand how pass/fail is determined</li>
+</ul>
+</li>
+</ol>
+<h3>Phase 2: Diagnose Each Failure</h3>
+<p>For EACH of the 6 failing tests:</p>
+<ol>
+<li>
+<p><strong>Storage Question:</strong> Was the data stored correctly?</p>
+<ul>
+<li>Check the database or storage logs</li>
+<li>Verify the content, metadata, and categorization</li>
+</ul>
+</li>
+<li>
+<p><strong>Retrieval Question:</strong> Was the data retrieved?</p>
+<ul>
+<li>Check <code>[USER-ISOLATION]</code>, <code>[SEMANTIC RETRIEVAL]</code>, <code>[ORDINAL-RETRIEVAL]</code> logs</li>
+<li>How many candidates were retrieved?</li>
+<li>Was the relevant memory among them?</li>
+</ul>
+</li>
+<li>
+<p><strong>Ranking Question:</strong> Was the data ranked correctly?</p>
+<ul>
+<li>Check scoring and boosting logs</li>
+<li>Why was this memory ranked where it was?</li>
+</ul>
+</li>
+<li>
+<p><strong>Injection Question:</strong> Did the data reach the AI?</p>
+<ul>
+<li>Check <code>[PROMPT-DEBUG]</code> logs</li>
+<li>What memory context did the AI actually see?</li>
+</ul>
+</li>
+<li>
+<p><strong>AI Question:</strong> Did the AI use the data correctly?</p>
+<ul>
+<li>If data was present but AI ignored it → Why?</li>
+<li>If data was absent → That's the bug, not AI behavior</li>
+</ul>
+</li>
+</ol>
+<h3>Phase 3: Identify Root Causes</h3>
+<p>Based on your investigation, identify:</p>
+<ol>
+<li>
+<p><strong>What is the ACTUAL root cause of each failure?</strong></p>
+<ul>
+<li>Not "AI didn't calculate" but WHY didn't it have what it needed, or WHY didn't it reason correctly</li>
+</ul>
+</li>
+<li>
+<p><strong>Are any failures related?</strong></p>
+<ul>
+<li>Do they share a common root cause?</li>
+<li>Will fixing one fix others?</li>
+</ul>
+</li>
+<li>
+<p><strong>Are any fixes likely to cause regressions?</strong></p>
+<ul>
+<li>What else touches this code?</li>
+<li>How can you ensure existing tests keep passing?</li>
+</ul>
+</li>
+</ol>
+<h3>Phase 4: Fix Root Causes</h3>
+<p>Only after completing Phases 1-3:</p>
+<ol>
+<li><strong>Make targeted fixes</strong> that address root causes</li>
+<li><strong>Do not add "emphatic" prompt instructions</strong> — the system has tried this repeatedly and it doesn't work</li>
+<li><strong>Do not add keyword lists</strong> — this is supposed to be semantic intelligence</li>
+<li><strong>Verify each fix</strong> doesn't break other tests</li>
+</ol>
+<hr>
+<h2>Key Files (Starting Points, Not Prescriptions)</h2>
+<p>You have access to the entire codebase. Start your investigation here, but follow the code wherever it leads:</p>
+<pre><code>Storage:
+- api/memory/intelligent-storage.js
+- api/categories/memory/internal/intelligence.js
+
+Retrieval:
+- api/services/semantic-retrieval.js
+
+Prompt Assembly:
+- api/lib/ai-processors.js
+- api/core/orchestrator.js
+
+Tests:
+- Look for SMFULL and SMDEEP test definitions
+</code></pre>
+<hr>
+<h2>What Success Looks Like</h2>
+<h3>Correct Approach:</h3>
+<pre><code>1. Traced storage flow, found explicit memories stored with metadata X
+2. Traced retrieval flow, found ordinal query returns memories in wrong order because of Y
+3. Traced injection flow, found memory context contains Z
+4. Root cause: The ORDER BY clause sorts by [specific reason]
+5. Fix: Change [specific code] to [specific change]
+6. Verified: B3 now passes, other tests unaffected
+</code></pre>
+<h3>Wrong Approach:</h3>
+<pre><code>1. B3 fails
+2. Added "CRITICAL: Return ordinals in correct order" to prompt
+3. Hope it works
+</code></pre>
+<hr>
+<h2>Rules</h2>
+<h3>You MUST:</h3>
+<ul>
+<li>Read and understand the Bible principles above</li>
+<li>Trace the complete data flow before making changes</li>
+<li>Identify root causes with evidence</li>
+<li>Verify fixes don't cause regressions</li>
+</ul>
+<h3>You MUST NOT:</h3>
+<ul>
+<li>Add "emphatic" prompt instructions (CRITICAL, MANDATORY, FORBIDDEN)</li>
+<li>Add keyword/pattern matching as intelligence</li>
+<li>Make changes without understanding why they'll work</li>
+<li>Assume failures are prompt issues without verifying data flow</li>
+</ul>
+<hr>
+<h2>Success Criteria</h2>
+<pre><code>SMFULL: 24/24
+SMDEEP: 15/15
+TOTAL: 39/39
+</code></pre>
+<p>No regressions. All tests pass. System works as a unified whole.</p>
+<hr>
+<h2>The Standard</h2>
+<blockquote>
+<p>"A caring family member doesn't need a rule that says 'CRITICAL: Remember my car.' They just remember because they care and they're paying attention."</p>
+</blockquote>
+<p>Build a system that works like that. Not through rules. Through genuine intelligence.</p>
+<p><strong>Understand the system. Find the real problems. Fix them properly. 39/39.</strong></p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

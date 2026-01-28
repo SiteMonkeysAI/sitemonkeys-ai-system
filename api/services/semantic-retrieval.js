@@ -70,6 +70,15 @@ const SAFETY_CRITICAL_DOMAINS = {
     ],
     safetyCriticalCategories: ['health_wellness'],
     reason: 'medical_queries_require_health_context'
+  },
+  pets_animals: {
+    patterns: [
+      /\b(pet|pets|cat|cats|dog|dogs|animal|animals|puppy|kitten)\b/i,
+      /\b(get\s+(a|an)|adopt|buy|purchase|bring\s+home).*(cat|dog|pet)\b/i,
+      /\b(should\s+i|can\s+i|thinking\s+about).*(cat|dog|pet)\b/i
+    ],
+    safetyCriticalCategories: ['health_wellness', 'relationships_social'],
+    reason: 'pet_decisions_intersect_allergies_and_family_preferences'
   }
 };
 
@@ -1358,7 +1367,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       // Apply boost based on keyword match percentage
       if (matchCount > 0) {
         const matchRatio = matchCount / queryWords.length;
-        const keywordBoost = matchRatio * 0.15; // Up to +0.15 boost for all keywords matching
+        // INCREASED from 0.15 to 0.25 for Issue #603 - STR1 volume stress test
+        // Strong keyword matches should rank highly even in volume scenarios
+        const keywordBoost = matchRatio * 0.25; // Up to +0.25 boost for all keywords matching
         const originalScore = memory.similarity;
         const boostedScore = Math.min(originalScore + keywordBoost, 1.0);
 
