@@ -4501,10 +4501,18 @@ Mode: ${modeConfig?.display_name || mode}
    * ORDINAL ENFORCEMENT (Issue #609-B3)
    * Deterministic validator to ensure ordinal queries return the correct ordinal item
    * Example: "What is my first code?" should return the first code, not the second
+   * 
+   * GUARDRAIL #2 (Issue #609 Follow-up):
+   * Validator ONLY activates when:
+   * 1. Query contains explicit ordinal ("first", "second", etc.)
+   * 2. Multiple candidate memories share the same ordinal_subject
+   * Otherwise, validator is a no-op to prevent unintended injection/replacement
    */
   #enforceOrdinalCorrectness({ response, memoryContext = [], query = '', context = {} }) {
     try {
-      // Detect ordinal in query
+      // ═══════════════════════════════════════════════════════════════
+      // ACTIVATION CONDITION #1: Query must contain explicit ordinal
+      // ═══════════════════════════════════════════════════════════════
       const ORDINAL_MAP = {
         'first': 1, '1st': 1, 'second': 2, '2nd': 2,
         'third': 3, '3rd': 3, 'fourth': 4, '4th': 4, 'fifth': 5, '5th': 5
@@ -4514,6 +4522,7 @@ Mode: ${modeConfig?.display_name || mode}
       const match = query.match(ordinalPattern);
 
       if (!match) {
+        this.debug(`[ORDINAL-VALIDATOR] No ordinal detected in query - validator is no-op`);
         return { correctionApplied: false, response };
       }
 
@@ -4523,7 +4532,9 @@ Mode: ${modeConfig?.display_name || mode}
 
       this.debug(`[ORDINAL-VALIDATOR] Query asks for: ${ordinalWord} ${subject} (#${ordinalNum})`);
 
-      // Extract ordinal memories
+      // ═══════════════════════════════════════════════════════════════
+      // ACTIVATION CONDITION #2: Multiple memories must share ordinal_subject
+      // ═══════════════════════════════════════════════════════════════
       const memories = Array.isArray(memoryContext) ? memoryContext : (memoryContext.memories || []);
       const ordinalMemories = memories
         .filter(m => {
@@ -4536,15 +4547,27 @@ Mode: ${modeConfig?.display_name || mode}
           return {
             ordinal: parseInt(metadata.ordinal) || null,
             value: metadata.ordinal_value || null,
-            content: m.content || ''
+            content: m.content || '',
+            subject: metadata.ordinal_subject || null
           };
         })
         .filter(m => m.ordinal !== null)
         .sort((a, b) => a.ordinal - b.ordinal);
 
       if (ordinalMemories.length === 0) {
+        this.debug(`[ORDINAL-VALIDATOR] No ordinal memories found for subject "${subject}" - validator is no-op`);
         return { correctionApplied: false, response };
       }
+
+      // Check if multiple memories share the same ordinal_subject
+      // This ensures we only activate when there's actual ambiguity
+      if (ordinalMemories.length < 2) {
+        this.debug(`[ORDINAL-VALIDATOR] Only 1 ordinal memory found for "${subject}" - no ambiguity, validator is no-op`);
+        return { correctionApplied: false, response };
+      }
+
+      this.debug(`[ORDINAL-VALIDATOR] ✅ Activation conditions met: ${ordinalMemories.length} ordinal memories for "${subject}"`);
+      // ═══════════════════════════════════════════════════════════════
 
       // Find target memory
       const targetMemory = ordinalMemories.find(m => m.ordinal === ordinalNum);
