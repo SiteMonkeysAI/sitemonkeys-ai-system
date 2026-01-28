@@ -1724,12 +1724,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       
       if (pairCount > 0) {
         const avgCohesion = totalPairwiseSimilarity / pairCount;
-        const MIN_COHESION = 0.15; // Minimum average cohesion threshold
-        
+        const MIN_COHESION = 0.05; // Minimum average cohesion threshold (lowered from 0.15 to fix Issue #612 regressions)
+
         console.log(`[SEMANTIC-COHESION] Checking cohesion: ${pairCount} pairs, avg=${avgCohesion.toFixed(3)}`);
-        
+
         // If cohesion is below threshold, drop lowest-scoring memories until restored
-        if (avgCohesion < MIN_COHESION && results.length > 3) {
+        // Only prune if we have MORE than needed (not when we have exactly what we need)
+        if (avgCohesion < MIN_COHESION && results.length > 5) {
           console.log(`[SEMANTIC-COHESION] ⚠️  Cohesion ${avgCohesion.toFixed(3)} below threshold ${MIN_COHESION}`);
           console.log(`[SEMANTIC-COHESION] Dropping lowest-scoring memories to restore cohesion`);
           

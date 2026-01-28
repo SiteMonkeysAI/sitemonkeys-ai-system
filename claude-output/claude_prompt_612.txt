@@ -1,0 +1,73 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #612: # [claude-fix] Fix Cohesion Guard Regression + Complete Ordinal Enforcement
+
+Issue Description:
+# [claude-fix] Fix Cohesion Guard Regression + Complete Ordinal Enforcement
+
+## Current State: 33/39
+
+The cohesion guard added in the last PR is too aggressive and caused regressions:
+- CMP2: Was 2/3 names, now 0/3 names (REGRESSION)
+- NUA1: Was passing, now failing (REGRESSION)
+- TRU2: Was passing, now failing (REGRESSION)
+
+## Required Fixes
+
+### 1. Tune Cohesion Guard (Fix CMP2/NUA1 Regression)
+
+The `MIN_COHESION = 0.15` threshold is dropping valid memories.
+
+**Required:** Lower to 0.05 or implement smarter logic that doesn't drop ALL low-cohesion memories — only drops when there are MORE than needed.
+
+**File:** `api/services/semantic-retrieval.js`
+
+### 2. Complete Ordinal Enforcement (Fix B3)
+
+Current B3 failure shows:
+- First code query → Returns CHARLIE ✅
+- Second code query → Returns CHARLIE ❌ (should be DELTA)
+
+The ordinal validator exists but isn't correcting this case.
+
+**Required:** When query asks for "second" and response contains the FIRST ordinal's value, replace it with the SECOND ordinal's value.
+
+**File:** `api/core/orchestrator.js` (`#enforceOrdinalCorrectness` method)
+
+### 3. Fix "Needs Memory" Gate for Pure Math
+
+Logs show `Needs memory: true` for "What is 2+2?" — this is wrong.
+
+**Required:** Ensure simple math/factual queries return `Needs memory: false` and skip retrieval entirely.
+
+**File:** Check early classification logic in orchestrator
+
+## Acceptance Criteria
+
+- SMFULL: 24/24 (B3 fixed)
+- SMDEEP: No regressions (CMP2 back to 2/3, NUA1/TRU2 passing again)
+- "What is 2+2?" never triggers memory retrieval
+
+## Do NOT
+
+- Lower global thresholds further without precision gates
+- Add emphatic prompt instructions
+- Break what was working (33/39 baseline)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

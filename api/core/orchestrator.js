@@ -695,18 +695,24 @@ export class Orchestrator {
       }
 
       // STEP 1: Conditionally retrieve memory context (up to 2,500 tokens)
-      // Skip memory ONLY for pure greetings - NOT for simple factual queries
+      // Skip memory for pure greetings AND pure simple_factual queries (like "What is 2+2?")
       // CRITICAL FIX (Issue #579, INF3): Simple factual queries may need memory for temporal reasoning
       // Example: "What year did I start at Amazon?" needs "graduated 2010" + "worked 5 years" = 2015
+      // CRITICAL FIX (Issue #612): BUT skip memory for pure math like "What is 2+2?"
       let memoryContext = null;
-      const skipMemoryForSimpleQuery = earlyClassification &&
-        earlyClassification.classification === 'greeting' && message.length < 50;
+      const skipMemoryForSimpleQuery = earlyClassification && (
+        (earlyClassification.classification === 'greeting' && message.length < 50) ||
+        (earlyClassification.classification === 'simple_factual' &&
+         earlyClassification.confidence > 0.70 &&
+         message.length < 50 &&
+         !message.match(/\b(my|your|our|their|I|you|we|they|name|work|job|start|year|when|where|who)\b/i))
+      );
 
       // Define memoryDuration at higher scope (Issue #446 fix)
       let memoryDuration = 0;
 
       if (skipMemoryForSimpleQuery) {
-        this.log(`[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} - user needs direct answer, not biography`);
+        this.log(`[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)}) - user needs direct answer, not biography`);
         memoryContext = {
           hasMemory: false,
           memory: '',
@@ -4581,13 +4587,7 @@ Mode: ${modeConfig?.display_name || mode}
         return { correctionApplied: false, response };
       }
 
-      // Check if response already correct
-      if (response.includes(correctValue)) {
-        this.debug(`[ORDINAL-VALIDATOR] ✓ Response correctly includes: ${correctValue}`);
-        return { correctionApplied: false, response };
-      }
-
-      // Check for wrong values
+      // Check for wrong values first (Issue #612: don't return early if correct value is present alongside wrong value)
       const wrongValues = ordinalMemories
         .filter(m => m.ordinal !== ordinalNum)
         .map(m => m.value || this.#extractValueFromContent(m.content))
@@ -4596,7 +4596,7 @@ Mode: ${modeConfig?.display_name || mode}
       let adjustedResponse = response;
       let corrected = false;
 
-      // Replace wrong values
+      // Replace wrong values with correct value (Issue #612: check this BEFORE checking if correct value is present)
       for (const wrongValue of wrongValues) {
         if (adjustedResponse.includes(wrongValue)) {
           adjustedResponse = adjustedResponse.replace(new RegExp(wrongValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), correctValue);
@@ -4605,7 +4605,13 @@ Mode: ${modeConfig?.display_name || mode}
         }
       }
 
-      // Inject if missing
+      // After replacement, check if response is now correct
+      if (!corrected && adjustedResponse.includes(correctValue)) {
+        this.debug(`[ORDINAL-VALIDATOR] ✓ Response correctly includes: ${correctValue}`);
+        return { correctionApplied: false, response };
+      }
+
+      // Inject if missing and no correction was made
       if (!corrected && !adjustedResponse.includes(correctValue)) {
         adjustedResponse = correctValue;
         corrected = true;
