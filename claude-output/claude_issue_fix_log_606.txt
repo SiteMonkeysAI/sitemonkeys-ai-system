@@ -1,0 +1,39 @@
+Starting issue-fix mode at Wed Jan 28 20:58:26 UTC 2026
+Fetching issue #606 details
+Using repository: SiteMonkeysAI/sitemonkeys-ai-system
+Creating a new branch: fix-issue-606-20260128205826
+From https://github.com/SiteMonkeysAI/sitemonkeys-ai-system
+ * branch              main       -> FETCH_HEAD
+Switched to a new branch 'fix-issue-606-20260128205826'
+branch 'fix-issue-606-20260128205826' set up to track 'origin/main'.
+Prompt saved to ./claude-output/claude_prompt_606.txt for debugging
+Running Claude to fix the issue...
+
+=== IMPLEMENTATION PLAN ===
+
+Issue #606: Deterministic Enforcement Architecture - Phase 1 Validators
+
+GOAL: Fix 4 test failures (CMP2, TRU2, EDG3, TRU1) by implementing deterministic validators
+that run after AI generation to guarantee correct behavior.
+
+FILES TO CREATE (5 new files in api/lib/validators/):
+
+1. character-preservation.js (~270 lines) - Fixes CMP2
+2. manipulation-guard.js (~120 lines) - Fixes TRU2
+3. anchor-preservation.js (~200 lines) - Fixes EDG3
+4. refusal-maintenance.js (~150 lines) - Fixes TRU1
+5. index.js (~50 lines) - Orchestrator
+
+FILE TO MODIFY:
+
+1. api/core/orchestrator.js
+   - Add imports for 4 new validators
+   - Add STEP 8 (character preservation) to #runEnforcementChain()
+   - Add STEP 9 (anchor preservation) to #runEnforcementChain()
+   - Add STEP 10 (refusal maintenance) to #runEnforcementChain()
+   - Add pre-response manipulation guard check in processMessage()
+
+PHILOSOPHY: These validators are PURE DETERMINISTIC CODE - no AI calls, no probabilistic logic.
+This isn't "AI fighting AI." It's reliable code guaranteeing reliable behavior.
+
+Ready to implement...
