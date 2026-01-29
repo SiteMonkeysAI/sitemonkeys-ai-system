@@ -395,7 +395,7 @@ export class Orchestrator {
       try {
         const ordinalResult = this.#enforceOrdinalCorrectness({
           response: enforcedResponse,
-          memoryContext: context.memory_context,
+          memoryContext: context.memoryObjects || [], // ISSUE #618: Use structured memory objects, not text string
           query: context.message || '',
           context: context
         });
@@ -437,6 +437,29 @@ export class Orchestrator {
         this.error("Temporal calculator failed:", error);
         complianceMetadata.warnings.push(
           "temporal_calculator_error: " + error.message,
+        );
+      }
+
+      // ========== STEP 9.7: TRU2 POST-RESPONSE CERTAINTY CHECK (Issue #618 Fix 5) ==========
+      try {
+        // Detect if user asked for false certainty and AI complied
+        const userAskedForCertainty = /\b(guarantee|promise|100\s*%|certain|definitely)\b/i.test(context.message || '');
+        const responseGaveGarantee = /\b(I\s+(guarantee|promise)|100\s*%\s+(certain|sure|guaranteed)|definitely\s+will|certainly\s+will)\b/i.test(enforcedResponse);
+
+        if (userAskedForCertainty && responseGaveGarantee) {
+          console.log('[TRU2-GUARD] ⚠️  Detected false certainty in response to guarantee request - enforcing refusal');
+          enforcedResponse = "I care too much about giving you accurate information to make guarantees I can't verify. No honest advisor can promise specific outcomes with 100% certainty. What I can do is provide you with the best available information and reasoning, with clear acknowledgment of uncertainty, to help you make an informed decision.";
+          complianceMetadata.overrides.push({
+            module: "tru2_certainty_guard",
+            reason: "Blocked false certainty response"
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("tru2_certainty_guard");
+      } catch (error) {
+        this.error("TRU2 certainty guard failed:", error);
+        complianceMetadata.warnings.push(
+          "tru2_certainty_guard_error: " + error.message,
         );
       }
 
@@ -722,19 +745,43 @@ export class Orchestrator {
       // Skip memory for pure greetings AND pure simple_factual queries (like "What is 2+2?")
       // CRITICAL FIX (Issue #579, INF3): Simple factual queries may need memory for temporal reasoning
       // Example: "What year did I start at Amazon?" needs "graduated 2010" + "worked 5 years" = 2015
+      // CRITICAL FIX (Issue #618 Fix 2): Deterministic math gate BEFORE retrieval
+      // Pure arithmetic queries should skip retrieval entirely (token efficiency + test stability)
+      // Pattern: digits + operators only, no personal context words
+      let memoryContext = null;
+
+      // SECURITY FIX: Limit input length to prevent ReDoS (CodeQL High severity)
+      // Regex patterns have potential for polynomial backtracking on malicious input
+      const MAX_MESSAGE_LENGTH = 500;
+      const sanitizedMessage = message.trim().slice(0, MAX_MESSAGE_LENGTH);
+
+      const isPureArithmetic = /^[^a-zA-Z]*[\d\s\+\-\*\/\(\)\.=]+[^a-zA-Z]*\?*$/.test(sanitizedMessage) &&
+                              !/\b(my|your|our|their|I|you|we|first|second|third|when|where|last|code|pin)\b/i.test(sanitizedMessage);
+
+      if (isPureArithmetic) {
+        this.log(`[MEMORY] ⏭️  DETERMINISTIC SKIP: Pure arithmetic detected - "${message}" - no retrieval needed`);
+        memoryContext = {
+          hasMemory: false,
+          memory: '',
+          tokens: 0,
+          count: 0,
+          memories: [],
+          memoryObjects: []
+        };
+      }
+
       // CRITICAL FIX (Issue #612): BUT skip memory for pure math like "What is 2+2?"
       // CRITICAL FIX (Issue #612 Refinement 2): Protect short personal queries
       // - Check if user has ANY existing memories before skipping
       // - Enhance personal-intent detection to catch possessive patterns ("cat's name", "salary")
-      let memoryContext = null;
-      
+
       // Enhanced personal-intent detection (catches possessive and implicit personal queries)
       const hasPersonalIntent = message.match(/\b(my|your|our|their|I|you|we|they|me|us|them)\b/i) ||  // Personal pronouns
                                 message.match(/\b(name|work|job|salary|age|birthday|address|phone|email|company|boss|team|project)\b/i) ||  // Personal topics
                                 message.match(/\b(when|where|who|which)\b.*\b(I|you|we|my|your|our)\b/i) ||  // Temporal/location + personal
                                 message.match(/['']s\s+(name|age|birthday|job|salary|phone|email|color|breed|model)/i);  // Possessive patterns ("cat's name")
-      
-      const skipMemoryForSimpleQuery = earlyClassification && (
+
+      const skipMemoryForSimpleQuery = !isPureArithmetic && earlyClassification && (
         (earlyClassification.classification === 'greeting' && message.length < 50) ||
         (earlyClassification.classification === 'simple_factual' &&
          earlyClassification.confidence > 0.70 &&
@@ -755,14 +802,19 @@ export class Orchestrator {
       // Define memoryDuration at higher scope (Issue #446 fix)
       let memoryDuration = 0;
 
-      if (skipMemoryForSimpleQuery && !userHasMemories) {
+      // ISSUE #618 Fix 2: Check if memoryContext already set by deterministic math gate
+      if (memoryContext) {
+        // Already skipped by deterministic gate, memoryDuration stays 0
+        this.log(`[MEMORY] ✅ Deterministic skip applied - memoryDuration: 0ms`);
+      } else if (skipMemoryForSimpleQuery && !userHasMemories) {
         this.log(`[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)}) - user needs direct answer, not biography`);
         memoryContext = {
           hasMemory: false,
           memory: '',
           tokens: 0,
           count: 0,
-          memories: []
+          memories: [],
+          memoryObjects: []
         };
         // memoryDuration stays 0 when skipped
       } else {
@@ -2201,6 +2253,7 @@ export class Orchestrator {
         categories: [], // Semantic retrieval doesn't use category filtering
         hasMemory: tokenCount > 0,
         memory_ids: memoryIds,
+        memoryObjects: memoriesToFormat, // ISSUE #618: Preserve structured memory objects for ordinal enforcement
       };
 
     } catch (error) {
@@ -3069,6 +3122,8 @@ export class Orchestrator {
       },
       // Pass through extraction metadata for truth-first disclosure
       extractionMetadata: documents?.extractionMetadata || null,
+      // ISSUE #618: Pass through structured memory objects for ordinal enforcement
+      memoryObjects: memory?.memoryObjects || [],
     };
   }
 
@@ -4612,7 +4667,9 @@ Mode: ${modeConfig?.display_name || mode}
       // ACTIVATION CONDITION #2: Multiple memories must share ordinal_subject
       // ═══════════════════════════════════════════════════════════════
       const memories = Array.isArray(memoryContext) ? memoryContext : (memoryContext.memories || []);
-      const ordinalMemories = memories
+      
+      // First attempt: Look for memories with explicit ordinal metadata
+      let ordinalMemories = memories
         .filter(m => {
           const metadata = m.metadata || {};
           const ordinalSubject = metadata.ordinal_subject || '';
@@ -4624,11 +4681,58 @@ Mode: ${modeConfig?.display_name || mode}
             ordinal: parseInt(metadata.ordinal) || null,
             value: metadata.ordinal_value || null,
             content: m.content || '',
-            subject: metadata.ordinal_subject || null
+            subject: metadata.ordinal_subject || null,
+            created_at: m.created_at,
+            id: m.id
           };
         })
         .filter(m => m.ordinal !== null)
         .sort((a, b) => a.ordinal - b.ordinal);
+
+      let fallbackUsed = false;
+      
+      // ISSUE #618 FOLLOW-UP: Fallback to created_at ordering if metadata missing
+      if (ordinalMemories.length === 0) {
+        this.debug(`[ORDINAL-VALIDATOR] No ordinal metadata found, attempting created_at fallback for subject "${subject}"`);
+        
+        // Fallback: Find memories containing the subject and sort by created_at
+        // Use word boundary matching to avoid false positives (e.g., "code" matching "encoded")
+        const subjectPattern = new RegExp(`\\b${subject.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+        const subjectMemories = memories
+          .filter(m => {
+            const content = (m.content || '');
+            return subjectPattern.test(content);
+          })
+          .sort((a, b) => {
+            // Sort by created_at ascending (earliest first)
+            const timeA = new Date(a.created_at || 0).getTime();
+            const timeB = new Date(b.created_at || 0).getTime();
+            // Secondary sort by ID for deterministic ordering when timestamps are identical
+            if (timeA !== timeB) {
+              return timeA - timeB;
+            }
+            return (a.id || 0) - (b.id || 0);
+          })
+          .map((m, index) => ({
+            ordinal: index + 1, // First = 1, Second = 2, etc.
+            value: this.#extractValueFromContent(m.content),
+            content: m.content || '',
+            subject: subject,
+            created_at: m.created_at,
+            id: m.id
+          }));
+        
+        // NOTE: Require at least 2 memories for fallback activation to maintain
+        // consistency with metadata-based flow (prevents single-memory no-ops)
+        // This ensures we only activate when there's actual ambiguity to resolve
+        if (subjectMemories.length >= 2) {
+          ordinalMemories = subjectMemories;
+          fallbackUsed = true;
+          this.debug(`[ORDINAL-VALIDATOR] ✅ Fallback activated: ${ordinalMemories.length} memories sorted by created_at`);
+        } else if (subjectMemories.length === 1) {
+          this.debug(`[ORDINAL-VALIDATOR] Fallback found 1 memory but requires 2+ for activation - validator is no-op`);
+        }
+      }
 
       if (ordinalMemories.length === 0) {
         this.debug(`[ORDINAL-VALIDATOR] No ordinal memories found for subject "${subject}" - validator is no-op`);
@@ -4648,6 +4752,7 @@ Mode: ${modeConfig?.display_name || mode}
       // Find target memory
       const targetMemory = ordinalMemories.find(m => m.ordinal === ordinalNum);
       if (!targetMemory) {
+        this.debug(`[ORDINAL-VALIDATOR] ❌ Could not find ordinal #${ordinalNum} in candidates`);
         return { correctionApplied: false, response };
       }
 
@@ -4669,11 +4774,12 @@ Mode: ${modeConfig?.display_name || mode}
       const hasWrongValue = wrongValues.some(wrong => response.includes(wrong));
       const hasCorrectValue = response.includes(correctValue);
 
-      // Enhanced telemetry (Issue #615 requirement)
+      // Enhanced telemetry (Issue #615 + #618 follow-up requirements)
       const telemetry = {
-        detectedOrdinal: ordinalNum,
+        ordinalDetected: ordinalNum,
         subject: subject,
-        candidatesFound: ordinalMemories.length,
+        candidateCount: ordinalMemories.length,
+        fallbackUsed: fallbackUsed,
         selectedValue: correctValue,
         wrongValuesInResponse: wrongValues.filter(wrong => response.includes(wrong)),
         hasCorrectValue,
