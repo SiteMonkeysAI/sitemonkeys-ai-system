@@ -448,6 +448,83 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Detect ordinal facts in content (e.g., "my first code is X", "my second code is Y")
+   * Returns ordinal metadata for storage
+   * @param {string} content - User message
+   * @returns {object} - { hasOrdinal, ordinal, subject, pattern, value }
+   */
+  detectOrdinalFact(content) {
+    if (!content || typeof content !== 'string') {
+      return { hasOrdinal: false };
+    }
+
+    const contentLower = content.toLowerCase();
+
+    // Ordinal mapping
+    const ORDINAL_PATTERNS = {
+      // Word ordinals
+      first: 1, second: 2, third: 3, fourth: 4, fifth: 5,
+      sixth: 6, seventh: 7, eighth: 8, ninth: 9, tenth: 10,
+      // Number ordinals
+      '1st': 1, '2nd': 2, '3rd': 3, '4th': 4, '5th': 5,
+      '6th': 6, '7th': 7, '8th': 8, '9th': 9, '10th': 10,
+      // Numeric
+      one: 1, two: 2, three: 3, four: 4, five: 5,
+      six: 6, seven: 7, eight: 8, nine: 9, ten: 10
+    };
+
+    // Pattern: "my [ordinal] [subject]" or "the [ordinal] [subject]"
+    const ordinalRegex = /\b(my|the)\s+(first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|1st|2nd|3rd|4th|5th|6th|7th|8th|9th|10th|one|two|three|four|five|six|seven|eight|nine|ten)\s+(\w+)/gi;
+    const matches = [...contentLower.matchAll(ordinalRegex)];
+
+    if (matches.length > 0) {
+      const match = matches[0]; // Use first match
+      const ordinalWord = match[2].toLowerCase();
+      const ordinalNum = ORDINAL_PATTERNS[ordinalWord];
+      const subject = match[3];
+
+      // Try to extract the value after "is/was/are"
+      // Example: "My first code is CHARLIE-123" → extract "CHARLIE-123"
+      let value = null;
+      if (typeof match.index === 'number') {
+        const afterMatchIndex = match.index + match[0].length;
+        const remainder = content.slice(afterMatchIndex);
+
+        // Skip leading whitespace
+        const wsMatch = remainder.match(/^\s+/);
+        const startAfterWs = wsMatch ? wsMatch[0].length : 0;
+        const afterWs = remainder.slice(startAfterWs);
+
+        // Check for "is", "was", "are" or ":"
+        const verbMatch = afterWs.match(/^(is|was|are|:)\b/i);
+        if (verbMatch) {
+          const afterVerb = afterWs.slice(verbMatch[0].length);
+          const wsAfterVerbMatch = afterVerb.match(/^\s+/);
+          const startValue = wsAfterVerbMatch ? wsAfterVerbMatch[0].length : 0;
+          const valueCandidate = afterVerb.slice(startValue);
+
+          // Extract and validate the value using a static regex
+          const staticValueMatch = valueCandidate.match(/^([A-Z0-9][A-Z0-9-_]{2,})/i);
+          if (staticValueMatch) {
+            value = staticValueMatch[1];
+            console.log(`[ORDINAL-DETECT] Found ordinal with value: ${ordinalWord} ${subject} = ${value} (#${ordinalNum})`);
+          }
+        }
+      }
+
+      return {
+        hasOrdinal: true,
+        ordinal: ordinalNum,
+        subject: subject,
+        pattern: `${ordinalWord} ${subject}`,
+        value: value
+      };
+    }
+
+    return { hasOrdinal: false };
+  }
+
+  /**
    * Main entry point - stores memory with compression and deduplication
    * @param {string} userId - User identifier
    * @param {string} userMessage - User's message
@@ -469,6 +546,15 @@ export class IntelligentMemoryStorage {
       console.log('[TRACE-T2] User message:', userMessage?.substring(0, 200));
 
       console.log('[INTELLIGENT-STORAGE] 🧠 Processing conversation for intelligent storage');
+
+      // FIX #633: Detect ordinal facts for B3 validator
+      const ordinalInfo = this.detectOrdinalFact(userMessage);
+      if (ordinalInfo.hasOrdinal) {
+        console.log(`[ORDINAL] Detected ordinal fact: ${ordinalInfo.pattern} (#${ordinalInfo.ordinal})`);
+        if (ordinalInfo.value) {
+          console.log(`[ORDINAL] Detected value: ${ordinalInfo.value}`);
+        }
+      }
 
       // FIX #557-T2: Check for explicit memory storage requests FIRST
       // When user says "Remember this exactly: X", store X verbatim without compression
@@ -494,7 +580,12 @@ export class IntelligentMemoryStorage {
           importance_score: 0.95,  // Very high importance for explicit requests
           original_user_phrase: userMessage.substring(0, 200),
           explicit_storage_request: true,  // Mark as explicit for retrieval optimization
-          wait_for_embedding: true  // FIX #566-STR1: Wait for embedding to complete for explicit requests
+          wait_for_embedding: true,  // FIX #566-STR1: Wait for embedding to complete for explicit requests
+          // FIX #633: Include ordinal metadata
+          ordinal: ordinalInfo.hasOrdinal ? ordinalInfo.ordinal : undefined,
+          ordinal_subject: ordinalInfo.hasOrdinal ? ordinalInfo.subject : undefined,
+          ordinal_pattern: ordinalInfo.hasOrdinal ? ordinalInfo.pattern : undefined,
+          ordinal_value: ordinalInfo.hasOrdinal ? ordinalInfo.value : undefined
         }, mode);
         console.log(`[A5-DEBUG] Storage: Set explicit_storage_request=true in metadata`);
         console.log(`[A5-DEBUG] Storage: Set wait_for_embedding=true in metadata`);
@@ -661,7 +752,12 @@ export class IntelligentMemoryStorage {
           fingerprint: fingerprintResult.fingerprint,
           fingerprintConfidence: fingerprintResult.confidence,
           importance_score: importanceScore,
-          original_user_phrase: userMessage.substring(0, 200)  // CRITICAL FIX #504: Store original for fallback matching
+          original_user_phrase: userMessage.substring(0, 200),  // CRITICAL FIX #504: Store original for fallback matching
+          // FIX #633: Include ordinal metadata
+          ordinal: ordinalInfo.hasOrdinal ? ordinalInfo.ordinal : undefined,
+          ordinal_subject: ordinalInfo.hasOrdinal ? ordinalInfo.subject : undefined,
+          ordinal_pattern: ordinalInfo.hasOrdinal ? ordinalInfo.pattern : undefined,
+          ordinal_value: ordinalInfo.hasOrdinal ? ordinalInfo.value : undefined
         }, mode);
         console.log('[FLOW] Step 4: Memory stored ✓');
         return result;
@@ -757,6 +853,19 @@ CRITICAL RULES:
    - "making 85" in salary context = $85,000
    - Always extract the NUMERIC VALUE as income
 
+16. *** CRITICAL: PRESERVE TEMPORAL PATTERNS EXACTLY FOR REASONING ***
+   - "worked 5 years" → preserve exactly (NOT "worked for duration")
+   - "left in 2020" → preserve exactly (NOT "left recently")
+   - "spent 3 months" → preserve exactly
+   - "until 2015" → preserve exactly
+   - "for 5 years" → preserve exactly
+   - Pattern forms: "worked/for/spent X years/months" AND "left/until/ended/quit in/at YYYY"
+   - Temporal patterns are CRITICAL for calculating start dates from (duration + end date)
+
+17. VEHICLE INFORMATION must be preserved:
+   - Car make/model: "Tesla Model 3", "Honda Civic", "Toyota Camry"
+   - Always preserve brand + model exactly
+
 Examples:
 Input User: "I make 55k a year" | AI: "That's a good starting salary..."
 Output: "Income: make 55k ($55,000/year salary pay compensation earnings)"
@@ -799,6 +908,14 @@ NOT: Historical context about previous location
 Input User: "They're giving me 90k now" | AI: "Congratulations..."
 Output: "Income: 90k ($90,000 salary pay compensation)"
 NOT: "Got promoted" without the salary value
+
+Input User: "I worked at Google for 5 years and left in 2020" | AI: "That's interesting..."
+Output: "Work: worked 5 years at Google. Left in 2020 (employment duration ended quit)"
+NOT: "Worked at Google" without duration/end date
+
+Input User: "My car is a Tesla Model 3" | AI: "Nice vehicle..."
+Output: "Vehicle: Tesla Model 3 (car automobile drive)"
+NOT: "Has car" without make/model
 
 *** CRITICAL ANTI-PATTERN - Issue #540 Fix ***
 Input User: "I just got promoted! My current job title is Senior Architect" |
@@ -910,6 +1027,44 @@ Facts (preserve user terminology + add synonyms):`;
       if (missingBrandNames.length > 0) {
         console.warn(`[EXTRACTION-FIX #566-STR1] Re-injecting ${missingBrandNames.length} lost brand names:`, missingBrandNames);
         facts += '\n' + missingBrandNames.join(', ');
+      }
+
+      // FIX #633-INF3: Verify temporal patterns survived extraction
+      const temporalDurationPattern = /(?:worked|for|spent)\s+\d+\s+(?:years?|months?)/i;
+      const temporalEndPattern = /(?:left|until|ended|quit).*?(?:in|at)?\s*\d{4}/i;
+
+      // CodeQL Fix: Bound input before regex to prevent polynomial regex performance issues
+      const safeUserMsg = userMsg.substring(0, 500);
+      const safeFacts = facts.substring(0, 500);
+
+      const inputHasDuration = temporalDurationPattern.test(safeUserMsg);
+      const factsHaveDuration = temporalDurationPattern.test(safeFacts);
+
+      const inputHasEnd = temporalEndPattern.test(safeUserMsg);
+      const factsHaveEnd = temporalEndPattern.test(safeFacts);
+
+      let missingTemporal = [];
+
+      if (inputHasDuration && !factsHaveDuration) {
+        const match = safeUserMsg.match(temporalDurationPattern);
+        if (match) {
+          console.warn('[EXTRACTION-FIX #633-INF3] Input had duration but extraction lost it');
+          missingTemporal.push(match[0]);
+        }
+      }
+
+      if (inputHasEnd && !factsHaveEnd) {
+        const match = safeUserMsg.match(temporalEndPattern);
+        if (match) {
+          console.warn('[EXTRACTION-FIX #633-INF3] Input had end date but extraction lost it');
+          missingTemporal.push(match[0]);
+        }
+      }
+
+      // Re-inject missing temporal patterns
+      if (missingTemporal.length > 0) {
+        console.warn(`[EXTRACTION-FIX #633-INF3] Re-injecting ${missingTemporal.length} lost temporal patterns:`, missingTemporal);
+        facts += '\n' + missingTemporal.join(', ');
       }
 
       // Store original user message snippet for fallback retrieval

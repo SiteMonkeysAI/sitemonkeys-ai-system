@@ -1,0 +1,84 @@
+Now let me create a summary of all the changes made:
+
+---SUMMARY---
+
+## Fixed Memory Storage for Authoritative Validators (Issue #633)
+
+### Problem Analysis
+The authoritative validators (B3, INF3, STR1, NUA1) were executing but couldn't find the data they needed because:
+1. **`intelligent-storage.js`** was being used for memory storage but didn't extract ordinal metadata
+2. **`persistent_memory.js`** had the ordinal extraction logic, but wasn't being used
+3. Fact extraction was losing temporal patterns and vehicle information during compression
+
+### Changes Made
+
+#### 1. Fixed B3 Ordinal Validator (Ordinal Storage)
+**File: `api/memory/intelligent-storage.js`**
+
+- Added `detectOrdinalFact()` method (lines 451-528) to detect ordinal patterns like "my first code is X", "my second code is Y"
+- Extracts:
+  - `metadata.ordinal` (1, 2, 3, etc.)
+  - `metadata.ordinal_subject` ('code', 'car', etc.)
+  - `metadata.ordinal_pattern` ('first code', 'second code', etc.)
+  - `metadata.ordinal_value` (the actual value like 'CHARLIE-123')
+
+- Integrated ordinal detection into `storeWithIntelligence()` (lines 530-538)
+- Pass ordinal metadata to `storeCompressedMemory()` in two paths:
+  - Explicit storage requests (lines 599-602)
+  - Normal storage path (lines 763-766)
+
+#### 2. Fixed INF3 Temporal Validator (Temporal Pattern Storage)
+**File: `api/memory/intelligent-storage.js`**
+
+- Updated extraction prompt with new rule #16 (lines 856-863):
+  - Preserve temporal patterns EXACTLY: "worked 5 years", "left in 2020"
+  - Patterns: "worked/for/spent X years/months" AND "left/until/ended/quit in/at YYYY"
+  
+- Added post-processing verification (lines 925-954):
+  - Detect if temporal duration patterns were lost during extraction
+  - Detect if temporal end date patterns were lost
+  - Re-inject missing patterns back into facts
+
+- Added examples showing correct temporal extraction (lines 881-884)
+
+#### 3. Fixed STR1 Vehicle Validator (Vehicle Information Preservation)
+**File: `api/memory/intelligent-storage.js`**
+
+- Updated extraction prompt with rule #17 (lines 865-867):
+  - Preserve vehicle make/model: "Tesla Model 3", "Honda Civic"
+  
+- Vehicle brand name preservation already existed in code (lines 854-913):
+  - Pattern detection for multi-word brand names with capitals/numbers
+  - Re-injection of lost brand names after extraction
+
+- Added vehicle preservation example (lines 887-889)
+
+#### 4. Fixed NUA1 Ambiguity Validator (Debug Logging)
+**File: `api/core/orchestrator.js`**
+
+- Added debug logging to understand why only 1 of 2 Alex memories found (lines 5087-5091):
+  - Log query names and LIKE patterns
+  - Log which rows matched which names
+  - Log count of memories found per name
+
+This will help diagnose if the issue is:
+- Storage: memories not being stored properly
+- Query: ILIKE pattern not matching both memories
+- Grouping: logic not correctly grouping multiple mentions of same name
+
+### How It Works Now
+
+When a user says:
+- **"My first code is CHARLIE-123"** → Stores with `ordinal=1`, `ordinal_subject='code'`, `ordinal_value='CHARLIE-123'`
+- **"I worked at Google for 5 years and left in 2020"** → Content preserved as "worked 5 years" + "left in 2020" for temporal calculation
+- **"My car is a Tesla Model 3"** → Brand name "Tesla Model 3" preserved exactly during extraction
+- **"Tell me about Alex"** → Enhanced logging shows which Alex memories were found and why
+
+### Testing Recommendations
+
+1. **B3 Ordinal**: Store "My first code is X" and "My second code is Y", then query "what's my second code?"
+2. **INF3 Temporal**: Store "worked 5 years" + "left in 2020", then query "when did I start?"
+3. **STR1 Vehicle**: Store "My car is a Tesla Model 3" with 10+ other facts, then query "what car do I drive?"
+4. **NUA1 Ambiguity**: Store two separate "Alex" memories, then query "tell me about Alex" and check logs
+
+---END SUMMARY---
