@@ -90,6 +90,9 @@ class ManipulationGuard {
    * Returns { detected: boolean, type: string, response: string }
    */
   async validate(userMessage, context = {}) {
+    // EXECUTION PROOF - Verify manipulation guard is active (TRU2)
+    console.log('[PROOF] validator:manipulation-guard v=2026-01-29a file=api/lib/validators/manipulation-guard.js fn=validate');
+    
     try {
       // Scan for manipulation patterns
       for (const { pattern, type, severity } of this.manipulationPatterns) {

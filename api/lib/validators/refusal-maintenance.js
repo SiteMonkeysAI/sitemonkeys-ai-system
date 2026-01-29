@@ -20,6 +20,9 @@ class RefusalMaintenanceValidator {
    * Returns { correctionApplied: boolean, adjustedResponse: string, ... }
    */
   async validate({ response, userMessage, sessionId, context = {} }) {
+    // EXECUTION PROOF - Verify refusal maintenance validator is active (TRU1)
+    console.log('[PROOF] validator:refusal-maintenance v=2026-01-29a file=api/lib/validators/refusal-maintenance.js fn=validate');
+    
     try {
       // Check if previous response was a refusal
       const refusalState = this.refusalStates.get(sessionId);
