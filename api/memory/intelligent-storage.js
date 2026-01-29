@@ -392,6 +392,9 @@ export class IntelligentMemoryStorage {
    * @returns {{isExplicit: boolean, extractedContent: string|null}} - Detection result
    */
   detectExplicitMemoryRequest(content) {
+    // EXECUTION PROOF - Verify explicit memory detection is active (A5)
+    console.log('[PROOF] storage:explicit-detect v=2026-01-29a file=api/memory/intelligent-storage.js fn=detectExplicitMemoryRequest');
+    
     if (!content || typeof content !== 'string') {
       return { isExplicit: false, extractedContent: null };
     }

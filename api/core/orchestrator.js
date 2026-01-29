@@ -2088,6 +2088,9 @@ export class Orchestrator {
 
       console.log('[CROSS-MODE-DIAG] allowCrossMode:', allowCrossMode);
 
+      // EXECUTION PROOF - Verify memory retrieval is active
+      console.log('[PROOF] orchestrator:memory-retrieval v=2026-01-29a file=api/core/orchestrator.js fn=processMessage');
+
       const result = await retrieveSemanticMemories(pool, message, {
         userId,
         mode,
@@ -2193,6 +2196,9 @@ export class Orchestrator {
       this.log(
         `[MEMORY] Semantic retrieval: ${finalMemoryCount} memories injected, ${tokenCount} tokens (method: ${telemetry.method})`
       );
+      
+      // EXECUTION PROOF - Show which memories were actually injected
+      console.log(`[PROOF] orchestrator:memory-injected v=2026-01-29a count=${finalMemoryCount} ids=[${memoryIds.join(',')}]`);
 
       return {
         memories: memoryText,
@@ -4585,6 +4591,9 @@ Mode: ${modeConfig?.display_name || mode}
    * Otherwise, validator is a no-op to prevent unintended injection/replacement
    */
   #enforceOrdinalCorrectness({ response, memoryContext = [], query = '', context = {} }) {
+    // EXECUTION PROOF - Verify ordinal enforcement is active (B3)
+    console.log('[PROOF] validator:ordinal v=2026-01-29a file=api/core/orchestrator.js fn=#enforceOrdinalCorrectness');
+    
     try {
       // ═══════════════════════════════════════════════════════════════
       // ACTIVATION CONDITION #1: Query must contain explicit ordinal
@@ -4748,6 +4757,9 @@ Mode: ${modeConfig?.display_name || mode}
    * Example: "worked 5 years" + "left in 2020" → started in 2015
    */
   #calculateTemporalInference({ response, memoryContext = [], query = '' }) {
+    // EXECUTION PROOF - Verify temporal inference is active (INF3)
+    console.log('[PROOF] validator:temporal v=2026-01-29a file=api/core/orchestrator.js fn=#calculateTemporalInference');
+    
     try {
       // Only activate for temporal queries
       const temporalKeywords = /\b(when|start|began|join|year|date)\b/i;
