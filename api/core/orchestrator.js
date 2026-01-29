@@ -750,8 +750,13 @@ export class Orchestrator {
       // Pattern: digits + operators only, no personal context words
       let memoryContext = null;
 
-      const isPureArithmetic = /^[^a-zA-Z]*[\d\s\+\-\*\/\(\)\.=]+[^a-zA-Z]*\?*$/.test(message.trim()) &&
-                              !/\b(my|your|our|their|I|you|we|first|second|third|when|where|last|code|pin)\b/i.test(message);
+      // SECURITY FIX: Limit input length to prevent ReDoS (CodeQL High severity)
+      // Regex patterns have potential for polynomial backtracking on malicious input
+      const MAX_MESSAGE_LENGTH = 500;
+      const sanitizedMessage = message.trim().slice(0, MAX_MESSAGE_LENGTH);
+
+      const isPureArithmetic = /^[^a-zA-Z]*[\d\s\+\-\*\/\(\)\.=]+[^a-zA-Z]*\?*$/.test(sanitizedMessage) &&
+                              !/\b(my|your|our|their|I|you|we|first|second|third|when|where|last|code|pin)\b/i.test(sanitizedMessage);
 
       if (isPureArithmetic) {
         this.log(`[MEMORY] ⏭️  DETERMINISTIC SKIP: Pure arithmetic detected - "${message}" - no retrieval needed`);
