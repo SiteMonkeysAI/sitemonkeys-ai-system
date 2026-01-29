@@ -1033,16 +1033,20 @@ Facts (preserve user terminology + add synonyms):`;
       const temporalDurationPattern = /(?:worked|for|spent)\s+\d+\s+(?:years?|months?)/i;
       const temporalEndPattern = /(?:left|until|ended|quit).*?(?:in|at)?\s*\d{4}/i;
 
-      const inputHasDuration = temporalDurationPattern.test(userMsg);
-      const factsHaveDuration = temporalDurationPattern.test(facts);
+      // CodeQL Fix: Bound input before regex to prevent polynomial regex performance issues
+      const safeUserMsg = userMsg.substring(0, 500);
+      const safeFacts = facts.substring(0, 500);
 
-      const inputHasEnd = temporalEndPattern.test(userMsg);
-      const factsHaveEnd = temporalEndPattern.test(facts);
+      const inputHasDuration = temporalDurationPattern.test(safeUserMsg);
+      const factsHaveDuration = temporalDurationPattern.test(safeFacts);
+
+      const inputHasEnd = temporalEndPattern.test(safeUserMsg);
+      const factsHaveEnd = temporalEndPattern.test(safeFacts);
 
       let missingTemporal = [];
 
       if (inputHasDuration && !factsHaveDuration) {
-        const match = userMsg.match(temporalDurationPattern);
+        const match = safeUserMsg.match(temporalDurationPattern);
         if (match) {
           console.warn('[EXTRACTION-FIX #633-INF3] Input had duration but extraction lost it');
           missingTemporal.push(match[0]);
@@ -1050,7 +1054,7 @@ Facts (preserve user terminology + add synonyms):`;
       }
 
       if (inputHasEnd && !factsHaveEnd) {
-        const match = userMsg.match(temporalEndPattern);
+        const match = safeUserMsg.match(temporalEndPattern);
         if (match) {
           console.warn('[EXTRACTION-FIX #633-INF3] Input had end date but extraction lost it');
           missingTemporal.push(match[0]);
