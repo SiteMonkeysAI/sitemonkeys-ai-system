@@ -1,0 +1,74 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #631: [claude-fix] Fix SMDEEP Validator Failures (INF3, NUA1, STR1)
+
+Issue Description:
+New Issue to Create
+Title: [claude-fix] Fix SMDEEP Validator Failures (INF3, NUA1, STR1)
+Body:
+markdown## Priority: HIGH
+
+## Current State
+- SMFULL: 24/24 ✅
+- SMDEEP: 9/15 (need 15/15)
+
+## Failing Tests
+
+### STR1 — Vehicle Recall (MOST OBVIOUS BUG)
+
+**Problem:** `[VEHICLE-AUTHORITATIVE] reason=already_in_response` but test fails.
+
+The check `vehicleInResponse.test(response)` matches "car" in refusal text: "I don't have information about what **car** you drive."
+
+**Fix:** Check refusal BEFORE "already in response":
+```javascript
+// In #enforceVehicleRecall(), change order:
+const isRefusal = refusalPattern.test(response.trim());
+
+// Only skip if NOT a refusal AND vehicle is actually mentioned as answer
+if (!isRefusal && vehicleInResponse.test(response)) {
+  return { correctionApplied: false, response };
+}
+
+// If it IS a refusal about vehicles, proceed to DB query and inject
+```
+
+### INF3 — Temporal Reasoning
+
+**Problem:** `duration=null endYear=null` — DB query not finding temporal facts.
+
+**Debug:** Add logging to see what DB returns:
+```javascript
+console.log(`[TEMPORAL-AUTHORITATIVE] db_rows=${dbResult.rows?.length}`);
+```
+
+### NUA1 — Ambiguity Recognition  
+
+**Problem:** `entity=Alex variants=[]` — not finding 2+ descriptors.
+
+**Debug:** Add logging:
+```javascript
+console.log(`[AMBIGUITY-AUTHORITATIVE] db_rows=${dbResult.rows?.length} descriptors=${Array.from(descriptors)}`);
+```
+
+## Acceptance Criteria
+- SMDEEP: 15/15
+- No regressions on SMFULL 24/24
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
