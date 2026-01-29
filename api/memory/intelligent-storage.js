@@ -570,7 +570,7 @@ export class IntelligentMemoryStorage {
         const verbatimTokens = this.countTokens(verbatimFacts);
 
         // Store with very high importance (explicit user request)
-        const result = await this.storeCompressedMemory(userId, category, verbatimFacts, {
+        const explicitMetadata = {
           original_tokens: verbatimTokens,
           compressed_tokens: verbatimTokens,
           compression_ratio: 1.0,  // No compression for explicit requests
@@ -580,13 +580,20 @@ export class IntelligentMemoryStorage {
           importance_score: 0.95,  // Very high importance for explicit requests
           original_user_phrase: userMessage.substring(0, 200),
           explicit_storage_request: true,  // Mark as explicit for retrieval optimization
-          wait_for_embedding: true,  // FIX #566-STR1: Wait for embedding to complete for explicit requests
-          // FIX #633: Include ordinal metadata
-          ordinal: ordinalInfo.hasOrdinal ? ordinalInfo.ordinal : undefined,
-          ordinal_subject: ordinalInfo.hasOrdinal ? ordinalInfo.subject : undefined,
-          ordinal_pattern: ordinalInfo.hasOrdinal ? ordinalInfo.pattern : undefined,
-          ordinal_value: ordinalInfo.hasOrdinal ? ordinalInfo.value : undefined
-        }, mode);
+          wait_for_embedding: true  // FIX #566-STR1: Wait for embedding to complete for explicit requests
+        };
+
+        // FIX #633: Include ordinal metadata only if detected
+        if (ordinalInfo.hasOrdinal) {
+          explicitMetadata.ordinal = ordinalInfo.ordinal;
+          explicitMetadata.ordinal_subject = ordinalInfo.subject;
+          explicitMetadata.ordinal_pattern = ordinalInfo.pattern;
+          if (ordinalInfo.value) {
+            explicitMetadata.ordinal_value = ordinalInfo.value;
+          }
+        }
+
+        const result = await this.storeCompressedMemory(userId, category, verbatimFacts, explicitMetadata, mode);
         console.log(`[A5-DEBUG] Storage: Set explicit_storage_request=true in metadata`);
         console.log(`[A5-DEBUG] Storage: Set wait_for_embedding=true in metadata`);
 
@@ -744,7 +751,8 @@ export class IntelligentMemoryStorage {
         // No duplicate found - either new fact or supersession
         // If supersession, storeCompressedMemory will detect and mark old memory as superseded
         console.log('[FLOW] Step 4: Storing new memory (supersession handled internally if applicable)...');
-        const result = await this.storeCompressedMemory(userId, category, facts, {
+
+        const regularMetadata = {
           original_tokens: originalTokens,
           compressed_tokens: compressedTokens,
           compression_ratio: parseFloat(ratio),
@@ -752,13 +760,20 @@ export class IntelligentMemoryStorage {
           fingerprint: fingerprintResult.fingerprint,
           fingerprintConfidence: fingerprintResult.confidence,
           importance_score: importanceScore,
-          original_user_phrase: userMessage.substring(0, 200),  // CRITICAL FIX #504: Store original for fallback matching
-          // FIX #633: Include ordinal metadata
-          ordinal: ordinalInfo.hasOrdinal ? ordinalInfo.ordinal : undefined,
-          ordinal_subject: ordinalInfo.hasOrdinal ? ordinalInfo.subject : undefined,
-          ordinal_pattern: ordinalInfo.hasOrdinal ? ordinalInfo.pattern : undefined,
-          ordinal_value: ordinalInfo.hasOrdinal ? ordinalInfo.value : undefined
-        }, mode);
+          original_user_phrase: userMessage.substring(0, 200)  // CRITICAL FIX #504: Store original for fallback matching
+        };
+
+        // FIX #633: Include ordinal metadata only if detected
+        if (ordinalInfo.hasOrdinal) {
+          regularMetadata.ordinal = ordinalInfo.ordinal;
+          regularMetadata.ordinal_subject = ordinalInfo.subject;
+          regularMetadata.ordinal_pattern = ordinalInfo.pattern;
+          if (ordinalInfo.value) {
+            regularMetadata.ordinal_value = ordinalInfo.value;
+          }
+        }
+
+        const result = await this.storeCompressedMemory(userId, category, facts, regularMetadata, mode);
         console.log('[FLOW] Step 4: Memory stored ✓');
         return result;
       }

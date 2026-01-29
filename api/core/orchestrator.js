@@ -5217,7 +5217,7 @@ Mode: ${modeConfig?.display_name || mode}
    * This validator bypasses retrieval to guarantee vehicle fact inclusion.
    */
   async #enforceVehicleRecall({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:vehicle v=2026-01-29c file=api/core/orchestrator.js fn=#enforceVehicleRecall');
+    console.log('[PROOF] validator:vehicle v=2026-01-29d file=api/core/orchestrator.js fn=#enforceVehicleRecall');
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -5230,8 +5230,11 @@ Mode: ${modeConfig?.display_name || mode}
 
       // Check if response is a system refusal (starts with "I" + refusal phrase)
       // More precise than generic "don't have" anywhere in response
-      const refusalPattern = /^I\s+(don't have|cannot|can't|am unable|do not have).*\b(information|memory|access|data|knowledge)\b/i;
-      const isRefusal = refusalPattern.test(response.trim());
+      // Updated to handle "I'm sorry, but I don't have..." patterns (Issue #636-STR1)
+      // Bound response before regex to prevent polynomial backtracking (CodeQL fix)
+      const refusalPattern = /^I('m sorry[^.]*?)?\s*(don't have|cannot|can't|am unable|do not have)/i;
+      const safeResponse = response.trim().substring(0, 200);
+      const isRefusal = refusalPattern.test(safeResponse);
 
       // Check if response already mentions a vehicle (but NOT in refusal context)
       const vehicleInResponse = /\b(tesla|honda|toyota|ford|chevrolet|nissan|bmw|mercedes|audi|lexus|mazda|subaru|jeep|ram|gmc|model\s*[0-9sxy]|car|truck|suv|vehicle)\b/i;
