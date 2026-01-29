@@ -1,0 +1,455 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #628: [claude-fix] [core-fix] Make Post-Response Validators Authoritative (Guaranteed Output Invariants)
+
+Issue Description:
+# [core-fix] Make Post-Response Validators Authoritative (Guaranteed Output Invariants)
+
+## Priority: CRITICAL
+
+## Goal: SMFULL 24/24 + SMDEEP 15/15 (39/39) with ZERO regressions
+
+---
+
+## The Problem (Root Cause)
+
+Current validators **run but do not guarantee outcomes**. They:
+- Detect conditions ✅
+- Log findings ✅
+- Attempt corrections ✅
+- **Guarantee the response contains required facts? ❌**
+
+This causes test failures even when:
+- Retrieval works
+- Validators execute
+- Memories exist in database
+
+The tests don't ask "did the system try?" — they ask **"does the output contain X?"**
+
+---
+
+## The Solution (Architectural Principle)
+
+**FINAL AUTHORITY RULE:**
+
+> If the system knows a fact that materially answers the query, the final response MUST contain it — regardless of retrieval, ranking, or model output.
+
+Validators become **authoritative**, not advisory. They can **replace or inject** content, not just log.
+
+---
+
+## Non-Negotiable Constraints (CRITICAL — READ FIRST)
+
+### 1. DB Query Budget
+- **Max additional DB queries per request: 1 (preferred), 2 (absolute max)**
+- Direct DB queries execute ONLY when:
+  - (a) Query intent matches the validator domain, AND
+  - (b) Response is missing the required invariant OR memory-injected=0 for a memory-critical query
+- All direct queries must be:
+  - User-scoped (`user_id = $1`)
+  - Filtered by `is_current = true OR is_current IS NULL`
+  - Bounded (`LIMIT 5`)
+  - No unbounded loops
+
+### 2. Never Override Correct Refusals
+- If response is a safety/policy refusal → validators may APPEND context but must NOT transform into a definitive answer
+- If response is an explicit clarification question → validators may APPEND but must NOT override the question
+
+### 3. No Regex on Unbounded User Strings
+- Slice content to safe length (e.g., 500 chars) before pattern matching
+- Prevents ReDoS vulnerabilities
+
+### 4. Prefer Metadata Over Content Regex
+- Where possible, query `metadata->'anchors'->>'...'` instead of `content ~` regex
+- Faster, more deterministic, avoids encoding edge cases
+
+---
+
+## Scope (What This PR Does)
+
+- ✅ Modifies 5 post-response validators to be authoritative
+- ✅ Each validator queries database directly ONLY when gating conditions are met
+- ✅ Each validator injects/replaces content deterministically
+- ❌ NO retrieval changes
+- ❌ NO ranking/boost changes
+- ❌ NO prompt changes
+- ❌ NO new dependencies
+
+---
+
+## The 5 Fixes (Surgical Specifications)
+
+---
+
+### Fix 1: B3 — Ordinal Ranking (Second Code)
+
+**File:** `api/core/orchestrator.js` → `#enforceOrdinalCorrectness()`
+
+**Current behavior:** Attempts to replace wrong values if found in response.
+
+**Problem:** Response may contain wrong code (ZEBRA instead of DELTA) or validator exits early. Generic pattern `[A-Z]+-[\d-]+` matches unrelated tokens.
+
+**Gating condition (must ALL be true before DB query):**
+- Query matches ordinal pattern (first|second|third + code|key|pin)
+- Response does NOT already contain correct ordinal value
+- OR response contains a DIFFERENT ordinal value for same subject
+
+**Required behavior:**
+
+```
+IF gating conditions met:
+  1. Identify which ordinal was requested (e.g., "second" → 2)
+  2. Query database directly: 
+     SELECT content, metadata FROM persistent_memories 
+     WHERE user_id = $1 
+     AND metadata->>'ordinal_subject' ILIKE $2
+     AND (is_current = true OR is_current IS NULL)
+     ORDER BY (metadata->>'ordinal')::int
+     LIMIT 5
+  3. Extract correct value for requested ordinal FROM METADATA ONLY
+     - Use metadata->>'ordinal_value' (not content regex)
+     - Only values with ordinal metadata are candidates
+  4. If response contains WRONG ordinal value (from same subject's metadata):
+     - REMOVE the wrong value
+  5. If response missing CORRECT ordinal value:
+     - APPEND injection template
+  6. Return modified response
+```
+
+**Critical: Do NOT treat generic code-like tokens as candidates.**
+- Only values from `metadata.ordinal_value` for the matching `ordinal_subject` are valid
+- ZEBRA-ANCHOR is NOT a code candidate unless it has ordinal metadata with subject="code"
+
+**Injection template:**
+```
+Your [ordinal] [subject] is [value].
+```
+
+**Telemetry:**
+```
+[ORDINAL-AUTHORITATIVE] query_ordinal=2 subject=code correct_value=DELTA-xxx wrong_values_removed=[CHARLIE-xxx] injected=true
+```
+
+---
+
+### Fix 2: INF3 — Temporal Reasoning (Start Year Calculation)
+
+**File:** `api/core/orchestrator.js` → `#calculateTemporalInference()`
+
+**Current behavior:** Calculates start year but only injects conditionally.
+
+**Problem:** Injection is conditional on response not already containing the year.
+
+**Gating condition (must ALL be true before DB query):**
+- Query matches temporal pattern (when|what year + start|begin|join + entity name)
+- Response does NOT contain a calculated year for this entity
+
+**Required behavior:**
+
+```
+IF gating conditions met:
+  1. Query database directly for user's temporal facts:
+     SELECT content FROM persistent_memories
+     WHERE user_id = $1
+     AND (content ILIKE '%years%' OR content ILIKE '%left%' OR content ILIKE '%until%')
+     AND (is_current = true OR is_current IS NULL)
+     LIMIT 10
+  2. Extract from content (slice to 500 chars first):
+     - Duration patterns: "worked X years", "spent X years", "for X years"
+     - End year patterns: "left in YYYY", "until YYYY", "ended YYYY"
+  3. If BOTH duration AND end year found for SAME entity:
+     - Calculate: start_year = end_year - duration
+     - Validate: start_year > 1950 AND start_year < current_year
+  4. If calculation valid:
+     - ALWAYS APPEND deterministic calculation to response
+     - Do NOT replace years in model response (risk of corrupting unrelated years)
+```
+
+**Injection template:**
+```
+Based on working [duration] years and leaving in [end_year], you started at [entity] in [start_year].
+```
+
+**Note:** APPEND only. Do not attempt to replace years in the model's response — risk of corrupting unrelated dates.
+
+**Telemetry:**
+```
+[TEMPORAL-AUTHORITATIVE] entity=Amazon duration=5 end_year=2020 calculated_start=2015 appended=true
+```
+
+---
+
+### Fix 3: NUA1 — Ambiguity Recognition (Two Alexes)
+
+**File:** `api/core/orchestrator.js` → NEW method `#enforceAmbiguityDisclosure()`
+
+**Current behavior:** Ambiguity detected and logged but response unchanged.
+
+**Problem:** Test requires response to MENTION the ambiguity.
+
+**Gating condition (must ALL be true before DB query):**
+- Query mentions a proper name (capitalized word)
+- Response does NOT already mention ambiguity/clarification about that name
+
+**Required behavior:**
+
+```
+IF gating conditions met:
+  1. Extract entity name from query (e.g., "Alex")
+  2. Query database directly:
+     SELECT id, content FROM persistent_memories
+     WHERE user_id = $1 
+     AND content ILIKE '%' || $2 || '%'
+     AND (is_current = true OR is_current IS NULL)
+     LIMIT 10
+  3. Extract descriptors for entity from each memory (slice content to 500 chars):
+     - Pattern: (friend|colleague|coworker|neighbor|boss|manager) + [Name]
+     - Pattern: [Name] + (from|at|in) + [location]
+     - Pattern: my + [relation] + [Name]
+  4. If ≥2 DIFFERENT descriptors found:
+     - Set ambiguity_detected = true
+  5. If ambiguity_detected AND response does NOT mention:
+     - "which Alex" / "more than one" / "clarify" / "two" / "both"
+     - PREPEND ambiguity notice
+  6. If response IS a refusal or clarification question:
+     - Do NOT override — append context only if helpful
+```
+
+**Injection template:**
+```
+I notice you've mentioned more than one [Name]: [variant1] and [variant2]. Which [Name] are you asking about?
+
+[original response]
+```
+
+**Telemetry:**
+```
+[AMBIGUITY-AUTHORITATIVE] entity=Alex variants=[friend,colleague] disclosure_prepended=true
+```
+
+---
+
+### Fix 4: STR1 — Volume Stress (Car Recall)
+
+**File:** `api/core/orchestrator.js` → NEW method `#enforceVehicleRecall()`
+
+**Current behavior:** Relies on retrieval ranking to include car memory.
+
+**Problem:** Under 10 facts, car memory may rank outside top-k.
+
+**Gating condition (must ALL be true before DB query):**
+- Query matches vehicle pattern (car|vehicle|drive|automobile|what do I drive)
+- Response does NOT mention any vehicle (tesla|honda|toyota|car|truck|vehicle|model [0-9sx])
+
+**Required behavior:**
+
+```
+IF gating conditions met:
+  1. Query database directly (BYPASS retrieval):
+     SELECT content FROM persistent_memories
+     WHERE user_id = $1 
+     AND content ~* '\m(drive|car|vehicle|tesla|honda|toyota|ford|model\s*[0-9sxy])\M'
+     AND (is_current = true OR is_current IS NULL)
+     LIMIT 1
+  2. If vehicle memory exists:
+     - Extract vehicle description (slice content to 500 chars, find vehicle name)
+  3. If response is NOT a refusal:
+     - APPEND vehicle fact
+  4. If response IS a refusal about something else:
+     - Do NOT inject vehicle fact into unrelated refusal
+```
+
+**Injection template:**
+```
+Based on what you've shared, you drive a [vehicle].
+```
+
+**Telemetry:**
+```
+[VEHICLE-AUTHORITATIVE] vehicle_found=true vehicle="Tesla Model 3" appended=true
+```
+
+---
+
+### Fix 5: CMP2 — International Names (Diacritics Preservation)
+
+**File:** `api/core/orchestrator.js` → NEW method `#enforceUnicodeNames()`
+
+**Current behavior:** Validator runs but depends on names being in retrieved context.
+
+**Problem:** If names memory not retrieved, validator has nothing to preserve.
+
+**Gating condition (must ALL be true before DB query):**
+- Query matches contacts pattern (contacts|people|names|who are my|list)
+- Response does NOT contain unicode characters (check for [À-ÿ] range)
+
+**Required behavior:**
+
+```
+IF gating conditions met:
+  1. Query database using METADATA anchors (preferred over content regex):
+     SELECT content, metadata FROM persistent_memories
+     WHERE user_id = $1
+     AND metadata->'anchors'->'unicode' IS NOT NULL
+     AND jsonb_array_length(metadata->'anchors'->'unicode') > 0
+     AND (is_current = true OR is_current IS NULL)
+     LIMIT 5
+     
+     FALLBACK (if no anchor metadata):
+     SELECT content FROM persistent_memories
+     WHERE user_id = $1
+     AND content ~ '[À-ÿ]'
+     AND (is_current = true OR is_current IS NULL)
+     LIMIT 5
+     
+  2. Extract canonical names with diacritics from content (slice to 500 chars)
+  3. If unicode names exist AND response does NOT contain them:
+     - APPEND canonical names list
+  4. If response contains ASCII-normalized versions (Jose, Bjorn):
+     - REPLACE with correct diacritics (José, Björn)
+  5. If response IS a refusal:
+     - Do NOT inject names into unrelated refusal
+```
+
+**Injection template:**
+```
+Your contacts include: [name1], [name2], [name3].
+```
+
+**Telemetry:**
+```
+[UNICODE-AUTHORITATIVE] names_found=[José García,Björn Lindqvist,Zhang Wei] appended=true
+```
+
+---
+
+## Implementation Order in Orchestrator
+
+All authoritative validators run in Step 9.x, AFTER AI response, BEFORE final return:
+
+```
+Step 9.1: Character Preservation (existing)
+Step 9.2: Anchor Preservation (existing)
+Step 9.3: Ordinal Enforcement (B3) ← MAKE AUTHORITATIVE
+Step 9.4: Temporal Calculation (INF3) ← MAKE AUTHORITATIVE  
+Step 9.5: Ambiguity Disclosure (NUA1) ← NEW
+Step 9.6: Vehicle Recall (STR1) ← NEW
+Step 9.7: Unicode Names (CMP2) ← NEW
+Step 9.8: Refusal Maintenance (existing)
+```
+
+---
+
+## What This PR Does NOT Change
+
+- ❌ Retrieval logic (semantic-retrieval.js unchanged)
+- ❌ Ranking/boost values
+- ❌ Token budgets
+- ❌ Prompt templates
+- ❌ Storage logic
+- ❌ Embedding generation
+- ❌ Any currently passing tests
+
+---
+
+## Acceptance Criteria (Non-Negotiable)
+
+### Must Pass:
+- [ ] SMFULL: 24/24 (including B3)
+- [ ] SMDEEP: 15/15 (including INF3, NUA1, STR1, CMP2)
+- [ ] 3 consecutive runs with fresh user_id each time
+- [ ] Zero regressions on currently passing tests
+
+### Performance Constraints:
+- [ ] Max 1 additional DB query per request (typical)
+- [ ] Max 2 additional DB queries per request (absolute ceiling)
+- [ ] No request latency increase > 50ms from validators
+
+### Telemetry Must Show:
+- [ ] `[ORDINAL-AUTHORITATIVE]` logs when B3-type query processed
+- [ ] `[TEMPORAL-AUTHORITATIVE]` logs when INF3-type query processed
+- [ ] `[AMBIGUITY-AUTHORITATIVE]` logs when NUA1-type query processed
+- [ ] `[VEHICLE-AUTHORITATIVE]` logs when STR1-type query processed
+- [ ] `[UNICODE-AUTHORITATIVE]` logs when CMP2-type query processed
+
+### Each Log Must Include:
+- Whether gating condition was met
+- Whether DB query was executed
+- Whether injection/replacement occurred
+- What value was injected (if any)
+
+---
+
+## Why This Will Work (And Not Regress)
+
+1. **Independence:** Each validator operates on its own condition. Fixing B3 cannot break STR1.
+
+2. **Gated DB Access:** DB queries only run when specific conditions are met — not on every request.
+
+3. **Bypasses Retrieval:** When validators DO query, they bypass retrieval ranking entirely.
+
+4. **Deterministic:** No probability. If condition met → action taken. Every time.
+
+5. **Safe:** Validators respect refusals and don't inject into unrelated contexts.
+
+6. **Bounded:** All queries have LIMIT, all content is sliced before regex.
+
+---
+
+## Files to Modify
+
+1. **`api/core/orchestrator.js`**
+   - Enhance `#enforceOrdinalCorrectness()` — add gating, add DB query, use metadata only
+   - Enhance `#calculateTemporalInference()` — add gating, always append if valid
+   - Add `#enforceAmbiguityDisclosure()` — new method with gating
+   - Add `#enforceVehicleRecall()` — new method with gating
+   - Add `#enforceUnicodeNames()` — new method with gating, prefer metadata anchors
+   - Wire all into Step 9.x enforcement chain
+
+2. **No other files should be modified.**
+
+---
+
+## Anti-Patterns to AVOID
+
+- ❌ Do NOT add retrieval boosts
+- ❌ Do NOT change ranking thresholds  
+- ❌ Do NOT modify prompt templates
+- ❌ Do NOT add new dependencies
+- ❌ Do NOT change storage logic
+- ❌ Do NOT run DB queries without gating conditions
+- ❌ Do NOT use unbounded regex on user content
+- ❌ Do NOT override safety/policy refusals
+- ❌ Do NOT treat generic tokens as ordinal candidates (B3 — use metadata only)
+- ❌ Do NOT replace years in model response (INF3 — append only)
+
+---
+
+## Proof of Completion
+
+After implementation, paste:
+
+1. SMFULL output showing 24/24
+2. SMDEEP output showing 15/15
+3. Railway logs showing all 5 `[*-AUTHORITATIVE]` telemetry lines firing
+4. Confirmation that no request has > 2 additional DB queries
+
+Only merge when all four are confirmed.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
