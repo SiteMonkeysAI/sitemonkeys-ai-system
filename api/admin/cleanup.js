@@ -2,7 +2,10 @@
  * ADMIN ENDPOINT - Cleanup Stale Memories
  */
 
-import { cleanupDuplicateCurrentFacts, createSupersessionConstraint } from '../services/supersession.js';
+import {
+  cleanupDuplicateCurrentFacts,
+  createSupersessionConstraint,
+} from '../services/supersession.js';
 import { persistentMemory } from '../categories/memory/index.js';
 
 export async function handleCleanupRequest(req, res) {
@@ -19,14 +22,14 @@ export async function handleCleanupRequest(req, res) {
       console.error('[ADMIN] No database pool available');
       return res.status(500).json({
         success: false,
-        error: 'Database pool not available'
+        error: 'Database pool not available',
       });
     }
 
     const report = {
       timestamp: new Date().toISOString(),
       dry_run: dryRun,
-      actions: []
+      actions: [],
     };
 
     // Step 1: Check current state
@@ -42,7 +45,7 @@ export async function handleCleanupRequest(req, res) {
     report.before = {
       total_memories: parseInt(beforeCount.rows[0].total),
       current_memories: parseInt(beforeCount.rows[0].current_count),
-      unique_fingerprints: parseInt(beforeCount.rows[0].unique_fingerprints)
+      unique_fingerprints: parseInt(beforeCount.rows[0].unique_fingerprints),
     };
 
     // Step 2: Find duplicates that would be cleaned
@@ -69,14 +72,14 @@ export async function handleCleanupRequest(req, res) {
     report.duplicates_found = duplicates.rows.length;
     report.duplicates_by_fingerprint = {};
 
-    duplicates.rows.forEach(row => {
+    duplicates.rows.forEach((row) => {
       if (!report.duplicates_by_fingerprint[row.fact_fingerprint]) {
         report.duplicates_by_fingerprint[row.fact_fingerprint] = [];
       }
       report.duplicates_by_fingerprint[row.fact_fingerprint].push({
         id: row.id,
         content_preview: row.content_preview,
-        created_at: row.created_at
+        created_at: row.created_at,
       });
     });
 
@@ -110,7 +113,7 @@ export async function handleCleanupRequest(req, res) {
 
       report.after = {
         total_memories: parseInt(afterCount.rows[0].total),
-        current_memories: parseInt(afterCount.rows[0].current_count)
+        current_memories: parseInt(afterCount.rows[0].current_count),
       };
     }
 
@@ -120,14 +123,13 @@ export async function handleCleanupRequest(req, res) {
 
     res.json({
       success: true,
-      report
+      report,
     });
-
   } catch (error) {
     console.error('[ADMIN] Cleanup error:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 }

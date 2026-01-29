@@ -1,11 +1,11 @@
 /**
  * hierarchyRouter.js
  * Phase 4: Dual Hierarchy Truth Validation
- * 
+ *
  * Purpose: Select correct source hierarchy based on claim type + mode
  * Business policy claims: Vault → Memory → Docs → External (vault wins)
  * Objective factual claims: External → Vault → Docs → Memory (reality wins)
- * 
+ *
  * Location: /api/core/intelligence/hierarchyRouter.js
  */
 
@@ -13,15 +13,15 @@ import { detectTruthType, TRUTH_TYPES } from './truthTypeDetector.js';
 
 // Claim type constants
 export const CLAIM_TYPES = {
-  BUSINESS_POLICY: 'BUSINESS_POLICY',   // Site Monkeys internal rules, pricing, procedures
+  BUSINESS_POLICY: 'BUSINESS_POLICY', // Site Monkeys internal rules, pricing, procedures
   OBJECTIVE_FACTUAL: 'OBJECTIVE_FACTUAL', // External reality, current events, prices
-  AMBIGUOUS: 'AMBIGUOUS'
+  AMBIGUOUS: 'AMBIGUOUS',
 };
 
 // Source hierarchy constants
 export const HIERARCHIES = {
-  VAULT_FIRST: ['vault', 'memory', 'docs', 'external'],    // Business policy: vault wins
-  EXTERNAL_FIRST: ['external', 'vault', 'docs', 'memory']  // Objective factual: reality wins
+  VAULT_FIRST: ['vault', 'memory', 'docs', 'external'], // Business policy: vault wins
+  EXTERNAL_FIRST: ['external', 'vault', 'docs', 'memory'], // Objective factual: reality wins
 };
 
 // Business policy patterns - these indicate internal/founder-defined rules
@@ -36,7 +36,7 @@ const BUSINESS_POLICY_PATTERNS = [
   /\bwhat('s| is) (our|my)\b/i,
   /\bhow much (do we|should we) charge\b/i,
   /\b(client|customer) (qualification|criteria|requirements)\b/i,
-  /\bminimum (package|project|engagement)\b/i
+  /\bminimum (package|project|engagement)\b/i,
 ];
 
 // Objective factual patterns - these indicate external reality
@@ -50,7 +50,7 @@ const OBJECTIVE_FACTUAL_PATTERNS = [
   /\b(fda|sec|government|court) (approval|ruling|decision)/i,
   /\b(latest|recent|new) (study|research|finding|report)/i,
   /\bbreaking\b/i,
-  /\bhappening (now|today|right now)\b/i
+  /\bhappening (now|today|right now)\b/i,
 ];
 
 /**
@@ -81,14 +81,14 @@ export function isBusinessPolicyClaim(query, mode = 'truth') {
   }
 
   // Calculate confidence
-  const patternConfidence = Math.min(0.9, 0.5 + (matchedPatterns.length * 0.15));
+  const patternConfidence = Math.min(0.9, 0.5 + matchedPatterns.length * 0.15);
   const totalConfidence = Math.min(1.0, patternConfidence + modeBoost);
 
   return {
     isBusinessPolicy: matchedPatterns.length > 0 || mode === 'site_monkeys',
     confidence: totalConfidence,
     patterns_matched: matchedPatterns,
-    mode_boost_applied: modeBoost > 0
+    mode_boost_applied: modeBoost > 0,
   };
 }
 
@@ -115,12 +115,12 @@ export function isObjectiveFactualClaim(query) {
     return { isObjectiveFactual: false, confidence: 0, patterns_matched: [] };
   }
 
-  const confidence = Math.min(0.95, 0.6 + (matchedPatterns.length * 0.12));
+  const confidence = Math.min(0.95, 0.6 + matchedPatterns.length * 0.12);
 
   return {
     isObjectiveFactual: true,
     confidence: confidence,
-    patterns_matched: matchedPatterns
+    patterns_matched: matchedPatterns,
   };
 }
 
@@ -143,7 +143,7 @@ export function detectClaimType(query, mode = 'truth') {
         reasoning: 'Both patterns matched; business policy wins in Site Monkeys mode',
         business_patterns: businessResult.patterns_matched,
         factual_patterns: factualResult.patterns_matched,
-        conflict_detected: true
+        conflict_detected: true,
       };
     } else {
       return {
@@ -152,7 +152,7 @@ export function detectClaimType(query, mode = 'truth') {
         reasoning: 'Both patterns matched; objective factual wins in non-Site Monkeys mode',
         business_patterns: businessResult.patterns_matched,
         factual_patterns: factualResult.patterns_matched,
-        conflict_detected: true
+        conflict_detected: true,
       };
     }
   }
@@ -164,7 +164,7 @@ export function detectClaimType(query, mode = 'truth') {
       confidence: businessResult.confidence,
       reasoning: `Matched ${businessResult.patterns_matched.length} business policy pattern(s)`,
       patterns_matched: businessResult.patterns_matched,
-      conflict_detected: false
+      conflict_detected: false,
     };
   }
 
@@ -175,7 +175,7 @@ export function detectClaimType(query, mode = 'truth') {
       confidence: factualResult.confidence,
       reasoning: `Matched ${factualResult.patterns_matched.length} objective factual pattern(s)`,
       patterns_matched: factualResult.patterns_matched,
-      conflict_detected: false
+      conflict_detected: false,
     };
   }
 
@@ -185,7 +185,7 @@ export function detectClaimType(query, mode = 'truth') {
     confidence: 0.3,
     reasoning: 'No clear pattern match; claim type ambiguous',
     default_hierarchy: mode === 'site_monkeys' ? 'VAULT_FIRST' : 'EXTERNAL_FIRST',
-    conflict_detected: false
+    conflict_detected: false,
   };
 }
 
@@ -233,8 +233,8 @@ export async function route(query, mode = 'truth') {
   const hierarchy = getSourceHierarchy(claimTypeResult.claimType, mode);
 
   // Determine if external lookup is required
-  const externalLookupRequired = 
-    hierarchy[0] === 'external' || 
+  const externalLookupRequired =
+    hierarchy[0] === 'external' ||
     truthTypeResult.type === TRUTH_TYPES.VOLATILE ||
     (truthTypeResult.high_stakes && truthTypeResult.high_stakes.isHighStakes);
 
@@ -253,7 +253,7 @@ export async function route(query, mode = 'truth') {
     high_stakes: truthTypeResult.high_stakes,
     ttl_ms: truthTypeResult.ttl_ms,
     conflict_detected: claimTypeResult.conflict_detected || false,
-    routing_time_ms: Date.now() - startTime
+    routing_time_ms: Date.now() - startTime,
   };
 }
 
@@ -274,9 +274,9 @@ export async function testRouting(query, mode = 'truth') {
       examples: [
         '?action=hierarchy&q=What%20is%20our%20minimum%20pricing',
         '?action=hierarchy&q=What%20is%20the%20current%20price%20of%20Bitcoin',
-        '?action=hierarchy&q=What%20is%20our%20pricing&mode=site_monkeys'
+        '?action=hierarchy&q=What%20is%20our%20pricing&mode=site_monkeys',
       ],
-      available_modes: ['truth', 'business', 'site_monkeys']
+      available_modes: ['truth', 'business', 'site_monkeys'],
     };
   }
 
@@ -292,8 +292,8 @@ export async function testRouting(query, mode = 'truth') {
       hierarchy: result.hierarchy_name,
       external_lookup_required: result.external_lookup_required,
       high_stakes: result.high_stakes,
-      routing_time_ms: result.routing_time_ms
-    }
+      routing_time_ms: result.routing_time_ms,
+    },
   };
 }
 
@@ -306,5 +306,5 @@ export default {
   detectClaimType,
   getSourceHierarchy,
   route,
-  testRouting
+  testRouting,
 };

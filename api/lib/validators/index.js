@@ -2,7 +2,7 @@
 
 /**
  * Validators Index - Central export for all deterministic validators
- * 
+ *
  * Validators are organized by execution phase:
  * - PRE-RESPONSE: Run before AI generation
  * - POST-RESPONSE: Run after AI generation, before user sees response
@@ -34,6 +34,6 @@ export function getAllValidatorStats() {
     manipulationGuard: manipulationGuard.getStats?.() || {},
     characterPreservation: characterPreservationValidator.getStats?.() || {},
     anchorPreservation: anchorPreservationValidator.getStats?.() || {},
-    refusalMaintenance: refusalMaintenanceValidator.getStats?.() || {}
+    refusalMaintenance: refusalMaintenanceValidator.getStats?.() || {},
   };
 }
