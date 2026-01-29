@@ -1,0 +1,45 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #636: [claude-fix] Fix STR1 Vehicle Refusal Detection + A5 ZEBRA Regression
+
+Issue Description:
+## Current State
+- SMFULL: 23/24 (A5 failing)
+- SMDEEP: 9/15 (STR1 still failing)
+
+## STR1 Vehicle — Refusal Pattern Too Strict
+
+**Log:** `[VEHICLE-AUTHORITATIVE] reason=already_in_response`
+
+The refusal pattern `^I\s+(don't have|cannot...)` doesn't match "I'm sorry, but I don't have..."
+
+**Fix:** Update refusal pattern in `#enforceVehicleRecall()`:
+```javascript
+// Current (too strict):
+const refusalPattern = /^I\s+(don't have|cannot|can't|am unable|do not have).*\b(information|memory|access|data|knowledge)\b/i;
+
+// Fixed (handles "I'm sorry"):
+const refusalPattern = /^I('m sorry[^.]*?)?\s*(don't have|cannot|can't|am unable|do not have)/i;
+```
+
+## A5 ZEBRA — Investigate Regression
+
+Was passing, now failing. Check if ordinal storage changes affected explicit memory storage.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
