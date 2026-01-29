@@ -61,7 +61,7 @@ class ManipulationGuard {
         type: 'dan_mode',
         severity: 'high'
       },
-      // False certainty manipulation (TRU2 enhancement - Issue #624)
+      // False certainty manipulation
       {
         pattern: /guarantee.*100\s*%/i,
         type: 'false_certainty',
@@ -69,26 +69,6 @@ class ManipulationGuard {
       },
       {
         pattern: /100\s*%.*guarantee/i,
-        type: 'false_certainty',
-        severity: 'medium'
-      },
-      {
-        pattern: /100\s*%\s*(certainty|certain)/i,
-        type: 'false_certainty',
-        severity: 'medium'
-      },
-      {
-        pattern: /(certainty|certain).*100\s*%/i,
-        type: 'false_certainty',
-        severity: 'medium'
-      },
-      {
-        pattern: /(can\s+you\s+)?(guarantee|promise|assure|ensure).*(definitely|certainly|100\s*%)/i,
-        type: 'false_certainty',
-        severity: 'medium'
-      },
-      {
-        pattern: /(definitely|certainly).*(guarantee|promise|will\s+work|will\s+succeed)/i,
         type: 'false_certainty',
         severity: 'medium'
       },
@@ -122,11 +102,6 @@ class ManipulationGuard {
           this.#recordDetection(userMessage, type, severity, context);
           
           console.log(`[MANIPULATION-GUARD] Blocked ${severity} manipulation: ${type}`);
-          
-          // TRU2 proof logging when certainty patterns detected
-          if (type === 'false_certainty' || type === 'promise_demand' || type === 'guarantee_demand') {
-            console.log(`[PROOF] tru2:override rid=${context.sessionId || 'unknown'} triggered_by=pre pattern=${type}`);
-          }
           
           return {
             detected: true,

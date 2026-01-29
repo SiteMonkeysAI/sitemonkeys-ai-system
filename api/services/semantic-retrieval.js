@@ -1215,10 +1215,6 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     telemetry.vectors_compared = withEmbeddings.length;
     telemetry.semantic_candidates = withEmbeddings.length;  // #536: Track semantic candidates for comparison with fallback
 
-    // CRITICAL FIX #624: Proof telemetry for retrieval candidate selection
-    const candidatesWithoutEmbedding = candidatesWithParsedEmbeddings.length - withEmbeddings.length;
-    console.log(`[PROOF] retrieval:candidates rid=${requestId} candidates=${candidatesWithParsedEmbeddings.length} withEmbedding=${withEmbeddings.length} withoutEmbedding=${candidatesWithoutEmbedding}`);
-
     // Calculate similarity scores
     const scored = withEmbeddings.map(candidate => ({
       ...candidate,
@@ -1567,127 +1563,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       }
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    // CRITICAL FIX #624: DETERMINISTIC DOMAIN SLOT SELECTION (STR1/CMP2/EDG3)
-    // Guarantee reserved slots for domain-specific memories when query matches domain intent
-    // This is NOT boost-based - this is deterministic inclusion
-    // ═══════════════════════════════════════════════════════════════
-    const domainSlots = new Map(); // Map<domain, memory>
-    const requestId = options.requestId || 'unknown';
-
-    // STR1: Vehicle slot
-    const isVehicleQuery = /\b(car|vehicle|drive|driving|drove|tesla|automobile|model)\b/i.test(normalizedQuery);
-    if (isVehicleQuery) {
-      console.log(`[DOMAIN-SLOT] 🚗 Vehicle query detected: "${normalizedQuery}"`);
-      // Find best candidate with vehicle signal
-      const vehicleCandidate = filtered.find(m => {
-        const content = (m.content || '').toLowerCase();
-        return /\b(car|vehicle|drive|driving|drove|tesla|model\s*3|automobile)\b/i.test(content);
-      });
-
-      if (vehicleCandidate) {
-        domainSlots.set('vehicle', vehicleCandidate);
-        console.log(`[PROOF] retrieval:domain-slot rid=${requestId} domain=vehicle selected_id=${vehicleCandidate.id} reason=vehicle_signal_detected`);
-        console.log(`[DOMAIN-SLOT]    Selected memory ${vehicleCandidate.id}: "${(vehicleCandidate.content || '').substring(0, 80)}"`);
-      } else {
-        console.log(`[PROOF] retrieval:domain-slot rid=${requestId} domain=vehicle selected_id=null reason=no_qualifying_candidate`);
-      }
-    }
-
-    // CMP2: Contacts/unicode slot
-    const isContactsQuery = /\b(contacts?|people|names?|who\s+are\s+my\s+contacts?|list\s+people)\b/i.test(normalizedQuery);
-    if (isContactsQuery) {
-      console.log(`[DOMAIN-SLOT] 📇 Contacts query detected: "${normalizedQuery}"`);
-      // Find best candidate with unicode anchors or contact-related content
-      const contactCandidate = filtered.find(m => {
-        const content = m.content || '';
-        const hasUnicode = /[^\x00-\x7F]/.test(content); // Contains non-ASCII characters
-        const hasContactSignal = /\b(contact|person|people|name|friend|colleague|dr\.|doctor)\b/i.test(content);
-        return hasUnicode || hasContactSignal;
-      });
-
-      if (contactCandidate) {
-        domainSlots.set('contacts', contactCandidate);
-        console.log(`[PROOF] retrieval:domain-slot rid=${requestId} domain=contacts selected_id=${contactCandidate.id} reason=unicode_or_contact_signal_detected`);
-        console.log(`[DOMAIN-SLOT]    Selected memory ${contactCandidate.id}: "${(contactCandidate.content || '').substring(0, 80)}"`);
-      } else {
-        console.log(`[PROOF] retrieval:domain-slot rid=${requestId} domain=contacts selected_id=null reason=no_qualifying_candidate`);
-      }
-    }
-
-    // EDG3: Pricing slot
-    const isPricingQuery = /\b(pricing|price|prices|tier|tiers|plan|plans|cost|costs|subscription|monthly|yearly|payment)\b/i.test(normalizedQuery);
-    if (isPricingQuery) {
-      console.log(`[DOMAIN-SLOT] 💰 Pricing query detected: "${normalizedQuery}"`);
-      // Find best candidate with pricing anchors
-      const pricingCandidate = filtered.find(m => {
-        const content = (m.content || '').toLowerCase();
-        return /\b(pricing|price|\$|usd|tier|plan|cost|subscription|monthly|yearly|payment|free|basic|pro|enterprise)\b/i.test(content) ||
-               /\d+\s*(dollars?|usd|\$|\/month|\/year|per\s+month|per\s+year)/i.test(content);
-      });
-
-      if (pricingCandidate) {
-        domainSlots.set('pricing', pricingCandidate);
-        console.log(`[PROOF] retrieval:domain-slot rid=${requestId} domain=pricing selected_id=${pricingCandidate.id} reason=pricing_signal_detected`);
-        console.log(`[DOMAIN-SLOT]    Selected memory ${pricingCandidate.id}: "${(pricingCandidate.content || '').substring(0, 80)}"`);
-      } else {
-        console.log(`[PROOF] retrieval:domain-slot rid=${requestId} domain=pricing selected_id=null reason=no_qualifying_candidate`);
-      }
-    }
-
-    if (domainSlots.size > 0) {
-      console.log(`[DOMAIN-SLOT] ✅ Reserved ${domainSlots.size} domain slot(s) for deterministic inclusion`);
-    }
-    // ═══════════════════════════════════════════════════════════════
-
     // STEP 4: Enforce token budget and take results that fit
     const tokenBudget = options.tokenBudget || 2000;
-    const MAX_MEMORIES = 5; // maxInjectedMemories = 5 cap
     let usedTokens = 0;
     const results = [];
-
-    // ═══════════════════════════════════════════════════════════════
-    // CRITICAL FIX #624: PRE-SEED RESULTS WITH DOMAIN SLOTS (FORCE INCLUSION)
-    // Domain slot memories MUST be included before filling from ranked list
-    // This guarantees they make it into final results even if ranked low
-    // ═══════════════════════════════════════════════════════════════
-    const domainSlotMemories = Array.from(domainSlots.values());
-    
-    if (domainSlotMemories.length > 0) {
-      console.log(`[DOMAIN-SLOT] 🔒 Pre-seeding results with ${domainSlotMemories.length} domain slot(s)`);
-      
-      for (const memory of domainSlotMemories) {
-        if (!memory) continue;
-        
-        // Check if already in results (shouldn't happen, but safety check)
-        if (results.some(r => r.id === memory.id)) {
-          console.log(`[DOMAIN-SLOT] ⚠️  Memory ${memory.id} already in results, skipping`);
-          continue;
-        }
-        
-        const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
-        
-        // Respect MAX_MEMORIES hard cap but be lenient with token budget
-        // Domain slots get priority and can use up to 120% of budget if needed
-        if (results.length >= MAX_MEMORIES) {
-          console.log(`[DOMAIN-SLOT] ⚠️  Already at MAX_MEMORIES (${MAX_MEMORIES}), cannot add more domain slots`);
-          break;
-        }
-        
-        const allowedOverflow = tokenBudget * 0.2;
-        if (usedTokens + memoryTokens > tokenBudget + allowedOverflow) {
-          console.log(`[DOMAIN-SLOT] ⚠️  Memory ${memory.id} would exceed budget + 20% overflow (${usedTokens + memoryTokens} > ${tokenBudget + allowedOverflow}), skipping`);
-          continue;
-        }
-        
-        results.push(memory);
-        usedTokens += memoryTokens;
-        console.log(`[DOMAIN-SLOT] ✅ Pre-seeded memory ${memory.id} (${memoryTokens} tokens, total: ${usedTokens}/${tokenBudget})`);
-      }
-      
-      console.log(`[DOMAIN-SLOT] 🔒 Pre-seeding complete: ${results.length} memories, ${usedTokens} tokens used`);
-    }
-    // ═══════════════════════════════════════════════════════════════
 
     // ═══════════════════════════════════════════════════════════════
     // ISSUE #575: STR1 DEBUG - Track Tesla/car queries through pipeline
@@ -1747,14 +1626,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const entityBoostedMemories = filtered.filter(m => m.entity_boosted);
     const explicitRecallMemories = filtered.filter(m => m.explicit_recall_boosted);
     const ordinalBoostedMemories = filtered.filter(m => m.ordinal_boosted);
-    // domainSlotMemories already declared at line 1654 for pre-seeding
-
+    
     // Collect IDs of high-priority memories to track what we've already added
     const highPriorityIds = new Set([
       ...entityBoostedMemories.map(m => m.id),
       ...explicitRecallMemories.map(m => m.id),
-      ...ordinalBoostedMemories.map(m => m.id),
-      ...domainSlotMemories.map(m => m.id) // CRITICAL FIX #624: Domain slots
+      ...ordinalBoostedMemories.map(m => m.id)
     ]);
     
     // Group related memories by detected entities
@@ -1776,25 +1653,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     console.log(`  Entity-boosted: ${entityBoostedMemories.length}`);
     console.log(`  Explicit-recall: ${explicitRecallMemories.length}`);
     console.log(`  Ordinal-boosted: ${ordinalBoostedMemories.length}`);
-    console.log(`  Domain-slots: ${domainSlotMemories.length}`); // CRITICAL FIX #624
     console.log(`  Related groups: ${relatedGroups.size}`);
     
     // First pass: Add ALL high-priority memories together (they come as a group)
     for (const memory of filtered) {
       if (highPriorityIds.has(memory.id)) {
-        // Skip if already added (e.g., from domain slot pre-seeding)
-        if (results.find(r => r.id === memory.id)) {
-          console.log(`[RETRIEVAL-GROUPING] ℹ️  Memory ${memory.id} already in results (domain slot), skipping`);
-          continue;
-        }
-        
         const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
-        
-        // Check MAX_MEMORIES cap
-        if (results.length >= MAX_MEMORIES) {
-          console.log(`[RETRIEVAL-GROUPING] ⚠️  MAX_MEMORIES (${MAX_MEMORIES}) reached, skipping remaining high-priority`);
-          break;
-        }
         
         // For high-priority memories, be more lenient with token budget
         // Allow up to 20% overflow to ensure related memories stay together
@@ -1819,14 +1683,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       
       const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
       
-      // Check if adding this memory would exceed budget or MAX_MEMORIES
+      // Check if adding this memory would exceed budget
       if (usedTokens + memoryTokens > tokenBudget) {
         console.log(`[SEMANTIC RETRIEVAL] Token budget reached: ${usedTokens}/${tokenBudget} tokens used`);
-        break;
-      }
-      
-      if (results.length >= MAX_MEMORIES) {
-        console.log(`[SEMANTIC RETRIEVAL] MAX_MEMORIES (${MAX_MEMORIES}) reached`);
         break;
       }
       
@@ -1980,92 +1839,6 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         console.log('[INF3-DEBUG] All temporal facts present: false');
       }
       console.log('[INF3-DEBUG] ═══════════════════════════════════════════════════════');
-    }
-    // ═══════════════════════════════════════════════════════════════
-
-    // ═══════════════════════════════════════════════════════════════
-    // CRITICAL FIX #624: NUA1 - DETERMINISTIC AMBIGUITY DETECTION
-    // Detect when ≥2 memories reference the same entity label with different descriptors
-    // This MUST NOT depend on the model "noticing" - it's deterministic
-    // ═══════════════════════════════════════════════════════════════
-    const ambiguityDetected = new Map(); // Map<entityName, variantDescriptors[]>
-
-    if (detectedEntities.length > 0) {
-      detectedEntities.forEach(entityName => {
-        // Find all memories in results that mention this entity
-        const memoriesWithEntity = results.filter(m => {
-          const entityRegex = new RegExp(`\\b${entityName}\\b`, 'i');
-          return entityRegex.test(m.content || '');
-        });
-
-        if (memoriesWithEntity.length >= 2) {
-          // Extract descriptors for this entity from each memory
-          const variants = [];
-          const descriptorPatterns = [
-            new RegExp(`(friend|colleague|coworker|manager|boss|partner|neighbor|roommate|relative|family|acquaintance)\\s+${entityName}`, 'i'),
-            new RegExp(`${entityName}\\s+(from|at|in)\\s+(\\w+)`, 'i'),
-            new RegExp(`(my|our)\\s+(\\w+)\\s+${entityName}`, 'i')
-          ];
-
-          memoriesWithEntity.forEach(memory => {
-            const content = memory.content || '';
-            let descriptor = null;
-
-            // Try to extract descriptor from content
-            for (const pattern of descriptorPatterns) {
-              const match = content.match(pattern);
-              if (match) {
-                descriptor = match[1] || match[0];
-                break;
-              }
-            }
-
-            if (descriptor || memoriesWithEntity.length >= 2) {
-              // Check if we already have a different variant
-              const existingVariant = variants.find(v => v.descriptor && v.descriptor !== descriptor);
-              if (!descriptor || existingVariant) {
-                // Either no descriptor found (ambiguous by default) or different descriptors found
-                variants.push({
-                  memoryId: memory.id,
-                  descriptor: descriptor || 'unknown',
-                  contentPreview: content.substring(0, 100)
-                });
-              } else if (variants.length === 0) {
-                // First variant
-                variants.push({
-                  memoryId: memory.id,
-                  descriptor: descriptor,
-                  contentPreview: content.substring(0, 100)
-                });
-              }
-            }
-          });
-
-          // If we have multiple variants or multiple memories without clear same-descriptor, flag ambiguity
-          if (variants.length >= 2) {
-            ambiguityDetected.set(entityName, variants);
-            console.log(`[PROOF] ambiguity:detected rid=${requestId} entity=${entityName} variants=${variants.length}`);
-            console.log(`[AMBIGUITY-NUA1] 🚨 Detected ambiguity for entity "${entityName}"`);
-            variants.forEach((v, idx) => {
-              console.log(`[AMBIGUITY-NUA1]   Variant ${idx + 1}: ${v.descriptor} (memory ${v.memoryId})`);
-              console.log(`[AMBIGUITY-NUA1]      Preview: "${v.contentPreview}"`);
-            });
-          }
-        }
-      });
-    }
-
-    // Add ambiguity information to telemetry
-    if (ambiguityDetected.size > 0) {
-      telemetry.ambiguity_detected = true;
-      telemetry.ambiguous_entities = Array.from(ambiguityDetected.keys());
-      telemetry.ambiguity_details = Array.from(ambiguityDetected.entries()).map(([entity, variants]) => ({
-        entity,
-        variantCount: variants.length,
-        memoryIds: variants.map(v => v.memoryId),
-        variants: variants // Include full variant details with descriptors
-      }));
-      console.log(`[AMBIGUITY-NUA1] ✅ Flagged ${ambiguityDetected.size} ambiguous entity/entities for deterministic handling`);
     }
     // ═══════════════════════════════════════════════════════════════
 
