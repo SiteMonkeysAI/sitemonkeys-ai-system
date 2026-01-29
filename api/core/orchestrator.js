@@ -4924,6 +4924,7 @@ Mode: ${modeConfig?.display_name || mode}
           );
 
           dbQueryExecuted = true;
+          console.log(`[TEMPORAL-AUTHORITATIVE] db_rows=${dbResult.rows?.length || 0}`);
 
           if (dbResult.rows && dbResult.rows.length > 0) {
             for (const row of dbResult.rows) {
@@ -5081,6 +5082,7 @@ Mode: ${modeConfig?.display_name || mode}
         );
 
         console.log(`[PROOF] authoritative-db domain=ambiguity ran=true rows=${dbResult.rows.length}`);
+        console.log(`[AMBIGUITY-AUTHORITATIVE] db_rows=${dbResult.rows?.length || 0}`);
 
         if (dbResult.rows && dbResult.rows.length >= 2) {
           // Group rows by which name they contain (using safe string operations, no dynamic regex)
@@ -5142,6 +5144,9 @@ Mode: ${modeConfig?.display_name || mode}
                 }
               }
             }
+
+            // Log descriptors found for debugging
+            console.log(`[AMBIGUITY-AUTHORITATIVE] entity=${name} descriptors=${Array.from(descriptors).join(',') || 'none'} count=${descriptors.size}`);
 
             // If we found 2+ different descriptors, ambiguity exists
             if (descriptors.size >= 2) {
@@ -5215,17 +5220,17 @@ Mode: ${modeConfig?.display_name || mode}
         return { correctionApplied: false, response };
       }
 
-      // Check if response already mentions a vehicle
-      const vehicleInResponse = /\b(tesla|honda|toyota|ford|chevrolet|nissan|bmw|mercedes|audi|lexus|mazda|subaru|jeep|ram|gmc|model\s*[0-9sxy]|car|truck|suv|vehicle)\b/i;
-      if (vehicleInResponse.test(response)) {
-        console.log(`[VEHICLE-AUTHORITATIVE] vehicle_found=false injected=false reason=already_in_response`);
-        return { correctionApplied: false, response };
-      }
-
       // Check if response is a system refusal (starts with "I" + refusal phrase)
       // More precise than generic "don't have" anywhere in response
       const refusalPattern = /^I\s+(don't have|cannot|can't|am unable|do not have).*\b(information|memory|access|data|knowledge)\b/i;
       const isRefusal = refusalPattern.test(response.trim());
+
+      // Check if response already mentions a vehicle (but NOT in refusal context)
+      const vehicleInResponse = /\b(tesla|honda|toyota|ford|chevrolet|nissan|bmw|mercedes|audi|lexus|mazda|subaru|jeep|ram|gmc|model\s*[0-9sxy]|car|truck|suv|vehicle)\b/i;
+      if (!isRefusal && vehicleInResponse.test(response)) {
+        console.log(`[VEHICLE-AUTHORITATIVE] vehicle_found=false injected=false reason=already_in_response`);
+        return { correctionApplied: false, response };
+      }
 
       this.debug(`[VEHICLE-AUTHORITATIVE] Vehicle query detected, isRefusal=${isRefusal}`);
 
