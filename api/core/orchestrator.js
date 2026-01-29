@@ -5231,8 +5231,10 @@ Mode: ${modeConfig?.display_name || mode}
       // Check if response is a system refusal (starts with "I" + refusal phrase)
       // More precise than generic "don't have" anywhere in response
       // Updated to handle "I'm sorry, but I don't have..." patterns (Issue #636-STR1)
+      // Bound response before regex to prevent polynomial backtracking (CodeQL fix)
       const refusalPattern = /^I('m sorry[^.]*?)?\s*(don't have|cannot|can't|am unable|do not have)/i;
-      const isRefusal = refusalPattern.test(response.trim());
+      const safeResponse = response.trim().substring(0, 200);
+      const isRefusal = refusalPattern.test(safeResponse);
 
       // Check if response already mentions a vehicle (but NOT in refusal context)
       const vehicleInResponse = /\b(tesla|honda|toyota|ford|chevrolet|nissan|bmw|mercedes|audi|lexus|mazda|subaru|jeep|ram|gmc|model\s*[0-9sxy]|car|truck|suv|vehicle)\b/i;
