@@ -19,6 +19,9 @@ class AnchorPreservationValidator {
    * Returns { correctionApplied: boolean, adjustedResponse: string, ... }
    */
   async validate({ response, memoryContext = [], query = '', context = {} }) {
+    // EXECUTION PROOF - Verify anchor preservation validator is active (EDG3)
+    console.log('[PROOF] validator:anchor-preservation v=2026-01-29a file=api/lib/validators/anchor-preservation.js fn=validate');
+    
     try {
       // Extract anchors from memory context
       const anchors = this.#extractAnchors(memoryContext);

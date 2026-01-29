@@ -19,6 +19,9 @@ class CharacterPreservationValidator {
    * Returns { correctionApplied: boolean, adjustedResponse: string, ... }
    */
   async validate({ response, memoryContext = [], context = {} }) {
+    // EXECUTION PROOF - Verify character preservation validator is active (CMP2)
+    console.log('[PROOF] validator:character-preservation v=2026-01-29a file=api/lib/validators/character-preservation.js fn=validate');
+    
     try {
       let correctionApplied = false;
       let adjustedResponse = response;

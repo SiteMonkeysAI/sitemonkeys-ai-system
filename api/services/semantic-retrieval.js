@@ -730,6 +730,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
   };
 
   // ═══════════════════════════════════════════════════════════════
+  // EXECUTION PROOF - Verify this code path is active
+  // ═══════════════════════════════════════════════════════════════
+  console.log(`[PROOF] semantic-retrieval v=2026-01-29a file=api/services/semantic-retrieval.js fn=retrieveSemanticMemories`);
+  
+  // ═══════════════════════════════════════════════════════════════
   // CRITICAL DIAGNOSTIC LOGGING #549, #553: Track userId through retrieval
   // ═══════════════════════════════════════════════════════════════
   console.log(`[RETRIEVAL-ENTRY] ════════════════════════════════════════`);
