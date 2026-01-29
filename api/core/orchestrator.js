@@ -1710,16 +1710,18 @@ export class Orchestrator {
       
       if (retrievalTelemetry.ambiguity_detected === true && retrievalTelemetry.ambiguous_entities) {
         const ambiguousEntities = retrievalTelemetry.ambiguous_entities;
-        const ambiguityDetails = retrievalTelemetry.ambiguity_details || {};
+        const ambiguityDetailsArray = retrievalTelemetry.ambiguity_details || [];
         
         console.log(`[PROOF] nua1:override rid=${sessionId || 'unknown'} entities=${ambiguousEntities.join(',')}`);
         console.log(`[NUA1-GUARD] 🚨 Ambiguity detected for entities: ${ambiguousEntities.join(', ')}`);
         
         // Build clarification message based on detected ambiguity
-        const clarificationParts = ambiguousEntities.map(entity => {
-          const details = ambiguityDetails[entity] || [];
-          if (details.length >= 2) {
-            const descriptors = details.map(d => d.descriptor).filter(Boolean);
+        const clarificationParts = ambiguityDetailsArray.map(detail => {
+          const entity = detail.entity;
+          const variants = detail.variants || [];
+          
+          if (variants.length >= 2) {
+            const descriptors = variants.map(v => v.descriptor).filter(d => d && d !== 'unknown');
             if (descriptors.length >= 2) {
               return `${entity} (${descriptors.join(' vs ')})`;
             }

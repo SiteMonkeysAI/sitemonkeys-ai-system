@@ -1667,15 +1667,17 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         
         const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
         
-        // Check if adding this memory would exceed budget or MAX_MEMORIES
-        if (usedTokens + memoryTokens > tokenBudget) {
-          console.log(`[DOMAIN-SLOT] ⚠️  Memory ${memory.id} would exceed token budget (${usedTokens + memoryTokens} > ${tokenBudget}), skipping`);
-          continue;
-        }
-        
+        // Respect MAX_MEMORIES hard cap but be lenient with token budget
+        // Domain slots get priority and can use up to 120% of budget if needed
         if (results.length >= MAX_MEMORIES) {
           console.log(`[DOMAIN-SLOT] ⚠️  Already at MAX_MEMORIES (${MAX_MEMORIES}), cannot add more domain slots`);
           break;
+        }
+        
+        const allowedOverflow = tokenBudget * 0.2;
+        if (usedTokens + memoryTokens > tokenBudget + allowedOverflow) {
+          console.log(`[DOMAIN-SLOT] ⚠️  Memory ${memory.id} would exceed budget + 20% overflow (${usedTokens + memoryTokens} > ${tokenBudget + allowedOverflow}), skipping`);
+          continue;
         }
         
         results.push(memory);
@@ -1787,6 +1789,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         }
         
         const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
+        
+        // Check MAX_MEMORIES cap
+        if (results.length >= MAX_MEMORIES) {
+          console.log(`[RETRIEVAL-GROUPING] ⚠️  MAX_MEMORIES (${MAX_MEMORIES}) reached, skipping remaining high-priority`);
+          break;
+        }
         
         // For high-priority memories, be more lenient with token budget
         // Allow up to 20% overflow to ensure related memories stay together
@@ -2054,7 +2062,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       telemetry.ambiguity_details = Array.from(ambiguityDetected.entries()).map(([entity, variants]) => ({
         entity,
         variantCount: variants.length,
-        memoryIds: variants.map(v => v.memoryId)
+        memoryIds: variants.map(v => v.memoryId),
+        variants: variants // Include full variant details with descriptors
       }));
       console.log(`[AMBIGUITY-NUA1] ✅ Flagged ${ambiguityDetected.size} ambiguous entity/entities for deterministic handling`);
     }

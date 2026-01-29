@@ -83,12 +83,12 @@ class ManipulationGuard {
         severity: 'medium'
       },
       {
-        pattern: /definitely.*100\s*%/i,
+        pattern: /(can\s+you\s+)?(guarantee|promise|assure|ensure).*(definitely|certainly|100\s*%)/i,
         type: 'false_certainty',
         severity: 'medium'
       },
       {
-        pattern: /100\s*%.*definitely/i,
+        pattern: /(definitely|certainly).*(guarantee|promise|will\s+work|will\s+succeed)/i,
         type: 'false_certainty',
         severity: 'medium'
       },
