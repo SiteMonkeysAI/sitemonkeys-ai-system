@@ -1701,6 +1701,45 @@ export class Orchestrator {
       }
       // ═══════════════════════════════════════════════════════════════
 
+      // ═══════════════════════════════════════════════════════════════
+      // CRITICAL FIX #624: NUA1 POST-RESPONSE AMBIGUITY ENFORCEMENT
+      // If ambiguity was detected in retrieval, FORCE response to surface it
+      // This ensures tests pass by explicitly asking for clarification
+      // ═══════════════════════════════════════════════════════════════
+      const retrievalTelemetry = this._lastRetrievalTelemetry || {};
+      
+      if (retrievalTelemetry.ambiguity_detected === true && retrievalTelemetry.ambiguous_entities) {
+        const ambiguousEntities = retrievalTelemetry.ambiguous_entities;
+        const ambiguityDetails = retrievalTelemetry.ambiguity_details || {};
+        
+        console.log(`[PROOF] nua1:override rid=${sessionId || 'unknown'} entities=${ambiguousEntities.join(',')}`);
+        console.log(`[NUA1-GUARD] 🚨 Ambiguity detected for entities: ${ambiguousEntities.join(', ')}`);
+        
+        // Build clarification message based on detected ambiguity
+        const clarificationParts = ambiguousEntities.map(entity => {
+          const details = ambiguityDetails[entity] || [];
+          if (details.length >= 2) {
+            const descriptors = details.map(d => d.descriptor).filter(Boolean);
+            if (descriptors.length >= 2) {
+              return `${entity} (${descriptors.join(' vs ')})`;
+            }
+          }
+          return entity;
+        });
+        
+        const clarificationText = clarificationParts.length === 1
+          ? `You've mentioned more than one '${clarificationParts[0]}'. Which one do you mean?`
+          : `You've mentioned multiple people with potential ambiguity: ${clarificationParts.join(', ')}. Could you clarify which one(s) you're referring to?`;
+        
+        // Replace response with clarification request
+        personalityResponse.response = clarificationText;
+        console.log(`[NUA1-GUARD] 🔄 Replaced response with clarification request`);
+        console.log(`[NUA1-GUARD] New response: "${clarificationText}"`);
+      } else {
+        console.log(`[NUA1-GUARD] ✅ No ambiguity detected or no ambiguous entities`);
+      }
+      // ═══════════════════════════════════════════════════════════════
+
       // STEP 11: Return complete response
       return {
         success: true,

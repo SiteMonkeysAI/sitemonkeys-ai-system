@@ -1642,8 +1642,50 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // STEP 4: Enforce token budget and take results that fit
     const tokenBudget = options.tokenBudget || 2000;
+    const MAX_MEMORIES = 5; // maxInjectedMemories = 5 cap
     let usedTokens = 0;
     const results = [];
+
+    // ═══════════════════════════════════════════════════════════════
+    // CRITICAL FIX #624: PRE-SEED RESULTS WITH DOMAIN SLOTS (FORCE INCLUSION)
+    // Domain slot memories MUST be included before filling from ranked list
+    // This guarantees they make it into final results even if ranked low
+    // ═══════════════════════════════════════════════════════════════
+    const domainSlotMemories = Array.from(domainSlots.values());
+    
+    if (domainSlotMemories.length > 0) {
+      console.log(`[DOMAIN-SLOT] 🔒 Pre-seeding results with ${domainSlotMemories.length} domain slot(s)`);
+      
+      for (const memory of domainSlotMemories) {
+        if (!memory) continue;
+        
+        // Check if already in results (shouldn't happen, but safety check)
+        if (results.some(r => r.id === memory.id)) {
+          console.log(`[DOMAIN-SLOT] ⚠️  Memory ${memory.id} already in results, skipping`);
+          continue;
+        }
+        
+        const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
+        
+        // Check if adding this memory would exceed budget or MAX_MEMORIES
+        if (usedTokens + memoryTokens > tokenBudget) {
+          console.log(`[DOMAIN-SLOT] ⚠️  Memory ${memory.id} would exceed token budget (${usedTokens + memoryTokens} > ${tokenBudget}), skipping`);
+          continue;
+        }
+        
+        if (results.length >= MAX_MEMORIES) {
+          console.log(`[DOMAIN-SLOT] ⚠️  Already at MAX_MEMORIES (${MAX_MEMORIES}), cannot add more domain slots`);
+          break;
+        }
+        
+        results.push(memory);
+        usedTokens += memoryTokens;
+        console.log(`[DOMAIN-SLOT] ✅ Pre-seeded memory ${memory.id} (${memoryTokens} tokens, total: ${usedTokens}/${tokenBudget})`);
+      }
+      
+      console.log(`[DOMAIN-SLOT] 🔒 Pre-seeding complete: ${results.length} memories, ${usedTokens} tokens used`);
+    }
+    // ═══════════════════════════════════════════════════════════════
 
     // ═══════════════════════════════════════════════════════════════
     // ISSUE #575: STR1 DEBUG - Track Tesla/car queries through pipeline
@@ -1703,7 +1745,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const entityBoostedMemories = filtered.filter(m => m.entity_boosted);
     const explicitRecallMemories = filtered.filter(m => m.explicit_recall_boosted);
     const ordinalBoostedMemories = filtered.filter(m => m.ordinal_boosted);
-    const domainSlotMemories = Array.from(domainSlots.values()); // CRITICAL FIX #624: Domain slot memories
+    // domainSlotMemories already declared at line 1654 for pre-seeding
 
     // Collect IDs of high-priority memories to track what we've already added
     const highPriorityIds = new Set([
@@ -1738,6 +1780,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // First pass: Add ALL high-priority memories together (they come as a group)
     for (const memory of filtered) {
       if (highPriorityIds.has(memory.id)) {
+        // Skip if already added (e.g., from domain slot pre-seeding)
+        if (results.find(r => r.id === memory.id)) {
+          console.log(`[RETRIEVAL-GROUPING] ℹ️  Memory ${memory.id} already in results (domain slot), skipping`);
+          continue;
+        }
+        
         const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
         
         // For high-priority memories, be more lenient with token budget
@@ -1763,9 +1811,14 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       
       const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
       
-      // Check if adding this memory would exceed budget
+      // Check if adding this memory would exceed budget or MAX_MEMORIES
       if (usedTokens + memoryTokens > tokenBudget) {
         console.log(`[SEMANTIC RETRIEVAL] Token budget reached: ${usedTokens}/${tokenBudget} tokens used`);
+        break;
+      }
+      
+      if (results.length >= MAX_MEMORIES) {
+        console.log(`[SEMANTIC RETRIEVAL] MAX_MEMORIES (${MAX_MEMORIES}) reached`);
         break;
       }
       
