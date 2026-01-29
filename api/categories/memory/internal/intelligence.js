@@ -1875,6 +1875,129 @@ class IntelligenceSystem {
         }
       }
 
+      // STEP 3.5: Anchor-aware boosting (Issue #615 - CMP2/EDG3)
+      // Boost memories with matching anchors (unicode names, pricing, etc.)
+      const queryAnchors = this.extractAnchors(query);
+      const hasQueryAnchors = queryAnchors.unicode.length > 0 || queryAnchors.pricing.length > 0;
+
+      if (hasQueryAnchors) {
+        this.logger.log(
+          `[ANCHOR-BOOST] Query contains anchors: ${queryAnchors.unicode.length} unicode, ${queryAnchors.pricing.length} pricing`,
+        );
+
+        allMemories = allMemories.map(memory => {
+          const memoryAnchors = memory.metadata?.anchors || { unicode: [], pricing: [], identifiers: [] };
+          let anchorBoost = 0;
+
+          // Check for matching unicode names (important for CMP2)
+          for (const unicodeName of queryAnchors.unicode) {
+            if (memoryAnchors.unicode.some(name => name.includes(unicodeName) || unicodeName.includes(name))) {
+              anchorBoost += 0.5;
+              this.logger.log(`[ANCHOR-BOOST] Unicode match: ${unicodeName} in memory ${memory.id}`);
+            }
+          }
+
+          // Check for matching pricing (important for EDG3)
+          for (const price of queryAnchors.pricing) {
+            if (memoryAnchors.pricing.some(p => p === price || memory.content?.includes(price))) {
+              anchorBoost += 0.3;
+              this.logger.log(`[ANCHOR-BOOST] Price match: ${price} in memory ${memory.id}`);
+            }
+          }
+
+          // Apply boost
+          if (anchorBoost > 0) {
+            return {
+              ...memory,
+              relevanceScore: (memory.relevanceScore || 0) + anchorBoost,
+              anchorBoost
+            };
+          }
+
+          return memory;
+        });
+      }
+
+      // STEP 3.6: Related-fact grouping for temporal reasoning (Issue #615 - INF3)
+      // When a memory contains a duration or temporal keyword, try to include related facts
+      const temporalKeywords = /\b(year|years|month|months|worked|left|started|joined|since|until|from|to|duration)\b/i;
+      const hasTemporalQuery = temporalKeywords.test(query);
+
+      if (hasTemporalQuery && allMemories.length > 0) {
+        this.logger.log(`[TEMPORAL-GROUPING] Temporal query detected, looking for related facts`);
+
+        // Extract entities from query (company names, proper nouns)
+        const entityPattern = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g;
+        const queryEntities = query.match(entityPattern) || [];
+
+        // Issue #615 Fix: Guard against empty entities (would create invalid SQL)
+        if (queryEntities.length > 0) {
+          // Cap max entities to bound query parameters
+          const MAX_ENTITIES = 5;
+          const cappedEntities = queryEntities.slice(0, MAX_ENTITIES);
+          
+          this.logger.log(`[TEMPORAL-GROUPING] Query entities: ${cappedEntities.join(', ')}`);
+
+          // Find memories that mention the same entities
+          const entityMemoryIds = new Set(allMemories.map(m => m.id));
+
+          // Issue #615 Fix: Use SINGLE query with OR conditions instead of N+1 queries
+          try {
+            // Build OR conditions for all entities
+            const entityConditions = cappedEntities.map((_, idx) => `content ILIKE $${idx + 2}`).join(' OR ');
+            const entityParams = cappedEntities.map(e => `%${e}%`);
+
+            const relatedQuery = `
+              SELECT * FROM persistent_memories
+              WHERE user_id = $1
+                AND (is_current = true OR is_current IS NULL)
+                AND (${entityConditions})
+                AND relevance_score > 0
+              ORDER BY created_at DESC
+              LIMIT 10
+            `;
+
+            const relatedResult = await this.coreSystem.executeQuery(relatedQuery, [
+              sanitizedUserId,
+              ...entityParams
+            ]);
+
+            // Cap added memories to avoid breaking selectivity (max 5 related facts)
+            let addedCount = 0;
+            const MAX_RELATED = 5;
+
+            for (const relatedMemory of relatedResult.rows) {
+              if (addedCount >= MAX_RELATED) break;
+              
+              if (!entityMemoryIds.has(relatedMemory.id)) {
+                // Issue #615 Fix: Case-insensitive entity matching
+                const content = relatedMemory.content || '';
+                const contentLower = content.toLowerCase();
+                const matchedEntity = cappedEntities.find(e => 
+                  contentLower.includes(e.toLowerCase())
+                );
+
+                // Add related memory with a temporal grouping boost
+                allMemories.push({
+                  ...relatedMemory,
+                  relevanceScore: (relatedMemory.relevance_score || 0) + 0.4,
+                  temporalGrouping: true,
+                  groupedEntity: matchedEntity,
+                  source: "temporal_grouping"
+                });
+                entityMemoryIds.add(relatedMemory.id);
+                addedCount++;
+                this.logger.log(`[TEMPORAL-GROUPING] Added related fact for entity "${matchedEntity}": memory ${relatedMemory.id}`);
+              }
+            }
+            
+            this.logger.log(`[TEMPORAL-GROUPING] Added ${addedCount} related facts (capped at ${MAX_RELATED})`);
+          } catch (error) {
+            this.logger.error(`[TEMPORAL-GROUPING] Error finding related facts:`, error);
+          }
+        }
+      }
+
       // STEP 4: Re-rank by multi-dimensional relevance score (Issue #210 Fix 3: Match-first priority)
       const rankedMemories = allMemories.sort((a, b) => {
         return (b.relevanceScore || 0) - (a.relevanceScore || 0);
@@ -2410,10 +2533,10 @@ class IntelligenceSystem {
 
     // Stop words to exclude
     const stopWords = new Set(['what', 'is', 'my', 'the', 'a', 'an', 'are', 'was', 'were', 'did', 'do', 'does']);
-    
+
     // FIX #566-STR1: Entity-specific keywords that should get extra boost in ranking
     // These indicate the user is asking about a specific thing they've mentioned
-    const entityKeywords = new Set(['car', 'dog', 'cat', 'pet', 'vehicle', 'phone', 'name', 'color', 'favourite', 'favorite']);
+    const entityKeywords = new Set(['car', 'dog', 'cat', 'pet', 'vehicle', 'phone', 'name', 'color', 'colour', 'favourite', 'favorite']);
 
     // Extract words that are likely to be important for matching
     const words = queryLower.match(/\b\w+\b/g) || [];
@@ -2425,13 +2548,28 @@ class IntelligenceSystem {
       // Prioritize nouns that indicate what the user is asking about
       !/^(you|your|how|why|when|where|which|who|tell|give|show|find)$/.test(word)
     );
-    
+
     // FIX #566-STR1: Add short entity keywords that might have been filtered
     words.forEach(word => {
       if (entityKeywords.has(word) && !keyTerms.includes(word)) {
         keyTerms.push(word);
       }
     });
+
+    // FIX #615-STR1: Domain expansion for vehicle queries
+    // When user asks about car/vehicle, expand to include related terms
+    const vehicleTerms = ['car', 'vehicle', 'drive', 'automobile', 'auto'];
+    const hasVehicleTerm = words.some(word => vehicleTerms.includes(word));
+
+    if (hasVehicleTerm) {
+      // Add all vehicle-related terms to ensure retrieval
+      vehicleTerms.forEach(term => {
+        if (!keyTerms.includes(term)) {
+          keyTerms.push(term);
+        }
+      });
+      this.logger.log(`[DOMAIN-EXPANSION] Vehicle query detected, expanded terms: ${vehicleTerms.join(', ')}`);
+    }
 
     return [...new Set(keyTerms)]; // Remove duplicates
   }
@@ -4022,6 +4160,69 @@ class IntelligenceSystem {
     }
 
     return { hasOrdinal: false, ordinals: [] };
+  }
+
+  /**
+   * Extract anchors from content (Issue #615 - CMP2/EDG3)
+   * Anchors are critical data points that must be preserved exactly:
+   * - Unicode/diacritics (José, Björn, Zhang)
+   * - Prices and numerical values ($99, $299)
+   * - High-entropy identifiers
+   * @param {string} content - Text to extract anchors from
+   * @returns {object} - { unicode: [], pricing: [], identifiers: [] }
+   */
+  extractAnchors(content) {
+    if (!content || typeof content !== 'string') {
+      return { unicode: [], pricing: [], identifiers: [] };
+    }
+
+    // SECURITY FIX: Limit input length to prevent ReDoS (Issue #615 comment)
+    // Regex patterns have potential for polynomial backtracking on malicious input
+    const MAX_CONTENT_LENGTH = 10000;
+    const sanitizedContent = content.slice(0, MAX_CONTENT_LENGTH);
+
+    const anchors = {
+      unicode: [],
+      pricing: [],
+      identifiers: []
+    };
+
+    // Extract Unicode/diacritics names (characters outside ASCII range)
+    // Matches names with diacritics like José, Björn, François, etc.
+    const unicodeNamePattern = /\b[A-ZÀ-ÿ][a-zà-ÿ]+(?:[- ][A-ZÀ-ÿ][a-zà-ÿ]+)*\b/g;
+    const names = sanitizedContent.match(unicodeNamePattern) || [];
+    for (const name of names) {
+      // Only include if it has non-ASCII characters
+      if (/[À-ÿ]/.test(name)) {
+        anchors.unicode.push(name);
+      }
+    }
+
+    // Extract pricing information
+    // Matches: $99, $299, €100, £50, 99 dollars, etc.
+    const pricingPatterns = [
+      /\$\d+(?:,\d{3})*(?:\.\d{2})?/g,  // $99, $1,000, $99.99
+      /€\d+(?:,\d{3})*(?:\.\d{2})?/g,   // €100
+      /£\d+(?:,\d{3})*(?:\.\d{2})?/g,   // £50
+      /\d+(?:,\d{3})*(?:\.\d{2})?\s*(?:dollars?|USD|EUR|GBP)/gi  // 99 dollars
+    ];
+
+    for (const pattern of pricingPatterns) {
+      const matches = sanitizedContent.match(pattern) || [];
+      anchors.pricing.push(...matches);
+    }
+
+    // Extract high-entropy identifiers (already captured for exact match)
+    const identifierPattern = /[A-Z0-9][A-Z0-9-_]{4,}/g;
+    const identifiers = sanitizedContent.match(identifierPattern) || [];
+    anchors.identifiers.push(...identifiers);
+
+    // Deduplicate
+    anchors.unicode = [...new Set(anchors.unicode)];
+    anchors.pricing = [...new Set(anchors.pricing)];
+    anchors.identifiers = [...new Set(anchors.identifiers)];
+
+    return anchors;
   }
 }
 

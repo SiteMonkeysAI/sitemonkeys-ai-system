@@ -330,6 +330,21 @@ class PersistentMemoryOrchestrator {
       }
       // ═══════════════════════════════════════════════════════════════
 
+      // ═══════════════════════════════════════════════════════════════
+      // ANCHOR EXTRACTION (Issue #615 - CMP2/EDG3) - Store critical data points
+      // ═══════════════════════════════════════════════════════════════
+      const anchors = this.intelligenceSystem.extractAnchors(conversationContent);
+
+      if (anchors.unicode.length > 0 || anchors.pricing.length > 0 || anchors.identifiers.length > 0) {
+        console.log(`[ANCHORS] Detected anchors:`, {
+          unicode: anchors.unicode.length,
+          pricing: anchors.pricing.length,
+          identifiers: anchors.identifiers.length
+        });
+        metadata.anchors = anchors;
+      }
+      // ═══════════════════════════════════════════════════════════════
+
       // Route to determine category
       console.log('[TRACE-STORE] A5. About to call analyzeAndRoute...');
       const routing = await this.intelligenceSystem.analyzeAndRoute(

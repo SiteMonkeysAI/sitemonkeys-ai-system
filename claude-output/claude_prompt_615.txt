@@ -1,0 +1,204 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #615: [claude-fix] CRITICAL: Deterministic Fixes for Remaining Failures (B3, INF3, STR1, CMP2, EDG3)
+
+Issue Description:
+# [claude-fix] CRITICAL: Deterministic Fixes for Remaining Failures (B3, INF3, STR1, CMP2, EDG3)
+
+## Priority: CRITICAL
+
+## Goal: SMFULL 24/24 + SMDEEP 15/15 (39/39 total) with zero regression
+
+---
+
+## Current Verified State (from live console suites)
+
+**SMFULL:** 23/24 (FAIL: **B3 Ordinal Ranking**)
+**SMDEEP:** 11/15 (FAIL: **INF3, STR1, CMP2, EDG3**)
+
+All other tests currently passing must remain passing.
+
+---
+
+## A) B3 — Ordinal Ranking Must Become Deterministic (Not "semantic")
+
+### Symptom
+
+* "first code" returns correct value
+* "second code" does NOT reliably return the second value (DELTA)
+
+### Root cause
+
+Ordinal questions cannot rely on LLM selection. They require deterministic resolution from stored data.
+
+### Required Fix
+
+Implement a deterministic ordinal resolver at the **final response boundary**:
+
+1. **Storage** must persist:
+   * `ordinal` (1,2,3…)
+   * `ordinal_subject` (e.g., "code")
+   * **`ordinal_value`** (the actual token value like `CHARLIE-...` / `DELTA-...`)
+
+2. **Retrieval** must inject ordinal candidates with explicit machine-readable metadata (not just free text).
+
+3. **Orchestrator** must run a **slot-scoped post-response validator**:
+   * Detect ordinal query ("first", "second", etc.)
+   * Identify subject ("code")
+   * From injected memory context, choose correct `ordinal_value`
+   * If response contains wrong ordinal value, replace only the **answer slot**, not a global replace
+   * If response is missing the value, inject it
+
+### Acceptance Criteria (B3)
+
+* Query "What is my first code?" returns **only** CHARLIE
+* Query "What is my second code?" returns **only** DELTA
+* Validator must log telemetry (in metadata) including:
+  * `ordinal_query_detected`
+  * `ordinal_subject`
+  * `ordinal_expected_value`
+  * `ordinal_repair_applied: true/false`
+
+---
+
+## B) CMP2 + EDG3 — Anchor Retrieval Must Be Guaranteed When Query Requires It
+
+### Symptom
+
+CMP2 fails because names with diacritics are not present in response.
+EDG3 fails because pricing anchors are missing.
+
+### Root cause
+
+Anchors are not being retrieved/injected reliably. Validators cannot correct what is not present.
+
+### Required Fix
+
+Add **Anchor-Aware Retrieval**:
+
+1. **During storage**, extract and store `anchors[]` for a memory:
+   * Unicode/diacritics strings (e.g., José García-López, Björn)
+   * Prices and tiers ($, %, "per month", etc.)
+   * High-entropy identifiers
+
+2. **During retrieval**, when query domain indicates:
+   * contacts/names → boost memories with unicode anchors
+   * pricing/business → boost memories with pricing anchors
+
+3. Ensure at least 1 matching-anchor memory survives final selection (within caps).
+
+### Acceptance Criteria
+
+* CMP2 returns all required names exactly as stored (José, Björn, Zhang)
+* EDG3 returns pricing tiers and key advantages (no summarization loss)
+* Still respects memory cap and token budgets
+
+---
+
+## C) STR1 — Volume Stress Requires Domain Expansion + Selection Guarantee
+
+### Symptom
+
+Under 10 competing facts, car fact is not retrieved.
+
+### Required Fix
+
+1. Expand query for vehicle domain (car/vehicle/drive/automobile + model terms)
+2. Apply domain-aware scoring so at least one vehicle memory appears in top results if it exists.
+
+### Acceptance Criteria
+
+In STR1 test:
+* car, dog, color are all recalled correctly.
+
+---
+
+## D) INF3 — Temporal Reasoning Needs Related-Fact Grouping
+
+### Symptom
+
+System retrieves only one of the two required facts (worked 5 years / left in 2020).
+
+### Required Fix
+
+Implement "related memory grouping" for temporal reasoning:
+
+* If a retrieved memory contains duration ("5 years") and entity ("Google"), retrieval must attempt to also include date/endpoint memory ("left in 2020") for same entity.
+* This is retrieval architecture, not prompting.
+
+### Acceptance Criteria
+
+INF3 computes ~2015 from 2020 - 5 with correct reasoning.
+
+---
+
+## Hard Constraints
+
+* ESM only (no CommonJS)
+* No prompt yelling as the "fix" — no "MANDATORY", "CRITICAL", "MUST" instructions
+* No regressions on passing tests
+* Deterministic validators must be slot-scoped and bounded
+* Token budgets enforced (cap + token budget)
+* All validators must be pure deterministic code (no AI calls)
+
+---
+
+## Files Likely Involved
+
+### Storage (anchor extraction)
+* `api/categories/memory/internal/intelligence.js`
+* `api/categories/memory/internal/persistent_memory.js`
+
+### Retrieval (anchor-aware, domain-aware, related grouping)
+* `api/services/semantic-retrieval.js`
+
+### Validators (ordinal resolver, anchor enforcement)
+* `api/core/orchestrator.js`
+* `api/lib/validators/` (existing validator patterns)
+
+---
+
+## Verification Required
+
+After implementation, paste live output from SMFULL and SMDEEP showing:
+
+* **SMFULL: 24/24**
+* **SMDEEP: 15/15**
+* **TOTAL: 39/39**
+
+No regressions allowed on currently passing tests.
+
+---
+
+## Why This Issue Exists
+
+Previous attempts used:
+- Threshold tuning (helped some, caused regressions)
+- Query expansion (partial success)
+- Validators that work but can't fix what isn't retrieved
+
+The remaining 5 failures require **deterministic guarantees**, not probabilistic improvements:
+- B3: Ordinal answers must be deterministically correct
+- CMP2/EDG3: Anchors must be retrieved and preserved
+- STR1: Domain-relevant memories must survive selection
+- INF3: Related facts must be retrieved together
+
+**Make correctness deterministic where probabilistic behavior is unacceptable.**
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
