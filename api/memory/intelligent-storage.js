@@ -1614,11 +1614,6 @@ Facts (preserve user terminology + add synonyms):`;
       console.log('[TRACE-INTELLIGENT] I16. Stored memory ID:', memoryId);
       console.log(`[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=${memoryId}, tokens=${tokenCount}`);
 
-      // CRITICAL FIX #624: Proof telemetry for storage write
-      const fingerprint = metadata.fingerprint || 'none';
-      const isExplicit = metadata.explicit_storage_request === true;
-      console.log(`[PROOF] storage:write rid=${metadata.rid || 'unknown'} memoryId=${memoryId} fingerprint=${fingerprint} explicit=${isExplicit}`);
-
       // DIAGNOSTIC LOGGING: Track exact storage details
       console.log('[STORAGE-DEBUG] Memory stored:', {
         id: memoryId,
