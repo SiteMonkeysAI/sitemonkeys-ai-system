@@ -5087,13 +5087,13 @@ Mode: ${modeConfig?.display_name || mode}
               }
 
               // Pattern: name + from/at location (Alex from Seattle, Alex at Google)
-              const locationMatch = content.match(new RegExp(`${name}\\s+(from|at|in)\\s+([A-Z][a-z]+)`, 'i'));
+              const locationMatch = content.match(new RegExp(`${safeName}\\s+(from|at|in)\\s+([A-Z][a-z]+)`, 'i'));
               if (locationMatch) {
                 descriptors.add(`${locationMatch[1]} ${locationMatch[2]}`);
               }
 
               // Pattern: my [relation] name (my friend Alex)
-              const myRelationMatch = content.match(new RegExp(`my\\s+(\\w+)\\s+${name}`, 'i'));
+              const myRelationMatch = content.match(new RegExp(`my\\s+(\\w+)\\s+${safeName}`, 'i'));
               if (myRelationMatch) {
                 descriptors.add(myRelationMatch[1].toLowerCase());
               }
