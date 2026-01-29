@@ -1,0 +1,50 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #633: [claude-fix] Fix Memory Storage for Authoritative Validators
+
+Issue Description:
+## Problem
+Authoritative validators execute but can't find the data they need.
+
+### Evidence from logs:
+
+1. **B3 Ordinal:** `found=false` — memories lack `metadata.ordinal_subject`
+2. **INF3 Temporal:** `db_rows=1` but `duration=null` — content doesn't match extraction patterns  
+3. **STR1 Vehicle:** No logs — validator not triggering at all
+4. **NUA1 Ambiguity:** `db_rows=1` — only finding 1 of 2 Alex memories
+
+## Fixes Needed
+
+### 1. Ordinal Storage
+When user says "My first code is X" and "My second code is Y", storage must set:
+- `metadata.ordinal = 1` and `metadata.ordinal_subject = 'code'` and `metadata.ordinal_value = 'X'`
+- `metadata.ordinal = 2` and `metadata.ordinal_subject = 'code'` and `metadata.ordinal_value = 'Y'`
+
+### 2. Temporal Storage  
+Ensure content contains extractable patterns like:
+- "worked 5 years" or "for 5 years" or "spent 5 years"
+- "left in 2020" or "until 2020" or "ended 2020"
+
+### 3. Vehicle Validator
+Debug why validator isn't logging. Check gating condition.
+
+### 4. Check why only 1 Alex memory found
+Two separate "Alex" memories should both be returned by query.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

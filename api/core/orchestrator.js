@@ -5083,6 +5083,8 @@ Mode: ${modeConfig?.display_name || mode}
 
         console.log(`[PROOF] authoritative-db domain=ambiguity ran=true rows=${dbResult.rows.length}`);
         console.log(`[AMBIGUITY-AUTHORITATIVE] db_rows=${dbResult.rows?.length || 0}`);
+        console.log(`[AMBIGUITY-DEBUG] Query names: ${candidateNames.join(', ')}`);
+        console.log(`[AMBIGUITY-DEBUG] Like patterns: ${likeParams.join(', ')}`);
 
         if (dbResult.rows && dbResult.rows.length >= 2) {
           // Group rows by which name they contain (using safe string operations, no dynamic regex)
@@ -5100,8 +5102,14 @@ Mode: ${modeConfig?.display_name || mode}
             for (const name of candidateNames) {
               if (contentLower.includes(name.toLowerCase())) {
                 nameMatches.get(name).push(content);
+                console.log(`[AMBIGUITY-DEBUG] Row ${row.id} matched name "${name}": "${content.substring(0, 80)}..."`);
               }
             }
+          }
+
+          // Debug: Log nameMatches counts
+          for (const [name, contents] of nameMatches) {
+            console.log(`[AMBIGUITY-DEBUG] Name "${name}" found in ${contents.length} memories`);
           }
 
           // Extract descriptors for each name using STATIC regex patterns (no interpolation)
