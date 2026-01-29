@@ -4696,16 +4696,22 @@ Mode: ${modeConfig?.display_name || mode}
         this.debug(`[ORDINAL-VALIDATOR] No ordinal metadata found, attempting created_at fallback for subject "${subject}"`);
         
         // Fallback: Find memories containing the subject and sort by created_at
+        // Use word boundary matching to avoid false positives (e.g., "code" matching "encoded")
+        const subjectPattern = new RegExp(`\\b${subject.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
         const subjectMemories = memories
           .filter(m => {
-            const content = (m.content || '').toLowerCase();
-            return content.includes(subject?.toLowerCase() || '');
+            const content = (m.content || '');
+            return subjectPattern.test(content);
           })
           .sort((a, b) => {
             // Sort by created_at ascending (earliest first)
             const timeA = new Date(a.created_at || 0).getTime();
             const timeB = new Date(b.created_at || 0).getTime();
-            return timeA - timeB;
+            // Secondary sort by ID for deterministic ordering when timestamps are identical
+            if (timeA !== timeB) {
+              return timeA - timeB;
+            }
+            return (a.id || 0) - (b.id || 0);
           })
           .map((m, index) => ({
             ordinal: index + 1, // First = 1, Second = 2, etc.
@@ -4716,10 +4722,15 @@ Mode: ${modeConfig?.display_name || mode}
             id: m.id
           }));
         
+        // NOTE: Require at least 2 memories for fallback activation to maintain
+        // consistency with metadata-based flow (prevents single-memory no-ops)
+        // This ensures we only activate when there's actual ambiguity to resolve
         if (subjectMemories.length >= 2) {
           ordinalMemories = subjectMemories;
           fallbackUsed = true;
           this.debug(`[ORDINAL-VALIDATOR] ✅ Fallback activated: ${ordinalMemories.length} memories sorted by created_at`);
+        } else if (subjectMemories.length === 1) {
+          this.debug(`[ORDINAL-VALIDATOR] Fallback found 1 memory but requires 2+ for activation - validator is no-op`);
         }
       }
 
@@ -4765,11 +4776,11 @@ Mode: ${modeConfig?.display_name || mode}
 
       // Enhanced telemetry (Issue #615 + #618 follow-up requirements)
       const telemetry = {
-        ordinal_detected: ordinalNum,
+        ordinalDetected: ordinalNum,
         subject: subject,
-        candidate_count: ordinalMemories.length,
-        fallback_used: fallbackUsed,
-        selected_value: correctValue,
+        candidateCount: ordinalMemories.length,
+        fallbackUsed: fallbackUsed,
+        selectedValue: correctValue,
         wrongValuesInResponse: wrongValues.filter(wrong => response.includes(wrong)),
         hasCorrectValue,
         hasWrongValue
