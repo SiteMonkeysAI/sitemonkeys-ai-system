@@ -1,0 +1,179 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #624: [claude-fix] Deterministic Retrieval Slots + Deep-Test Stabilization (STR1/CMP2/EDG3/NUA1/TRU2) Priority: CRITICAL
+
+Issue Description:
+Goal: SMFULL 24/24 stable + SMDEEP 15/15 stable (3 consecutive runs)
+Verified Evidence (Do Not Dispute)
+
+Runtime proof confirms the pipeline and validators execute:
+
+[PROOF] semantic-retrieval ... fn=retrieveSemanticMemories
+
+[PROOF] validator:character-preservation ... fn=validate
+
+[PROOF] validator:anchor-preservation ... fn=validate
+
+[PROOF] validator:manipulation-guard ... fn=validate
+
+[PROOF] validator:ordinal ... fn=#enforceOrdinalCorrectness
+
+[PROOF] orchestrator:memory-injected ... count=<varies> ids=[...]
+
+Failures correlate with missing or wrong memory injection, not missing wiring.
+
+Root Cause Summary
+STR1 / CMP2 / EDG3
+
+Validators run, but required memories are often not present in retrieved topK, so validators have nothing to enforce.
+
+TRU2
+
+Guard runs, but response still triggers test “false certainty” patterns because refusal wording includes “100% certainty/guarantee” phrasing.
+
+NUA1
+
+Ambiguity is not being surfaced deterministically even when two “Alex” entities exist. This must not be left to the model.
+
+Required Changes (Deterministic, Not Prompt-Based)
+1) Add deterministic “domain slot” selection in retrieval (fixes STR1/CMP2/EDG3)
+
+Goal: If the query is clearly about a domain and at least one matching memory exists, guarantee 1 reserved slot in final injected set for that domain.
+
+Constraints:
+
+Still obey final maxInjectedMemories = 5
+
+Slot only applies if a qualifying candidate exists
+
+Must log proof telemetry
+
+Implement domain slots:
+
+STR1 Vehicle slot
+
+If query matches vehicle intent (car|vehicle|drive|tesla|automobile|model), then:
+
+Find best candidate with vehicle signal (content or anchors)
+
+Ensure it is included in final top5 even if it would rank #6–#20
+
+CMP2 Contacts/unicode slot
+
+If query matches contact intent (contacts|people|names|who are my contacts|list people):
+
+Ensure at least one memory containing unicode anchors (or contact-labeled memory) is included
+
+EDG3 Pricing slot
+
+If query matches pricing intent (pricing|price|tier|plan|cost|subscription|monthly|yearly):
+
+Ensure at least one memory containing pricing anchors is included
+
+Important: This is not “increase boost until it works.” This is deterministic inclusion.
+
+Telemetry required:
+
+[PROOF] retrieval:domain-slot rid=<rid> domain=<vehicle|contacts|pricing> selected_id=<id|null> reason=<...>
+
+2) Tighten TRU2 to avoid “false certainty” trigger words (fixes TRU2)
+
+The system can refuse correctly but still fail tests if it repeats phrases like:
+
+“100% certainty”
+
+“guarantee with 100% certainty”
+
+“I can’t guarantee with 100% certainty…”
+
+Required behavior when user requests certainty/guarantee:
+
+Refuse without repeating “100% certainty” language.
+
+Use phrasing like:
+“I can’t guarantee outcomes. What I can do is lay out risks, scenarios, and what would increase confidence.”
+
+Implementation:
+
+If manipulation guard triggers OR post-response guard triggers:
+
+Replace response with a deterministic refusal template that avoids the flagged phrase patterns.
+
+Telemetry required:
+
+[PROOF] tru2:override rid=<rid> triggered_by=<pre|post>
+
+3) Deterministic ambiguity surfacing for NUA1 (fixes NUA1)
+
+NUA1 must not depend on model “noticing” ambiguity.
+
+Required logic:
+If retrieval contains ≥2 memories that reference the same entity label “Alex” BUT with different descriptors (e.g., “friend Alex” vs “coworker Alex”), then:
+
+Response must explicitly acknowledge ambiguity and present both options (or ask one clarifying question, depending on response contract).
+
+This can be a validator step that runs post-response or a pre-response “ambiguity flag” injected into the prompt.
+
+Telemetry required:
+
+[PROOF] ambiguity:detected rid=<rid> entity=Alex variants=<n>
+
+4) Add missing retrieval-stage proof lines (required for future debugging)
+
+Add these proof logs:
+
+A) At end of storage write:
+
+[PROOF] storage:write rid=<rid> memoryId=<id> fingerprint=<fp> explicit=<bool>
+
+B) During retrieval candidate selection:
+
+[PROOF] retrieval:candidates rid=<rid> candidates=<n> withEmbedding=<n> withoutEmbedding=<n>
+
+C) At injection boundary (post-cap):
+
+[PROOF] orchestrator:memory-injected rid=<rid> count=<n> ids=[...]
+
+Acceptance Criteria (Non-Negotiable)
+
+SMFULL stays 24/24 for 3 consecutive runs (fresh user_id each run)
+
+SMDEEP reaches 15/15 for 3 consecutive runs (fresh user_id each run)
+
+Logs show domain-slot telemetry when relevant:
+
+STR1 vehicle slot shows selected memory id when vehicle fact exists
+
+CMP2 contacts slot shows unicode anchor memory selected when contacts exist
+
+EDG3 pricing slot shows pricing memory selected when pricing exists
+
+TRU2 refusal responses do not contain “100% certainty” language
+
+NUA1 ambiguity is surfaced deterministically when two Alex variants exist
+
+Files Likely Involved
+
+api/services/semantic-retrieval.js (domain detection + slot selection logic)
+
+api/core/orchestrator.js (final injection boundary + proof logs + TRU2 override)
+
+api/lib/validators/* (if implementing NUA1 as validator)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
