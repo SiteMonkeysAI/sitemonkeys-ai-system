@@ -4667,7 +4667,9 @@ Mode: ${modeConfig?.display_name || mode}
       // ACTIVATION CONDITION #2: Multiple memories must share ordinal_subject
       // ═══════════════════════════════════════════════════════════════
       const memories = Array.isArray(memoryContext) ? memoryContext : (memoryContext.memories || []);
-      const ordinalMemories = memories
+      
+      // First attempt: Look for memories with explicit ordinal metadata
+      let ordinalMemories = memories
         .filter(m => {
           const metadata = m.metadata || {};
           const ordinalSubject = metadata.ordinal_subject || '';
@@ -4679,11 +4681,47 @@ Mode: ${modeConfig?.display_name || mode}
             ordinal: parseInt(metadata.ordinal) || null,
             value: metadata.ordinal_value || null,
             content: m.content || '',
-            subject: metadata.ordinal_subject || null
+            subject: metadata.ordinal_subject || null,
+            created_at: m.created_at,
+            id: m.id
           };
         })
         .filter(m => m.ordinal !== null)
         .sort((a, b) => a.ordinal - b.ordinal);
+
+      let fallbackUsed = false;
+      
+      // ISSUE #618 FOLLOW-UP: Fallback to created_at ordering if metadata missing
+      if (ordinalMemories.length === 0) {
+        this.debug(`[ORDINAL-VALIDATOR] No ordinal metadata found, attempting created_at fallback for subject "${subject}"`);
+        
+        // Fallback: Find memories containing the subject and sort by created_at
+        const subjectMemories = memories
+          .filter(m => {
+            const content = (m.content || '').toLowerCase();
+            return content.includes(subject?.toLowerCase() || '');
+          })
+          .sort((a, b) => {
+            // Sort by created_at ascending (earliest first)
+            const timeA = new Date(a.created_at || 0).getTime();
+            const timeB = new Date(b.created_at || 0).getTime();
+            return timeA - timeB;
+          })
+          .map((m, index) => ({
+            ordinal: index + 1, // First = 1, Second = 2, etc.
+            value: this.#extractValueFromContent(m.content),
+            content: m.content || '',
+            subject: subject,
+            created_at: m.created_at,
+            id: m.id
+          }));
+        
+        if (subjectMemories.length >= 2) {
+          ordinalMemories = subjectMemories;
+          fallbackUsed = true;
+          this.debug(`[ORDINAL-VALIDATOR] ✅ Fallback activated: ${ordinalMemories.length} memories sorted by created_at`);
+        }
+      }
 
       if (ordinalMemories.length === 0) {
         this.debug(`[ORDINAL-VALIDATOR] No ordinal memories found for subject "${subject}" - validator is no-op`);
@@ -4703,6 +4741,7 @@ Mode: ${modeConfig?.display_name || mode}
       // Find target memory
       const targetMemory = ordinalMemories.find(m => m.ordinal === ordinalNum);
       if (!targetMemory) {
+        this.debug(`[ORDINAL-VALIDATOR] ❌ Could not find ordinal #${ordinalNum} in candidates`);
         return { correctionApplied: false, response };
       }
 
@@ -4724,12 +4763,13 @@ Mode: ${modeConfig?.display_name || mode}
       const hasWrongValue = wrongValues.some(wrong => response.includes(wrong));
       const hasCorrectValue = response.includes(correctValue);
 
-      // Enhanced telemetry (Issue #615 requirement)
+      // Enhanced telemetry (Issue #615 + #618 follow-up requirements)
       const telemetry = {
-        detectedOrdinal: ordinalNum,
+        ordinal_detected: ordinalNum,
         subject: subject,
-        candidatesFound: ordinalMemories.length,
-        selectedValue: correctValue,
+        candidate_count: ordinalMemories.length,
+        fallback_used: fallbackUsed,
+        selected_value: correctValue,
         wrongValuesInResponse: wrongValues.filter(wrong => response.includes(wrong)),
         hasCorrectValue,
         hasWrongValue
