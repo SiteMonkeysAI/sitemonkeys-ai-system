@@ -5056,6 +5056,9 @@ Mode: ${modeConfig?.display_name || mode}
       for (const name of names) {
         if (!this.pool || !userId) break;
 
+        // Escape name before using it in any dynamically constructed regular expressions
+        const safeName = _.escapeRegExp(name);
+
         try {
           this.debug(`[AMBIGUITY-AUTHORITATIVE] Querying for entity="${name}"`);
 
@@ -5071,13 +5074,14 @@ Mode: ${modeConfig?.display_name || mode}
 
           if (dbResult.rows && dbResult.rows.length >= 2) {
             // Extract descriptors for this name from each memory
+            // Extract descriptors for this name from each memory
             const descriptors = new Set();
 
             for (const row of dbResult.rows) {
               const content = (row.content || '').substring(0, 500);
 
               // Pattern: relationship + name (friend Alex, colleague Alex)
-              const relationMatch = content.match(new RegExp(`(friend|colleague|coworker|neighbor|boss|manager|partner)\\s+${name}`, 'i'));
+              const relationMatch = content.match(new RegExp(`(friend|colleague|coworker|neighbor|boss|manager|partner)\\s+${safeName}`, 'i'));
               if (relationMatch) {
                 descriptors.add(relationMatch[1].toLowerCase());
               }
