@@ -391,17 +391,20 @@ export class IntelligentMemoryStorage {
   extractTemporalAnchors(content) {
     if (!content || typeof content !== 'string') return {};
 
+    // SECURITY: Bound input to prevent ReDoS (CodeQL fix for polynomial regex)
+    const safeContent = content.substring(0, 500);
+
     const temporal = {};
 
     // Detect end-year pattern: "left in 2020", "quit in 2019", "until 2021"
-    const endYearMatch = content.match(/(left|quit|ended|until|departed|finished|stopped).*?((?:19|20)\d{2})/i);
+    const endYearMatch = safeContent.match(/(left|quit|ended|until|departed|finished|stopped).*?((?:19|20)\d{2})/i);
     if (endYearMatch) {
       temporal.end_year = parseInt(endYearMatch[2]);
       console.log(`[TEMPORAL] anchor_stored end_year=${temporal.end_year}`);
     }
 
     // Detect duration pattern: "worked for 5 years", "spent 3 years"
-    const durationMatch = content.match(/(worked|spent|for)\s+(\d+)\s+years?/i);
+    const durationMatch = safeContent.match(/(worked|spent|for)\s+(\d+)\s+years?/i);
     if (durationMatch) {
       temporal.duration_years = parseInt(durationMatch[2]);
       console.log(`[TEMPORAL] anchor_stored duration_years=${temporal.duration_years}`);
@@ -413,17 +416,23 @@ export class IntelligentMemoryStorage {
   /**
    * Extract unicode names from content (Issue #643 - CMP2)
    * Preserves names with diacritics and non-ASCII characters
+   * Extracts full name spans, not fragments
    * @param {string} content - Content to analyze
    * @returns {string[]} - Array of unicode names
    */
   extractUnicodeNames(content) {
     if (!content || typeof content !== 'string') return [];
 
-    const words = content.split(/\s+/);
-    const unicodeNames = words.filter(w => {
-      // Match words with non-ASCII characters or common diacritics
-      return /[^\x00-\x7F]/.test(w) || /[áéíóúñüöäåøæÀ-ÿ]/i.test(w);
-    });
+    // Match sequences of capitalized words containing unicode/diacritics
+    // This captures full names like "José García-López" not just fragments
+    const namePattern = /(?:[A-Z][a-zÀ-ÿ]+[-\s]?)+[A-ZÀ-ÿ][a-zÀ-ÿ]+/g;
+    const matches = content.match(namePattern) || [];
+
+    // Filter to only names with actual unicode characters, strip trailing punctuation
+    const unicodeNames = matches
+      .filter(m => /[À-ÿ]/.test(m))
+      .map(m => m.replace(/[.,;:!?'")\]}>]+$/, '').trim())
+      .filter(m => m.length > 0);
 
     if (unicodeNames.length > 0) {
       console.log(`[UNICODE] anchors_stored names=[${unicodeNames.join(', ')}]`);
@@ -825,10 +834,16 @@ export class IntelligentMemoryStorage {
         // If supersession, storeCompressedMemory will detect and mark old memory as superseded
         console.log('[FLOW] Step 4: Storing new memory (supersession handled internally if applicable)...');
 
-        // FIX #643: Extract temporal anchors (INF3)
-        const temporalAnchors = this.extractTemporalAnchors(facts);
+        // FIX #643: Extract temporal anchors from ORIGINAL user message first (INF3)
+        // Compressed facts may have dropped "left in 2020" - extract from source
+        const temporalAnchors = this.extractTemporalAnchors(userMessage);
 
-        // FIX #643: Extract unicode names (CMP2)
+        // Fallback to facts only if nothing found in original
+        if (Object.keys(temporalAnchors).length === 0) {
+          Object.assign(temporalAnchors, this.extractTemporalAnchors(facts));
+        }
+
+        // FIX #643: Extract unicode names from facts (CMP2)
         const unicodeNames = this.extractUnicodeNames(facts);
 
         const regularMetadata = {
@@ -1602,9 +1617,10 @@ Facts (preserve user terminology + add synonyms):`;
           const newDescriptor = this.getDescriptorSignature(facts);
 
           if (existingDescriptor !== 'unknown' && newDescriptor !== 'unknown' && existingDescriptor !== newDescriptor) {
-            console.log(`[DEDUP] descriptor_mismatch existing="${existingDescriptor}" new="${newDescriptor}" stored_separately=true`);
+            console.log(`[DEDUP] force_separate=true reason=descriptor_mismatch existing="${existingDescriptor}" new="${newDescriptor}"`);
             console.log(`[DEDUP] ⏭️ Same entity name but different relationship - storing as separate memory`);
-            return null; // Store as separate memory
+            // Return null means "no duplicate found" - caller will proceed to store new memory normally
+            return null;
           }
 
           console.log(`[SEMANTIC-DEDUP] ✅ True DUPLICATE detected (same fact repeated), will boost existing memory`);
