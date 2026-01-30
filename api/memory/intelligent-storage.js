@@ -414,9 +414,49 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Extract pricing anchors from content (Issue #648 - EDG3)
+   * Detects monetary values and pricing information
+   * @param {string} content - Content to analyze
+   * @returns {string[]} - Array of pricing strings
+   */
+  extractPricingAnchors(content) {
+    if (!content || typeof content !== 'string') return [];
+
+    // SECURITY: Bound input to prevent ReDoS
+    const safeContent = content.substring(0, 500);
+
+    const prices = [];
+
+    // Pattern 1: Dollar amounts: $99, $1,234, $1,234.56
+    const dollarPattern = /\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?/g;
+    const dollarMatches = safeContent.match(dollarPattern) || [];
+    prices.push(...dollarMatches);
+
+    // Pattern 2: Price with context: "costs $99", "price is $299"
+    // Already captured by dollarPattern
+
+    // Pattern 3: Abbreviated amounts: "99/month", "$50 per month"
+    const perPattern = /\$?\d+(?:,\d{3})*(?:\.\d{2})?\s*(?:per|\/)\s*(?:month|year|mo|yr)/gi;
+    const perMatches = safeContent.match(perPattern) || [];
+    prices.push(...perMatches);
+
+    // Deduplicate and clean
+    const uniquePrices = [...new Set(prices)]
+      .map(p => p.trim())
+      .filter(p => p.length > 0);
+
+    if (uniquePrices.length > 0) {
+      console.log(`[PRICING] anchors_stored prices=[${uniquePrices.join(', ')}]`);
+    }
+
+    return uniquePrices;
+  }
+
+  /**
    * Extract unicode names from content (Issue #643 - CMP2)
    * Preserves names with diacritics and non-ASCII characters
    * Extracts full name spans, not fragments
+   * FIX #648: Support single-word names with diacritics and CJK names
    * @param {string} content - Content to analyze
    * @returns {string[]} - Array of unicode names
    */
@@ -426,19 +466,52 @@ export class IntelligentMemoryStorage {
     // SECURITY: Bound input to prevent ReDoS (CodeQL fix for polynomial regex)
     const safeContent = content.substring(0, 500);
 
-    // Match sequences of capitalized words containing unicode/diacritics
-    // This captures full names like "José García-López" not just fragments
-    const namePattern = /(?:[A-Z][a-zÀ-ÿ]+[-\s]?)+[A-ZÀ-ÿ][a-zÀ-ÿ]+/g;
-    const matches = safeContent.match(namePattern) || [];
+    console.log(`[STORAGE-CONTRACT] unicode_input="${safeContent.substring(0, 100)}"`);
 
-    // Filter to only names with actual unicode characters, strip trailing punctuation
-    const unicodeNames = matches
-      .filter(m => /[À-ÿ]/.test(m))
+    // Pattern 1: Multi-word names like "José García-López"
+    const multiWordPattern = /(?:[A-Z][a-zÀ-ÿ]+[-\s]?)+[A-ZÀ-ÿ][a-zÀ-ÿ]+/g;
+
+    // Pattern 2: Single words with diacritics like "Björn", "José"
+    // Must have at least one diacritic character (À-ÿ)
+    const singleWordPattern = /\b[A-ZÀ-ÿ][a-zÀ-ÿ]*[À-ÿ][a-zÀ-ÿ]*\b/g;
+
+    // Pattern 3: CJK names (Chinese, Japanese, Korean characters)
+    // Matches 2-4 consecutive CJK characters
+    const cjkPattern = /[\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]{2,4}/g;
+
+    // Pattern 4: Capitalized words adjacent to CJK (like "Zhang Wei")
+    // This catches romanized Asian names near context clues
+    const cjkAdjacentPattern = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b/g;
+
+    const multiMatches = safeContent.match(multiWordPattern) || [];
+    const singleMatches = safeContent.match(singleWordPattern) || [];
+    const cjkMatches = safeContent.match(cjkPattern) || [];
+
+    // For adjacent pattern, only include if near "contact", "name", or other context
+    let adjacentMatches = [];
+    if (/contact|name|colleague|friend|client/i.test(safeContent)) {
+      adjacentMatches = safeContent.match(cjkAdjacentPattern) || [];
+    }
+
+    // Combine all matches and deduplicate
+    const allMatches = [...new Set([...multiMatches, ...singleMatches, ...cjkMatches, ...adjacentMatches])];
+
+    console.log(`[STORAGE-CONTRACT] pattern_matches=${JSON.stringify(allMatches)}`);
+
+    // Clean up matches
+    const unicodeNames = allMatches
       .map(m => m.replace(/[.,;:!?'")\]}>]+$/, '').trim())
-      .filter(m => m.length > 0);
+      .filter(m => m.length > 0)
+      .filter(m => {
+        // Keep if: has diacritic, has CJK, or is multi-word capitalized
+        return /[À-ÿ\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]/.test(m) ||
+               /^[A-Z][a-z]+\s+[A-Z][a-z]+/.test(m);
+      });
 
     if (unicodeNames.length > 0) {
       console.log(`[UNICODE] anchors_stored names=[${unicodeNames.join(', ')}]`);
+    } else {
+      console.log(`[UNICODE] anchors_stored names=[] (no matches found)`);
     }
 
     return unicodeNames;
@@ -460,10 +533,12 @@ export class IntelligentMemoryStorage {
 
     for (const descriptor of descriptors) {
       if (contentLower.includes(descriptor)) {
+        console.log(`[STORAGE-CONTRACT] descriptor_content="${content.substring(0, 50)}" detected="${descriptor}"`);
         return descriptor;
       }
     }
 
+    console.log(`[STORAGE-CONTRACT] descriptor_content="${content.substring(0, 50)}" detected="unknown"`);
     return 'unknown';
   }
 
@@ -630,6 +705,9 @@ export class IntelligentMemoryStorage {
       // CRITICAL TRACE #560: Log the actual user message for T2 debugging
       console.log('[TRACE-T2] User message:', userMessage?.substring(0, 200));
 
+      // STORAGE CONTRACT DIAGNOSTIC LOGGING (Issue #648)
+      console.log(`[STORAGE-CONTRACT] input_length=${userMessage?.length || 0} first_100_chars="${userMessage?.substring(0, 100) || ''}"`);
+
       console.log('[INTELLIGENT-STORAGE] 🧠 Processing conversation for intelligent storage');
 
       // FIX #633: Detect ordinal facts for B3 validator
@@ -748,6 +826,10 @@ export class IntelligentMemoryStorage {
       let facts = await this.extractKeyFacts(userMessage, responseForExtraction);
       console.log('[FLOW] Step 1: Facts extracted ✓');
 
+      // STORAGE CONTRACT DIAGNOSTIC LOGGING (Issue #648)
+      console.log(`[STORAGE-CONTRACT] extracted_facts_length=${facts?.length || 0} first_100_chars="${facts?.substring(0, 100) || ''}"`);
+
+
       // Validation: Check if numeric values from input survived extraction
       // Using bounded patterns to prevent ReDoS vulnerability
       // Pattern matches: $123, $1,234, $123.45, $1,234.56, 123k, 12345 (5-9 digits)
@@ -846,8 +928,19 @@ export class IntelligentMemoryStorage {
           Object.assign(temporalAnchors, this.extractTemporalAnchors(facts));
         }
 
-        // FIX #643: Extract unicode names from facts (CMP2)
-        const unicodeNames = this.extractUnicodeNames(facts);
+        // FIX #643: Extract unicode names from ORIGINAL message first, then facts (CMP2)
+        // Compression might have damaged unicode characters
+        let unicodeNames = this.extractUnicodeNames(userMessage);
+        if (unicodeNames.length === 0) {
+          unicodeNames = this.extractUnicodeNames(facts);
+        }
+
+        // FIX #648: Extract pricing anchors from ORIGINAL message (EDG3)
+        // Compression might have dropped pricing details
+        let pricingAnchors = this.extractPricingAnchors(userMessage);
+        if (pricingAnchors.length === 0) {
+          pricingAnchors = this.extractPricingAnchors(facts);
+        }
 
         const regularMetadata = {
           original_tokens: originalTokens,
@@ -870,8 +963,8 @@ export class IntelligentMemoryStorage {
           }
         }
 
-        // FIX #643: Add anchors metadata for temporal and unicode (INF3, CMP2)
-        if (Object.keys(temporalAnchors).length > 0 || unicodeNames.length > 0) {
+        // FIX #643/#648: Add anchors metadata for temporal, unicode, and pricing (INF3, CMP2, EDG3)
+        if (Object.keys(temporalAnchors).length > 0 || unicodeNames.length > 0 || pricingAnchors.length > 0) {
           regularMetadata.anchors = {};
 
           if (Object.keys(temporalAnchors).length > 0) {
@@ -880,6 +973,10 @@ export class IntelligentMemoryStorage {
 
           if (unicodeNames.length > 0) {
             regularMetadata.anchors.unicode = unicodeNames;
+          }
+
+          if (pricingAnchors.length > 0) {
+            regularMetadata.anchors.pricing = pricingAnchors;
           }
         }
 
@@ -987,9 +1084,17 @@ CRITICAL RULES:
    - Pattern forms: "worked/for/spent X years/months" AND "left/until/ended/quit in/at YYYY"
    - Temporal patterns are CRITICAL for calculating start dates from (duration + end date)
 
-17. VEHICLE INFORMATION must be preserved:
+17. VEHICLE INFORMATION must be preserved (FIX #648-STR1):
    - Car make/model: "Tesla Model 3", "Honda Civic", "Toyota Camry"
    - Always preserve brand + model exactly
+   - CRITICAL: Vehicle info is HIGH PRIORITY - never drop it
+   - When multiple facts present, vehicle is CRITICAL and must be extracted
+
+18. WHEN MULTIPLE FACTS PROVIDED (10+), extract ALL of them:
+   - User provided each fact intentionally
+   - Do not prioritize or drop ANY facts
+   - If space limited, use extreme brevity but keep ALL facts
+   - Format: "Dog: Max. Color: blue. Car: Tesla Model 3. Job: software engineer." etc.
 
 Examples:
 Input User: "I make 55k a year" | AI: "That's a good starting salary..."
@@ -1058,15 +1163,17 @@ REASON: The AI's historical reference is NOT new information from the user.
         Only extract the NEW value from the USER's message.
 
 Rules for compression:
-- Maximum 3-5 facts total
-- Each fact: Include user's exact terminology + synonyms in parentheses
+- FIX #648-STR1: Extract ALL facts provided by user (no maximum limit)
+- When 10+ facts present, use EXTREME brevity but keep ALL facts
+- Each fact: Include user's exact terminology (synonyms optional if space tight)
 - Include ONLY: Names, numbers, specific entities, user statements, amounts, times
 - PRESERVE ALL NUMBERS EXACTLY: Years (2010), durations (5 years), prices ($99, $299), quantities, dates
 - PRESERVE BRAND NAMES AND PROPER NOUNS: Tesla Model 3, iPhone 15, Google, Microsoft, etc.
 - PRESERVE SPECIFIC ENTITIES: Car models, product names, company names, locations
 - EXCLUDE: Questions, greetings, explanations, AI responses
-- Format: "Category: user_exact_term (synonym1 synonym2 synonym3)"
+- Format: "Category: user_exact_term (synonym1 synonym2)" OR "Category: user_exact_term" if space limited
 - CRITICAL: Numbers AND brand names are MORE important than descriptions - always preserve exact values
+- CRITICAL: If choosing between brevity and completeness, choose completeness - store ALL facts
 
 User: ${userMsg}
 Assistant: ${aiResponse}
@@ -1619,9 +1726,15 @@ Facts (preserve user terminology + add synonyms):`;
           const existingDescriptor = this.getDescriptorSignature(row.content);
           const newDescriptor = this.getDescriptorSignature(facts);
 
-          if (existingDescriptor !== 'unknown' && newDescriptor !== 'unknown' && existingDescriptor !== newDescriptor) {
+          // STORAGE CONTRACT DIAGNOSTIC LOGGING (Issue #648)
+          console.log(`[STORAGE-CONTRACT] dedup_decision existing_id=${row.id} existing_desc="${existingDescriptor}" new_desc="${newDescriptor}"`);
+
+          // FIX #648-NUA1: Block merge if EITHER descriptor is known and they differ
+          // Original logic required BOTH to be non-unknown, but we should block if we detect ANY descriptor mismatch
+          if ((existingDescriptor !== 'unknown' || newDescriptor !== 'unknown') && existingDescriptor !== newDescriptor) {
             console.log(`[DEDUP] force_separate=true reason=descriptor_mismatch existing="${existingDescriptor}" new="${newDescriptor}"`);
             console.log(`[DEDUP] ⏭️ Same entity name but different relationship - storing as separate memory`);
+            console.log(`[STORAGE-CONTRACT] dedup_decision action=force_separate reason=descriptor_mismatch`);
             // Return null means "no duplicate found" - caller will proceed to store new memory normally
             return null;
           }
@@ -1904,6 +2017,10 @@ Facts (preserve user terminology + add synonyms):`;
       const memoryId = result.rows[0].id;
       console.log('[TRACE-INTELLIGENT] I16. Stored memory ID:', memoryId);
       console.log(`[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=${memoryId}, tokens=${tokenCount}`);
+
+      // STORAGE CONTRACT DIAGNOSTIC LOGGING (Issue #648)
+      const metadataKeys = Object.keys(metadata || {}).join(',');
+      console.log(`[STORAGE-CONTRACT] stored_id=${memoryId} category=${category} metadata_keys=${metadataKeys}`);
 
       // DIAGNOSTIC LOGGING: Track exact storage details
       console.log('[STORAGE-DEBUG] Memory stored:', {
