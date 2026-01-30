@@ -1,0 +1,71 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #641: [claude-fix] B3 Ordinal — Inject Target Ordinal Value When Missing (Remove "ambiguity required") markdown
+
+Issue Description:
+## Problem
+B3 fails because ordinal enforcement blocks injection under "no_ambiguity" gating.
+
+**Evidence:**
+```
+[ORDINAL-AUTHORITATIVE] query_ordinal=2 subject=code ... injected=false reason=no_ambiguity
+```
+
+## Required Behavior
+If query asks for an ordinal (first/second/third) and a matching ordinal memory exists for that subject, the final response MUST contain the target ordinal_value.
+
+This must NOT require "2+ ordinal memories" or any ambiguity check.
+
+## Minimal Fix (api/core/orchestrator.js → #enforceOrdinalCorrectness)
+
+1. **Determine target ordinal:**
+   - queryOrdinal from query (e.g., "second" → 2)
+   - subject ∈ {code, key, pin}
+
+2. **Build ordinalMemories (allow 1+):**
+   - ordinalMemories can be length 1 (not 2+)
+   - Extract: `targetMemory = ordinalMemories.find(m => m.ordinal === queryOrdinal)`
+
+3. **New gating logic:**
+   - If no targetMemory or no targetValue → return no-op with `reason=target_missing`
+   - If response already contains targetValue → return no-op with `reason=already_correct`
+   - Else → deterministically **APPEND** (not prepend):
+```
+     Your second code is DELTA-xxxx.
+```
+
+4. **Remove conflicting values (optional):**
+   - If response contains OTHER ordinal values for same subject, remove them
+
+## Why APPEND not PREPEND
+Prepending can break other validators (e.g., refusal-maintenance expects certain response formats).
+
+## Acceptance Criteria
+- B3 passes reliably across 3 runs
+- Log shows: `[ORDINAL-AUTHORITATIVE] ... target_found=true injected=true`
+- No regressions on TRU1 refusal maintenance
+
+
+## Also Check: TRU1 Refusal Maintenance Regression
+
+TRU1 now shows `maintainedRefusal: false`. Ensure refusal state detection isn't bypassed by newly injected/prepended content from validators.
+
+Validator execution order may need adjustment — refusal-maintenance should run AFTER all injection validators.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
