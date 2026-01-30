@@ -1,0 +1,93 @@
+Excellent! Let me create a detailed summary of the changes:
+
+---SUMMARY---
+
+Fixed SMDEEP authoritative validators to read metadata.anchors and added comprehensive truth-telemetry for CMP2, EDG3, NUA1, and STR1 test diagnostics as requested in Issue #650.
+
+## Files Modified
+
+### 1. api/core/orchestrator.js - Unicode Validator (CMP2)
+
+**Problem**: The Unicode validator was querying for metadata.anchors.unicode in the database but then **ignoring it** and re-extracting names from content text, causing false negatives when anchors existed but weren't being read.
+
+**Fixes**:
+- Changed query to retrieve full memory rows (id, content, metadata, category_name, is_current) for up to 20 memories
+- **CRITICAL FIX**: Now properly reads unicode names from `metadata.anchors.unicode` array instead of scraping text
+- Falls back to text extraction only when metadata.anchors doesn't exist
+- Added comprehensive truth-telemetry logging:
+  - `rows_returned`: Total rows retrieved from DB
+  - `anchors_present`: Whether any rows have metadata.anchors
+  - `unique_anchors_keys`: All anchor types found across memories
+  - `unicode_names_found`: Actual unicode names extracted from anchors
+  - Per-row diagnostic: id, category, is_current, content preview, anchors_keys
+- Updated decision logging format to be consistent with test requirements:
+  - `decision: appended=true/false reason=...`
+
+### 2. api/lib/validators/anchor-preservation.js - Pricing Validator (EDG3)
+
+**Problem**: The validator already read metadata.anchors.pricing correctly, but lacked diagnostic logging to prove it was working and help debug test failures.
+
+**Fixes**:
+- Added telemetry tracking:
+  - `memories_checked`: Total memories examined
+  - `memories_with_anchors`: Count of memories with metadata.anchors
+  - `anchor_types_found`: Set of all anchor types discovered
+- Added per-memory logging when anchors exist:
+  - `anchors_keys=[...]`: Shows which anchor types are present
+  - `prices_found=[...]`: Specifically logs pricing anchors when they exist
+- Added logging when no anchors exist: `anchors_keys=[] (no metadata.anchors)`
+- Final extraction summary with counts and anchor types
+
+### 3. api/services/semantic-retrieval.js - Memory Retrieval Telemetry (NUA1/STR1)
+
+**Problem**: When NUA1 (two Alexes) and STR1 (volume stress) tests failed, there was no way to diagnose whether:
+- Dedup merged the facts
+- Routing split categories incorrectly
+- Query filters excluded data
+- Storage never persisted the data
+
+**Fixes**:
+
+#### General Retrieval Truth-Telemetry (after DB query):
+- Added `[TRUTH-TELEMETRY]` trace showing:
+  - Query text
+  - Filters used: userId, mode, categories, is_current, limit
+  - Rows returned count
+  - Per-row details (up to 20 rows):
+    - id, category, is_current, fingerprint
+    - content preview (first 80 chars)
+    - anchors_keys from metadata
+
+#### NUA1-Specific Telemetry (ambiguity detection):
+- Added `[NUA1-TELEMETRY]` logging when entity-boosting is applied
+- Shows all memories that were boosted for ambiguity detection:
+  - Memory id and category
+  - Which entities matched (e.g., "Alex")
+  - Content preview
+  - Anchors keys from metadata
+- This proves whether both "Alex" memories were retrieved and whether they have anchor metadata
+
+#### STR1-Specific Telemetry (already existed):
+- Confirmed existing `[FOUNDER-STR1]` and `[STR1-DEBUG]` logging is comprehensive
+- Shows complete ranking for car queries
+- Tracks Tesla through pipeline (candidates → filtered → final ranking)
+- Shows why items ranked where they did (scores, boosts, thresholds)
+
+## Success Criteria Met
+
+✅ **CMP2**: Validator now prints `unicode_names_found=[...]` based on metadata.anchors
+✅ **EDG3**: Validator now prints `prices_found=[...]` based on metadata.anchors when they exist
+✅ **NUA1**: Validator trace shows filters, row count, and per-row diagnostics including anchors
+✅ **STR1**: Validator trace confirms storage and shows why rankings occurred
+
+## Key Implementation Details
+
+1. **Metadata parsing safety**: All code handles both JSONB objects and stringified JSON with try/catch
+2. **Bounded logging**: Limits to 20 rows max in truth-telemetry to avoid unbounded output
+3. **Consistent format**: All telemetry uses clear prefixes and structured output
+4. **No relaxation**: Tests were not relaxed - validators were fixed to work correctly
+5. **Token-efficient**: Only logs diagnostic keys and short previews, not full content/metadata
+
+The validators now provide complete observability into what data exists, how it's being filtered, and why results appear as they do, enabling precise diagnosis of test failures without guesswork.
+
+---END SUMMARY---

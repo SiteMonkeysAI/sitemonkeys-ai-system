@@ -5419,47 +5419,70 @@ Mode: ${modeConfig?.display_name || mode}
         try {
           this.debug(`[UNICODE-AUTHORITATIVE] Executing direct DB query for unicode names`);
 
-          // Prefer metadata anchor approach
-          let dbResult = await this.pool.query(
-            `SELECT content, metadata
+          // Query for rows that might have unicode anchors
+          const dbResult = await this.pool.query(
+            `SELECT id, content, metadata, category_name, is_current
              FROM persistent_memories
              WHERE user_id = $1
-             AND metadata->'anchors'->'unicode' IS NOT NULL
-             AND jsonb_array_length(metadata->'anchors'->'unicode') > 0
              AND (is_current = true OR is_current IS NULL)
-             LIMIT 5`,
+             ORDER BY created_at DESC
+             LIMIT 20`,
             [userId]
           );
 
-          // Fallback to content regex if no metadata
-          if (!dbResult.rows || dbResult.rows.length === 0) {
-            dbResult = await this.pool.query(
-              `SELECT content
-               FROM persistent_memories
-               WHERE user_id = $1
-               AND content ~ '[À-ÿ]'
-               AND (is_current = true OR is_current IS NULL)
-               LIMIT 5`,
-              [userId]
-            );
-          }
+          console.log(`[UNICODE-AUTHORITATIVE] Truth-telemetry: rows_returned=${dbResult.rows.length}`);
 
           if (dbResult.rows && dbResult.rows.length > 0) {
-            for (const row of dbResult.rows) {
-              const content = (row.content || '').substring(0, 500);
+            let anchorsPresent = false;
+            let anchorsKeys = [];
 
-              // Extract names with unicode characters
-              const nameMatches = content.matchAll(/\b([A-ZÀ-ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]+)?)\b/g);
-              for (const match of nameMatches) {
-                const name = match[1];
-                if (unicodePattern.test(name)) {
-                  unicodeNames.push(name);
+            for (const row of dbResult.rows) {
+              const metadata = row.metadata || {};
+              const anchors = metadata.anchors;
+
+              // Truth-telemetry: log each row
+              const contentPreview = (row.content || '').substring(0, 80).replace(/\n/g, ' ');
+              console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: category=${row.category_name}, is_current=${row.is_current}, content="${contentPreview}"`);
+
+              // CRITICAL FIX: Read from metadata.anchors, not content text
+              if (anchors) {
+                anchorsPresent = true;
+                const keys = Object.keys(anchors);
+                anchorsKeys.push(...keys);
+                console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: anchors_keys=[${keys.join(', ')}]`);
+
+                // Extract unicode names from anchors.unicode
+                if (anchors.unicode && Array.isArray(anchors.unicode)) {
+                  for (const name of anchors.unicode) {
+                    if (typeof name === 'string' && unicodePattern.test(name)) {
+                      unicodeNames.push(name);
+                    }
+                  }
+                  console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: unicode_names_from_anchors=[${anchors.unicode.join(', ')}]`);
+                }
+              } else {
+                console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: anchors_keys=[] (no anchors)`);
+              }
+
+              // Fallback: extract from content if no anchors exist
+              if (!anchors || !anchors.unicode) {
+                const content = (row.content || '').substring(0, 500);
+                const nameMatches = content.matchAll(/\b([A-ZÀ-ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]+)?)\b/g);
+                for (const match of nameMatches) {
+                  const name = match[1];
+                  if (unicodePattern.test(name)) {
+                    unicodeNames.push(name);
+                  }
                 }
               }
             }
 
             // Remove duplicates
             unicodeNames = [...new Set(unicodeNames)];
+
+            console.log(`[UNICODE-AUTHORITATIVE] anchors_present=${anchorsPresent}`);
+            console.log(`[UNICODE-AUTHORITATIVE] unique_anchors_keys=[${[...new Set(anchorsKeys)].join(', ')}]`);
+            console.log(`[UNICODE-AUTHORITATIVE] unicode_names_found=[${unicodeNames.join(', ')}]`);
 
             this.debug(`[UNICODE-AUTHORITATIVE] DB query found unicode names: ${unicodeNames.join(', ')}`);
           }
@@ -5472,13 +5495,13 @@ Mode: ${modeConfig?.display_name || mode}
       // AUTHORITATIVE ENFORCEMENT: Replace ASCII or append unicode names
       // ═══════════════════════════════════════════════════════════════
       if (unicodeNames.length === 0) {
-        console.log(`[UNICODE-AUTHORITATIVE] names_found=[] appended=false reason=no_unicode_names`);
+        console.log(`[UNICODE-AUTHORITATIVE] decision: appended=false reason=no_unicode_names`);
         return { correctionApplied: false, response };
       }
 
       // Don't inject into unrelated refusals
       if (isRefusal && !response.toLowerCase().includes('contact') && !response.toLowerCase().includes('name')) {
-        console.log(`[UNICODE-AUTHORITATIVE] names_found=[${unicodeNames.join(',')}] appended=false reason=unrelated_refusal`);
+        console.log(`[UNICODE-AUTHORITATIVE] decision: appended=false reason=unrelated_refusal`);
         return { correctionApplied: false, response };
       }
 
@@ -5504,7 +5527,7 @@ Mode: ${modeConfig?.display_name || mode}
         this.debug(`[UNICODE-AUTHORITATIVE] Appended unicode names list`);
       }
 
-      console.log(`[UNICODE-AUTHORITATIVE] names_found=[${unicodeNames.join(',')}] appended=${corrected}`);
+      console.log(`[UNICODE-AUTHORITATIVE] decision: appended=${corrected} reason=${corrected ? 'injected_unicode_names' : 'already_present'}`);
 
       return {
         correctionApplied: corrected,
