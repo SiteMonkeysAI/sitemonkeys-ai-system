@@ -5076,10 +5076,9 @@ Mode: ${modeConfig?.display_name || mode}
         return { correctionApplied: false, response };
       }
 
-      // Check if response is a system refusal (starts with "I" + refusal phrase)
-      // More precise than generic "don't have" anywhere in response
-      const refusalPattern = /^I\s+(don't have|cannot|can't|am unable|do not have).*\b(information|memory|access|data|knowledge)\b/i;
-      const isRefusal = refusalPattern.test(response.trim());
+      // Use shared refusal detection (Issue #643)
+      const isRefusal = this.#isRefusalish(response);
+      console.log(`[REFUSAL] isRefusalish=${isRefusal} validator=ambiguity`);
 
       this.debug(`[AMBIGUITY-AUTHORITATIVE] Detected names: ${names.join(', ')}`);
 
@@ -5243,6 +5242,34 @@ Mode: ${modeConfig?.display_name || mode}
   }
 
   /**
+   * Shared Refusal Detection Helper (Issue #643)
+   * Detects if a response is a refusal/lack-of-information statement
+   * Used by multiple validators for consistency
+   */
+  #isRefusalish(response) {
+    const head = response.trim().slice(0, 260).toLowerCase();
+
+    const refusalPhrases = [
+      "i don't have", "i do not have", "i can't", "i cannot", "i am unable",
+      "i'm sorry", "unfortunately", "i apologize"
+    ];
+
+    const contextWords = [
+      "information", "context", "access", "data", "details",
+      "enough information", "that information", "this information"
+    ];
+
+    const hasRefusalPhrase = refusalPhrases.some(p => head.includes(p));
+    const hasContextWord = contextWords.some(w => head.includes(w));
+
+    // Also catch "As an AI..." patterns
+    const asAnAI = head.includes("as an ai") &&
+      (head.includes("can't") || head.includes("cannot") || head.includes("don't have"));
+
+    return (hasRefusalPhrase && hasContextWord) || asAnAI;
+  }
+
+  /**
    * Vehicle Recall Enforcer (Issue #628 - STR1)
    * AUTHORITATIVE: Direct DB query to ensure vehicle info is included
    *
@@ -5250,31 +5277,33 @@ Mode: ${modeConfig?.display_name || mode}
    * This validator bypasses retrieval to guarantee vehicle fact inclusion.
    */
   async #enforceVehicleRecall({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:vehicle v=2026-01-29d file=api/core/orchestrator.js fn=#enforceVehicleRecall');
+    console.log('[PROOF] validator:vehicle v=2026-01-30a file=api/core/orchestrator.js fn=#enforceVehicleRecall');
 
     try {
       // ═══════════════════════════════════════════════════════════════
       // GATING CONDITION: Query about vehicle
       // ═══════════════════════════════════════════════════════════════
       const vehiclePattern = /\b(car|vehicle|drive|driving|automobile|what do I drive)\b/i;
-      if (!vehiclePattern.test(query)) {
+      const isVehicleQuery = vehiclePattern.test(query);
+
+      if (!isVehicleQuery) {
         return { correctionApplied: false, response };
       }
 
-      // Check if response is a system refusal (starts with "I" + refusal phrase)
-      // More precise than generic "don't have" anywhere in response
-      // Updated to handle "I'm sorry, but I don't have..." patterns (Issue #636-STR1)
-      // Bound response before regex to prevent polynomial backtracking (CodeQL fix)
-      const refusalPattern = /^I('m sorry[^.]*?)?\s*(don't have|cannot|can't|am unable|do not have)/i;
-      const safeResponse = response.trim().substring(0, 200);
-      const isRefusal = refusalPattern.test(safeResponse);
+      // Use shared refusal detection (Issue #643 - STR1 fix)
+      const isRefusal = this.#isRefusalish(response);
 
-      // Check if response already mentions a vehicle (but NOT in refusal context)
+      // Check if response already mentions a vehicle
       const vehicleInResponse = /\b(tesla|honda|toyota|ford|chevrolet|nissan|bmw|mercedes|audi|lexus|mazda|subaru|jeep|ram|gmc|model\s*[0-9sxy]|car|truck|suv|vehicle)\b/i;
+
+      // FIX #643-STR1: Only short-circuit if NOT a refusal AND vehicle mentioned
       if (!isRefusal && vehicleInResponse.test(response)) {
-        console.log(`[VEHICLE-AUTHORITATIVE] vehicle_found=false injected=false reason=already_in_response`);
+        console.log(`[VEHICLE-AUTHORITATIVE] vehicle_found=false injected=false reason=already_correct`);
+        console.log(`[REFUSAL] isRefusalish=false validator=vehicle`);
         return { correctionApplied: false, response };
       }
+
+      console.log(`[REFUSAL] isRefusalish=${isRefusal} validator=vehicle`);
 
       this.debug(`[VEHICLE-AUTHORITATIVE] Vehicle query detected, isRefusal=${isRefusal}`);
 
@@ -5374,10 +5403,9 @@ Mode: ${modeConfig?.display_name || mode}
       const unicodePattern = /[À-ÿ]/;
       const hasUnicode = unicodePattern.test(response);
 
-      // Check if response is a system refusal (starts with "I" + refusal phrase)
-      // More precise than generic "don't have" anywhere in response
-      const refusalPattern = /^I\s+(don't have|cannot|can't|am unable|do not have).*\b(information|memory|access|data|knowledge)\b/i;
-      const isRefusal = refusalPattern.test(response.trim());
+      // Use shared refusal detection (Issue #643)
+      const isRefusal = this.#isRefusalish(response);
+      console.log(`[REFUSAL] isRefusalish=${isRefusal} validator=unicode`);
 
       this.debug(`[UNICODE-AUTHORITATIVE] Contacts query detected, hasUnicode=${hasUnicode}, isRefusal=${isRefusal}`);
 

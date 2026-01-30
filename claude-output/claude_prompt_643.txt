@@ -1,0 +1,194 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #643: [claude-fix] SMDEEP Stabilization — Storage Anchors + Shared Refusal Detection
+
+Issue Description:
+## Goal
+Keep SMFULL 24/24. Fix SMDEEP failures (INF3, NUA1, STR1, CMP2, TRU1) in ONE PR.
+
+## Non-Negotiables
+- Do NOT change semantic retrieval thresholds or scoring
+- Do NOT add new prompt modifications
+- Fix upstream storage first (so validators have data)
+- Then refine validator gating (so they fire deterministically)
+
+---
+
+## Fix 1: Implement Shared Refusal Detector
+
+**Location:** `api/core/orchestrator.js` (add helper function)
+```javascript
+function isRefusalish(response) {
+  const head = response.trim().slice(0, 260).toLowerCase();
+  
+  const refusalPhrases = [
+    "i don't have", "i do not have", "i can't", "i cannot", "i am unable",
+    "i'm sorry", "unfortunately", "i apologize"
+  ];
+  
+  const contextWords = [
+    "information", "context", "access", "data", "details", 
+    "enough information", "that information", "this information"
+  ];
+  
+  const hasRefusalPhrase = refusalPhrases.some(p => head.includes(p));
+  const hasContextWord = contextWords.some(w => head.includes(w));
+  
+  // Also catch "As an AI..." patterns
+  const asAnAI = head.includes("as an ai") && 
+    (head.includes("can't") || head.includes("cannot") || head.includes("don't have"));
+  
+  return (hasRefusalPhrase && hasContextWord) || asAnAI;
+}
+```
+
+**Use this helper in:**
+- `#enforceVehicleRecall()` — replace current refusal pattern
+- `#enforceUnicodeNames()` — replace current refusal pattern  
+- `#enforceAmbiguityDisclosure()` — replace current refusal pattern
+- `refusal-maintenance.js` — use for consistency
+
+---
+
+## Fix 2: STR1 Vehicle (Logic Bug)
+
+**File:** `api/core/orchestrator.js` → `#enforceVehicleRecall()`
+
+**Problem:** `reason=already_in_response` triggers on "I don't know what car you drive" because it matches "car"
+
+**Fix:**
+```javascript
+// BEFORE checking vehicleInResponse, compute refusal status
+const isRefusal = isRefusalish(response);
+
+// Only short-circuit if NOT a refusal AND vehicle mentioned
+if (!isRefusal && vehicleInResponse.test(response)) {
+  return { correctionApplied: false, response, reason: 'already_correct' };
+}
+
+// If IS a refusal AND query is vehicle-related → run DB lookup + append
+if (isRefusal && isVehicleQuery) {
+  // Query DB for vehicle, append if found
+}
+```
+
+---
+
+## Fix 3: INF3 Temporal (Missing End Year)
+
+**Problem:** `duration=5 endYear=null` — "left in 2020" not being stored
+
+**File:** `api/memory/intelligent-storage.js`
+
+**Fix:** Store temporal anchors in metadata during extraction:
+```javascript
+// Detect end-year pattern
+const endYearMatch = content.match(/(left|quit|ended|until|departed).*?((?:19|20)\d{2})/i);
+if (endYearMatch) {
+  metadata.temporal = metadata.temporal || {};
+  metadata.temporal.end_year = parseInt(endYearMatch[2]);
+}
+
+// Detect duration pattern  
+const durationMatch = content.match(/(worked|spent|for)\s+(\d+)\s+years?/i);
+if (durationMatch) {
+  metadata.temporal = metadata.temporal || {};
+  metadata.temporal.duration_years = parseInt(durationMatch[2]);
+}
+```
+
+**Then in temporal validator:** Read `metadata.temporal` first; only fall back to content parsing if metadata missing.
+
+---
+
+## Fix 4: NUA1 Ambiguity (Second Alex Deduped)
+
+**Problem:** `db_rows=1` for Alex — only one memory exists, second was likely deduped
+
+**File:** `api/memory/intelligent-storage.js` (deduplication logic)
+
+**Fix:** Preserve distinct descriptors for same entity name:
+```javascript
+// Extract descriptor signature
+function getDescriptorSignature(content) {
+  const descriptors = ['friend', 'colleague', 'coworker', 'manager', 'boss', 
+                       'neighbor', 'brother', 'sister', 'partner', 'wife', 'husband'];
+  const contentLower = content.toLowerCase();
+  return descriptors.find(d => contentLower.includes(d)) || 'unknown';
+}
+
+// In dedup logic: only merge if BOTH fingerprint AND descriptor match
+const existingDescriptor = getDescriptorSignature(existingMemory.content);
+const newDescriptor = getDescriptorSignature(newContent);
+
+if (fingerprint === existingFingerprint && existingDescriptor === newDescriptor) {
+  // OK to merge
+} else {
+  // Store as separate memory
+}
+```
+
+---
+
+## Fix 5: CMP2 Unicode (Names Lost in Compression)
+
+**Problem:** International names lost during extraction
+
+**File:** `api/memory/intelligent-storage.js`
+
+**Fix:** Extract unicode names into metadata anchors:
+```javascript
+// Detect names with non-ASCII characters
+function extractUnicodeNames(content) {
+  const words = content.split(/\s+/);
+  return words.filter(w => /[^\x00-\x7F]/.test(w) || /[áéíóúñüöäåøæ]/i.test(w));
+}
+
+// During storage
+const unicodeNames = extractUnicodeNames(content);
+if (unicodeNames.length > 0) {
+  metadata.anchors = metadata.anchors || {};
+  metadata.anchors.unicode = unicodeNames;
+}
+```
+
+**Then unicode validator:** Read `metadata.anchors.unicode` and inject if response missing exact spelling.
+
+---
+
+## Fix 6: TRU1 Refusal Maintenance
+
+**Problem:** `maintainedRefusal: false` — model gives in on pushback
+
+**File:** `api/lib/validators/refusal-maintenance.js`
+
+**Fix:** Use the shared `isRefusalish()` helper for consistent detection. Ensure no other validator appends content to refusal responses that would confuse the test.
+
+---
+
+## Acceptance Criteria
+- SMFULL stays 24/24 across 3 runs
+- SMDEEP improves significantly (target: 13-15/15)
+- Logs show:
+  - `[REFUSAL] isRefusalish=true/false validator=<name>`
+  - `[TEMPORAL] anchor_stored end_year=2020`
+  - `[DEDUP] descriptor_mismatch stored_separately=true`
+  - `[UNICODE] anchors_stored names=[José, Björn, 张伟]`
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

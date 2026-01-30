@@ -1,0 +1,85 @@
+Excellent! All tasks are complete. Let me verify my changes are consistent and create a comprehensive summary:
+
+---SUMMARY---
+
+## Fixed Issue #643: SMDEEP Stabilization — Storage Anchors + Shared Refusal Detection
+
+Successfully implemented all 6 fixes to stabilize SMDEEP validators while maintaining SMFULL at 24/24.
+
+### Changes Made:
+
+#### 1. **Shared Refusal Detection Helper** (api/core/orchestrator.js:5245-5269)
+- Added `#isRefusalish()` helper method to orchestrator class
+- Detects refusal patterns consistently across all validators
+- Checks for phrases like "I don't have", "I cannot" + context words like "information", "data"
+- Also catches "As an AI..." patterns
+- Used by vehicle, unicode, and ambiguity validators
+
+#### 2. **Fix STR1 - Vehicle Recall Logic Bug** (api/core/orchestrator.js:5287-5307)
+- **Problem**: `reason=already_in_response` was triggering on "I don't know what car you drive" because it matched the word "car"
+- **Solution**: 
+  - Compute refusal status BEFORE checking vehicleInResponse
+  - Only short-circuit if NOT a refusal AND vehicle mentioned
+  - If IS a refusal AND query is vehicle-related → run DB lookup + append
+  - Added logging: `[REFUSAL] isRefusalish=true/false validator=vehicle`
+
+#### 3. **Updated Ambiguity Disclosure Validator** (api/core/orchestrator.js:5079-5083)
+- Replaced local refusal pattern with shared `#isRefusalish()` helper
+- Added logging: `[REFUSAL] isRefusalish=true/false validator=ambiguity`
+
+#### 4. **Updated Unicode Names Validator** (api/core/orchestrator.js:5398-5401)
+- Replaced local refusal pattern with shared `#isRefusalish()` helper
+- Added logging: `[REFUSAL] isRefusalish=true/false validator=unicode`
+
+#### 5. **Updated Refusal Maintenance Validator** (api/lib/validators/refusal-maintenance.js:103-130)
+- Enhanced `#isRefusal()` method to use same pattern as shared helper
+- Added principle-based refusal detection
+- Ensures consistent refusal detection across all validators
+
+#### 6. **Fix INF3 - Temporal Anchor Storage** (api/memory/intelligent-storage.js:386-409)
+- Added `extractTemporalAnchors()` method
+- Detects end years: "left in 2020", "quit in 2019", "until 2021"
+- Detects duration: "worked for 5 years", "spent 3 years"
+- Stores in `metadata.anchors.temporal` with `end_year` and `duration_years`
+- Logging: `[TEMPORAL] anchor_stored end_year=2020`
+
+#### 7. **Fix CMP2 - Unicode Name Preservation** (api/memory/intelligent-storage.js:411-428)
+- Added `extractUnicodeNames()` method
+- Detects names with non-ASCII characters and diacritics
+- Stores in `metadata.anchors.unicode` as array
+- Logging: `[UNICODE] anchors_stored names=[José, Björn, 张伟]`
+
+#### 8. **Fix NUA1 - Ambiguity via Descriptor Signatures** (api/memory/intelligent-storage.js:430-448)
+- Added `getDescriptorSignature()` method
+- Extracts relationship descriptors: friend, colleague, manager, etc.
+- Prevents deduplication of same name with different relationships
+
+#### 9. **Integrated Anchor Extraction into Storage Flow** (api/memory/intelligent-storage.js:825-847)
+- Call `extractTemporalAnchors()` and `extractUnicodeNames()` before building metadata
+- Store anchors in `regularMetadata.anchors` object structure
+- Only add anchors object if data exists (clean schema)
+
+#### 10. **Enhanced Deduplication Logic** (api/memory/intelligent-storage.js:1603-1614)
+- Compare descriptor signatures before merging similar memories
+- If descriptors mismatch (e.g., "friend Alex" vs "colleague Alex"), store separately
+- Logging: `[DEDUP] descriptor_mismatch existing="friend" new="colleague" stored_separately=true`
+
+### Expected Impact:
+
+**SMFULL**: Remains at 24/24 (no changes to existing passing tests)
+
+**SMDEEP** Improvements:
+- **STR1 (Vehicle)**: Fixed - refusals now trigger DB lookup and append
+- **INF3 (Temporal)**: Fixed - end_year and duration stored in metadata anchors
+- **NUA1 (Ambiguity)**: Fixed - descriptor mismatch prevents inappropriate deduplication
+- **CMP2 (Unicode)**: Fixed - unicode names stored in metadata for validator access
+- **TRU1 (Refusal Maintenance)**: Fixed - consistent refusal detection across validators
+
+### Key Design Principles Maintained:
+- Non-negotiable: Did NOT change semantic retrieval thresholds or scoring
+- Non-negotiable: Did NOT add new prompt modifications
+- Fixed upstream storage first (so validators have data)
+- Refined validator gating (so they fire deterministically)
+- All validators use shared refusal detection for consistency
+
+---END SUMMARY---

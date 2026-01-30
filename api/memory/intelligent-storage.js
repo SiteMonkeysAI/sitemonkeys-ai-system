@@ -383,11 +383,96 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Extract temporal anchors from content (Issue #643 - INF3)
+   * Detects end years and duration information for temporal memory
+   * @param {string} content - Content to analyze
+   * @returns {object} - Temporal metadata { end_year, duration_years }
+   */
+  extractTemporalAnchors(content) {
+    if (!content || typeof content !== 'string') return {};
+
+    // SECURITY: Bound input to prevent ReDoS (CodeQL fix for polynomial regex)
+    const safeContent = content.substring(0, 500);
+
+    const temporal = {};
+
+    // Detect end-year pattern: "left in 2020", "quit in 2019", "until 2021"
+    const endYearMatch = safeContent.match(/(left|quit|ended|until|departed|finished|stopped).*?((?:19|20)\d{2})/i);
+    if (endYearMatch) {
+      temporal.end_year = parseInt(endYearMatch[2]);
+      console.log(`[TEMPORAL] anchor_stored end_year=${temporal.end_year}`);
+    }
+
+    // Detect duration pattern: "worked for 5 years", "spent 3 years"
+    const durationMatch = safeContent.match(/(worked|spent|for)\s+(\d+)\s+years?/i);
+    if (durationMatch) {
+      temporal.duration_years = parseInt(durationMatch[2]);
+      console.log(`[TEMPORAL] anchor_stored duration_years=${temporal.duration_years}`);
+    }
+
+    return temporal;
+  }
+
+  /**
+   * Extract unicode names from content (Issue #643 - CMP2)
+   * Preserves names with diacritics and non-ASCII characters
+   * Extracts full name spans, not fragments
+   * @param {string} content - Content to analyze
+   * @returns {string[]} - Array of unicode names
+   */
+  extractUnicodeNames(content) {
+    if (!content || typeof content !== 'string') return [];
+
+    // SECURITY: Bound input to prevent ReDoS (CodeQL fix for polynomial regex)
+    const safeContent = content.substring(0, 500);
+
+    // Match sequences of capitalized words containing unicode/diacritics
+    // This captures full names like "José García-López" not just fragments
+    const namePattern = /(?:[A-Z][a-zÀ-ÿ]+[-\s]?)+[A-ZÀ-ÿ][a-zÀ-ÿ]+/g;
+    const matches = safeContent.match(namePattern) || [];
+
+    // Filter to only names with actual unicode characters, strip trailing punctuation
+    const unicodeNames = matches
+      .filter(m => /[À-ÿ]/.test(m))
+      .map(m => m.replace(/[.,;:!?'")\]}>]+$/, '').trim())
+      .filter(m => m.length > 0);
+
+    if (unicodeNames.length > 0) {
+      console.log(`[UNICODE] anchors_stored names=[${unicodeNames.join(', ')}]`);
+    }
+
+    return unicodeNames;
+  }
+
+  /**
+   * Extract descriptor signature for entity (Issue #643 - NUA1)
+   * Identifies relationship descriptors to prevent inappropriate deduplication
+   * @param {string} content - Content to analyze
+   * @returns {string} - Descriptor like 'friend', 'colleague', 'unknown'
+   */
+  getDescriptorSignature(content) {
+    if (!content || typeof content !== 'string') return 'unknown';
+
+    const descriptors = ['friend', 'colleague', 'coworker', 'manager', 'boss',
+                        'neighbor', 'brother', 'sister', 'partner', 'wife', 'husband',
+                        'cousin', 'uncle', 'aunt', 'client', 'vendor', 'contractor'];
+    const contentLower = content.toLowerCase();
+
+    for (const descriptor of descriptors) {
+      if (contentLower.includes(descriptor)) {
+        return descriptor;
+      }
+    }
+
+    return 'unknown';
+  }
+
+  /**
    * Detect explicit memory storage requests (Fix #557-T2)
    * When user explicitly asks to remember something, store it verbatim without compression
-   * 
+   *
    * SECURITY NOTE: Uses string-based detection instead of regex to prevent ReDoS attacks
-   * 
+   *
    * @param {string} content - User message to check
    * @returns {{isExplicit: boolean, extractedContent: string|null}} - Detection result
    */
@@ -752,6 +837,18 @@ export class IntelligentMemoryStorage {
         // If supersession, storeCompressedMemory will detect and mark old memory as superseded
         console.log('[FLOW] Step 4: Storing new memory (supersession handled internally if applicable)...');
 
+        // FIX #643: Extract temporal anchors from ORIGINAL user message first (INF3)
+        // Compressed facts may have dropped "left in 2020" - extract from source
+        const temporalAnchors = this.extractTemporalAnchors(userMessage);
+
+        // Fallback to facts only if nothing found in original
+        if (Object.keys(temporalAnchors).length === 0) {
+          Object.assign(temporalAnchors, this.extractTemporalAnchors(facts));
+        }
+
+        // FIX #643: Extract unicode names from facts (CMP2)
+        const unicodeNames = this.extractUnicodeNames(facts);
+
         const regularMetadata = {
           original_tokens: originalTokens,
           compressed_tokens: compressedTokens,
@@ -770,6 +867,19 @@ export class IntelligentMemoryStorage {
           regularMetadata.ordinal_pattern = ordinalInfo.pattern;
           if (ordinalInfo.value) {
             regularMetadata.ordinal_value = ordinalInfo.value;
+          }
+        }
+
+        // FIX #643: Add anchors metadata for temporal and unicode (INF3, CMP2)
+        if (Object.keys(temporalAnchors).length > 0 || unicodeNames.length > 0) {
+          regularMetadata.anchors = {};
+
+          if (Object.keys(temporalAnchors).length > 0) {
+            regularMetadata.anchors.temporal = temporalAnchors;
+          }
+
+          if (unicodeNames.length > 0) {
+            regularMetadata.anchors.unicode = unicodeNames;
           }
         }
 
@@ -1503,6 +1613,17 @@ Facts (preserve user terminology + add synonyms):`;
           if (this.shouldPreventMerge(row.content, facts)) {
             console.log(`[DEDUP] ⏭️ Skipping similar memory (id=${row.id}) due to high-entropy mismatch`);
             continue; // Skip this match, check next one
+          }
+
+          // FIX #643-NUA1: Check descriptor mismatch (different relationships for same name)
+          const existingDescriptor = this.getDescriptorSignature(row.content);
+          const newDescriptor = this.getDescriptorSignature(facts);
+
+          if (existingDescriptor !== 'unknown' && newDescriptor !== 'unknown' && existingDescriptor !== newDescriptor) {
+            console.log(`[DEDUP] force_separate=true reason=descriptor_mismatch existing="${existingDescriptor}" new="${newDescriptor}"`);
+            console.log(`[DEDUP] ⏭️ Same entity name but different relationship - storing as separate memory`);
+            // Return null means "no duplicate found" - caller will proceed to store new memory normally
+            return null;
           }
 
           console.log(`[SEMANTIC-DEDUP] ✅ True DUPLICATE detected (same fact repeated), will boost existing memory`);
