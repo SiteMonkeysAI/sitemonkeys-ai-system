@@ -1,0 +1,57 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #654: [claude-fix] Fix syntax error in anchor-preservation.js line 211
+
+Issue Description:
+## Problem
+
+PR #651 introduced a syntax error preventing deployment:
+```
+SyntaxError: Unexpected token 'else'
+    at anchor-preservation.js:211
+```
+
+## Root Cause
+
+The `else` block added for telemetry at line ~208-211 has a brace mismatch.
+
+## Fix
+
+In `api/lib/validators/anchor-preservation.js` around line 208-211, the structure should be:
+```javascript
+if (metadata.anchors) {
+  telemetry.memories_with_anchors++;
+  const anchorKeys = Object.keys(metadata.anchors);
+  anchorKeys.forEach(k => telemetry.anchor_types_found.add(k));
+  console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: anchors_keys=[${anchorKeys.join(', ')}]`);
+  // ... rest of anchor processing
+} else {
+  console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: anchors_keys=[] (no metadata.anchors)`);
+}
+```
+
+Ensure proper brace matching throughout the function.
+
+## Acceptance Criteria
+
+- Server starts without syntax errors
+- Healthcheck passes
+- Deployment succeeds
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
