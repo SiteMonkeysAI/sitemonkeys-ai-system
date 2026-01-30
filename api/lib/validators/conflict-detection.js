@@ -1,5 +1,3 @@
-// api/lib/validators/conflict-detection.js
-
 /**
  * Conflict Detection Validator (NUA2) - Deterministic post-response validator
  * Detects when memory contains conflicting preferences (e.g., allergy vs spouse preference)
