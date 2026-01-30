@@ -4799,25 +4799,19 @@ Mode: ${modeConfig?.display_name || mode}
         }
       }
 
-      if (ordinalMemories.length === 0) {
-        console.log(`[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} db_query=${dbQueryExecuted} found=false injected=false`);
-        return { correctionApplied: false, response };
-      }
-
-      if (ordinalMemories.length < 2) {
-        this.debug(`[ORDINAL-AUTHORITATIVE] Only 1 ordinal memory - no ambiguity needed`);
-        console.log(`[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} db_query=${dbQueryExecuted} found=1 injected=false reason=no_ambiguity`);
-        return { correctionApplied: false, response };
-      }
-
       // ═══════════════════════════════════════════════════════════════
       // EXTRACTION: Get correct value from metadata ONLY
       // ═══════════════════════════════════════════════════════════════
       const targetMemory = ordinalMemories.find(m => m.ordinal === ordinalNum);
-      if (!targetMemory || !targetMemory.value) {
-        console.log(`[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} db_query=${dbQueryExecuted} correct_value=NOT_FOUND injected=false`);
+
+      if (ordinalMemories.length === 0 || !targetMemory || !targetMemory.value) {
+        const reason = ordinalMemories.length === 0 ? 'no_memories' : 'target_missing';
+        console.log(`[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} db_query=${dbQueryExecuted} found=${ordinalMemories.length} injected=false reason=${reason}`);
         return { correctionApplied: false, response };
       }
+
+      this.debug(`[ORDINAL-AUTHORITATIVE] Found target memory: ordinal=${targetMemory.ordinal} value=${targetMemory.value} (total_memories=${ordinalMemories.length})`);
+      console.log(`[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} db_query=${dbQueryExecuted} target_found=true memories_count=${ordinalMemories.length}`);
 
       const correctValue = targetMemory.value;
 
