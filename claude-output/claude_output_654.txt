@@ -1,0 +1,38 @@
+Based on my thorough analysis:
+
+1. **The issue has already been fixed**: PR #652 (commit c34b09de) already fixed the exact syntax error described in issue #654
+2. **Current state is correct**: The `else` block is properly placed at lines 161-163, correctly paired with the `if (metadata.anchors)` block that starts at line 118
+3. **No misplaced else block**: There is no stray `else` block after line 211 (in the number extraction section)
+
+The file structure is correct:
+- Lines 118-160: `if (metadata.anchors) { ... }` - processes metadata anchors
+- Lines 161-163: `} else { ... }` - logs when no metadata.anchors
+- Lines 165-213: Fallback extraction (runs for all memories)
+
+Since the code is already correct and this appears to be a duplicate issue (issue #652 already fixed this), there are no changes needed.
+
+---SUMMARY---
+**Issue Status: Already Fixed**
+
+Upon investigation, issue #654 describes a syntax error that was introduced by PR #651 and **already fixed by PR #652** (commit c34b09de with message "Fix syntax error in anchor-preservation.js line 211 — unexpected 'else'").
+
+**The Problem (from PR #651):**
+The `else` block for logging when `metadata.anchors` doesn't exist was incorrectly placed after line 213 (after the number extraction loop), instead of being paired with the `if (metadata.anchors)` statement at line 118.
+
+**The Fix (already in PR #652):**
+The `else` block was moved to its correct location at lines 161-163, immediately after the closing brace of the `if (metadata.anchors)` block.
+
+**Current File State (api/lib/validators/anchor-preservation.js):**
+- Lines 118-160: `if (metadata.anchors) { ... }` - correctly processes metadata anchors
+- Lines 161-163: `} else { ... }` - correctly logs when no metadata.anchors exist  
+- Lines 165-213: Fallback extraction code (runs for all memories regardless)
+- Line 214: Closing brace for the memory loop
+
+**Verification:**
+- The else block is at line 161 (correct location)
+- There is no misplaced else block after line 211/213
+- The brace structure is properly matched
+- The syntax is valid
+
+**No changes were needed** - the current HEAD (commit af966c8a) already contains the fix from PR #652. Issue #654 appears to be a duplicate of issue #652.
+---END SUMMARY---
