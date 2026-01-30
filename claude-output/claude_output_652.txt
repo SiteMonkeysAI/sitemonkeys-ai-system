@@ -1,0 +1,46 @@
+Excellent! The syntax error has been fixed. The structure is now correct:
+
+- Line 118: `if (metadata.anchors) {` - opening the if block
+- Lines 119-160: Processing when metadata.anchors exists
+- Line 161: `} else {` - properly paired else block
+- Line 162: Logging when no metadata.anchors exists
+- Line 163: `}` - closing the if/else block
+- Lines 165+: Fallback extraction code that runs for all memories
+
+The fix addresses the issue exactly as described in the issue #652. The `else` block is now properly paired with its corresponding `if` statement.
+
+---SUMMARY---
+
+## Fixed Syntax Error in anchor-preservation.js
+
+**File Modified:** `api/lib/validators/anchor-preservation.js`
+
+**Problem:** 
+PR #651 introduced a syntax error at line 211 where an `else` block was placed after a `for` loop instead of being paired with its corresponding `if` statement. This caused a `SyntaxError: Unexpected token 'else'` that crashed the server on startup.
+
+**Root Cause:**
+The `else` block intended to log when `metadata.anchors` doesn't exist was incorrectly placed at line 211-213, outside its intended `if` block scope. It was positioned after the number extraction `for` loop instead of being paired with the `if (metadata.anchors)` statement at line 118.
+
+**Solution:**
+Moved the `else` block to its correct position at line 161, immediately after the closing brace of the `if (metadata.anchors)` block. The structure is now:
+
+```javascript
+if (metadata.anchors) {
+  // ... anchor processing code (lines 119-160) ...
+  console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: anchors_keys=[${anchorKeys.join(', ')}]`);
+} else {
+  console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: anchors_keys=[] (no metadata.anchors)`);
+}
+```
+
+**Changes Made:**
+1. Removed the misplaced `else` block from after the number extraction loop (previously at lines 211-213)
+2. Added the `else` block in the correct location after the `if (metadata.anchors)` block (now at lines 161-163)
+
+**Result:**
+- Syntax error eliminated
+- Server can now start without parse errors
+- Telemetry logging works as intended for both cases (with and without metadata.anchors)
+- All brace matching is now correct
+
+---END SUMMARY---
