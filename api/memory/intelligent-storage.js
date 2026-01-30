@@ -423,10 +423,13 @@ export class IntelligentMemoryStorage {
   extractUnicodeNames(content) {
     if (!content || typeof content !== 'string') return [];
 
+    // SECURITY: Bound input to prevent ReDoS (CodeQL fix for polynomial regex)
+    const safeContent = content.substring(0, 500);
+
     // Match sequences of capitalized words containing unicode/diacritics
     // This captures full names like "José García-López" not just fragments
     const namePattern = /(?:[A-Z][a-zÀ-ÿ]+[-\s]?)+[A-ZÀ-ÿ][a-zÀ-ÿ]+/g;
-    const matches = content.match(namePattern) || [];
+    const matches = safeContent.match(namePattern) || [];
 
     // Filter to only names with actual unicode characters, strip trailing punctuation
     const unicodeNames = matches
