@@ -393,15 +393,18 @@ export class IntelligentMemoryStorage {
 
     const temporal = {};
 
+    // Bound input to prevent ReDoS on polynomial regex
+    const safeContent = content.substring(0, 500);
+
     // Detect end-year pattern: "left in 2020", "quit in 2019", "until 2021"
-    const endYearMatch = content.match(/(left|quit|ended|until|departed|finished|stopped).*?((?:19|20)\d{2})/i);
+    const endYearMatch = safeContent.match(/(left|quit|ended|until|departed|finished|stopped).*?((?:19|20)\d{2})/i);
     if (endYearMatch) {
       temporal.end_year = parseInt(endYearMatch[2]);
       console.log(`[TEMPORAL] anchor_stored end_year=${temporal.end_year}`);
     }
 
     // Detect duration pattern: "worked for 5 years", "spent 3 years"
-    const durationMatch = content.match(/(worked|spent|for)\s+(\d+)\s+years?/i);
+    const durationMatch = safeContent.match(/(worked|spent|for)\s+(\d+)\s+years?/i);
     if (durationMatch) {
       temporal.duration_years = parseInt(durationMatch[2]);
       console.log(`[TEMPORAL] anchor_stored duration_years=${temporal.duration_years}`);
@@ -419,7 +422,9 @@ export class IntelligentMemoryStorage {
   extractUnicodeNames(content) {
     if (!content || typeof content !== 'string') return [];
 
-    const words = content.split(/\s+/);
+    // Bound input to prevent excessive processing on large content
+    const safeContent = content.substring(0, 500);
+    const words = safeContent.split(/\s+/);
     const unicodeNames = words.filter(w => {
       // Match words with non-ASCII characters or common diacritics
       return /[^\x00-\x7F]/.test(w) || /[áéíóúñüöäåøæÀ-ÿ]/i.test(w);
