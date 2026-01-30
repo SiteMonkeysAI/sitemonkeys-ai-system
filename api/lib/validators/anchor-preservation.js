@@ -158,6 +158,8 @@ class AnchorPreservationValidator {
             });
           }
         }
+      } else {
+        console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: anchors_keys=[] (no metadata.anchors)`);
       }
 
       // FALLBACK: Extract prices from content (if not already from metadata)
@@ -208,8 +210,6 @@ class AnchorPreservationValidator {
             source: content
           });
         }
-      } else {
-        console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: anchors_keys=[] (no metadata.anchors)`);
       }
     }
 
