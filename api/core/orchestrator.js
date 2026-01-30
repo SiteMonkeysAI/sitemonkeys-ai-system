@@ -29,6 +29,7 @@ import { manipulationGuard } from "../lib/validators/manipulation-guard.js";
 import { characterPreservationValidator } from "../lib/validators/character-preservation.js";
 import { anchorPreservationValidator } from "../lib/validators/anchor-preservation.js";
 import { refusalMaintenanceValidator } from "../lib/validators/refusal-maintenance.js";
+import { conflictDetectionValidator } from "../lib/validators/conflict-detection.js";
 import { costTracker } from "../utils/cost-tracker.js";
 import { PoliticalGuardrails } from "../lib/politicalGuardrails.js";
 import { ProductValidator } from "../lib/productValidation.js";
@@ -462,6 +463,32 @@ export class Orchestrator {
         this.error("Ambiguity disclosure failed:", error);
         complianceMetadata.warnings.push(
           "ambiguity_disclosure_error: " + error.message,
+        );
+      }
+
+      // ========== STEP 9.8: CONFLICT DETECTION (Issue #639-NUA2) ==========
+      try {
+        const conflictResult = await conflictDetectionValidator.validate({
+          response: enforcedResponse,
+          memoryContext: context.memory_context,
+          query: context.message || '',
+          context: context
+        });
+
+        if (conflictResult.correctionApplied) {
+          enforcedResponse = conflictResult.response;
+          complianceMetadata.overrides.push({
+            module: "conflict_detection",
+            conflicts: conflictResult.conflicts,
+            conflictsDetected: conflictResult.conflictsDetected
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("conflict_detection");
+      } catch (error) {
+        this.error("Conflict detection failed:", error);
+        complianceMetadata.warnings.push(
+          "conflict_detection_error: " + error.message,
         );
       }
 
@@ -4697,12 +4724,20 @@ Mode: ${modeConfig?.display_name || mode}
       const memories = Array.isArray(memoryContext) ? memoryContext : (memoryContext.memories || []);
       let ordinalMemories = memories
         .filter(m => {
-          const metadata = m.metadata || {};
+          // Normalize metadata - handle string vs object
+          let metadata = m.metadata || {};
+          if (typeof metadata === 'string') {
+            try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+          }
           const ordinalSubject = (metadata.ordinal_subject || '').toLowerCase();
           return ordinalSubject && ordinalSubject.includes(subject);
         })
         .map(m => {
-          const metadata = m.metadata || {};
+          // Normalize metadata - handle string vs object
+          let metadata = m.metadata || {};
+          if (typeof metadata === 'string') {
+            try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+          }
           return {
             ordinal: parseInt(metadata.ordinal) || null,
             value: metadata.ordinal_value || null,
@@ -4741,7 +4776,11 @@ Mode: ${modeConfig?.display_name || mode}
             if (dbResult.rows && dbResult.rows.length > 0) {
               ordinalMemories = dbResult.rows
                 .map(row => {
-                  const metadata = row.metadata || {};
+                  // Normalize metadata - handle string vs object
+                  let metadata = row.metadata || {};
+                  if (typeof metadata === 'string') {
+                    try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+                  }
                   return {
                     ordinal: parseInt(metadata.ordinal) || null,
                     value: metadata.ordinal_value || null,

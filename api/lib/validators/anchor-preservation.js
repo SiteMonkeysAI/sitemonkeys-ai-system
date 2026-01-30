@@ -87,66 +87,115 @@ class AnchorPreservationValidator {
 
   /**
    * Extract anchor data points from memory context
+   * ENHANCED (Issue #639): Now also reads metadata.anchors stored during memory creation
    */
   #extractAnchors(memoryContext) {
     const anchors = [];
-    
+
     // Handle both array and object formats
-    const memories = Array.isArray(memoryContext) 
-      ? memoryContext 
+    const memories = Array.isArray(memoryContext)
+      ? memoryContext
       : (memoryContext.memories || []);
-    
+
     for (const memory of memories) {
       const content = memory.content || memory.text || '';
-      
-      // Extract prices (including various formats)
+
+      // FIX #639: Normalize metadata - handle string vs object
+      let metadata = memory.metadata || {};
+      if (typeof metadata === 'string') {
+        try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+      }
+
+      // ENHANCEMENT: Extract anchors from metadata if available (more reliable)
+      if (metadata.anchors) {
+        // Pricing anchors from metadata
+        if (metadata.anchors.pricing && Array.isArray(metadata.anchors.pricing)) {
+          for (const price of metadata.anchors.pricing) {
+            anchors.push({
+              type: 'price',
+              value: price,
+              source: content,
+              fromMetadata: true
+            });
+          }
+        }
+
+        // Unicode/identifier anchors from metadata
+        if (metadata.anchors.unicode && Array.isArray(metadata.anchors.unicode)) {
+          for (const identifier of metadata.anchors.unicode) {
+            anchors.push({
+              type: 'identifier',
+              value: identifier,
+              source: content,
+              fromMetadata: true
+            });
+          }
+        }
+
+        // Other identifier anchors from metadata
+        if (metadata.anchors.identifiers && Array.isArray(metadata.anchors.identifiers)) {
+          for (const identifier of metadata.anchors.identifiers) {
+            anchors.push({
+              type: 'identifier',
+              value: identifier,
+              source: content,
+              fromMetadata: true
+            });
+          }
+        }
+      }
+
+      // FALLBACK: Extract prices from content (if not already from metadata)
       const pricePattern = /\$[\d,]+(?:\.\d{2})?|\d+\s*(?:dollars?|USD|usd)/gi;
       const prices = content.match(pricePattern) || [];
       for (const price of prices) {
-        anchors.push({ 
-          type: 'price', 
-          value: price.trim(),
-          source: content
-        });
+        // Avoid duplicates from metadata
+        if (!anchors.some(a => a.value === price.trim())) {
+          anchors.push({
+            type: 'price',
+            value: price.trim(),
+            source: content
+          });
+        }
       }
-      
-      // Extract dates
+
+      // Extract dates from content
       const datePattern = /\b(?:\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{4}[-/]\d{1,2}[-/]\d{1,2}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})\b/gi;
       const dates = content.match(datePattern) || [];
       for (const date of dates) {
-        anchors.push({ 
-          type: 'date', 
+        anchors.push({
+          type: 'date',
           value: date.trim(),
           source: content
         });
       }
-      
-      // Extract percentages
+
+      // Extract percentages from content
       const percentPattern = /\b\d+(?:\.\d+)?%/g;
       const percentages = content.match(percentPattern) || [];
       for (const percentage of percentages) {
-        anchors.push({ 
-          type: 'percentage', 
+        anchors.push({
+          type: 'percentage',
           value: percentage,
           source: content
         });
       }
-      
+
       // Extract other significant numbers with context
       const numberPattern = /\b\d{2,}(?:,\d{3})*(?:\.\d+)?\b/g;
       const numbers = content.match(numberPattern) || [];
       for (const number of numbers) {
         // Skip if already captured as price/percentage
         if (!anchors.some(a => a.value.includes(number))) {
-          anchors.push({ 
-            type: 'number', 
+          anchors.push({
+            type: 'number',
             value: number,
             source: content
           });
         }
       }
     }
-    
+
     return anchors;
   }
 

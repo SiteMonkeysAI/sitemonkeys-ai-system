@@ -22,6 +22,7 @@ export { manipulationGuard } from './manipulation-guard.js';
 export { characterPreservationValidator } from './character-preservation.js';
 export { anchorPreservationValidator } from './anchor-preservation.js';
 export { refusalMaintenanceValidator } from './refusal-maintenance.js';
+export { conflictDetectionValidator } from './conflict-detection.js';
 
 /**
  * Get stats from all validators
@@ -34,6 +35,7 @@ export function getAllValidatorStats() {
     manipulationGuard: manipulationGuard.getStats?.() || {},
     characterPreservation: characterPreservationValidator.getStats?.() || {},
     anchorPreservation: anchorPreservationValidator.getStats?.() || {},
-    refusalMaintenance: refusalMaintenanceValidator.getStats?.() || {}
+    refusalMaintenance: refusalMaintenanceValidator.getStats?.() || {},
+    conflictDetection: conflictDetectionValidator.getStats?.() || {}
   };
 }

@@ -1,0 +1,72 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #639: [claude-fix] Metadata Type Normalization + NUA2/EDG3 Deterministic Validators
+
+Issue Description:
+## Priority: HIGH
+
+## Root Cause Hypothesis
+Metadata is stored but validators fail because `metadata` is sometimes a **string** and sometimes an **object**. When validators do `metadata.ordinal_subject` on a string, it silently returns undefined.
+
+## Investigation First
+
+Run this query to inspect actual metadata shape:
+```sql
+SELECT id, user_id, created_at, is_current, 
+       pg_typeof(metadata) as metadata_type,
+       content, 
+       metadata
+FROM persistent_memories
+WHERE user_id LIKE 'smfull-%' OR user_id LIKE 'smdeep-%'
+ORDER BY created_at DESC
+LIMIT 30;
+```
+
+## Fix 1: Normalize Metadata at Retrieval Boundary
+
+In ONE place (likely `#enforceOrdinalCorrectness` and other validators), add:
+```javascript
+// Normalize metadata - handle string vs object
+let meta = row.metadata || {};
+if (typeof meta === 'string') {
+  try { meta = JSON.parse(meta); } catch { meta = {}; }
+}
+```
+
+Apply this pattern to ALL authoritative validators that query metadata.
+
+## Fix 2: NUA2 Deterministic Injection
+
+When BOTH conditions are true:
+- Memory contains allergy + spouse preference
+- Response lacks "tension/tradeoff/conflict" keywords
+
+Prepend: "There's a real tradeoff here: your allergy vs your wife's preference."
+
+## Fix 3: EDG3 Pricing Anchor Validator
+
+If pricing anchors exist in metadata and response is missing them, append deterministically.
+
+## Constraints for Implementation
+- Touch as few files as possible
+- Don't change prompts
+- Don't adjust similarity thresholds
+- Fix metadata normalization + deterministic injections only
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
