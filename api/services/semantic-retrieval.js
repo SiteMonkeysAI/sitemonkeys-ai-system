@@ -858,6 +858,37 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // CRITICAL SECURITY FIX #549: Validate user_id isolation
     // Ensure NO cross-user memory leakage
     // ═══════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+    // TRUTH-TELEMETRY (Issue #650): NUA1/STR1 diagnostic trace
+    // ═══════════════════════════════════════════════════════════════
+    console.log(`[TRUTH-TELEMETRY] ═══════════════════════════════════════════════`);
+    console.log(`[TRUTH-TELEMETRY] Query: "${normalizedQuery.substring(0, 100)}"`);
+    console.log(`[TRUTH-TELEMETRY] Filters: userId=${userId}, mode=${mode}, categories=${JSON.stringify(effectiveCategories)}, is_current=true, limit=${RETRIEVAL_CONFIG.maxCandidates}`);
+    console.log(`[TRUTH-TELEMETRY] Rows returned: ${candidates.length}`);
+
+    // Log each row with key diagnostic info
+    for (let i = 0; i < Math.min(candidates.length, 20); i++) {
+      const row = candidates[i];
+      const contentPreview = (row.content || '').substring(0, 80).replace(/\n/g, ' ');
+
+      // Parse metadata safely
+      let metadata = row.metadata || {};
+      if (typeof metadata === 'string') {
+        try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+      }
+
+      const anchorsKeys = metadata.anchors ? Object.keys(metadata.anchors) : [];
+
+      console.log(`[TRUTH-TELEMETRY] Row #${i+1}: id=${row.id}, category=${row.category_name}, is_current=${row.is_current}, fingerprint=${row.fact_fingerprint || 'none'}`);
+      console.log(`[TRUTH-TELEMETRY]   content="${contentPreview}"`);
+      console.log(`[TRUTH-TELEMETRY]   anchors_keys=[${anchorsKeys.join(', ')}]`);
+    }
+
+    if (candidates.length > 20) {
+      console.log(`[TRUTH-TELEMETRY] ... and ${candidates.length - 20} more rows`);
+    }
+    console.log(`[TRUTH-TELEMETRY] ═══════════════════════════════════════════════`);
+
     console.log(`[USER-ISOLATION] ════════════════════════════════════════`);
     console.log(`[USER-ISOLATION] Requested userId: ${userId}`);
     console.log(`[USER-ISOLATION] Retrieved ${candidates.length} candidates`);
@@ -1489,6 +1520,22 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       if (boostedCount > 0) {
         console.log(`[ENTITY-BOOST] ✅ Boosted ${boostedCount} memories containing detected entities`);
         console.log(`[ENTITY-BOOST] This ensures ALL memories about these entities are shown, allowing ambiguity detection`);
+
+        // TRUTH-TELEMETRY for NUA1: Show which specific memories were boosted for ambiguity detection
+        console.log(`[NUA1-TELEMETRY] Entity-boosted memories for ambiguity detection:`);
+        entityBoosted.filter(m => m.entity_boosted).forEach((mem, idx) => {
+          console.log(`[NUA1-TELEMETRY]   Memory ${idx+1}: id=${mem.id}, category=${mem.category_name}`);
+          console.log(`[NUA1-TELEMETRY]     matched_entities=[${mem.matched_entities.join(', ')}]`);
+          console.log(`[NUA1-TELEMETRY]     content="${(mem.content || '').substring(0, 100)}"`);
+
+          // Parse metadata to check anchors
+          let metadata = mem.metadata || {};
+          if (typeof metadata === 'string') {
+            try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+          }
+          const anchorsKeys = metadata.anchors ? Object.keys(metadata.anchors) : [];
+          console.log(`[NUA1-TELEMETRY]     anchors_keys=[${anchorsKeys.join(', ')}]`);
+        });
       }
     }
     // ═══════════════════════════════════════════════════════════════

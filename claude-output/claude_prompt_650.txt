@@ -1,0 +1,107 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #650: [claude-fix] Fix SMDEEP authoritative validators: read metadata.anchors + add truth-telemetry for NUA1/STR1/EDG3
+
+Issue Description:
+Priority: HIGH (test harness correctness + visibility)
+
+Evidence
+
+CMP2 failing while storage clearly extracted and stored unicode anchors:
+
+Storage log shows pattern_matches=[...]
+
+Storage log shows metadata_keys=...anchors
+
+Validator prints: [UNICODE-AUTHORITATIVE] names_found=[] reason=no_unicode_names
+
+This indicates validator is not reading metadata.anchors (or is failing to parse it).
+
+Required Fix 1: Validators must read anchors (NOT response text)
+A) Unicode validator (CMP2)
+
+Wherever [UNICODE-AUTHORITATIVE] is implemented:
+
+Query DB rows for the user
+
+Extract unicode names from metadata.anchors (not from response content)
+
+Must handle both shapes safely:
+
+metadata.anchors as JSON object/array (jsonb)
+
+metadata.anchors as a stringified JSON (defensive fallback)
+
+Required output (logs):
+
+anchors_present: true/false
+
+anchors_keys: [...] (when present)
+
+unicode_names_found: [...]
+
+decision: appended=true/false reason=...
+
+B) Pricing validator (EDG3)
+
+Same pattern:
+
+Read pricing from metadata.anchors
+
+Log prices_found=[...] and whether pricing anchors were appended/preserved.
+
+Required Fix 2: Add truth-telemetry so NUA1/STR1 stop being guesswork
+
+For NUA1 and STR1 failures, validators must print an “authoritative trace”:
+
+filters used (category / fingerprint / is_current / any LIMIT)
+
+rows returned count
+
+for each row: id, category, is_current, short content_preview, and anchors_keys
+
+This is mandatory so we can tell if:
+
+dedup merged facts
+
+routing split categories
+
+query filters are excluding data
+
+or storage skipped something
+
+Success Criteria
+
+CMP2: validator prints unicode_names_found=[...] based on anchors and passes
+
+EDG3: validator prints prices_found=[...] based on anchors and passes (if anchors exist)
+
+NUA1: validator trace clearly shows why db_rows=1 (merge? filter? category?)
+
+STR1: validator trace confirms whether the 10-fact message was stored and whether vehicle anchor exists
+
+Constraints
+
+Do not “fix” by relaxing tests without proof
+
+Do not rely on response text scraping if anchors exist
+
+Must remain token-efficient and not dump full metadata, only keys + short previews
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

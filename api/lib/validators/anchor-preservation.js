@@ -91,14 +91,22 @@ class AnchorPreservationValidator {
    */
   #extractAnchors(memoryContext) {
     const anchors = [];
+    const telemetry = {
+      memories_checked: 0,
+      memories_with_anchors: 0,
+      anchor_types_found: new Set()
+    };
 
     // Handle both array and object formats
     const memories = Array.isArray(memoryContext)
       ? memoryContext
       : (memoryContext.memories || []);
 
+    telemetry.memories_checked = memories.length;
+
     for (const memory of memories) {
       const content = memory.content || memory.text || '';
+      const memoryId = memory.id || 'unknown';
 
       // FIX #639: Normalize metadata - handle string vs object
       let metadata = memory.metadata || {};
@@ -108,8 +116,15 @@ class AnchorPreservationValidator {
 
       // ENHANCEMENT: Extract anchors from metadata if available (more reliable)
       if (metadata.anchors) {
+        telemetry.memories_with_anchors++;
+        const anchorKeys = Object.keys(metadata.anchors);
+        anchorKeys.forEach(k => telemetry.anchor_types_found.add(k));
+
+        console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: anchors_keys=[${anchorKeys.join(', ')}]`);
+
         // Pricing anchors from metadata
         if (metadata.anchors.pricing && Array.isArray(metadata.anchors.pricing)) {
+          console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: prices_found=[${metadata.anchors.pricing.join(', ')}]`);
           for (const price of metadata.anchors.pricing) {
             anchors.push({
               type: 'price',
@@ -193,8 +208,12 @@ class AnchorPreservationValidator {
             source: content
           });
         }
+      } else {
+        console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: anchors_keys=[] (no metadata.anchors)`);
       }
     }
+
+    console.log(`[ANCHOR-VALIDATOR] Extraction telemetry: memories_checked=${telemetry.memories_checked}, memories_with_anchors=${telemetry.memories_with_anchors}, anchor_types=[${Array.from(telemetry.anchor_types_found).join(', ')}], total_anchors=${anchors.length}`);
 
     return anchors;
   }
