@@ -36,7 +36,7 @@ const SUPERSESSION_CONFIG = {
   maxRetries: 3,
   retryDelayMs: 100,
   fingerprintTimeout: 2000,
-  fingerprintModel: 'gpt-4o-mini'
+  fingerprintModel: 'gpt-4o-mini',
 };
 
 // ============================================================================
@@ -50,18 +50,18 @@ const FINGERPRINT_PATTERNS = [
     patterns: [
       /\b(?:my|our)?\s*(?:phone|cell|mobile|telephone)\s*(?:number|#)?\s*(?:is|:)?\s*[\d\-\(\)\s\+]+/i,
       /\b(?:call|reach|text)\s*(?:me|us)\s*(?:at|on)?\s*[\d\-\(\)\s\+]+/i,
-      /\b[\d]{3}[-.\s]?[\d]{3}[-.\s]?[\d]{4}\b/
+      /\b[\d]{3}[-.\s]?[\d]{3}[-.\s]?[\d]{4}\b/,
     ],
-    confidence: 0.95
+    confidence: 0.95,
   },
   // Email
   {
     fingerprint: 'user_email',
     patterns: [
       /\b(?:my|our)?\s*(?:email|e-mail)\s*(?:address|is|:)?\s*[\w\.\-]+@[\w\.\-]+\.\w+/i,
-      /\b(?:email|reach|contact)\s*(?:me|us)\s*(?:at)?\s*[\w\.\-]+@[\w\.\-]+\.\w+/i
+      /\b(?:email|reach|contact)\s*(?:me|us)\s*(?:at)?\s*[\w\.\-]+@[\w\.\-]+\.\w+/i,
     ],
-    confidence: 0.95
+    confidence: 0.95,
   },
   // Name
   {
@@ -69,9 +69,9 @@ const FINGERPRINT_PATTERNS = [
     patterns: [
       /\b(?:my|our)\s+name\s+is\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
       /\b(?:i'?m|i am|call me)\s+([A-Z][a-z]+)/i,
-      /\bname(?:'s|:)?\s*([A-Z][a-z]+)/i
+      /\bname(?:'s|:)?\s*([A-Z][a-z]+)/i,
     ],
-    confidence: 0.90
+    confidence: 0.9,
   },
   // Location/Residence
   {
@@ -80,9 +80,9 @@ const FINGERPRINT_PATTERNS = [
       /\bi\s+(?:live|reside|stay|am located)\s+(?:in|at)\s+(.+)/i,
       /\b(?:my|our)\s+(?:home|house|address|residence|location)\s+(?:is|:)\s+(.+)/i,
       /\bi(?:'m| am)\s+(?:from|based in|located in)\s+(.+)/i,
-      /\b(?:moved|moving)\s+to\s+(.+)/i
+      /\b(?:moved|moving)\s+to\s+(.+)/i,
     ],
-    confidence: 0.85
+    confidence: 0.85,
   },
   // Job/Occupation
   {
@@ -90,9 +90,9 @@ const FINGERPRINT_PATTERNS = [
     patterns: [
       /\bi\s+(?:work|am employed)\s+(?:as|at)\s+(?:a\s+)?(.+)/i,
       /\b(?:my|our)\s+(?:job|occupation|profession|role|title|position)\s+(?:is|:)\s+(.+)/i,
-      /\bi(?:'m| am)\s+a\s+(developer|engineer|manager|designer|analyst|consultant|director|ceo|cto|founder|doctor|lawyer|teacher|nurse|accountant)/i
+      /\bi(?:'m| am)\s+a\s+(developer|engineer|manager|designer|analyst|consultant|director|ceo|cto|founder|doctor|lawyer|teacher|nurse|accountant)/i,
     ],
-    confidence: 0.85
+    confidence: 0.85,
   },
   // Company/Employer
   {
@@ -100,9 +100,9 @@ const FINGERPRINT_PATTERNS = [
     patterns: [
       /\bi\s+work\s+(?:at|for)\s+(.+)/i,
       /\b(?:my|our)\s+(?:company|employer|workplace)\s+(?:is|:)\s+(.+)/i,
-      /\bemployed\s+(?:by|at)\s+(.+)/i
+      /\bemployed\s+(?:by|at)\s+(.+)/i,
     ],
-    confidence: 0.85
+    confidence: 0.85,
   },
   // Age/Birthday
   {
@@ -111,9 +111,9 @@ const FINGERPRINT_PATTERNS = [
       /\bi(?:'m| am)\s+(\d{1,3})\s*(?:years?\s*old)?/i,
       /\b(?:my|our)\s+age\s+(?:is|:)\s*(\d{1,3})/i,
       /\bborn\s+(?:in|on)\s+(.+)/i,
-      /\b(?:my|our)\s+birthday\s+(?:is|:)\s+(.+)/i
+      /\b(?:my|our)\s+birthday\s+(?:is|:)\s+(.+)/i,
     ],
-    confidence: 0.90
+    confidence: 0.9,
   },
   // Salary/Compensation
   {
@@ -122,9 +122,9 @@ const FINGERPRINT_PATTERNS = [
       /\b(?:my|our)\s+(?:salary|income|pay|compensation|wage|earnings?)\s+(?:is|:)?\s*\$?\d+[,\d]*(?:k|K|\d{3})?/i,
       /\bi\s+(?:make|earn|get paid)\s+\$?\d+[,\d]*(?:k|K|\d{3})?/i,
       /\b(?:salary|income|pay|compensation)(?:\s+is|\s+of)?\s*\$?\d+[,\d]*(?:k|K|\d{3})?/i,
-      /\$\d+[,\d]*(?:\.\d{2})?\s*(?:per year|annually|\/year|a year)/i
+      /\$\d+[,\d]*(?:\.\d{2})?\s*(?:per year|annually|\/year|a year)/i,
     ],
-    confidence: 0.95
+    confidence: 0.95,
   },
   // Marital Status
   {
@@ -132,54 +132,54 @@ const FINGERPRINT_PATTERNS = [
     patterns: [
       /\bi(?:'m| am)\s+(married|single|divorced|widowed|engaged|separated)/i,
       /\b(?:my|our)\s+(?:marital\s+)?status\s+(?:is|:)\s+(married|single|divorced|widowed|engaged|separated)/i,
-      /\bgot\s+(married|divorced|engaged)/i
+      /\bgot\s+(married|divorced|engaged)/i,
     ],
-    confidence: 0.90
+    confidence: 0.9,
   },
   // Spouse/Partner Name
   {
     fingerprint: 'user_spouse_name',
     patterns: [
       /\b(?:my|our)\s+(?:wife|husband|spouse|partner)(?:'s name)?\s+(?:is|:)\s+([A-Z][a-z]+)/i,
-      /\bmarried\s+to\s+([A-Z][a-z]+)/i
+      /\bmarried\s+to\s+([A-Z][a-z]+)/i,
     ],
-    confidence: 0.85
+    confidence: 0.85,
   },
   // Children
   {
     fingerprint: 'user_children_count',
     patterns: [
       /\bi\s+have\s+(\d+|one|two|three|four|five|no)\s+(?:kid|child|children|son|daughter)/i,
-      /\b(?:my|our)\s+(?:kid|child|children)\s*(?:'s name|:)?\s+(.+)/i
+      /\b(?:my|our)\s+(?:kid|child|children)\s*(?:'s name|:)?\s+(.+)/i,
     ],
-    confidence: 0.85
+    confidence: 0.85,
   },
   // Pet
   {
     fingerprint: 'user_pet',
     patterns: [
       /\bi\s+have\s+a\s+(dog|cat|pet|bird|fish|hamster|rabbit)(?:\s+named\s+([A-Z][a-z]+))?/i,
-      /\b(?:my|our)\s+(?:dog|cat|pet)(?:'s name)?\s+(?:is|:)\s+([A-Z][a-z]+)/i
+      /\b(?:my|our)\s+(?:dog|cat|pet)(?:'s name)?\s+(?:is|:)\s+([A-Z][a-z]+)/i,
     ],
-    confidence: 0.80
+    confidence: 0.8,
   },
   // Favorite Color
   {
     fingerprint: 'user_favorite_color',
     patterns: [
       /\b(?:my|our)\s+fav(?:ou?rite)?\s+colou?r\s+(?:is|:)\s+(\w+)/i,
-      /\bi\s+(?:love|like|prefer)\s+(?:the\s+colou?r\s+)?(\w+)\s+(?:colou?r|the\s+most)/i
+      /\bi\s+(?:love|like|prefer)\s+(?:the\s+colou?r\s+)?(\w+)\s+(?:colou?r|the\s+most)/i,
     ],
-    confidence: 0.80
+    confidence: 0.8,
   },
   // Timezone/Location context
   {
     fingerprint: 'user_timezone',
     patterns: [
       /\b(?:my|our)\s+timezone?\s+(?:is|:)\s+(.+)/i,
-      /\bi(?:'m| am)\s+(?:in|on)\s+(EST|PST|CST|MST|UTC|GMT)/i
+      /\bi(?:'m| am)\s+(?:in|on)\s+(EST|PST|CST|MST|UTC|GMT)/i,
     ],
-    confidence: 0.85
+    confidence: 0.85,
   },
   // Meeting/Appointment Time
   {
@@ -188,10 +188,10 @@ const FINGERPRINT_PATTERNS = [
       /\b(?:meeting|appointment|call|session)\s+(?:is\s+)?(?:at|scheduled\s+for|changed\s+to)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)?)/i,
       /\b(?:my|our|the)\s+(?:meeting|appointment|call)\s+(?:time\s+)?(?:is|:)\s*(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)?)/i,
       /\brescheduled?\s+(?:to|for)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)?)/i,
-      /\bmoved?\s+(?:to|for)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)?)/i
+      /\bmoved?\s+(?:to|for)\s+(\d{1,2}(?::\d{2})?\s*(?:am|pm|AM|PM)?)/i,
     ],
-    confidence: 0.90
-  }
+    confidence: 0.9,
+  },
 ];
 
 // ============================================================================
@@ -224,7 +224,9 @@ function detectFingerprintDeterministic(content) {
       console.log(`[SUPERSESSION-DIAG]   Match: ${match ? 'YES - ' + match[0] : 'NO'}`);
       if (match) {
         console.log(`[SUPERSESSION-DIAG] ✅ PATTERN MATCH FOUND: ${fingerprint}`);
-        console.log(`[SUPERSESSION] Deterministic match: ${fingerprint} (confidence: ${confidence})`);
+        console.log(
+          `[SUPERSESSION] Deterministic match: ${fingerprint} (confidence: ${confidence})`,
+        );
         return { fingerprint, confidence, method: 'deterministic' };
       }
     }
@@ -261,14 +263,15 @@ async function detectFingerprintWithModel(content, options = {}) {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: SUPERSESSION_CONFIG.fingerprintModel,
-        messages: [{
-          role: 'system',
-          content: `You identify if a statement contains a superseding personal fact about the user.
+        messages: [
+          {
+            role: 'system',
+            content: `You identify if a statement contains a superseding personal fact about the user.
 
 If it does, return ONLY one of these canonical fingerprints:
 - user_name
@@ -293,15 +296,17 @@ If it does, return ONLY one of these canonical fingerprints:
 
 If it's NOT a superseding personal fact (opinions, questions, general conversation, requests), return exactly: null
 
-Return ONLY the fingerprint or "null", nothing else. No explanation.`
-        }, {
-          role: 'user',
-          content: content
-        }],
+Return ONLY the fingerprint or "null", nothing else. No explanation.`,
+          },
+          {
+            role: 'user',
+            content: content,
+          },
+        ],
         max_tokens: 50,
-        temperature: 0
+        temperature: 0,
       }),
-      signal: controller.signal
+      signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
@@ -316,10 +321,13 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
     }
 
     // Validate it's one of our known fingerprints
-    const validFingerprints = FINGERPRINT_PATTERNS.map(p => p.fingerprint);
+    const validFingerprints = FINGERPRINT_PATTERNS.map((p) => p.fingerprint);
     const additionalValid = [
-      'user_preferred_language', 'user_health_condition', 'user_dietary_preference',
-      'user_salary', 'user_meeting_time'
+      'user_preferred_language',
+      'user_health_condition',
+      'user_dietary_preference',
+      'user_salary',
+      'user_meeting_time',
     ];
     const allValid = [...validFingerprints, ...additionalValid];
 
@@ -330,7 +338,6 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
 
     console.log(`[SUPERSESSION] Model match: ${fingerprint} (${timeMs}ms)`);
     return { fingerprint, confidence: 0.75, method: 'model', timeMs };
-
   } catch (error) {
     const timeMs = Date.now() - startTime;
     if (error.name === 'AbortError') {
@@ -349,7 +356,7 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
 /**
  * Generate fact fingerprint from content.
  * Uses deterministic regex patterns FIRST, then model-assist as fallback.
- * 
+ *
  * @param {string} content - The content to analyze
  * @param {object} options - Options
  * @returns {Promise<{ fingerprint: string|null, confidence: number, method: string }>}
@@ -359,7 +366,7 @@ export async function generateFactFingerprint(content, options = {}) {
 
   // Step 1: Try deterministic detection (instant, free, reliable)
   const deterministicResult = detectFingerprintDeterministic(content);
-  
+
   if (deterministicResult.fingerprint) {
     return deterministicResult;
   }
@@ -395,7 +402,7 @@ export async function storeWithSupersession(pool, memoryData) {
     fingerprintConfidence = 0.5,
     mode = 'truth-general',
     categoryName = 'general',
-    tokenCount = 0
+    tokenCount = 0,
   } = memoryData;
 
   // If no fingerprint, this isn't a superseding fact - use normal storage
@@ -416,28 +423,34 @@ export async function storeWithSupersession(pool, memoryData) {
       // Note: We don't filter by mode to ensure ALL memories with this fingerprint are superseded
       // across all modes (e.g., salary stored in truth-general should be superseded even if
       // new salary comes in via a different mode)
-      const existing = await client.query(`
+      const existing = await client.query(
+        `
         SELECT id, content, fact_fingerprint
         FROM persistent_memories
         WHERE user_id = $1
           AND fact_fingerprint = $2
           AND is_current = true
         FOR UPDATE
-      `, [userId, factFingerprint]);
+      `,
+        [userId, factFingerprint],
+      );
 
       // CRITICAL: Mark old facts as not current BEFORE inserting new fact
       // This prevents violating the unique constraint idx_one_current_fact
       let oldIds = [];
       if (existing.rows.length > 0) {
-        oldIds = existing.rows.map(r => r.id);
+        oldIds = existing.rows.map((r) => r.id);
 
         // Mark old facts as not current (superseded_by will be set after insert)
-        await client.query(`
+        await client.query(
+          `
           UPDATE persistent_memories
           SET is_current = false,
               superseded_at = NOW()
           WHERE id = ANY($1::integer[])
-        `, [oldIds]);
+        `,
+          [oldIds],
+        );
 
         console.log(`[SUPERSESSION] Marked ${existing.rows.length} old memories as not current`);
         console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
@@ -450,40 +463,50 @@ export async function storeWithSupersession(pool, memoryData) {
       }
 
       // Insert new memory (id is INTEGER with sequence, auto-generated)
-      const newMemory = await client.query(`
+      const newMemory = await client.query(
+        `
         INSERT INTO persistent_memories (
           user_id, content, category_name, token_count,
           fact_fingerprint, fingerprint_confidence,
           is_current, mode, embedding_status, created_at
         ) VALUES ($1, $2, $3, $4, $5, $6, true, $7, 'pending', NOW())
         RETURNING id
-      `, [
-        userId,
-        content,
-        categoryName,
-        tokenCount || Math.ceil(content.length / 4), // Estimate if not provided
-        factFingerprint,
-        fingerprintConfidence,
-        mode
-      ]);
+      `,
+        [
+          userId,
+          content,
+          categoryName,
+          tokenCount || Math.ceil(content.length / 4), // Estimate if not provided
+          factFingerprint,
+          fingerprintConfidence,
+          mode,
+        ],
+      );
 
       const newId = newMemory.rows[0].id; // INTEGER
 
       // Link old facts to new fact via superseded_by
       if (oldIds.length > 0) {
         // After running fix-superseded-by-type migration, superseded_by is INTEGER matching id
-        await client.query(`
+        await client.query(
+          `
           UPDATE persistent_memories
           SET superseded_by = $1
           WHERE id = ANY($2::integer[])
-        `, [newId, oldIds]);
+        `,
+          [newId, oldIds],
+        );
 
         console.log(`[SUPERSESSION] ✅ Comprehensive supersession complete`);
         console.log(`[SUPERSESSION]    New memory ID: ${newId}`);
-        console.log(`[SUPERSESSION]    Superseded ${oldIds.length} old memories: ${oldIds.join(', ')}`);
+        console.log(
+          `[SUPERSESSION]    Superseded ${oldIds.length} old memories: ${oldIds.join(', ')}`,
+        );
         console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
       } else {
-        console.log(`[SUPERSESSION] ✅ Stored new memory ID ${newId} (no existing memories to supersede)`);
+        console.log(
+          `[SUPERSESSION] ✅ Stored new memory ID ${newId} (no existing memories to supersede)`,
+        );
         console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
       }
 
@@ -492,11 +515,10 @@ export async function storeWithSupersession(pool, memoryData) {
       return {
         success: true,
         memoryId: newId,
-        superseded: existing.rows.map(r => r.id),
+        superseded: existing.rows.map((r) => r.id),
         supersededCount: existing.rows.length,
-        fingerprint: factFingerprint
+        fingerprint: factFingerprint,
       };
-
     } catch (error) {
       await client.query('ROLLBACK');
 
@@ -504,13 +526,12 @@ export async function storeWithSupersession(pool, memoryData) {
       if (error.code === '40001' || error.code === '40P01') {
         retries++;
         console.log(`[SUPERSESSION] ⚠️ Conflict detected, retry ${retries}/${maxRetries}`);
-        await new Promise(r => setTimeout(r, SUPERSESSION_CONFIG.retryDelayMs * retries));
+        await new Promise((r) => setTimeout(r, SUPERSESSION_CONFIG.retryDelayMs * retries));
         continue;
       }
 
       console.error(`[SUPERSESSION] ❌ Transaction failed: ${error.message}`);
       throw error;
-
     } finally {
       client.release();
     }
@@ -530,22 +551,20 @@ async function storeWithoutSupersession(pool, memoryData) {
     content,
     mode = 'truth-general',
     categoryName = 'general',
-    tokenCount = 0
+    tokenCount = 0,
   } = memoryData;
 
   try {
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       INSERT INTO persistent_memories (
         user_id, content, category_name, token_count,
         is_current, mode, embedding_status, created_at
       ) VALUES ($1, $2, $3, $4, true, $5, 'pending', NOW())
       RETURNING id
-    `, [
-      userId,
-      content,
-      categoryName,
-      tokenCount || Math.ceil(content.length / 4)
-    ]);
+    `,
+      [userId, content, categoryName, tokenCount || Math.ceil(content.length / 4)],
+    );
 
     console.log(`[SUPERSESSION] Stored non-superseding memory ID ${result.rows[0].id}`);
 
@@ -554,9 +573,8 @@ async function storeWithoutSupersession(pool, memoryData) {
       memoryId: result.rows[0].id,
       superseded: [],
       supersededCount: 0,
-      fingerprint: null
+      fingerprint: null,
     };
-
   } catch (error) {
     console.error(`[SUPERSESSION] ❌ Storage failed: ${error.message}`);
     throw error;
@@ -607,10 +625,13 @@ export async function createSupersessionConstraint(pool) {
       WHERE is_current = true AND fact_fingerprint IS NOT NULL
     `);
 
-    console.log('[SUPERSESSION] ✅ Created comprehensive unique constraint: idx_one_current_fact_comprehensive');
-    console.log('[SUPERSESSION]    (enforces one current fact per user per fingerprint, across all modes)');
+    console.log(
+      '[SUPERSESSION] ✅ Created comprehensive unique constraint: idx_one_current_fact_comprehensive',
+    );
+    console.log(
+      '[SUPERSESSION]    (enforces one current fact per user per fingerprint, across all modes)',
+    );
     return { success: true, message: 'Comprehensive index created successfully' };
-
   } catch (error) {
     // If there are existing duplicates, we need to clean them first
     if (error.code === '23505') {
@@ -618,7 +639,7 @@ export async function createSupersessionConstraint(pool) {
       return {
         success: false,
         message: 'Duplicate current facts exist. Run cleanupDuplicateCurrentFacts() first.',
-        error: error.message
+        error: error.message,
       };
     }
     throw error;
@@ -660,12 +681,14 @@ export async function cleanupDuplicateCurrentFacts(pool) {
     const cleanedCount = result.rowCount;
 
     if (cleanedCount > 0) {
-      console.log(`[SUPERSESSION] 🧹 Comprehensive cleanup: Marked ${cleanedCount} duplicate current facts as superseded`);
+      console.log(
+        `[SUPERSESSION] 🧹 Comprehensive cleanup: Marked ${cleanedCount} duplicate current facts as superseded`,
+      );
       console.log(`[SUPERSESSION]    (cleaned duplicates across all modes per fingerprint)`);
 
       // Group by fingerprint for reporting
       const byFingerprint = {};
-      result.rows.forEach(row => {
+      result.rows.forEach((row) => {
         byFingerprint[row.fact_fingerprint] = (byFingerprint[row.fact_fingerprint] || 0) + 1;
       });
 
@@ -677,7 +700,6 @@ export async function cleanupDuplicateCurrentFacts(pool) {
     }
 
     return { success: true, cleaned: cleanedCount };
-
   } catch (error) {
     console.error(`[SUPERSESSION] ❌ Cleanup failed: ${error.message}`);
     throw error;
@@ -694,5 +716,5 @@ export default {
   createSupersessionConstraint,
   cleanupDuplicateCurrentFacts,
   detectFingerprintDeterministic,
-  config: SUPERSESSION_CONFIG
+  config: SUPERSESSION_CONFIG,
 };

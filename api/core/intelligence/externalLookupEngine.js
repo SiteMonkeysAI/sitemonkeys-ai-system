@@ -1,11 +1,11 @@
 /**
  * externalLookupEngine.js
  * Phase 4: Dual Hierarchy Truth Validation
- * 
+ *
  * Purpose: Fetch and validate information from external sources
  * Automatic triggers: freshness markers, high-stakes domains, low confidence
  * Graceful degradation: disclose failure, provide internal answer, give verification path
- * 
+ *
  * Location: /api/core/intelligence/externalLookupEngine.js
  */
 
@@ -21,7 +21,7 @@ export const LOOKUP_CONFIG = {
   MAX_LOOKUPS_PER_REQUEST: 1,
   HIGH_STAKES_MAX_LOOKUPS: 2,
   TIMEOUT_MS: 5000,
-  CONFIDENCE_THRESHOLD: 0.70
+  CONFIDENCE_THRESHOLD: 0.7,
 };
 
 // API-based sources with proper parsing (returns structured data)
@@ -38,8 +38,8 @@ export const API_SOURCES = {
         const eth = json.ethereum?.usd;
         if (!btc && !eth) return null;
         return `Bitcoin: $${btc || 'N/A'}, Ethereum: $${eth || 'N/A'}`;
-      }
-    }
+      },
+    },
   ],
   CURRENCY: [
     {
@@ -71,8 +71,8 @@ export const API_SOURCES = {
         if (!rate) return null;
 
         return `${fromCurrency}/${toCurrency} exchange rate: ${rate.toFixed(4)} (as of ${json.time_last_update_utc || 'now'})`;
-      }
-    }
+      },
+    },
   ],
   // STOCKS: Removed - no free API available without authentication
   // Graceful degradation will direct users to finance.yahoo.com or similar
@@ -85,7 +85,9 @@ export const API_SOURCES = {
       name: 'Wikipedia Political Leaders',
       buildUrl: (query) => {
         // Extract country and position from query
-        const ukMatch = query.match(/\b(UK|United Kingdom|Britain|British)\b.*?(prime minister|PM)/i);
+        const ukMatch = query.match(
+          /\b(UK|United Kingdom|Britain|British)\b.*?(prime minister|PM)/i,
+        );
         const usMatch = query.match(/\b(US|USA|United States|America|American)\b.*?(president)/i);
         const germanyMatch = query.match(/\b(Germany|German)\b.*?(chancellor)/i);
         const franceMatch = query.match(/\b(France|French)\b.*?(president)/i);
@@ -101,7 +103,9 @@ export const API_SOURCES = {
         }
 
         // Generic current leader lookup
-        const leaderMatch = query.match(/(?:current|who is the)\s+(?:prime minister|president|chancellor|leader)\s+of\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i);
+        const leaderMatch = query.match(
+          /(?:current|who is the)\s+(?:prime minister|president|chancellor|leader)\s+of\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i,
+        );
         if (leaderMatch) {
           const country = leaderMatch[1];
           // Try to construct Wikipedia URL for that country's leader
@@ -118,8 +122,8 @@ export const API_SOURCES = {
         // Extract current leader name from Wikipedia summary
         // This will get the first few sentences which usually mention the current holder
         return json.extract.substring(0, 500);
-      }
-    }
+      },
+    },
   ],
   MEDICAL: [
     {
@@ -127,27 +131,33 @@ export const API_SOURCES = {
       buildUrl: (query) => {
         // PRINCIPLE (Issue #402 Finding #11): Extract drug name from query dynamically
         // Use pattern matching, not hardcoded drug lists (CEO approach)
-        
+
         // Pattern 1: "What is X used for?" or "Side effects of X"
-        let drugMatch = query.match(/(?:what is|about|regarding|side effects of|information on)\s+([a-z]{3,20})\b/i);
-        
+        let drugMatch = query.match(
+          /(?:what is|about|regarding|side effects of|information on)\s+([a-z]{3,20})\b/i,
+        );
+
         // Pattern 2: Drug name followed by medical terms
         if (!drugMatch) {
-          drugMatch = query.match(/\b([a-z]{3,20})\s+(?:drug|medication|medicine|pill|tablet|capsule|dosage|prescription)\b/i);
+          drugMatch = query.match(
+            /\b([a-z]{3,20})\s+(?:drug|medication|medicine|pill|tablet|capsule|dosage|prescription)\b/i,
+          );
         }
-        
-        // Pattern 3: Medical context followed by drug name  
+
+        // Pattern 3: Medical context followed by drug name
         if (!drugMatch) {
-          drugMatch = query.match(/(?:drug|medication|medicine)\s+(?:called|named)\s+([a-z]{3,20})\b/i);
+          drugMatch = query.match(
+            /(?:drug|medication|medicine)\s+(?:called|named)\s+([a-z]{3,20})\b/i,
+          );
         }
-        
+
         const drugName = drugMatch ? drugMatch[1].toLowerCase() : null;
-        
+
         if (!drugName) {
           // If we can't extract a drug name, return null to skip this source
           return null;
         }
-        
+
         return `https://api.fda.gov/drug/label.json?search=openfda.generic_name:${encodeURIComponent(drugName)}&limit=1`;
       },
       parser: 'json',
@@ -158,27 +168,33 @@ export const API_SOURCES = {
         return [
           result.warnings?.[0]?.substring(0, 1000),
           result.adverse_reactions?.[0]?.substring(0, 1000),
-          result.indications_and_usage?.[0]?.substring(0, 500)
-        ].filter(Boolean).join('\n\n');
-      }
-    }
+          result.indications_and_usage?.[0]?.substring(0, 500),
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+      },
+    },
   ],
   NEWS: [
     // 1. Google News RSS - primary discovery layer
     {
       name: 'Google News RSS',
-      buildUrl: (query) => `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`,
+      buildUrl: (query) =>
+        `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`,
       parser: 'rss',
       type: 'api',
       extract: (text) => {
         const items = [];
-        const itemRegex = /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
+        const itemRegex =
+          /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
         let match;
         while ((match = itemRegex.exec(text)) !== null && items.length < 5) {
           items.push({ title: match[1], source: match[2], date: match[3] });
         }
-        return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
-      }
+        return items.length > 0
+          ? items.map((i) => `[${i.source}] ${i.title} (${i.date})`).join('\n\n')
+          : null;
+      },
     },
     // 2. Wikipedia Current Events - fallback context only
     {
@@ -186,11 +202,11 @@ export const API_SOURCES = {
       url: 'https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events',
       parser: 'json',
       type: 'api',
-      extract: (json) => json.extract?.substring(0, 2000) || null
-    }
+      extract: (json) => json.extract?.substring(0, 2000) || null,
+    },
     // NOTE: GDELT API removed due to consistent failures (returns HTML error pages instead of JSON)
     // If re-enabled, need proper error handling for non-JSON responses
-  ]
+  ],
 };
 
 // Domain-specific authoritative sources (non-API fallbacks)
@@ -200,41 +216,63 @@ export const AUTHORITATIVE_SOURCES = {
     { name: 'NIH', url: 'https://www.nih.gov', type: 'government', parseable: false },
     { name: 'CDC', url: 'https://www.cdc.gov', type: 'government', parseable: false },
     { name: 'Mayo Clinic', url: 'https://www.mayoclinic.org', type: 'medical', parseable: false },
-    { name: 'PubMed', url: 'https://pubmed.ncbi.nlm.nih.gov', type: 'research', parseable: false }
+    { name: 'PubMed', url: 'https://pubmed.ncbi.nlm.nih.gov', type: 'research', parseable: false },
   ],
   LEGAL: [
     { name: 'Congress.gov', url: 'https://www.congress.gov', type: 'government', parseable: false },
-    { name: 'Supreme Court', url: 'https://www.supremecourt.gov', type: 'government', parseable: false },
-    { name: 'Federal Register', url: 'https://www.federalregister.gov', type: 'government', parseable: false },
-    { name: 'Cornell Law', url: 'https://www.law.cornell.edu', type: 'legal', parseable: false }
+    {
+      name: 'Supreme Court',
+      url: 'https://www.supremecourt.gov',
+      type: 'government',
+      parseable: false,
+    },
+    {
+      name: 'Federal Register',
+      url: 'https://www.federalregister.gov',
+      type: 'government',
+      parseable: false,
+    },
+    { name: 'Cornell Law', url: 'https://www.law.cornell.edu', type: 'legal', parseable: false },
   ],
   FINANCIAL: [
     { name: 'SEC', url: 'https://www.sec.gov', type: 'government', parseable: false },
     { name: 'IRS', url: 'https://www.irs.gov', type: 'government', parseable: false },
-    { name: 'Federal Reserve', url: 'https://www.federalreserve.gov', type: 'government', parseable: false },
-    { name: 'Treasury', url: 'https://home.treasury.gov', type: 'government', parseable: false }
+    {
+      name: 'Federal Reserve',
+      url: 'https://www.federalreserve.gov',
+      type: 'government',
+      parseable: false,
+    },
+    { name: 'Treasury', url: 'https://home.treasury.gov', type: 'government', parseable: false },
   ],
   SAFETY: [
     { name: 'CPSC', url: 'https://www.cpsc.gov', type: 'government', parseable: false },
     { name: 'NHTSA', url: 'https://www.nhtsa.gov', type: 'government', parseable: false },
     { name: 'OSHA', url: 'https://www.osha.gov', type: 'government', parseable: false },
-    { name: 'FDA Recalls', url: 'https://www.fda.gov/safety/recalls', type: 'government', parseable: false }
+    {
+      name: 'FDA Recalls',
+      url: 'https://www.fda.gov/safety/recalls',
+      type: 'government',
+      parseable: false,
+    },
   ],
   GENERAL: [
     {
       name: 'Wikipedia',
       buildUrl: (query) => {
         // Extract key term from query for Wikipedia lookup
-        const cleanQuery = query.replace(/\b(what is|define|definition of|meaning of|explain)\b/gi, '').trim();
+        const cleanQuery = query
+          .replace(/\b(what is|define|definition of|meaning of|explain)\b/gi, '')
+          .trim();
         const keyTerm = cleanQuery.split(' ').slice(0, 3).join(' ');
         return `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(keyTerm)}`;
       },
       parser: 'json',
       type: 'api',
       parseable: true,
-      extract: (json) => json.extract?.substring(0, 2000) || null
-    }
-  ]
+      extract: (json) => json.extract?.substring(0, 2000) || null,
+    },
+  ],
 };
 
 // Freshness markers that trigger automatic lookup
@@ -243,11 +281,12 @@ const FRESHNESS_MARKERS = [
   /\b(price|stock|rate|value|cost)\b/i,
   /\b(weather|forecast|temperature)\b/i,
   /\b(news|update|announcement|breaking|situation|happening)\b/i,
-  /\b(available|in stock|open|closed)\b/i
+  /\b(available|in stock|open|closed)\b/i,
 ];
 
 // High-stakes news markers that require corroboration
-const HIGH_STAKES_NEWS_MARKERS = /attack|bombing|invasion|coup|killed|missile|war|strike|assassination|military action|troops|casualties/i;
+const HIGH_STAKES_NEWS_MARKERS =
+  /attack|bombing|invasion|coup|killed|missile|war|strike|assassination|military action|troops|casualties/i;
 
 // News intent structural patterns - detect news queries by STRUCTURE, not specific names
 // PRINCIPLE: News intent = question structure + proper nouns, NOT hardcoded name lists
@@ -284,7 +323,7 @@ const NEWS_STRUCTURE_PATTERNS = [
   /\bweather\s+(in|at|for)\b/i,
 
   // ISSUE #406 FIX: Celebrity/entertainment news
-  /\b(latest|recent)\s+(celebrity|entertainment)\s+(news|gossip|stories)\b/i
+  /\b(latest|recent)\s+(celebrity|entertainment)\s+(news|gossip|stories)\b/i,
 ];
 
 // Geopolitical context markers (not entity names, but CONTEXT indicators)
@@ -292,11 +331,12 @@ const NEWS_STRUCTURE_PATTERNS = [
 const GEOPOLITICAL_CONTEXT_MARKERS = [
   /\b(election|diplomatic|military|conflict|treaty|summit|sanctions|trade\s+war)\b/i,
   /\b(president|prime\s+minister|chancellor|leader|government|parliament|congress|senate)\b/i,
-  /\b(country|nation|state|territory|border|international)\b/i
+  /\b(country|nation|state|territory|border|international)\b/i,
 ];
 
 // Reputable news sources for corroboration
-const REPUTABLE_SOURCES = /reuters|associated press|ap news|bbc|afp|npr|guardian|new york times|nytimes|washington post|wall street journal|wsj|cnn|abc news|cbs news|nbc news/i;
+const REPUTABLE_SOURCES =
+  /reuters|associated press|ap news|bbc|afp|npr|guardian|new york times|nytimes|washington post|wall street journal|wsj|cnn|abc news|cbs news|nbc news/i;
 
 /**
  * Extract clean search query from conversational input
@@ -316,7 +356,10 @@ export function extractSearchQuery(query) {
   cleaned = cleaned.replace(/^(what's even|what is even|that's|that is)\s+/i, '');
 
   // Remove phrases like "someone told me that", "I heard that", etc.
-  cleaned = cleaned.replace(/\b(someone told me that|I heard( that)?|I saw( that)?|they say|apparently|supposedly)\s+/gi, '');
+  cleaned = cleaned.replace(
+    /\b(someone told me that|I heard( that)?|I saw( that)?|they say|apparently|supposedly)\s+/gi,
+    '',
+  );
 
   // For very long queries (>200 chars), try to extract the core topic
   if (cleaned.length > 200) {
@@ -327,7 +370,9 @@ export function extractSearchQuery(query) {
     }
 
     // Look for company/product names + key action words
-    const entityMatch = cleaned.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(released|announced|launched|unveiled|introduced|created|built|developed|acquired|bought|sold|hired|fired|quit)\s+([^.?,]+)/);
+    const entityMatch = cleaned.match(
+      /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(released|announced|launched|unveiled|introduced|created|built|developed|acquired|bought|sold|hired|fired|quit)\s+([^.?,]+)/,
+    );
     if (entityMatch) {
       return `${entityMatch[1]} ${entityMatch[2]} ${entityMatch[3]}`.trim();
     }
@@ -358,7 +403,8 @@ export function hasProperNouns(query) {
   // Look for capitalized words that aren't at sentence start
   // Pattern: word boundary, capital letter, lowercase letters
   // Exclude common sentence starters and question words
-  const excludeWords = /^(What|Where|When|Who|Why|How|Is|Are|Does|Do|Can|Could|Would|Should|Tell|Please|The|A|An|I|You|We|They|He|She|It)$/;
+  const excludeWords =
+    /^(What|Where|When|Who|Why|How|Is|Are|Does|Do|Can|Could|Would|Should|Tell|Please|The|A|An|I|You|We|They|He|She|It)$/;
 
   const words = query.split(/\s+/);
 
@@ -402,16 +448,21 @@ export function hasNewsIntent(query) {
   const normalizedQuery = query.toLowerCase().trim();
 
   // Check for news structural patterns
-  const hasNewsStructure = NEWS_STRUCTURE_PATTERNS.some(pattern => pattern.test(normalizedQuery));
+  const hasNewsStructure = NEWS_STRUCTURE_PATTERNS.some((pattern) => pattern.test(normalizedQuery));
 
   // Check for proper nouns (named entities)
   const hasNamedEntity = hasProperNouns(query);
 
   // Check for geopolitical context markers
-  const hasGeopoliticalContext = GEOPOLITICAL_CONTEXT_MARKERS.some(pattern => pattern.test(normalizedQuery));
+  const hasGeopoliticalContext = GEOPOLITICAL_CONTEXT_MARKERS.some((pattern) =>
+    pattern.test(normalizedQuery),
+  );
 
   // Check for time markers indicating current events
-  const hasTimeMarker = /\b(today|this morning|yesterday|right now|currently|latest|recent|just now)\b/i.test(normalizedQuery);
+  const hasTimeMarker =
+    /\b(today|this morning|yesterday|right now|currently|latest|recent|just now)\b/i.test(
+      normalizedQuery,
+    );
 
   // NEWS INTENT LOGIC (Principle-Based):
   // 1. News structure + proper noun = news query (e.g., "What's the situation with Starmer")
@@ -448,7 +499,7 @@ export function checkFreshnessMarkers(query) {
 
   return {
     hasFreshnessMarkers: matchedMarkers.length > 0,
-    markers: matchedMarkers
+    markers: matchedMarkers,
   };
 }
 
@@ -481,12 +532,14 @@ export function hasReputableSource(fetchedContent) {
 export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.5) {
   // Ensure query is a string to avoid type confusion (arrays, objects, etc.)
   if (typeof query !== 'string') {
-    console.warn('[externalLookupEngine] isLookupRequired called with non-string query, skipping lookup check');
+    console.warn(
+      '[externalLookupEngine] isLookupRequired called with non-string query, skipping lookup check',
+    );
     return {
       required: false,
       reasons: ['Invalid query type for lookup; expected string'],
       priority: 'none',
-      max_lookups: 0
+      max_lookups: 0,
     };
   }
 
@@ -497,7 +550,7 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
       required: false,
       reasons: ['Document review requests do not require external lookup'],
       priority: 'none',
-      max_lookups: 0
+      max_lookups: 0,
     };
   }
 
@@ -508,7 +561,7 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
       required: false,
       reasons: ['Long-form inputs are not lookup candidates'],
       priority: 'none',
-      max_lookups: 0
+      max_lookups: 0,
     };
   }
 
@@ -556,7 +609,7 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
     required: reasons.length > 0,
     reasons: reasons,
     priority: priority,
-    max_lookups: priority === 'high' ? LOOKUP_CONFIG.HIGH_STAKES_MAX_LOOKUPS : maxSources
+    max_lookups: priority === 'high' ? LOOKUP_CONFIG.HIGH_STAKES_MAX_LOOKUPS : maxSources,
   };
 }
 
@@ -572,30 +625,35 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   const lowerQuery = query.toLowerCase();
 
   // Currency exchange rates - use Exchange Rates API
-  if (lowerQuery.match(/exchange rate|currency|EUR|USD|GBP|JPY|CHF|CAD|AUD/) &&
-      lowerQuery.match(/current|rate|price|convert|exchange/i)) {
+  if (
+    lowerQuery.match(/exchange rate|currency|EUR|USD|GBP|JPY|CHF|CAD|AUD/) &&
+    lowerQuery.match(/current|rate|price|convert|exchange/i)
+  ) {
     return API_SOURCES.CURRENCY;
   }
 
   // Stock prices - use financial API (currently disabled pending proper API)
-  if (lowerQuery.match(/stock|share|market/) &&
-      lowerQuery.match(/price|value|trading|current/i)) {
+  if (lowerQuery.match(/stock|share|market/) && lowerQuery.match(/price|value|trading|current/i)) {
     // Return empty for graceful degradation until proper API configured
     console.log('[externalLookupEngine] Stock price query detected - no API configured');
     return [];
   }
 
   // Commodity prices - use metals/commodity API (currently disabled pending proper API)
-  if (lowerQuery.match(/gold|silver|platinum|palladium|oil|crude|natural gas/) &&
-      lowerQuery.match(/price|cost|value|ounce|barrel/i)) {
+  if (
+    lowerQuery.match(/gold|silver|platinum|palladium|oil|crude|natural gas/) &&
+    lowerQuery.match(/price|cost|value|ounce|barrel/i)
+  ) {
     // Return empty for graceful degradation until proper API configured
     console.log('[externalLookupEngine] Commodity price query detected - no API configured');
     return [];
   }
 
   // Government/political positions - use Wikipedia API
-  if (lowerQuery.match(/prime minister|president|chancellor|leader|government/) &&
-      lowerQuery.match(/current|who is|UK|United Kingdom|USA|United States|Germany|France/i)) {
+  if (
+    lowerQuery.match(/prime minister|president|chancellor|leader|government/) &&
+    lowerQuery.match(/current|who is|UK|United Kingdom|USA|United States|Germany|France/i)
+  ) {
     return API_SOURCES.GOVERNMENT;
   }
 
@@ -605,8 +663,10 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   }
 
   // Medical drug queries - use FDA API with specific field extraction
-  if (lowerQuery.match(/side effects?|dosage|drug interactions?/) &&
-      lowerQuery.match(/aspirin|ibuprofen|acetaminophen|tylenol|advil/)) {
+  if (
+    lowerQuery.match(/side effects?|dosage|drug interactions?/) &&
+    lowerQuery.match(/aspirin|ibuprofen|acetaminophen|tylenol|advil/)
+  ) {
     return API_SOURCES.MEDICAL;
   }
 
@@ -616,7 +676,7 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     // OPTION A: Return empty to trigger graceful degradation with disclosure
     // console.log('[externalLookupEngine] Weather query detected - no weather API configured');
     // return [];
-    
+
     // OPTION B: Return news sources for general weather context
     console.log('[externalLookupEngine] Weather query detected - using news sources for context');
     return API_SOURCES.NEWS;
@@ -625,9 +685,11 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   // News/current events queries - PRINCIPLE-BASED DETECTION
   // Use hasNewsIntent() which detects structure + proper nouns, not hardcoded names
   // ISSUE #406 FIX: Also check for generic news queries without proper nouns
-  const isGenericNewsQuery = lowerQuery.match(/\b(top|latest|recent|breaking)\s+(news|stories|headlines|updates)\b/i);
+  const isGenericNewsQuery = lowerQuery.match(
+    /\b(top|latest|recent|breaking)\s+(news|stories|headlines|updates)\b/i,
+  );
   const isEntertainmentQuery = lowerQuery.match(/\b(celebrity|entertainment|gossip)\b/i);
-  
+
   // Note: Weather queries are already handled above (line 507)
   if (hasNewsIntent(query) || isGenericNewsQuery || isEntertainmentQuery) {
     return API_SOURCES.NEWS;
@@ -639,7 +701,10 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   }
 
   // ISSUE #406 FIX: Celebrity/entertainment news
-  if (lowerQuery.match(/celebrity|entertainment|gossip|hollywood/i) && lowerQuery.match(/news|latest|recent|stories/i)) {
+  if (
+    lowerQuery.match(/celebrity|entertainment|gossip|hollywood/i) &&
+    lowerQuery.match(/news|latest|recent|stories/i)
+  ) {
     return API_SOURCES.NEWS;
   }
 
@@ -693,11 +758,15 @@ export async function performLookup(query, sources, truthType = null) {
   const queryWasCleaned = searchQuery !== query;
 
   if (queryWasCleaned) {
-    console.log(`[externalLookupEngine] Cleaned query: "${query.substring(0, 80)}..." → "${searchQuery}"`);
+    console.log(
+      `[externalLookupEngine] Cleaned query: "${query.substring(0, 80)}..." → "${searchQuery}"`,
+    );
   } else {
-    console.log(`[externalLookupEngine] Performing lookup for: "${searchQuery.substring(0, 50)}..."`);
+    console.log(
+      `[externalLookupEngine] Performing lookup for: "${searchQuery.substring(0, 50)}..."`,
+    );
   }
-  console.log(`[externalLookupEngine] Sources: ${sources.map(s => s.name).join(', ')}`);
+  console.log(`[externalLookupEngine] Sources: ${sources.map((s) => s.name).join(', ')}`);
 
   // Check cache using original query as key (not cleaned query)
   const cached = cacheGet(query);
@@ -710,7 +779,7 @@ export async function performLookup(query, sources, truthType = null) {
       sources_used: cached.sources_used,
       verified_at: cached.verified_at,
       cache_valid_until: cached.cache_valid_until,
-      lookup_time_ms: Date.now() - startTime
+      lookup_time_ms: Date.now() - startTime,
     };
   }
 
@@ -730,13 +799,15 @@ export async function performLookup(query, sources, truthType = null) {
       try {
         // Build URL if function provided - use cleaned search query
         const fetchUrl = source.buildUrl ? source.buildUrl(searchQuery) : source.url;
-        
+
         // Skip this source if buildUrl returned null (couldn't extract required info)
         if (!fetchUrl) {
-          console.log(`[externalLookupEngine] ${source.name} buildUrl returned null - skipping source`);
+          console.log(
+            `[externalLookupEngine] ${source.name} buildUrl returned null - skipping source`,
+          );
           continue;
         }
-        
+
         console.log(`[externalLookupEngine] Fetching from ${source.name} (${fetchUrl})`);
 
         // Create abort controller for timeout
@@ -748,8 +819,8 @@ export async function performLookup(query, sources, truthType = null) {
           signal: controller.signal,
           headers: {
             'User-Agent': 'SiteMonkeys-AI-System/1.0',
-            'Accept': 'application/json,text/html,text/plain'
-          }
+            Accept: 'application/json,text/html,text/plain',
+          },
         });
 
         clearTimeout(timeoutId);
@@ -760,7 +831,7 @@ export async function performLookup(query, sources, truthType = null) {
             name: source.name,
             type: source.type || 'unknown',
             status: `error_${response.status}`,
-            success: false
+            success: false,
           });
           continue;
         }
@@ -785,7 +856,7 @@ export async function performLookup(query, sources, truthType = null) {
               name: source.name,
               type: source.type || 'api',
               status: 'extraction_failed',
-              success: false
+              success: false,
             });
             continue;
           }
@@ -810,7 +881,7 @@ export async function performLookup(query, sources, truthType = null) {
               name: source.name,
               type: source.type || 'api',
               status: 'extraction_failed',
-              success: false
+              success: false,
             });
             continue;
           }
@@ -824,7 +895,7 @@ export async function performLookup(query, sources, truthType = null) {
               name: source.name,
               type: source.type || 'unknown',
               status: 'non_parseable',
-              success: false
+              success: false,
             });
             continue;
           }
@@ -836,12 +907,14 @@ export async function performLookup(query, sources, truthType = null) {
             try {
               parsedData = source.extract({ text });
             } catch (extractError) {
-              console.log(`[externalLookupEngine] ${source.name} extractor failed: ${extractError.message}`);
+              console.log(
+                `[externalLookupEngine] ${source.name} extractor failed: ${extractError.message}`,
+              );
               sourcesUsed.push({
                 name: source.name,
                 type: source.type || 'unknown',
                 status: 'extractor_error',
-                success: false
+                success: false,
               });
               continue;
             }
@@ -857,7 +930,7 @@ export async function performLookup(query, sources, truthType = null) {
             name: source.name,
             type: source.type || 'unknown',
             status: 'no_data',
-            success: false
+            success: false,
           });
           continue;
         }
@@ -876,7 +949,7 @@ export async function performLookup(query, sources, truthType = null) {
           source: source.name,
           text: parsedData,
           length: parsedData.length,
-          type: source.type || 'api'
+          type: source.type || 'api',
         });
 
         sourcesUsed.push({
@@ -884,11 +957,12 @@ export async function performLookup(query, sources, truthType = null) {
           type: source.type || 'api',
           status: 'success',
           text_length: parsedData.length,
-          success: true
+          success: true,
         });
 
-        console.log(`[externalLookupEngine] ✓ ${source.name}: ${parsedData.length} chars extracted`);
-
+        console.log(
+          `[externalLookupEngine] ✓ ${source.name}: ${parsedData.length} chars extracted`,
+        );
       } catch (fetchError) {
         if (fetchError.name === 'AbortError') {
           console.log(`[externalLookupEngine] ${source.name} timed out`);
@@ -896,7 +970,7 @@ export async function performLookup(query, sources, truthType = null) {
             name: source.name,
             type: source.type || 'unknown',
             status: 'timeout',
-            success: false
+            success: false,
           });
         } else {
           console.log(`[externalLookupEngine] ${source.name} fetch error: ${fetchError.message}`);
@@ -905,7 +979,7 @@ export async function performLookup(query, sources, truthType = null) {
             type: source.type || 'unknown',
             status: 'error',
             error: fetchError.message,
-            success: false
+            success: false,
           });
         }
       }
@@ -917,20 +991,21 @@ export async function performLookup(query, sources, truthType = null) {
         query: query,
         sources: results,
         total_text_length: totalTextFetched,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       // Check for news corroboration if required
       const phase4Metadata = {};
       if (truthType && requiresCorroboration(query, truthType)) {
         // Combine all fetched content for reputable source check
-        const fetchedContent = results.map(r => r.text).join(' ');
+        const fetchedContent = results.map((r) => r.text).join(' ');
         phase4Metadata.news_corroborated = hasReputableSource(fetchedContent);
-        phase4Metadata.news_sources_checked = sourcesUsed.map(s => s.name);
+        phase4Metadata.news_sources_checked = sourcesUsed.map((s) => s.name);
 
         // Add disclosure if corroboration failed
         if (!phase4Metadata.news_corroborated) {
-          phase4Metadata.disclosure = "Multiple outlets are reporting this, but I cannot confirm from reputable sources like Reuters or AP. Please verify independently.";
+          phase4Metadata.disclosure =
+            'Multiple outlets are reporting this, but I cannot confirm from reputable sources like Reuters or AP. Please verify independently.';
         }
       }
 
@@ -945,7 +1020,7 @@ export async function performLookup(query, sources, truthType = null) {
         total_text_fetched: totalTextFetched,
         verified_at: new Date().toISOString(),
         lookup_time_ms: Date.now() - startTime,
-        ...phase4Metadata
+        ...phase4Metadata,
       };
     }
 
@@ -958,16 +1033,15 @@ export async function performLookup(query, sources, truthType = null) {
       error: 'All sources failed or returned no data',
       sources_consulted: sourcesUsed,
       verified_at: new Date().toISOString(),
-      lookup_time_ms: Date.now() - startTime
+      lookup_time_ms: Date.now() - startTime,
     };
-
   } catch (error) {
     console.error(`[externalLookupEngine] Lookup failed:`, error);
     return {
       success: false,
       from_cache: false,
       error: error.message,
-      lookup_time_ms: Date.now() - startTime
+      lookup_time_ms: Date.now() - startTime,
     };
   }
 }
@@ -984,25 +1058,31 @@ function getVerificationSources(query) {
   if (lowerQuery.match(/exchange rate|currency|EUR|USD|GBP/i)) {
     return [
       { name: 'XE.com', url: 'https://www.xe.com' },
-      { name: 'Google Finance', url: 'https://www.google.com/finance' }
+      { name: 'Google Finance', url: 'https://www.google.com/finance' },
     ];
   }
 
   // Stock prices
-  if (lowerQuery.includes('stock') || lowerQuery.includes('share') || 
-      (lowerQuery.includes('market') && lowerQuery.includes('price'))) {
+  if (
+    lowerQuery.includes('stock') ||
+    lowerQuery.includes('share') ||
+    (lowerQuery.includes('market') && lowerQuery.includes('price'))
+  ) {
     return [
       { name: 'Yahoo Finance', url: 'https://finance.yahoo.com' },
-      { name: 'Google Finance', url: 'https://www.google.com/finance' }
+      { name: 'Google Finance', url: 'https://www.google.com/finance' },
     ];
   }
 
   // Commodity prices
-  if (lowerQuery.includes('gold') || lowerQuery.includes('silver') || 
-      (lowerQuery.includes('oil') && lowerQuery.includes('price'))) {
+  if (
+    lowerQuery.includes('gold') ||
+    lowerQuery.includes('silver') ||
+    (lowerQuery.includes('oil') && lowerQuery.includes('price'))
+  ) {
     return [
       { name: 'Kitco', url: 'https://www.kitco.com' },
-      { name: 'Bloomberg', url: 'https://www.bloomberg.com/markets/commodities' }
+      { name: 'Bloomberg', url: 'https://www.bloomberg.com/markets/commodities' },
     ];
   }
 
@@ -1010,7 +1090,7 @@ function getVerificationSources(query) {
   if (lowerQuery.match(/prime minister|president|chancellor/i)) {
     return [
       { name: 'Wikipedia', url: 'https://en.wikipedia.org' },
-      { name: 'Official government website', url: 'Search for official gov site' }
+      { name: 'Official government website', url: 'Search for official gov site' },
     ];
   }
 
@@ -1018,14 +1098,14 @@ function getVerificationSources(query) {
   if (hasNewsIntent(query)) {
     return [
       { name: 'Reuters', url: 'https://www.reuters.com' },
-      { name: 'Associated Press', url: 'https://apnews.com' }
+      { name: 'Associated Press', url: 'https://apnews.com' },
     ];
   }
 
   // Default general sources
   return [
     { name: 'Google Search', url: 'https://www.google.com' },
-    { name: 'Wikipedia', url: 'https://en.wikipedia.org' }
+    { name: 'Wikipedia', url: 'https://en.wikipedia.org' },
   ];
 }
 
@@ -1051,17 +1131,19 @@ export function gracefulDegradation(query, lookupResult, internalAnswer = null) 
     minimal_response_required: true, // Signal to response generator: keep it SHORT
     max_response_words: 30, // Maximum words for the response
     internal_answer: internalAnswer,
-    internal_answer_labeled: internalAnswer ? {
-      data: internalAnswer,
-      label: 'Based on training data (as of early 2024) - may be outdated',
-      confidence: 'unverified'
-    } : null,
+    internal_answer_labeled: internalAnswer
+      ? {
+          data: internalAnswer,
+          label: 'Based on training data (as of early 2024) - may be outdated',
+          confidence: 'unverified',
+        }
+      : null,
     verification_path: {
       message: 'Check current information at:',
-      sources: sources.slice(0, 2) // Max 2 sources for brevity
+      sources: sources.slice(0, 2), // Max 2 sources for brevity
     },
     lookup_error: lookupResult.error || 'No reliable source available',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -1073,11 +1155,7 @@ export function gracefulDegradation(query, lookupResult, internalAnswer = null) 
  */
 export async function lookup(query, options = {}) {
   const startTime = Date.now();
-  const {
-    internalConfidence = 0.5,
-    internalAnswer = null,
-    forceRefresh = false
-  } = options;
+  const { internalConfidence = 0.5, internalAnswer = null, forceRefresh = false } = options;
 
   // Input sanitization - Prevent ReDoS and injection
   if (typeof query !== 'string') {
@@ -1093,7 +1171,7 @@ export async function lookup(query, options = {}) {
       reason: 'Invalid or empty query after sanitization',
       truth_type: null,
       internal_confidence: internalConfidence,
-      total_time_ms: Date.now() - startTime
+      total_time_ms: Date.now() - startTime,
     };
   }
 
@@ -1106,14 +1184,16 @@ export async function lookup(query, options = {}) {
   const lookupCheck = isLookupRequired(query, truthTypeResult, internalConfidence);
 
   if (!lookupCheck.required && !forceRefresh) {
-    console.log(`[externalLookupEngine] Lookup not required: ${lookupCheck.reasons.length === 0 ? 'no triggers matched' : 'skipped'}`);
+    console.log(
+      `[externalLookupEngine] Lookup not required: ${lookupCheck.reasons.length === 0 ? 'no triggers matched' : 'skipped'}`,
+    );
     return {
       success: true,
       lookup_performed: false,
       reason: 'Lookup not required - no triggers matched',
       truth_type: truthTypeResult.type,
       internal_confidence: internalConfidence,
-      total_time_ms: Date.now() - startTime
+      total_time_ms: Date.now() - startTime,
     };
   }
 
@@ -1122,8 +1202,14 @@ export async function lookup(query, options = {}) {
 
   // Handle no reliable source available
   if (sources.length === 0) {
-    console.log(`[externalLookupEngine] No reliable parseable source available for this query type`);
-    const degraded = gracefulDegradation(query, { error: 'No reliable parseable source available for this query type' }, internalAnswer);
+    console.log(
+      `[externalLookupEngine] No reliable parseable source available for this query type`,
+    );
+    const degraded = gracefulDegradation(
+      query,
+      { error: 'No reliable parseable source available for this query type' },
+      internalAnswer,
+    );
     return {
       ...degraded,
       success: true,
@@ -1132,7 +1218,7 @@ export async function lookup(query, options = {}) {
       failure_reason: 'No reliable parseable source available for this query type',
       truth_type: truthTypeResult.type,
       lookup_reasons: lookupCheck.reasons,
-      total_time_ms: Date.now() - startTime
+      total_time_ms: Date.now() - startTime,
     };
   }
 
@@ -1147,7 +1233,7 @@ export async function lookup(query, options = {}) {
       ...degraded,
       truth_type: truthTypeResult.type,
       lookup_reasons: lookupCheck.reasons,
-      total_time_ms: Date.now() - startTime
+      total_time_ms: Date.now() - startTime,
     };
   }
 
@@ -1159,7 +1245,7 @@ export async function lookup(query, options = {}) {
       lookupResult.data,
       truthTypeResult.type,
       lookupResult.sources_consulted || sources,
-      0.8 // Default confidence for external data
+      0.8, // Default confidence for external data
     );
   }
 
@@ -1189,7 +1275,7 @@ export async function lookup(query, options = {}) {
     lookup_priority: lookupCheck.priority,
     lookup_time_ms: lookupResult.lookup_time_ms,
     total_time_ms: Date.now() - startTime,
-    ...corroborationMetadata
+    ...corroborationMetadata,
   };
 }
 
@@ -1210,9 +1296,9 @@ export async function testLookup(query, options = {}) {
       examples: [
         '?action=external-lookup&q=What%20is%20the%20current%20price%20of%20Bitcoin',
         '?action=external-lookup&q=What%20are%20the%20side%20effects%20of%20aspirin',
-        '?action=external-lookup&q=What%20is%20the%20Pythagorean%20theorem'
+        '?action=external-lookup&q=What%20is%20the%20Pythagorean%20theorem',
       ],
-      config: LOOKUP_CONFIG
+      config: LOOKUP_CONFIG,
     };
   }
 
@@ -1221,7 +1307,7 @@ export async function testLookup(query, options = {}) {
     return {
       success: false,
       message: 'Invalid query type; expected string parameter "q"',
-      received_type: typeof query
+      received_type: typeof query,
     };
   }
 
@@ -1236,8 +1322,8 @@ export async function testLookup(query, options = {}) {
       truth_type: result.truth_type,
       lookup_reasons: result.lookup_reasons || [],
       degraded: result.degraded || false,
-      total_time_ms: result.total_time_ms
-    }
+      total_time_ms: result.total_time_ms,
+    },
   };
 }
 
@@ -1258,5 +1344,5 @@ export default {
   performLookup,
   gracefulDegradation,
   lookup,
-  testLookup
+  testLookup,
 };

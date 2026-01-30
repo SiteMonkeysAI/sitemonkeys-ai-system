@@ -57,10 +57,18 @@ async function initializeDocumentTables(pool) {
 
     // Create indexes for efficient queries
     await pool.query(`CREATE INDEX IF NOT EXISTS idx_documents_user_id ON documents(user_id)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_documents_user_mode ON documents(user_id, mode)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_document_chunks_user_mode ON document_chunks(user_id, mode)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id ON document_chunks(document_id, chunk_index)`);
-    await pool.query(`CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding_status ON document_chunks(embedding_status)`);
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_documents_user_mode ON documents(user_id, mode)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_document_chunks_user_mode ON document_chunks(user_id, mode)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_document_chunks_document_id ON document_chunks(document_id, chunk_index)`,
+    );
+    await pool.query(
+      `CREATE INDEX IF NOT EXISTS idx_document_chunks_embedding_status ON document_chunks(embedding_status)`,
+    );
 
     console.log('[DOCUMENT-SERVICE] Database tables initialized successfully');
   } catch (error) {
@@ -95,7 +103,10 @@ export async function extractText(buffer, mimetype, filename) {
       metadata.info = pdfData.info;
     }
     // Handle DOCX files
-    else if (mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || filename.endsWith('.docx')) {
+    else if (
+      mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+      filename.endsWith('.docx')
+    ) {
       const docxData = await mammoth.extractRawText({ buffer });
       text = docxData.value;
       metadata.messages = docxData.messages;
@@ -108,20 +119,20 @@ export async function extractText(buffer, mimetype, filename) {
     else {
       return {
         success: false,
-        error: `Unsupported file type: ${mimetype}`
+        error: `Unsupported file type: ${mimetype}`,
       };
     }
 
     return {
       success: true,
       text,
-      metadata
+      metadata,
     };
   } catch (error) {
     console.error('[DOCUMENT-SERVICE] Text extraction error:', error.message);
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -132,14 +143,14 @@ export async function extractText(buffer, mimetype, filename) {
 
 export function chunkText(text, config = {}) {
   const {
-    chunkSize = 800,      // Target tokens per chunk
-    minChunkSize = 512,   // Minimum chunk size
-    maxChunkSize = 1024,  // Maximum chunk size
-    overlap = 50          // Overlap between chunks in tokens
+    chunkSize = 800, // Target tokens per chunk
+    minChunkSize = 512, // Minimum chunk size
+    maxChunkSize = 1024, // Maximum chunk size
+    overlap = 50, // Overlap between chunks in tokens
   } = config;
 
   // Split text into paragraphs
-  const paragraphs = text.split(/\n\n+/).filter(p => p.trim().length > 0);
+  const paragraphs = text.split(/\n\n+/).filter((p) => p.trim().length > 0);
   const chunks = [];
   let currentChunk = '';
   let currentTokens = 0;
@@ -152,7 +163,7 @@ export function chunkText(text, config = {}) {
       // Save current chunk
       chunks.push({
         content: currentChunk.trim(),
-        tokenCount: currentTokens
+        tokenCount: currentTokens,
       });
 
       // Start new chunk with overlap
@@ -164,7 +175,7 @@ export function chunkText(text, config = {}) {
     else if (currentTokens >= minChunkSize && currentTokens + paragraphTokens > chunkSize) {
       chunks.push({
         content: currentChunk.trim(),
-        tokenCount: currentTokens
+        tokenCount: currentTokens,
       });
 
       const overlapText = getLastNTokens(currentChunk, overlap);
@@ -182,7 +193,7 @@ export function chunkText(text, config = {}) {
   if (currentChunk.trim().length > 0) {
     chunks.push({
       content: currentChunk.trim(),
-      tokenCount: currentTokens
+      tokenCount: currentTokens,
     });
   }
 
@@ -225,7 +236,16 @@ export async function storeDocument(userId, mode, filename, buffer, mimetype, op
       `INSERT INTO documents (user_id, mode, filename, original_size, content_type, chunk_count, total_tokens, metadata)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING id`,
-      [userId, mode, filename, buffer.length, mimetype, chunks.length, totalTokens, extractMetadata]
+      [
+        userId,
+        mode,
+        filename,
+        buffer.length,
+        mimetype,
+        chunks.length,
+        totalTokens,
+        extractMetadata,
+      ],
     );
 
     const documentId = docResult.rows[0].id;
@@ -235,23 +255,25 @@ export async function storeDocument(userId, mode, filename, buffer, mimetype, op
       await dbPool.query(
         `INSERT INTO document_chunks (document_id, user_id, mode, chunk_index, content, token_count, embedding_status)
          VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
-        [documentId, userId, mode, i, chunks[i].content, chunks[i].tokenCount]
+        [documentId, userId, mode, i, chunks[i].content, chunks[i].tokenCount],
       );
     }
 
-    console.log(`[DOCUMENT-SERVICE] Stored document ${documentId} with ${chunks.length} chunks (${totalTokens} tokens)`);
+    console.log(
+      `[DOCUMENT-SERVICE] Stored document ${documentId} with ${chunks.length} chunks (${totalTokens} tokens)`,
+    );
 
     return {
       success: true,
       documentId,
       chunkCount: chunks.length,
-      totalTokens
+      totalTokens,
     };
   } catch (error) {
     console.error('[DOCUMENT-SERVICE] Storage error:', error.message);
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -273,7 +295,7 @@ export async function embedDocumentChunks(documentId, options = {}) {
       `SELECT id, content FROM document_chunks
        WHERE document_id = $1 AND embedding_status = 'pending'
        ORDER BY chunk_index`,
-      [documentId]
+      [documentId],
     );
 
     const chunks = chunksResult.rows;
@@ -293,7 +315,7 @@ export async function embedDocumentChunks(documentId, options = {}) {
             `UPDATE document_chunks
              SET embedding = $1::vector(1536), embedding_status = 'ready'
              WHERE id = $2`,
-            [embeddingStr, chunk.id]
+            [embeddingStr, chunk.id],
           );
           embedded++;
         } else {
@@ -302,38 +324,40 @@ export async function embedDocumentChunks(documentId, options = {}) {
             `UPDATE document_chunks
              SET embedding_status = 'failed'
              WHERE id = $1`,
-            [chunk.id]
+            [chunk.id],
           );
           failed++;
         }
 
         // Rate limiting
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       } catch (error) {
         console.error(`[DOCUMENT-SERVICE] Embedding error for chunk ${chunk.id}:`, error.message);
         await dbPool.query(
           `UPDATE document_chunks
            SET embedding_status = 'failed'
            WHERE id = $1`,
-          [chunk.id]
+          [chunk.id],
         );
         failed++;
       }
     }
 
-    console.log(`[DOCUMENT-SERVICE] Embedded ${embedded}/${chunks.length} chunks for document ${documentId}`);
+    console.log(
+      `[DOCUMENT-SERVICE] Embedded ${embedded}/${chunks.length} chunks for document ${documentId}`,
+    );
 
     return {
       success: true,
       embedded,
       failed,
-      total: chunks.length
+      total: chunks.length,
     };
   } catch (error) {
     console.error('[DOCUMENT-SERVICE] Embedding process error:', error.message);
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -358,7 +382,7 @@ export async function backfillDocumentEmbeddings(options = {}) {
          WHERE embedding_status IN ('pending', 'failed')
          ORDER BY id
          LIMIT $1`,
-        [batchSize]
+        [batchSize],
       );
 
       const chunks = chunksResult.rows;
@@ -375,7 +399,7 @@ export async function backfillDocumentEmbeddings(options = {}) {
               `UPDATE document_chunks
                SET embedding = $1::vector(1536), embedding_status = 'ready'
                WHERE id = $2`,
-              [embeddingStr, chunk.id]
+              [embeddingStr, chunk.id],
             );
             totalSucceeded++;
           } else {
@@ -383,7 +407,7 @@ export async function backfillDocumentEmbeddings(options = {}) {
               `UPDATE document_chunks
                SET embedding_status = 'failed'
                WHERE id = $1`,
-              [chunk.id]
+              [chunk.id],
             );
             totalFailed++;
           }
@@ -391,7 +415,7 @@ export async function backfillDocumentEmbeddings(options = {}) {
           totalProcessed++;
 
           // Rate limiting
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
         } catch (error) {
           console.error(`[DOCUMENT-SERVICE] Backfill error for chunk ${chunk.id}:`, error.message);
           totalFailed++;
@@ -402,24 +426,26 @@ export async function backfillDocumentEmbeddings(options = {}) {
 
     // Get remaining count
     const remainingResult = await dbPool.query(
-      `SELECT COUNT(*) FROM document_chunks WHERE embedding_status IN ('pending', 'failed')`
+      `SELECT COUNT(*) FROM document_chunks WHERE embedding_status IN ('pending', 'failed')`,
     );
     const remaining = parseInt(remainingResult.rows[0].count);
 
-    console.log(`[DOCUMENT-SERVICE] Backfill complete: ${totalSucceeded} succeeded, ${totalFailed} failed, ${remaining} remaining`);
+    console.log(
+      `[DOCUMENT-SERVICE] Backfill complete: ${totalSucceeded} succeeded, ${totalFailed} failed, ${remaining} remaining`,
+    );
 
     return {
       success: true,
       processed: totalProcessed,
       succeeded: totalSucceeded,
       failed: totalFailed,
-      remaining
+      remaining,
     };
   } catch (error) {
     console.error('[DOCUMENT-SERVICE] Backfill error:', error.message);
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -445,13 +471,13 @@ export async function searchDocuments(userId, mode, queryEmbedding, options = {}
        FROM document_chunks dc
        JOIN documents d ON dc.document_id = d.id
        WHERE dc.user_id = $1 AND dc.mode = $2 AND dc.embedding_status = 'ready'`,
-      [userId, mode]
+      [userId, mode],
     );
 
     const chunks = chunksResult.rows;
 
     // Parse embeddings (handle both FLOAT4[] and vector(1536) types)
-    const chunksWithParsedEmbeddings = chunks.map(chunk => {
+    const chunksWithParsedEmbeddings = chunks.map((chunk) => {
       let embedding = chunk.embedding;
 
       // If embedding is a string (from pgvector vector type), parse it
@@ -459,7 +485,9 @@ export async function searchDocuments(userId, mode, queryEmbedding, options = {}
         try {
           embedding = JSON.parse(embedding);
         } catch (error) {
-          console.warn(`[DOCUMENT-SERVICE] Failed to parse embedding for chunk ${chunk.id}: ${error.message}`);
+          console.warn(
+            `[DOCUMENT-SERVICE] Failed to parse embedding for chunk ${chunk.id}: ${error.message}`,
+          );
           embedding = null;
         }
       }
@@ -469,10 +497,10 @@ export async function searchDocuments(userId, mode, queryEmbedding, options = {}
 
     // Calculate similarity scores
     const scoredChunks = chunksWithParsedEmbeddings
-      .filter(chunk => chunk.embedding && Array.isArray(chunk.embedding))
-      .map(chunk => ({
+      .filter((chunk) => chunk.embedding && Array.isArray(chunk.embedding))
+      .map((chunk) => ({
         ...chunk,
-        similarity: cosineSimilarity(queryEmbedding, chunk.embedding)
+        similarity: cosineSimilarity(queryEmbedding, chunk.embedding),
       }));
 
     // Sort by similarity
@@ -492,7 +520,7 @@ export async function searchDocuments(userId, mode, queryEmbedding, options = {}
         filename: chunk.filename,
         content: chunk.content,
         tokenCount: chunk.token_count,
-        similarity: chunk.similarity
+        similarity: chunk.similarity,
       });
 
       totalTokens += chunk.token_count;
@@ -501,13 +529,13 @@ export async function searchDocuments(userId, mode, queryEmbedding, options = {}
     return {
       chunks: selectedChunks,
       totalTokens,
-      totalAvailable: chunks.length
+      totalAvailable: chunks.length,
     };
   } catch (error) {
     console.error('[DOCUMENT-SERVICE] Search error:', error.message);
     return {
       chunks: [],
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -529,18 +557,18 @@ export async function getUserDocuments(userId, mode, options = {}) {
        FROM documents
        WHERE user_id = $1 AND mode = $2
        ORDER BY created_at DESC`,
-      [userId, mode]
+      [userId, mode],
     );
 
     return {
       success: true,
-      documents: result.rows
+      documents: result.rows,
     };
   } catch (error) {
     console.error('[DOCUMENT-SERVICE] Get documents error:', error.message);
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -555,13 +583,13 @@ export async function deleteDocument(documentId, userId, options = {}) {
     // Delete with ownership verification
     const result = await dbPool.query(
       `DELETE FROM documents WHERE id = $1 AND user_id = $2 RETURNING id`,
-      [documentId, userId]
+      [documentId, userId],
     );
 
     if (result.rowCount === 0) {
       return {
         success: false,
-        error: 'Document not found or access denied'
+        error: 'Document not found or access denied',
       };
     }
 
@@ -569,13 +597,13 @@ export async function deleteDocument(documentId, userId, options = {}) {
 
     return {
       success: true,
-      documentId
+      documentId,
     };
   } catch (error) {
     console.error('[DOCUMENT-SERVICE] Delete error:', error.message);
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -590,13 +618,13 @@ export async function getDocumentStatus(documentId, options = {}) {
     // Get document info
     const docResult = await dbPool.query(
       `SELECT id, filename, chunk_count, total_tokens FROM documents WHERE id = $1`,
-      [documentId]
+      [documentId],
     );
 
     if (docResult.rows.length === 0) {
       return {
         success: false,
-        error: 'Document not found'
+        error: 'Document not found',
       };
     }
 
@@ -606,13 +634,13 @@ export async function getDocumentStatus(documentId, options = {}) {
        FROM document_chunks
        WHERE document_id = $1
        GROUP BY embedding_status`,
-      [documentId]
+      [documentId],
     );
 
     const status = {
       pending: 0,
       ready: 0,
-      failed: 0
+      failed: 0,
     };
 
     for (const row of statusResult.rows) {
@@ -622,13 +650,13 @@ export async function getDocumentStatus(documentId, options = {}) {
     return {
       success: true,
       document: docResult.rows[0],
-      embeddingStatus: status
+      embeddingStatus: status,
     };
   } catch (error) {
     console.error('[DOCUMENT-SERVICE] Status check error:', error.message);
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }

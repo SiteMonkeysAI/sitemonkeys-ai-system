@@ -1,21 +1,21 @@
 /**
  * boundedReasoningGate.js
- * 
+ *
  * ⚠️ WARNING: THIS IS AN ENFORCEMENT GATE, NOT A STYLE GUIDE ⚠️
- * 
- * This file must be invoked as a hard post-generation gate. 
- * Any implementation that treats it as advisory, optional, or prompt-level 
+ *
+ * This file must be invoked as a hard post-generation gate.
+ * Any implementation that treats it as advisory, optional, or prompt-level
  * invalidates its purpose and will reintroduce epistemic dishonesty.
- * 
+ *
  * THE CORE PRINCIPLE:
- * "The system may reason beyond available facts, but it may never 
+ * "The system may reason beyond available facts, but it may never
  * pretend that reasoning is fact."
- * 
- * This is not a "mode" - it is a constraint set that TIGHTENS 
+ *
+ * This is not a "mode" - it is a constraint set that TIGHTENS
  * (not loosens) when operating beyond verified truth.
- * 
+ *
  * PRIMARY OUTPUT: Decision quality, not response volume.
- * 
+ *
  * Silence is sometimes the highest-fidelity output.
  */
 
@@ -24,17 +24,17 @@
 // ============================================
 
 const CREATIVITY_ALLOWED = [
-  'framing',              // Presenting information in useful structure
-  'analogy',              // Drawing parallels to aid understanding
+  'framing', // Presenting information in useful structure
+  'analogy', // Drawing parallels to aid understanding
   'scenario_structuring', // IF/THEN reasoning with stated assumptions
-  'decision_modeling'     // Frameworks that reduce uncertainty or regret
+  'decision_modeling', // Frameworks that reduce uncertainty or regret
 ];
 
 const CREATIVITY_FORBIDDEN = [
-  'invented_facts',         // Making up data points
+  'invented_facts', // Making up data points
   'hypothetical_statistics', // "Studies show..." without source
-  'imagined_precedent',     // "This usually..." without basis
-  'implied_certainty'       // Confident tone masking uncertainty
+  'imagined_precedent', // "This usually..." without basis
+  'implied_certainty', // Confident tone masking uncertainty
 ];
 
 // ============================================
@@ -47,12 +47,12 @@ const IMPACT_AXES = {
   feasibility: 'Changes whether something is possible or practical',
   timeline: 'Changes when something can or must happen',
   irreversibility: 'Changes ability to undo or correct course',
-  quality: 'Changes the caliber of the outcome'
+  quality: 'Changes the caliber of the outcome',
 };
 
 /**
  * Material Impact Declaration (required for volunteered content)
- * 
+ *
  * @typedef {Object} MaterialImpactDeclaration
  * @property {string} axis - One of IMPACT_AXES keys
  * @property {string} why_it_matters - One sentence explanation
@@ -65,10 +65,10 @@ const IMPACT_AXES = {
 /**
  * GATE 1: TRUTH GATE
  * Is this factual OR clearly labeled as inference?
- * 
+ *
  * PASS: Verified fact with provenance, OR inference explicitly labeled
  * FAIL: Speculation presented as certainty
- * 
+ *
  * ⚠️ ENFORCEMENT: This gate is non-negotiable. No exceptions.
  */
 function truthGate(content, metadata) {
@@ -77,28 +77,28 @@ function truthGate(content, metadata) {
     invented_facts: /studies show|research indicates|data suggests/i,
     hypothetical_statistics: /\d+%\s+(of people|of cases|typically)/i,
     imagined_precedent: /this (usually|typically|normally|always) (works|happens|is)/i,
-    implied_certainty: /^(The answer is|You should definitely|You need to|You must)/i
+    implied_certainty: /^(The answer is|You should definitely|You need to|You must)/i,
   };
-  
+
   for (const [violation, pattern] of Object.entries(forbiddenPatterns)) {
     if (pattern.test(content) && !metadata.verified) {
       return {
         passed: false,
         violation: `Forbidden creativity: ${violation}`,
-        requirement: 'Must have provenance OR must explicitly label as inference'
+        requirement: 'Must have provenance OR must explicitly label as inference',
       };
     }
   }
-  
+
   // If claiming fact, must have verification
   if (metadata.presented_as === 'fact') {
     return {
       passed: metadata.verified === true,
       violation: metadata.verified ? null : 'Unverified claim presented as fact',
-      requirement: 'Must have provenance OR must label as inference'
+      requirement: 'Must have provenance OR must label as inference',
     };
   }
-  
+
   // If inference, must be labeled
   if (metadata.presented_as === 'inference') {
     const inferenceMarkers = [
@@ -112,29 +112,29 @@ function truthGate(content, metadata) {
       /if.*then/i,
       /it appears that/i,
       /evidence suggests/i,
-      /in my assessment/i
+      /in my assessment/i,
     ];
-    
-    const hasLabeling = inferenceMarkers.some(m => m.test(content));
+
+    const hasLabeling = inferenceMarkers.some((m) => m.test(content));
     return {
       passed: hasLabeling,
       violation: hasLabeling ? null : 'Inference not clearly labeled as inference',
-      requirement: 'Inference must be explicitly marked as reasoning, not fact'
+      requirement: 'Inference must be explicitly marked as reasoning, not fact',
     };
   }
-  
+
   return { passed: true, violation: null };
 }
 
 /**
- * GATE 2: MATERIAL IMPACT GATE  
+ * GATE 2: MATERIAL IMPACT GATE
  * Does this meaningfully change the decision?
- * 
+ *
  * PASS: Has declared impact axis + "why it matters"
  * FAIL: "Nice to know" that changes nothing, or no declaration
- * 
+ *
  * PRECISION LOCK: Requires explicit declaration, not just text patterns
- * 
+ *
  * ⚠️ ENFORCEMENT: Volunteered content without declaration is rejected.
  */
 function materialImpactGate(content, impactDeclaration) {
@@ -143,29 +143,29 @@ function materialImpactGate(content, impactDeclaration) {
     return {
       passed: false,
       violation: 'No material impact declaration provided',
-      requirement: 'Must declare { axis, why_it_matters }'
+      requirement: 'Must declare { axis, why_it_matters }',
     };
   }
-  
+
   // Validate axis
   if (!IMPACT_AXES[impactDeclaration.axis]) {
     return {
       passed: false,
       violation: `Invalid impact axis: ${impactDeclaration.axis}`,
       valid_axes: Object.keys(IMPACT_AXES),
-      requirement: 'Must use valid impact axis'
+      requirement: 'Must use valid impact axis',
     };
   }
-  
+
   // Validate why_it_matters exists and has substance
   if (!impactDeclaration.why_it_matters || impactDeclaration.why_it_matters.length < 10) {
     return {
       passed: false,
       violation: 'Missing or insufficient "why_it_matters" explanation',
-      requirement: 'Must explain why this impacts the decision'
+      requirement: 'Must explain why this impacts the decision',
     };
   }
-  
+
   // Check why_it_matters isn't generic filler
   const genericPhrases = [
     /good to know/i,
@@ -175,51 +175,51 @@ function materialImpactGate(content, impactDeclaration) {
     /worth mentioning/i,
     /for your information/i,
     /fyi/i,
-    /as an aside/i
+    /as an aside/i,
   ];
-  
-  if (genericPhrases.some(p => p.test(impactDeclaration.why_it_matters))) {
+
+  if (genericPhrases.some((p) => p.test(impactDeclaration.why_it_matters))) {
     return {
       passed: false,
       violation: 'Generic "why_it_matters" - does not explain actual impact',
-      requirement: 'Must specify concrete impact on decision'
+      requirement: 'Must specify concrete impact on decision',
     };
   }
-  
+
   return {
     passed: true,
     violation: null,
     axis: impactDeclaration.axis,
     axis_definition: IMPACT_AXES[impactDeclaration.axis],
-    why_it_matters: impactDeclaration.why_it_matters
+    why_it_matters: impactDeclaration.why_it_matters,
   };
 }
 
 /**
  * GATE 3: PROPORTIONALITY GATE
  * Can this be said simply without derailing the main answer?
- * 
+ *
  * PASS: Concise, focused, doesn't explode scope, doesn't duplicate
  * FAIL: Adds cognitive load disproportionate to benefit
- * 
+ *
  * PRECISION LOCK: Checks semantic redundancy, not just length
- * 
+ *
  * ⚠️ ENFORCEMENT: Redundant or scope-exploding content is rejected.
  */
 function proportionalityGate(content, mainAnswer, semanticSimilarityFn = null) {
   const contentLength = content.length;
   const mainAnswerLength = mainAnswer.length || 1; // Prevent division by zero
   const ratio = contentLength / mainAnswerLength;
-  
+
   // Length check: volunteered content should not exceed 30% of main answer
   if (ratio > 0.3) {
     return {
       passed: false,
       violation: `Volunteered content too long (${Math.round(ratio * 100)}% of main answer)`,
-      requirement: 'Must be ≤30% of main answer length'
+      requirement: 'Must be ≤30% of main answer length',
     };
   }
-  
+
   // Scope explosion check
   const scopeExplosion = [
     /here are \d+ (things|ways|options|alternatives)/i,
@@ -227,17 +227,17 @@ function proportionalityGate(content, mainAnswer, semanticSimilarityFn = null) {
     /another thing.*another thing/i,
     /you might also.*you might also/i,
     /first.*second.*third.*fourth/i,
-    /on one hand.*on the other hand.*but also/i
+    /on one hand.*on the other hand.*but also/i,
   ];
-  
-  if (scopeExplosion.some(p => p.test(content))) {
+
+  if (scopeExplosion.some((p) => p.test(content))) {
     return {
       passed: false,
       violation: 'Content explodes scope with multiple tangents',
-      requirement: 'Must be focused, not a list of tangents'
+      requirement: 'Must be focused, not a list of tangents',
     };
   }
-  
+
   // Semantic redundancy check (if similarity function provided)
   if (semanticSimilarityFn) {
     const similarity = semanticSimilarityFn(content, mainAnswer);
@@ -245,16 +245,16 @@ function proportionalityGate(content, mainAnswer, semanticSimilarityFn = null) {
       return {
         passed: false,
         violation: `Volunteered content duplicates main answer (${Math.round(similarity * 100)}% similar)`,
-        requirement: 'Must add new information, not restate'
+        requirement: 'Must add new information, not restate',
       };
     }
   }
-  
+
   return {
     passed: true,
     violation: null,
     length_ratio: ratio,
-    is_focused: true
+    is_focused: true,
   };
 }
 
@@ -263,7 +263,8 @@ function proportionalityGate(content, mainAnswer, semanticSimilarityFn = null) {
 // ============================================
 
 // Patterns that indicate speculative/predictive queries
-const SPECULATIVE_PATTERNS = /\b(will .+ in the (next|future)|predict|forecast|going to happen|what will|years from now|by 20\d\d|in \d+ years)\b/i;
+const SPECULATIVE_PATTERNS =
+  /\b(will .+ in the (next|future)|predict|forecast|going to happen|what will|years from now|by 20\d\d|in \d+ years)\b/i;
 
 /**
  * Determine if we're operating in bounded reasoning territory
@@ -285,7 +286,7 @@ function requiresBoundedReasoning(phase4Metadata, queryText = '') {
     return {
       required: true,
       reason: 'Speculative/predictive query - future is inherently uncertain',
-      disclosure: 'I\'m reasoning about future possibilities, not verified facts.'
+      disclosure: "I'm reasoning about future possibilities, not verified facts.",
     };
   }
 
@@ -310,7 +311,7 @@ function requiresBoundedReasoning(phase4Metadata, queryText = '') {
     return {
       required: true,
       reason: 'Volatile claim without external verification',
-      disclosure: 'I don\'t have verified current data on this specific situation.'
+      disclosure: "I don't have verified current data on this specific situation.",
     };
   }
 
@@ -319,7 +320,8 @@ function requiresBoundedReasoning(phase4Metadata, queryText = '') {
     return {
       required: true,
       reason: 'High-stakes claim without external verification',
-      disclosure: 'This is a high-stakes topic and I don\'t have verified data specific to your situation.'
+      disclosure:
+        "This is a high-stakes topic and I don't have verified data specific to your situation.",
     };
   }
 
@@ -328,7 +330,7 @@ function requiresBoundedReasoning(phase4Metadata, queryText = '') {
     return {
       required: true,
       reason: 'Low confidence without verification',
-      disclosure: 'I\'m reasoning from general knowledge here, not verified specifics.'
+      disclosure: "I'm reasoning from general knowledge here, not verified specifics.",
     };
   }
 
@@ -341,36 +343,43 @@ function requiresBoundedReasoning(phase4Metadata, queryText = '') {
 
 /**
  * Determine if unsolicited information should be volunteered
- * 
+ *
  * THREE CONDITIONS (ALL must be true):
  * 1. Passes all three gates
  * 2. Would a wise, caring advisor mention this?
  * 3. Would staying silent cost them something?
- * 
+ *
  * ⚠️ ENFORCEMENT: If any condition fails, do not volunteer.
  */
-function shouldVolunteer(content, impactDeclaration, mainAnswer, phase4Metadata, context, semanticSimilarityFn = null) {
+function shouldVolunteer(
+  content,
+  impactDeclaration,
+  mainAnswer,
+  phase4Metadata,
+  context,
+  semanticSimilarityFn = null,
+) {
   // Gate 1: Truth
-  const truthResult = truthGate(content, { 
+  const truthResult = truthGate(content, {
     presented_as: context.isInference ? 'inference' : 'fact',
-    verified: phase4Metadata.verified_at !== null
+    verified: phase4Metadata.verified_at !== null,
   });
   if (!truthResult.passed) {
     return { volunteer: false, gate: 'truth', reason: truthResult.violation };
   }
-  
+
   // Gate 2: Material Impact (requires declaration)
   const impactResult = materialImpactGate(content, impactDeclaration);
   if (!impactResult.passed) {
     return { volunteer: false, gate: 'material_impact', reason: impactResult.violation };
   }
-  
+
   // Gate 3: Proportionality (includes semantic check)
   const proportionResult = proportionalityGate(content, mainAnswer, semanticSimilarityFn);
   if (!proportionResult.passed) {
     return { volunteer: false, gate: 'proportionality', reason: proportionResult.violation };
   }
-  
+
   // Would silence cost them?
   const silenceCostFactors = {
     prevents_significant_risk: context.preventsSignificantRisk,
@@ -378,27 +387,27 @@ function shouldVolunteer(content, impactDeclaration, mainAnswer, phase4Metadata,
     prevents_common_mistake: context.preventsCommonMistake,
     irreversible_decision: context.irreversibleDecision,
     changes_feasibility: impactDeclaration.axis === 'feasibility',
-    changes_timeline_critically: impactDeclaration.axis === 'timeline' && context.timelineCritical
+    changes_timeline_critically: impactDeclaration.axis === 'timeline' && context.timelineCritical,
   };
-  
+
   const activeCostFactors = Object.entries(silenceCostFactors)
     .filter(([_, value]) => value)
     .map(([factor, _]) => factor);
-  
+
   if (activeCostFactors.length === 0) {
-    return { 
-      volunteer: false, 
+    return {
+      volunteer: false,
       gate: 'silence_cost',
-      reason: 'Passes gates but silence would not cost them - omit'
+      reason: 'Passes gates but silence would not cost them - omit',
     };
   }
-  
-  return { 
-    volunteer: true, 
+
+  return {
+    volunteer: true,
     reason: 'Passes all gates AND silence would cost them',
     impact_axis: impactDeclaration.axis,
     why_it_matters: impactDeclaration.why_it_matters,
-    silence_cost_factors: activeCostFactors
+    silence_cost_factors: activeCostFactors,
   };
 }
 
@@ -407,41 +416,52 @@ function shouldVolunteer(content, impactDeclaration, mainAnswer, phase4Metadata,
 // ============================================
 
 /**
- * The system stops once all information that passes the 
+ * The system stops once all information that passes the
  * Truth, Material Impact, and Proportionality gates has been delivered.
- * 
+ *
  * ⚠️ CRITICAL: SILENCE IS SOMETIMES THE HIGHEST-FIDELITY OUTPUT.
- * 
+ *
  * If nothing passes the gates, the system stops.
  * It does not search for something to say.
  */
-function shouldStop(deliveredItems, remainingItems, mainAnswer, phase4Metadata, semanticSimilarityFn = null) {
+function shouldStop(
+  deliveredItems,
+  remainingItems,
+  mainAnswer,
+  phase4Metadata,
+  semanticSimilarityFn = null,
+) {
   if (!remainingItems || remainingItems.length === 0) {
-    return { 
-      stop: true, 
-      reason: 'All relevant content delivered'
+    return {
+      stop: true,
+      reason: 'All relevant content delivered',
     };
   }
-  
+
   // Check if any remaining content passes all gates
   for (const item of remainingItems) {
     const truthPassed = truthGate(item.content, item.metadata).passed;
-    const impactPassed = item.impactDeclaration ? 
-      materialImpactGate(item.content, item.impactDeclaration).passed : false;
-    const proportionPassed = proportionalityGate(item.content, mainAnswer, semanticSimilarityFn).passed;
-    
+    const impactPassed = item.impactDeclaration
+      ? materialImpactGate(item.content, item.impactDeclaration).passed
+      : false;
+    const proportionPassed = proportionalityGate(
+      item.content,
+      mainAnswer,
+      semanticSimilarityFn,
+    ).passed;
+
     if (truthPassed && impactPassed && proportionPassed) {
-      return { 
-        stop: false, 
+      return {
+        stop: false,
         reason: 'Remaining content passes gates',
-        next_item: item
+        next_item: item,
       };
     }
   }
-  
-  return { 
-    stop: true, 
-    reason: 'Remaining content fails gates - silence is higher fidelity than noise'
+
+  return {
+    stop: true,
+    reason: 'Remaining content fails gates - silence is higher fidelity than noise',
   };
 }
 
@@ -458,7 +478,7 @@ const BOUNDED_REASONING_STRUCTURE = {
     required: true,
     gate: null, // Always required in bounded reasoning
     purpose: 'State explicitly that this is bounded reasoning, not verified fact',
-    example: 'I don\'t have verified data on this specific situation.'
+    example: "I don't have verified data on this specific situation.",
   },
   knownPatterns: {
     required: true,
@@ -466,34 +486,34 @@ const BOUNDED_REASONING_STRUCTURE = {
     purpose: 'Share what IS known from comparable/parallel situations',
     requirement: 'Must use inference markers',
     example: 'Based on similar situations...',
-    allowed_creativity: ['framing', 'analogy']
+    allowed_creativity: ['framing', 'analogy'],
   },
   keyVariables: {
     required: false,
     gate: 'material_impact',
     purpose: 'Identify what could change the answer',
-    condition: 'Include if decision is sensitive to specific variables'
+    condition: 'Include if decision is sensitive to specific variables',
   },
   decisionFramework: {
     required: false,
     gate: 'material_impact',
     purpose: 'Provide path forward that reduces uncertainty or regret',
     condition: 'Include when it empowers without speculating on outcome',
-    allowed_creativity: ['scenario_structuring', 'decision_modeling']
+    allowed_creativity: ['scenario_structuring', 'decision_modeling'],
   },
   riskWarning: {
     required: false,
     gate: 'all_three',
     purpose: 'State what would NOT be advisable',
-    condition: 'Include only if silence would cost them'
+    condition: 'Include only if silence would cost them',
   },
   stop: {
     required: true,
     gate: null, // Mechanical condition
     purpose: 'End when all gate-passing content is delivered',
     rule: 'No additional value-add beyond what passes gates',
-    principle: 'Silence is sometimes the highest-fidelity output'
-  }
+    principle: 'Silence is sometimes the highest-fidelity output',
+  },
 };
 
 // ============================================
@@ -514,11 +534,18 @@ const BOUNDED_REASONING_STRUCTURE = {
  * @param {object} context - Context including queryText and queryClassification
  * @param {function} semanticSimilarityFn - Optional similarity function
  */
-function enforceBoundedReasoning(response, phase4Metadata, context = {}, semanticSimilarityFn = null) {
+function enforceBoundedReasoning(
+  response,
+  phase4Metadata,
+  context = {},
+  semanticSimilarityFn = null,
+) {
   // ISSUE #431 FIX: Respect intelligent query classification
   // If semantic classifier determined scaffolding is not needed, pass through
   if (context?.queryClassification?.requiresScaffolding === false) {
-    console.log(`[BOUNDED-REASONING] Respecting query classification: ${context.queryClassification.classification} - skipping scaffolding`);
+    console.log(
+      `[BOUNDED-REASONING] Respecting query classification: ${context.queryClassification.classification} - skipping scaffolding`,
+    );
     return {
       bounded_reasoning_required: false,
       disclosure_added: false,
@@ -528,17 +555,18 @@ function enforceBoundedReasoning(response, phase4Metadata, context = {}, semanti
       gates_applied: {
         truth: { checked: 0, passed: 0, failed: 0 },
         material_impact: { checked: 0, passed: 0, failed: 0 },
-        proportionality: { checked: 0, passed: 0, failed: 0 }
+        proportionality: { checked: 0, passed: 0, failed: 0 },
       },
       creativity_check: {
         allowed_used: [],
-        forbidden_blocked: []
+        forbidden_blocked: [],
       },
       enforced_response: response,
       enforcement_passed: true,
       violations: [],
-      principle: 'The system may reason beyond available facts, but it may never pretend that reasoning is fact.',
-      skipped_for_classification: true
+      principle:
+        'The system may reason beyond available facts, but it may never pretend that reasoning is fact.',
+      skipped_for_classification: true,
     };
   }
 
@@ -551,12 +579,12 @@ function enforceBoundedReasoning(response, phase4Metadata, context = {}, semanti
     gates_applied: {
       truth: { checked: 0, passed: 0, failed: 0 },
       material_impact: { checked: 0, passed: 0, failed: 0 },
-      proportionality: { checked: 0, passed: 0, failed: 0 }
+      proportionality: { checked: 0, passed: 0, failed: 0 },
     },
     creativity_check: {
       allowed_used: [],
-      forbidden_blocked: []
-    }
+      forbidden_blocked: [],
+    },
   };
 
   let enforcedResponse = response;
@@ -564,7 +592,7 @@ function enforceBoundedReasoning(response, phase4Metadata, context = {}, semanti
   // Check if bounded reasoning is required, pass queryText from context
   const boundedCheck = requiresBoundedReasoning(phase4Metadata, context.queryText || '');
   enforcement.bounded_reasoning_required = boundedCheck.required;
-  
+
   if (boundedCheck.required) {
     // Ensure disclosure is present at the start
     const hasDisclosure = [
@@ -572,39 +600,40 @@ function enforceBoundedReasoning(response, phase4Metadata, context = {}, semanti
       /I'm reasoning from/i,
       /This is a high-stakes topic/i,
       /Based on general knowledge/i,
-      /Without verified data/i
-    ].some(p => p.test(response.substring(0, 500)));
-    
+      /Without verified data/i,
+    ].some((p) => p.test(response.substring(0, 500)));
+
     if (!hasDisclosure && boundedCheck.disclosure) {
       enforcedResponse = boundedCheck.disclosure + '\n\n' + response;
       enforcement.disclosure_added = true;
     }
   }
-  
+
   // Check for forbidden creativity patterns
   const forbiddenChecks = {
     invented_facts: /studies show|research indicates|data suggests/gi,
     hypothetical_statistics: /\d+%\s+(of people|of cases|typically)/gi,
     imagined_precedent: /this (usually|typically|normally|always) (works|happens|is)/gi,
-    implied_certainty: /^(The answer is|You should definitely|You need to|You must)/gim
+    implied_certainty: /^(The answer is|You should definitely|You need to|You must)/gim,
   };
-  
+
   for (const [forbidden, pattern] of Object.entries(forbiddenChecks)) {
     if (pattern.test(enforcedResponse) && !phase4Metadata.verified_at) {
       enforcement.creativity_check.forbidden_blocked.push(forbidden);
     }
   }
-  
+
   enforcement.stopped_reason = 'All gate-passing content delivered';
-  
+
   const passed = enforcement.creativity_check.forbidden_blocked.length === 0;
-  
+
   return {
     ...enforcement,
     enforced_response: enforcedResponse,
     enforcement_passed: passed,
     violations: enforcement.creativity_check.forbidden_blocked,
-    principle: 'The system may reason beyond available facts, but it may never pretend that reasoning is fact.'
+    principle:
+      'The system may reason beyond available facts, but it may never pretend that reasoning is fact.',
   };
 }
 
@@ -634,6 +663,7 @@ export {
 };
 
 // Core principles (for documentation/reference)
-export const PRINCIPLE = 'The system may reason beyond available facts, but it may never pretend that reasoning is fact.';
+export const PRINCIPLE =
+  'The system may reason beyond available facts, but it may never pretend that reasoning is fact.';
 export const PRIMARY_OUTPUT = 'Decision quality, not response volume.';
 export const SILENCE_PRINCIPLE = 'Silence is sometimes the highest-fidelity output.';

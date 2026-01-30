@@ -3,56 +3,52 @@
 // Executes all chat requests in correct priority order
 // Truth > Memory > Analysis > AI > Personality > Validation > Fallback (last resort)
 
-import { coreSystem, intelligenceSystem } from "../categories/memory/index.js";
-import { SemanticAnalyzer } from "../core/intelligence/semantic_analyzer.js";
-import { EliFramework } from "../core/personalities/eli_framework.js";
-import { RoxyFramework } from "../core/personalities/roxy_framework.js";
-import { PersonalitySelector } from "../core/personalities/personality_selector.js";
-import { trackApiCall } from "../lib/tokenTracker.js";
-import { getVaultStatus, generateVaultContext } from "../lib/vault.js";
-import { extractedDocuments } from "../upload-for-analysis.js";
-import {
-  MODES,
-  validateModeCompliance,
-  calculateConfidenceScore,
-} from "../config/modes.js";
-import { EMERGENCY_FALLBACKS } from "../lib/site-monkeys/emergency-fallbacks.js";
-import Anthropic from "@anthropic-ai/sdk";
-import OpenAI from "openai";
-import _ from "lodash";
+import { coreSystem, intelligenceSystem } from '../categories/memory/index.js';
+import { SemanticAnalyzer } from '../core/intelligence/semantic_analyzer.js';
+import { EliFramework } from '../core/personalities/eli_framework.js';
+import { RoxyFramework } from '../core/personalities/roxy_framework.js';
+import { PersonalitySelector } from '../core/personalities/personality_selector.js';
+import { trackApiCall } from '../lib/tokenTracker.js';
+import { getVaultStatus, generateVaultContext } from '../lib/vault.js';
+import { extractedDocuments } from '../upload-for-analysis.js';
+import { MODES, validateModeCompliance, calculateConfidenceScore } from '../config/modes.js';
+import { EMERGENCY_FALLBACKS } from '../lib/site-monkeys/emergency-fallbacks.js';
+import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import _ from 'lodash';
 // ========== ENFORCEMENT MODULE IMPORTS ==========
-import { driftWatcher } from "../lib/validators/drift-watcher.js";
-import { initiativeEnforcer } from "../lib/validators/initiative-enforcer.js";
-import { memoryUsageEnforcer } from "../lib/validators/memory-usage-enforcer.js";
+import { driftWatcher } from '../lib/validators/drift-watcher.js';
+import { initiativeEnforcer } from '../lib/validators/initiative-enforcer.js';
+import { memoryUsageEnforcer } from '../lib/validators/memory-usage-enforcer.js';
 // Phase 1 Deterministic Validators (Issue #606)
-import { manipulationGuard } from "../lib/validators/manipulation-guard.js";
-import { characterPreservationValidator } from "../lib/validators/character-preservation.js";
-import { anchorPreservationValidator } from "../lib/validators/anchor-preservation.js";
-import { refusalMaintenanceValidator } from "../lib/validators/refusal-maintenance.js";
-import { conflictDetectionValidator } from "../lib/validators/conflict-detection.js";
-import { costTracker } from "../utils/cost-tracker.js";
-import { PoliticalGuardrails } from "../lib/politicalGuardrails.js";
-import { ProductValidator } from "../lib/productValidation.js";
+import { manipulationGuard } from '../lib/validators/manipulation-guard.js';
+import { characterPreservationValidator } from '../lib/validators/character-preservation.js';
+import { anchorPreservationValidator } from '../lib/validators/anchor-preservation.js';
+import { refusalMaintenanceValidator } from '../lib/validators/refusal-maintenance.js';
+import { conflictDetectionValidator } from '../lib/validators/conflict-detection.js';
+import { costTracker } from '../utils/cost-tracker.js';
+import { PoliticalGuardrails } from '../lib/politicalGuardrails.js';
+import { ProductValidator } from '../lib/productValidation.js';
 import {
   checkFounderProtection,
   handleCostCeiling,
-} from "../lib/site-monkeys/emergency-fallbacks.js";
-import { logMemoryOperation } from "../routes/debug.js";
+} from '../lib/site-monkeys/emergency-fallbacks.js';
+import { logMemoryOperation } from '../routes/debug.js';
 //import { validateCompliance as validateVaultCompliance } from '../lib/vault.js';
 // ========== SEMANTIC INTEGRATION ==========
-import { retrieveSemanticMemories } from "../services/semantic-retrieval.js";
+import { retrieveSemanticMemories } from '../services/semantic-retrieval.js';
 // ========== PII PROTECTION (Innovation #34) ==========
-import { sanitizePII } from "../memory/pii-sanitizer.js";
+import { sanitizePII } from '../memory/pii-sanitizer.js';
 // ========== PHASE 4/5/6/7 INTEGRATION ==========
-import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
-import { route } from "../core/intelligence/hierarchyRouter.js";
-import { lookup } from "../core/intelligence/externalLookupEngine.js";
-import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
-import { enforceBoundedReasoning } from "../core/intelligence/boundedReasoningGate.js";
-import { enforceResponseContract } from "../core/intelligence/responseContractGate.js";
-import { enforceReasoningEscalation } from "./intelligence/reasoningEscalationEnforcer.js";
-import { applyPrincipleBasedReasoning } from "./intelligence/principleBasedReasoning.js";
-import { classifyQueryComplexity } from "./intelligence/queryComplexityClassifier.js";
+import { detectTruthType } from '../core/intelligence/truthTypeDetector.js';
+import { route } from '../core/intelligence/hierarchyRouter.js';
+import { lookup } from '../core/intelligence/externalLookupEngine.js';
+import { enforceAll } from '../core/intelligence/doctrineEnforcer.js';
+import { enforceBoundedReasoning } from '../core/intelligence/boundedReasoningGate.js';
+import { enforceResponseContract } from '../core/intelligence/responseContractGate.js';
+import { enforceReasoningEscalation } from './intelligence/reasoningEscalationEnforcer.js';
+import { applyPrincipleBasedReasoning } from './intelligence/principleBasedReasoning.js';
+import { classifyQueryComplexity } from './intelligence/queryComplexityClassifier.js';
 // ================================================
 
 // ==================== CONSTANTS ====================
@@ -73,10 +69,10 @@ export class Orchestrator {
     this.roxyFramework = new RoxyFramework();
     this.personalitySelector = new PersonalitySelector();
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || "sk-dummy-key-for-testing",
+      apiKey: process.env.OPENAI_API_KEY || 'sk-dummy-key-for-testing',
     });
     this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY || "sk-ant-dummy-key-for-testing",
+      apiKey: process.env.ANTHROPIC_API_KEY || 'sk-ant-dummy-key-for-testing',
     });
 
     // Database pool for semantic retrieval (set during initialization)
@@ -113,7 +109,7 @@ export class Orchestrator {
       console.log(`[${timestamp}] [ORCHESTRATOR] ${message}`);
 
       if (process.stdout && process.stdout.write) {
-        process.stdout.write("");
+        process.stdout.write('');
       }
     };
 
@@ -122,33 +118,35 @@ export class Orchestrator {
 
     this.error = (message, error) => {
       const timestamp = new Date().toISOString();
-      console.error(`[${timestamp}] [ORCHESTRATOR ERROR] ${message}`, error || "");
+      console.error(`[${timestamp}] [ORCHESTRATOR ERROR] ${message}`, error || '');
 
       if (process.stderr && process.stderr.write) {
-        process.stderr.write("");
+        process.stderr.write('');
       }
     };
   }
 
   async initialize() {
     try {
-      this.log("[INIT] Initializing SemanticAnalyzer...");
+      this.log('[INIT] Initializing SemanticAnalyzer...');
       await this.semanticAnalyzer.initialize();
 
       // Get database pool from global memory system
       if (global.memorySystem?.pool) {
         this.pool = global.memorySystem.pool;
-        this.log("[INIT] Database pool acquired from memory system");
+        this.log('[INIT] Database pool acquired from memory system');
       } else {
-        this.log("[INIT] WARNING: No database pool available - semantic retrieval will use keyword fallback");
+        this.log(
+          '[INIT] WARNING: No database pool available - semantic retrieval will use keyword fallback',
+        );
       }
 
       this.initialized = true;
-      this.log("[INIT] SemanticAnalyzer initialization complete");
+      this.log('[INIT] SemanticAnalyzer initialization complete');
       return true;
     } catch (error) {
       this.error(
-        "[INIT] SemanticAnalyzer initialization failed - system will use fallback analysis",
+        '[INIT] SemanticAnalyzer initialization failed - system will use fallback analysis',
         error,
       );
       this.initialized = false;
@@ -184,9 +182,7 @@ export class Orchestrator {
           enforcedResponse = driftResult.adjustedResponse || enforcedResponse;
 
           if (driftResult.confidenceAdjustment) {
-            complianceMetadata.confidence_adjustments.push(
-              driftResult.confidenceAdjustment,
-            );
+            complianceMetadata.confidence_adjustments.push(driftResult.confidenceAdjustment);
           }
 
           if (driftResult.warning) {
@@ -194,36 +190,32 @@ export class Orchestrator {
           }
         }
 
-        complianceMetadata.enforcement_applied.push("drift_watcher");
+        complianceMetadata.enforcement_applied.push('drift_watcher');
       } catch (error) {
-        this.error("Drift watcher failed:", error);
-        complianceMetadata.warnings.push(
-          "drift_watcher_error: " + error.message,
-        );
+        this.error('Drift watcher failed:', error);
+        complianceMetadata.warnings.push('drift_watcher_error: ' + error.message);
       }
 
       // ========== STEP 2: INITIATIVE ENFORCER ==========
       try {
         const initiativeResult = await initiativeEnforcer.enforce({
           response: enforcedResponse,
-          personality: personality || "eli",
+          personality: personality || 'eli',
           context: context,
         });
 
         if (initiativeResult.modified) {
           enforcedResponse = initiativeResult.response;
           complianceMetadata.overrides.push({
-            module: "initiative_enforcer",
+            module: 'initiative_enforcer',
             reason: initiativeResult.reason,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("initiative_enforcer");
+        complianceMetadata.enforcement_applied.push('initiative_enforcer');
       } catch (error) {
-        this.error("Initiative enforcer failed:", error);
-        complianceMetadata.warnings.push(
-          "initiative_enforcer_error: " + error.message,
-        );
+        this.error('Initiative enforcer failed:', error);
+        complianceMetadata.warnings.push('initiative_enforcer_error: ' + error.message);
       }
 
       // ========== STEP 3: MEMORY USAGE ENFORCER ==========
@@ -236,19 +228,17 @@ export class Orchestrator {
         if (memoryResult.modified) {
           enforcedResponse = memoryResult.response;
           complianceMetadata.overrides.push({
-            module: "memory_usage_enforcer",
+            module: 'memory_usage_enforcer',
             reason: memoryResult.reason,
             matchedPhrase: memoryResult.matchedPhrase,
             memoryTokens: memoryResult.memoryTokens,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("memory_usage_enforcer");
+        complianceMetadata.enforcement_applied.push('memory_usage_enforcer');
       } catch (error) {
-        this.error("Memory usage enforcer failed:", error);
-        complianceMetadata.warnings.push(
-          "memory_usage_enforcer_error: " + error.message,
-        );
+        this.error('Memory usage enforcer failed:', error);
+        complianceMetadata.warnings.push('memory_usage_enforcer_error: ' + error.message);
       }
 
       // ========== STEP 4: POLITICAL GUARDRAILS ==========
@@ -261,17 +251,15 @@ export class Orchestrator {
         if (politicalResult.politicalContentDetected) {
           enforcedResponse = politicalResult.neutralizedResponse;
           complianceMetadata.overrides.push({
-            module: "political_guardrails",
+            module: 'political_guardrails',
             reason: politicalResult.reason,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("political_guardrails");
+        complianceMetadata.enforcement_applied.push('political_guardrails');
       } catch (error) {
-        this.error("Political guardrails failed:", error);
-        complianceMetadata.warnings.push(
-          "political_guardrails_error: " + error.message,
-        );
+        this.error('Political guardrails failed:', error);
+        complianceMetadata.warnings.push('political_guardrails_error: ' + error.message);
       }
 
       // ========== STEP 5: PRODUCT VALIDATION ==========
@@ -284,60 +272,52 @@ export class Orchestrator {
         if (productResult.needsDisclosure) {
           enforcedResponse = productResult.responseWithDisclosure;
           complianceMetadata.overrides.push({
-            module: "product_validation",
+            module: 'product_validation',
             reason: productResult.reason,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("product_validation");
+        complianceMetadata.enforcement_applied.push('product_validation');
       } catch (error) {
-        this.error("Product validation failed:", error);
-        complianceMetadata.warnings.push(
-          "product_validation_error: " + error.message,
-        );
+        this.error('Product validation failed:', error);
+        complianceMetadata.warnings.push('product_validation_error: ' + error.message);
       }
 
       // ========== STEP 6: FOUNDER PROTECTION ==========
       try {
         const founderResult = await checkFounderProtection({
           response: enforcedResponse,
-          mode: mode || "truth_general",
+          mode: mode || 'truth_general',
           context: context,
         });
 
         if (founderResult.violationDetected) {
           enforcedResponse = founderResult.correctedResponse;
           complianceMetadata.overrides.push({
-            module: "founder_protection",
+            module: 'founder_protection',
             reason: founderResult.reason,
             violations: founderResult.violations,
           });
           complianceMetadata.security_pass = false;
         }
 
-        complianceMetadata.enforcement_applied.push("founder_protection");
+        complianceMetadata.enforcement_applied.push('founder_protection');
       } catch (error) {
-        this.error("Founder protection failed:", error);
-        complianceMetadata.warnings.push(
-          "founder_protection_error: " + error.message,
-        );
+        this.error('Founder protection failed:', error);
+        complianceMetadata.warnings.push('founder_protection_error: ' + error.message);
       }
 
       // ========== STEP 7: VAULT COMPLIANCE (Site Monkeys only) ==========
-      if (mode === "site_monkeys" && context.sources?.hasVault) {
+      if (mode === 'site_monkeys' && context.sources?.hasVault) {
         try {
           // NOTE: validateVaultCompliance function not implemented yet
           // Using basic vault enforcement instead
           // TODO: Implement proper vault compliance validation
 
-          complianceMetadata.enforcement_applied.push(
-            "vault_compliance_pending",
-          );
+          complianceMetadata.enforcement_applied.push('vault_compliance_pending');
         } catch (error) {
-          this.error("Vault compliance failed:", error);
-          complianceMetadata.warnings.push(
-            "vault_compliance_error: " + error.message,
-          );
+          this.error('Vault compliance failed:', error);
+          complianceMetadata.warnings.push('vault_compliance_error: ' + error.message);
         }
       }
 
@@ -346,24 +326,22 @@ export class Orchestrator {
         const charResult = await characterPreservationValidator.validate({
           response: enforcedResponse,
           memoryContext: context.memory_context,
-          context: context
+          context: context,
         });
 
         if (charResult.correctionApplied) {
           enforcedResponse = charResult.response;
           complianceMetadata.overrides.push({
-            module: "character_preservation",
+            module: 'character_preservation',
             corrections: charResult.corrections,
-            specialStringsChecked: charResult.specialStringsChecked
+            specialStringsChecked: charResult.specialStringsChecked,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("character_preservation");
+        complianceMetadata.enforcement_applied.push('character_preservation');
       } catch (error) {
-        this.error("Character preservation failed:", error);
-        complianceMetadata.warnings.push(
-          "character_preservation_error: " + error.message,
-        );
+        this.error('Character preservation failed:', error);
+        complianceMetadata.warnings.push('character_preservation_error: ' + error.message);
       }
 
       // ========== STEP 9: ANCHOR PRESERVATION (Issue #606 Phase 1) ==========
@@ -372,24 +350,22 @@ export class Orchestrator {
           response: enforcedResponse,
           memoryContext: context.memory_context,
           query: context.message || '',
-          context: context
+          context: context,
         });
 
         if (anchorResult.correctionApplied) {
           enforcedResponse = anchorResult.response;
           complianceMetadata.overrides.push({
-            module: "anchor_preservation",
+            module: 'anchor_preservation',
             missingAnchors: anchorResult.missingAnchors,
-            anchorsChecked: anchorResult.anchorsChecked
+            anchorsChecked: anchorResult.anchorsChecked,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("anchor_preservation");
+        complianceMetadata.enforcement_applied.push('anchor_preservation');
       } catch (error) {
-        this.error("Anchor preservation failed:", error);
-        complianceMetadata.warnings.push(
-          "anchor_preservation_error: " + error.message,
-        );
+        this.error('Anchor preservation failed:', error);
+        complianceMetadata.warnings.push('anchor_preservation_error: ' + error.message);
       }
 
       // ========== STEP 9.5: ORDINAL ENFORCEMENT (Issue #628-B3) ==========
@@ -398,23 +374,21 @@ export class Orchestrator {
           response: enforcedResponse,
           memoryContext: context.memory_context,
           query: context.message || '',
-          context: context
+          context: context,
         });
 
         if (ordinalResult.correctionApplied) {
           enforcedResponse = ordinalResult.response;
           complianceMetadata.overrides.push({
-            module: "ordinal_enforcement",
-            ordinalCorrected: ordinalResult.ordinalCorrected
+            module: 'ordinal_enforcement',
+            ordinalCorrected: ordinalResult.ordinalCorrected,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("ordinal_enforcement");
+        complianceMetadata.enforcement_applied.push('ordinal_enforcement');
       } catch (error) {
-        this.error("Ordinal enforcement failed:", error);
-        complianceMetadata.warnings.push(
-          "ordinal_enforcement_error: " + error.message,
-        );
+        this.error('Ordinal enforcement failed:', error);
+        complianceMetadata.warnings.push('ordinal_enforcement_error: ' + error.message);
       }
 
       // ========== STEP 9.6: TEMPORAL REASONING CALCULATOR (Issue #628-INF3) ==========
@@ -423,23 +397,21 @@ export class Orchestrator {
           response: enforcedResponse,
           memoryContext: context.memory_context,
           query: context.message || '',
-          context: context
+          context: context,
         });
 
         if (temporalResult.calculationApplied) {
           enforcedResponse = temporalResult.response;
           complianceMetadata.overrides.push({
-            module: "temporal_calculator",
-            calculation: temporalResult.calculation
+            module: 'temporal_calculator',
+            calculation: temporalResult.calculation,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("temporal_calculator");
+        complianceMetadata.enforcement_applied.push('temporal_calculator');
       } catch (error) {
-        this.error("Temporal calculator failed:", error);
-        complianceMetadata.warnings.push(
-          "temporal_calculator_error: " + error.message,
-        );
+        this.error('Temporal calculator failed:', error);
+        complianceMetadata.warnings.push('temporal_calculator_error: ' + error.message);
       }
 
       // ========== STEP 9.7: AMBIGUITY DISCLOSURE (Issue #628-NUA1) ==========
@@ -448,22 +420,20 @@ export class Orchestrator {
           response: enforcedResponse,
           memoryContext: context.memory_context,
           query: context.message || '',
-          context: context
+          context: context,
         });
 
         if (ambiguityResult.correctionApplied) {
           enforcedResponse = ambiguityResult.response;
           complianceMetadata.overrides.push({
-            module: "ambiguity_disclosure"
+            module: 'ambiguity_disclosure',
           });
         }
 
-        complianceMetadata.enforcement_applied.push("ambiguity_disclosure");
+        complianceMetadata.enforcement_applied.push('ambiguity_disclosure');
       } catch (error) {
-        this.error("Ambiguity disclosure failed:", error);
-        complianceMetadata.warnings.push(
-          "ambiguity_disclosure_error: " + error.message,
-        );
+        this.error('Ambiguity disclosure failed:', error);
+        complianceMetadata.warnings.push('ambiguity_disclosure_error: ' + error.message);
       }
 
       // ========== STEP 9.8: CONFLICT DETECTION (Issue #639-NUA2) ==========
@@ -472,24 +442,22 @@ export class Orchestrator {
           response: enforcedResponse,
           memoryContext: context.memory_context,
           query: context.message || '',
-          context: context
+          context: context,
         });
 
         if (conflictResult.correctionApplied) {
           enforcedResponse = conflictResult.response;
           complianceMetadata.overrides.push({
-            module: "conflict_detection",
+            module: 'conflict_detection',
             conflicts: conflictResult.conflicts,
-            conflictsDetected: conflictResult.conflictsDetected
+            conflictsDetected: conflictResult.conflictsDetected,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("conflict_detection");
+        complianceMetadata.enforcement_applied.push('conflict_detection');
       } catch (error) {
-        this.error("Conflict detection failed:", error);
-        complianceMetadata.warnings.push(
-          "conflict_detection_error: " + error.message,
-        );
+        this.error('Conflict detection failed:', error);
+        complianceMetadata.warnings.push('conflict_detection_error: ' + error.message);
       }
 
       // ========== STEP 9.8: VEHICLE RECALL (Issue #628-STR1) ==========
@@ -498,22 +466,20 @@ export class Orchestrator {
           response: enforcedResponse,
           memoryContext: context.memory_context,
           query: context.message || '',
-          context: context
+          context: context,
         });
 
         if (vehicleResult.correctionApplied) {
           enforcedResponse = vehicleResult.response;
           complianceMetadata.overrides.push({
-            module: "vehicle_recall"
+            module: 'vehicle_recall',
           });
         }
 
-        complianceMetadata.enforcement_applied.push("vehicle_recall");
+        complianceMetadata.enforcement_applied.push('vehicle_recall');
       } catch (error) {
-        this.error("Vehicle recall failed:", error);
-        complianceMetadata.warnings.push(
-          "vehicle_recall_error: " + error.message,
-        );
+        this.error('Vehicle recall failed:', error);
+        complianceMetadata.warnings.push('vehicle_recall_error: ' + error.message);
       }
 
       // ========== STEP 9.9: UNICODE NAMES (Issue #628-CMP2) ==========
@@ -522,22 +488,20 @@ export class Orchestrator {
           response: enforcedResponse,
           memoryContext: context.memory_context,
           query: context.message || '',
-          context: context
+          context: context,
         });
 
         if (unicodeResult.correctionApplied) {
           enforcedResponse = unicodeResult.response;
           complianceMetadata.overrides.push({
-            module: "unicode_names"
+            module: 'unicode_names',
           });
         }
 
-        complianceMetadata.enforcement_applied.push("unicode_names");
+        complianceMetadata.enforcement_applied.push('unicode_names');
       } catch (error) {
-        this.error("Unicode names enforcement failed:", error);
-        complianceMetadata.warnings.push(
-          "unicode_names_error: " + error.message,
-        );
+        this.error('Unicode names enforcement failed:', error);
+        complianceMetadata.warnings.push('unicode_names_error: ' + error.message);
       }
 
       // ========== STEP 10: REFUSAL MAINTENANCE (Issue #606 Phase 1) ==========
@@ -546,30 +510,26 @@ export class Orchestrator {
           response: enforcedResponse,
           userMessage: context.message || '',
           sessionId: context.sessionId || context.userId,
-          context: context
+          context: context,
         });
 
         if (refusalResult.correctionApplied) {
           enforcedResponse = refusalResult.response;
           complianceMetadata.overrides.push({
-            module: "refusal_maintenance",
+            module: 'refusal_maintenance',
             reason: refusalResult.reason,
-            originalReason: refusalResult.originalReason
+            originalReason: refusalResult.originalReason,
           });
         }
 
-        complianceMetadata.enforcement_applied.push("refusal_maintenance");
+        complianceMetadata.enforcement_applied.push('refusal_maintenance');
       } catch (error) {
-        this.error("Refusal maintenance failed:", error);
-        complianceMetadata.warnings.push(
-          "refusal_maintenance_error: " + error.message,
-        );
+        this.error('Refusal maintenance failed:', error);
+        complianceMetadata.warnings.push('refusal_maintenance_error: ' + error.message);
       }
     } catch (error) {
-      this.error("Enforcement chain critical failure:", error);
-      complianceMetadata.warnings.push(
-        "enforcement_chain_failure: " + error.message,
-      );
+      this.error('Enforcement chain critical failure:', error);
+      complianceMetadata.warnings.push('enforcement_chain_failure: ' + error.message);
       complianceMetadata.security_pass = false;
     }
 
@@ -597,7 +557,7 @@ export class Orchestrator {
           response: response,
           gateResults: { passed: true, compositeScore: 1.0, minimumScore: 0.6 },
           enhanced: false,
-          enhancements: []
+          enhancements: [],
         };
       }
 
@@ -607,7 +567,7 @@ export class Orchestrator {
       const gateContext = {
         mode: context.mode,
         message: message,
-        highStakes: DOCTRINE_CONFIG.highStakesPatterns.some(pattern => pattern.test(message))
+        highStakes: DOCTRINE_CONFIG.highStakesPatterns.some((pattern) => pattern.test(message)),
       };
 
       const gateResults = enforceDoctrineGates(response, gateContext);
@@ -618,12 +578,14 @@ export class Orchestrator {
       if (!gateResults.passed) {
         if (enforcementLevel === 'warn') {
           // Just log warning
-          this.log(`[DOCTRINE-GATES] ⚠️ Response failed gates (score: ${gateResults.compositeScore})`);
+          this.log(
+            `[DOCTRINE-GATES] ⚠️ Response failed gates (score: ${gateResults.compositeScore})`,
+          );
           return {
             response: response,
             gateResults: gateResults,
             enhanced: false,
-            enhancements: []
+            enhancements: [],
           };
         } else if (enforcementLevel === 'enhance') {
           // Auto-enhance the response
@@ -634,7 +596,7 @@ export class Orchestrator {
             response: enhancementResult.enhanced,
             gateResults: enhancementResult.newResults,
             enhanced: true,
-            enhancements: enhancementResult.enhancements
+            enhancements: enhancementResult.enhancements,
           };
         } else if (enforcementLevel === 'block') {
           // Try to enhance, but block if still failing
@@ -649,7 +611,7 @@ export class Orchestrator {
             response: enhancementResult.enhanced,
             gateResults: enhancementResult.newResults,
             enhanced: true,
-            enhancements: enhancementResult.enhancements
+            enhancements: enhancementResult.enhancements,
           };
         }
       }
@@ -659,16 +621,15 @@ export class Orchestrator {
         response: response,
         gateResults: gateResults,
         enhanced: false,
-        enhancements: []
+        enhancements: [],
       };
-
     } catch (error) {
       this.error('[DOCTRINE-GATES] Evaluation failed, using original response', error);
       return {
         response: response,
         gateResults: { passed: true, compositeScore: 1.0, minimumScore: 0.6, error: error.message },
         enhanced: false,
-        enhancements: []
+        enhancements: [],
       };
     }
   }
@@ -680,7 +641,7 @@ export class Orchestrator {
     const {
       message,
       userId,
-      mode = "truth_general",
+      mode = 'truth_general',
       sessionId,
       documentContext = null,
       vaultEnabled = false,
@@ -700,7 +661,7 @@ export class Orchestrator {
         memoryEnd: 0,
         aiCallStart: 0,
         aiCallEnd: 0,
-        totalEnd: 0
+        totalEnd: 0,
       };
 
       // STEP 0.4: MEMORY VISIBILITY REQUEST DETECTION (UX-046)
@@ -719,13 +680,22 @@ export class Orchestrator {
 
         if (intentResult.intent === 'MEMORY_VISIBILITY') {
           isMemoryVisibilityRequest = true;
-          console.log(`[SEMANTIC-VISIBILITY] Intent detected, similarity: ${intentResult.confidence.toFixed(2)}`);
-          console.log(`[VISIBILITY-DIAG] ✅ Semantic analyzer detected MEMORY_VISIBILITY intent (confidence: ${intentResult.confidence.toFixed(3)})`);
+          console.log(
+            `[SEMANTIC-VISIBILITY] Intent detected, similarity: ${intentResult.confidence.toFixed(2)}`,
+          );
+          console.log(
+            `[VISIBILITY-DIAG] ✅ Semantic analyzer detected MEMORY_VISIBILITY intent (confidence: ${intentResult.confidence.toFixed(3)})`,
+          );
         } else {
-          console.log(`[VISIBILITY-DIAG] Semantic analyzer detected intent: ${intentResult.intent} (confidence: ${intentResult.confidence.toFixed(3)})`);
+          console.log(
+            `[VISIBILITY-DIAG] Semantic analyzer detected intent: ${intentResult.intent} (confidence: ${intentResult.confidence.toFixed(3)})`,
+          );
         }
       } catch (error) {
-        console.error('[VISIBILITY-DIAG] ⚠️ Semantic analyzer failed, using regex fallback:', error.message);
+        console.error(
+          '[VISIBILITY-DIAG] ⚠️ Semantic analyzer failed, using regex fallback:',
+          error.message,
+        );
 
         // Fallback to regex patterns if semantic analyzer fails
         const memoryVisibilityPatterns = [
@@ -733,18 +703,20 @@ export class Orchestrator {
           /show (?:me )?(?:my )?memor(?:y|ies)/i,
           /list (?:my |what you )?(?:remember|stored|know)/i,
           /what (?:have you |do you have )(?:stored|saved|remembered)/i,
-          /my (?:stored )?(?:memories|information|data)/i
+          /my (?:stored )?(?:memories|information|data)/i,
         ];
 
-        isMemoryVisibilityRequest = memoryVisibilityPatterns.some(p => p.test(message));
+        isMemoryVisibilityRequest = memoryVisibilityPatterns.some((p) => p.test(message));
 
         // Safe fallback - string matching has no ReDoS risk
         if (!isMemoryVisibilityRequest) {
           const msgLower = message.toLowerCase();
-          if (msgLower.includes('remember about me') ||
-              msgLower.includes('what you know about me') ||
-              msgLower.includes('see my memories') ||
-              msgLower.includes('view stored')) {
+          if (
+            msgLower.includes('remember about me') ||
+            msgLower.includes('what you know about me') ||
+            msgLower.includes('see my memories') ||
+            msgLower.includes('view stored')
+          ) {
             isMemoryVisibilityRequest = true;
             console.log('[VISIBILITY-DIAG] Matched via safe string fallback');
           }
@@ -758,23 +730,27 @@ export class Orchestrator {
         this.log(`[MEMORY-VISIBILITY] Detected memory visibility request`);
 
         try {
-          const memories = await this.pool.query(`
+          const memories = await this.pool.query(
+            `
             SELECT id, content, category_name, created_at, relevance_score, mode
             FROM persistent_memories
             WHERE user_id = $1 AND (is_current = true OR is_current IS NULL)
             ORDER BY relevance_score DESC, created_at DESC
             LIMIT 20
-          `, [userId]);
+          `,
+            [userId],
+          );
 
           if (memories.rows.length === 0) {
             return {
               success: true,
-              response: "I don't have any memories stored for you yet. As we talk, I'll remember important facts you share.",
+              response:
+                "I don't have any memories stored for you yet. As we talk, I'll remember important facts you share.",
               metadata: {
                 memoryVisibility: true,
                 count: 0,
-                duration: Date.now() - startTime
-              }
+                duration: Date.now() - startTime,
+              },
             };
           }
 
@@ -782,8 +758,12 @@ export class Orchestrator {
           let response = `I have ${memories.rows.length} memories stored about you:\n\n`;
 
           memories.rows.forEach((m, i) => {
-            const importance = m.relevance_score >= 0.9 ? '⭐ Critical' :
-                              m.relevance_score >= 0.75 ? '📌 Important' : '📝 Note';
+            const importance =
+              m.relevance_score >= 0.9
+                ? '⭐ Critical'
+                : m.relevance_score >= 0.75
+                  ? '📌 Important'
+                  : '📝 Note';
             response += `${i + 1}. [${m.category_name}] ${m.content}\n`;
             response += `   ${importance} | Stored: ${new Date(m.created_at).toLocaleDateString()}\n\n`;
           });
@@ -794,8 +774,8 @@ export class Orchestrator {
             metadata: {
               memoryVisibility: true,
               count: memories.rows.length,
-              duration: Date.now() - startTime
-            }
+              duration: Date.now() - startTime,
+            },
           };
         } catch (error) {
           this.log(`[MEMORY-VISIBILITY] Error: ${error.message}`);
@@ -811,8 +791,12 @@ export class Orchestrator {
       try {
         // Use lightweight classification without full phase4 metadata
         earlyClassification = await classifyQueryComplexity(message, { truth_type: 'UNKNOWN' });
-        this.log(`🎯 [EARLY_CLASSIFICATION] Result: ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)})`);
-        this.log(`🎯 [EARLY_CLASSIFICATION] Needs memory: ${earlyClassification.classification !== 'greeting' && earlyClassification.classification !== 'simple_factual'}`);
+        this.log(
+          `🎯 [EARLY_CLASSIFICATION] Result: ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)})`,
+        );
+        this.log(
+          `🎯 [EARLY_CLASSIFICATION] Needs memory: ${earlyClassification.classification !== 'greeting' && earlyClassification.classification !== 'simple_factual'}`,
+        );
       } catch (classificationError) {
         this.error('⚠️ Early classification error:', classificationError);
         // Continue with memory retrieval on error (safe fallback)
@@ -827,20 +811,23 @@ export class Orchestrator {
       // - Check if user has ANY existing memories before skipping
       // - Enhance personal-intent detection to catch possessive patterns ("cat's name", "salary")
       let memoryContext = null;
-      
+
       // Enhanced personal-intent detection (catches possessive and implicit personal queries)
-      const hasPersonalIntent = message.match(/\b(my|your|our|their|I|you|we|they|me|us|them)\b/i) ||  // Personal pronouns
-                                message.match(/\b(name|work|job|salary|age|birthday|address|phone|email|company|boss|team|project)\b/i) ||  // Personal topics
-                                message.match(/\b(when|where|who|which)\b.*\b(I|you|we|my|your|our)\b/i) ||  // Temporal/location + personal
-                                message.match(/['']s\s+(name|age|birthday|job|salary|phone|email|color|breed|model)/i);  // Possessive patterns ("cat's name")
-      
-      const skipMemoryForSimpleQuery = earlyClassification && (
-        (earlyClassification.classification === 'greeting' && message.length < 50) ||
-        (earlyClassification.classification === 'simple_factual' &&
-         earlyClassification.confidence > 0.70 &&
-         message.length < 50 &&
-         !hasPersonalIntent)  // Use enhanced personal-intent detection
-      );
+      const hasPersonalIntent =
+        message.match(/\b(my|your|our|their|I|you|we|they|me|us|them)\b/i) || // Personal pronouns
+        message.match(
+          /\b(name|work|job|salary|age|birthday|address|phone|email|company|boss|team|project)\b/i,
+        ) || // Personal topics
+        message.match(/\b(when|where|who|which)\b.*\b(I|you|we|my|your|our)\b/i) || // Temporal/location + personal
+        message.match(/['']s\s+(name|age|birthday|job|salary|phone|email|color|breed|model)/i); // Possessive patterns ("cat's name")
+
+      const skipMemoryForSimpleQuery =
+        earlyClassification &&
+        ((earlyClassification.classification === 'greeting' && message.length < 50) ||
+          (earlyClassification.classification === 'simple_factual' &&
+            earlyClassification.confidence > 0.7 &&
+            message.length < 50 &&
+            !hasPersonalIntent)); // Use enhanced personal-intent detection
 
       // Issue #612 Refinement 2: Additional safety check
       // Even if we think we can skip, check if user has memories first
@@ -848,7 +835,9 @@ export class Orchestrator {
       if (skipMemoryForSimpleQuery) {
         userHasMemories = await this.#hasUserMemories(userId);
         if (userHasMemories) {
-          this.log(`[MEMORY] ⚠️  User has existing memories - will NOT skip retrieval even for simple query`);
+          this.log(
+            `[MEMORY] ⚠️  User has existing memories - will NOT skip retrieval even for simple query`,
+          );
         }
       }
 
@@ -856,13 +845,15 @@ export class Orchestrator {
       let memoryDuration = 0;
 
       if (skipMemoryForSimpleQuery && !userHasMemories) {
-        this.log(`[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)}) - user needs direct answer, not biography`);
+        this.log(
+          `[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)}) - user needs direct answer, not biography`,
+        );
         memoryContext = {
           hasMemory: false,
           memory: '',
           tokens: 0,
           count: 0,
-          memories: []
+          memories: [],
         };
         // memoryDuration stays 0 when skipped
       } else {
@@ -876,7 +867,9 @@ export class Orchestrator {
         );
         // Enhanced telemetry for memory injection verification
         if (memoryContext.hasMemory) {
-          this.log(`[MEMORY] ✓ Memory WILL be injected into prompt (${memoryContext.tokens} tokens)`);
+          this.log(
+            `[MEMORY] ✓ Memory WILL be injected into prompt (${memoryContext.tokens} tokens)`,
+          );
           if (memoryContext.memory_ids && memoryContext.memory_ids.length > 0) {
             this.log(`[MEMORY] Memory IDs: [${memoryContext.memory_ids.join(', ')}]`);
           }
@@ -889,28 +882,32 @@ export class Orchestrator {
       // If message is very large (>10K chars), treat it as document context
       let effectiveDocumentContext = documentContext;
       if (!effectiveDocumentContext && message && message.length > 10000) {
-        this.log(`[DOCUMENTS] Large message detected (${message.length} chars), treating as pasted document`);
+        this.log(
+          `[DOCUMENTS] Large message detected (${message.length} chars), treating as pasted document`,
+        );
         effectiveDocumentContext = message;
       }
 
       // STEP 2: Load document context (always check if document available)
       // Check extractedDocuments Map first, then use documentContext if provided
-      const documentData = await this.#loadDocumentContext(effectiveDocumentContext, sessionId, message);
+      const documentData = await this.#loadDocumentContext(
+        effectiveDocumentContext,
+        sessionId,
+        message,
+      );
       if (documentData) {
-        this.log(
-          `[DOCUMENTS] Loaded ${documentData.tokens} tokens from ${documentData.filename}`,
-        );
+        this.log(`[DOCUMENTS] Loaded ${documentData.tokens} tokens from ${documentData.filename}`);
       } else {
-        this.log("[DOCUMENTS] No document available");
+        this.log('[DOCUMENTS] No document available');
       }
 
       // STEP 3: Load vault (if Site Monkeys mode and enabled)
       let vaultData = vaultContext
         ? await this.#loadVaultContext(vaultContext)
-        : mode === "site_monkeys" && vaultEnabled
+        : mode === 'site_monkeys' && vaultEnabled
           ? await this.#loadVaultContext(userId, sessionId)
           : null;
-      
+
       // Apply intelligent section selection to vault content
       if (vaultData && vaultData.fullContent) {
         const selection = this.#selectRelevantVaultSections(vaultData.fullContent, message);
@@ -922,17 +919,15 @@ export class Orchestrator {
           totalSections: selection.totalSections,
           selectionReason: selection.selectionReason,
         };
-        this.log(`[VAULT] Selected ${selection.sectionsSelected}${selection.totalSections ? `/${selection.totalSections}` : ''} sections: ${selection.tokens} tokens (${selection.selectionReason})`);
+        this.log(
+          `[VAULT] Selected ${selection.sectionsSelected}${selection.totalSections ? `/${selection.totalSections}` : ''} sections: ${selection.tokens} tokens (${selection.selectionReason})`,
+        );
       } else if (vaultData) {
         this.log(`[VAULT] Loaded ${vaultData.tokens} tokens (no selection applied)`);
       }
 
       // STEP 4: Assemble complete context
-      const context = this.#assembleContext(
-        memoryContext,
-        documentData,
-        vaultData,
-      );
+      const context = this.#assembleContext(memoryContext, documentData, vaultData);
       context.userId = userId;
       context.mode = mode;
       context.sessionId = sessionId;
@@ -942,15 +937,11 @@ export class Orchestrator {
 
       // STEP 5: Perform semantic analysis
       const analysisStartTime = Date.now();
-      const analysis = await this.#performSemanticAnalysis(
-        message,
-        context,
-        conversationHistory,
-      );
+      const analysis = await this.#performSemanticAnalysis(message, context, conversationHistory);
       const analysisTime = Date.now() - analysisStartTime;
       this.requestStats.semanticAnalysisTime += analysisTime;
       this.log(
-        `[ANALYSIS] Intent: ${analysis.intent} (${analysis.intentConfidence?.toFixed(2) || "N/A"}), Domain: ${analysis.domain} (${analysis.domainConfidence?.toFixed(2) || "N/A"}), Complexity: ${analysis.complexity.toFixed(2)}, Time: ${analysisTime}ms`,
+        `[ANALYSIS] Intent: ${analysis.intent} (${analysis.intentConfidence?.toFixed(2) || 'N/A'}), Domain: ${analysis.domain} (${analysis.domainConfidence?.toFixed(2) || 'N/A'}), Complexity: ${analysis.complexity.toFixed(2)}, Time: ${analysisTime}ms`,
       );
 
       // STEP 6: Calculate confidence
@@ -958,10 +949,10 @@ export class Orchestrator {
       this.log(`[CONFIDENCE] Score: ${confidence.toFixed(3)}`);
 
       // STEP 6.5: PHASE 4 - Truth Type Detection and External Lookup (PRE-GENERATION)
-      this.log("🔍 PHASE 4: Truth type detection and external lookup");
+      this.log('🔍 PHASE 4: Truth type detection and external lookup');
       let phase4Metadata = {
         truth_type: null,
-        source_class: "internal",
+        source_class: 'internal',
         verified_at: null,
         cache_valid_until: null,
         external_lookup: false,
@@ -985,32 +976,39 @@ export class Orchestrator {
         phase4Metadata.confidence = truthTypeResult.confidence || 0.8;
         phase4Metadata.high_stakes = truthTypeResult.high_stakes;
 
-        this.log(`[PHASE 4] Truth type: ${truthTypeResult.type}, confidence: ${phase4Metadata.confidence}`);
+        this.log(
+          `[PHASE 4] Truth type: ${truthTypeResult.type}, confidence: ${phase4Metadata.confidence}`,
+        );
 
         // Step 2: Route through hierarchy
         const routeResult = await route(message, mode);
         phase4Metadata.claim_type = routeResult.claim_type;
         phase4Metadata.hierarchy = routeResult.hierarchy_name;
 
-        this.log(`[PHASE 4] Claim type: ${routeResult.claim_type}, hierarchy: ${routeResult.hierarchy_name}`);
+        this.log(
+          `[PHASE 4] Claim type: ${routeResult.claim_type}, hierarchy: ${routeResult.hierarchy_name}`,
+        );
 
         // Step 3: External lookup if needed
         // Trigger conditions: VOLATILE truth type, high-stakes domains, or router requires external
 
         // News trigger patterns - what/when questions about current events
-        const NEWS_TRIGGER_PATTERNS = /\b(what happened|what's happening|news|today|this morning|yesterday|current events|latest|breaking|update on)\b/i;
+        const NEWS_TRIGGER_PATTERNS =
+          /\b(what happened|what's happening|news|today|this morning|yesterday|current events|latest|breaking|update on)\b/i;
 
         // Geopolitical patterns - specific countries/conflicts
-        const GEOPOLITICAL_PATTERNS = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|war|attack|invasion|military|troops|sanctions|election|president|congress|senate)\b/i;
+        const GEOPOLITICAL_PATTERNS =
+          /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|war|attack|invasion|military|troops|sanctions|election|president|congress|senate)\b/i;
 
-        const matchesNewsPattern = NEWS_TRIGGER_PATTERNS.test(message) || GEOPOLITICAL_PATTERNS.test(message);
+        const matchesNewsPattern =
+          NEWS_TRIGGER_PATTERNS.test(message) || GEOPOLITICAL_PATTERNS.test(message);
 
         const shouldLookup =
           truthTypeResult.type === 'VOLATILE' ||
           (truthTypeResult.type === 'SEMI_STABLE' && matchesNewsPattern) ||
           matchesNewsPattern ||
           (truthTypeResult.high_stakes && truthTypeResult.high_stakes.isHighStakes) ||
-          (routeResult.external_lookup_required && routeResult.hierarchy_name === "EXTERNAL_FIRST");
+          (routeResult.external_lookup_required && routeResult.hierarchy_name === 'EXTERNAL_FIRST');
 
         // Debug logging for lookup decision
         console.log('[ORCHESTRATOR] Lookup decision:', {
@@ -1023,13 +1021,15 @@ export class Orchestrator {
           routerRequiresLookup: routeResult.external_lookup_required,
           hierarchyName: routeResult.hierarchy_name,
           confidence: phase4Metadata.confidence,
-          willAttemptLookup: shouldLookup
+          willAttemptLookup: shouldLookup,
         });
 
         if (shouldLookup) {
           console.log('[ORCHESTRATOR] About to call lookup for:', message);
           this.log(`[PHASE4] 1. Lookup triggered for: ${message.substring(0, 50)}...`);
-          this.log(`🌐 External lookup required (type: ${truthTypeResult.type}, high_stakes: ${truthTypeResult.high_stakes?.isHighStakes || false}), performing lookup...`);
+          this.log(
+            `🌐 External lookup required (type: ${truthTypeResult.type}, high_stakes: ${truthTypeResult.high_stakes?.isHighStakes || false}), performing lookup...`,
+          );
 
           // Issue #391: Enrich query with conversation context if it's a follow-up
           let enrichedMessage = message;
@@ -1038,19 +1038,24 @@ export class Orchestrator {
           // HANDOFF LOGGING (Issue #392): Check conversation history before enrichment
           console.log('[CONTEXT] Enrichment check:', {
             historyLength: conversationHistory?.length || 0,
-            hasHistory: conversationHistory && conversationHistory.length > 0
+            hasHistory: conversationHistory && conversationHistory.length > 0,
           });
 
           if (conversationHistory && conversationHistory.length > 0) {
-            const enrichmentResult = this.#enrichQueryWithConversationContext(message, conversationHistory);
+            const enrichmentResult = this.#enrichQueryWithConversationContext(
+              message,
+              conversationHistory,
+            );
             if (enrichmentResult.contextAdded) {
               enrichedMessage = enrichmentResult.enrichedQuery;
               queryEnrichment = {
                 original: message,
                 enriched: enrichedMessage,
-                contextUsed: enrichmentResult.contextUsed
+                contextUsed: enrichmentResult.contextUsed,
               };
-              this.log(`[CONTEXT] Query enriched: "${message.substring(0, 50)}..." → "${enrichedMessage.substring(0, 50)}..."`);
+              this.log(
+                `[CONTEXT] Query enriched: "${message.substring(0, 50)}..." → "${enrichedMessage.substring(0, 50)}..."`,
+              );
             } else {
               this.log('[CONTEXT] Enrichment not needed for this query');
             }
@@ -1076,21 +1081,26 @@ export class Orchestrator {
             // Successful lookup with data
             phase4Metadata.external_lookup = true;
             phase4Metadata.lookup_attempted = true;
-            phase4Metadata.source_class = "external";
+            phase4Metadata.source_class = 'external';
             phase4Metadata.verified_at = lookupResult.verified_at || new Date().toISOString();
             phase4Metadata.external_data = lookupResult.data;
 
             // Extract fetched content from the lookup result
             // lookupResult.data.sources is an array of {source, text, length, type}
-            if (lookupResult.data.sources && Array.isArray(lookupResult.data.sources) && lookupResult.data.sources.length > 0) {
+            if (
+              lookupResult.data.sources &&
+              Array.isArray(lookupResult.data.sources) &&
+              lookupResult.data.sources.length > 0
+            ) {
               phase4Metadata.fetched_content = lookupResult.data.sources
-                .map(s => `[Source: ${s.source}]\n${s.text}`)
+                .map((s) => `[Source: ${s.source}]\n${s.text}`)
                 .join('\n\n---\n\n');
               phase4Metadata.sources_used = lookupResult.data.sources.length;
             } else {
               phase4Metadata.fetched_content = null;
               // Count successful sources from sources_consulted
-              const successfulSources = lookupResult.sources_used?.filter(s => s.success === true) || [];
+              const successfulSources =
+                lookupResult.sources_used?.filter((s) => s.success === true) || [];
               phase4Metadata.sources_used = successfulSources.length;
             }
 
@@ -1099,8 +1109,11 @@ export class Orchestrator {
             if (phase4Metadata.sources_used === 0) {
               phase4Metadata.external_lookup = false;
               phase4Metadata.lookup_attempted = true;
-              phase4Metadata.failure_reason = lookupResult.failure_reason || 'No reliable parseable source available';
-              this.log(`⚠️ External lookup attempted but no sources succeeded (graceful degradation)`);
+              phase4Metadata.failure_reason =
+                lookupResult.failure_reason || 'No reliable parseable source available';
+              this.log(
+                `⚠️ External lookup attempted but no sources succeeded (graceful degradation)`,
+              );
             } else {
               // Update cache validity if provided
               if (lookupResult.cache_valid_until) {
@@ -1114,7 +1127,9 @@ export class Orchestrator {
                   this.log(`[PHASE4] 3. Received: ${src.length} bytes from ${src.source}`);
                 });
               }
-              this.log(`[PHASE4] 4. Stored in phase4Metadata: ${phase4Metadata.sources_used} sources, ${lookupResult.data.total_text_length} total chars`);
+              this.log(
+                `[PHASE4] 4. Stored in phase4Metadata: ${phase4Metadata.sources_used} sources, ${lookupResult.data.total_text_length} total chars`,
+              );
               this.log(
                 `✅ External lookup successful: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content ? phase4Metadata.fetched_content.length : 0} chars`,
               );
@@ -1125,7 +1140,9 @@ export class Orchestrator {
             phase4Metadata.lookup_attempted = true;
             phase4Metadata.fetched_content = null;
             phase4Metadata.sources_used = 0;
-            phase4Metadata.failure_reason = lookupResult.failure_reason || 'No reliable parseable source available for this query type';
+            phase4Metadata.failure_reason =
+              lookupResult.failure_reason ||
+              'No reliable parseable source available for this query type';
             this.log(`⚠️ External lookup: ${phase4Metadata.failure_reason}`);
           } else {
             // Lookup failed or returned no data
@@ -1133,12 +1150,13 @@ export class Orchestrator {
             phase4Metadata.lookup_attempted = true;
             phase4Metadata.fetched_content = null;
             phase4Metadata.sources_used = 0;
-            phase4Metadata.failure_reason = lookupResult.error || 'External lookup failed or returned no data';
-            this.log("⚠️ External lookup failed or returned no data");
+            phase4Metadata.failure_reason =
+              lookupResult.error || 'External lookup failed or returned no data';
+            this.log('⚠️ External lookup failed or returned no data');
           }
         }
       } catch (phase4Error) {
-        this.error("⚠️ Phase 4 pipeline error:", phase4Error);
+        this.error('⚠️ Phase 4 pipeline error:', phase4Error);
         // Continue with internal processing even if Phase 4 fails
         phase4Metadata.phase4_error = phase4Error.message;
       }
@@ -1149,10 +1167,16 @@ export class Orchestrator {
       try {
         this.log('🎯 [QUERY_CLASSIFICATION] Analyzing query complexity...');
         queryClassification = await classifyQueryComplexity(message, phase4Metadata);
-        this.log(`🎯 [QUERY_CLASSIFICATION] Result: ${queryClassification.classification} (confidence: ${queryClassification.confidence.toFixed(2)})`);
-        this.log(`🎯 [QUERY_CLASSIFICATION] Scaffolding required: ${queryClassification.requiresScaffolding}`);
-        this.log(`🎯 [QUERY_CLASSIFICATION] Response approach: ${queryClassification.responseApproach?.type || 'default'}`);
-        
+        this.log(
+          `🎯 [QUERY_CLASSIFICATION] Result: ${queryClassification.classification} (confidence: ${queryClassification.confidence.toFixed(2)})`,
+        );
+        this.log(
+          `🎯 [QUERY_CLASSIFICATION] Scaffolding required: ${queryClassification.requiresScaffolding}`,
+        );
+        this.log(
+          `🎯 [QUERY_CLASSIFICATION] Response approach: ${queryClassification.responseApproach?.type || 'default'}`,
+        );
+
         // Add to context for personality frameworks
         context.queryClassification = queryClassification;
       } catch (classificationError) {
@@ -1162,7 +1186,9 @@ export class Orchestrator {
 
       // STEP 6.5: Inject external data into context if available
       if (phase4Metadata.external_lookup && phase4Metadata.external_data) {
-        this.log(`[PHASE4] 5. Injecting external context: ${phase4Metadata.external_data.total_text_length} chars from ${phase4Metadata.sources_used} sources`);
+        this.log(
+          `[PHASE4] 5. Injecting external context: ${phase4Metadata.external_data.total_text_length} chars from ${phase4Metadata.sources_used} sources`,
+        );
         // Add external data to context for AI injection
         context.external = phase4Metadata.external_data;
         context.sources = context.sources || {};
@@ -1172,7 +1198,7 @@ export class Orchestrator {
       // STEP 6.8: PRINCIPLE-BASED REASONING LAYER
       // Analyze query and determine reasoning strategy/depth
       // This transforms the system from "warehouse worker" to "caring family member"
-      this.log("🧠 Applying principle-based reasoning layer...");
+      this.log('🧠 Applying principle-based reasoning layer...');
 
       // HANDOFF LOGGING (Issue #392): orchestrator → reasoning
       console.log('[HANDOFF] orchestrator → reasoning:', {
@@ -1181,7 +1207,7 @@ export class Orchestrator {
         hasLookupResult: !!phase4Metadata?.external_lookup,
         truthType: phase4Metadata?.truth_type || 'unknown',
         hasAnalysis: !!analysis,
-        conversationHistoryLength: conversationHistory?.length || 0
+        conversationHistoryLength: conversationHistory?.length || 0,
       });
 
       let reasoningResult = null;
@@ -1190,7 +1216,7 @@ export class Orchestrator {
           analysis,
           phase4Metadata,
           memoryContext,
-          conversationHistory
+          conversationHistory,
         });
 
         // CRITICAL FIX (Issue #392): Check reasoningResult is valid before accessing properties
@@ -1199,9 +1225,13 @@ export class Orchestrator {
           context.reasoningGuidance = null;
           context.reasoningMetadata = null;
         } else {
-          this.log(`[REASONING] Strategy: ${reasoningResult.metadata.strategy}, Depth: ${reasoningResult.metadata.depth}`);
+          this.log(
+            `[REASONING] Strategy: ${reasoningResult.metadata.strategy}, Depth: ${reasoningResult.metadata.depth}`,
+          );
           if (reasoningResult.metadata.requirements?.hypothesisTesting) {
-            this.log('[REASONING] ⚠️  Hypothesis testing required - explore claim before contradicting');
+            this.log(
+              '[REASONING] ⚠️  Hypothesis testing required - explore claim before contradicting',
+            );
           }
           if (reasoningResult.metadata.requirements?.connectionVolunteering) {
             this.log('[REASONING] 🔗 Connection volunteering - reference past context proactively');
@@ -1220,11 +1250,10 @@ export class Orchestrator {
           reasoningOk: reasoningResult?.success !== false,
           strategy: reasoningResult?.metadata?.strategy || 'none',
           hasError: !!reasoningResult?.error,
-          hasPromptInjection: !!reasoningResult?.promptInjection
+          hasPromptInjection: !!reasoningResult?.promptInjection,
         });
-
       } catch (reasoningError) {
-        this.error("⚠️ Reasoning layer error:", reasoningError);
+        this.error('⚠️ Reasoning layer error:', reasoningError);
         // Continue without reasoning guidance if it fails
         context.reasoningGuidance = null;
         context.reasoningMetadata = null;
@@ -1234,22 +1263,24 @@ export class Orchestrator {
           reasoningOk: false,
           strategy: 'error',
           hasError: true,
-          errorMessage: reasoningError.message
+          errorMessage: reasoningError.message,
         });
       }
 
       // ========== PRE-RESPONSE VALIDATION (Issue #606 Phase 1) ==========
       // STEP 6.5: Check for manipulation attempts BEFORE AI generation
-      this.log("[MANIPULATION-GUARD] Checking for manipulation attempts...");
+      this.log('[MANIPULATION-GUARD] Checking for manipulation attempts...');
       const manipulationCheck = await manipulationGuard.validate(message, {
         mode,
         sessionId,
-        userId
+        userId,
       });
-      
+
       if (manipulationCheck.blocked) {
-        this.log(`[MANIPULATION-GUARD] Blocked ${manipulationCheck.severity} manipulation: ${manipulationCheck.type}`);
-        
+        this.log(
+          `[MANIPULATION-GUARD] Blocked ${manipulationCheck.severity} manipulation: ${manipulationCheck.type}`,
+        );
+
         // Return refusal immediately without calling AI
         return {
           success: true,
@@ -1261,8 +1292,8 @@ export class Orchestrator {
             confidence: 1.0, // Deterministic block
             mode: mode,
             timestamp: new Date().toISOString(),
-            duration: Date.now() - startTime
-          }
+            duration: Date.now() - startTime,
+          },
         };
       }
 
@@ -1294,7 +1325,7 @@ export class Orchestrator {
             confidence: confidence,
             mode: mode,
             timestamp: new Date().toISOString(),
-          }
+          },
         };
       }
 
@@ -1306,7 +1337,7 @@ export class Orchestrator {
       // ========== RUN ENFORCEMENT CHAIN (BEFORE PERSONALITY) ==========
       // CRITICAL FIX: Enforcement must run BEFORE personality to ensure
       // business rules and security policies are applied to raw AI output
-      this.log("[ENFORCEMENT] Running enforcement chain on AI response...");
+      this.log('[ENFORCEMENT] Running enforcement chain on AI response...');
       const enforcedResult = await this.#runEnforcementChain(
         aiResponse.response,
         analysis,
@@ -1326,17 +1357,19 @@ export class Orchestrator {
         enforcedResult.compliance_metadata.overrides.forEach((override) => {
           this.log(`[ENFORCEMENT] - ${override.module}: ${override.reason || 'applied'}`);
           if (override.module === 'memory_usage_enforcer') {
-            this.log(`[ENFORCEMENT] ⚠️  MEMORY VIOLATION: AI claimed ignorance despite ${override.memoryTokens} tokens of memory`);
+            this.log(
+              `[ENFORCEMENT] ⚠️  MEMORY VIOLATION: AI claimed ignorance despite ${override.memoryTokens} tokens of memory`,
+            );
           }
         });
       }
 
       // ========== RUN DOCTRINE GATES (AFTER ENFORCEMENT, BEFORE PERSONALITY) ==========
-      this.log("[DOCTRINE-GATES] Evaluating truth-first standards...");
+      this.log('[DOCTRINE-GATES] Evaluating truth-first standards...');
       const doctrineResult = await this.#applyDoctrineGates(
         enforcedResult.response,
         context,
-        message
+        message,
       );
 
       this.log(
@@ -1344,9 +1377,7 @@ export class Orchestrator {
       );
 
       if (doctrineResult.enhanced) {
-        this.log(
-          `[DOCTRINE-GATES] Response enhanced: ${doctrineResult.enhancements.join(', ')}`,
-        );
+        this.log(`[DOCTRINE-GATES] Response enhanced: ${doctrineResult.enhancements.join(', ')}`);
       }
 
       // STEP 8: Apply personality reasoning framework (AFTER ENFORCEMENT AND DOCTRINE GATES)
@@ -1369,7 +1400,7 @@ export class Orchestrator {
       }
 
       // STEP 8.5: PHASE 5 - Doctrine Enforcement Gates (POST-GENERATION)
-      this.log("🛡️ PHASE 5: Applying doctrine enforcement gates");
+      this.log('🛡️ PHASE 5: Applying doctrine enforcement gates');
       let phase5Enforcement = {
         enforcement_passed: true,
         violations: [],
@@ -1380,11 +1411,12 @@ export class Orchestrator {
       };
 
       try {
-        const modeForEnforcement = mode === "site_monkeys"
-          ? "site_monkeys"
-          : mode === "business_validation"
-          ? "business_validation"
-          : "truth";
+        const modeForEnforcement =
+          mode === 'site_monkeys'
+            ? 'site_monkeys'
+            : mode === 'business_validation'
+              ? 'business_validation'
+              : 'truth';
 
         phase5Enforcement = enforceAll(
           personalityResponse.response,
@@ -1394,20 +1426,20 @@ export class Orchestrator {
 
         if (!phase5Enforcement.enforcement_passed) {
           this.log(
-            `⚠️ Phase 5 enforcement violations: ${phase5Enforcement.violations.map(v => v.gate).join(", ")}`,
+            `⚠️ Phase 5 enforcement violations: ${phase5Enforcement.violations.map((v) => v.gate).join(', ')}`,
           );
 
           // Apply corrected response if enforcement modified it
           if (phase5Enforcement.corrected_response) {
             personalityResponse.response = phase5Enforcement.corrected_response;
             phase5Enforcement.original_response_modified = true;
-            this.log("✏️ Response corrected by Phase 5 enforcement");
+            this.log('✏️ Response corrected by Phase 5 enforcement');
           }
         } else {
           this.log(`✅ Phase 5 enforcement passed: ${phase5Enforcement.gates_run.length} gates`);
         }
       } catch (phase5Error) {
-        this.error("⚠️ Phase 5 enforcement error:", phase5Error);
+        this.error('⚠️ Phase 5 enforcement error:', phase5Error);
         phase5Enforcement.phase5_error = phase5Error.message;
       }
 
@@ -1416,7 +1448,7 @@ export class Orchestrator {
       // ============================================
       // ⚠️ THIS IS A HARD GATE, NOT ADVISORY
       // It MUST run post-generation. Skipping it reintroduces epistemic dishonesty.
-      this.log("🧠 PHASE 6: Bounded Reasoning Enforcement");
+      this.log('🧠 PHASE 6: Bounded Reasoning Enforcement');
       let phase6BoundedReasoning = {
         required: false,
         disclosure_added: false,
@@ -1430,10 +1462,11 @@ export class Orchestrator {
           phase4Metadata,
           {
             queryText: message, // Pass the original user query for speculative detection
-            isInference: phase4Metadata.source_class !== 'vault' && phase4Metadata.source_class !== 'external',
+            isInference:
+              phase4Metadata.source_class !== 'vault' && phase4Metadata.source_class !== 'external',
             queryClassification: context.queryClassification, // ISSUE #431 FIX: Pass query classification
             // Add other context as available
-          }
+          },
         );
 
         phase6BoundedReasoning = {
@@ -1455,7 +1488,7 @@ export class Orchestrator {
           this.log('✅ Bounded reasoning enforcement passed');
         }
       } catch (phase6Error) {
-        this.error("⚠️ Phase 6 bounded reasoning error:", phase6Error);
+        this.error('⚠️ Phase 6 bounded reasoning error:', phase6Error);
         phase6BoundedReasoning.phase6_error = phase6Error.message;
       }
 
@@ -1464,26 +1497,31 @@ export class Orchestrator {
       // ============================================
       // Uncertainty is a trigger for deeper reasoning, not permission to stop.
       // This gate ensures the system does not ship responses that quit early.
-      this.log("🔬 PHASE 6.5: Reasoning Escalation Enforcement");
+      this.log('🔬 PHASE 6.5: Reasoning Escalation Enforcement');
       let reasoningEscalationResult = { enforced: false, passed: true };
 
       if (phase6BoundedReasoning.required) {
         reasoningEscalationResult = enforceReasoningEscalation(
           personalityResponse.response,
           phase6BoundedReasoning,
-          { message, phase4Metadata, mode, queryClassification: context.queryClassification } // ISSUE #431 FIX: Pass query classification
+          { message, phase4Metadata, mode, queryClassification: context.queryClassification }, // ISSUE #431 FIX: Pass query classification
         );
 
         // If correction was applied, use the corrected response
-        if (reasoningEscalationResult.correction_applied && reasoningEscalationResult.corrected_response) {
+        if (
+          reasoningEscalationResult.correction_applied &&
+          reasoningEscalationResult.corrected_response
+        ) {
           personalityResponse.response = reasoningEscalationResult.corrected_response;
           this.log('🔬 Reasoning escalation correction applied');
         }
 
         // Log violations for monitoring
         if (!reasoningEscalationResult.passed) {
-          this.log('⚠️ Reasoning escalation violations:',
-            reasoningEscalationResult.violations.map(v => v.type).join(', '));
+          this.log(
+            '⚠️ Reasoning escalation violations:',
+            reasoningEscalationResult.violations.map((v) => v.type).join(', '),
+          );
         } else {
           this.log('✅ Reasoning escalation enforcement passed');
         }
@@ -1492,13 +1530,13 @@ export class Orchestrator {
       // ============================================
       // PHASE 7: RESPONSE FORMAT CONTRACT (RUNS LAST)
       // ============================================
-      this.log("📋 PHASE 7: Response Contract Gate");
+      this.log('📋 PHASE 7: Response Contract Gate');
       let response_contract = {
         triggered: false,
         style: null,
         stripped_sections_count: 0,
         original_length: personalityResponse.response.length,
-        final_length: personalityResponse.response.length
+        final_length: personalityResponse.response.length,
       };
 
       try {
@@ -1507,18 +1545,20 @@ export class Orchestrator {
           message,
           phase4Metadata,
           documentData || {},
-          context.queryClassification // ISSUE #431 FIX: Pass query classification
+          context.queryClassification, // ISSUE #431 FIX: Pass query classification
         );
         personalityResponse.response = contractResult.response;
         response_contract = contractResult.contract;
 
         if (response_contract.triggered) {
-          this.log(`📋 Response contract enforced: ${response_contract.style} | Stripped ${response_contract.stripped_sections_count} sections`);
+          this.log(
+            `📋 Response contract enforced: ${response_contract.style} | Stripped ${response_contract.stripped_sections_count} sections`,
+          );
         } else {
           this.log('✅ No response contract constraints detected');
         }
       } catch (phase7Error) {
-        this.error("⚠️ Phase 7 response contract error:", phase7Error);
+        this.error('⚠️ Phase 7 response contract error:', phase7Error);
         response_contract.phase7_error = phase7Error.message;
       }
 
@@ -1527,12 +1567,12 @@ export class Orchestrator {
       // ============================================
       // Apply response length limits for simple queries
       // This is the "CEO vs Warehouse Worker" principle in action
-      this.log("✂️ PHASE 7.5: Response Intelligence (length enforcement)");
+      this.log('✂️ PHASE 7.5: Response Intelligence (length enforcement)');
       let responseIntelligence = {
         applied: false,
         originalLength: personalityResponse.response.length,
         finalLength: personalityResponse.response.length,
-        reason: null
+        reason: null,
       };
 
       try {
@@ -1543,7 +1583,9 @@ export class Orchestrator {
           const maxLength = classification.responseApproach?.maxLength;
 
           if (maxLength && personalityResponse.response.length > maxLength) {
-            this.log(`✂️ Response too long for ${classification.classification} (${personalityResponse.response.length} > ${maxLength})`);
+            this.log(
+              `✂️ Response too long for ${classification.classification} (${personalityResponse.response.length} > ${maxLength})`,
+            );
 
             // For greetings: HARD LIMIT 150 chars (Anti-Engagement Architecture)
             if (classification.classification === 'greeting') {
@@ -1556,7 +1598,10 @@ export class Orchestrator {
                 const lastSentence = Math.max(lastPeriod, lastQuestion, lastExclaim);
 
                 if (lastSentence > MIN_SENTENCE_LENGTH) {
-                  personalityResponse.response = personalityResponse.response.substring(0, lastSentence + 1);
+                  personalityResponse.response = personalityResponse.response.substring(
+                    0,
+                    lastSentence + 1,
+                  );
                 } else {
                   personalityResponse.response = truncated.trim() + '...';
                 }
@@ -1569,14 +1614,19 @@ export class Orchestrator {
 
               // CRITICAL: Final safety check - NEVER exceed GREETING_LIMIT
               if (personalityResponse.response.length > GREETING_LIMIT) {
-                this.log(`⚠️ Response still over limit after truncation (${personalityResponse.response.length} > ${GREETING_LIMIT}), applying hard cut`);
-                personalityResponse.response = personalityResponse.response.substring(0, GREETING_LIMIT - 3).trim() + '...';
+                this.log(
+                  `⚠️ Response still over limit after truncation (${personalityResponse.response.length} > ${GREETING_LIMIT}), applying hard cut`,
+                );
+                personalityResponse.response =
+                  personalityResponse.response.substring(0, GREETING_LIMIT - 3).trim() + '...';
               }
 
               responseIntelligence.applied = true;
               responseIntelligence.finalLength = personalityResponse.response.length;
               responseIntelligence.reason = `greeting_hard_limited_150_chars`;
-              this.log(`✂️ Greeting hard-limited: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
+              this.log(
+                `✂️ Greeting hard-limited: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`,
+              );
             }
             // For simple_short: Keep first line or sentence (same as greeting)
             else if (classification.classification === 'simple_short') {
@@ -1586,29 +1636,39 @@ export class Orchestrator {
 
               // CRITICAL: Final safety check - NEVER exceed GREETING_LIMIT for simple_short
               if (personalityResponse.response.length > GREETING_LIMIT) {
-                this.log(`⚠️ Simple short response over limit (${personalityResponse.response.length} > ${GREETING_LIMIT}), applying hard cut`);
-                personalityResponse.response = personalityResponse.response.substring(0, GREETING_LIMIT - 3).trim() + '...';
+                this.log(
+                  `⚠️ Simple short response over limit (${personalityResponse.response.length} > ${GREETING_LIMIT}), applying hard cut`,
+                );
+                personalityResponse.response =
+                  personalityResponse.response.substring(0, GREETING_LIMIT - 3).trim() + '...';
               }
 
               responseIntelligence.applied = true;
               responseIntelligence.finalLength = personalityResponse.response.length;
               responseIntelligence.reason = `simple_short_truncated_to_first_line`;
-              this.log(`✂️ Simple short query truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
+              this.log(
+                `✂️ Simple short query truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`,
+              );
             }
             // For simple factual: Keep first paragraph or sentence
             else if (classification.classification === 'simple_factual') {
               // Extract first sentence or up to maxLength
-              const sentences = personalityResponse.response.match(/[^.!?]+[.!?]+/g) || [personalityResponse.response];
+              const sentences = personalityResponse.response.match(/[^.!?]+[.!?]+/g) || [
+                personalityResponse.response,
+              ];
               const firstSentence = sentences[0].trim();
               if (firstSentence.length <= maxLength) {
                 personalityResponse.response = firstSentence;
               } else {
-                personalityResponse.response = personalityResponse.response.substring(0, maxLength).trim() + '...';
+                personalityResponse.response =
+                  personalityResponse.response.substring(0, maxLength).trim() + '...';
               }
               responseIntelligence.applied = true;
               responseIntelligence.finalLength = personalityResponse.response.length;
               responseIntelligence.reason = `simple_factual_truncated`;
-              this.log(`✂️ Simple query truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
+              this.log(
+                `✂️ Simple query truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`,
+              );
             }
           }
 
@@ -1616,15 +1676,20 @@ export class Orchestrator {
           const formatConstraints = [
             { pattern: /one sentence only|single sentence|just one sentence/i, maxSentences: 1 },
             { pattern: /two sentences|2 sentences/i, maxSentences: 2 },
-            { pattern: /one word|single word/i, maxWords: 1 }
+            { pattern: /one word|single word/i, maxWords: 1 },
           ];
 
           for (const constraint of formatConstraints) {
             if (constraint.pattern.test(message)) {
               if (constraint.maxSentences) {
-                const sentences = personalityResponse.response.match(/[^.!?]+[.!?]+/g) || [personalityResponse.response];
+                const sentences = personalityResponse.response.match(/[^.!?]+[.!?]+/g) || [
+                  personalityResponse.response,
+                ];
                 if (sentences.length > constraint.maxSentences) {
-                  personalityResponse.response = sentences.slice(0, constraint.maxSentences).join(' ').trim();
+                  personalityResponse.response = sentences
+                    .slice(0, constraint.maxSentences)
+                    .join(' ')
+                    .trim();
                   responseIntelligence.applied = true;
                   responseIntelligence.finalLength = personalityResponse.response.length;
                   responseIntelligence.reason = `format_constraint_${constraint.maxSentences}_sentences`;
@@ -1647,10 +1712,11 @@ export class Orchestrator {
 
           // Remove engagement bait from simple queries (greetings, simple factual)
           // Patterns like "Let me know if...", "Feel free to...", "Happy to help with..."
-          if (classification.classification === 'greeting' ||
-              classification.classification === 'simple_factual' ||
-              classification.classification === 'simple_short') {
-
+          if (
+            classification.classification === 'greeting' ||
+            classification.classification === 'simple_factual' ||
+            classification.classification === 'simple_short'
+          ) {
             const engagementBaitPatterns = [
               /let me know if you (need|want|would like|have)/gi,
               /feel free to (ask|reach out|contact)/gi,
@@ -1666,7 +1732,7 @@ export class Orchestrator {
               /we have discussed/gi,
               /we've talked about/gi,
               /in our previous (conversation|chat)/gi,
-              /as (we|i) mentioned (before|earlier)/gi
+              /as (we|i) mentioned (before|earlier)/gi,
             ];
 
             let cleanedResponse = personalityResponse.response;
@@ -1676,9 +1742,9 @@ export class Orchestrator {
               const matches = cleanedResponse.match(pattern);
               if (matches) {
                 // Remove sentences containing engagement bait
-                const sentences = cleanedResponse.split(/[.!?]+/).filter(s => s.trim());
+                const sentences = cleanedResponse.split(/[.!?]+/).filter((s) => s.trim());
                 cleanedResponse = sentences
-                  .filter(sentence => !pattern.test(sentence))
+                  .filter((sentence) => !pattern.test(sentence))
                   .join('. ')
                   .trim();
 
@@ -1695,7 +1761,8 @@ export class Orchestrator {
               personalityResponse.response = cleanedResponse;
               responseIntelligence.applied = true;
               responseIntelligence.finalLength = cleanedResponse.length;
-              responseIntelligence.reason = (responseIntelligence.reason || 'simple_query') + '+engagement_bait_removed';
+              responseIntelligence.reason =
+                (responseIntelligence.reason || 'simple_query') + '+engagement_bait_removed';
             }
           }
         }
@@ -1704,7 +1771,7 @@ export class Orchestrator {
           this.log('✅ No response length enforcement needed');
         }
       } catch (responseIntelError) {
-        this.error("⚠️ Response intelligence error:", responseIntelError);
+        this.error('⚠️ Response intelligence error:', responseIntelError);
       }
 
       // STEP 9: Validate compliance (truth-first, mode enforcement)
@@ -1714,25 +1781,19 @@ export class Orchestrator {
         analysis,
         confidence,
       );
-      this.log(
-        `[VALIDATION] Compliant: ${validatedResponse.compliant ? "PASS" : "FAIL"}`,
-      );
+      this.log(`[VALIDATION] Compliant: ${validatedResponse.compliant ? 'PASS' : 'FAIL'}`);
       if (!validatedResponse.compliant && validatedResponse.issues.length > 0) {
-        this.log(
-          `[VALIDATION] Issues: ${validatedResponse.issues.join(", ")}`,
-        );
+        this.log(`[VALIDATION] Issues: ${validatedResponse.issues.join(', ')}`);
       }
       if (validatedResponse.adjustments.length > 0) {
-        this.log(
-          `[VALIDATION] Adjustments: ${validatedResponse.adjustments.join(", ")}`,
-        );
+        this.log(`[VALIDATION] Adjustments: ${validatedResponse.adjustments.join(', ')}`);
       }
 
       // STEP 10: Track performance
       performanceMarkers.totalEnd = Date.now();
       const processingTime = performanceMarkers.totalEnd - startTime;
       this.#trackPerformance(startTime, true, false);
-      
+
       // ========== PERFORMANCE TARGET VALIDATION (BIBLE REQUIREMENT - Section I) ==========
       const performanceMetrics = {
         totalDuration: processingTime,
@@ -1740,9 +1801,9 @@ export class Orchestrator {
         aiCallDuration: performanceMarkers.aiCallEnd - performanceMarkers.aiCallStart,
         hasDocument: !!(documentData && documentData.tokens > 0),
         hasMemory: memoryContext.hasMemory,
-        hasVault: !!(vaultData && vaultData.tokens > 0)
+        hasVault: !!(vaultData && vaultData.tokens > 0),
       };
-      
+
       // Bible targets: Simple <2s, Memory <3s, Document <5s, Vault <4s
       let targetDuration = 2000; // Default: simple query
       let targetType = 'simple';
@@ -1756,13 +1817,17 @@ export class Orchestrator {
         targetDuration = 3000;
         targetType = 'memory';
       }
-      
+
       const targetMet = processingTime <= targetDuration;
       const targetStatus = targetMet ? '✅' : '⚠️';
-      
-      this.log(`[PERFORMANCE] ${targetStatus} Total: ${processingTime}ms (target: ${targetType} <${targetDuration}ms)`);
-      this.log(`[PERFORMANCE] Breakdown: Memory ${memoryDuration}ms, AI ${performanceMetrics.aiCallDuration}ms`);
-      
+
+      this.log(
+        `[PERFORMANCE] ${targetStatus} Total: ${processingTime}ms (target: ${targetType} <${targetDuration}ms)`,
+      );
+      this.log(
+        `[PERFORMANCE] Breakdown: Memory ${memoryDuration}ms, AI ${performanceMetrics.aiCallDuration}ms`,
+      );
+
       if (!targetMet) {
         this.log(`[PERFORMANCE] ⚠️ EXCEEDED TARGET by ${processingTime - targetDuration}ms`);
       }
@@ -1777,8 +1842,8 @@ export class Orchestrator {
           memoryTokens: context.tokenBreakdown?.memory || memoryContext.tokens,
           memory_ids: memoryContext.memory_ids || [],
           memory_count: memoryContext.count || 0,
-          documentTokens: context.tokenBreakdown?.documents || (documentData?.tokens || 0),
-          vaultTokens: context.tokenBreakdown?.vault || (vaultData?.tokens || 0),
+          documentTokens: context.tokenBreakdown?.documents || documentData?.tokens || 0,
+          vaultTokens: context.tokenBreakdown?.vault || vaultData?.tokens || 0,
           totalContextTokens: context.totalTokens,
 
           // Memory retrieval telemetry (Issue #206, enhanced in Issue #208, #210, #212, #242)
@@ -1786,7 +1851,7 @@ export class Orchestrator {
             method: 'keyword_fallback',
             fallback_reason: 'no_telemetry',
             memories_retrieved: memoryContext.count || 0,
-            tokens_retrieved: memoryContext.tokens || 0
+            tokens_retrieved: memoryContext.tokens || 0,
           },
 
           // Token budget compliance
@@ -1801,8 +1866,7 @@ export class Orchestrator {
           // Personality tracking
           personalityApplied: personalityResponse.personality,
           personalityEnhancements: personalityResponse.modificationsCount || 0,
-          personalityReasoningApplied:
-            personalityResponse.reasoningApplied || false,
+          personalityReasoningApplied: personalityResponse.reasoningApplied || false,
 
           // Mode enforcement
           modeEnforced: mode,
@@ -1815,7 +1879,7 @@ export class Orchestrator {
             targetType: targetType,
             targetDuration: targetDuration,
             targetMet: targetMet,
-            exceedBy: targetMet ? 0 : processingTime - targetDuration
+            exceedBy: targetMet ? 0 : processingTime - targetDuration,
           },
           processingTime: processingTime,
           semanticAnalysisTime: analysis.processingTime || 0,
@@ -1823,14 +1887,14 @@ export class Orchestrator {
           // Cost tracking
           cost: aiResponse.cost,
           semanticAnalysisCost: analysis.cost || 0,
-          totalCostIncludingAnalysis:
-            (aiResponse.cost?.totalCost || 0) + (analysis.cost || 0),
+          totalCostIncludingAnalysis: (aiResponse.cost?.totalCost || 0) + (analysis.cost || 0),
 
           // FIX #5: Add token_usage to API response for frontend display
           token_usage: {
             prompt_tokens: aiResponse.cost?.inputTokens || 0,
             completion_tokens: aiResponse.cost?.outputTokens || 0,
-            total_tokens: (aiResponse.cost?.inputTokens || 0) + (aiResponse.cost?.outputTokens || 0),
+            total_tokens:
+              (aiResponse.cost?.inputTokens || 0) + (aiResponse.cost?.outputTokens || 0),
             context_tokens: {
               memory: context.tokenBreakdown?.memory || 0,
               documents: context.tokenBreakdown?.documents || 0,
@@ -1865,11 +1929,12 @@ export class Orchestrator {
             high_stakes: phase4Metadata.high_stakes,
             phase4_error: phase4Metadata.phase4_error,
             // Include sources summary (bounded, not full content)
-            sources: phase4Metadata.external_data?.sources?.map(s => ({
-              name: s.source,
-              type: s.type,
-              success: true
-            })) || null,
+            sources:
+              phase4Metadata.external_data?.sources?.map((s) => ({
+                name: s.source,
+                type: s.type,
+                success: true,
+              })) || null,
           },
 
           // PHASE 5: Enforcement Gate Results
@@ -1907,9 +1972,7 @@ export class Orchestrator {
           cost_tracking: {
             session_cost: costTracker.getSessionCost(sessionId),
             ceiling: costTracker.getCostCeiling(mode),
-            remaining:
-              costTracker.getCostCeiling(mode) -
-              costTracker.getSessionCost(sessionId),
+            remaining: costTracker.getCostCeiling(mode) - costTracker.getSessionCost(sessionId),
           },
 
           // Fallback tracking
@@ -2006,7 +2069,11 @@ export class Orchestrator {
     }
 
     // Time references without topic
-    if (/\b(recently|lately|today|yesterday|last (week|month|year|night)|this (morning|afternoon|evening)|currently|now|in the last)\b/i.test(message)) {
+    if (
+      /\b(recently|lately|today|yesterday|last (week|month|year|night)|this (morning|afternoon|evening)|currently|now|in the last)\b/i.test(
+        message,
+      )
+    ) {
       reasons.push('time_reference');
       confidence += 0.25;
     }
@@ -2030,7 +2097,9 @@ export class Orchestrator {
     }
 
     // Clarifying questions
-    if (/\b(what happened|any (news|updates|changes)|tell me more|explain|elaborate)\b/i.test(message)) {
+    if (
+      /\b(what happened|any (news|updates|changes)|tell me more|explain|elaborate)\b/i.test(message)
+    ) {
       reasons.push('clarifying');
       confidence += 0.3;
     }
@@ -2054,34 +2123,38 @@ export class Orchestrator {
     const keywords = new Set();
 
     // Get recent user messages
-    const recentTurns = conversationHistory
-      .filter(turn => turn.role === 'user')
-      .slice(-maxTurns);
+    const recentTurns = conversationHistory.filter((turn) => turn.role === 'user').slice(-maxTurns);
 
     for (const turn of recentTurns) {
       const text = turn.content || '';
 
       // Extract proper nouns (capitalized words)
       const properNouns = text.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\b/g) || [];
-      properNouns.forEach(noun => {
+      properNouns.forEach((noun) => {
         if (noun.length > 2) entities.add(noun);
       });
 
       // Extract specific entities
-      const countries = text.match(/\b(Venezuela|Ukraine|Russia|China|Iran|Israel|Gaza|Palestine|Greenland|Denmark|USA|America|Britain|France|Germany)\b/gi) || [];
-      countries.forEach(country => entities.add(country));
+      const countries =
+        text.match(
+          /\b(Venezuela|Ukraine|Russia|China|Iran|Israel|Gaza|Palestine|Greenland|Denmark|USA|America|Britain|France|Germany)\b/gi,
+        ) || [];
+      countries.forEach((country) => entities.add(country));
 
       const people = text.match(/\b(Trump|Biden|Putin|Maduro|Netanyahu)\b/gi) || [];
-      people.forEach(person => entities.add(person));
+      people.forEach((person) => entities.add(person));
 
       // Extract key topics
-      const topics = text.match(/\b(election|war|conflict|invasion|arrest|situation|crisis|deal|agreement|policy|announcement)\b/gi) || [];
-      topics.forEach(topic => keywords.add(topic.toLowerCase()));
+      const topics =
+        text.match(
+          /\b(election|war|conflict|invasion|arrest|situation|crisis|deal|agreement|policy|announcement)\b/gi,
+        ) || [];
+      topics.forEach((topic) => keywords.add(topic.toLowerCase()));
     }
 
     return {
       entities: Array.from(entities),
-      keywords: Array.from(keywords)
+      keywords: Array.from(keywords),
     };
   }
 
@@ -2103,10 +2176,7 @@ export class Orchestrator {
     }
 
     // Build enriched query with top entities and keywords
-    const contextParts = [
-      ...extracted.entities.slice(0, 3),
-      ...extracted.keywords.slice(0, 2)
-    ];
+    const contextParts = [...extracted.entities.slice(0, 3), ...extracted.keywords.slice(0, 2)];
 
     const enrichedQuery = `${contextParts.join(' ')} ${query}`.trim();
 
@@ -2114,7 +2184,7 @@ export class Orchestrator {
       enrichedQuery,
       originalQuery: query,
       contextAdded: true,
-      contextUsed: contextParts
+      contextUsed: contextParts,
     };
   }
 
@@ -2136,7 +2206,7 @@ export class Orchestrator {
 
       const result = await pool.query(
         'SELECT EXISTS(SELECT 1 FROM persistent_memories WHERE user_id = $1 LIMIT 1) as has_memories',
-        [userId]
+        [userId],
       );
 
       return result.rows[0]?.has_memories || false;
@@ -2157,7 +2227,7 @@ export class Orchestrator {
       method: 'keyword_fallback',
       fallback_reason: 'initialization',
       candidates_considered: 0,
-      latency_ms: 0
+      latency_ms: 0,
     };
 
     try {
@@ -2165,7 +2235,7 @@ export class Orchestrator {
       const pool = global.memorySystem?.pool || this.pool;
 
       if (!pool) {
-        this.error("[MEMORY] No database pool available, using keyword fallback");
+        this.error('[MEMORY] No database pool available, using keyword fallback');
         telemetry.fallback_reason = 'no_pool';
         return await this.#keywordRetrievalFallback(userId, message, mode);
       }
@@ -2183,20 +2253,24 @@ export class Orchestrator {
         allowCrossMode = false; // Use all modes, handled by buildPrefilterQuery
         console.log('[CROSS-MODE-DIAG] Site Monkeys mode - accessing all modes including vault');
       } else {
-        console.log('[CROSS-MODE-DIAG] ✅ Cross-mode transfer ENABLED by default - including truth-general memories');
+        console.log(
+          '[CROSS-MODE-DIAG] ✅ Cross-mode transfer ENABLED by default - including truth-general memories',
+        );
       }
 
       console.log('[CROSS-MODE-DIAG] allowCrossMode:', allowCrossMode);
 
       // EXECUTION PROOF - Verify memory retrieval is active
-      console.log('[PROOF] orchestrator:memory-retrieval v=2026-01-29a file=api/core/orchestrator.js fn=processMessage');
+      console.log(
+        '[PROOF] orchestrator:memory-retrieval v=2026-01-29a file=api/core/orchestrator.js fn=processMessage',
+      );
 
       const result = await retrieveSemanticMemories(pool, message, {
         userId,
         mode,
         tokenBudget,
         includePinned: true,
-        allowCrossMode
+        allowCrossMode,
       });
 
       telemetry = result.telemetry;
@@ -2207,7 +2281,7 @@ export class Orchestrator {
       // Format memories into string for context injection
       // Apply PII sanitization (Innovation #34: Privacy Protection)
       // PROBLEM 4 FIX: Detect and highlight safety-critical memories
-      let memoryText = "";
+      let memoryText = '';
       let memoryIds = [];
       let hasSafetyCritical = false;
 
@@ -2228,38 +2302,49 @@ export class Orchestrator {
 
         // Log if cap was enforced
         if (memoriesPreCap > memoriesPostCap) {
-          this.log(`[ORCHESTRATOR] Hard cap enforced: ${memoriesPreCap} → ${memoriesPostCap} memories`);
+          this.log(
+            `[ORCHESTRATOR] Hard cap enforced: ${memoriesPreCap} → ${memoriesPostCap} memories`,
+          );
         }
 
         // FOUNDER DIAGNOSTIC #579-A5: Log memory injection details
-        const zebraMemoryPresent = memoriesToFormat.some(m => 
-          /zebra|anchor/i.test(m.content || '') || 
-          m.metadata?.explicit_storage_request === true
+        const zebraMemoryPresent = memoriesToFormat.some(
+          (m) =>
+            /zebra|anchor/i.test(m.content || '') || m.metadata?.explicit_storage_request === true,
         );
         if (zebraMemoryPresent) {
           console.log(`[A5-DEBUG] Orchestrator: zebra_memory_in_context=true`);
-          console.log(`[A5-DEBUG] Orchestrator: Injecting ${memoriesToFormat.length} memories into AI context`);
-          memoriesToFormat.filter(m => 
-            /zebra|anchor/i.test(m.content || '') || 
-            m.metadata?.explicit_storage_request === true
-          ).forEach(m => {
-            console.log(`[A5-DEBUG] Orchestrator:   Memory ${m.id}: explicit=${m.metadata?.explicit_storage_request || false}`);
-            console.log(`[A5-DEBUG] Orchestrator:   Content: "${(m.content || '').substring(0, 100)}"`);
-          });
+          console.log(
+            `[A5-DEBUG] Orchestrator: Injecting ${memoriesToFormat.length} memories into AI context`,
+          );
+          memoriesToFormat
+            .filter(
+              (m) =>
+                /zebra|anchor/i.test(m.content || '') ||
+                m.metadata?.explicit_storage_request === true,
+            )
+            .forEach((m) => {
+              console.log(
+                `[A5-DEBUG] Orchestrator:   Memory ${m.id}: explicit=${m.metadata?.explicit_storage_request || false}`,
+              );
+              console.log(
+                `[A5-DEBUG] Orchestrator:   Content: "${(m.content || '').substring(0, 100)}"`,
+              );
+            });
         }
-        
+
         const formattedMemories = memoriesToFormat
           .map((m) => {
             if (m.id) memoryIds.push(m.id);
-            const content = m.content || "";
+            const content = m.content || '';
 
             // Check if this memory is safety-critical
-            const isSafetyCritical = m.safety_boosted ||
-              (m.category_name === 'health_wellness' && (
-                /allerg(y|ic|ies)|cannot eat|can't eat|intolerant/i.test(content) ||
-                /medication|medicine|prescription|insulin/i.test(content) ||
-                /diabetes|asthma|heart condition|chronic|disability/i.test(content)
-              ));
+            const isSafetyCritical =
+              m.safety_boosted ||
+              (m.category_name === 'health_wellness' &&
+                (/allerg(y|ic|ies)|cannot eat|can't eat|intolerant/i.test(content) ||
+                  /medication|medicine|prescription|insulin/i.test(content) ||
+                  /diabetes|asthma|heart condition|chronic|disability/i.test(content)));
 
             if (isSafetyCritical) {
               hasSafetyCritical = true;
@@ -2270,15 +2355,18 @@ export class Orchestrator {
             // Sanitize PII before injection
             return sanitizePII(content);
           })
-          .filter(c => c.length > 0);
+          .filter((c) => c.length > 0);
 
         // If safety-critical memories exist, emphasize them
         if (hasSafetyCritical) {
-          memoryText = "⚠️ SAFETY-CRITICAL INFORMATION (health, medical, allergies):\n\n" +
-                       formattedMemories.join("\n\n");
-          this.log(`[MEMORY] ⚠️ ${result.memories.filter(m => m.safety_boosted).length} safety-critical memories detected - emphasis added to context`);
+          memoryText =
+            '⚠️ SAFETY-CRITICAL INFORMATION (health, medical, allergies):\n\n' +
+            formattedMemories.join('\n\n');
+          this.log(
+            `[MEMORY] ⚠️ ${result.memories.filter((m) => m.safety_boosted).length} safety-critical memories detected - emphasis added to context`,
+          );
         } else {
-          memoryText = formattedMemories.join("\n\n");
+          memoryText = formattedMemories.join('\n\n');
         }
       }
 
@@ -2288,17 +2376,19 @@ export class Orchestrator {
       logMemoryOperation(userId, 'inject', {
         memory_injected: tokenCount > 0,
         memory_ids: memoryIds,
-        token_count: tokenCount
+        token_count: tokenCount,
       });
 
       // CRITICAL: Report post-cap count in logs and telemetry
       const finalMemoryCount = memoryIds.length; // This reflects the actual injected count after cap
       this.log(
-        `[MEMORY] Semantic retrieval: ${finalMemoryCount} memories injected, ${tokenCount} tokens (method: ${telemetry.method})`
+        `[MEMORY] Semantic retrieval: ${finalMemoryCount} memories injected, ${tokenCount} tokens (method: ${telemetry.method})`,
       );
-      
+
       // EXECUTION PROOF - Show which memories were actually injected
-      console.log(`[PROOF] orchestrator:memory-injected v=2026-01-29a count=${finalMemoryCount} ids=[${memoryIds.join(',')}]`);
+      console.log(
+        `[PROOF] orchestrator:memory-injected v=2026-01-29a count=${finalMemoryCount} ids=[${memoryIds.join(',')}]`,
+      );
 
       return {
         memories: memoryText,
@@ -2308,7 +2398,6 @@ export class Orchestrator {
         hasMemory: tokenCount > 0,
         memory_ids: memoryIds,
       };
-
     } catch (error) {
       this.error(`[MEMORY] Semantic retrieval failed: ${error.message}`);
       telemetry.method = 'keyword_fallback';
@@ -2329,10 +2418,10 @@ export class Orchestrator {
     const personalPatterns = [
       /\b(?:my|i|me|mine)\b/i,
       /\b(?:personal|family|home|life)\b/i,
-      /\b(?:remember|mentioned|told you|said)\b/i
+      /\b(?:remember|mentioned|told you|said)\b/i,
     ];
 
-    return personalPatterns.some(pattern => pattern.test(message));
+    return personalPatterns.some((pattern) => pattern.test(message));
   }
 
   /**
@@ -2340,28 +2429,22 @@ export class Orchestrator {
    */
   async #keywordRetrievalFallback(userId, message, mode) {
     try {
-      const routingResult = { primaryCategory: "general" };
+      const routingResult = { primaryCategory: 'general' };
 
       // Use global.memorySystem which is already initialized
-      let memories = { success: false, memories: "", count: 0 };
+      let memories = { success: false, memories: '', count: 0 };
 
-      if (
-        global.memorySystem &&
-        typeof global.memorySystem.retrieveMemory === "function"
-      ) {
+      if (global.memorySystem && typeof global.memorySystem.retrieveMemory === 'function') {
         try {
-          const result = await global.memorySystem.retrieveMemory(
-            userId,
-            message,
-          );
+          const result = await global.memorySystem.retrieveMemory(userId, message);
 
           // Enhanced memory result handling - support multiple return formats
           if (result) {
-            let memoryText = "";
+            let memoryText = '';
             let memoryCount = 0;
 
             // Format 1: result.memories is a string
-            if (typeof result.memories === "string" && result.memories.length > 0) {
+            if (typeof result.memories === 'string' && result.memories.length > 0) {
               memoryText = result.memories;
               memoryCount = result.count || 1;
             }
@@ -2369,21 +2452,21 @@ export class Orchestrator {
             else if (Array.isArray(result.memories) && result.memories.length > 0) {
               memoryText = result.memories
                 .map((m) => {
-                  if (typeof m === "string") return m;
+                  if (typeof m === 'string') return m;
                   if (m.content) return m.content;
                   if (m.text) return m.text;
                   return JSON.stringify(m);
                 })
-                .join("\n\n");
+                .join('\n\n');
               memoryCount = result.memories.length;
             }
             // Format 3: result.memories is an object
-            else if (typeof result.memories === "object" && result.memories !== null) {
+            else if (typeof result.memories === 'object' && result.memories !== null) {
               memoryText = JSON.stringify(result.memories, null, 2);
               memoryCount = result.count || 1;
             }
             // Format 4: result itself is the memory string
-            else if (typeof result === "string" && result.length > 0) {
+            else if (typeof result === 'string' && result.length > 0) {
               memoryText = result;
               memoryCount = 1;
             }
@@ -2400,18 +2483,18 @@ export class Orchestrator {
                 `[MEMORY] Keyword fallback loaded ${memoryCount} memories, ${memoryText.length} chars`,
               );
             } else {
-              this.log("[MEMORY] Result received but no usable memory content found");
+              this.log('[MEMORY] Result received but no usable memory content found');
             }
           }
         } catch (error) {
-          this.error("[MEMORY] Retrieval error:", error);
+          this.error('[MEMORY] Retrieval error:', error);
         }
       }
 
       if (!memories || !memories.success) {
-        this.log("[MEMORY] No memories found or retrieval failed");
+        this.log('[MEMORY] No memories found or retrieval failed');
         return {
-          memories: "",
+          memories: '',
           tokens: 0,
           count: 0,
           categories: [],
@@ -2420,7 +2503,7 @@ export class Orchestrator {
         };
       }
 
-      const memoryContent = memories.memories || "";
+      const memoryContent = memories.memories || '';
       const tokenCount = Math.ceil(memoryContent.length / 4);
 
       // Extract memory IDs from the result - ensure consistency
@@ -2428,19 +2511,25 @@ export class Orchestrator {
 
       // CRITICAL FIX (Issue #210): If we have memories but no IDs, this is a TELEMETRY FAILURE
       if (tokenCount > 0 && memoryIds.length === 0 && memories.count > 0) {
-        this.error(`[TELEMETRY] ❌ CRITICAL: memory_count=${memories.count} but memory_ids=[] - telemetry integrity failure`);
+        this.error(
+          `[TELEMETRY] ❌ CRITICAL: memory_count=${memories.count} but memory_ids=[] - telemetry integrity failure`,
+        );
 
         // Try to extract IDs from the memories array if available
         if (Array.isArray(memories.memories)) {
-          memoryIds = memories.memories.map(m => m.id).filter(id => id !== undefined);
+          memoryIds = memories.memories.map((m) => m.id).filter((id) => id !== undefined);
           if (memoryIds.length > 0) {
-            this.log(`[TELEMETRY] ⚠️  Recovered ${memoryIds.length} IDs from memories array - but this should not be necessary`);
+            this.log(
+              `[TELEMETRY] ⚠️  Recovered ${memoryIds.length} IDs from memories array - but this should not be necessary`,
+            );
           }
         }
 
         // If still no IDs after recovery attempt, this is a FAIL condition
         if (memoryIds.length === 0) {
-          this.error(`[TELEMETRY] ❌ FAILED: Cannot recover memory IDs - retrieval layer not returning IDs`);
+          this.error(
+            `[TELEMETRY] ❌ FAILED: Cannot recover memory IDs - retrieval layer not returning IDs`,
+          );
         }
       }
 
@@ -2448,23 +2537,21 @@ export class Orchestrator {
       logMemoryOperation(userId, 'inject', {
         memory_injected: tokenCount > 0,
         memory_ids: memoryIds,
-        token_count: tokenCount
+        token_count: tokenCount,
       });
 
       return {
         memories: memoryContent,
         tokens: tokenCount,
         count: memories.count || 0,
-        categories: routingResult.primaryCategory
-          ? [routingResult.primaryCategory]
-          : [],
+        categories: routingResult.primaryCategory ? [routingResult.primaryCategory] : [],
         hasMemory: tokenCount > 0,
         memory_ids: memoryIds,
       };
     } catch (error) {
-      this.error("[MEMORY] Fallback retrieval failed, continuing without memory", error);
+      this.error('[MEMORY] Fallback retrieval failed, continuing without memory', error);
       return {
-        memories: "",
+        memories: '',
         tokens: 0,
         count: 0,
         categories: [],
@@ -2484,28 +2571,28 @@ export class Orchestrator {
       // 3. Message field itself (inline pasted documents)
 
       let documentContent = null;
-      let filename = "pasted_document.txt";
+      let filename = 'pasted_document.txt';
       let source = null;
 
       // Priority 1: Check if documentContext was passed (frontend sends pasted content here)
       if (documentContext && typeof documentContext === 'string' && documentContext.length > 1000) {
         documentContent = documentContext;
-        source = "documentContext_parameter";
-        this.log("[DOCUMENTS] Found document in documentContext parameter");
+        source = 'documentContext_parameter';
+        this.log('[DOCUMENTS] Found document in documentContext parameter');
       }
       // Priority 2: Check extractedDocuments Map (uploaded files)
       else {
-        const latestDoc = extractedDocuments.get("latest");
+        const latestDoc = extractedDocuments.get('latest');
         if (latestDoc) {
           documentContent = latestDoc.fullContent || latestDoc.content;
           filename = latestDoc.filename || filename;
-          source = "uploaded_file";
-          this.log("[DOCUMENTS] Found document in extractedDocuments Map");
+          source = 'uploaded_file';
+          this.log('[DOCUMENTS] Found document in extractedDocuments Map');
         }
       }
 
       if (!documentContent || documentContent.length === 0) {
-        this.log("[DOCUMENTS] No document found in storage");
+        this.log('[DOCUMENTS] No document found in storage');
         return null;
       }
 
@@ -2514,29 +2601,33 @@ export class Orchestrator {
       // SESSION_LIMITS ENFORCEMENT - Per Bible Documents (Issue #407 Follow-up)
       // Check cumulative session document tokens BEFORE applying query budgets
       const SESSION_LIMITS = {
-        maxUploadedTokens: 10000,      // Total from ALL uploads combined
-        maxMemoryTokens: 2500,         // From persistent memory
-        maxConversationTokens: 20000,  // Chat history
-        totalSessionLimit: 35000       // ABSOLUTE MAXIMUM
+        maxUploadedTokens: 10000, // Total from ALL uploads combined
+        maxMemoryTokens: 2500, // From persistent memory
+        maxConversationTokens: 20000, // Chat history
+        totalSessionLimit: 35000, // ABSOLUTE MAXIMUM
       };
 
       const currentSessionDocTokens = this.getSessionDocumentTokens(sessionId);
       const remainingDocBudget = SESSION_LIMITS.maxUploadedTokens - currentSessionDocTokens;
 
       if (remainingDocBudget <= 0) {
-        this.warn(`[SESSION-LIMIT] Document upload blocked - session at ${currentSessionDocTokens}/${SESSION_LIMITS.maxUploadedTokens} doc tokens`);
+        this.warn(
+          `[SESSION-LIMIT] Document upload blocked - session at ${currentSessionDocTokens}/${SESSION_LIMITS.maxUploadedTokens} doc tokens`,
+        );
         return {
           content: '',
           tokens: 0,
           filename: filename,
           processed: false,
           blocked: true,
-          reason: `Session document limit reached (${SESSION_LIMITS.maxUploadedTokens} tokens). Clear existing documents or start new chat.`
+          reason: `Session document limit reached (${SESSION_LIMITS.maxUploadedTokens} tokens). Clear existing documents or start new chat.`,
         };
       }
 
       if (tokens > remainingDocBudget) {
-        this.warn(`[SESSION-LIMIT] Document (${tokens} tokens) exceeds remaining budget (${remainingDocBudget}), will extract within limit`);
+        this.warn(
+          `[SESSION-LIMIT] Document (${tokens} tokens) exceeds remaining budget (${remainingDocBudget}), will extract within limit`,
+        );
         // Continue to extraction logic below - effectiveBudget will limit it
       }
 
@@ -2545,28 +2636,29 @@ export class Orchestrator {
       // Classify query type to determine appropriate token budget
       const queryType = this.#classifyQueryComplexity(message);
       const TOKEN_BUDGETS = {
-        simple: 10000,   // Simple factual queries (BIBLE: target $0.10)
-        medium: 30000,   // Analysis and comparison (BIBLE: target $0.30)
-        complex: 80000   // Comprehensive research (BIBLE: target $0.80)
+        simple: 10000, // Simple factual queries (BIBLE: target $0.10)
+        medium: 30000, // Analysis and comparison (BIBLE: target $0.30)
+        complex: 80000, // Comprehensive research (BIBLE: target $0.80)
       };
 
       // Use the LOWER of query budget or remaining session budget
-      const effectiveBudget = Math.min(
-        TOKEN_BUDGETS[queryType] || 10000,
-        remainingDocBudget
-      );
+      const effectiveBudget = Math.min(TOKEN_BUDGETS[queryType] || 10000, remainingDocBudget);
 
-      this.log(`[TOKEN-BUDGET] Query classified as '${queryType}', budget: ${TOKEN_BUDGETS[queryType]} tokens (effective: ${effectiveBudget})`);
+      this.log(
+        `[TOKEN-BUDGET] Query classified as '${queryType}', budget: ${TOKEN_BUDGETS[queryType]} tokens (effective: ${effectiveBudget})`,
+      );
 
       if (tokens > effectiveBudget) {
         // Use intelligent extraction rather than hard truncation
         const extractionResult = this.#intelligentDocumentExtraction(
-          documentContent, 
+          documentContent,
           effectiveBudget * 4,
-          message
+          message,
         );
-        
-        this.log(`[COST-CONTROL] Document extracted: ${extractionResult.originalTokens} → ${extractionResult.extractedTokens} tokens (${Math.round(extractionResult.coverage * 100)}% coverage, strategy: ${extractionResult.strategy}, source: ${source})`);
+
+        this.log(
+          `[COST-CONTROL] Document extracted: ${extractionResult.originalTokens} → ${extractionResult.extractedTokens} tokens (${Math.round(extractionResult.coverage * 100)}% coverage, strategy: ${extractionResult.strategy}, source: ${source})`,
+        );
 
         // Track in session cache
         this.#trackSessionDocument(sessionId, extractionResult.extractedTokens, filename);
@@ -2584,14 +2676,14 @@ export class Orchestrator {
             extractedTokens: extractionResult.extractedTokens,
             coverage: extractionResult.coverage,
             coveragePercent: Math.round(extractionResult.coverage * 100),
-            strategy: extractionResult.strategy
+            strategy: extractionResult.strategy,
           },
-          truncationNote: `Document extracted from ${extractionResult.originalTokens} to ${extractionResult.extractedTokens} tokens (${Math.round(extractionResult.coverage * 100)}% coverage) using ${extractionResult.strategy} strategy.`
+          truncationNote: `Document extracted from ${extractionResult.originalTokens} to ${extractionResult.extractedTokens} tokens (${Math.round(extractionResult.coverage * 100)}% coverage) using ${extractionResult.strategy} strategy.`,
         };
       }
 
       this.log(`[DOCUMENTS] Loaded: ${filename} (${tokens} tokens, source: ${source})`);
-      
+
       // Track in session cache
       this.#trackSessionDocument(sessionId, tokens, filename);
 
@@ -2605,10 +2697,7 @@ export class Orchestrator {
         source: source,
       };
     } catch (error) {
-      this.error(
-        "[DOCUMENTS] Loading failed, continuing without documents",
-        error,
-      );
+      this.error('[DOCUMENTS] Loading failed, continuing without documents', error);
       return null;
     }
   }
@@ -2643,12 +2732,16 @@ export class Orchestrator {
 
       // FIX #2: Better error handling - provide more context
       // 3️⃣ No vault found - provide helpful diagnostic info
-      this.log("[VAULT] Not available - vault requires site_monkeys mode and vault content to be loaded");
-      this.log(`[VAULT] Diagnostic: global.vaultContent exists: ${!!global.vaultContent}, length: ${global.vaultContent?.length || 0}`);
+      this.log(
+        '[VAULT] Not available - vault requires site_monkeys mode and vault content to be loaded',
+      );
+      this.log(
+        `[VAULT] Diagnostic: global.vaultContent exists: ${!!global.vaultContent}, length: ${global.vaultContent?.length || 0}`,
+      );
       return null;
     } catch (error) {
       // FIX #2: Improved error logging with more context
-      this.error("[VAULT] Loading failed - Error details:", {
+      this.error('[VAULT] Loading failed - Error details:', {
         message: error.message,
         hasGlobalVault: !!global.vaultContent,
         hasVaultCandidate: !!vaultCandidate,
@@ -2658,7 +2751,7 @@ export class Orchestrator {
   }
 
   // ==================== INTELLIGENT VAULT SECTION SELECTION ====================
-  
+
   /**
    * Selects relevant vault sections based on query analysis
    * Enforces 9,000 token maximum for vault content
@@ -2668,71 +2761,81 @@ export class Orchestrator {
    */
   #selectRelevantVaultSections(vaultContent, query) {
     const MAX_VAULT_TOKENS = 9000;
-    
+
     try {
       if (!vaultContent || vaultContent.length === 0) {
-        return { content: "", tokens: 0, sectionsSelected: 0 };
+        return { content: '', tokens: 0, sectionsSelected: 0 };
       }
 
       // Keywords to look for in query
       const queryLower = query.toLowerCase();
       const keywords = this.#extractKeywords(queryLower);
-      
+
       // Special handling for "what's in the vault" type queries - return full inventory
-      const isInventoryQuery = /what'?s?\s+(in|inside|stored|contained|within)\s+(the\s+)?vault/i.test(query) ||
-                              /list\s+(all|everything|vault|contents)/i.test(query) ||
-                              /show\s+(me\s+)?(all|everything|vault|contents)/i.test(query);
-      
+      const isInventoryQuery =
+        /what'?s?\s+(in|inside|stored|contained|within)\s+(the\s+)?vault/i.test(query) ||
+        /list\s+(all|everything|vault|contents)/i.test(query) ||
+        /show\s+(me\s+)?(all|everything|vault|contents)/i.test(query);
+
       if (isInventoryQuery) {
-        this.log("[VAULT SELECTION] Inventory query detected - allowing full vault access");
+        this.log('[VAULT SELECTION] Inventory query detected - allowing full vault access');
         const targetTokens = Math.min(MAX_VAULT_TOKENS, Math.ceil(vaultContent.length / 4));
         const targetChars = targetTokens * 4;
-        
+
         if (vaultContent.length <= targetChars) {
           return {
             content: vaultContent,
             tokens: Math.ceil(vaultContent.length / 4),
             sectionsSelected: 1,
-            selectionReason: "Full vault for inventory query"
+            selectionReason: 'Full vault for inventory query',
           };
         }
-        
+
         // Truncate intelligently for inventory
         const truncated = this.#truncateVaultIntelligently(vaultContent, targetChars);
         return {
           content: truncated,
           tokens: Math.ceil(truncated.length / 4),
           sectionsSelected: 1,
-          selectionReason: "Truncated vault for inventory query"
+          selectionReason: 'Truncated vault for inventory query',
         };
       }
 
       // ENHANCEMENT: Detect folder/file queries (from spec - Priority 1)
-      const isFolderQuery = /(?:folder|directory|files?|documents?)\s+(?:named|called|labeled|in|called)\s+(\w+)/i.test(query);
-      const folderMatch = query.match(/(?:folder|directory|files?|documents?)\s+(?:named|called|labeled|in|called)\s+(\w+)/i);
-      
+      const isFolderQuery =
+        /(?:folder|directory|files?|documents?)\s+(?:named|called|labeled|in|called)\s+(\w+)/i.test(
+          query,
+        );
+      const folderMatch = query.match(
+        /(?:folder|directory|files?|documents?)\s+(?:named|called|labeled|in|called)\s+(\w+)/i,
+      );
+
       if (isFolderQuery && folderMatch) {
         const folderName = folderMatch[1].toLowerCase();
         this.log(`[VAULT SELECTION] Folder query detected: "${folderName}"`);
-        
+
         // Find sections that reference this folder
         const sections = this.#splitVaultIntoSections(vaultContent);
-        const folderSections = sections.filter(section => {
+        const folderSections = sections.filter((section) => {
           const sectionLower = section.toLowerCase();
-          return sectionLower.includes(folderName) || 
-                 sectionLower.includes(`/${folderName}/`) ||
-                 sectionLower.includes(`folder: ${folderName}`) ||
-                 sectionLower.includes(`directory: ${folderName}`);
+          return (
+            sectionLower.includes(folderName) ||
+            sectionLower.includes(`/${folderName}/`) ||
+            sectionLower.includes(`folder: ${folderName}`) ||
+            sectionLower.includes(`directory: ${folderName}`)
+          );
         });
-        
+
         if (folderSections.length > 0) {
-          this.log(`[VAULT SELECTION] Found ${folderSections.length} sections matching folder "${folderName}"`);
-          
+          this.log(
+            `[VAULT SELECTION] Found ${folderSections.length} sections matching folder "${folderName}"`,
+          );
+
           // Return folder sections within token budget
           let selectedContent = [];
           let totalTokens = 0;
           let sectionsUsed = 0;
-          
+
           for (const section of folderSections) {
             const sectionTokens = Math.ceil(section.length / 4);
             if (totalTokens + sectionTokens <= MAX_VAULT_TOKENS) {
@@ -2741,20 +2844,20 @@ export class Orchestrator {
               sectionsUsed++;
             }
           }
-          
+
           return {
-            content: selectedContent.join("\n\n"),
+            content: selectedContent.join('\n\n'),
             tokens: totalTokens,
             sectionsSelected: sectionsUsed,
             totalSections: folderSections.length,
-            selectionReason: `Folder "${folderName}" sections`
+            selectionReason: `Folder "${folderName}" sections`,
           };
         }
       }
 
       // Split vault into sections (by document markers or paragraphs)
       const sections = this.#splitVaultIntoSections(vaultContent);
-      
+
       if (sections.length === 0) {
         // Fallback: treat entire vault as one section
         const targetTokens = Math.min(MAX_VAULT_TOKENS, Math.ceil(vaultContent.length / 4));
@@ -2764,15 +2867,15 @@ export class Orchestrator {
           content,
           tokens: Math.ceil(content.length / 4),
           sectionsSelected: 1,
-          selectionReason: "Full vault (no sections found)"
+          selectionReason: 'Full vault (no sections found)',
         };
       }
 
       // Score each section by relevance (with enhanced folder/file name matching)
-      const scoredSections = sections.map(section => ({
+      const scoredSections = sections.map((section) => ({
         content: section,
         score: this.#scoreVaultSection(section, keywords, queryLower),
-        tokens: Math.ceil(section.length / 4)
+        tokens: Math.ceil(section.length / 4),
       }));
 
       // Sort by relevance score (descending)
@@ -2798,7 +2901,8 @@ export class Orchestrator {
         } else {
           // Try to fit partial section if we have room
           const remainingTokens = MAX_VAULT_TOKENS - totalTokens;
-          if (remainingTokens > 500 && section.score >= 50) { // Only high-scoring sections
+          if (remainingTokens > 500 && section.score >= 50) {
+            // Only high-scoring sections
             const partialChars = remainingTokens * 4;
             const partial = section.content.substring(0, partialChars);
             selectedContent.push(partial);
@@ -2809,10 +2913,12 @@ export class Orchestrator {
         }
       }
 
-      const finalContent = selectedContent.join("\n\n");
-      
-      this.log(`[VAULT SELECTION] Selected ${sectionsUsed}/${sections.length} sections, ${totalTokens} tokens`);
-      
+      const finalContent = selectedContent.join('\n\n');
+
+      this.log(
+        `[VAULT SELECTION] Selected ${sectionsUsed}/${sections.length} sections, ${totalTokens} tokens`,
+      );
+
       // Calculate better selection reason
       let selectionReason = `Selected ${sectionsUsed} relevant sections`;
       if (scoredSections[0]?.score >= 50) {
@@ -2820,27 +2926,26 @@ export class Orchestrator {
       } else if (sectionsUsed === sections.length) {
         selectionReason = `All sections relevant (${sectionsUsed} sections)`;
       }
-      
+
       return {
         content: finalContent,
         tokens: totalTokens,
         sectionsSelected: sectionsUsed,
         totalSections: sections.length,
-        selectionReason: selectionReason
+        selectionReason: selectionReason,
       };
-
     } catch (error) {
-      this.error("[VAULT SELECTION] Selection failed, using truncated vault", error);
-      
+      this.error('[VAULT SELECTION] Selection failed, using truncated vault', error);
+
       // Fallback: truncate to MAX_VAULT_TOKENS
       const maxChars = MAX_VAULT_TOKENS * 4;
       const truncated = vaultContent.substring(0, maxChars);
-      
+
       return {
         content: truncated,
         tokens: Math.ceil(truncated.length / 4),
         sectionsSelected: 1,
-        selectionReason: "Fallback truncation"
+        selectionReason: 'Fallback truncation',
       };
     }
   }
@@ -2851,15 +2956,66 @@ export class Orchestrator {
    */
   #extractKeywords(queryLower) {
     // Remove common words
-    const stopWords = new Set(['what', 'is', 'the', 'a', 'an', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'are', 'was', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'could', 'should', 'may', 'might', 'can', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'between', 'under', 'again', 'further', 'then', 'once', 'show', 'me', 'list', 'all']);
-    
+    const stopWords = new Set([
+      'what',
+      'is',
+      'the',
+      'a',
+      'an',
+      'in',
+      'on',
+      'at',
+      'to',
+      'for',
+      'of',
+      'with',
+      'by',
+      'from',
+      'are',
+      'was',
+      'were',
+      'been',
+      'be',
+      'have',
+      'has',
+      'had',
+      'do',
+      'does',
+      'did',
+      'will',
+      'would',
+      'could',
+      'should',
+      'may',
+      'might',
+      'can',
+      'about',
+      'into',
+      'through',
+      'during',
+      'before',
+      'after',
+      'above',
+      'below',
+      'between',
+      'under',
+      'again',
+      'further',
+      'then',
+      'once',
+      'show',
+      'me',
+      'list',
+      'all',
+    ]);
+
     const words = queryLower.match(/\b\w+\b/g) || [];
-    const keywords = words.filter(word => word.length > 2 && !stopWords.has(word));
-    
+    const keywords = words.filter((word) => word.length > 2 && !stopWords.has(word));
+
     // Identify potential folder/file names (capitalized words or quoted terms in original query)
     // Note: We're working with lowercased query, but we can still identify longer meaningful terms
-    const importantTerms = keywords.filter(word => word.length > 4);
-    
+    const importantTerms = keywords.filter((word) => word.length > 4);
+
     return [...new Set([...keywords, ...importantTerms])]; // Remove duplicates
   }
 
@@ -2869,7 +3025,7 @@ export class Orchestrator {
   #splitVaultIntoSections(vaultContent) {
     // Look for document boundaries or major section markers
     const patterns = [
-      /={3,}/g,  // === separators
+      /={3,}/g, // === separators
       /\n\n[A-Z][^\n]+\n={2,}/g, // Markdown headers
       /\[DOCUMENT:\s*[^\]]+\]/gi, // Document markers
       /FILE:\s*[^\n]+/gi, // File markers
@@ -2877,12 +3033,12 @@ export class Orchestrator {
 
     let sections = [];
     let lastIndex = 0;
-    
+
     // Try to find natural section boundaries
     const allMatches = [];
-    patterns.forEach(pattern => {
+    patterns.forEach((pattern) => {
       const matches = [...vaultContent.matchAll(pattern)];
-      matches.forEach(match => {
+      matches.forEach((match) => {
         allMatches.push({ index: match.index, text: match[0] });
       });
     });
@@ -2892,16 +3048,17 @@ export class Orchestrator {
 
     // Split at boundaries
     if (allMatches.length > 0) {
-      allMatches.forEach(match => {
+      allMatches.forEach((match) => {
         if (match.index > lastIndex) {
           const section = vaultContent.substring(lastIndex, match.index).trim();
-          if (section.length > 100) { // Minimum section size
+          if (section.length > 100) {
+            // Minimum section size
             sections.push(section);
           }
         }
         lastIndex = match.index;
       });
-      
+
       // Add final section
       const finalSection = vaultContent.substring(lastIndex).trim();
       if (finalSection.length > 100) {
@@ -2911,7 +3068,7 @@ export class Orchestrator {
 
     // Fallback: split by large paragraphs if no sections found
     if (sections.length === 0) {
-      sections = vaultContent.split(/\n\n+/).filter(s => s.length > 200);
+      sections = vaultContent.split(/\n\n+/).filter((s) => s.length > 200);
     }
 
     // If still no sections, split by size
@@ -2922,7 +3079,7 @@ export class Orchestrator {
       }
     }
 
-    return sections.filter(s => s.length > 0);
+    return sections.filter((s) => s.length > 0);
   }
 
   /**
@@ -2982,7 +3139,7 @@ export class Orchestrator {
     }
 
     // PRIORITY 3: Content keyword matching (existing logic)
-    keywords.forEach(keyword => {
+    keywords.forEach((keyword) => {
       const count = (sectionLower.match(new RegExp(_.escapeRegExp(keyword), 'g')) || []).length;
       score += count * 10;
     });
@@ -3027,15 +3184,19 @@ export class Orchestrator {
 
     // Try to truncate at a section boundary
     const truncated = vaultContent.substring(0, maxChars);
-    
+
     // Find the last complete section (look for double newline)
     const lastSectionBreak = truncated.lastIndexOf('\n\n');
-    
-    if (lastSectionBreak > maxChars * 0.8) { // If we're not losing too much
-      return truncated.substring(0, lastSectionBreak) + "\n\n[Vault content truncated - more available on request]";
+
+    if (lastSectionBreak > maxChars * 0.8) {
+      // If we're not losing too much
+      return (
+        truncated.substring(0, lastSectionBreak) +
+        '\n\n[Vault content truncated - more available on request]'
+      );
     }
-    
-    return truncated + "\n\n[Vault content truncated - more available on request]";
+
+    return truncated + '\n\n[Vault content truncated - more available on request]';
   }
 
   // ==================== STEP 4: ASSEMBLE CONTEXT ====================
@@ -3053,11 +3214,13 @@ export class Orchestrator {
     };
 
     // Enforce memory budget (≤2,500 tokens)
-    let memoryText = memory?.memories || "";
+    let memoryText = memory?.memories || '';
     let memoryTokens = memory?.tokens || 0;
 
     if (memoryTokens > BUDGET.MEMORY) {
-      this.log(`[TOKEN-BUDGET] Memory exceeds limit: ${memoryTokens} > ${BUDGET.MEMORY}, truncating...`);
+      this.log(
+        `[TOKEN-BUDGET] Memory exceeds limit: ${memoryTokens} > ${BUDGET.MEMORY}, truncating...`,
+      );
       const targetChars = BUDGET.MEMORY * 4;
       // CRITICAL FIX (Issue #579, CMP2, EDG3): Truncate at sentence boundary, not mid-word
       // Preserve names (Dr. Xiaoying Zhang-Müller) and numbers ($99, $299)
@@ -3066,7 +3229,7 @@ export class Orchestrator {
       const lastSentence = Math.max(
         truncated.lastIndexOf('. '),
         truncated.lastIndexOf('.\n'),
-        truncated.lastIndexOf('\n\n')
+        truncated.lastIndexOf('\n\n'),
       );
       if (lastSentence > targetChars * 0.8) {
         // If we can keep >80% by truncating at sentence, do it
@@ -3077,22 +3240,26 @@ export class Orchestrator {
         memoryText = lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
       }
       memoryTokens = Math.ceil(memoryText.length / 4);
-      this.log(`[TOKEN-BUDGET] Truncated memory to ${memoryText.length} chars (${memoryTokens} tokens) at safe boundary`);
+      this.log(
+        `[TOKEN-BUDGET] Truncated memory to ${memoryText.length} chars (${memoryTokens} tokens) at safe boundary`,
+      );
     }
 
     // Enforce document budget (≤3,000 tokens)
-    let documentText = documents?.content || "";
+    let documentText = documents?.content || '';
     let documentTokens = documents?.tokens || 0;
 
     if (documentTokens > BUDGET.DOCUMENTS) {
-      this.log(`[TOKEN-BUDGET] Documents exceed limit: ${documentTokens} > ${BUDGET.DOCUMENTS}, truncating...`);
+      this.log(
+        `[TOKEN-BUDGET] Documents exceed limit: ${documentTokens} > ${BUDGET.DOCUMENTS}, truncating...`,
+      );
       const targetChars = BUDGET.DOCUMENTS * 4;
       // CRITICAL FIX (Issue #579): Truncate at sentence boundary to preserve complete info
       let truncated = documentText.substring(0, targetChars);
       const lastSentence = Math.max(
         truncated.lastIndexOf('. '),
         truncated.lastIndexOf('.\n'),
-        truncated.lastIndexOf('\n\n')
+        truncated.lastIndexOf('\n\n'),
       );
       if (lastSentence > targetChars * 0.8) {
         documentText = truncated.substring(0, lastSentence + 1);
@@ -3101,13 +3268,15 @@ export class Orchestrator {
         documentText = lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
       }
       documentTokens = Math.ceil(documentText.length / 4);
-      this.log(`[TOKEN-BUDGET] Truncated documents to ${documentText.length} chars (${documentTokens} tokens) at safe boundary`);
+      this.log(
+        `[TOKEN-BUDGET] Truncated documents to ${documentText.length} chars (${documentTokens} tokens) at safe boundary`,
+      );
     }
 
     // Enforce vault budget (≤9,000 tokens) - should already be enforced by selection
-    const vaultText = vault?.content || "";
+    const vaultText = vault?.content || '';
     const vaultTokens = vault?.tokens || 0;
-    
+
     if (vaultTokens > BUDGET.VAULT) {
       this.log(`[TOKEN-BUDGET] WARNING: Vault exceeds limit: ${vaultTokens} > ${BUDGET.VAULT}`);
       // This shouldn't happen due to selection, but log it
@@ -3115,9 +3284,11 @@ export class Orchestrator {
 
     // Calculate total and verify budget compliance
     const totalTokens = memoryTokens + documentTokens + vaultTokens;
-    
+
     if (totalTokens > BUDGET.TOTAL) {
-      this.log(`[TOKEN-BUDGET] WARNING: Total context exceeds limit: ${totalTokens} > ${BUDGET.TOTAL}`);
+      this.log(
+        `[TOKEN-BUDGET] WARNING: Total context exceeds limit: ${totalTokens} > ${BUDGET.TOTAL}`,
+      );
     } else {
       this.log(`[TOKEN-BUDGET] ✅ Context within budget: ${totalTokens}/${BUDGET.TOTAL} tokens`);
     }
@@ -3136,14 +3307,14 @@ export class Orchestrator {
         documents: documentTokens <= BUDGET.DOCUMENTS,
         vault: vaultTokens <= BUDGET.VAULT,
         total: totalTokens <= BUDGET.TOTAL,
-      }
+      },
     };
   }
 
   #assembleContext(memory, documents, vault) {
     // Call explicit token budget enforcement method
     const enforcement = this.#enforceTokenBudget(memory, documents, vault);
-    
+
     // Use enforced values
     const memoryText = enforcement.memoryText;
     const memoryTokens = enforcement.memoryTokens;
@@ -3155,7 +3326,9 @@ export class Orchestrator {
 
     // Build context strings
     const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] [ORCHESTRATOR] [CONTEXT] Assembling context - Memory: ${memoryText.length} chars (${memoryTokens}t), Documents: ${documentText.length} chars (${documentTokens}t), Vault: ${vaultText.length} chars (${vaultTokens}t)`);
+    console.log(
+      `[${timestamp}] [ORCHESTRATOR] [CONTEXT] Assembling context - Memory: ${memoryText.length} chars (${memoryTokens}t), Documents: ${documentText.length} chars (${documentTokens}t), Vault: ${vaultText.length} chars (${vaultTokens}t)`,
+    );
 
     return {
       memory: memoryText,
@@ -3183,24 +3356,19 @@ export class Orchestrator {
   async #performSemanticAnalysis(message, context, conversationHistory) {
     try {
       if (!this.initialized) {
-        this.error(
-          "[ANALYSIS] SemanticAnalyzer not initialized, using fallback",
-        );
+        this.error('[ANALYSIS] SemanticAnalyzer not initialized, using fallback');
         return this.#generateFallbackAnalysis(message, context);
       }
 
-      const semanticResult = await this.semanticAnalyzer.analyzeSemantics(
-        message,
-        {
-          userId: context.userId || "unknown",
-          conversationHistory: conversationHistory,
-          availableMemory: context.sources?.hasMemory || false,
-          documentContext: context.sources?.hasDocuments || false,
-          vaultContext: context.sources?.hasVault || false,
-          mode: context.mode,
-          sessionId: context.sessionId,
-        },
-      );
+      const semanticResult = await this.semanticAnalyzer.analyzeSemantics(message, {
+        userId: context.userId || 'unknown',
+        conversationHistory: conversationHistory,
+        availableMemory: context.sources?.hasMemory || false,
+        documentContext: context.sources?.hasDocuments || false,
+        vaultContext: context.sources?.hasVault || false,
+        mode: context.mode,
+        sessionId: context.sessionId,
+      });
 
       if (semanticResult.cost) {
         this.requestStats.semanticAnalysisCost += semanticResult.cost;
@@ -3221,12 +3389,8 @@ export class Orchestrator {
         requiresCalculation: semanticResult.requiresCalculation,
         requiresComparison: semanticResult.requiresComparison,
         requiresCreativity: semanticResult.requiresCreativity,
-        requiresExpertise:
-          semanticResult.complexityFactors?.expertiseRequired || false,
-        contextDependency: this.#calculateContextDependency(
-          context,
-          semanticResult,
-        ),
+        requiresExpertise: semanticResult.complexityFactors?.expertiseRequired || false,
+        contextDependency: this.#calculateContextDependency(context, semanticResult),
         reasoning: `Semantic analysis via embeddings: Intent=${semanticResult.intent} (${semanticResult.intentConfidence?.toFixed(2)}), Domain=${semanticResult.domain} (${semanticResult.domainConfidence?.toFixed(2)})`,
         semanticDetails: semanticResult,
         cacheHit: semanticResult.cacheHit,
@@ -3235,7 +3399,7 @@ export class Orchestrator {
         fallbackUsed: false,
       };
     } catch (error) {
-      this.error("[ANALYSIS] Semantic analysis failed, using fallback", error);
+      this.error('[ANALYSIS] Semantic analysis failed, using fallback', error);
       return this.#generateFallbackAnalysis(message, context);
     }
   }
@@ -3253,27 +3417,21 @@ export class Orchestrator {
   }
 
   #generateFallbackAnalysis(message, context) {
-    this.log("[ANALYSIS] Using fallback heuristic analysis");
+    this.log('[ANALYSIS] Using fallback heuristic analysis');
 
     const messageLower = message.toLowerCase();
 
-    let intent = "question";
+    let intent = 'question';
     if (
-      messageLower.includes("create") ||
-      messageLower.includes("build") ||
-      messageLower.includes("make")
+      messageLower.includes('create') ||
+      messageLower.includes('build') ||
+      messageLower.includes('make')
     ) {
-      intent = "command";
-    } else if (
-      messageLower.includes("should i") ||
-      messageLower.includes("which option")
-    ) {
-      intent = "decision_making";
-    } else if (
-      messageLower.includes("how do i") ||
-      messageLower.includes("solve")
-    ) {
-      intent = "problem_solving";
+      intent = 'command';
+    } else if (messageLower.includes('should i') || messageLower.includes('which option')) {
+      intent = 'decision_making';
+    } else if (messageLower.includes('how do i') || messageLower.includes('solve')) {
+      intent = 'problem_solving';
     }
 
     const domain = this.#determineDomain(message, context);
@@ -3294,17 +3452,17 @@ export class Orchestrator {
         ambiguity: 0,
         expertiseRequired: false,
       },
-      emotionalTone: "neutral",
+      emotionalTone: 'neutral',
       emotionalWeight: 0,
       personalContext: /\b(my|I|me)\b/i.test(message),
-      temporalContext: "general",
+      temporalContext: 'general',
       requiresMemory: false,
       requiresCalculation: /\d/.test(message),
       requiresComparison: /\b(vs|versus|compare)\b/i.test(message),
       requiresCreativity: false,
       requiresExpertise: false,
       contextDependency: 0.5,
-      reasoning: "Fallback heuristic analysis (semantic analyzer unavailable)",
+      reasoning: 'Fallback heuristic analysis (semantic analyzer unavailable)',
       semanticDetails: null,
       cacheHit: false,
       processingTime: 0,
@@ -3317,19 +3475,19 @@ export class Orchestrator {
     const msg = message.toLowerCase();
 
     if (/business|revenue|profit|customer|market|strategy|company/i.test(msg)) {
-      return "business";
+      return 'business';
     }
     if (/code|software|programming|technical|system|api|database/i.test(msg)) {
-      return "technical";
+      return 'technical';
     }
     if (/feel|emotion|relationship|family|friend|personal/i.test(msg)) {
-      return "personal";
+      return 'personal';
     }
     if (/health|medical|doctor|wellness|fitness/i.test(msg)) {
-      return "health";
+      return 'health';
     }
 
-    return "general";
+    return 'general';
   }
 
   // ==================== STEP 6: CALCULATE CONFIDENCE ====================
@@ -3356,27 +3514,24 @@ export class Orchestrator {
       if (context.sources?.hasDocuments) confidence += 0.03;
       if (context.sources?.hasVault) confidence += 0.07;
 
-      if (analysis.domain === "business" || analysis.domain === "technical") {
+      if (analysis.domain === 'business' || analysis.domain === 'technical') {
         confidence -= 0.1;
       }
 
-      if (
-        analysis.intent === "problem_solving" ||
-        analysis.intent === "decision_making"
-      ) {
+      if (analysis.intent === 'problem_solving' || analysis.intent === 'decision_making') {
         confidence -= 0.08;
       }
 
       if (analysis.fallbackUsed) {
         confidence -= 0.2;
-        this.log("[CONFIDENCE] Reduced due to fallback analysis");
+        this.log('[CONFIDENCE] Reduced due to fallback analysis');
       }
 
       confidence = Math.max(0.0, Math.min(1.0, confidence));
 
       return confidence;
     } catch (error) {
-      this.error("[CONFIDENCE] Calculation failed, using default", error);
+      this.error('[CONFIDENCE] Calculation failed, using default', error);
       return 0.75;
     }
   }
@@ -3407,13 +3562,15 @@ export class Orchestrator {
         isSafetyCritical = true;
         const domains = phase4Metadata.high_stakes.domains || [];
         routingReason.push(`high_stakes:${domains.join(',')}`);
-        this.log(`[AI ROUTING] High-stakes domain detected: ${domains.join(', ')} - auto-escalating to Claude`);
+        this.log(
+          `[AI ROUTING] High-stakes domain detected: ${domains.join(', ')} - auto-escalating to Claude`,
+        );
       }
 
       // PRIORITY 1: Vault presence (Site Monkeys mode always uses Claude)
-      if (context.sources?.hasVault && mode === "site_monkeys") {
+      if (context.sources?.hasVault && mode === 'site_monkeys') {
         useClaude = true;
-        routingReason.push("vault_access");
+        routingReason.push('vault_access');
       }
 
       // PRIORITY 2: Token budget check (high token count prefers Claude)
@@ -3424,13 +3581,15 @@ export class Orchestrator {
 
       // PRIORITY 3: Confidence and complexity (original logic)
       if (!useClaude) {
-        if (confidence < 0.85 ||
-            analysis.requiresExpertise ||
-            (mode === "business_validation" && analysis.complexity > 0.7)) {
+        if (
+          confidence < 0.85 ||
+          analysis.requiresExpertise ||
+          (mode === 'business_validation' && analysis.complexity > 0.7)
+        ) {
           useClaude = true;
           routingReason.push(`confidence:${confidence.toFixed(2)}`);
-          if (analysis.requiresExpertise) routingReason.push("requires_expertise");
-          if (mode === "business_validation" && analysis.complexity > 0.7) {
+          if (analysis.requiresExpertise) routingReason.push('requires_expertise');
+          if (mode === 'business_validation' && analysis.complexity > 0.7) {
             routingReason.push(`high_complexity:${analysis.complexity.toFixed(2)}`);
           }
         }
@@ -3439,7 +3598,7 @@ export class Orchestrator {
       // ========== USER CONFIRMATION FOR CLAUDE (BIBLE REQUIREMENT - Section D) ==========
       // "User confirmation required before Claude (except safety-critical)"
       // CRITICAL FIX: Respect user's explicit choice when confirmation is provided
-      
+
       // If user explicitly said NO to Claude (claudeConfirmed: false), force GPT-4
       if (context.claudeConfirmed === false) {
         this.log(`[AI ROUTING] User declined Claude, forcing GPT-4`);
@@ -3452,33 +3611,29 @@ export class Orchestrator {
         const confirmationNeeded = context.claudeConfirmed !== true;
 
         if (confirmationNeeded) {
-          this.log(`[AI ROUTING] Claude escalation requires user confirmation (reasons: ${routingReason.join(', ')})`);
+          this.log(
+            `[AI ROUTING] Claude escalation requires user confirmation (reasons: ${routingReason.join(', ')})`,
+          );
           return {
             needsConfirmation: true,
             reason: routingReason.join(', '),
             message: `This query would benefit from Claude Sonnet 4.5 analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use GPT-4 (faster, $0.01-0.03)?`,
             estimatedCost: {
               claude: '$0.05-0.15',
-              gpt4: '$0.01-0.03'
-            }
+              gpt4: '$0.01-0.03',
+            },
           };
         }
       }
 
-      const model = useClaude ? "claude-sonnet-4.5" : "gpt-4";
-      
-      this.log(
-        `[AI ROUTING] Using ${model} (reasons: ${routingReason.join(", ") || "default"})`,
-      );
+      const model = useClaude ? 'claude-sonnet-4.5' : 'gpt-4';
+
+      this.log(`[AI ROUTING] Using ${model} (reasons: ${routingReason.join(', ') || 'default'})`);
 
       // ========== COST CEILING CHECK ==========
       if (useClaude && context.sessionId) {
         const estimatedCost = costTracker.estimateClaudeCost(message, context);
-        const costCheck = costTracker.wouldExceedCeiling(
-          context.sessionId,
-          estimatedCost,
-          mode,
-        );
+        const costCheck = costTracker.wouldExceedCeiling(context.sessionId, estimatedCost, mode);
 
         if (costCheck.wouldExceed) {
           this.log(
@@ -3488,13 +3643,13 @@ export class Orchestrator {
           const fallbackResult = await handleCostCeiling({
             query: message,
             context: context,
-            reason: "cost_ceiling_exceeded",
+            reason: 'cost_ceiling_exceeded',
             currentCost: costCheck.totalCost,
           });
 
           return {
             response: fallbackResult.response,
-            model: "cost_fallback",
+            model: 'cost_fallback',
             cost: {
               inputTokens: 0,
               outputTokens: 0,
@@ -3513,41 +3668,59 @@ export class Orchestrator {
 
       // Log if external context is being used
       if (context.sources?.hasExternal && phase4Metadata) {
-        this.log(`[PHASE4] 6. AI generation starting with external context (${context.external?.total_text_length || 0} chars)`);
+        this.log(
+          `[PHASE4] 6. AI generation starting with external context (${context.external?.total_text_length || 0} chars)`,
+        );
       }
 
       // Build system prompt with reasoning guidance if available
       // ISSUE #443: Add query classification to system prompt for response intelligence
       // ISSUE #566/#570: Pass memory context flag to enable semantic intelligence requirements
       const hasMemoryContext = context.sources?.hasMemory && context.memory;
-      const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, context.earlyClassification, hasMemoryContext);
+      const systemPrompt = this.#buildSystemPrompt(
+        mode,
+        analysis,
+        context.reasoningGuidance,
+        context.earlyClassification,
+        hasMemoryContext,
+      );
 
       // PHASE 4: Inject external content if fetched
-      let externalContext = "";
+      let externalContext = '';
       if (phase4Metadata.fetched_content && phase4Metadata.sources_used > 0) {
         externalContext = `\n\n[CURRENT EXTERNAL INFORMATION - Use this to inform your response]\n${phase4Metadata.fetched_content}\n[END EXTERNAL INFORMATION]\n\n`;
-        console.log(`[PHASE4] Injected external content: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content.length} chars`);
+        console.log(
+          `[PHASE4] Injected external content: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content.length} chars`,
+        );
       }
 
       // ========== ISSUE #575: DIAGNOSTIC LOGGING - PROMPT DEBUG ==========
       console.log('[PROMPT-DEBUG] ═══════════════════════════════════════════════════════');
       console.log(`[PROMPT-DEBUG] System prompt length: ${systemPrompt.length} chars`);
       console.log(`[PROMPT-DEBUG] Memory context present: ${hasMemoryContext}`);
-      console.log(`[PROMPT-DEBUG] Memory context length: ${context.memory ? context.memory.length : 0} chars`);
-      console.log(`[PROMPT-DEBUG] Semantic intelligence instructions present: ${hasMemoryContext && systemPrompt.includes('CRITICAL REASONING REQUIREMENTS')}`);
+      console.log(
+        `[PROMPT-DEBUG] Memory context length: ${context.memory ? context.memory.length : 0} chars`,
+      );
+      console.log(
+        `[PROMPT-DEBUG] Semantic intelligence instructions present: ${hasMemoryContext && systemPrompt.includes('CRITICAL REASONING REQUIREMENTS')}`,
+      );
       console.log(`[PROMPT-DEBUG] External context length: ${externalContext.length} chars`);
       console.log(`[PROMPT-DEBUG] Context string length: ${contextString.length} chars`);
-      console.log(`[PROMPT-DEBUG] Full system prompt (first 500 chars):\n${systemPrompt.substring(0, 500)}...`);
-      console.log(`[PROMPT-DEBUG] Context string (first 500 chars):\n${contextString.substring(0, 500)}...`);
+      console.log(
+        `[PROMPT-DEBUG] Full system prompt (first 500 chars):\n${systemPrompt.substring(0, 500)}...`,
+      );
+      console.log(
+        `[PROMPT-DEBUG] Context string (first 500 chars):\n${contextString.substring(0, 500)}...`,
+      );
       console.log('[PROMPT-DEBUG] ═══════════════════════════════════════════════════════');
 
       // VAULT-ONLY MODE: Pure vault queries bypass contamination
       const isVaultQuery =
         context.sources?.hasVault &&
-        (message.toLowerCase().includes("vault") ||
-          message.toLowerCase().includes("founder") ||
-          message.toLowerCase().includes("directive") ||
-          mode === "site_monkeys");
+        (message.toLowerCase().includes('vault') ||
+          message.toLowerCase().includes('founder') ||
+          message.toLowerCase().includes('directive') ||
+          mode === 'site_monkeys');
 
       let response, inputTokens, outputTokens;
 
@@ -3560,14 +3733,14 @@ export class Orchestrator {
           conversationHistory.slice(-5).forEach((msg) => {
             messages.push({
               role: msg.role === 'assistant' ? 'assistant' : 'user',
-              content: msg.content
+              content: msg.content,
             });
           });
         }
 
         // Add current message with all context
         if (isVaultQuery) {
-          console.log("[AI] 🔒 PURE VAULT MODE - Zero contamination");
+          console.log('[AI] 🔒 PURE VAULT MODE - Zero contamination');
           const vaultPrompt = `You are a vault content specialist. Search through the ENTIRE vault systematically.
 
       VAULT CONTENT:
@@ -3576,17 +3749,17 @@ export class Orchestrator {
       USER QUESTION: ${message}
 
       Instructions: Search thoroughly and quote directly from the vault. Reference document names when quoting.`;
-          messages.push({ role: "user", content: vaultPrompt });
+          messages.push({ role: 'user', content: vaultPrompt });
           console.log(`[AI] Pure vault prompt: ${vaultPrompt.length} chars`);
         } else {
           messages.push({
-            role: "user",
-            content: `${systemPrompt}\n\n${externalContext}${contextString}\n\nUser query: ${message}`
+            role: 'user',
+            content: `${systemPrompt}\n\n${externalContext}${contextString}\n\nUser query: ${message}`,
           });
         }
 
         const claudeResponse = await this.anthropic.messages.create({
-          model: "claude-sonnet-4-20250514",
+          model: 'claude-sonnet-4-20250514',
           max_tokens: 2000,
           messages: messages,
         });
@@ -3599,7 +3772,7 @@ export class Orchestrator {
         const messages = [];
 
         if (!isVaultQuery) {
-          messages.push({ role: "system", content: systemPrompt });
+          messages.push({ role: 'system', content: systemPrompt });
         }
 
         // Add recent conversation history (last 5 exchanges)
@@ -3607,14 +3780,14 @@ export class Orchestrator {
           conversationHistory.slice(-5).forEach((msg) => {
             messages.push({
               role: msg.role === 'assistant' ? 'assistant' : 'user',
-              content: msg.content
+              content: msg.content,
             });
           });
         }
 
         // Add current message with context
         if (isVaultQuery) {
-          console.log("[AI] 🔒 PURE VAULT MODE - Zero contamination");
+          console.log('[AI] 🔒 PURE VAULT MODE - Zero contamination');
           const vaultPrompt = `You are a vault content specialist. Search through the ENTIRE vault systematically.
 
       VAULT CONTENT:
@@ -3623,17 +3796,17 @@ export class Orchestrator {
       USER QUESTION: ${message}
 
       Instructions: Search thoroughly and quote directly from the vault. Reference document names when quoting.`;
-          messages.push({ role: "user", content: vaultPrompt });
+          messages.push({ role: 'user', content: vaultPrompt });
           console.log(`[AI] Pure vault prompt: ${vaultPrompt.length} chars`);
         } else {
           messages.push({
-            role: "user",
+            role: 'user',
             content: `${externalContext}${contextString}\n\n${message}`,
           });
         }
 
         const gptResponse = await this.openai.chat.completions.create({
-          model: "gpt-4",
+          model: 'gpt-4',
           messages: messages,
           temperature: 0.7,
           max_tokens: 2000,
@@ -3654,17 +3827,17 @@ export class Orchestrator {
       }
 
       // Map model to personality for token tracking
-      let personality = "claude"; // Default for claude model
-      if (model === "gpt-4") {
+      let personality = 'claude'; // Default for claude model
+      if (model === 'gpt-4') {
         // For GPT-4, use mode or default to eli
-        personality = mode === "business_validation" ? "eli" : "roxy";
+        personality = mode === 'business_validation' ? 'eli' : 'roxy';
       }
-      
+
       trackApiCall(
         personality,
         inputTokens,
         outputTokens,
-        context.sources?.hasVault ? (context.vault?.length || 0) / 4 : 0
+        context.sources?.hasVault ? (context.vault?.length || 0) / 4 : 0,
       );
 
       return {
@@ -3673,7 +3846,7 @@ export class Orchestrator {
         cost: cost,
       };
     } catch (error) {
-      this.error("[AI] Routing failed", error);
+      this.error('[AI] Routing failed', error);
       throw new Error(`AI routing failed: ${error.message}`);
     }
   }
@@ -3682,11 +3855,7 @@ export class Orchestrator {
 
   async #applyPersonality(response, analysis, mode, context) {
     try {
-      const selection = this.personalitySelector.selectPersonality(
-        analysis,
-        mode,
-        context,
-      );
+      const selection = this.personalitySelector.selectPersonality(analysis, mode, context);
 
       this.log(
         `[PERSONALITY] Selected ${selection.personality} (confidence: ${selection.confidence.toFixed(2)}) - ${selection.reasoning}`,
@@ -3694,7 +3863,7 @@ export class Orchestrator {
 
       let personalityResult;
 
-      if (selection.personality === "eli") {
+      if (selection.personality === 'eli') {
         personalityResult = await this.eliFramework.analyzeAndEnhance(
           response,
           analysis,
@@ -3711,56 +3880,34 @@ export class Orchestrator {
       }
 
       if (personalityResult.reasoningApplied) {
-        this.log(
-          `[PERSONALITY] ${selection.personality.toUpperCase()} analysis applied:`,
-        );
+        this.log(`[PERSONALITY] ${selection.personality.toUpperCase()} analysis applied:`);
 
-        if (
-          selection.personality === "eli" &&
-          personalityResult.analysisApplied
-        ) {
+        if (selection.personality === 'eli' && personalityResult.analysisApplied) {
           const applied = personalityResult.analysisApplied;
           if (applied.risksIdentified?.length > 0) {
-            this.log(
-              `  - Identified ${applied.risksIdentified.length} unmentioned risks`,
-            );
+            this.log(`  - Identified ${applied.risksIdentified.length} unmentioned risks`);
           }
           if (applied.assumptionsChallenged?.length > 0) {
-            this.log(
-              `  - Challenged ${applied.assumptionsChallenged.length} assumptions`,
-            );
+            this.log(`  - Challenged ${applied.assumptionsChallenged.length} assumptions`);
           }
           if (applied.downsideScenarios?.length > 0) {
-            this.log(
-              `  - Modeled ${applied.downsideScenarios.length} downside scenarios`,
-            );
+            this.log(`  - Modeled ${applied.downsideScenarios.length} downside scenarios`);
           }
           if (applied.blindSpotsFound?.length > 0) {
-            this.log(
-              `  - Found ${applied.blindSpotsFound.length} potential blind spots`,
-            );
+            this.log(`  - Found ${applied.blindSpotsFound.length} potential blind spots`);
           }
         }
 
-        if (
-          selection.personality === "roxy" &&
-          personalityResult.analysisApplied
-        ) {
+        if (selection.personality === 'roxy' && personalityResult.analysisApplied) {
           const applied = personalityResult.analysisApplied;
           if (applied.opportunitiesIdentified?.length > 0) {
-            this.log(
-              `  - Identified ${applied.opportunitiesIdentified.length} opportunities`,
-            );
+            this.log(`  - Identified ${applied.opportunitiesIdentified.length} opportunities`);
           }
           if (applied.simplificationsFound?.length > 0) {
-            this.log(
-              `  - Found ${applied.simplificationsFound.length} simpler approaches`,
-            );
+            this.log(`  - Found ${applied.simplificationsFound.length} simpler approaches`);
           }
           if (applied.practicalSteps?.length > 0) {
-            this.log(
-              `  - Added ${applied.practicalSteps.length} practical next steps`,
-            );
+            this.log(`  - Added ${applied.practicalSteps.length} practical next steps`);
           }
         }
       }
@@ -3774,14 +3921,11 @@ export class Orchestrator {
         selectionReasoning: selection.reasoning,
       };
     } catch (error) {
-      this.error(
-        "[PERSONALITY] Personality framework failed, using original response",
-        error,
-      );
+      this.error('[PERSONALITY] Personality framework failed, using original response', error);
 
       return {
         response: response,
-        personality: "none",
+        personality: 'none',
         modificationsCount: 0,
         analysisApplied: {},
         reasoningApplied: false,
@@ -3799,31 +3943,31 @@ export class Orchestrator {
       let adjustedResponse = response;
 
       // FIX #3: Less strict confidence validation - only flag very low confidence
-      if (
-        confidence < 0.5 &&
-        !response.includes("uncertain") &&
-        !response.includes("don't know")
-      ) {
-        issues.push("Low confidence without uncertainty acknowledgment");
+      if (confidence < 0.5 && !response.includes('uncertain') && !response.includes("don't know")) {
+        issues.push('Low confidence without uncertainty acknowledgment');
         adjustedResponse +=
-          "\n\n⚠️ **Confidence Note:** This analysis has moderate certainty based on available information.";
-        adjustments.push("Added uncertainty acknowledgment");
+          '\n\n⚠️ **Confidence Note:** This analysis has moderate certainty based on available information.';
+        adjustments.push('Added uncertainty acknowledgment');
       }
 
       // FIX #3: Less strict business validation - accept more flexible language
-      if (mode === "business_validation") {
+      if (mode === 'business_validation') {
         // Accept broader range of risk-related keywords
-        const hasRiskAnalysis = /risk|downside|worst case|if this fails|concern|challenge|issue|problem|difficulty|obstacle/i.test(
-          response,
-        );
+        const hasRiskAnalysis =
+          /risk|downside|worst case|if this fails|concern|challenge|issue|problem|difficulty|obstacle/i.test(
+            response,
+          );
         // Accept broader range of business impact keywords
-        const hasSurvivalImpact = /survival|runway|cash flow|burn rate|revenue|cost|budget|timeline|deadline|financial/i.test(
-          response,
-        );
+        const hasSurvivalImpact =
+          /survival|runway|cash flow|burn rate|revenue|cost|budget|timeline|deadline|financial/i.test(
+            response,
+          );
 
         // Only flag if BOTH are missing (not each individually)
         if (!hasRiskAnalysis && !hasSurvivalImpact) {
-          issues.push("Business validation response could be more specific about risks and business impact");
+          issues.push(
+            'Business validation response could be more specific about risks and business impact',
+          );
         }
       }
 
@@ -3833,18 +3977,18 @@ export class Orchestrator {
           response,
         );
       if (hasEngagementBait) {
-        issues.push("Contains engagement bait phrases");
-        adjustments.push("Flagged engagement phrases for review");
+        issues.push('Contains engagement bait phrases');
+        adjustments.push('Flagged engagement phrases for review');
       }
 
       // FIX #3: More lenient completeness check
       const isComplete =
         response.length > 50 &&
-        !response.includes("to be continued") &&
-        !response.includes("[incomplete]");
+        !response.includes('to be continued') &&
+        !response.includes('[incomplete]');
 
       if (!isComplete) {
-        issues.push("Response may be incomplete");
+        issues.push('Response may be incomplete');
       }
 
       const compliant = issues.length === 0;
@@ -3856,10 +4000,7 @@ export class Orchestrator {
         adjustments: adjustments,
       };
     } catch (error) {
-      this.error(
-        "[VALIDATION] Compliance check failed, using original response",
-        error,
-      );
+      this.error('[VALIDATION] Compliance check failed, using original response', error);
       return {
         response: response,
         compliant: true,
@@ -3873,11 +4014,11 @@ export class Orchestrator {
 
   async #handleEmergencyFallback(error, requestData) {
     try {
-      this.log("[FALLBACK] Emergency fallback triggered");
+      this.log('[FALLBACK] Emergency fallback triggered');
 
       const fallbackResponse =
         EMERGENCY_FALLBACKS.system_failure ||
-        "I encountered a technical issue processing your request. I want to be honest: rather than provide potentially incorrect information, I need to acknowledge this limitation. Could you try rephrasing your question or breaking it into smaller parts?";
+        'I encountered a technical issue processing your request. I want to be honest: rather than provide potentially incorrect information, I need to acknowledge this limitation. Could you try rephrasing your question or breaking it into smaller parts?';
 
       return {
         success: false,
@@ -3888,10 +4029,10 @@ export class Orchestrator {
           documentTokens: 0,
           vaultTokens: 0,
           totalContextTokens: 0,
-          model: "none",
+          model: 'none',
           confidence: 0.0,
-          personalityApplied: "none",
-          modeEnforced: requestData.mode || "unknown",
+          personalityApplied: 'none',
+          modeEnforced: requestData.mode || 'unknown',
           processingTime: 0,
           cost: {
             inputTokens: 0,
@@ -3903,7 +4044,7 @@ export class Orchestrator {
         error: error.message,
       };
     } catch (fallbackError) {
-      this.error("[FALLBACK] Emergency fallback also failed", fallbackError);
+      this.error('[FALLBACK] Emergency fallback also failed', fallbackError);
 
       return {
         success: false,
@@ -3937,44 +4078,45 @@ export class Orchestrator {
     // Pattern 1: Currency (e.g., $99, $299, $1,500)
     const currencyPattern = /\$[\d,]+(?:\.\d{2})?/g;
     const currencyMatches = memoryText.match(currencyPattern) || [];
-    currencyMatches.forEach(match => {
+    currencyMatches.forEach((match) => {
       numbers.push({ type: 'currency', value: match, raw: match });
     });
 
     // Pattern 2: Percentages (e.g., 15%, 3.5%)
     const percentPattern = /\d+(?:\.\d+)?%/g;
     const percentMatches = memoryText.match(percentPattern) || [];
-    percentMatches.forEach(match => {
+    percentMatches.forEach((match) => {
       numbers.push({ type: 'percentage', value: match, raw: match });
     });
 
     // Pattern 3: Years (e.g., 2010, 2015)
     const yearPattern = /\b(19|20)\d{2}\b/g;
     const yearMatches = memoryText.match(yearPattern) || [];
-    yearMatches.forEach(match => {
+    yearMatches.forEach((match) => {
       numbers.push({ type: 'year', value: match, raw: match });
     });
 
     // Pattern 4: Quantities with units (e.g., 5 years, 10 miles, 3 days)
-    const quantityPattern = /\b\d+\s+(?:years?|months?|days?|hours?|minutes?|miles?|kilometers?|pounds?|kilograms?|items?|users?|customers?)\b/gi;
+    const quantityPattern =
+      /\b\d+\s+(?:years?|months?|days?|hours?|minutes?|miles?|kilometers?|pounds?|kilograms?|items?|users?|customers?)\b/gi;
     const quantityMatches = memoryText.match(quantityPattern) || [];
-    quantityMatches.forEach(match => {
+    quantityMatches.forEach((match) => {
       numbers.push({ type: 'quantity', value: match, raw: match });
     });
 
     // Deduplicate
-    const uniqueNumbers = [...new Set(numbers.map(n => n.raw))].map(raw =>
-      numbers.find(n => n.raw === raw)
+    const uniqueNumbers = [...new Set(numbers.map((n) => n.raw))].map((raw) =>
+      numbers.find((n) => n.raw === raw),
     );
 
     return {
       highlighted: memoryText,
-      numbers: uniqueNumbers
+      numbers: uniqueNumbers,
     };
   }
 
   #buildContextString(context, _mode) {
-    let contextStr = "";
+    let contextStr = '';
 
     // ========== PHASE 4: INJECT EXTERNAL DATA FIRST (IF AVAILABLE) ==========
     if (context.sources?.hasExternal && context.external) {
@@ -4056,7 +4198,7 @@ END OF EXTERNAL DATA
   `;
 
       console.log(
-        "[ORCHESTRATOR] ✅ Vault injected as PRIMARY context - documents will be ignored for vault queries",
+        '[ORCHESTRATOR] ✅ Vault injected as PRIMARY context - documents will be ignored for vault queries',
       );
 
       // STOP HERE - Do not add document context when vault is present
@@ -4067,7 +4209,9 @@ END OF EXTERNAL DATA
         const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
 
         // Extract numerical data from memory
-        const { highlighted: memoryText, numbers: numericalData } = this.#extractNumericalData(context.memory);
+        const { highlighted: memoryText, numbers: numericalData } = this.#extractNumericalData(
+          context.memory,
+        );
 
         contextStr += `
 ═══════════════════════════════════════════════════════════════
@@ -4085,7 +4229,7 @@ ${memoryText}
           contextStr += `
 
 ⚠️ NUMERICAL DATA IN MEMORY (preserve exactly):
-${numericalData.map(n => `  • ${n.value} (${n.type})`).join('\n')}
+${numericalData.map((n) => `  • ${n.value} (${n.type})`).join('\n')}
 
 A caring family member preserves exact numbers as you shared them - no approximations or rounding.
 `;
@@ -4102,9 +4246,7 @@ When using this memory context, a caring family member would naturally apply tem
     }
 
     // ========== FALLBACK: NO VAULT - USE DOCUMENTS AND MEMORY ==========
-    console.log(
-      "[ORCHESTRATOR] No vault available - using standard context priority",
-    );
+    console.log('[ORCHESTRATOR] No vault available - using standard context priority');
 
     // FIX #4: Enhanced memory acknowledgment in standard mode
     // ISSUE #570: Strengthen memory context injection with explicit reasoning requirements
@@ -4113,7 +4255,9 @@ When using this memory context, a caring family member would naturally apply tem
       const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
 
       // Extract numerical data from memory
-      const { highlighted: memoryText, numbers: numericalData } = this.#extractNumericalData(context.memory);
+      const { highlighted: memoryText, numbers: numericalData } = this.#extractNumericalData(
+        context.memory,
+      );
 
       contextStr += `
 ═══════════════════════════════════════════════════════════════
@@ -4134,10 +4278,11 @@ END OF MEMORY CONTEXT (${memoryCount} items total)
         contextStr += `
 
 ⚠️ NUMERICAL DATA IN MEMORY (preserve exactly):
-${numericalData.map(n => `  • ${n.value} (${n.type})`).join('\n')}
+${numericalData.map((n) => `  • ${n.value} (${n.type})`).join('\n')}
 
 A caring family member preserves exact numbers as you shared them - no approximations or rounding.
-`;}
+`;
+      }
 
       contextStr += `
 
@@ -4161,7 +4306,7 @@ If you're asking about something you've told me before, I should be able to find
     // ========== DOCUMENT CONTEXT (Issue #407 Fix + Enhancement) ==========
     if (context.sources?.hasDocuments && context.documents) {
       const extracted = context.extractionMetadata;
-      
+
       if (extracted && extracted.coverage < 1.0) {
         // TRUTH-FIRST DISCLOSURE: Partial document extraction
         contextStr += `
@@ -4221,7 +4366,13 @@ Do NOT confuse it with previous documents mentioned in memory.
     return contextStr;
   }
 
-  #buildSystemPrompt(mode, _analysis, reasoningGuidance = null, queryClassification = null, hasMemoryContext = false) {
+  #buildSystemPrompt(
+    mode,
+    _analysis,
+    reasoningGuidance = null,
+    queryClassification = null,
+    hasMemoryContext = false,
+  ) {
     const modeConfig = MODES[mode];
 
     let prompt = `You are a truth-first AI assistant. Your priorities are: Truth > Helpfulness > Engagement.
@@ -4235,7 +4386,6 @@ Core Principles:
 `;
 
     // Memory context is already injected earlier - no need for additional instructions here
-
 
     // ISSUE #443: Add query-specific response guidance
     if (queryClassification) {
@@ -4288,7 +4438,7 @@ NOTE: Fill in ALL brackets with actual content - never output placeholder text.
 Mode: ${modeConfig?.display_name || mode}
 `;
 
-    if (mode === "business_validation") {
+    if (mode === 'business_validation') {
       prompt += `\nBusiness Validation Requirements:
 - Always analyze downside scenarios and risks
 - Consider cash flow and survival impact
@@ -4297,7 +4447,7 @@ Mode: ${modeConfig?.display_name || mode}
 `;
     }
 
-    if (mode === "site_monkeys") {
+    if (mode === 'site_monkeys') {
       prompt += `\nSite Monkeys Mode:
 - Use vault content as authoritative business guidance
 - Enforce founder protection principles
@@ -4324,11 +4474,11 @@ Mode: ${modeConfig?.display_name || mode}
 
   #calculateCost(model, inputTokens, outputTokens) {
     const rates = {
-      "gpt-4": { input: 0.01, output: 0.03 },
-      "claude-sonnet-4.5": { input: 0.003, output: 0.015 },
+      'gpt-4': { input: 0.01, output: 0.03 },
+      'claude-sonnet-4.5': { input: 0.003, output: 0.015 },
     };
 
-    const rate = rates[model] || rates["gpt-4"];
+    const rate = rates[model] || rates['gpt-4'];
 
     const inputCost = (inputTokens / 1000) * rate.input;
     const outputCost = (outputTokens / 1000) * rate.output;
@@ -4360,17 +4510,14 @@ Mode: ${modeConfig?.display_name || mode}
     const processingTime = Date.now() - startTime;
     const count = this.requestStats.totalRequests;
     this.requestStats.avgProcessingTime =
-      (this.requestStats.avgProcessingTime * (count - 1) + processingTime) /
-      count;
+      (this.requestStats.avgProcessingTime * (count - 1) + processingTime) / count;
   }
 
   getStats() {
     return {
       ...this.requestStats,
-      successRate:
-        this.requestStats.successfulRequests / this.requestStats.totalRequests,
-      fallbackRate:
-        this.requestStats.fallbackUsed / this.requestStats.totalRequests,
+      successRate: this.requestStats.successfulRequests / this.requestStats.totalRequests,
+      fallbackRate: this.requestStats.fallbackUsed / this.requestStats.totalRequests,
       timestamp: new Date().toISOString(),
     };
   }
@@ -4395,10 +4542,14 @@ Mode: ${modeConfig?.display_name || mode}
     // BIBLE FIX: If confidence is low, escalate budget (simulates progressive escalation)
     // Instead of retry logic, we make intelligent upfront decisions
     if (confidence !== null && confidence < 0.7) {
-      this.log(`[COMPLEXITY] Low confidence (${confidence.toFixed(2)}) - escalating to medium budget`);
+      this.log(
+        `[COMPLEXITY] Low confidence (${confidence.toFixed(2)}) - escalating to medium budget`,
+      );
       // Force at least medium budget for low-confidence queries
       if (confidence < 0.5) {
-        this.log(`[COMPLEXITY] Very low confidence (${confidence.toFixed(2)}) - escalating to complex budget`);
+        this.log(
+          `[COMPLEXITY] Very low confidence (${confidence.toFixed(2)}) - escalating to complex budget`,
+        );
         return 'complex';
       }
       // Don't return yet - still check patterns, but bias toward medium/complex
@@ -4410,11 +4561,11 @@ Mode: ${modeConfig?.display_name || mode}
       /^define/,
       /^explain briefly/,
       /^how many/,
-      /^summarize/
+      /^summarize/,
     ];
 
     // Don't allow simple classification if confidence is low
-    if (simplePatterns.some(pattern => pattern.test(lowerMessage))) {
+    if (simplePatterns.some((pattern) => pattern.test(lowerMessage))) {
       if (confidence !== null && confidence < 0.7) {
         return 'medium'; // Upgrade to medium if uncertain
       }
@@ -4432,11 +4583,11 @@ Mode: ${modeConfig?.display_name || mode}
       'detailed',
       'comprehensive',
       'thorough',
-      'breakdown'
+      'breakdown',
     ];
 
-    const complexCount = complexIndicators.filter(
-      indicator => lowerMessage.includes(indicator)
+    const complexCount = complexIndicators.filter((indicator) =>
+      lowerMessage.includes(indicator),
     ).length;
 
     if (complexCount >= 2) {
@@ -4469,52 +4620,52 @@ Mode: ${modeConfig?.display_name || mode}
   #intelligentDocumentExtraction(content, maxChars, userQuery = null) {
     const totalTokens = Math.ceil(content.length / 4);
     const maxTokens = Math.ceil(maxChars / 4);
-    
+
     // If fits, return full content
     if (content.length <= maxChars) {
-      return { 
-        content, 
-        extracted: false, 
+      return {
+        content,
+        extracted: false,
         coverage: 1.0,
         originalTokens: totalTokens,
         extractedTokens: totalTokens,
-        strategy: 'full'
+        strategy: 'full',
       };
     }
-    
+
     const strategies = [];
-    
+
     // Strategy 1: Query-relevant extraction (if user asked a question)
     if (userQuery && userQuery.length > 10) {
       const relevant = this.#extractQueryRelevantSections(content, userQuery, maxChars);
       if (relevant.confidence > 0.3) {
-        strategies.push({ 
-          type: 'query-relevant', 
-          content: relevant.content, 
-          score: relevant.confidence 
+        strategies.push({
+          type: 'query-relevant',
+          content: relevant.content,
+          score: relevant.confidence,
         });
       }
     }
-    
+
     // Strategy 2: Key sections (intro + conclusion + headings)
     const keySections = this.#extractKeySections(content, maxChars);
     strategies.push({ type: 'key-sections', content: keySections, score: 0.6 });
-    
+
     // Strategy 3: Structure-based (headers, sections)
     const structured = this.#extractByStructure(content, maxChars);
     strategies.push({ type: 'structured', content: structured, score: 0.5 });
-    
+
     // Use best strategy
     const best = strategies.sort((a, b) => b.score - a.score)[0];
     const extractedTokens = Math.ceil(best.content.length / 4);
-    
+
     return {
       content: best.content,
       extracted: true,
       strategy: best.type,
       coverage: extractedTokens / totalTokens,
       originalTokens: totalTokens,
-      extractedTokens: extractedTokens
+      extractedTokens: extractedTokens,
     };
   }
 
@@ -4528,24 +4679,30 @@ Mode: ${modeConfig?.display_name || mode}
   #extractQueryRelevantSections(content, query, maxChars) {
     // Split into paragraphs/sections
     const sections = content.split(/\n\n+/);
-    const queryTerms = query.toLowerCase()
+    const queryTerms = query
+      .toLowerCase()
       .split(/\s+/)
-      .filter(t => t.length > 3 && !['what', 'where', 'when', 'which', 'this', 'that', 'about'].includes(t));
-    
+      .filter(
+        (t) =>
+          t.length > 3 && !['what', 'where', 'when', 'which', 'this', 'that', 'about'].includes(t),
+      );
+
     if (queryTerms.length === 0) {
       return { content: '', confidence: 0 };
     }
-    
+
     // Score each section by query relevance
-    const scored = sections.map(section => {
-      const lower = section.toLowerCase();
-      const matches = queryTerms.filter(term => lower.includes(term)).length;
-      return { section, score: matches / queryTerms.length };
-    }).filter(s => s.score > 0);
-    
+    const scored = sections
+      .map((section) => {
+        const lower = section.toLowerCase();
+        const matches = queryTerms.filter((term) => lower.includes(term)).length;
+        return { section, score: matches / queryTerms.length };
+      })
+      .filter((s) => s.score > 0);
+
     // Take highest scoring sections within budget
     scored.sort((a, b) => b.score - a.score);
-    
+
     let result = '';
     let chars = 0;
     for (const { section, score } of scored) {
@@ -4553,10 +4710,10 @@ Mode: ${modeConfig?.display_name || mode}
       result += section + '\n\n';
       chars += section.length + 2;
     }
-    
-    return { 
-      content: result.trim(), 
-      confidence: scored[0]?.score || 0 
+
+    return {
+      content: result.trim(),
+      confidence: scored[0]?.score || 0,
     };
   }
 
@@ -4568,23 +4725,23 @@ Mode: ${modeConfig?.display_name || mode}
    */
   #extractKeySections(content, maxChars) {
     const lines = content.split('\n');
-    
+
     // Always include: first 20%, last 10%, all headers
     const firstPortion = Math.floor(lines.length * 0.2);
     const lastPortion = Math.floor(lines.length * 0.1);
-    
+
     const first = lines.slice(0, firstPortion).join('\n');
     const last = lines.slice(-lastPortion).join('\n');
     const headers = lines
-      .filter(l => /^#{1,3}\s+/.test(l) || /^[A-Z][A-Z\s]{5,}:?\s*$/.test(l))
+      .filter((l) => /^#{1,3}\s+/.test(l) || /^[A-Z][A-Z\s]{5,}:?\s*$/.test(l))
       .join('\n');
-    
+
     let result = first + '\n\n[...]\n\n' + headers + '\n\n[...]\n\n' + last;
-    
+
     if (result.length > maxChars) {
       result = result.substring(0, maxChars);
     }
-    
+
     return result;
   }
 
@@ -4643,10 +4800,10 @@ Mode: ${modeConfig?.display_name || mode}
    */
   getSessionDocumentTokens(sessionId) {
     if (!sessionId) return 0;
-    
+
     const session = this.sessionCache.get(sessionId);
     if (!session || !session.documents) return 0;
-    
+
     return session.documents.reduce((sum, doc) => sum + (doc.tokens || 0), 0);
   }
 
@@ -4659,31 +4816,33 @@ Mode: ${modeConfig?.display_name || mode}
    */
   #trackSessionDocument(sessionId, tokens, filename) {
     if (!sessionId) return;
-    
+
     let session = this.sessionCache.get(sessionId);
     if (!session) {
       session = { documents: [] };
       this.sessionCache.set(sessionId, session);
     }
-    
+
     if (!session.documents) {
       session.documents = [];
     }
-    
+
     session.documents.push({
       tokens: tokens,
       filename: filename,
-      timestamp: Date.now()
+      timestamp: Date.now(),
     });
-    
-    this.debug(`[SESSION-TRACKING] Session ${sessionId}: ${this.getSessionDocumentTokens(sessionId)} total doc tokens (${session.documents.length} documents)`);
+
+    this.debug(
+      `[SESSION-TRACKING] Session ${sessionId}: ${this.getSessionDocumentTokens(sessionId)} total doc tokens (${session.documents.length} documents)`,
+    );
   }
 
   /**
    * ORDINAL ENFORCEMENT (Issue #609-B3)
    * Deterministic validator to ensure ordinal queries return the correct ordinal item
    * Example: "What is my first code?" should return the first code, not the second
-   * 
+   *
    * GUARDRAIL #2 (Issue #609 Follow-up):
    * Validator ONLY activates when:
    * 1. Query contains explicit ordinal ("first", "second", etc.)
@@ -4692,19 +4851,30 @@ Mode: ${modeConfig?.display_name || mode}
    */
   async #enforceOrdinalCorrectness({ response, memoryContext = [], query = '', context = {} }) {
     // EXECUTION PROOF - Verify ordinal enforcement is active (B3)
-    console.log('[PROOF] validator:ordinal v=2026-01-29c file=api/core/orchestrator.js fn=#enforceOrdinalCorrectness');
+    console.log(
+      '[PROOF] validator:ordinal v=2026-01-29c file=api/core/orchestrator.js fn=#enforceOrdinalCorrectness',
+    );
 
     try {
       // ═══════════════════════════════════════════════════════════════
       // GATING CONDITION: Check if this is an ordinal query
       // ═══════════════════════════════════════════════════════════════
       const ORDINAL_MAP = {
-        'first': 1, '1st': 1, 'second': 2, '2nd': 2,
-        'third': 3, '3rd': 3, 'fourth': 4, '4th': 4, 'fifth': 5, '5th': 5
+        first: 1,
+        '1st': 1,
+        second: 2,
+        '2nd': 2,
+        third: 3,
+        '3rd': 3,
+        fourth: 4,
+        '4th': 4,
+        fifth: 5,
+        '5th': 5,
       };
 
       // FIXED: Restrict to exact test subjects only (code|key|pin) - prevents ZEBRA contamination
-      const ordinalPattern = /\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\s+(code|key|pin)\b/i;
+      const ordinalPattern =
+        /\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\s+(code|key|pin)\b/i;
       const match = query.match(ordinalPattern);
 
       if (!match) {
@@ -4716,36 +4886,46 @@ Mode: ${modeConfig?.display_name || mode}
       const subject = match[2].toLowerCase();
       const ordinalNum = ORDINAL_MAP[ordinalWord];
 
-      this.debug(`[ORDINAL-AUTHORITATIVE] Query asks for: ${ordinalWord} ${subject} (#${ordinalNum})`);
+      this.debug(
+        `[ORDINAL-AUTHORITATIVE] Query asks for: ${ordinalWord} ${subject} (#${ordinalNum})`,
+      );
 
       // ═══════════════════════════════════════════════════════════════
       // GATING CHECK: Response already contains correct ordinal value?
       // ═══════════════════════════════════════════════════════════════
-      const memories = Array.isArray(memoryContext) ? memoryContext : (memoryContext.memories || []);
+      const memories = Array.isArray(memoryContext) ? memoryContext : memoryContext.memories || [];
       let ordinalMemories = memories
-        .filter(m => {
+        .filter((m) => {
           // Normalize metadata - handle string vs object
           let metadata = m.metadata || {};
           if (typeof metadata === 'string') {
-            try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+            try {
+              metadata = JSON.parse(metadata);
+            } catch {
+              metadata = {};
+            }
           }
           const ordinalSubject = (metadata.ordinal_subject || '').toLowerCase();
           return ordinalSubject && ordinalSubject.includes(subject);
         })
-        .map(m => {
+        .map((m) => {
           // Normalize metadata - handle string vs object
           let metadata = m.metadata || {};
           if (typeof metadata === 'string') {
-            try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+            try {
+              metadata = JSON.parse(metadata);
+            } catch {
+              metadata = {};
+            }
           }
           return {
             ordinal: parseInt(metadata.ordinal) || null,
             value: metadata.ordinal_value || null,
             content: m.content || '',
-            subject: metadata.ordinal_subject || null
+            subject: metadata.ordinal_subject || null,
           };
         })
-        .filter(m => m.ordinal !== null && m.value)
+        .filter((m) => m.ordinal !== null && m.value)
         .sort((a, b) => a.ordinal - b.ordinal);
 
       // ═══════════════════════════════════════════════════════════════
@@ -4759,7 +4939,9 @@ Mode: ${modeConfig?.display_name || mode}
         // Fallback to direct DB query
         if (this.pool && userId) {
           try {
-            this.debug(`[ORDINAL-AUTHORITATIVE] Executing direct DB query for subject="${subject}"`);
+            this.debug(
+              `[ORDINAL-AUTHORITATIVE] Executing direct DB query for subject="${subject}"`,
+            );
             const dbResult = await this.pool.query(
               `SELECT content, metadata
                FROM persistent_memories
@@ -4768,30 +4950,36 @@ Mode: ${modeConfig?.display_name || mode}
                AND (is_current = true OR is_current IS NULL)
                ORDER BY (metadata->>'ordinal')::int
                LIMIT 5`,
-              [userId, `%${subject}%`]
+              [userId, `%${subject}%`],
             );
 
             dbQueryExecuted = true;
 
             if (dbResult.rows && dbResult.rows.length > 0) {
               ordinalMemories = dbResult.rows
-                .map(row => {
+                .map((row) => {
                   // Normalize metadata - handle string vs object
                   let metadata = row.metadata || {};
                   if (typeof metadata === 'string') {
-                    try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+                    try {
+                      metadata = JSON.parse(metadata);
+                    } catch {
+                      metadata = {};
+                    }
                   }
                   return {
                     ordinal: parseInt(metadata.ordinal) || null,
                     value: metadata.ordinal_value || null,
                     content: row.content || '',
-                    subject: metadata.ordinal_subject || null
+                    subject: metadata.ordinal_subject || null,
                   };
                 })
-                .filter(m => m.ordinal !== null && m.value)
+                .filter((m) => m.ordinal !== null && m.value)
                 .sort((a, b) => a.ordinal - b.ordinal);
 
-              this.debug(`[ORDINAL-AUTHORITATIVE] DB query found ${ordinalMemories.length} ordinal memories`);
+              this.debug(
+                `[ORDINAL-AUTHORITATIVE] DB query found ${ordinalMemories.length} ordinal memories`,
+              );
             }
           } catch (dbError) {
             this.error('[ORDINAL-AUTHORITATIVE] DB query failed:', dbError);
@@ -4802,34 +4990,42 @@ Mode: ${modeConfig?.display_name || mode}
       // ═══════════════════════════════════════════════════════════════
       // EXTRACTION: Get correct value from metadata ONLY
       // ═══════════════════════════════════════════════════════════════
-      const targetMemory = ordinalMemories.find(m => m.ordinal === ordinalNum);
+      const targetMemory = ordinalMemories.find((m) => m.ordinal === ordinalNum);
 
       if (ordinalMemories.length === 0 || !targetMemory || !targetMemory.value) {
         const reason = ordinalMemories.length === 0 ? 'no_memories' : 'target_missing';
-        console.log(`[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} db_query=${dbQueryExecuted} found=${ordinalMemories.length} injected=false reason=${reason}`);
+        console.log(
+          `[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} db_query=${dbQueryExecuted} found=${ordinalMemories.length} injected=false reason=${reason}`,
+        );
         return { correctionApplied: false, response };
       }
 
-      this.debug(`[ORDINAL-AUTHORITATIVE] Found target memory: ordinal=${targetMemory.ordinal} value=${targetMemory.value} (total_memories=${ordinalMemories.length})`);
-      console.log(`[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} db_query=${dbQueryExecuted} target_found=true memories_count=${ordinalMemories.length}`);
+      this.debug(
+        `[ORDINAL-AUTHORITATIVE] Found target memory: ordinal=${targetMemory.ordinal} value=${targetMemory.value} (total_memories=${ordinalMemories.length})`,
+      );
+      console.log(
+        `[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} db_query=${dbQueryExecuted} target_found=true memories_count=${ordinalMemories.length}`,
+      );
 
       const correctValue = targetMemory.value;
 
       // Gather all wrong values (other ordinals with same subject)
       const wrongValues = ordinalMemories
-        .filter(m => m.ordinal !== ordinalNum)
-        .map(m => m.value)
-        .filter(v => v);
+        .filter((m) => m.ordinal !== ordinalNum)
+        .map((m) => m.value)
+        .filter((v) => v);
 
       // ═══════════════════════════════════════════════════════════════
       // AUTHORITATIVE ENFORCEMENT: Replace wrong, inject if missing
       // ═══════════════════════════════════════════════════════════════
-      const hasWrongValue = wrongValues.some(wrong => response.includes(wrong));
+      const hasWrongValue = wrongValues.some((wrong) => response.includes(wrong));
       const hasCorrectValue = response.includes(correctValue);
 
       // Only proceed if correction needed
       if (hasCorrectValue && !hasWrongValue) {
-        console.log(`[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} correct_value=${correctValue} db_query=${dbQueryExecuted} injected=false reason=already_correct`);
+        console.log(
+          `[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} correct_value=${correctValue} db_query=${dbQueryExecuted} injected=false reason=already_correct`,
+        );
         return { correctionApplied: false, response };
       }
 
@@ -4840,10 +5036,15 @@ Mode: ${modeConfig?.display_name || mode}
       // REMOVE wrong values
       for (const wrongValue of wrongValues) {
         if (adjustedResponse.includes(wrongValue)) {
-          adjustedResponse = adjustedResponse.replace(new RegExp(wrongValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), correctValue);
+          adjustedResponse = adjustedResponse.replace(
+            new RegExp(wrongValue.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+            correctValue,
+          );
           corrected = true;
           wrongValuesRemoved.push(wrongValue);
-          this.debug(`[ORDINAL-AUTHORITATIVE] Replaced wrong value: "${wrongValue}" → "${correctValue}"`);
+          this.debug(
+            `[ORDINAL-AUTHORITATIVE] Replaced wrong value: "${wrongValue}" → "${correctValue}"`,
+          );
         }
       }
 
@@ -4857,14 +5058,15 @@ Mode: ${modeConfig?.display_name || mode}
         this.debug(`[ORDINAL-AUTHORITATIVE] Injected missing value: ${correctValue}`);
       }
 
-      console.log(`[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} correct_value=${correctValue} wrong_values_removed=[${wrongValuesRemoved.join(',')}] db_query=${dbQueryExecuted} injected=${injected}`);
+      console.log(
+        `[ORDINAL-AUTHORITATIVE] query_ordinal=${ordinalNum} subject=${subject} correct_value=${correctValue} wrong_values_removed=[${wrongValuesRemoved.join(',')}] db_query=${dbQueryExecuted} injected=${injected}`,
+      );
 
       return {
         correctionApplied: corrected,
         response: adjustedResponse,
-        ordinalCorrected: corrected ? { ordinal: ordinalNum, subject, correctValue } : null
+        ordinalCorrected: corrected ? { ordinal: ordinalNum, subject, correctValue } : null,
       };
-
     } catch (error) {
       this.error('[ORDINAL-AUTHORITATIVE] Error:', error);
       return { correctionApplied: false, response };
@@ -4889,7 +5091,9 @@ Mode: ${modeConfig?.display_name || mode}
    */
   async #calculateTemporalInference({ response, memoryContext = [], query = '', context = {} }) {
     // EXECUTION PROOF - Verify temporal inference is active (INF3)
-    console.log('[PROOF] validator:temporal v=2026-01-29c file=api/core/orchestrator.js fn=#calculateTemporalInference');
+    console.log(
+      '[PROOF] validator:temporal v=2026-01-29c file=api/core/orchestrator.js fn=#calculateTemporalInference',
+    );
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -4909,7 +5113,7 @@ Mode: ${modeConfig?.display_name || mode}
       // ═══════════════════════════════════════════════════════════════
       // TRY RETRIEVAL FIRST: Extract from memory context
       // ═══════════════════════════════════════════════════════════════
-      const memories = Array.isArray(memoryContext) ? memoryContext : (memoryContext.memories || []);
+      const memories = Array.isArray(memoryContext) ? memoryContext : memoryContext.memories || [];
       let duration = null;
       let endYear = null;
       let entity = null;
@@ -4953,7 +5157,7 @@ Mode: ${modeConfig?.display_name || mode}
              AND (content ILIKE '%years%' OR content ILIKE '%left%' OR content ILIKE '%until%')
              AND (is_current = true OR is_current IS NULL)
              LIMIT 10`,
-            [userId]
+            [userId],
           );
 
           dbQueryExecuted = true;
@@ -4981,7 +5185,9 @@ Mode: ${modeConfig?.display_name || mode}
               if (duration && endYear) break; // Found both
             }
 
-            this.debug(`[TEMPORAL-AUTHORITATIVE] DB query found duration=${duration}, endYear=${endYear}, entity=${entity}`);
+            this.debug(
+              `[TEMPORAL-AUTHORITATIVE] DB query found duration=${duration}, endYear=${endYear}, entity=${entity}`,
+            );
           }
         } catch (dbError) {
           this.error('[TEMPORAL-AUTHORITATIVE] DB query failed:', dbError);
@@ -4992,7 +5198,9 @@ Mode: ${modeConfig?.display_name || mode}
       // CALCULATION & VALIDATION
       // ═══════════════════════════════════════════════════════════════
       if (!duration || !endYear) {
-        console.log(`[TEMPORAL-AUTHORITATIVE] duration=${duration} endYear=${endYear} db_query=${dbQueryExecuted} calculated_start=NOT_FOUND appended=false`);
+        console.log(
+          `[TEMPORAL-AUTHORITATIVE] duration=${duration} endYear=${endYear} db_query=${dbQueryExecuted} calculated_start=NOT_FOUND appended=false`,
+        );
         return { calculationApplied: false, response };
       }
 
@@ -5023,7 +5231,9 @@ Mode: ${modeConfig?.display_name || mode}
       // ═══════════════════════════════════════════════════════════════
       // Check if response already contains the calculated year
       if (response.includes(startYear.toString())) {
-        console.log(`[TEMPORAL-AUTHORITATIVE] entity=${entity || 'unknown'} duration=${duration} end_year=${endYear} calculated_start=${startYear} db_query=${dbQueryExecuted} appended=false reason=already_present`);
+        console.log(
+          `[TEMPORAL-AUTHORITATIVE] entity=${entity || 'unknown'} duration=${duration} end_year=${endYear} calculated_start=${startYear} db_query=${dbQueryExecuted} appended=false reason=already_present`,
+        );
         return { calculationApplied: false, response };
       }
 
@@ -5035,14 +5245,15 @@ Mode: ${modeConfig?.display_name || mode}
       const adjustedResponse = response.trim() + '\n\n' + injection;
 
       this.debug(`[TEMPORAL-AUTHORITATIVE] ✅ Calculated: ${endYear} - ${duration} = ${startYear}`);
-      console.log(`[TEMPORAL-AUTHORITATIVE] entity=${entity || 'unknown'} duration=${duration} end_year=${endYear} calculated_start=${startYear} db_query=${dbQueryExecuted} appended=true`);
+      console.log(
+        `[TEMPORAL-AUTHORITATIVE] entity=${entity || 'unknown'} duration=${duration} end_year=${endYear} calculated_start=${startYear} db_query=${dbQueryExecuted} appended=true`,
+      );
 
       return {
         calculationApplied: true,
         response: adjustedResponse,
-        calculation: { duration, endYear, startYear, entity, validated: true }
+        calculation: { duration, endYear, startYear, entity, validated: true },
       };
-
     } catch (error) {
       this.error('[TEMPORAL-AUTHORITATIVE] Error:', error);
       return { calculationApplied: false, response };
@@ -5057,14 +5268,16 @@ Mode: ${modeConfig?.display_name || mode}
    * Example: "Alex" could be friend Alex or colleague Alex
    */
   async #enforceAmbiguityDisclosure({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:ambiguity v=2026-01-29c file=api/core/orchestrator.js fn=#enforceAmbiguityDisclosure');
+    console.log(
+      '[PROOF] validator:ambiguity v=2026-01-29c file=api/core/orchestrator.js fn=#enforceAmbiguityDisclosure',
+    );
 
     try {
       // ═══════════════════════════════════════════════════════════════
       // GATING CONDITION: Query mentions a proper name (capitalized)
       // ═══════════════════════════════════════════════════════════════
       const namePattern = /\b([A-Z][a-z]{2,})\b/g;
-      const names = [...query.matchAll(namePattern)].map(m => m[1]);
+      const names = [...query.matchAll(namePattern)].map((m) => m[1]);
 
       if (names.length === 0) {
         return { correctionApplied: false, response };
@@ -5100,8 +5313,10 @@ Mode: ${modeConfig?.display_name || mode}
         this.debug(`[AMBIGUITY-AUTHORITATIVE] Querying for entities: ${candidateNames.join(', ')}`);
 
         // Build OR conditions for multiple names using parameterized query
-        const ilikeClauses = candidateNames.map((_, idx) => `content ILIKE $${idx + 2}`).join(' OR ');
-        const likeParams = candidateNames.map(name => `%${name}%`);
+        const ilikeClauses = candidateNames
+          .map((_, idx) => `content ILIKE $${idx + 2}`)
+          .join(' OR ');
+        const likeParams = candidateNames.map((name) => `%${name}%`);
 
         const dbResult = await this.pool.query(
           `SELECT id, content
@@ -5110,10 +5325,12 @@ Mode: ${modeConfig?.display_name || mode}
            AND (${ilikeClauses})
            AND (is_current = true OR is_current IS NULL)
            LIMIT 10`,
-          [userId, ...likeParams]
+          [userId, ...likeParams],
         );
 
-        console.log(`[PROOF] authoritative-db domain=ambiguity ran=true rows=${dbResult.rows.length}`);
+        console.log(
+          `[PROOF] authoritative-db domain=ambiguity ran=true rows=${dbResult.rows.length}`,
+        );
         console.log(`[AMBIGUITY-AUTHORITATIVE] db_rows=${dbResult.rows?.length || 0}`);
         console.log(`[AMBIGUITY-DEBUG] Query names: ${candidateNames.join(', ')}`);
         console.log(`[AMBIGUITY-DEBUG] Like patterns: ${likeParams.join(', ')}`);
@@ -5134,7 +5351,9 @@ Mode: ${modeConfig?.display_name || mode}
             for (const name of candidateNames) {
               if (contentLower.includes(name.toLowerCase())) {
                 nameMatches.get(name).push(content);
-                console.log(`[AMBIGUITY-DEBUG] Row ${row.id} matched name "${name}": "${content.substring(0, 80)}..."`);
+                console.log(
+                  `[AMBIGUITY-DEBUG] Row ${row.id} matched name "${name}": "${content.substring(0, 80)}..."`,
+                );
               }
             }
           }
@@ -5152,7 +5371,8 @@ Mode: ${modeConfig?.display_name || mode}
             const nameLower = name.toLowerCase();
 
             // Static patterns that don't embed the name
-            const relationPattern = /\b(friend|colleague|coworker|neighbor|boss|manager|partner)\s+([A-Z][a-z]{2,})\b/gi;
+            const relationPattern =
+              /\b(friend|colleague|coworker|neighbor|boss|manager|partner)\s+([A-Z][a-z]{2,})\b/gi;
             const locationPattern = /\b([A-Z][a-z]{2,})\s+(from|at|in)\s+([A-Z][a-z]+)\b/gi;
             const myRelationPattern = /\bmy\s+(\w+)\s+([A-Z][a-z]{2,})\b/gi;
 
@@ -5186,15 +5406,19 @@ Mode: ${modeConfig?.display_name || mode}
             }
 
             // Log descriptors found for debugging
-            console.log(`[AMBIGUITY-AUTHORITATIVE] entity=${name} descriptors=${Array.from(descriptors).join(',') || 'none'} count=${descriptors.size}`);
+            console.log(
+              `[AMBIGUITY-AUTHORITATIVE] entity=${name} descriptors=${Array.from(descriptors).join(',') || 'none'} count=${descriptors.size}`,
+            );
 
             // If we found 2+ different descriptors, ambiguity exists
             if (descriptors.size >= 2) {
               ambiguityDetected = {
                 entity: name,
-                variants: Array.from(descriptors).slice(0, 2)
+                variants: Array.from(descriptors).slice(0, 2),
               };
-              this.debug(`[AMBIGUITY-AUTHORITATIVE] Ambiguity detected for "${name}": ${JSON.stringify(Array.from(descriptors))}`);
+              this.debug(
+                `[AMBIGUITY-AUTHORITATIVE] Ambiguity detected for "${name}": ${JSON.stringify(Array.from(descriptors))}`,
+              );
               break; // Found ambiguity, stop searching
             }
           }
@@ -5207,7 +5431,9 @@ Mode: ${modeConfig?.display_name || mode}
       // AUTHORITATIVE ENFORCEMENT: Prepend ambiguity notice
       // ═══════════════════════════════════════════════════════════════
       if (!ambiguityDetected) {
-        console.log(`[AMBIGUITY-AUTHORITATIVE] entity=${names[0] || 'unknown'} variants=[] disclosure_prepended=false reason=no_ambiguity`);
+        console.log(
+          `[AMBIGUITY-AUTHORITATIVE] entity=${names[0] || 'unknown'} variants=[] disclosure_prepended=false reason=no_ambiguity`,
+        );
         return { correctionApplied: false, response };
       }
 
@@ -5216,11 +5442,13 @@ Mode: ${modeConfig?.display_name || mode}
         const contextNote = `\n\n(Note: You've mentioned more than one ${ambiguityDetected.entity}: ${ambiguityDetected.variants.join(' and ')}.)`;
         const adjustedResponse = response.trim() + contextNote;
 
-        console.log(`[AMBIGUITY-AUTHORITATIVE] entity=${ambiguityDetected.entity} variants=[${ambiguityDetected.variants.join(',')}] disclosure_prepended=false context_appended=true`);
+        console.log(
+          `[AMBIGUITY-AUTHORITATIVE] entity=${ambiguityDetected.entity} variants=[${ambiguityDetected.variants.join(',')}] disclosure_prepended=false context_appended=true`,
+        );
 
         return {
           correctionApplied: true,
-          response: adjustedResponse
+          response: adjustedResponse,
         };
       }
 
@@ -5228,13 +5456,14 @@ Mode: ${modeConfig?.display_name || mode}
       const disclosure = `I notice you've mentioned more than one ${ambiguityDetected.entity}: ${ambiguityDetected.variants[0]} and ${ambiguityDetected.variants[1]}. Which ${ambiguityDetected.entity} are you asking about?\n\n`;
       const adjustedResponse = disclosure + response;
 
-      console.log(`[AMBIGUITY-AUTHORITATIVE] entity=${ambiguityDetected.entity} variants=[${ambiguityDetected.variants.join(',')}] disclosure_prepended=true`);
+      console.log(
+        `[AMBIGUITY-AUTHORITATIVE] entity=${ambiguityDetected.entity} variants=[${ambiguityDetected.variants.join(',')}] disclosure_prepended=true`,
+      );
 
       return {
         correctionApplied: true,
-        response: adjustedResponse
+        response: adjustedResponse,
       };
-
     } catch (error) {
       this.error('[AMBIGUITY-AUTHORITATIVE] Error:', error);
       return { correctionApplied: false, response };
@@ -5250,21 +5479,34 @@ Mode: ${modeConfig?.display_name || mode}
     const head = response.trim().slice(0, 260).toLowerCase();
 
     const refusalPhrases = [
-      "i don't have", "i do not have", "i can't", "i cannot", "i am unable",
-      "i'm sorry", "unfortunately", "i apologize"
+      "i don't have",
+      'i do not have',
+      "i can't",
+      'i cannot',
+      'i am unable',
+      "i'm sorry",
+      'unfortunately',
+      'i apologize',
     ];
 
     const contextWords = [
-      "information", "context", "access", "data", "details",
-      "enough information", "that information", "this information"
+      'information',
+      'context',
+      'access',
+      'data',
+      'details',
+      'enough information',
+      'that information',
+      'this information',
     ];
 
-    const hasRefusalPhrase = refusalPhrases.some(p => head.includes(p));
-    const hasContextWord = contextWords.some(w => head.includes(w));
+    const hasRefusalPhrase = refusalPhrases.some((p) => head.includes(p));
+    const hasContextWord = contextWords.some((w) => head.includes(w));
 
     // Also catch "As an AI..." patterns
-    const asAnAI = head.includes("as an ai") &&
-      (head.includes("can't") || head.includes("cannot") || head.includes("don't have"));
+    const asAnAI =
+      head.includes('as an ai') &&
+      (head.includes("can't") || head.includes('cannot') || head.includes("don't have"));
 
     return (hasRefusalPhrase && hasContextWord) || asAnAI;
   }
@@ -5277,7 +5519,9 @@ Mode: ${modeConfig?.display_name || mode}
    * This validator bypasses retrieval to guarantee vehicle fact inclusion.
    */
   async #enforceVehicleRecall({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:vehicle v=2026-01-30a file=api/core/orchestrator.js fn=#enforceVehicleRecall');
+    console.log(
+      '[PROOF] validator:vehicle v=2026-01-30a file=api/core/orchestrator.js fn=#enforceVehicleRecall',
+    );
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -5294,11 +5538,14 @@ Mode: ${modeConfig?.display_name || mode}
       const isRefusal = this.#isRefusalish(response);
 
       // Check if response already mentions a vehicle
-      const vehicleInResponse = /\b(tesla|honda|toyota|ford|chevrolet|nissan|bmw|mercedes|audi|lexus|mazda|subaru|jeep|ram|gmc|model\s*[0-9sxy]|car|truck|suv|vehicle)\b/i;
+      const vehicleInResponse =
+        /\b(tesla|honda|toyota|ford|chevrolet|nissan|bmw|mercedes|audi|lexus|mazda|subaru|jeep|ram|gmc|model\s*[0-9sxy]|car|truck|suv|vehicle)\b/i;
 
       // FIX #643-STR1: Only short-circuit if NOT a refusal AND vehicle mentioned
       if (!isRefusal && vehicleInResponse.test(response)) {
-        console.log(`[VEHICLE-AUTHORITATIVE] vehicle_found=false injected=false reason=already_correct`);
+        console.log(
+          `[VEHICLE-AUTHORITATIVE] vehicle_found=false injected=false reason=already_correct`,
+        );
         console.log(`[REFUSAL] isRefusalish=false validator=vehicle`);
         return { correctionApplied: false, response };
       }
@@ -5324,19 +5571,23 @@ Mode: ${modeConfig?.display_name || mode}
              AND content ~* '\\m(drive|car|vehicle|tesla|honda|toyota|ford|model\\s*[0-9sxy])\\M'
              AND (is_current = true OR is_current IS NULL)
              LIMIT 1`,
-            [userId]
+            [userId],
           );
 
           if (dbResult.rows && dbResult.rows.length > 0) {
             const content = (dbResult.rows[0].content || '').substring(0, 500);
 
             // Extract vehicle description
-            const vehicleMatch = content.match(/\b(drive|have|own)\s+(a|an|the)?\s*([A-Z][a-zA-Z0-9\s-]+(?:Model\s*[0-9SXY])?)/i);
+            const vehicleMatch = content.match(
+              /\b(drive|have|own)\s+(a|an|the)?\s*([A-Z][a-zA-Z0-9\s-]+(?:Model\s*[0-9SXY])?)/i,
+            );
             if (vehicleMatch) {
               vehicleFound = vehicleMatch[3].trim();
             } else {
               // Fallback: just extract vehicle brand/model
-              const brandMatch = content.match(/\b(Tesla|Honda|Toyota|Ford|Chevrolet|Nissan|BMW|Mercedes|Audi|Model\s*[0-9SXY])[^\.\n]*/i);
+              const brandMatch = content.match(
+                /\b(Tesla|Honda|Toyota|Ford|Chevrolet|Nissan|BMW|Mercedes|Audi|Model\s*[0-9SXY])[^\.\n]*/i,
+              );
               if (brandMatch) {
                 vehicleFound = brandMatch[0].trim();
               }
@@ -5353,13 +5604,21 @@ Mode: ${modeConfig?.display_name || mode}
       // AUTHORITATIVE ENFORCEMENT: Append vehicle fact
       // ═══════════════════════════════════════════════════════════════
       if (!vehicleFound) {
-        console.log(`[VEHICLE-AUTHORITATIVE] vehicle_found=false injected=false reason=not_in_memory`);
+        console.log(
+          `[VEHICLE-AUTHORITATIVE] vehicle_found=false injected=false reason=not_in_memory`,
+        );
         return { correctionApplied: false, response };
       }
 
       // Don't inject into unrelated refusals
-      if (isRefusal && !response.toLowerCase().includes('vehicle') && !response.toLowerCase().includes('car')) {
-        console.log(`[VEHICLE-AUTHORITATIVE] vehicle_found=true vehicle="${vehicleFound}" injected=false reason=unrelated_refusal`);
+      if (
+        isRefusal &&
+        !response.toLowerCase().includes('vehicle') &&
+        !response.toLowerCase().includes('car')
+      ) {
+        console.log(
+          `[VEHICLE-AUTHORITATIVE] vehicle_found=true vehicle="${vehicleFound}" injected=false reason=unrelated_refusal`,
+        );
         return { correctionApplied: false, response };
       }
 
@@ -5367,13 +5626,14 @@ Mode: ${modeConfig?.display_name || mode}
       const injection = `Based on what you've shared, you drive a ${vehicleFound}.`;
       const adjustedResponse = response.trim() + '\n\n' + injection;
 
-      console.log(`[VEHICLE-AUTHORITATIVE] vehicle_found=true vehicle="${vehicleFound}" appended=true`);
+      console.log(
+        `[VEHICLE-AUTHORITATIVE] vehicle_found=true vehicle="${vehicleFound}" appended=true`,
+      );
 
       return {
         correctionApplied: true,
-        response: adjustedResponse
+        response: adjustedResponse,
       };
-
     } catch (error) {
       this.error('[VEHICLE-AUTHORITATIVE] Error:', error);
       return { correctionApplied: false, response };
@@ -5388,7 +5648,9 @@ Mode: ${modeConfig?.display_name || mode}
    * Example: José not Jose, Björn not Bjorn
    */
   async #enforceUnicodeNames({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:unicode v=2026-01-29c file=api/core/orchestrator.js fn=#enforceUnicodeNames');
+    console.log(
+      '[PROOF] validator:unicode v=2026-01-29c file=api/core/orchestrator.js fn=#enforceUnicodeNames',
+    );
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -5407,7 +5669,9 @@ Mode: ${modeConfig?.display_name || mode}
       const isRefusal = this.#isRefusalish(response);
       console.log(`[REFUSAL] isRefusalish=${isRefusal} validator=unicode`);
 
-      this.debug(`[UNICODE-AUTHORITATIVE] Contacts query detected, hasUnicode=${hasUnicode}, isRefusal=${isRefusal}`);
+      this.debug(
+        `[UNICODE-AUTHORITATIVE] Contacts query detected, hasUnicode=${hasUnicode}, isRefusal=${isRefusal}`,
+      );
 
       // ═══════════════════════════════════════════════════════════════
       // AUTHORITATIVE MODE: Direct DB query for unicode names
@@ -5427,10 +5691,12 @@ Mode: ${modeConfig?.display_name || mode}
              AND (is_current = true OR is_current IS NULL)
              ORDER BY created_at DESC
              LIMIT 20`,
-            [userId]
+            [userId],
           );
 
-          console.log(`[UNICODE-AUTHORITATIVE] Truth-telemetry: rows_returned=${dbResult.rows.length}`);
+          console.log(
+            `[UNICODE-AUTHORITATIVE] Truth-telemetry: rows_returned=${dbResult.rows.length}`,
+          );
 
           if (dbResult.rows && dbResult.rows.length > 0) {
             let anchorsPresent = false;
@@ -5442,14 +5708,18 @@ Mode: ${modeConfig?.display_name || mode}
 
               // Truth-telemetry: log each row
               const contentPreview = (row.content || '').substring(0, 80).replace(/\n/g, ' ');
-              console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: category=${row.category_name}, is_current=${row.is_current}, content="${contentPreview}"`);
+              console.log(
+                `[UNICODE-AUTHORITATIVE] Row ${row.id}: category=${row.category_name}, is_current=${row.is_current}, content="${contentPreview}"`,
+              );
 
               // CRITICAL FIX: Read from metadata.anchors, not content text
               if (anchors) {
                 anchorsPresent = true;
                 const keys = Object.keys(anchors);
                 anchorsKeys.push(...keys);
-                console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: anchors_keys=[${keys.join(', ')}]`);
+                console.log(
+                  `[UNICODE-AUTHORITATIVE] Row ${row.id}: anchors_keys=[${keys.join(', ')}]`,
+                );
 
                 // Extract unicode names from anchors.unicode
                 if (anchors.unicode && Array.isArray(anchors.unicode)) {
@@ -5458,7 +5728,9 @@ Mode: ${modeConfig?.display_name || mode}
                       unicodeNames.push(name);
                     }
                   }
-                  console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: unicode_names_from_anchors=[${anchors.unicode.join(', ')}]`);
+                  console.log(
+                    `[UNICODE-AUTHORITATIVE] Row ${row.id}: unicode_names_from_anchors=[${anchors.unicode.join(', ')}]`,
+                  );
                 }
               } else {
                 console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: anchors_keys=[] (no anchors)`);
@@ -5467,7 +5739,9 @@ Mode: ${modeConfig?.display_name || mode}
               // Fallback: extract from content if no anchors exist
               if (!anchors || !anchors.unicode) {
                 const content = (row.content || '').substring(0, 500);
-                const nameMatches = content.matchAll(/\b([A-ZÀ-ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]+)?)\b/g);
+                const nameMatches = content.matchAll(
+                  /\b([A-ZÀ-ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]+)?)\b/g,
+                );
                 for (const match of nameMatches) {
                   const name = match[1];
                   if (unicodePattern.test(name)) {
@@ -5481,10 +5755,14 @@ Mode: ${modeConfig?.display_name || mode}
             unicodeNames = [...new Set(unicodeNames)];
 
             console.log(`[UNICODE-AUTHORITATIVE] anchors_present=${anchorsPresent}`);
-            console.log(`[UNICODE-AUTHORITATIVE] unique_anchors_keys=[${[...new Set(anchorsKeys)].join(', ')}]`);
+            console.log(
+              `[UNICODE-AUTHORITATIVE] unique_anchors_keys=[${[...new Set(anchorsKeys)].join(', ')}]`,
+            );
             console.log(`[UNICODE-AUTHORITATIVE] unicode_names_found=[${unicodeNames.join(', ')}]`);
 
-            this.debug(`[UNICODE-AUTHORITATIVE] DB query found unicode names: ${unicodeNames.join(', ')}`);
+            this.debug(
+              `[UNICODE-AUTHORITATIVE] DB query found unicode names: ${unicodeNames.join(', ')}`,
+            );
           }
         } catch (dbError) {
           this.error('[UNICODE-AUTHORITATIVE] DB query failed:', dbError);
@@ -5500,7 +5778,11 @@ Mode: ${modeConfig?.display_name || mode}
       }
 
       // Don't inject into unrelated refusals
-      if (isRefusal && !response.toLowerCase().includes('contact') && !response.toLowerCase().includes('name')) {
+      if (
+        isRefusal &&
+        !response.toLowerCase().includes('contact') &&
+        !response.toLowerCase().includes('name')
+      ) {
         console.log(`[UNICODE-AUTHORITATIVE] decision: appended=false reason=unrelated_refusal`);
         return { correctionApplied: false, response };
       }
@@ -5513,9 +5795,14 @@ Mode: ${modeConfig?.display_name || mode}
         // Generate ASCII version by removing diacritics
         const asciiName = unicodeName.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         if (asciiName !== unicodeName && adjustedResponse.includes(asciiName)) {
-          adjustedResponse = adjustedResponse.replace(new RegExp(asciiName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), unicodeName);
+          adjustedResponse = adjustedResponse.replace(
+            new RegExp(asciiName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
+            unicodeName,
+          );
           corrected = true;
-          this.debug(`[UNICODE-AUTHORITATIVE] Replaced ASCII "${asciiName}" with unicode "${unicodeName}"`);
+          this.debug(
+            `[UNICODE-AUTHORITATIVE] Replaced ASCII "${asciiName}" with unicode "${unicodeName}"`,
+          );
         }
       }
 
@@ -5527,13 +5814,14 @@ Mode: ${modeConfig?.display_name || mode}
         this.debug(`[UNICODE-AUTHORITATIVE] Appended unicode names list`);
       }
 
-      console.log(`[UNICODE-AUTHORITATIVE] decision: appended=${corrected} reason=${corrected ? 'injected_unicode_names' : 'already_present'}`);
+      console.log(
+        `[UNICODE-AUTHORITATIVE] decision: appended=${corrected} reason=${corrected ? 'injected_unicode_names' : 'already_present'}`,
+      );
 
       return {
         correctionApplied: corrected,
-        response: adjustedResponse
+        response: adjustedResponse,
       };
-
     } catch (error) {
       this.error('[UNICODE-AUTHORITATIVE] Error:', error);
       return { correctionApplied: false, response };
