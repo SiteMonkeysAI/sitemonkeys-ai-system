@@ -395,7 +395,8 @@ export async function storeWithSupersession(pool, memoryData) {
     fingerprintConfidence = 0.5,
     mode = 'truth-general',
     categoryName = 'general',
-    tokenCount = 0
+    tokenCount = 0,
+    metadata = {}  // FIX #659: Accept metadata parameter
   } = memoryData;
 
   // If no fingerprint, this isn't a superseding fact - use normal storage
@@ -450,12 +451,14 @@ export async function storeWithSupersession(pool, memoryData) {
       }
 
       // Insert new memory (id is INTEGER with sequence, auto-generated)
+      // FIX #659: Include metadata in INSERT to preserve anchors
       const newMemory = await client.query(`
         INSERT INTO persistent_memories (
           user_id, content, category_name, token_count,
           fact_fingerprint, fingerprint_confidence,
-          is_current, mode, embedding_status, created_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, true, $7, 'pending', NOW())
+          is_current, mode, embedding_status, created_at,
+          metadata
+        ) VALUES ($1, $2, $3, $4, $5, $6, true, $7, 'pending', NOW(), $8)
         RETURNING id
       `, [
         userId,
@@ -464,7 +467,8 @@ export async function storeWithSupersession(pool, memoryData) {
         tokenCount || Math.ceil(content.length / 4), // Estimate if not provided
         factFingerprint,
         fingerprintConfidence,
-        mode
+        mode,
+        JSON.stringify(metadata)  // FIX #659: Store metadata as JSONB
       ]);
 
       const newId = newMemory.rows[0].id; // INTEGER
