@@ -368,6 +368,16 @@ export class Orchestrator {
 
       // ========== STEP 9: ANCHOR PRESERVATION (Issue #606 Phase 1) ==========
       try {
+        // FIX #659: VALIDATOR-TRACE diagnostic logging (gated by DEBUG_DIAGNOSTICS)
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[VALIDATOR-TRACE] Calling anchor validator with memory_context length=${context.memory_context?.length || 0}`);
+          console.log(`[VALIDATOR-TRACE] Memory IDs being validated: [${context.memory_ids?.join(',') || 'none'}]`);
+          if (context.memory_context && context.memory_context.length > 0) {
+            const firstMemory = context.memory_context[0];
+            console.log(`[VALIDATOR-TRACE] First memory: id=${firstMemory.id} has_metadata=${!!firstMemory.metadata} has_anchors=${!!(firstMemory.metadata?.anchors)}`);
+          }
+        }
+
         const anchorResult = await anchorPreservationValidator.validate({
           response: enforcedResponse,
           memoryContext: context.memory_context,
@@ -938,6 +948,8 @@ export class Orchestrator {
       context.sessionId = sessionId;
       context.message = message;
       context.claudeConfirmed = claudeConfirmed; // BIBLE FIX: Pass confirmation flag
+      context.memory_context = memoryContext.memory_objects || [];  // FIX #659: Pass memory objects to validators
+      context.memory_ids = memoryContext.memory_ids || [];  // FIX #659: Pass memory IDs for validator trace
       this.log(`[CONTEXT] Total: ${context.totalTokens} tokens`);
 
       // STEP 5: Perform semantic analysis
@@ -2307,6 +2319,7 @@ export class Orchestrator {
         categories: [], // Semantic retrieval doesn't use category filtering
         hasMemory: tokenCount > 0,
         memory_ids: memoryIds,
+        memory_objects: memoriesToFormat,  // FIX #659: Return actual memory objects for validators
       };
 
     } catch (error) {
@@ -5117,6 +5130,27 @@ Mode: ${modeConfig?.display_name || mode}
         console.log(`[AMBIGUITY-AUTHORITATIVE] db_rows=${dbResult.rows?.length || 0}`);
         console.log(`[AMBIGUITY-DEBUG] Query names: ${candidateNames.join(', ')}`);
         console.log(`[AMBIGUITY-DEBUG] Like patterns: ${likeParams.join(', ')}`);
+
+        // FIX #659: NUA1 diagnostic - Show ALL rows for entity regardless of is_current (gated by DEBUG_DIAGNOSTICS)
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          try {
+            const allRowsResult = await this.pool.query(
+              `SELECT id, is_current, content, category_name, created_at, fact_fingerprint
+               FROM persistent_memories
+               WHERE user_id = $1 AND (${ilikeClauses})
+               ORDER BY created_at DESC
+               LIMIT 20`,
+              [userId, ...likeParams]
+            );
+            console.log(`[NUA1-DIAG] Total rows for entity (ignoring is_current): ${allRowsResult.rows.length}`);
+            allRowsResult.rows.forEach((row) => {
+              const preview = (row.content || '').substring(0, 80).replace(/\n/g, ' ');
+              console.log(`[NUA1-DIAG] id=${row.id} is_current=${row.is_current} fingerprint=${row.fingerprint || 'none'} category=${row.category_name} created=${row.created_at} content="${preview}..."`);
+            });
+          } catch (diagError) {
+            console.error(`[NUA1-DIAG] Diagnostic query failed: ${diagError.message}`);
+          }
+        }
 
         // AUTHORITATIVE DEBUG (Issue #656) - Explain which filters are applied
         console.log(`[AMBIGUITY-DEBUG] entity=${candidateNames.join(', ')} query_filters={user_id=${userId}, is_current=true OR NULL, categories=all, mode=all} returned_ids=[${dbResult.rows.map(r => r.id).join(', ')}]`);

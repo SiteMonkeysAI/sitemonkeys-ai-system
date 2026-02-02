@@ -978,6 +978,13 @@ export class IntelligentMemoryStorage {
           if (pricingAnchors.length > 0) {
             regularMetadata.anchors.pricing = pricingAnchors;
           }
+
+          // FIX #659: UNICODE-TRACE diagnostic logging (gated by DEBUG_DIAGNOSTICS)
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[UNICODE-TRACE] extracted_unicode=${JSON.stringify(unicodeNames)}`);
+            console.log(`[UNICODE-TRACE] before_storage anchors_keys=[${Object.keys(regularMetadata.anchors).join(',')}] unicode_count=${unicodeNames.length}`);
+            console.log(`[UNICODE-TRACE] metadata_type=${typeof regularMetadata}`);
+          }
         }
 
         const result = await this.storeCompressedMemory(userId, category, facts, regularMetadata, mode);
@@ -1902,7 +1909,8 @@ Facts (preserve user terminology + add synonyms):`;
           fingerprintConfidence: fingerprintResult.confidence,
           mode: normalizedMode,  // CRITICAL FIX: Use normalized mode (hyphen, not underscore)
           categoryName: category,
-          tokenCount
+          tokenCount,
+          metadata  // FIX #659: Pass metadata to preserve anchors in supersession path
         });
 
         if (supersessionResult.success) {
