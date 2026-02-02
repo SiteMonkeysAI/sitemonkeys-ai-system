@@ -2022,6 +2022,13 @@ Facts (preserve user terminology + add synonyms):`;
       const metadataKeys = Object.keys(metadata || {}).join(',');
       console.log(`[STORAGE-CONTRACT] stored_id=${memoryId} category=${category} metadata_keys=${metadataKeys}`);
 
+      // ANCHOR STORAGE DIAGNOSTIC LOGGING (Issue #656)
+      // Prove anchors are persisted at storage time
+      const anchorKeys = Object.keys(metadata.anchors || {});
+      const unicodeCount = (metadata.anchors?.unicode || []).length;
+      const pricingCount = (metadata.anchors?.pricing || []).length;
+      console.log(`[ANCHOR-STORAGE] stored_id=${memoryId} anchors_keys=[${anchorKeys.join(',')}] unicode_count=${unicodeCount} pricing_count=${pricingCount}`);
+
       // DIAGNOSTIC LOGGING: Track exact storage details
       console.log('[STORAGE-DEBUG] Memory stored:', {
         id: memoryId,

@@ -1,0 +1,74 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #656: [claude-fix] Fix anchor pipeline + validator inputs: prove anchors persisted, ensure validators receive memoryContext
+
+Issue Description:
+## Problem
+
+1. `[ANCHOR-VALIDATOR] memories_checked=0` on every call — validators receive no memories
+2. CMP2 passes via content scraping fallback, not anchors (fragile)
+3. NUA1 shows `db_rows=1` but TRUTH-TELEMETRY shows two Alex rows exist
+
+## Required Deliverables
+
+### 1. Prove anchors exist at storage time
+
+Add diagnostic log immediately after memory insert/update in `intelligent-storage.js`:
+```javascript
+console.log(`[ANCHOR-STORAGE] stored_id=${id} anchors_keys=[${Object.keys(metadata.anchors || {}).join(',')}] unicode_count=${(metadata.anchors?.unicode || []).length} pricing_count=${(metadata.anchors?.pricing || []).length}`);
+```
+
+This proves whether failure is storage vs retrieval.
+
+### 2. Fix validator memoryContext
+
+In `anchor-preservation.js`, the validator receives `memoryContext` but `memories_checked=0`.
+
+Either:
+- Validator is called before retrieval (move it after)
+- Validator receives wrong object shape
+- memoryContext is empty/undefined at call time
+
+Add debug at validator entry:
+```javascript
+console.log(`[ANCHOR-VALIDATOR] Input: memoryContext_type=${typeof memoryContext} is_array=${Array.isArray(memoryContext)} length=${memoryContext?.length || memoryContext?.memories?.length || 0}`);
+```
+
+### 3. Add authoritative ambiguity debug for NUA1
+
+Log exact query and filters used by ambiguity detection:
+```javascript
+console.log(`[AMBIGUITY-DEBUG] entity=${entity} query_filters={user_id, is_current, categories, mode} returned_ids=[...] content_previews=[...]`);
+```
+
+This explains WHY `db_rows=1` when two Alex rows exist.
+
+## Success Criteria
+
+- `[ANCHOR-STORAGE]` logs confirm anchors written (or reveal they're not)
+- `[ANCHOR-VALIDATOR]` receives `memories_checked > 0`
+- `[AMBIGUITY-DEBUG]` explains which filter excludes second Alex row
+- No guessing — proof in logs
+
+## Constraints
+
+- Do not "fix" by relaxing tests
+- Do not assume root cause — prove it with telemetry first
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

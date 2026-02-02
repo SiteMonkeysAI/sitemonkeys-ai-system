@@ -5118,6 +5118,16 @@ Mode: ${modeConfig?.display_name || mode}
         console.log(`[AMBIGUITY-DEBUG] Query names: ${candidateNames.join(', ')}`);
         console.log(`[AMBIGUITY-DEBUG] Like patterns: ${likeParams.join(', ')}`);
 
+        // AUTHORITATIVE DEBUG (Issue #656) - Explain which filters are applied
+        console.log(`[AMBIGUITY-DEBUG] entity=${candidateNames.join(', ')} query_filters={user_id=${userId}, is_current=true OR NULL, categories=all, mode=all} returned_ids=[${dbResult.rows.map(r => r.id).join(', ')}]`);
+        if (dbResult.rows.length > 0) {
+          console.log(`[AMBIGUITY-DEBUG] content_previews:`);
+          dbResult.rows.forEach((row, idx) => {
+            const preview = (row.content || '').substring(0, 100).replace(/\n/g, ' ');
+            console.log(`[AMBIGUITY-DEBUG]   Row ${idx + 1} (id=${row.id}): "${preview}..."`);
+          });
+        }
+
         if (dbResult.rows && dbResult.rows.length >= 2) {
           // Group rows by which name they contain (using safe string operations, no dynamic regex)
           const nameMatches = new Map();

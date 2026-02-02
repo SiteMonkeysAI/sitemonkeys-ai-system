@@ -21,7 +21,13 @@ class AnchorPreservationValidator {
   async validate({ response, memoryContext = [], query = '', context = {} }) {
     // EXECUTION PROOF - Verify anchor preservation validator is active (EDG3)
     console.log('[PROOF] validator:anchor-preservation v=2026-01-29a file=api/lib/validators/anchor-preservation.js fn=validate');
-    
+
+    // DIAGNOSTIC LOGGING (Issue #656) - Debug validator input
+    console.log(`[ANCHOR-VALIDATOR] Input: memoryContext_type=${typeof memoryContext} is_array=${Array.isArray(memoryContext)} length=${memoryContext?.length || memoryContext?.memories?.length || 0}`);
+    if (memoryContext && typeof memoryContext === 'object') {
+      console.log(`[ANCHOR-VALIDATOR] Input structure: keys=[${Object.keys(memoryContext).join(',')}]`);
+    }
+
     try {
       // Extract anchors from memory context
       const anchors = this.#extractAnchors(memoryContext);
