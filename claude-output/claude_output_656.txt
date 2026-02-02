@@ -1,0 +1,77 @@
+Excellent! All the changes look correct. Let me create a summary of what was done:
+
+---SUMMARY---
+
+## Changes Made to Fix Issue #656
+
+### 1. **Added Anchor Storage Diagnostic Logging** (`api/memory/intelligent-storage.js:2025-2030`)
+
+Added diagnostic logging immediately after memory insert in `storeCompressedMemory()` to prove whether anchors are persisted at storage time:
+
+```javascript
+console.log(`[ANCHOR-STORAGE] stored_id=${memoryId} anchors_keys=[${anchorKeys.join(',')}] unicode_count=${unicodeCount} pricing_count=${pricingCount}`);
+```
+
+This will reveal:
+- Whether `metadata.anchors` exists at storage time
+- Which anchor types are present (pricing, unicode, temporal, etc.)
+- Count of each anchor type
+
+If this shows `anchors_keys=[]`, the problem is in extraction/metadata building.
+If this shows anchors present but validator sees none, the problem is in retrieval.
+
+### 2. **Added Validator Input Debug Logging** (`api/lib/validators/anchor-preservation.js:24-29`)
+
+Added diagnostic logging at validator entry point to understand what `memoryContext` is being received:
+
+```javascript
+console.log(`[ANCHOR-VALIDATOR] Input: memoryContext_type=${typeof memoryContext} is_array=${Array.isArray(memoryContext)} length=${memoryContext?.length || memoryContext?.memories?.length || 0}`);
+if (memoryContext && typeof memoryContext === 'object') {
+  console.log(`[ANCHOR-VALIDATOR] Input structure: keys=[${Object.keys(memoryContext).join(',')}]`);
+}
+```
+
+This will reveal:
+- Whether `memoryContext` is an array, object, or undefined
+- The actual length/count of memories provided
+- The structure of the object (if it's nested like `{memories: [...]}`
+
+The validator was showing `memories_checked=0` because either:
+- `memoryContext` is called before retrieval completes (timing issue)
+- `memoryContext` has wrong shape (needs `memoryContext.memories` instead of direct array)
+- `context.memory_context` passed from orchestrator is empty/undefined
+
+### 3. **Added Ambiguity Detection Authoritative Debug Logging** (`api/core/orchestrator.js:5121-5129`)
+
+Added comprehensive debug logging for NUA1 ambiguity detection to explain why `db_rows=1` when two Alex rows exist:
+
+```javascript
+console.log(`[AMBIGUITY-DEBUG] entity=${candidateNames.join(', ')} query_filters={user_id=${userId}, is_current=true OR NULL, categories=all, mode=all} returned_ids=[${dbResult.rows.map(r => r.id).join(', ')}]`);
+if (dbResult.rows.length > 0) {
+  console.log(`[AMBIGUITY-DEBUG] content_previews:`);
+  dbResult.rows.forEach((row, idx) => {
+    const preview = (row.content || '').substring(0, 100).replace(/\n/g, ' ');
+    console.log(`[AMBIGUITY-DEBUG]   Row ${idx + 1} (id=${row.id}): "${preview}..."`);
+  });
+}
+```
+
+This will reveal:
+- Exact query filters applied (user_id, is_current, etc.)
+- Which memory IDs were returned
+- Content preview of each returned row
+- Whether one of the two Alex memories is being filtered out by `is_current=true OR NULL`
+
+## Expected Outcomes
+
+After these changes, the logs will provide **authoritative evidence** for:
+
+1. **CMP2 (pricing anchors)**: Whether anchors are stored in metadata or only detected via content scraping fallback
+2. **Validator memoryContext issue**: The exact type/shape of data the validator receives and why `memories_checked=0`
+3. **NUA1 (ambiguity detection)**: Which filter excludes the second Alex row (likely `is_current` or missing from query results)
+
+## No Behavioral Changes
+
+All changes are purely diagnostic logging. No code logic was modified, ensuring zero risk to production behavior. The logs follow the exact format requested in the issue description.
+
+---END SUMMARY---
