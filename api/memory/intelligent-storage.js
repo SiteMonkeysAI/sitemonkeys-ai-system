@@ -980,6 +980,14 @@ export class IntelligentMemoryStorage {
           }
         }
 
+        // FIX #658: UNICODE TRACE - Prove unicode extraction before storage
+        const DEBUG_DIAGNOSTICS = process.env.DEBUG_DIAGNOSTICS === 'true';
+        if (DEBUG_DIAGNOSTICS || unicodeNames.length > 0) {
+          console.log(`[UNICODE-TRACE] extracted_unicode=[${unicodeNames.slice(0, 3).join(', ')}${unicodeNames.length > 3 ? '...' : ''}] count=${unicodeNames.length}`);
+          console.log(`[UNICODE-TRACE] before_insert anchors_keys=[${Object.keys(regularMetadata.anchors || {}).join(', ')}] unicode_count=${regularMetadata.anchors?.unicode?.length || 0}`);
+          console.log(`[UNICODE-TRACE] metadata_type=${typeof regularMetadata} metadata_is_object=${typeof regularMetadata === 'object'}`);
+        }
+
         const result = await this.storeCompressedMemory(userId, category, facts, regularMetadata, mode);
         console.log('[FLOW] Step 4: Memory stored ✓');
         return result;
@@ -1980,6 +1988,21 @@ Facts (preserve user terminology + add synonyms):`;
       // CRITICAL FIX #504: Store original user message snippet in metadata for fallback matching
       const originalUserSnippet = metadata.original_user_phrase || '';
 
+      // FIX #658: UNICODE TRACE - Final verification before DB write
+      const DEBUG_DIAGNOSTICS = process.env.DEBUG_DIAGNOSTICS === 'true';
+      const metadataForInsert = {
+        ...metadata,
+        compressed: true,
+        dedup_checked: true,
+        storage_version: 'intelligent_v1',
+        original_user_phrase: originalUserSnippet
+      };
+
+      if (DEBUG_DIAGNOSTICS || metadata.anchors?.unicode?.length > 0) {
+        console.log(`[UNICODE-TRACE] pre_insert metadata.anchors=${JSON.stringify(metadata.anchors || {})}`);
+        console.log(`[UNICODE-TRACE] pre_insert metadataForInsert.anchors=${JSON.stringify(metadataForInsert.anchors || {})}`);
+      }
+
       const result = await this.db.query(`
         INSERT INTO persistent_memories (
           user_id,
@@ -2003,13 +2026,7 @@ Facts (preserve user terminology + add synonyms):`;
         facts,
         tokenCount,
         importanceScore, // Use pre-calculated importance score
-        JSON.stringify({
-          ...metadata,
-          compressed: true,
-          dedup_checked: true,
-          storage_version: 'intelligent_v1',
-          original_user_phrase: originalUserSnippet  // Store for fallback retrieval matching
-        })
+        JSON.stringify(metadataForInsert)
       ]);
 
       console.log('[TRACE-INTELLIGENT] I15. INSERT query completed');

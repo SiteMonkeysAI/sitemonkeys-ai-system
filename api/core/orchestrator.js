@@ -862,7 +862,9 @@ export class Orchestrator {
           memory: '',
           tokens: 0,
           count: 0,
-          memories: []
+          memories: [],
+          memory_ids: [],
+          raw_memories: [] // FIX #658: Include empty array for validators
         };
         // memoryDuration stays 0 when skipped
       } else {
@@ -2307,6 +2309,8 @@ export class Orchestrator {
         categories: [], // Semantic retrieval doesn't use category filtering
         hasMemory: tokenCount > 0,
         memory_ids: memoryIds,
+        // FIX #658: Pass raw memory array for validators (anchor, unicode, ambiguity)
+        raw_memories: result.memories?.slice(0, 15) || [], // Post-cap array with full metadata
       };
 
     } catch (error) {
@@ -2417,6 +2421,7 @@ export class Orchestrator {
           categories: [],
           hasMemory: false,
           memory_ids: [],
+          raw_memories: [], // FIX #658: Include empty array for validators
         };
       }
 
@@ -2460,6 +2465,7 @@ export class Orchestrator {
           : [],
         hasMemory: tokenCount > 0,
         memory_ids: memoryIds,
+        raw_memories: Array.isArray(result?.memories) ? result.memories : [], // FIX #658: Pass raw array if available
       };
     } catch (error) {
       this.error("[MEMORY] Fallback retrieval failed, continuing without memory", error);
@@ -2470,6 +2476,7 @@ export class Orchestrator {
         categories: [],
         hasMemory: false,
         memory_ids: [],
+        raw_memories: [], // FIX #658: Include empty array for validators
       };
     }
   }
@@ -3175,6 +3182,9 @@ export class Orchestrator {
       },
       // Pass through extraction metadata for truth-first disclosure
       extractionMetadata: documents?.extractionMetadata || null,
+      // FIX #658: Pass raw memory array for validators (anchor, unicode, ambiguity)
+      memory_context: memory?.raw_memories || [],
+      memory_ids: memory?.memory_ids || [],
     };
   }
 
@@ -5126,6 +5136,28 @@ Mode: ${modeConfig?.display_name || mode}
             const preview = (row.content || '').substring(0, 100).replace(/\n/g, ' ');
             console.log(`[AMBIGUITY-DEBUG]   Row ${idx + 1} (id=${row.id}): "${preview}..."`);
           });
+        }
+
+        // FIX #658: NUA1 DIAGNOSTIC - Show ALL rows for debugging ambiguity
+        const DEBUG_DIAGNOSTICS = process.env.DEBUG_DIAGNOSTICS === 'true';
+        if (DEBUG_DIAGNOSTICS) {
+          try {
+            const allRowsResult = await this.pool.query(
+              `SELECT id, is_current, metadata->>'fingerprint' as fingerprint, category_name, created_at, content
+               FROM persistent_memories
+               WHERE user_id = $1 AND content ILIKE ANY($2)
+               ORDER BY created_at DESC
+               LIMIT 20`,
+              [userId, candidateNames.map(n => `%${n}%`)]
+            );
+            console.log(`[NUA1-DEBUG] ALL rows for ${candidateNames.join(', ')} (including is_current=false):`);
+            allRowsResult.rows.forEach(row => {
+              const preview = (row.content || '').substring(0, 80).replace(/\n/g, ' ');
+              console.log(`[NUA1-DEBUG]   id=${row.id} is_current=${row.is_current} fingerprint=${row.fingerprint || 'null'} category=${row.category_name} created=${row.created_at} content="${preview}..."`);
+            });
+          } catch (diagError) {
+            console.error(`[NUA1-DEBUG] Diagnostic query failed: ${diagError.message}`);
+          }
         }
 
         if (dbResult.rows && dbResult.rows.length >= 2) {

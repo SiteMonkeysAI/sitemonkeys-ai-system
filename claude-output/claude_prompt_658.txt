@@ -1,0 +1,129 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #658: [claude-fix] Fix anchor persistence + validator pipeline + ambiguity retention (unicode + NUA1)
+
+Issue Description:
+## Priority: CRITICAL
+## Context: PR #657 telemetry proves anchors + validator pipeline are broken
+
+### Evidence (from deployed logs)
+1) Unicode anchors are never persisted:
+- `[ANCHOR-STORAGE] stored_id=XXXX anchors_keys=[] unicode_count=0`
+- Yet storage contract shows unicode pattern matches (names with diacritics)
+
+2) Anchor validator receives empty memory array:
+- `[ANCHOR-VALIDATOR] Input: ... is_array=true length=0`
+- `memories_checked=0` every run
+
+3) NUA1 ambiguity fails because 2nd "Alex" is missing at query time:
+- `[AMBIGUITY-DEBUG] ... returned_ids=[6582]` (sometimes)
+- `[AMBIGUITY-DEBUG] ... returned_ids=[]` (sometimes)
+- Expected: 2 rows for same name (friend Alex vs colleague Alex)
+
+---
+
+## Mission
+Fix the pipe, not symptoms:
+
+A) Ensure unicode anchors are persisted into `persistent_memories.metadata.anchors.unicode` **at storage time**
+B) Ensure anchor validators receive real retrieved memories (or fetch them authoritatively by memory_ids)
+C) Ensure NUA1 ambiguity sees BOTH Alex rows (no accidental supersession / incorrect is_current filtering)
+
+---
+
+## REQUIRED TRACE (before coding)
+Add temporary DIAG logs (gated by DEBUG_DIAGNOSTICS=true) to prove exactly where unicode names are lost:
+
+### Storage Trace (api/memory/intelligent-storage.js)
+At the moment metadata is assembled for INSERT/UPDATE, log:
+- extracted unicode names (array length + first 3 items)
+- metadata.anchors keys right before DB write
+- confirm metadata type (object vs string) right before pool.query
+
+Example required logs:
+- `[UNICODE-TRACE] extracted_unicode=[...]`
+- `[UNICODE-TRACE] before_insert anchors_keys=[...] unicode_count=N`
+- `[UNICODE-TRACE] metadata_type=object|string`
+
+### Validator Trace (api/lib/validators/anchor-preservation.js OR call site)
+At validator entry:
+- confirm if called with `[]` vs real memories
+- log keys of input object (if not array)
+
+At orchestrator call site:
+- log BOTH:
+  - the injected memory IDs (metadata.memory_ids)
+  - the object/array being passed into anchor validator
+
+---
+
+## FIX A: Unicode anchors persistence
+After trace confirms where unicode is lost, fix it at the source:
+
+- If unicode extraction never runs -> implement extraction in the same code path that already writes pricing anchors
+- If unicode extraction runs but metadata is overwritten -> fix metadata merge/normalization
+- If unicode is detected in pattern_matches but not translated into anchors -> convert pattern_matches → anchors.unicode
+- Ensure JSONB object shape: `metadata.anchors.unicode = [ ... ]`
+
+### Acceptance Criteria A
+- `[ANCHOR-STORAGE] ... anchors_keys=[unicode,...] unicode_count>0` for unicode name input
+- Unicode validator prints `unicode_names_found=[...]` from anchors (not content scraping)
+
+---
+
+## FIX B: Validator memoryContext pipeline
+Stop passing empty arrays.
+
+Two acceptable implementations:
+
+1) Pass the actual injected memories array into validator (post-cap)
+OR
+2) Authoritative fetch: if validator receives empty array but metadata.memory_ids exists,
+   query DB by memory_ids and validate anchors from DB rows.
+
+### Acceptance Criteria B
+- `[ANCHOR-VALIDATOR] ... length>0` when memory_ids > 0
+- `memories_checked>0` and `anchor_types_found` reflects actual anchors
+
+---
+
+## FIX C: NUA1 ambiguity stability
+Determine why 2nd Alex disappears:
+- Is it being marked `is_current=false` due to fingerprint collision/supersession?
+- Is it filtered out because embeddings are null and query filters require embeddings?
+- Is it stored in a different user_id due to session mismatch?
+- Is it excluded by category/mode filters?
+
+Add gated debug query to print BOTH Alex rows regardless of is_current:
+- query `WHERE user_id=$1 AND content ILIKE '%Alex%' ORDER BY created_at DESC LIMIT 20`
+- print: id, is_current, fingerprint, category, created_at
+
+### Acceptance Criteria C
+- NUA1 returns 2 rows consistently for same-name entity
+- ambiguity detector triggers disclosure when 2+ rows exist
+
+---
+
+## Constraints
+- ESM only
+- DEBUG_DIAGNOSTICS flag gating + bounded logs (no PII previews)
+- No test relaxation
+- Must prove fixes with post-deploy logs + rerun SMDEEP
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

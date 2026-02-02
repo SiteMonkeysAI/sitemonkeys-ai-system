@@ -28,9 +28,29 @@ class AnchorPreservationValidator {
       console.log(`[ANCHOR-VALIDATOR] Input structure: keys=[${Object.keys(memoryContext).join(',')}]`);
     }
 
+    // FIX #658: VALIDATOR TRACE - Show memory_ids from context
+    const DEBUG_DIAGNOSTICS = process.env.DEBUG_DIAGNOSTICS === 'true';
+    if (DEBUG_DIAGNOSTICS || context?.memory_ids?.length > 0) {
+      console.log(`[VALIDATOR-TRACE] context.memory_ids=[${context?.memory_ids?.join(', ') || ''}] count=${context?.memory_ids?.length || 0}`);
+      console.log(`[VALIDATOR-TRACE] context.memory_context type=${Array.isArray(context?.memory_context)} length=${context?.memory_context?.length || 0}`);
+      if (Array.isArray(context?.memory_context) && context.memory_context.length > 0) {
+        console.log(`[VALIDATOR-TRACE] First memory has metadata: ${!!context.memory_context[0]?.metadata}`);
+        console.log(`[VALIDATOR-TRACE] First memory has anchors: ${!!context.memory_context[0]?.metadata?.anchors}`);
+      }
+    }
+
     try {
+      // FIX #658: Use context.memory_context if memoryContext is empty
+      const effectiveMemoryContext = (Array.isArray(memoryContext) && memoryContext.length > 0)
+        ? memoryContext
+        : (context?.memory_context || []);
+
+      if (DEBUG_DIAGNOSTICS && effectiveMemoryContext.length > 0) {
+        console.log(`[VALIDATOR-TRACE] Using ${effectiveMemoryContext === memoryContext ? 'direct' : 'context.memory_context'} memory array, length=${effectiveMemoryContext.length}`);
+      }
+
       // Extract anchors from memory context
-      const anchors = this.#extractAnchors(memoryContext);
+      const anchors = this.#extractAnchors(effectiveMemoryContext);
       
       if (anchors.length === 0) {
         return {
