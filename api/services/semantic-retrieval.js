@@ -1670,14 +1670,45 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
           if (Array.isArray(anchorValues) && anchorValues.length > 0) {
             anchorMatches = anchorValues.some(anchor => {
-              const anchorStr = typeof anchor === 'object'
-                ? JSON.stringify(anchor).toLowerCase()
-                : String(anchor).toLowerCase();
               const queryLower = normalizedQuery.toLowerCase();
 
-              // Check for match
-              return queryLower.includes(anchorStr) ||
-                     anchorStr.includes(queryLower.split(' ').pop());
+              // FIX #675: Handle anchor objects properly (explicit_token, ordinal)
+              // These have structured fields like {type, value} or {position, item, value}
+              if (typeof anchor === 'object' && anchor !== null) {
+                // For explicit_token: {type: 'explicit_token', value: 'ZEBRA'}
+                // For ordinal: {position: 'first', item: 'code', value: 'ABC123'}
+
+                // FIX #675: Debug log for anchor matching
+                if (anchorType === 'explicit_token' && anchor.value) {
+                  console.log(`[FIX-675] Checking explicit_token anchor: "${anchor.value}" against query: "${normalizedQuery}"`);
+                }
+
+                // Check the value field (primary match)
+                if (anchor.value) {
+                  const valueStr = String(anchor.value).toLowerCase();
+                  if (queryLower.includes(valueStr) || valueStr.includes(queryLower.split(' ').pop())) {
+                    return true;
+                  }
+                }
+
+                // For ordinal anchors, also check position and item fields
+                if (anchorType === 'ordinal') {
+                  if (anchor.position && queryLower.includes(String(anchor.position).toLowerCase())) {
+                    return true;
+                  }
+                  if (anchor.item && queryLower.includes(String(anchor.item).toLowerCase())) {
+                    return true;
+                  }
+                }
+
+                // Fallback: stringify the whole object
+                const anchorStr = JSON.stringify(anchor).toLowerCase();
+                return queryLower.includes(anchorStr) || anchorStr.includes(queryLower.split(' ').pop());
+              } else {
+                // For simple string anchors (unicode names, pricing strings)
+                const anchorStr = String(anchor).toLowerCase();
+                return queryLower.includes(anchorStr) || anchorStr.includes(queryLower.split(' ').pop());
+              }
             });
           } else if (typeof anchorValues === 'object' && Object.keys(anchorValues).length > 0) {
             // Temporal anchors are objects, not arrays

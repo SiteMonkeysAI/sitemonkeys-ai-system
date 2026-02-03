@@ -1,0 +1,44 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #675: [claude-fix] Anchors stored but not boosting retrieval - A5 still fails
+
+Issue Description:
+## Evidence
+FIX-673 logs show anchors ARE being stored:
+- `anchor_keys=[ordinal,explicit_token] explicit_token=1`
+- `anchor_keys=[unicode] unicode=7`
+
+But A5 (ZEBRA token recall) still fails.
+
+## Root Cause
+`semantic-retrieval.js` now SELECTs metadata (PR #673), but likely:
+1. Not parsing `metadata.anchors` after retrieval
+2. Not applying anchor boost to relevance scoring
+3. Or anchor matching logic not triggered
+
+## Required Fix
+In `semantic-retrieval.js`, after fetching memories with metadata:
+1. Parse `JSON.parse(row.metadata)` if string
+2. Check `metadata.anchors.explicit_token` for matches
+3. Apply boost to memories with matching anchors
+
+## Test
+A5 should pass - ZEBRA token should be recalled via explicit_token anchor match.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
