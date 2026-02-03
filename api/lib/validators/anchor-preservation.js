@@ -94,13 +94,15 @@ class AnchorPreservationValidator {
   /**
    * Extract anchor data points from memory context
    * ENHANCED (Issue #639): Now also reads metadata.anchors stored during memory creation
+   * FIX #670: Strict validation to prevent garbage anchors, fallback only for legacy memories
    */
   #extractAnchors(memoryContext) {
     const anchors = [];
     const telemetry = {
       memories_checked: 0,
       memories_with_anchors: 0,
-      anchor_types_found: new Set()
+      anchor_types_found: new Set(),
+      garbage_rejected: 0
     };
 
     // Handle both array and object formats
@@ -132,96 +134,169 @@ class AnchorPreservationValidator {
         if (metadata.anchors.pricing && Array.isArray(metadata.anchors.pricing)) {
           console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: prices_found=[${metadata.anchors.pricing.join(', ')}]`);
           for (const price of metadata.anchors.pricing) {
-            anchors.push({
-              type: 'price',
-              value: price,
-              source: content,
-              fromMetadata: true
-            });
+            // FIX #670: Validate price anchors
+            if (this.#validateAnchorType('pricing', price)) {
+              anchors.push({
+                type: 'price',
+                value: price,
+                source: content,
+                fromMetadata: true
+              });
+            } else {
+              telemetry.garbage_rejected++;
+              console.log(`[ANCHOR-VALIDATOR] ⚠️ Rejected invalid pricing anchor: ${price}`);
+            }
           }
         }
 
         // Unicode/identifier anchors from metadata
         if (metadata.anchors.unicode && Array.isArray(metadata.anchors.unicode)) {
           for (const identifier of metadata.anchors.unicode) {
-            anchors.push({
-              type: 'identifier',
-              value: identifier,
-              source: content,
-              fromMetadata: true
-            });
+            // FIX #670: Validate unicode anchors
+            if (this.#validateAnchorType('unicode', identifier)) {
+              anchors.push({
+                type: 'identifier',
+                value: identifier,
+                source: content,
+                fromMetadata: true
+              });
+            } else {
+              telemetry.garbage_rejected++;
+              console.log(`[ANCHOR-VALIDATOR] ⚠️ Rejected invalid unicode anchor: ${identifier}`);
+            }
           }
         }
 
-        // Other identifier anchors from metadata
-        if (metadata.anchors.identifiers && Array.isArray(metadata.anchors.identifiers)) {
-          for (const identifier of metadata.anchors.identifiers) {
-            anchors.push({
-              type: 'identifier',
-              value: identifier,
-              source: content,
-              fromMetadata: true
-            });
+        // Ordinal anchors from metadata (Issue #670)
+        if (metadata.anchors.ordinal && Array.isArray(metadata.anchors.ordinal)) {
+          for (const ordinal of metadata.anchors.ordinal) {
+            if (this.#validateAnchorType('ordinal', ordinal)) {
+              anchors.push({
+                type: 'ordinal',
+                value: ordinal,
+                source: content,
+                fromMetadata: true
+              });
+            } else {
+              telemetry.garbage_rejected++;
+              console.log(`[ANCHOR-VALIDATOR] ⚠️ Rejected invalid ordinal anchor: ${JSON.stringify(ordinal)}`);
+            }
+          }
+        }
+
+        // Explicit token anchors from metadata (Issue #670)
+        if (metadata.anchors.explicit_token && Array.isArray(metadata.anchors.explicit_token)) {
+          for (const token of metadata.anchors.explicit_token) {
+            if (this.#validateAnchorType('explicit_token', token)) {
+              anchors.push({
+                type: 'explicit_token',
+                value: token,
+                source: content,
+                fromMetadata: true
+              });
+            } else {
+              telemetry.garbage_rejected++;
+              console.log(`[ANCHOR-VALIDATOR] ⚠️ Rejected invalid explicit_token anchor: ${JSON.stringify(token)}`);
+            }
+          }
+        }
+
+        // Temporal anchors from metadata
+        if (metadata.anchors.temporal && typeof metadata.anchors.temporal === 'object') {
+          // Temporal is an object, not an array
+          for (const [key, value] of Object.entries(metadata.anchors.temporal)) {
+            if (this.#validateAnchorType('temporal', value)) {
+              anchors.push({
+                type: 'temporal',
+                value: value,
+                source: content,
+                fromMetadata: true
+              });
+            } else {
+              telemetry.garbage_rejected++;
+              console.log(`[ANCHOR-VALIDATOR] ⚠️ Rejected invalid temporal anchor: ${value}`);
+            }
           }
         }
       } else {
         console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: anchors_keys=[] (no metadata.anchors)`);
       }
 
-      // FALLBACK: Extract prices from content (if not already from metadata)
-      const pricePattern = /\$[\d,]+(?:\.\d{2})?|\d+\s*(?:dollars?|USD|usd)/gi;
-      const prices = content.match(pricePattern) || [];
-      for (const price of prices) {
-        // Avoid duplicates from metadata
-        if (!anchors.some(a => a.value === price.trim())) {
-          anchors.push({
-            type: 'price',
-            value: price.trim(),
-            source: content
-          });
-        }
-      }
-
-      // Extract dates from content
-      const datePattern = /\b(?:\d{1,2}[-/]\d{1,2}[-/]\d{2,4}|\d{4}[-/]\d{1,2}[-/]\d{1,2}|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+\d{4})\b/gi;
-      const dates = content.match(datePattern) || [];
-      for (const date of dates) {
-        anchors.push({
-          type: 'date',
-          value: date.trim(),
-          source: content
-        });
-      }
-
-      // Extract percentages from content
-      const percentPattern = /\b\d+(?:\.\d+)?%/g;
-      const percentages = content.match(percentPattern) || [];
-      for (const percentage of percentages) {
-        anchors.push({
-          type: 'percentage',
-          value: percentage,
-          source: content
-        });
-      }
-
-      // Extract other significant numbers with context
-      const numberPattern = /\b\d{2,}(?:,\d{3})*(?:\.\d+)?\b/g;
-      const numbers = content.match(numberPattern) || [];
-      for (const number of numbers) {
-        // Skip if already captured as price/percentage
-        if (!anchors.some(a => a.value.includes(number))) {
-          anchors.push({
-            type: 'number',
-            value: number,
-            source: content
-          });
+      // FALLBACK: Extract prices from content ONLY for legacy memories without metadata.anchors
+      // This ensures backward compatibility but won't create garbage for new memories
+      if (!metadata.anchors || !metadata.anchor_version) {
+        const pricePattern = /\$[\d,]+(?:\.\d{2})?|\d+\s*(?:dollars?|USD|usd)/gi;
+        const prices = content.match(pricePattern) || [];
+        for (const price of prices) {
+          // Avoid duplicates and validate
+          if (!anchors.some(a => a.value === price.trim()) && this.#validateAnchorType('pricing', price.trim())) {
+            anchors.push({
+              type: 'price',
+              value: price.trim(),
+              source: content,
+              fallback: true
+            });
+          }
         }
       }
     }
 
-    console.log(`[ANCHOR-VALIDATOR] Extraction telemetry: memories_checked=${telemetry.memories_checked}, memories_with_anchors=${telemetry.memories_with_anchors}, anchor_types=[${Array.from(telemetry.anchor_types_found).join(', ')}], total_anchors=${anchors.length}`);
+    console.log(`[ANCHOR-VALIDATOR] Extraction telemetry: memories_checked=${telemetry.memories_checked}, memories_with_anchors=${telemetry.memories_with_anchors}, anchor_types=[${Array.from(telemetry.anchor_types_found).join(', ')}], total_anchors=${anchors.length}, garbage_rejected=${telemetry.garbage_rejected}`);
 
     return anchors;
+  }
+
+  /**
+   * Validate anchor type (FIX #670)
+   * Strict validation - only accept REAL anchors, reject garbage
+   */
+  #validateAnchorType(type, value) {
+    // Blacklist patterns - NEVER allow these as anchors
+    const ANCHOR_BLACKLIST = [
+      /^Work\s+Experience$/i,
+      /^Team\s+Leadership$/i,
+      /^Project\s+Value$/i,
+      /^\d{10,}$/,  // Timestamps (10+ digits)
+      /^\d{1,2}%?$/,  // Random small numbers without context
+      /^[A-Z][a-z]+\s+[A-Z][a-z]+$/,  // Generic two-word phrases without unicode
+    ];
+
+    const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+    // Check blacklist first
+    if (ANCHOR_BLACKLIST.some(pattern => pattern.test(stringValue))) {
+      return false;
+    }
+
+    switch (type) {
+      case 'unicode':
+        // Must contain actual non-ASCII characters
+        return typeof value === 'string' && /[\u0080-\uFFFF]/.test(value);
+
+      case 'pricing':
+        // Must contain currency symbol or explicit currency word
+        return typeof value === 'string' && /[$€£¥₹₽]|\b(dollars?|USD|EUR|GBP|JPY|cents?)\b/i.test(value);
+
+      case 'temporal':
+        // Must be recognizable date/time, NOT random numbers
+        return typeof value === 'number' || (typeof value === 'string' && (
+          /\b(19|20)\d{2}\b/.test(value) ||  // Year
+          /\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(value) ||
+          /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/.test(value) ||  // Date format
+          /\b\d{1,2}:\d{2}\s*(AM|PM)?\b/i.test(value)  // Time format
+        ));
+
+      case 'ordinal':
+        // Must be an object with position and item
+        return typeof value === 'object' && value !== null && value.position && value.item;
+
+      case 'explicit_token':
+        // Must be an object with type and value
+        return typeof value === 'object' && value !== null && value.type === 'explicit_token' && value.value;
+
+      default:
+        return false;
+    }
   }
 
   /**

@@ -659,12 +659,101 @@ function calculateHybridScore(memory, options = {}) {
 }
 
 // ============================================
+// INTENT DETECTION FOR INTELLIGENT RETRIEVAL (FIX #670)
+// ============================================
+
+/**
+ * Retrieval intent types with corresponding strategies
+ */
+const RETRIEVAL_INTENTS = {
+  EXPLICIT_RECALL: {
+    // "what's my token", "my code", "tell me my X"
+    patterns: [
+      /\b(?:what(?:'s| is| was)?|tell me|show me|give me)\s+my\s+(\w+)/i,
+      /\bmy\s+(\w+)\s+(?:is|was|code|token|number)/i,
+      /\bremember(?:ed)?\s+my\s+(\w+)/i
+    ],
+    strategy: 'BROAD_CATEGORY_SEARCH',
+    boost: { explicit_token: 10.0, ordinal: 5.0 }
+  },
+
+  ORDINAL_QUERY: {
+    // "first code", "second option", "primary contact"
+    patterns: [
+      /\b(first|second|third|primary|secondary|main|original)\s+(\w+)/i
+    ],
+    strategy: 'ORDINAL_MATCH',
+    boost: { ordinal: 15.0 }
+  },
+
+  TEMPORAL_QUERY: {
+    // "when did", "what year", "date of"
+    patterns: [
+      /\bwhen\s+(?:did|was|is)/i,
+      /\bwhat\s+(?:year|date|time)/i,
+      /\b(?:in|during|around)\s+(19|20)\d{2}/i
+    ],
+    strategy: 'TEMPORAL_MATCH',
+    boost: { temporal: 10.0 }
+  },
+
+  PRICING_QUERY: {
+    // "how much", "cost", "price", "budget"
+    patterns: [
+      /\bhow\s+much/i,
+      /\b(?:cost|price|budget|spend|paid|worth)/i,
+      /[$€£¥₹]/
+    ],
+    strategy: 'PRICING_MATCH',
+    boost: { pricing: 10.0 }
+  },
+
+  VOLUME_RECALL: {
+    // Implied when many facts exist and user asks general question
+    patterns: [
+      /\b(?:all|everything|list)\s+(?:about|regarding|I)/i,
+      /\bwhat\s+do\s+you\s+(?:know|remember)/i
+    ],
+    strategy: 'MULTI_CATEGORY_SCAN',
+    maxResults: 20
+  }
+};
+
+/**
+ * Detect retrieval intent from query (FIX #670 - FIX C)
+ * Understands WHAT the user is asking for, not just semantic similarity
+ */
+function detectRetrievalIntent(query) {
+  for (const [intentType, config] of Object.entries(RETRIEVAL_INTENTS)) {
+    for (const pattern of config.patterns) {
+      const match = query.match(pattern);
+      if (match) {
+        return {
+          type: intentType,
+          strategy: config.strategy,
+          boost: config.boost || {},
+          maxResults: config.maxResults,
+          extractedValue: match[1],  // Captured group
+          extractedOrdinal: match[2]  // For ordinal queries
+        };
+      }
+    }
+  }
+
+  return {
+    type: 'GENERAL',
+    strategy: 'SEMANTIC_DEFAULT',
+    boost: {}
+  };
+}
+
+// ============================================
 // MAIN RETRIEVAL FUNCTION
 // ============================================
 
 /**
  * Retrieve semantically relevant memories for a query
- * 
+ *
  * @param {object} pool - PostgreSQL connection pool
  * @param {string|Array|any} query - User query text (may be user-controlled)
  * @param {object} options - Retrieval options
@@ -801,6 +890,15 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // STEP 0.6: Detect proper names in query (FIX #577 - NUA1)
     const detectedEntities = detectProperNames(normalizedQuery);
+
+    // STEP 0.7: Detect retrieval intent (FIX #670)
+    const intent = detectRetrievalIntent(normalizedQuery);
+    console.log(`[RETRIEVAL-INTENT] Detected: ${intent.type}, Strategy: ${intent.strategy}`);
+    if (Object.keys(intent.boost).length > 0) {
+      console.log(`[RETRIEVAL-INTENT] Anchor boost factors: ${JSON.stringify(intent.boost)}`);
+    }
+    telemetry.intent_type = intent.type;
+    telemetry.intent_strategy = intent.strategy;
 
     // STEP 1: Generate query embedding (use expanded query for better semantic matching)
     const embedStart = Date.now();
@@ -1540,9 +1638,98 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     }
     // ═══════════════════════════════════════════════════════════════
 
+    // ═══════════════════════════════════════════════════════════════
+    // FIX #670 - FIX D: Anchor-aware re-ranking based on intent
+    // When query intent suggests specific anchor types, boost memories with matching anchors
+    // ═══════════════════════════════════════════════════════════════
+    const anchorBoosted = entityBoosted.map(memory => {
+      // Skip if no anchor boost needed
+      if (!intent.boost || Object.keys(intent.boost).length === 0) {
+        return memory;
+      }
+
+      // Parse metadata
+      let metadata = memory.metadata || {};
+      if (typeof metadata === 'string') {
+        try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+      }
+
+      const anchors = metadata.anchors || {};
+      let score = memory.similarity;
+      let boostApplied = false;
+      const boostReasons = [];
+
+      // Check each anchor type for matches
+      for (const [anchorType, boostFactor] of Object.entries(intent.boost)) {
+        if (anchors[anchorType]) {
+          const anchorValues = anchors[anchorType];
+
+          // Check if any anchor actually matches query content
+          let anchorMatches = false;
+
+          if (Array.isArray(anchorValues) && anchorValues.length > 0) {
+            anchorMatches = anchorValues.some(anchor => {
+              const anchorStr = typeof anchor === 'object'
+                ? JSON.stringify(anchor).toLowerCase()
+                : String(anchor).toLowerCase();
+              const queryLower = normalizedQuery.toLowerCase();
+
+              // Check for match
+              return queryLower.includes(anchorStr) ||
+                     anchorStr.includes(queryLower.split(' ').pop());
+            });
+          } else if (typeof anchorValues === 'object' && Object.keys(anchorValues).length > 0) {
+            // Temporal anchors are objects, not arrays
+            anchorMatches = Object.values(anchorValues).some(val => {
+              const valStr = String(val).toLowerCase();
+              return normalizedQuery.toLowerCase().includes(valStr);
+            });
+          }
+
+          if (anchorMatches) {
+            // Strong boost for exact match
+            score *= boostFactor;
+            boostApplied = true;
+            boostReasons.push(`${anchorType} anchor match (${boostFactor}x)`);
+            console.log(`[ANCHOR-RERANK] Memory ${memory.id}: ${anchorType} anchor match, boost ${boostFactor}x`);
+          } else {
+            // Smaller boost just for having the anchor type
+            score *= (1 + boostFactor * 0.1);
+            boostReasons.push(`${anchorType} anchor present (${(1 + boostFactor * 0.1).toFixed(2)}x)`);
+          }
+        }
+      }
+
+      // Penalize memories with no anchors when query clearly expects them
+      if (intent.type !== 'GENERAL' && (!anchors || Object.keys(anchors).length === 0)) {
+        score *= 0.7;  // 30% penalty
+        boostReasons.push('no anchors penalty (0.7x)');
+      }
+
+      if (boostApplied) {
+        console.log(`[ANCHOR-RERANK] Memory ${memory.id}: ${boostReasons.join(', ')}`);
+        console.log(`[ANCHOR-RERANK]   Original: ${memory.similarity.toFixed(3)} → Adjusted: ${score.toFixed(3)}`);
+      }
+
+      return {
+        ...memory,
+        similarity: Math.min(score, 1.0), // Cap at 1.0
+        anchor_boosted: boostApplied,
+        anchor_boost_reasons: boostReasons
+      };
+    });
+
+    if (Object.keys(intent.boost).length > 0) {
+      const boostedCount = anchorBoosted.filter(m => m.anchor_boosted).length;
+      if (boostedCount > 0) {
+        console.log(`[ANCHOR-RERANK] ✅ Applied anchor boost to ${boostedCount} memories based on intent: ${intent.type}`);
+      }
+    }
+    // ═══════════════════════════════════════════════════════════════
+
     // Apply hybrid scoring
     // CRITICAL FIX #562-T2: Pass isMemoryRecall flag to enable strong recency boost
-    const hybridScored = entityBoosted.map(memory => ({
+    const hybridScored = anchorBoosted.map(memory => ({
       ...memory,
       hybrid_score: calculateHybridScore(memory, { isMemoryRecall })
     }));
