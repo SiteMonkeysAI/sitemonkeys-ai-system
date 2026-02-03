@@ -590,12 +590,26 @@ export class IntelligentMemoryStorage {
     }
 
     // 2. EXPLICIT TOKEN ANCHORS - "my token is ABC123", "code: XYZ789"
+    // FIX #677: Also match standalone tokens like "ZEBRA-ANCHOR-123" from explicit storage requests
     const tokenRegex = /\b(?:my\s+)?(?:token|code|key|id|password|pin|number)\s*(?:is|=|:)\s*['"]?([A-Z0-9_-]{4,})['"]?/gi;
     const tokenMatches = [...safeContent.matchAll(tokenRegex)];
     for (const match of tokenMatches) {
       anchors.explicit_token.push({
         type: 'explicit_token',
         value: match[1]
+      });
+    }
+
+    // FIX #677: If content looks like a standalone token (e.g., "ZEBRA-ANCHOR-123"),
+    // treat it as an explicit_token anchor (common in "Remember this exactly: TOKEN" cases)
+    const standaloneTokenRegex = /^([A-Z][A-Z0-9_-]{3,})$/i;
+    const standaloneMatch = safeContent.trim().match(standaloneTokenRegex);
+    if (standaloneMatch && anchors.explicit_token.length === 0) {
+      // Only add if no other explicit tokens were found
+      console.log(`[FIX-677] Detected standalone token anchor: "${standaloneMatch[1]}"`);
+      anchors.explicit_token.push({
+        type: 'explicit_token',
+        value: standaloneMatch[1]
       });
     }
 

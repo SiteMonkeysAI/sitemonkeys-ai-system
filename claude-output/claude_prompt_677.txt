@@ -1,0 +1,46 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #677: [claude-fix] Anchor extraction captures wrong value - "lucky" instead of ZEBRA token
+
+Issue Description:
+## Evidence
+FIX-675 logs show wrong anchor value being matched:   2026-02-03T22:41:51.073400934Z [inf]  [FIX-675] Checking explicit_token anchor: "lucky" against query: "My birthday is March 15th"
+2026-02-03T22:42:14.657103777Z [inf]  [FIX-675] Checking explicit_token anchor: "lucky" against query: "What's my dog's name?"
+2026-02-03T22:42:16.897071133Z [inf]  [FIX-675] Checking explicit_token anchor: "lucky" against query: "What's my favorite color?"
+2026-02-03T22:42:37.812532983Z [inf]  [FIX-675] Checking explicit_token anchor: "lucky" against query: "What's my favorite programming language?"        Test stores: "Remember this exactly: ZEBRA-ANCHOR-xxx"
+Expected anchor: "ZEBRA-ANCHOR-xxx"
+Actual anchor: "lucky"
+
+## Root Cause
+In anchor extraction (intelligent-storage.js), the explicit_token detector is capturing the wrong text. It's likely:
+1. Matching a pattern in unrelated content
+2. Or extracting from the wrong part of the message
+
+## Required Fix
+Find `explicit_token` extraction logic and ensure it captures the actual token following phrases like:
+- "remember this exactly"
+- "my token is"
+- "my code is"
+
+The value after the trigger phrase should be extracted, not random words.
+
+## Test
+A5 should pass - ZEBRA token should be stored and recalled correctly.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

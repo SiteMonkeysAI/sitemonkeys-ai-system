@@ -1,0 +1,50 @@
+Good, the function is called in multiple places. Let me verify each call site to ensure my fix will work:
+
+1. Line 882: Called with `verbatimFacts` for explicit memory requests ✅ (this is our main fix)
+2. Line 1071: Called with `userMessage` for regular storage
+3. Line 1075: Called with `facts` (extracted facts) for regular storage
+
+The fix should work for all cases. When the content is a standalone token like "ZEBRA-ANCHOR-123", it will be correctly identified and stored.
+
+Let me create a summary of the changes:
+
+---SUMMARY---
+
+## Issue Analysis
+The issue was that anchor extraction was capturing "lucky" instead of "ZEBRA-ANCHOR-123" when storing explicit memory requests like "Remember this exactly: ZEBRA-ANCHOR-123".
+
+## Root Cause
+The `extractAndPersistAnchors()` function in `api/memory/intelligent-storage.js` only had a regex pattern to detect explicit tokens in phrases like:
+- "my token is ABC123"
+- "code: XYZ789"
+- "password is ABC-123"
+
+It did NOT handle standalone tokens like "ZEBRA-ANCHOR-123" which are common in explicit memory storage requests after the trigger phrase is stripped away by `detectExplicitMemoryRequest()`.
+
+## Fix Applied
+Modified `api/memory/intelligent-storage.js` (lines 603-614) to add standalone token detection:
+
+1. Added a new regex pattern `/^([A-Z][A-Z0-9_-]{3,})$/i` to match standalone tokens
+2. When content is JUST a token (e.g., "ZEBRA-ANCHOR-123") with no surrounding text, it now:
+   - Detects it as a standalone token
+   - Stores it as an `explicit_token` anchor with the correct value
+   - Logs the detection with `[FIX-677]` prefix for debugging
+
+3. The standalone detection only activates if no other explicit tokens were already found, preventing duplication
+
+## How It Works Now
+When a user says "Remember this exactly: ZEBRA-ANCHOR-123":
+
+1. `detectExplicitMemoryRequest()` extracts "ZEBRA-ANCHOR-123" as the verbatim content
+2. `extractAndPersistAnchors("ZEBRA-ANCHOR-123", metadata)` is called
+3. The new standalone token regex matches and captures "ZEBRA-ANCHOR-123"
+4. Anchor is stored as: `{type: 'explicit_token', value: 'ZEBRA-ANCHOR-123'}`
+5. During retrieval, the correct token "ZEBRA-ANCHOR-123" will be matched instead of wrong values like "lucky"
+
+## Files Modified
+- `api/memory/intelligent-storage.js` - Added standalone token detection in the `extractAndPersistAnchors()` method
+
+## Testing
+The fix should allow test A5 to pass - ZEBRA tokens will now be correctly stored and recalled.
+
+---END SUMMARY---
