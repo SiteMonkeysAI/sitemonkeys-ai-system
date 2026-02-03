@@ -1,0 +1,150 @@
+---SUMMARY---
+
+# DIAGNOSTIC REPORT: Issue #679 - Test Score Regression Root Cause Analysis
+
+## EXECUTIVE SUMMARY
+
+**ROOT CAUSE IDENTIFIED: The regression is caused by ARCHITECTURAL FRAGMENTATION, not individual bugs.**
+
+The memory system has **TWO SEPARATE STORAGE PATHS** with **DIFFERENT anchor extraction logic**. Recent PRs #673, #675, #677 fixed the WRONG storage path - they modified `intelligent-storage.js`, which is NOT used by the main chat flow.
+
+## CRITICAL FINDINGS
+
+### 1. Dual Storage Path Problem
+
+**Path 1 (ACTIVE, UNFIXED):** Main chat flow
+- `chatProcessor.js` api/lib/chatProcessor.js:389-423
+- → `persistentMemory.storeMemory()` api/categories/memory/internal/persistent_memory.js:285-450
+- → `intelligenceSystem.extractAnchors()` api/categories/memory/internal/intelligence.js:4174-4226
+- Anchor extraction: Simple regex `/[A-Z0-9][A-Z0-9-_]{4,}/g` (line 4216)
+- Stores anchors as **string arrays**: `["ZEBRA-ALPHA-2468"]`
+
+**Path 2 (INACTIVE, FIXED BY PRs):** Intelligent storage
+- `intelligent-storage.js:storeWithIntelligence()`
+- → `extractExplicitTokenAnchors()` api/memory/intelligent-storage.js:570-625
+- Sophisticated context-aware extraction with "my token is X" detection
+- Stores anchors as **structured objects**: `[{type: 'explicit_token', value: 'ZEBRA-ALPHA-2468'}]`
+
+**IMPACT:** PRs #673, #675, #677 fixed Path 2, but chat uses Path 1. Fixes had ZERO impact on actual system behavior.
+
+### 2. Anchor Format Mismatch
+
+**Storage (intelligence.js:4218):**
+```javascript
+anchors.identifiers.push(...identifiers);  // Stores: ["ZEBRA-ALPHA-2468"]
+```
+
+**Retrieval Expects (semantic-retrieval.js:1677, PR #675 fix):**
+```javascript
+if (typeof anchor === 'object' && anchor !== null) {
+  if (anchor.value) {  // Expects: {type: 'explicit_token', value: 'ZEBRA-ALPHA-2468'}
+    const valueStr = String(anchor.value).toLowerCase();
+    // Boost logic here
+  }
+}
+```
+
+**IMPACT:** Type mismatch breaks anchor boosting. PR #675 introduced retrieval logic expecting objects, but storage still writes strings. This DIRECTLY caused the regression.
+
+### 3. Embedding Race Condition (STR1 Failure)
+
+**Code:** api/categories/memory/internal/persistent_memory.js:418-430
+
+Storage completes immediately, but embedding generation is async (non-blocking):
+```javascript
+embedMemoryNonBlocking(this.coreSystem.pool, memoryId, content, { timeout: 3000 })
+```
+
+**Timeline:**
+- T+0ms: Store fact 1, start embedding
+- T+300ms: Store fact 2, start embedding
+- T+2700ms: Store fact 10, start embedding
+- T+4700ms: Query starts
+
+**IMPACT:** If any embedding takes >2000ms, memory has `embedding IS NULL`. Semantic retrieval filters it out with `WHERE embedding IS NOT NULL`. Memory becomes invisible.
+
+### 4. MAX_MEMORIES_FINAL Hard Cap
+
+**Location:** Mentioned in STR1_ROOT_CAUSE_ANALYSIS.md (api/core/orchestrator.js:1904-1912)
+
+Only 5 memories maximum injected into AI context. With 10 stored facts, 50% are excluded based on ranking.
+
+**IMPACT:** Small scoring differences = exclusion. If ZEBRA token ranks 6th due to broken boosting, it's invisible to AI.
+
+## WHY EACH TEST IS FAILING
+
+### A5: ZEBRA Token Not Recalled
+- **Storage:** Path 1 extracts "ZEBRA-ALPHA-2468" as string
+- **Retrieval:** PR #675 expects `{value: 'ZEBRA-ALPHA-2468'}` object
+- **Result:** Type mismatch → no anchor boost → lower ranking → possibly below top 5 cap
+
+### CMP2: International Names Lost
+- **Storage:** Unicode detection pattern is correct
+- **Issue:** Retrieval ranking or cap excluding one of the names
+
+### STR1: Volume Stress - Car Fact Not Recalled
+- **Root Cause:** Embedding race condition
+- **Timeline:** 2000ms wait insufficient for all 10 embeddings
+- **Result:** Car fact embedding not ready → filtered out by `WHERE embedding IS NOT NULL`
+
+### INF1/INF3: Inference Tests Failing
+- **Storage:** Both facts may be stored correctly
+- **Issue 1:** Ranking places one fact below top 5 cap
+- **Issue 2:** Prompt-based "calculate" instruction violates genuine intelligence doctrine
+
+### NUA1: Ambiguity Not Recognized
+- **Storage:** Both "Alex" memories stored
+- **Issue:** One "Alex" ranked below threshold or cap → AI sees only one → no ambiguity detected
+
+## ARCHITECTURAL ISSUES
+
+1. **Dual Path Fragmentation:** Two storage implementations with different logic
+2. **Format Mismatch:** Storage writes strings, retrieval expects objects (introduced by PR #675)
+3. **Async Race Conditions:** Non-blocking embeddings cause non-deterministic failures
+4. **Hard Constraints:** 5-memory cap makes ranking critical
+5. **False Confidence:** PRs appeared successful but modified unused code
+
+## DATA LOSS POINTS
+
+1. **Anchor Format Conversion:** Strings stored, objects expected → boosting broken
+2. **Embedding Race:** Memories without embeddings invisible to semantic search
+3. **Ranking Threshold:** Relevant memories ranked 6+ excluded by cap
+4. **Metadata Serialization:** Complex objects may not survive `JSON.stringify()`
+
+## RECOMMENDED FIXES
+
+### Immediate (Unblock Tests)
+
+1. **Unify Anchor Extraction** - Merge sophisticated logic from `intelligent-storage.js:extractExplicitTokenAnchors()` (lines 570-625) into `intelligence.js:extractAnchors()` (lines 4174-4226)
+
+2. **Fix Anchor Storage Format** - In `intelligence.js:4218`, change:
+   ```javascript
+   // OLD: anchors.identifiers.push(...identifiers);
+   // NEW:
+   for (const identifier of identifiers) {
+     anchors.identifiers.push({type: 'identifier', value: identifier});
+   }
+   ```
+
+3. **Fix Embedding Race** - Add embedding readiness check in `intelligence.js:extractRelevantMemories()` OR implement keyword fallback for memories without embeddings
+
+4. **Review Memory Cap** - Investigate if MAX_MEMORIES_FINAL=5 is too restrictive for multi-fact scenarios
+
+### Architectural (Long-term)
+
+1. **Eliminate Dual Storage Paths** - Deprecate `intelligent-storage.js`, consolidate to `persistent_memory.js`
+2. **Contract Tests** - Verify storage format matches retrieval expectations
+3. **Embedding Telemetry** - Track success/failure rates, timeout frequency
+4. **Graceful Degradation** - Use keyword fallback when embeddings unavailable
+
+## CONCLUSION
+
+**The regression was NOT caused by the fixes being wrong - it was caused by fixing the wrong code.**
+
+PRs #673, #675, #677 modified `intelligent-storage.js`, which is not used by the main chat flow. Meanwhile, PR #675 changed retrieval to expect structured anchor objects, but the active storage path (`intelligence.js`) still writes simple strings. This format mismatch broke anchor boosting, causing test scores to drop.
+
+**No targeted fix will succeed without unifying the storage paths and fixing the format mismatch.**
+
+**Estimated fix time:** 2-3 hours to merge logic and ensure format consistency.
+
+---END SUMMARY---
