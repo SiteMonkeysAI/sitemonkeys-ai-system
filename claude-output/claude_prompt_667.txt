@@ -1,0 +1,170 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #667: [claude-fix] CRITICAL: Wire retrieved memories to anchor-preservation validator
+
+Issue Description:
+# [claude-fix] CRITICAL: Wire retrieved memories to anchor-preservation validator
+
+## Priority: CRITICAL
+## This is a comprehensive fix, not a diagnostic
+
+---
+
+## THE DOCTRINE (What We're Building)
+
+This system operates on **Truth > Helpfulness > Engagement**. We are building an AI that acts like a "caring family member with world-class expertise" - one that preserves exact facts, admits uncertainty, and never loses critical information like names, prices, or dates.
+
+The anchor-preservation validator exists to ENFORCE this doctrine by ensuring the AI's response preserves critical anchors (unicode names, pricing, temporal data) that were stored in memory.
+
+**Without this validator working, the system cannot fulfill its core promise.**
+
+---
+
+## THE PROBLEM (Proven with Evidence)
+
+### Storage Works Perfectly
+```
+[ANCHOR-STORAGE] stored_id=6636 anchors_keys=[unicode] unicode_count=7
+[ANCHOR-STORAGE] stored_id=6635 anchors_keys=[pricing] pricing_count=1
+[ANCHOR-STORAGE] stored_id=6651 anchors_keys=[temporal] unicode_count=0
+```
+
+### Retrieval/Injection Confirmed for Failing Runs
+```
+[PROOF] orchestrator:memory-injected count=5 ids=[6655,6652,6644,6651,6650]
+[PROOF] orchestrator:memory-injected count=7 ids=[6656,6652,6651,6659,6650,6644,6663]
+```
+
+### Validator Receives NOTHING
+```
+[ANCHOR-VALIDATOR] Input: memoryContext_type=object is_array=true length=0
+[ANCHOR-VALIDATOR] Extraction telemetry: memories_checked=0, memories_with_anchors=0
+```
+
+**This pattern repeats on 100% of validator calls.** Memories ARE retrieved, but the validator receives an empty array.
+
+---
+
+## CRITICAL CLARIFICATION (prevents wrong fix)
+
+The validator must validate **the same memories actually injected into the prompt** (post-filter, post-cap), not:
+- all DB rows for the user, and not
+- pre-cap candidates, and not
+- an empty placeholder array.
+
+**Definition of "memories to validate":**
+Use the exact array used to build the final memory injection block (the one whose IDs appear in logs like `orchestrator:memory-injected count=X ids=[...]`).
+
+**Hard requirement:**
+If injection uses `memoriesForInjection` or `retrievedMemories` or similar, then call validator with THAT SAME ARRAY (not `memoryContext`, not `context.memories`, not `[]`).
+
+The `[VALIDATOR-WIRE]` log you add must print the IDs of the array passed to the validator, and those IDs MUST match the injected IDs from the `orchestrator:memory-injected` log.
+
+---
+
+## YOUR MISSION
+
+You have full authority to explore the codebase and implement a complete fix. Do not just add diagnostics - FIX THE PROBLEM.
+
+### Step 1: Trace the Data Flow
+Find where memories flow from retrieval to validator:
+- `api/core/orchestrator.js` - where `orchestrator:memory-injected` logs
+- `api/lib/validators/anchor-preservation.js` - where `[ANCHOR-VALIDATOR]` logs
+
+### Step 2: Identify the Break Point
+The memories exist at point A (PROOF logs show them).
+The validator receives empty at point B (ANCHOR-VALIDATOR logs show length=0).
+Find exactly where between A and B the data is lost.
+
+Likely causes:
+- Wrong variable being passed to validator
+- Validator called before retrieval completes
+- Memories stored in one property, validator reads different property
+- Async timing issue
+
+### Step 3: Implement the Fix
+Once you identify the break, fix it properly:
+- Pass the actual retrieved memories array to the validator
+- Ensure the validator is called AFTER retrieval completes
+- Ensure the data structure matches what the validator expects
+
+### Step 4: Add Verification Logging
+Add ONE diagnostic log right before the validator call:
+```javascript
+console.log(`[VALIDATOR-WIRE] Passing to anchor validator: count=${memories?.length || 0} ids=${JSON.stringify(memories?.map(m => m.id) || [])}`);
+```
+
+This will prove the fix works when we see `count > 0` in logs.
+
+---
+
+## KEY FILES TO EXAMINE
+
+1. **`api/core/orchestrator.js`** - Main orchestration, memory injection, validator calls
+2. **`api/lib/validators/anchor-preservation.js`** - The validator itself
+3. **`api/services/semantic-retrieval.js`** - Memory retrieval service
+
+Search for:
+- `anchor-preservation` or `AnchorPreservation`
+- `validateAnchorPreservation`
+- `memory-injected`
+- `memoryContext`
+
+---
+
+## ACCEPTANCE CRITERIA
+
+The fix is complete when:
+
+1. **Logs show memories reaching validator (matching injection):**
+   ```
+   [PROOF] orchestrator:memory-injected count=5 ids=[6655,6652,6644,6651,6650]
+   [VALIDATOR-WIRE] Passing to anchor validator: count=5 ids=[6655,6652,6644,6651,6650]
+   [ANCHOR-VALIDATOR] Input: ... length=5
+   [ANCHOR-VALIDATOR] Extraction telemetry: memories_checked=5, memories_with_anchors=2
+   ```
+   **The IDs in VALIDATOR-WIRE must match the IDs in memory-injected.**
+
+2. **No regressions:** All existing tests pass, `npm run lint` passes
+
+3. **Token efficiency maintained:** Do NOT fetch all DB rows for user - validate only the injected memories
+
+4. **CMP2 test improves:** Unicode names (Zhang Wei, Björk, José) should be preserved after fix
+
+---
+
+## CONSTRAINTS
+
+- ESM modules only (import/export, not require)
+- Node.js 18+ JavaScript
+- Run `npm run lint` before committing
+- Do not remove existing functionality
+- Do not add placeholder code - implement real fixes
+
+---
+
+## CONTEXT: Why This Matters
+
+This system has 53 proprietary innovations. The anchor-preservation validator is one of them - it ensures that when a user tells us "My colleague is 张伟 (Zhang Wei)" or "The contract is $847,293.58", we NEVER lose that exact information.
+
+The storage works. The retrieval works. The validator logic works. The ONLY problem is the wiring - connecting the retrieved memories to the validator.
+
+This should be a straightforward fix once you trace the data flow. You have the skills and the codebase access to solve this completely.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

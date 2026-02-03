@@ -1,0 +1,114 @@
+Perfect! All the changes look good. Now let me write a summary of what was done:
+
+---SUMMARY---
+
+## Issue #667 Fix: Wire Retrieved Memories to Anchor-Preservation Validator
+
+### Problem Identified
+The anchor-preservation validator was receiving an empty array of memories despite memories being successfully retrieved and injected. The logs showed:
+- `[PROOF] orchestrator:memory-injected count=5 ids=[6655,6652,6644,6651,6650]` ✅ (memories retrieved)
+- `[ANCHOR-VALIDATOR] Input: ... length=0` ❌ (validator received empty array)
+
+### Root Cause
+JavaScript scoping issue in `api/core/orchestrator.js`:
+
+1. **Main Issue**: `memoriesToFormat` was declared with `const` inside an `if` block (line 2238), making it undefined when referenced outside that block at the return statement (line 2326). When the variable is out of scope, it returns `undefined`, which makes `memoryContext.memory_objects` undefined, and then `context.memory_context = memoryContext.memory_objects || []` evaluates to an empty array.
+
+2. **Secondary Issue**: The `#keywordRetrievalFallback` method didn't return `memory_objects` at all, so when fallback was used, validators would receive nothing.
+
+### Changes Made
+
+#### 1. Fixed Scoping in Semantic Retrieval (Line 2228)
+**Before:**
+```javascript
+let memoryText = "";
+let memoryIds = [];
+let hasSafetyCritical = false;
+
+if (result.memories && result.memories.length > 0) {
+  const memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
+  // ... use memoriesToFormat ...
+}
+
+return {
+  memory_objects: memoriesToFormat,  // undefined - out of scope!
+};
+```
+
+**After:**
+```javascript
+let memoryText = "";
+let memoryIds = [];
+let hasSafetyCritical = false;
+let memoriesToFormat = []; // FIX #667: Declare outside if block
+
+if (result.memories && result.memories.length > 0) {
+  memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
+  // ... use memoriesToFormat ...
+}
+
+return {
+  memory_objects: memoriesToFormat,  // Now accessible!
+};
+```
+
+#### 2. Enhanced Fallback Path to Preserve Memory Objects (Lines 2379-2420)
+Added `memoryObjects` tracking in the fallback retrieval to preserve the original memory objects when available:
+
+```javascript
+let memoryObjects = []; // FIX #667: Preserve original memory objects
+
+// Format 2: result.memories is an array of memory objects
+else if (Array.isArray(result.memories) && result.memories.length > 0) {
+  memoryObjects = result.memories; // Store original objects
+  // ... format for text injection ...
+}
+
+memories = {
+  memory_objects: memoryObjects, // Include for validators
+};
+```
+
+#### 3. Updated All Fallback Return Statements (Lines 2444, 2489, 2500)
+Ensured `memory_objects` is always returned, even when empty:
+
+```javascript
+return {
+  // ... other properties ...
+  memory_objects: memoryObjects, // or [] when no memories
+};
+```
+
+#### 4. Added Verification Logging (Line 372)
+Added `[VALIDATOR-WIRE]` log before the validator call to prove the fix works:
+
+```javascript
+// FIX #667: Verification logging - prove memories reach validator
+console.log(`[VALIDATOR-WIRE] Passing to anchor validator: count=${context.memory_context?.length || 0} ids=${JSON.stringify(context.memory_context?.map(m => m.id) || [])}`);
+```
+
+### Expected Results
+After this fix, logs should show:
+```
+[PROOF] orchestrator:memory-injected count=5 ids=[6655,6652,6644,6651,6650]
+[VALIDATOR-WIRE] Passing to anchor validator: count=5 ids=[6655,6652,6644,6651,6650]
+[ANCHOR-VALIDATOR] Input: ... length=5
+[ANCHOR-VALIDATOR] Extraction telemetry: memories_checked=5, memories_with_anchors=2
+```
+
+The IDs in `[VALIDATOR-WIRE]` will match the IDs in `orchestrator:memory-injected`, proving the memories flow correctly from retrieval → injection → validation.
+
+### Files Modified
+- `api/core/orchestrator.js` (4 sections modified)
+  - Semantic retrieval memory object scoping fix
+  - Fallback path memory object preservation
+  - Fallback return statements updated (3 locations)
+  - Added verification logging before validator call
+
+### Testing Recommendations
+1. Run existing tests to ensure no regressions
+2. Run CMP2 test (unicode names: Zhang Wei, Björk, José) - should now preserve characters correctly
+3. Verify logs show matching IDs between `memory-injected` and `VALIDATOR-WIRE`
+4. Check that validator receives memories with anchor metadata
+
+---END SUMMARY---
