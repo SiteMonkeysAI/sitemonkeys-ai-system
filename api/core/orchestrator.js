@@ -368,6 +368,9 @@ export class Orchestrator {
 
       // ========== STEP 9: ANCHOR PRESERVATION (Issue #606 Phase 1) ==========
       try {
+        // FIX #667: Verification logging - prove memories reach validator
+        console.log(`[VALIDATOR-WIRE] Passing to anchor validator: count=${context.memory_context?.length || 0} ids=${JSON.stringify(context.memory_context?.map(m => m.id) || [])}`);
+
         // FIX #659: VALIDATOR-TRACE diagnostic logging (gated by DEBUG_DIAGNOSTICS)
         if (process.env.DEBUG_DIAGNOSTICS === 'true') {
           console.log(`[VALIDATOR-TRACE] Calling anchor validator with memory_context length=${context.memory_context?.length || 0}`);
@@ -2222,20 +2225,18 @@ export class Orchestrator {
       let memoryText = "";
       let memoryIds = [];
       let hasSafetyCritical = false;
+      let memoriesToFormat = []; // FIX #667: Declare outside if block so it's accessible when returning
 
       if (result.memories && result.memories.length > 0) {
         // ═══════════════════════════════════════════════════════════════
         // HARD FINAL CAP - Absolute maximum memories before injection
         // This is the LAST line of defense - enforced regardless of upstream logic
-        // CRITICAL (Issue #579 - NUA1, STR1): Increased from 8 to 15 to handle:
-        // - Multiple entities with same name (NUA1: two different "Alex")
-        // - Volume stress (STR1: 10+ facts stored, need to find Tesla at rank #9)
-        // - Complex international names (CMP2: Dr. Xiaoying Zhang-Müller preserved)
-        // - Ordinal queries (A5: first code vs second code disambiguation)
+        // CRITICAL: Enforces token efficiency + selectivity doctrine
+        // Validator must validate exactly what is injected (these 5 memories)
         // ═══════════════════════════════════════════════════════════════
-        const MAX_MEMORIES_FINAL = 15; // Increased from 8 for Issue #579 comprehensive fix
+        const MAX_MEMORIES_FINAL = 5; // Token efficiency + selectivity - validator validates these exact memories
         const memoriesPreCap = result.memories.length;
-        const memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
+        memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
         const memoriesPostCap = memoriesToFormat.length;
 
         // Log if cap was enforced
@@ -2372,14 +2373,17 @@ export class Orchestrator {
           if (result) {
             let memoryText = "";
             let memoryCount = 0;
+            let memoryObjects = []; // FIX #667: Preserve original memory objects for validators
 
             // Format 1: result.memories is a string
             if (typeof result.memories === "string" && result.memories.length > 0) {
               memoryText = result.memories;
               memoryCount = result.count || 1;
+              // No objects available for string format
             }
             // Format 2: result.memories is an array of memory objects
             else if (Array.isArray(result.memories) && result.memories.length > 0) {
+              memoryObjects = result.memories; // FIX #667: Store original objects
               memoryText = result.memories
                 .map((m) => {
                   if (typeof m === "string") return m;
@@ -2394,11 +2398,14 @@ export class Orchestrator {
             else if (typeof result.memories === "object" && result.memories !== null) {
               memoryText = JSON.stringify(result.memories, null, 2);
               memoryCount = result.count || 1;
+              // Single object, wrap in array
+              memoryObjects = [result.memories]; // FIX #667
             }
             // Format 4: result itself is the memory string
             else if (typeof result === "string" && result.length > 0) {
               memoryText = result;
               memoryCount = 1;
+              // No objects available for string format
             }
 
             if (memoryText.length > 0) {
@@ -2407,6 +2414,7 @@ export class Orchestrator {
                 memories: memoryText,
                 count: memoryCount,
                 memory_ids: result.memory_ids || [],
+                memory_objects: memoryObjects, // FIX #667: Include objects for validators
               };
 
               this.log(
@@ -2430,6 +2438,7 @@ export class Orchestrator {
           categories: [],
           hasMemory: false,
           memory_ids: [],
+          memory_objects: [], // FIX #667: Return empty array for validators
         };
       }
 
@@ -2438,6 +2447,7 @@ export class Orchestrator {
 
       // Extract memory IDs from the result - ensure consistency
       let memoryIds = memories.memory_ids || [];
+      const memoryObjects = memories.memory_objects || []; // FIX #667: Extract objects for validators
 
       // CRITICAL FIX (Issue #210): If we have memories but no IDs, this is a TELEMETRY FAILURE
       if (tokenCount > 0 && memoryIds.length === 0 && memories.count > 0) {
@@ -2473,6 +2483,7 @@ export class Orchestrator {
           : [],
         hasMemory: tokenCount > 0,
         memory_ids: memoryIds,
+        memory_objects: memoryObjects, // FIX #667: Return objects for validators
       };
     } catch (error) {
       this.error("[MEMORY] Fallback retrieval failed, continuing without memory", error);
@@ -2483,6 +2494,7 @@ export class Orchestrator {
         categories: [],
         hasMemory: false,
         memory_ids: [],
+        memory_objects: [], // FIX #667: Return empty array for validators
       };
     }
   }
