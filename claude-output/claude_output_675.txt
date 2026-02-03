@@ -1,0 +1,55 @@
+Good! Lines 979 and 1635 are just for logging/telemetry (getting the keys), and lines 1658-1666 are the ones I just fixed. There are no other places where anchor matching happens.
+
+Now let me create a summary of the changes:
+
+---SUMMARY---
+
+## Fixed Issue #675: Anchors stored but not boosting retrieval - A5 fails
+
+### Root Cause
+PR #673 successfully added anchor storage and metadata retrieval, but the anchor boost logic in `semantic-retrieval.js` was not correctly parsing anchor objects. When anchors like `explicit_token` or `ordinal` are stored, they're saved as objects with structured fields:
+- `explicit_token`: `{type: 'explicit_token', value: 'ZEBRA'}`
+- `ordinal`: `{position: 'first', item: 'code', value: 'ABC123'}`
+
+The existing code was using `JSON.stringify(anchor).toLowerCase()` to convert the entire object to a string like `{"type":"explicit_token","value":"zebra"}`, then trying to match this stringified JSON against the user's query. This meant a query like "what's my token" would never match the actual token value "ZEBRA".
+
+### Changes Made
+
+**File: `api/services/semantic-retrieval.js`** (lines 1671-1712)
+
+Modified the anchor matching logic in the anchor boost section to:
+
+1. **Properly extract the `value` field** from anchor objects:
+   - For `explicit_token` anchors: Extract `anchor.value` (e.g., "ZEBRA") instead of stringifying the whole object
+   - For `ordinal` anchors: Check `anchor.value`, `anchor.position`, and `anchor.item` fields
+   - For simple string anchors (unicode names, pricing): Keep existing behavior
+
+2. **Added debug logging** for explicit_token matching:
+   - Logs when checking explicit_token anchors to help diagnose issues
+   - Format: `[FIX-675] Checking explicit_token anchor: "ZEBRA" against query: "what's my token"`
+
+3. **Improved matching logic**:
+   - First checks if anchor has a `value` property and extracts it
+   - For ordinal anchors, also checks `position` and `item` fields
+   - Falls back to JSON stringify only if needed
+   - Handles both object anchors and simple string anchors
+
+### Expected Impact
+
+**A5 Test should now PASS**:
+- When user says: "Remember this exactly: ZEBRA-XXX"
+- Anchor stored: `{type: 'explicit_token', value: 'ZEBRA-XXX'}`
+- When user asks: "What's my token?"
+- System detects `EXPLICIT_RECALL` intent with `boost: { explicit_token: 10.0 }`
+- NEW BEHAVIOR: Correctly extracts "ZEBRA-XXX" from `anchor.value`
+- Applies 10.0x boost to matching memory
+- ZEBRA token memory ranks at top and gets recalled
+
+### Testing
+The fix maintains backward compatibility with:
+- String anchors (unicode names, pricing) - unchanged behavior
+- Temporal anchors (object with properties) - unchanged behavior
+- Ordinal anchors - IMPROVED (now checks position/item/value fields)
+- Explicit token anchors - FIXED (now extracts value field correctly)
+
+---END SUMMARY---
