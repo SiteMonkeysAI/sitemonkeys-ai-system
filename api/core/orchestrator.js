@@ -2231,13 +2231,10 @@ export class Orchestrator {
         // ═══════════════════════════════════════════════════════════════
         // HARD FINAL CAP - Absolute maximum memories before injection
         // This is the LAST line of defense - enforced regardless of upstream logic
-        // CRITICAL (Issue #579 - NUA1, STR1): Increased from 8 to 15 to handle:
-        // - Multiple entities with same name (NUA1: two different "Alex")
-        // - Volume stress (STR1: 10+ facts stored, need to find Tesla at rank #9)
-        // - Complex international names (CMP2: Dr. Xiaoying Zhang-Müller preserved)
-        // - Ordinal queries (A5: first code vs second code disambiguation)
+        // CRITICAL: Enforces token efficiency + selectivity doctrine
+        // Validator must validate exactly what is injected (these 5 memories)
         // ═══════════════════════════════════════════════════════════════
-        const MAX_MEMORIES_FINAL = 15; // Increased from 8 for Issue #579 comprehensive fix
+        const MAX_MEMORIES_FINAL = 5; // Token efficiency + selectivity - validator validates these exact memories
         const memoriesPreCap = result.memories.length;
         memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
         const memoriesPostCap = memoriesToFormat.length;
