@@ -1,0 +1,103 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #673: [claude-fix] CRITICAL: Anchors detected but not persisted to database
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>[claude-fix] CRITICAL: Anchors detected but not persisted to database</h1>
+<h2>Problem</h2>
+<p>Test results show <strong>SMFULL 23/24</strong> (A5 failing) and <strong>SMDEEP 10/15</strong> (STR1, CMP2 failing).</p>
+<p>Logs reveal anchors are being <strong>detected</strong> at storage time but <strong>NOT saved</strong> to the database:</p>
+<p><strong>Storage shows detection:</strong></p>
+<pre><code>[ANCHOR-STORAGE] Detected anchors: pricing=1
+[ANCHOR-STORAGE] stored_id=6772 anchors_keys=[pricing] unicode_count=0 pricing_count=1
+[ANCHOR-STORAGE] Detected anchors: unicode=7   ← Zhang-Müller, Björn, José detected
+[ANCHOR-STORAGE] Detected anchors: explicit_token=1   ← ZEBRA token detected
+</code></pre>
+<p><strong>Retrieval shows empty:</strong></p>
+<pre><code>[ANCHOR-VALIDATOR] Memory 6772: anchors_keys=[] (no metadata.anchors)
+[ANCHOR-VALIDATOR] Memory 6773: anchors_keys=[] (no metadata.anchors)
+[ANCHOR-VALIDATOR] memories_with_anchors=0   ← ZERO memories have anchors!
+</code></pre>
+<h2>Evidence</h2>
+<p>Every single retrieval check shows <code>memories_with_anchors=0</code>:</p>
+<pre><code>[ANCHOR-VALIDATOR] Extraction telemetry: memories_checked=5, memories_with_anchors=0
+[ANCHOR-VALIDATOR] Extraction telemetry: memories_checked=4, memories_with_anchors=0
+[ANCHOR-VALIDATOR] Extraction telemetry: memories_checked=3, memories_with_anchors=0
+</code></pre>
+<p>This pattern repeats ~90 times in the logs. Not a single memory has anchors stored.</p>
+<h2>Root Cause</h2>
+<p>In <code>api/memory/intelligent-storage.js</code>, the <code>extractAndPersistAnchors()</code> function detects anchors and logs them, but the result is NOT being assigned to the metadata object BEFORE the database INSERT.</p>
+<p>The function likely:</p>
+<ol>
+<li>✅ Extracts anchors correctly</li>
+<li>✅ Logs that anchors were found</li>
+<li>❌ Returns the anchors but caller ignores the return value</li>
+<li>❌ Or modifies a copy of metadata instead of the actual object</li>
+</ol>
+<h2>Required Fix</h2>
+<p>Find where <code>extractAndPersistAnchors()</code> is called (lines ~868 and ~1057) and ensure the anchors are ASSIGNED to metadata BEFORE the INSERT:</p>
+<pre><code class="language-javascript">// WRONG pattern (suspected current behavior):
+await this.extractAndPersistAnchors(content, metadata);  // Returns anchors but ignores them
+await db.insert(memory);  // Inserts without anchors
+
+// CORRECT pattern:
+const extractedAnchors = await this.extractAndPersistAnchors(content);
+metadata.anchors = extractedAnchors.anchors;
+metadata.anchor_version = '2.0';
+metadata.anchor_extracted_at = new Date().toISOString();
+// THEN do the INSERT with populated metadata
+await db.insert(memory);
+</code></pre>
+<h2>Alternative: Check if mutation is the issue</h2>
+<p>If <code>extractAndPersistAnchors()</code> is supposed to mutate metadata in place, verify:</p>
+<ol>
+<li>The metadata object passed is the SAME object used in the INSERT</li>
+<li>No spread operator or Object.assign creates a copy between extraction and INSERT</li>
+<li>The anchors property is set BEFORE JSON.stringify or database write</li>
+</ol>
+<h2>Verification Steps</h2>
+<p>After fix:</p>
+<ol>
+<li>Run SMFULL test suite</li>
+<li>Check logs for: <code>[ANCHOR-VALIDATOR] memories_with_anchors=1</code> (or more)</li>
+<li>A5 test should pass (ZEBRA token recalled via anchor match)</li>
+<li>CMP2 test should pass (international names preserved via unicode anchors)</li>
+</ol>
+<h2>Failed Tests This Should Fix</h2>
+
+Test | What Failed | Why
+-- | -- | --
+A5 | Explicit memory not recalled | explicit_token anchor not stored
+STR1 | Car fact not recalled | No anchor boost at retrieval
+CMP2 | International names lost | unicode anchors detected but not stored
+
+
+<h2>Priority</h2>
+<p><strong>CRITICAL</strong> - This is the core bug. The entire anchor system (PR #670) is non-functional because anchors are detected but never persisted.</p>
+<h2>Files to Check</h2>
+<ol>
+<li><code>api/memory/intelligent-storage.js</code> - Lines 868, 1057 where <code>extractAndPersistAnchors()</code> is called</li>
+<li>Verify the metadata object passed to the INSERT contains the anchors</li>
+</ol></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

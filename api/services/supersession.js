@@ -452,6 +452,12 @@ export async function storeWithSupersession(pool, memoryData) {
 
       // Insert new memory (id is INTEGER with sequence, auto-generated)
       // FIX #659: Include metadata in INSERT to preserve anchors
+      // FIX #673: Log metadata before INSERT to verify anchors are present
+      console.log(`[FIX-673-SUPERSESSION] PRE-INSERT metadata check: has_anchors=${!!metadata.anchors}, anchor_keys=[${Object.keys(metadata.anchors || {}).join(',')}]`);
+      if (metadata.anchors) {
+        console.log(`[FIX-673-SUPERSESSION] PRE-INSERT anchor counts: unicode=${(metadata.anchors.unicode || []).length}, pricing=${(metadata.anchors.pricing || []).length}, explicit_token=${(metadata.anchors.explicit_token || []).length}`);
+      }
+
       const newMemory = await client.query(`
         INSERT INTO persistent_memories (
           user_id, content, category_name, token_count,

@@ -590,7 +590,8 @@ function buildPrefilterQuery(options) {
       fingerprint_confidence,
       relevance_score,
       created_at,
-      EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400 as days_ago
+      EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400 as days_ago,
+      metadata
     FROM persistent_memories
     WHERE ${conditions.join(' AND ')}
     ORDER BY relevance_score DESC, created_at DESC
@@ -2162,7 +2163,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 export async function findByFingerprint(pool, userId, fingerprint) {
   try {
     const { rows } = await pool.query(`
-      SELECT id, user_id, content, fact_fingerprint, fingerprint_confidence, created_at
+      SELECT id, user_id, content, fact_fingerprint, fingerprint_confidence, created_at, metadata
       FROM persistent_memories
       WHERE user_id = $1
         AND is_current = true

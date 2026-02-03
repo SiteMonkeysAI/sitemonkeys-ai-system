@@ -2062,6 +2062,24 @@ Facts (preserve user terminology + add synonyms):`;
       // CRITICAL FIX #504: Store original user message snippet in metadata for fallback matching
       const originalUserSnippet = metadata.original_user_phrase || '';
 
+      // FIX #673: Log metadata BEFORE INSERT to verify anchors are present
+      console.log(`[FIX-673] PRE-INSERT metadata check: has_anchors=${!!metadata.anchors}, anchor_keys=[${Object.keys(metadata.anchors || {}).join(',')}]`);
+      if (metadata.anchors) {
+        console.log(`[FIX-673] PRE-INSERT anchor counts: unicode=${(metadata.anchors.unicode || []).length}, pricing=${(metadata.anchors.pricing || []).length}, explicit_token=${(metadata.anchors.explicit_token || []).length}`);
+      }
+
+      // FIX #673: Build metadata object that will be stored
+      const metadataToStore = {
+        ...metadata,
+        compressed: true,
+        dedup_checked: true,
+        storage_version: 'intelligent_v1',
+        original_user_phrase: originalUserSnippet  // Store for fallback retrieval matching
+      };
+
+      // FIX #673: Verify anchors are in the object that will be stored
+      console.log(`[FIX-673] STORING metadata: has_anchors=${!!metadataToStore.anchors}, anchor_keys=[${Object.keys(metadataToStore.anchors || {}).join(',')}]`);
+
       const result = await this.db.query(`
         INSERT INTO persistent_memories (
           user_id,
@@ -2085,13 +2103,7 @@ Facts (preserve user terminology + add synonyms):`;
         facts,
         tokenCount,
         importanceScore, // Use pre-calculated importance score
-        JSON.stringify({
-          ...metadata,
-          compressed: true,
-          dedup_checked: true,
-          storage_version: 'intelligent_v1',
-          original_user_phrase: originalUserSnippet  // Store for fallback retrieval matching
-        })
+        JSON.stringify(metadataToStore)
       ]);
 
       console.log('[TRACE-INTELLIGENT] I15. INSERT query completed');
