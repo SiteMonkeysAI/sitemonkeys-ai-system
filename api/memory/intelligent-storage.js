@@ -543,6 +543,114 @@ export class IntelligentMemoryStorage {
   }
 
   /**
+   * Extract and persist ALL anchor types from content (Issue #670 - FIX A)
+   * Comprehensive anchor detection: ordinal, explicit_token, unicode, pricing, temporal
+   *
+   * CRITICAL: This runs ONCE at storage time to persist anchors in metadata
+   * Anchors stored here should NEVER need to be "invented" by validators
+   *
+   * @param {string} content - Content to extract anchors from
+   * @param {object} existingMetadata - Existing metadata to merge with
+   * @returns {object} - Metadata with anchors added
+   */
+  extractAndPersistAnchors(content, existingMetadata = {}) {
+    if (!content || typeof content !== 'string') {
+      return existingMetadata;
+    }
+
+    // SECURITY: Bound input to prevent ReDoS
+    const safeContent = content.substring(0, 1000);
+
+    const anchors = {
+      unicode: [],
+      pricing: [],
+      temporal: [],
+      ordinal: [],
+      explicit_token: []
+    };
+
+    // 1. ORDINAL ANCHORS - "first code", "second option", "primary contact"
+    const ordinalRegex = /\b(first|second|third|fourth|fifth|primary|secondary|main|backup|original|alternate)\s+(\w+(?:\s+\w+)?)/gi;
+    const ordinalMatches = [...safeContent.matchAll(ordinalRegex)];
+    for (const match of ordinalMatches) {
+      const position = match[1].toLowerCase();
+      const item = match[2];
+
+      // Try to extract the associated value (e.g., "first code is ABC123" → extract "ABC123")
+      const afterMatchIndex = match.index + match[0].length;
+      const remainder = safeContent.slice(afterMatchIndex);
+      const valueMatch = remainder.match(/^\s*(?:is|was|are|:)\s*([A-Z0-9][A-Z0-9-_]{2,})/i);
+
+      const anchor = { position, item };
+      if (valueMatch) {
+        anchor.value = valueMatch[1];
+      }
+
+      anchors.ordinal.push(anchor);
+    }
+
+    // 2. EXPLICIT TOKEN ANCHORS - "my token is ABC123", "code: XYZ789"
+    const tokenRegex = /\b(?:my\s+)?(?:token|code|key|id|password|pin|number)\s*(?:is|=|:)\s*['"]?([A-Z0-9_-]{4,})['"]?/gi;
+    const tokenMatches = [...safeContent.matchAll(tokenRegex)];
+    for (const match of tokenMatches) {
+      anchors.explicit_token.push({
+        type: 'explicit_token',
+        value: match[1]
+      });
+    }
+
+    // 3. UNICODE NAMES - Already extracted by extractUnicodeNames, but include for completeness
+    const unicodeNames = this.extractUnicodeNames(safeContent);
+    anchors.unicode = unicodeNames;
+
+    // 4. PRICING ANCHORS - Already extracted by extractPricingAnchors
+    const pricingAnchors = this.extractPricingAnchors(safeContent);
+    anchors.pricing = pricingAnchors;
+
+    // 5. TEMPORAL ANCHORS - Already extracted by extractTemporalAnchors (returns object)
+    const temporalAnchors = this.extractTemporalAnchors(safeContent);
+    if (Object.keys(temporalAnchors).length > 0) {
+      anchors.temporal = temporalAnchors;
+    }
+
+    // Filter out empty anchor types
+    const nonEmptyAnchors = {};
+    for (const [type, values] of Object.entries(anchors)) {
+      if (Array.isArray(values) && values.length > 0) {
+        nonEmptyAnchors[type] = values;
+      } else if (!Array.isArray(values) && Object.keys(values).length > 0) {
+        // temporal is an object, not array
+        nonEmptyAnchors[type] = values;
+      }
+    }
+
+    // Log what was detected
+    const anchorCounts = Object.entries(nonEmptyAnchors)
+      .map(([type, vals]) => {
+        const count = Array.isArray(vals) ? vals.length : Object.keys(vals).length;
+        return `${type}=${count}`;
+      })
+      .join(', ');
+
+    if (anchorCounts) {
+      console.log(`[ANCHOR-STORAGE] Detected anchors: ${anchorCounts}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[ANCHOR-STORAGE] Persisting: ${JSON.stringify(nonEmptyAnchors).substring(0, 200)}`);
+      }
+    } else {
+      console.log(`[ANCHOR-STORAGE] Detected anchors: none`);
+    }
+
+    // Merge with existing metadata
+    return {
+      ...existingMetadata,
+      anchors: nonEmptyAnchors,
+      anchor_version: '2.0',
+      anchor_extracted_at: Date.now()
+    };
+  }
+
+  /**
    * Detect explicit memory storage requests (Fix #557-T2)
    * When user explicitly asks to remember something, store it verbatim without compression
    *
@@ -733,7 +841,7 @@ export class IntelligentMemoryStorage {
         const verbatimTokens = this.countTokens(verbatimFacts);
 
         // Store with very high importance (explicit user request)
-        const explicitMetadata = {
+        let explicitMetadata = {
           original_tokens: verbatimTokens,
           compressed_tokens: verbatimTokens,
           compression_ratio: 1.0,  // No compression for explicit requests
@@ -755,6 +863,9 @@ export class IntelligentMemoryStorage {
             explicitMetadata.ordinal_value = ordinalInfo.value;
           }
         }
+
+        // FIX #670: Extract and persist ALL anchors at storage time (explicit path)
+        explicitMetadata = this.extractAndPersistAnchors(verbatimFacts, explicitMetadata);
 
         const result = await this.storeCompressedMemory(userId, category, verbatimFacts, explicitMetadata, mode);
         console.log(`[A5-DEBUG] Storage: Set explicit_storage_request=true in metadata`);
@@ -919,30 +1030,8 @@ export class IntelligentMemoryStorage {
         // If supersession, storeCompressedMemory will detect and mark old memory as superseded
         console.log('[FLOW] Step 4: Storing new memory (supersession handled internally if applicable)...');
 
-        // FIX #643: Extract temporal anchors from ORIGINAL user message first (INF3)
-        // Compressed facts may have dropped "left in 2020" - extract from source
-        const temporalAnchors = this.extractTemporalAnchors(userMessage);
-
-        // Fallback to facts only if nothing found in original
-        if (Object.keys(temporalAnchors).length === 0) {
-          Object.assign(temporalAnchors, this.extractTemporalAnchors(facts));
-        }
-
-        // FIX #643: Extract unicode names from ORIGINAL message first, then facts (CMP2)
-        // Compression might have damaged unicode characters
-        let unicodeNames = this.extractUnicodeNames(userMessage);
-        if (unicodeNames.length === 0) {
-          unicodeNames = this.extractUnicodeNames(facts);
-        }
-
-        // FIX #648: Extract pricing anchors from ORIGINAL message (EDG3)
-        // Compression might have dropped pricing details
-        let pricingAnchors = this.extractPricingAnchors(userMessage);
-        if (pricingAnchors.length === 0) {
-          pricingAnchors = this.extractPricingAnchors(facts);
-        }
-
-        const regularMetadata = {
+        // FIX #670: Start with base metadata
+        let regularMetadata = {
           original_tokens: originalTokens,
           compressed_tokens: compressedTokens,
           compression_ratio: parseFloat(ratio),
@@ -963,28 +1052,13 @@ export class IntelligentMemoryStorage {
           }
         }
 
-        // FIX #643/#648: Add anchors metadata for temporal, unicode, and pricing (INF3, CMP2, EDG3)
-        if (Object.keys(temporalAnchors).length > 0 || unicodeNames.length > 0 || pricingAnchors.length > 0) {
-          regularMetadata.anchors = {};
+        // FIX #670: Extract and persist ALL anchors at storage time (regular path)
+        // Extract from ORIGINAL message first (preserves data lost in compression), then fallback to facts
+        regularMetadata = this.extractAndPersistAnchors(userMessage, regularMetadata);
 
-          if (Object.keys(temporalAnchors).length > 0) {
-            regularMetadata.anchors.temporal = temporalAnchors;
-          }
-
-          if (unicodeNames.length > 0) {
-            regularMetadata.anchors.unicode = unicodeNames;
-          }
-
-          if (pricingAnchors.length > 0) {
-            regularMetadata.anchors.pricing = pricingAnchors;
-          }
-
-          // FIX #659: UNICODE-TRACE diagnostic logging (gated by DEBUG_DIAGNOSTICS)
-          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-            console.log(`[UNICODE-TRACE] extracted_unicode=${JSON.stringify(unicodeNames)}`);
-            console.log(`[UNICODE-TRACE] before_storage anchors_keys=[${Object.keys(regularMetadata.anchors).join(',')}] unicode_count=${unicodeNames.length}`);
-            console.log(`[UNICODE-TRACE] metadata_type=${typeof regularMetadata}`);
-          }
+        // If no anchors found in original message, try extracting from compressed facts as fallback
+        if (!regularMetadata.anchors || Object.keys(regularMetadata.anchors).length === 0) {
+          regularMetadata = this.extractAndPersistAnchors(facts, regularMetadata);
         }
 
         const result = await this.storeCompressedMemory(userId, category, facts, regularMetadata, mode);

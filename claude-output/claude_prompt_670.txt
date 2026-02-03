@@ -1,0 +1,518 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #670: [claude-fix] [CRITICAL] Anchor Integrity + Intelligent Retrieval System Overhaul
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>[CRITICAL] Anchor Integrity + Intelligent Retrieval System Overhaul</h1>
+<h2>Summary</h2>
+<p>PR #667 confirmed the wiring fix works - the anchor-preservation validator now receives injected memories. However, Railway logs reveal <strong>two interconnected problems</strong> that break doctrine:</p>
+<ol>
+<li><strong>Anchors not persisted at storage time</strong> → Validator forced to "invent" anchors → Garbage injection</li>
+<li><strong>Retrieval selectivity too aggressive</strong> → Right memories stored but not surfaced → Test failures A5, B3, STR1</li>
+</ol>
+<p>These are NOT separate issues - they're two sides of the same coin: <strong>the system lacks end-to-end intelligent handling of critical data (anchors, pricing, names, ordinal relationships)</strong>.</p>
+<hr>
+<h2>Evidence from Railway Logs</h2>
+<h3>Problem 1: Anchor Persistence Failure</h3>
+<pre><code>[ANCHOR-VALIDATOR] Memory 6704: anchors_keys=[] (no metadata.anchors)
+[ANCHOR-VALIDATOR] Memory 6691: anchors_keys=[] (no metadata.anchors)
+[ANCHOR-VALIDATOR] Memory 6696: anchors_keys=[] (no metadata.anchors)
+[ANCHOR-VALIDATOR] Memory 6693: anchors_keys=[] (no metadata.anchors)
+
+[ANCHOR-VALIDATOR] Injected 2 missing anchors: 2010, 2019
+[ANCHOR-VALIDATOR] Injected 5 missing anchors: 1770146415622, 251585, Work Experience, Team Leadership, Project Value
+[ANCHOR-VALIDATOR] Injected 3 missing anchors: 80%, 2019, 65
+</code></pre>
+<p><strong>Doctrine Violation:</strong> Anchors must be "stored once → preserved forever." Current behavior is "anchors rarely stored → validator invents garbage at runtime."</p>
+<p>Garbage examples from logs:</p>
+<ul>
+<li><code>Work Experience, Team Leadership, Project Value</code> → Generic labels, NOT anchors</li>
+<li><code>1770146415622</code> → Timestamp, NOT a meaningful anchor</li>
+<li><code>65</code> → Random number extracted from text</li>
+</ul>
+<h3>Problem 2: Retrieval Selectivity Failures</h3>
+<p><strong>Test A5 (Explicit Memory Request):</strong> User asks "what's my token?" → System stored it → System doesn't retrieve it</p>
+<p><strong>Test B3 (Ordinal Ranking):</strong> User stored "first code = ABC123, second code = XYZ789" → Asks "what's my first code?" → Wrong answer or no answer</p>
+<p><strong>Test STR1 (Volume Stress):</strong> 10 facts stored → Ask about fact #9 (Tesla) → Can't find it among 10 stored items</p>
+<p><strong>Root Cause:</strong> Semantic similarity alone isn't enough. The system needs <strong>intelligent retrieval</strong> that understands:</p>
+<ul>
+<li>Explicit requests ("my token", "my code") should trigger broad recall</li>
+<li>Ordinal relationships ("first", "second") require preserving sequence metadata</li>
+<li>Volume queries need to search across categories, not just top-N from one</li>
+</ul>
+<hr>
+<h2>Doctrinal Alignment (From the Bible)</h2>
+<h3>Master Completion Ledger - Innovation #12: Contextual Relevance Ranking</h3>
+<blockquote>
+<p>"Ranking algorithm evaluates multiple dimensions of relevance: semantic similarity to query, relationship to current conversation topic, connection to user's goals and context, importance score, recency when appropriate. Uses AI-driven understanding of what 'relevant' means in current context rather than just counting keywords."</p>
+</blockquote>
+<p><strong>Current State:</strong> System uses semantic similarity only, misses context and intent.</p>
+<h3>Master Completion Ledger - Innovation #8: Semantic + Mode-Aware Indexing</h3>
+<blockquote>
+<p>"Indexing system creates semantic embeddings that capture meaning and relationships, not just keywords... Understanding that 'budget' means different things in Business mode vs. personal finance discussions."</p>
+</blockquote>
+<p><strong>Current State:</strong> System indexes semantically but doesn't differentiate meaning by context or intent type.</p>
+<h3>Master Completion Ledger - Innovation #49: Adaptive Learning of User Priorities</h3>
+<blockquote>
+<p>"System learns what types of information and topics are most important to each user based on their behavior..."</p>
+</blockquote>
+<p><strong>Current State:</strong> No signal back from retrieval success/failure to inform future ranking.</p>
+<h3>Additional Context Document - Section on Intelligence</h3>
+<blockquote>
+<p>"Users don't know what they don't know. A truly caring, intelligent system doesn't just answer the question asked - it volunteers critical information the user hasn't thought to consider."</p>
+</blockquote>
+<p><strong>Implication:</strong> If the user asks for "their code" and we HAVE their code stored, failing to retrieve it is the opposite of caring intelligence.</p>
+<hr>
+<h2>Required Fixes</h2>
+<h3>FIX A: Anchor Detection + Persistence at Storage Time</h3>
+<p><strong>Location:</strong> <code>api/memory/intelligent-storage.js</code> (or wherever metadata is assembled before INSERT)</p>
+<p><strong>Principle:</strong> Detect anchors ONCE at storage, persist them, never "invent" at retrieval.</p>
+<p><strong>Implementation:</strong></p>
+<pre><code class="language-javascript">// ANCHOR DETECTION PATTERNS (strict, doctrine-aligned)
+const ANCHOR_PATTERNS = {
+  unicode: {
+    // Names with non-ASCII characters: Zhang Wei, Björk, José García
+    detect: (text) =&gt; {
+      const unicodeNameRegex = /\b([A-Z][a-zÀ-ÿ]*[\^@-\uFFFF]+[a-zÀ-ÿ]*|[\^@-\uFFFF]+[a-zÀ-ÿ]*\s+[A-Z][a-z]*)\b/g;
+      return [...text.matchAll(unicodeNameRegex)].map(m =&gt; m[0]);
+    },
+    validate: (anchor) =&gt; /[\^@-\uFFFF]/.test(anchor) // Must contain actual unicode
+  },
+  
+  pricing: {
+    // Currency patterns: $1,234.56, €500, £99.99, 10000円
+    detect: (text) =&gt; {
+      const currencyRegex = /[$€£¥₹₽]\s*[\d,]+(?:\.\d{2})?|\d+(?:,\d{3})*(?:\.\d{2})?\s*(?:dollars?|USD|EUR|GBP|JPY)/gi;
+      return [...text.matchAll(currencyRegex)].map(m =&gt; m[0].trim());
+    },
+    validate: (anchor) =&gt; /[$€£¥₹₽]|\b(?:dollars?|USD|EUR|GBP|JPY)\b/i.test(anchor)
+  },
+  
+  temporal: {
+    // Dates/times: 2010, January 15th, 3:30 PM, Q4 2024
+    detect: (text) =&gt; {
+      const temporalRegex = /\b(19|20)\d{2}\b|\b(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2}(?:st|nd|rd|th)?(?:,?\s*\d{4})?|\b\d{1,2}:\d{2}\s*(?:AM|PM)?\b|\bQ[1-4]\s*\d{4}\b/gi;
+      return [...text.matchAll(temporalRegex)].map(m =&gt; m[0]);
+    },
+    validate: (anchor) =&gt; /(19|20)\d{2}|January|February|March|April|May|June|July|August|September|October|November|December|:\d{2}|Q[1-4]/i.test(anchor)
+  },
+  
+  ordinal: {
+    // Ordinal relationships: first code, second choice, primary contact
+    detect: (text) =&gt; {
+      const ordinalRegex = /\b(first|second|third|fourth|fifth|primary|secondary|main|backup|original|alternate)\s+(\w+(?:\s+\w+)?)/gi;
+      return [...text.matchAll(ordinalRegex)].map(m =&gt; ({ position: m[1].toLowerCase(), item: m[2] }));
+    },
+    validate: (anchor) =&gt; typeof anchor === 'object' &amp;&amp; anchor.position &amp;&amp; anchor.item
+  },
+  
+  explicit_token: {
+    // User-assigned tokens/codes: "my token is ABC123", "code: XYZ789"
+    detect: (text) =&gt; {
+      const tokenRegex = /\b(?:my\s+)?(?:token|code|key|id|password|pin|number)\s*(?:is|=|:)\s*['"]?([A-Z0-9_-]{4,})['"]?/gi;
+      return [...text.matchAll(tokenRegex)].map(m =&gt; ({ type: 'explicit_token', value: m[1] }));
+    },
+    validate: (anchor) =&gt; typeof anchor === 'object' &amp;&amp; anchor.type === 'explicit_token'
+  }
+};
+
+// At storage time, BEFORE database INSERT:
+function extractAndPersistAnchors(content, existingMetadata = {}) {
+  const anchors = {
+    unicode: [],
+    pricing: [],
+    temporal: [],
+    ordinal: [],
+    explicit_token: []
+  };
+  
+  for (const [type, pattern] of Object.entries(ANCHOR_PATTERNS)) {
+    const detected = pattern.detect(content);
+    anchors[type] = detected.filter(a =&gt; pattern.validate(a));
+  }
+  
+  // Log for verification
+  const anchorCounts = Object.entries(anchors)
+    .filter(([_, arr]) =&gt; arr.length &gt; 0)
+    .map(([type, arr]) =&gt; `${type}=${arr.length}`)
+    .join(', ');
+  
+  console.log(`[ANCHOR-STORAGE] Detected anchors: ${anchorCounts || 'none'}`);
+  
+  return {
+    ...existingMetadata,
+    anchors,
+    anchor_version: '2.0',  // Version for migration tracking
+    anchor_extracted_at: Date.now()
+  };
+}
+</code></pre>
+<p><strong>Success Criteria:</strong></p>
+<ul>
+<li><code>[ANCHOR-STORAGE]</code> log appears on EVERY memory insert</li>
+<li>Unicode names → <code>anchors.unicode</code> populated</li>
+<li>Pricing → <code>anchors.pricing</code> populated</li>
+<li>Dates/years → <code>anchors.temporal</code> populated</li>
+<li>"first/second/primary" patterns → <code>anchors.ordinal</code> populated</li>
+<li>"my token is X" → <code>anchors.explicit_token</code> populated</li>
+</ul>
+<hr>
+<h3>FIX B: Tighten Anchor Validator (Fallback Only)</h3>
+<p><strong>Location:</strong> <code>api/lib/validators/anchor-preservation.js</code></p>
+<p><strong>Principle:</strong> Validator should VERIFY stored anchors, not CREATE them. Fallback extraction only for legacy memories.</p>
+<pre><code class="language-javascript">// STRICT validation - only accept REAL anchors
+function validateAnchorType(type, value) {
+  switch (type) {
+    case 'unicode':
+      // Must contain actual non-ASCII characters
+      return typeof value === 'string' &amp;&amp; /[\^@-\uFFFF]/.test(value);
+      
+    case 'pricing':
+      // Must contain currency symbol or explicit currency word
+      return typeof value === 'string' &amp;&amp; /[$€£¥₹₽]|\b(dollars?|USD|EUR|GBP|JPY|cents?)\b/i.test(value);
+      
+    case 'temporal':
+      // Must be recognizable date/time, NOT random numbers
+      return typeof value === 'string' &amp;&amp; (
+        /\b(19|20)\d{2}\b/.test(value) ||  // Year
+        /\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(value) ||
+        /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/.test(value) ||  // Date format
+        /\b\d{1,2}:\d{2}\s*(AM|PM)?\b/i.test(value)  // Time format
+      );
+      
+    case 'ordinal':
+      return typeof value === 'object' &amp;&amp; value.position &amp;&amp; value.item;
+      
+    case 'explicit_token':
+      return typeof value === 'object' &amp;&amp; value.type === 'explicit_token' &amp;&amp; value.value;
+      
+    default:
+      return false;
+  }
+}
+
+// NEVER inject these as anchors:
+const ANCHOR_BLACKLIST = [
+  /^Work\s+Experience$/i,
+  /^Team\s+Leadership$/i,
+  /^Project\s+Value$/i,
+  /^\d{10,}$/,  // Timestamps
+  /^\d{1,2}%?$/,  // Random small numbers
+  /^[A-Z][a-z]+\s+[A-Z][a-z]+$/,  // Generic two-word phrases without unicode
+];
+
+function isBlacklistedAnchor(value) {
+  const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
+  return ANCHOR_BLACKLIST.some(pattern =&gt; pattern.test(stringValue));
+}
+</code></pre>
+<hr>
+<h3>FIX C: Intelligent Retrieval with Intent Detection</h3>
+<p><strong>Location:</strong> <code>api/memory/semantic-retrieval.js</code> (or equivalent)</p>
+<p><strong>Principle:</strong> Understand WHAT the user is asking for, not just semantic similarity.</p>
+<p><strong>Implementation:</strong></p>
+<pre><code class="language-javascript">// INTENT DETECTION - runs BEFORE semantic search
+const RETRIEVAL_INTENTS = {
+  EXPLICIT_RECALL: {
+    // "what's my token", "my code", "tell me my X"
+    patterns: [
+      /\b(?:what(?:'s| is| was)?|tell me|show me|give me)\s+my\s+(\w+)/i,
+      /\bmy\s+(\w+)\s+(?:is|was|code|token|number)/i,
+      /\bremember(?:ed)?\s+my\s+(\w+)/i
+    ],
+    strategy: 'BROAD_CATEGORY_SEARCH',  // Search multiple categories
+    boost: { explicit_token: 10.0, ordinal: 5.0 }
+  },
+  
+  ORDINAL_QUERY: {
+    // "first code", "second option", "primary contact"
+    patterns: [
+      /\b(first|second|third|primary|secondary|main|original)\s+(\w+)/i
+    ],
+    strategy: 'ORDINAL_MATCH',  // Match ordinal anchors specifically
+    boost: { ordinal: 15.0 }
+  },
+  
+  TEMPORAL_QUERY: {
+    // "when did", "what year", "date of"
+    patterns: [
+      /\bwhen\s+(?:did|was|is)/i,
+      /\bwhat\s+(?:year|date|time)/i,
+      /\b(?:in|during|around)\s+(19|20)\d{2}/i
+    ],
+    strategy: 'TEMPORAL_MATCH',
+    boost: { temporal: 10.0 }
+  },
+  
+  PRICING_QUERY: {
+    // "how much", "cost", "price", "budget"
+    patterns: [
+      /\bhow\s+much/i,
+      /\b(?:cost|price|budget|spend|paid|worth)/i,
+      /[$€£¥₹]/
+    ],
+    strategy: 'PRICING_MATCH',
+    boost: { pricing: 10.0 }
+  },
+  
+  VOLUME_RECALL: {
+    // Implied when many facts exist and user asks general question
+    patterns: [
+      /\b(?:all|everything|list)\s+(?:about|regarding|I)/i,
+      /\bwhat\s+do\s+you\s+(?:know|remember)/i
+    ],
+    strategy: 'MULTI_CATEGORY_SCAN',  // Scan across categories
+    maxResults: 20  // Override normal limit
+  }
+};
+
+async function intelligentRetrieve(userId, query, options = {}) {
+  // Step 1: Detect intent
+  const intent = detectIntent(query);
+  
+  console.log(`[RETRIEVAL-INTENT] Detected: ${intent.type}, Strategy: ${intent.strategy}`);
+  
+  // Step 2: Apply intent-specific strategy
+  let candidates;
+  
+  switch (intent.strategy) {
+    case 'BROAD_CATEGORY_SEARCH':
+      // Search ALL categories, not just semantically similar
+      candidates = await searchAllCategories(userId, query, {
+        maxPerCategory: 3,
+        anchorBoost: intent.boost
+      });
+      break;
+      
+    case 'ORDINAL_MATCH':
+      // Specifically look for ordinal anchors
+      candidates = await searchByAnchorType(userId, 'ordinal', {
+        matchValue: intent.extractedOrdinal,
+        fallbackSemantic: true
+      });
+      break;
+      
+    case 'MULTI_CATEGORY_SCAN':
+      // Broader recall for volume queries
+      candidates = await scanMultipleCategories(userId, {
+        limit: intent.maxResults || 20,
+        sortBy: 'relevance_then_recency'
+      });
+      break;
+      
+    default:
+      // Standard semantic search with anchor boost
+      candidates = await semanticSearch(userId, query, {
+        anchorBoost: intent.boost || {}
+      });
+  }
+  
+  // Step 3: Re-rank with anchor awareness
+  const ranked = rerankWithAnchors(candidates, query, intent);
+  
+  // Step 4: Apply MAX_MEMORIES_FINAL cap (5)
+  const final = ranked.slice(0, 5);
+  
+  console.log(`[RETRIEVAL-RESULT] Intent: ${intent.type}, Candidates: ${candidates.length}, Final: ${final.length}`);
+  
+  return final;
+}
+
+function detectIntent(query) {
+  for (const [intentType, config] of Object.entries(RETRIEVAL_INTENTS)) {
+    for (const pattern of config.patterns) {
+      const match = query.match(pattern);
+      if (match) {
+        return {
+          type: intentType,
+          strategy: config.strategy,
+          boost: config.boost || {},
+          maxResults: config.maxResults,
+          extractedValue: match[1],  // Captured group
+          extractedOrdinal: match[2]  // For ordinal queries
+        };
+      }
+    }
+  }
+  
+  return {
+    type: 'GENERAL',
+    strategy: 'SEMANTIC_DEFAULT',
+    boost: {}
+  };
+}
+</code></pre>
+<hr>
+<h3>FIX D: Anchor-Aware Re-Ranking</h3>
+<p><strong>Principle:</strong> When anchors match query intent, boost those memories significantly.</p>
+<pre><code class="language-javascript">function rerankWithAnchors(memories, query, intent) {
+  return memories
+    .map(memory =&gt; {
+      let score = memory.relevance || 0.5;
+      const anchors = memory.metadata?.anchors || {};
+      
+      // Boost for matching anchor types
+      for (const [anchorType, boostFactor] of Object.entries(intent.boost || {})) {
+        if (anchors[anchorType]?.length &gt; 0) {
+          // Check if any anchor actually matches query content
+          const anchorMatches = anchors[anchorType].some(anchor =&gt; {
+            const anchorStr = typeof anchor === 'object' ? 
+              JSON.stringify(anchor).toLowerCase() : 
+              String(anchor).toLowerCase();
+            return query.toLowerCase().includes(anchorStr) ||
+                   anchorStr.includes(query.toLowerCase().split(' ').pop());
+          });
+          
+          if (anchorMatches) {
+            score *= boostFactor;
+            console.log(`[RERANK] Memory ${memory.id}: ${anchorType} anchor match, boost ${boostFactor}x`);
+          } else {
+            // Smaller boost just for having the anchor type
+            score *= (1 + boostFactor * 0.1);
+          }
+        }
+      }
+      
+      // Penalize memories with no anchors when query clearly expects them
+      if (intent.type !== 'GENERAL' &amp;&amp; Object.keys(anchors).length === 0) {
+        score *= 0.7;  // 30% penalty
+      }
+      
+      return { ...memory, adjustedScore: score };
+    })
+    .sort((a, b) =&gt; b.adjustedScore - a.adjustedScore);
+}
+</code></pre>
+<hr>
+<h2>Verification Tests</h2>
+<h3>Test 1: Anchor Storage Verification</h3>
+<pre><code>INPUT: "My first code is ABC123, my second code is XYZ789"
+
+EXPECTED LOG:
+[ANCHOR-STORAGE] Detected anchors: ordinal=2, explicit_token=2
+[ANCHOR-STORAGE] Persisting: {"ordinal":[{"position":"first","item":"code"},{"position":"second","item":"code"}],"explicit_token":[{"type":"explicit_token","value":"ABC123"},{"type":"explicit_token","value":"XYZ789"}]}
+</code></pre>
+<h3>Test 2: Ordinal Retrieval (B3)</h3>
+<pre><code>STORED: "My first code is ABC123, my second code is XYZ789"
+QUERY: "What's my first code?"
+
+EXPECTED:
+[RETRIEVAL-INTENT] Detected: ORDINAL_QUERY, Strategy: ORDINAL_MATCH
+[RERANK] Memory X: ordinal anchor match, boost 15x
+RESPONSE: "Your first code is ABC123"
+</code></pre>
+<h3>Test 3: Explicit Token Recall (A5)</h3>
+<pre><code>STORED: "My special token is QUANTUM7"
+QUERY: "What's my token?"
+
+EXPECTED:
+[RETRIEVAL-INTENT] Detected: EXPLICIT_RECALL, Strategy: BROAD_CATEGORY_SEARCH
+[RERANK] Memory X: explicit_token anchor match, boost 10x
+RESPONSE: "Your token is QUANTUM7"
+</code></pre>
+<h3>Test 4: Volume Stress (STR1)</h3>
+<pre><code>STORED: 10 different facts about favorite things (car=Tesla at position 9)
+QUERY: "What's my favorite car?"
+
+EXPECTED:
+[RETRIEVAL-INTENT] Detected: GENERAL (or EXPLICIT_RECALL)
+[RETRIEVAL-RESULT] Scanned all categories, found car reference
+RESPONSE: "Your favorite car is Tesla"
+</code></pre>
+<h3>Test 5: No Garbage Anchors</h3>
+<pre><code>STORED: "I have work experience in team leadership"
+QUERY: Any
+
+EXPECTED:
+[ANCHOR-STORAGE] Detected anchors: none
+(NOT: anchors=["Work Experience", "Team Leadership"])
+</code></pre>
+<hr>
+<h2>Files to Modify</h2>
+
+File | Change
+-- | --
+api/memory/intelligent-storage.js | Add extractAndPersistAnchors() before INSERT
+api/lib/validators/anchor-preservation.js | Tighten validation, add blacklist
+api/memory/semantic-retrieval.js | Add intent detection + intelligent retrieval
+api/core/orchestrator.js | Wire new retrieval path
+
+
+<hr>
+<h2>Success Metrics</h2>
+<ol>
+<li>
+<p><strong>Anchor Storage Rate:</strong> ≥95% of memories with anchors have <code>metadata.anchors</code> populated at storage (not validator-invented)</p>
+</li>
+<li>
+<p><strong>Garbage Injection Rate:</strong> Near-zero "Injected X missing anchors" for non-legacy memories</p>
+</li>
+<li>
+<p><strong>Test Pass Rate:</strong></p>
+<ul>
+<li>A5 (Explicit Memory): PASS</li>
+<li>B3 (Ordinal Ranking): PASS</li>
+<li>STR1 (Volume Stress): PASS</li>
+</ul>
+</li>
+<li>
+<p><strong>Log Evidence:</strong></p>
+<ul>
+<li><code>[ANCHOR-STORAGE]</code> appears on every INSERT</li>
+<li><code>[RETRIEVAL-INTENT]</code> shows correct intent detection</li>
+<li><code>[RERANK]</code> shows anchor boost applied</li>
+<li><code>[ANCHOR-VALIDATOR]</code> shows <code>memories_with_anchors &gt; 0</code> from actual stored anchors</li>
+</ul>
+</li>
+</ol>
+<hr>
+<h2>Non-Goals (Guardrails)</h2>
+<ul>
+<li><strong>NOT</strong> making retrieval so broad it returns everything (token efficiency matters)</li>
+<li><strong>NOT</strong> removing semantic search (it's still the foundation)</li>
+<li><strong>NOT</strong> changing MAX_MEMORIES_FINAL=5 (selectivity is doctrine)</li>
+<li><strong>NOT</strong> inventing anchors that don't exist (that's what caused this problem)</li>
+</ul>
+<hr>
+<h2>Doctrinal Reminders</h2>
+<p>From the Bible:</p>
+<blockquote>
+<p>"Surgical memory extraction is limited to 2400 tokens per response"</p>
+</blockquote>
+<p>This fix maintains token efficiency while improving WHAT gets selected, not HOW MUCH.</p>
+<blockquote>
+<p>"System indexes stored information using both semantic understanding (meaning-based organization) AND mode awareness"</p>
+</blockquote>
+<p>This fix adds INTENT awareness to complement semantic understanding.</p>
+<blockquote>
+<p>"Understands conceptual equivalence and meaning similarity"</p>
+</blockquote>
+<p>This fix ensures "my token" and "my code" are understood as explicit recall requests, not vague semantic queries.</p>
+<hr>
+<h2>Priority</h2>
+<p><strong>CRITICAL</strong> - These test failures (A5, B3, STR1) represent core memory system functionality. Users explicitly storing information and then being unable to retrieve it violates the fundamental promise of the system.</p>
+<hr>
+<p><strong>Related Issues:</strong> PR #667 (anchor wiring - MERGED)
+<strong>Blocks:</strong> Full test suite pass, production readiness</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
