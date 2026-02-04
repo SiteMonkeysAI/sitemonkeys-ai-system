@@ -1,0 +1,65 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #681: [claude-fix] CRITICAL: Unify storage paths - PRs 673-677 fixed wrong file
+
+Issue Description:
+// Storage still writes:
+["ZEBRA"]
+```
+
+**Type mismatch = broken boosting = regression.**
+
+## The Fix
+
+Create one comprehensive issue:
+
+**Title:** `[claude-fix] CRITICAL: Unify storage paths - PRs 673-677 fixed wrong file`
+
+**Body:**
+```
+## Root Cause
+Chat flow uses intelligence.js, NOT intelligent-storage.js.
+PRs 673-677 fixed unused code. PR 675 caused regression by
+creating format mismatch (retrieval expects objects, storage writes strings).
+
+## Required Changes
+
+1. In `api/categories/memory/internal/intelligence.js` line ~4218:
+   Change string storage to object format:
+```javascript
+   // OLD: anchors.identifiers.push(...identifiers);
+   // NEW:
+   for (const identifier of identifiers) {
+     anchors.identifiers.push({type: 'identifier', value: identifier});
+   }
+```
+
+2. Port anchor extraction logic from intelligent-storage.js:570-625
+   to intelligence.js:4174-4226
+
+3. Verify metadata column is selected in intelligence.js retrieval queries
+
+## Files
+- api/categories/memory/internal/intelligence.js (PRIMARY - this is the active path)
+- api/categories/memory/internal/persistent_memory.js
+
+## Test
+SMDEEP should improve from 8/15 toward 12+/15
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

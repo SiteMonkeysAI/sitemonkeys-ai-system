@@ -1,0 +1,76 @@
+Perfect! All changes look correct. Let me verify the fix addresses the issue completely by reviewing what was required:
+
+**Issue Requirements:**
+1. ✅ Change string storage to object format in `intelligence.js` line ~4218 - **DONE**: Changed from `anchors.identifiers.push(...identifiers)` to storing objects with `{type: 'identifier', value: identifier}`
+
+2. ✅ Port anchor extraction logic from `intelligent-storage.js:570-625` to `intelligence.js:4174-4226` - **DONE**: Added ordinal and explicit_token anchor extraction with the same logic
+
+3. ✅ Verify metadata column is selected in intelligence.js retrieval queries - **VERIFIED**: Using `SELECT *` which includes metadata
+
+**Additional fixes made:**
+- Updated JSDoc comments to reflect new structure
+- Updated default anchor structure in retrieval fallback (line 1889)
+- Updated anchor detection in `persistent_memory.js` to include new types
+- Fixed deduplication logic for object-based identifiers
+
+---SUMMARY---
+
+## Fixed Issue #681: Unified storage paths and corrected anchor format mismatch
+
+### Root Cause
+The chat flow uses `intelligence.js` for memory operations, NOT `intelligent-storage.js`. PRs 673-677 fixed the unused `intelligent-storage.js` file, but PR 675 updated retrieval to expect object format anchors `{type, value}` while storage in `intelligence.js` still wrote plain strings `["ZEBRA"]`, causing a format mismatch that broke anchor-based boosting.
+
+### Changes Made
+
+#### 1. `api/categories/memory/internal/intelligence.js` (Primary Fix)
+
+**Line 4218 - Fixed identifier storage format:**
+- **Before:** `anchors.identifiers.push(...identifiers);` (stored as strings)
+- **After:** Loop that stores each identifier as `{type: 'identifier', value: identifier}` (object format)
+- This matches the format expected by retrieval code in `semantic-retrieval.js` from PR 675
+
+**Lines 4217-4260 - Ported anchor extraction logic:**
+- Added **ordinal anchor** extraction: Detects patterns like "first code", "second option" with optional values
+- Added **explicit_token anchor** extraction: Detects patterns like "my token is ABC123" and standalone tokens like "ZEBRA-ANCHOR-123"
+- This brings `intelligence.js` to parity with the enhanced anchor extraction in `intelligent-storage.js` from PRs 673-677
+
+**Line 4227-4230 - Fixed deduplication:**
+- Updated deduplication logic for identifiers to work with object format (dedup by `value` field)
+- Maintains Set-based deduplication for unicode and pricing (still string arrays)
+
+**Line 1889 - Updated default structure:**
+- Added `ordinal: [], explicit_token: []` to default anchor object in retrieval fallback
+
+**Lines 4166-4174 - Updated JSDoc:**
+- Updated return type documentation to reflect new structure with all 5 anchor types
+
+#### 2. `api/categories/memory/internal/persistent_memory.js`
+
+**Lines 336-345 - Updated anchor detection check:**
+- Added checks for `anchors.ordinal?.length > 0` and `anchors.explicit_token?.length > 0`
+- Updated logging to include counts of all 5 anchor types
+- Ensures new anchor types are properly stored in metadata
+
+### Impact
+
+**Before this fix:**
+- Storage: `anchors.identifiers = ["ZEBRA"]` (array of strings)
+- Retrieval: Expected `anchors.identifiers = [{type: 'identifier', value: 'ZEBRA'}]` (array of objects)
+- Result: Type mismatch → anchor boosting failed → SMDEEP regression
+
+**After this fix:**
+- Storage and retrieval both use object format: `{type: 'identifier', value: 'ZEBRA'}`
+- Ordinal and explicit_token anchors now extracted and stored consistently
+- Format unified across storage and retrieval paths
+- Expected result: SMDEEP should improve from 8/15 toward 12+/15
+
+### Files Modified
+1. `api/categories/memory/internal/intelligence.js` - Primary storage path fixes
+2. `api/categories/memory/internal/persistent_memory.js` - Detection logic for new anchor types
+
+### Verification
+- Metadata column already selected via `SELECT *` in all intelligence.js retrieval queries
+- All anchor types now stored in consistent object format
+- No breaking changes to existing unicode/pricing anchors (still use string arrays)
+
+---END SUMMARY---

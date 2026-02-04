@@ -335,11 +335,15 @@ class PersistentMemoryOrchestrator {
       // ═══════════════════════════════════════════════════════════════
       const anchors = this.intelligenceSystem.extractAnchors(conversationContent);
 
-      if (anchors.unicode.length > 0 || anchors.pricing.length > 0 || anchors.identifiers.length > 0) {
+      // FIX #681: Include new anchor types (ordinal, explicit_token)
+      if (anchors.unicode.length > 0 || anchors.pricing.length > 0 || anchors.identifiers.length > 0 ||
+          anchors.ordinal?.length > 0 || anchors.explicit_token?.length > 0) {
         console.log(`[ANCHORS] Detected anchors:`, {
           unicode: anchors.unicode.length,
           pricing: anchors.pricing.length,
-          identifiers: anchors.identifiers.length
+          identifiers: anchors.identifiers.length,
+          ordinal: anchors.ordinal?.length || 0,
+          explicit_token: anchors.explicit_token?.length || 0
         });
         metadata.anchors = anchors;
       }
