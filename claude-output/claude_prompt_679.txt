@@ -1,0 +1,43 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #679: [claude-fix] DIAGNOSTIC: Full system audit - test scores regressing despite targeted fixes
+
+Issue Description:
+## Situation
+Multiple targeted fixes (PRs #673, #675, #677) have NOT improved test scores.
+SMDEEP went from 10/15 → 8/15 (regression).
+
+## Known Symptoms
+- A5: ZEBRA token not recalled (explicit memory)
+- CMP2: International names lost (was passing, now failing)  
+- STR1: Volume stress fails (car fact not recalled)
+- INF1/INF3: Inference tests failing
+- NUA1: Ambiguity not recognized
+
+## Request
+Do NOT make targeted fixes. Instead:
+
+1. TRACE a single memory from storage → retrieval end-to-end
+2. IDENTIFY where data is being lost or corrupted
+3. CHECK if recent PRs introduced regressions
+4. LOOK for architectural issues (race conditions, async timing, object mutations)
+
+Output a diagnostic report BEFORE proposing any code changes.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
