@@ -1886,7 +1886,7 @@ class IntelligenceSystem {
         );
 
         allMemories = allMemories.map(memory => {
-          const memoryAnchors = memory.metadata?.anchors || { unicode: [], pricing: [], identifiers: [] };
+          const memoryAnchors = memory.metadata?.anchors || { unicode: [], pricing: [], identifiers: [], ordinal: [], explicit_token: [] };
           let anchorBoost = 0;
 
           // Check for matching unicode names (important for CMP2)
@@ -4163,17 +4163,19 @@ class IntelligenceSystem {
   }
 
   /**
-   * Extract anchors from content (Issue #615 - CMP2/EDG3)
+   * Extract anchors from content (Issue #615 - CMP2/EDG3, Issue #681)
    * Anchors are critical data points that must be preserved exactly:
    * - Unicode/diacritics (José, Björn, Zhang)
    * - Prices and numerical values ($99, $299)
-   * - High-entropy identifiers
+   * - High-entropy identifiers (stored as objects: {type, value})
+   * - Ordinal references (first code, second option)
+   * - Explicit tokens (my token is ABC123)
    * @param {string} content - Text to extract anchors from
-   * @returns {object} - { unicode: [], pricing: [], identifiers: [] }
+   * @returns {object} - { unicode: [], pricing: [], identifiers: [], ordinal: [], explicit_token: [] }
    */
   extractAnchors(content) {
     if (!content || typeof content !== 'string') {
-      return { unicode: [], pricing: [], identifiers: [] };
+      return { unicode: [], pricing: [], identifiers: [], ordinal: [], explicit_token: [] };
     }
 
     // SECURITY FIX: Limit input length to prevent ReDoS (Issue #615 comment)
@@ -4184,7 +4186,9 @@ class IntelligenceSystem {
     const anchors = {
       unicode: [],
       pricing: [],
-      identifiers: []
+      identifiers: [],
+      ordinal: [],
+      explicit_token: []
     };
 
     // Extract Unicode/diacritics names (characters outside ASCII range)
@@ -4212,15 +4216,68 @@ class IntelligenceSystem {
       anchors.pricing.push(...matches);
     }
 
+    // FIX #681: ORDINAL ANCHORS - "first code", "second option", "primary contact"
+    const ordinalRegex = /\b(first|second|third|fourth|fifth|primary|secondary|main|backup|original|alternate)\s+(\w+(?:\s+\w+)?)/gi;
+    const ordinalMatches = [...sanitizedContent.matchAll(ordinalRegex)];
+    for (const match of ordinalMatches) {
+      const position = match[1].toLowerCase();
+      const item = match[2];
+
+      // Try to extract the associated value (e.g., "first code is ABC123" → extract "ABC123")
+      const afterMatchIndex = match.index + match[0].length;
+      const remainder = sanitizedContent.slice(afterMatchIndex);
+      const valueMatch = remainder.match(/^\s*(?:is|was|are|:)\s*([A-Z0-9][A-Z0-9-_]{2,})/i);
+
+      const anchor = { position, item };
+      if (valueMatch) {
+        anchor.value = valueMatch[1];
+      }
+
+      anchors.ordinal.push(anchor);
+    }
+
+    // FIX #681: EXPLICIT TOKEN ANCHORS - "my token is ABC123", "code: XYZ789"
+    // Also match standalone tokens like "ZEBRA-ANCHOR-123" from explicit storage requests
+    const tokenRegex = /\b(?:my\s+)?(?:token|code|key|id|password|pin|number)\s*(?:is|=|:)\s*['"]?([A-Z0-9_-]{4,})['"]?/gi;
+    const tokenMatches = [...sanitizedContent.matchAll(tokenRegex)];
+    for (const match of tokenMatches) {
+      anchors.explicit_token.push({
+        type: 'explicit_token',
+        value: match[1]
+      });
+    }
+
+    // If content looks like a standalone token (e.g., "ZEBRA-ANCHOR-123"),
+    // treat it as an explicit_token anchor (common in "Remember this exactly: TOKEN" cases)
+    const standaloneTokenRegex = /^([A-Z][A-Z0-9_-]{3,})$/i;
+    const standaloneMatch = sanitizedContent.trim().match(standaloneTokenRegex);
+    if (standaloneMatch && anchors.explicit_token.length === 0) {
+      // Only add if no other explicit tokens were found
+      console.log(`[FIX-681] Detected standalone token anchor: "${standaloneMatch[1]}"`);
+      anchors.explicit_token.push({
+        type: 'explicit_token',
+        value: standaloneMatch[1]
+      });
+    }
+
     // Extract high-entropy identifiers (already captured for exact match)
     const identifierPattern = /[A-Z0-9][A-Z0-9-_]{4,}/g;
     const identifiers = sanitizedContent.match(identifierPattern) || [];
-    anchors.identifiers.push(...identifiers);
+    // FIX #681: Store identifiers as objects to match retrieval expectations
+    for (const identifier of identifiers) {
+      anchors.identifiers.push({type: 'identifier', value: identifier});
+    }
 
     // Deduplicate
     anchors.unicode = [...new Set(anchors.unicode)];
     anchors.pricing = [...new Set(anchors.pricing)];
-    anchors.identifiers = [...new Set(anchors.identifiers)];
+    // FIX #681: Deduplicate identifiers by value field
+    const seenValues = new Set();
+    anchors.identifiers = anchors.identifiers.filter(item => {
+      if (seenValues.has(item.value)) return false;
+      seenValues.add(item.value);
+      return true;
+    });
 
     return anchors;
   }
