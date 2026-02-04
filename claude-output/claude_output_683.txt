@@ -1,0 +1,76 @@
+Perfect! Let me create a summary of the changes:
+
+---SUMMARY---
+
+## Fixed Issue #683: ZEBRA memory not in candidate set - explicit recall query doesn't retrieve it
+
+### Root Cause
+When a user asks "What's my token?" to recall an explicitly stored memory like "ZEBRA-XXX", the semantic similarity between the query and the stored content is too low. This caused the ZEBRA memory to never make it into the candidate set fetched from the database, even though:
+1. FIX-675 had already implemented anchor boosting logic
+2. The EXPLICIT_RECALL intent was being detected correctly
+
+The problem was that anchor boosting only works on memories that are ALREADY in the candidate set. If the semantic similarity was too low, the memory wouldn't be fetched from the database in the first place.
+
+### Changes Made
+
+**File: `api/services/semantic-retrieval.js`**
+
+**Change 1: Pass intent to buildPrefilterQuery (line 964)**
+- Added `intent` parameter to the buildPrefilterQuery call
+- This allows the SQL query builder to know when an EXPLICIT_RECALL query is being processed
+- Comment added: `// FIX #683: Pass intent to ensure explicit_token anchors are included for EXPLICIT_RECALL`
+
+**Change 2: Accept intent parameter in buildPrefilterQuery (lines 523, 528-530)**
+- Added `intent = null` to the destructured options parameter
+- Added logging to show when intent is detected: `console.log(\`[MODE-DIAG] Intent type: ${intent.type}\`)`
+- Comment added: `// FIX #683: Accept intent for EXPLICIT_RECALL queries`
+
+**Change 3: Add OR clause for EXPLICIT_RECALL queries (lines 583-592)**
+- Modified WHERE clause construction to use a variable `whereClauses` instead of inline string
+- When `intent.type === 'EXPLICIT_RECALL'`, adds an OR condition to the SQL query:
+  ```sql
+  (normal conditions) OR (user_id = $1 AND metadata->'anchors' ? 'explicit_token' AND embedding IS NOT NULL AND embedding_status = 'ready' AND (is_current = true OR is_current IS NULL))
+  ```
+- This uses PostgreSQL's JSONB operators (`?` operator) to check if metadata has explicit_token anchors
+- Ensures that ALL memories with explicit_token anchors are included in the candidate set, regardless of semantic similarity
+- Added logging: `[FIX-683] 🎯 EXPLICIT_RECALL intent detected - including memories with explicit_token anchors`
+
+### How It Works
+
+**Before the fix:**
+1. User asks: "What's my token?"
+2. Intent detection: EXPLICIT_RECALL ✓
+3. SQL query fetches candidates based on semantic similarity
+4. ZEBRA memory has low similarity → NOT in candidate set ❌
+5. Anchor boosting can't help because memory isn't in the set
+
+**After the fix:**
+1. User asks: "What's my token?"
+2. Intent detection: EXPLICIT_RECALL ✓
+3. SQL query modified to include OR clause
+4. Query fetches: (semantic matches) OR (memories with explicit_token anchors)
+5. ZEBRA memory has explicit_token anchor → IN candidate set ✓
+6. Anchor boosting applies 10.0x boost (from FIX-675)
+7. ZEBRA memory ranks at top and gets recalled ✓
+
+### Expected Impact
+
+**A5 Test should now PASS:**
+- User stores: "Remember this exactly: ZEBRA-XXX"
+- Storage creates explicit_token anchor: `{type: 'explicit_token', value: 'ZEBRA-XXX'}`
+- User asks: "What's my token?" or "What phrase did I ask you to remember?"
+- System detects EXPLICIT_RECALL intent
+- SQL query includes OR condition to fetch memories with explicit_token anchors
+- ZEBRA memory is in candidate set
+- Anchor boosting applies 10.0x multiplier
+- ZEBRA token is recalled successfully
+
+### Backward Compatibility
+
+The fix maintains full backward compatibility:
+- Only activates when intent.type === 'EXPLICIT_RECALL'
+- Normal semantic queries are unaffected
+- The OR clause respects user_id isolation and is_current filtering
+- Mode filtering is applied to the main conditions, and explicit_token memories are included regardless of mode (user safety is maintained via user_id check)
+
+---END SUMMARY---

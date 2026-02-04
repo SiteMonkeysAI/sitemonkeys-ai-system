@@ -1,0 +1,46 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #683: [claude-fix] A5: ZEBRA memory not in candidate set - explicit recall query doesn't retrieve it
+
+Issue Description:
+## Evidence
+FIX-675 logs show ZEBRA anchor checked against many queries:
+- "My first code is CHARLIE..."
+- "What is my first code?"
+- "What is my second code?"
+
+But NO log shows:
+- "What's my token?" or "What phrase did I ask you to remember?"
+
+This means the ZEBRA memory isn't being retrieved as a candidate for the recall query.
+
+## Root Cause
+Semantic similarity between "Remember this exactly: ZEBRA-..." and 
+"What's my token?" is too low. Memory doesn't make initial candidate set.
+
+## Required Fix
+For EXPLICIT_RECALL intent queries, the retrieval should:
+1. Check for memories with explicit_token anchors regardless of semantic score
+2. OR lower the similarity threshold for explicit recall queries
+3. OR add keyword fallback for "token", "remember", "phrase" queries
+
+## Test
+A5 should pass - ZEBRA token recalled when asked "What's my token?"
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
