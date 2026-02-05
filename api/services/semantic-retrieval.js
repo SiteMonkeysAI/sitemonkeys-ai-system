@@ -671,7 +671,39 @@ function calculateHybridScore(memory, options = {}) {
     score += memory.fingerprint_confidence * confidenceWeight;
   }
 
-  return Math.min(score, 1.0); // Cap at 1.0
+  // ═══════════════════════════════════════════════════════════════
+  // CRITICAL FIX #685: High-priority memory ranking guarantee
+  // Ensure boosted memories ALWAYS rank above non-boosted memories
+  // by adding a priority tier that exceeds the 1.0 cap
+  // This fixes the ranking issue where non-boosted high-similarity
+  // memories could outrank boosted low-similarity memories
+  // ═══════════════════════════════════════════════════════════════
+  const isHighPriority = memory.explicit_recall_boosted || 
+                         memory.entity_boosted || 
+                         memory.ordinal_boosted ||
+                         memory.safety_boosted;
+  
+  if (isHighPriority) {
+    // Add priority tier: high-priority memories get +2.0 to their score
+    // This ensures they ALWAYS rank above non-boosted memories
+    // (non-boosted max is 1.0, boosted min becomes 2.0)
+    score += 2.0;
+    
+    // Log priority boost for diagnostics
+    const priorityTypes = [];
+    if (memory.explicit_recall_boosted) priorityTypes.push('explicit_recall');
+    if (memory.entity_boosted) priorityTypes.push('entity');
+    if (memory.ordinal_boosted) priorityTypes.push('ordinal');
+    if (memory.safety_boosted) priorityTypes.push('safety');
+    
+    console.log(`[PRIORITY-TIER] Memory ${memory.id}: High-priority types=[${priorityTypes.join(', ')}], adding +2.0 tier boost`);
+    console.log(`[PRIORITY-TIER]   Final hybrid_score: ${score.toFixed(3)} (guaranteed top-tier ranking)`);
+  } else {
+    // Cap non-boosted memories at 1.0 to maintain separation
+    score = Math.min(score, 1.0);
+  }
+
+  return score;
 }
 
 // ============================================
