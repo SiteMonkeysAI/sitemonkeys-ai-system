@@ -23,13 +23,26 @@ class RefusalMaintenanceValidator {
     // EXECUTION PROOF - Verify refusal maintenance validator is active (TRU1)
     console.log('[PROOF] validator:refusal-maintenance v=2026-01-29a file=api/lib/validators/refusal-maintenance.js fn=validate');
     
+    // FIX #691-TRU1: Add detailed telemetry for diagnosis
+    console.log('[TRU1-TELEMETRY] ═══════════════════════════════════════');
+    console.log('[TRU1-TELEMETRY] Refusal Maintenance Check');
+    console.log('[TRU1-TELEMETRY] sessionId:', sessionId);
+    console.log('[TRU1-TELEMETRY] userMessage:', userMessage?.substring(0, 100));
+    
     try {
       // Check if previous response was a refusal
       const refusalState = this.refusalStates.get(sessionId);
+      console.log('[TRU1-TELEMETRY] Previous refusal state:', refusalState ? 'FOUND' : 'NOT FOUND');
+      if (refusalState) {
+        console.log('[TRU1-TELEMETRY]   wasRefusal:', refusalState.wasRefusal);
+        console.log('[TRU1-TELEMETRY]   reason:', refusalState.reason?.substring(0, 60));
+        console.log('[TRU1-TELEMETRY]   age:', Math.floor((Date.now() - refusalState.timestamp) / 1000), 'seconds');
+      }
       
       if (!refusalState || !refusalState.wasRefusal) {
         // No previous refusal, check if current response is a refusal
         const isCurrentRefusal = this.#isRefusal(response);
+        console.log('[TRU1-TELEMETRY] No prior refusal. Current response is refusal?', isCurrentRefusal);
         
         if (isCurrentRefusal) {
           // Store this refusal state
@@ -38,8 +51,10 @@ class RefusalMaintenanceValidator {
             reason: this.#extractRefusalReason(response),
             timestamp: Date.now()
           });
+          console.log('[TRU1-TELEMETRY] ✅ Stored new refusal state for sessionId:', sessionId);
         }
         
+        console.log('[TRU1-TELEMETRY] ═══════════════════════════════════════');
         return {
           correctionApplied: false,
           response: response
@@ -48,10 +63,13 @@ class RefusalMaintenanceValidator {
       
       // Previous response was a refusal - check if user is pushing back
       const isPushback = this.#detectPushback(userMessage);
+      console.log('[TRU1-TELEMETRY] User pushback detected?', isPushback);
       
       if (!isPushback) {
         // Not pushback, clear refusal state (new topic)
         this.refusalStates.delete(sessionId);
+        console.log('[TRU1-TELEMETRY] Not pushback - clearing refusal state (new topic)');
+        console.log('[TRU1-TELEMETRY] ═══════════════════════════════════════');
         
         return {
           correctionApplied: false,
@@ -61,9 +79,12 @@ class RefusalMaintenanceValidator {
       
       // User is pushing back - check if AI maintained refusal
       const isCurrentRefusal = this.#isRefusal(response);
+      console.log('[TRU1-TELEMETRY] AI maintained refusal?', isCurrentRefusal);
       
       if (isCurrentRefusal) {
         // AI properly maintained refusal
+        console.log('[TRU1-TELEMETRY] ✅ AI properly maintained refusal');
+        console.log('[TRU1-TELEMETRY] ═══════════════════════════════════════');
         return {
           correctionApplied: false,
           response: response,
@@ -72,12 +93,14 @@ class RefusalMaintenanceValidator {
       }
       
       // AI caved to pushback - override with maintained refusal
+      console.log('[TRU1-TELEMETRY] ❌ AI CAVED to pushback - applying correction');
       const maintainedRefusal = this.#generateMaintainedRefusal(refusalState.reason);
       
       console.log('[REFUSAL-VALIDATOR] AI caved to pushback - maintaining refusal');
       
       this.#recordCorrection(userMessage, response, maintainedRefusal, context);
       
+      console.log('[TRU1-TELEMETRY] ═══════════════════════════════════════');
       return {
         correctionApplied: true,
         response: maintainedRefusal,
@@ -88,6 +111,7 @@ class RefusalMaintenanceValidator {
       
     } catch (error) {
       console.error('[REFUSAL-VALIDATOR] Validation error:', error);
+      console.log('[TRU1-TELEMETRY] ═══════════════════════════════════════');
       
       return {
         correctionApplied: false,
