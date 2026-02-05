@@ -1,0 +1,99 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #707: [claude-fix] CRITICAL: Stop supersession from merging distinct people with same name (NUA1 root cause)
+
+Issue Description:
+## Problem (Confirmed Root Cause)
+NUA1 fails because supersession is incorrectly merging two distinct people who share the same name ("Alex") into one current memory.
+
+Observed sequence:
+- Memory A stored: "Friend: Alex ... doctor"
+- Memory B stored: "Colleague: Alex ... marketing"
+- Supersession marks A as is_current=false and creates B
+- Ambiguity validator only sees one current "Alex" record, so it cannot disclose ambiguity.
+
+This is a storage/supersession bug, not retrieval.
+
+## Required Fix (Root Cause)
+Supersession must NOT supersede across distinct person identities that share the same name.
+
+### Step 1: Add PERSON entity disambiguation metadata at storage time
+When storing a memory that references a PERSON (proper name), persist the following in metadata:
+
+- metadata.entity_name = "Alex"
+- metadata.entity_type = "person"
+- metadata.entity_disambiguator = "<relationship>|<role_or_descriptor>"
+
+Examples:
+- "friend|doctor"
+- "colleague|marketing"
+- "brother|doctor"
+- "neighbor|unknown" (role optional)
+
+Relationship signals (non-exhaustive):
+friend, colleague, coworker, boss, neighbor, brother, sister, mother, father, wife, husband, partner
+
+Role/descriptor signals (optional but helpful):
+doctor, marketing, engineer, teacher, etc.
+
+CRITICAL: The disambiguator must be derived ONLY from the user message / extracted facts (not assistant text).
+
+### Step 2: Supersession scope must include disambiguator (person entities only)
+When performing supersession for entity_type="person", ONLY supersede if ALL match:
+- same user_id
+- same entity_name
+- entity_type == "person"
+- SAME entity_disambiguator
+- (is_current = true OR is_current IS NULL)
+
+If entity_disambiguator differs → DO NOT supersede.
+Store as a separate current memory.
+
+### Step 3: Safety fallback when disambiguator is missing
+If entity_type="person" AND disambiguator cannot be confidently derived:
+- DO NOT supersede any existing person memories with that entity_name.
+- Store a new current memory with disambiguator="unknown|unknown" (or similar),
+  OR skip supersession for that insert.
+Goal: Avoid destructive merges.
+
+## Acceptance Criteria
+1) After storing:
+   - "My friend Alex is a doctor"
+   - "Alex, my colleague, works in marketing"
+   There must be TWO current memories for entity_name="Alex" with different disambiguators.
+   Neither should be marked is_current=false.
+
+2) NUA1 must pass:
+   Response must disclose ambiguity (e.g., "I know two people named Alex — your friend who is a doctor, and your colleague in marketing. Which one?").
+
+3) No regressions:
+   Supersession for SINGLE-IDENTITY fields (salary, phone, email, address) must remain unchanged.
+   This disambiguator rule applies ONLY to entity_type="person".
+
+## Files Likely Involved
+- api/memory/intelligent-storage.js (supersession decision / where is_current is flipped)
+- any supersession helper module used there
+
+## Constraints
+- Do NOT increase MAX_MEMORIES_FINAL (keep ≤5 injected by doctrine)
+- Do NOT add new validators
+- Fix the root cause at storage/supersession time
+- Run ONLY the NUA1 test until it passes, then run full SMDEEP
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

@@ -1952,23 +1952,39 @@ Facts (preserve user terminology + add synonyms):`;
 
           if (supersessionResult.supersedes && supersessionResult.supersedes.length > 0) {
             // Semantic supersession detected - mark old memories as superseded
+            // FIX #707: Check descriptor signatures to prevent merging distinct people with same name
             for (const superseded of supersessionResult.supersedes) {
-              console.log(`[SEMANTIC-SUPERSESSION] Memory ${superseded.memoryId} superseded (similarity: ${superseded.similarity.toFixed(3)}, reason: ${superseded.reason})`);
-              
-              // Also check for temporal reconciliation
               const existingMem = existingMemories.rows.find(m => m.id === superseded.memoryId);
-              if (existingMem) {
-                const temporalResult = await semanticAnalyzer.analyzeTemporalReconciliation(
-                  facts,
-                  existingMem.content,
-                  superseded.similarity
-                );
+              if (!existingMem) continue;
 
-                if (temporalResult.shouldSupersede) {
-                  console.log(`[SEMANTIC-TEMPORAL] ${temporalResult.explanation}`);
-                }
+              // FIX #707: Extract descriptors for both memories
+              const existingDescriptor = this.getDescriptorSignature(existingMem.content);
+              const newDescriptor = this.getDescriptorSignature(facts);
+
+              // If descriptors differ (e.g., "colleague" vs "brother"), DO NOT supersede
+              // This prevents merging distinct people with the same name
+              if ((existingDescriptor !== 'unknown' || newDescriptor !== 'unknown') &&
+                  existingDescriptor !== newDescriptor) {
+                console.log(`[SEMANTIC-SUPERSESSION] ⏭️ Skipping supersession for memory ${superseded.memoryId}`);
+                console.log(`[SEMANTIC-SUPERSESSION]    Reason: Different descriptors (existing="${existingDescriptor}", new="${newDescriptor}")`);
+                console.log(`[SEMANTIC-SUPERSESSION]    Existing: "${existingMem.content.substring(0, 60)}..."`);
+                console.log(`[SEMANTIC-SUPERSESSION]    New: "${facts.substring(0, 60)}..."`);
+                continue; // Skip this supersession, keep both memories as current
               }
-              
+
+              console.log(`[SEMANTIC-SUPERSESSION] Memory ${superseded.memoryId} superseded (similarity: ${superseded.similarity.toFixed(3)}, reason: ${superseded.reason})`);
+
+              // Also check for temporal reconciliation
+              const temporalResult = await semanticAnalyzer.analyzeTemporalReconciliation(
+                facts,
+                existingMem.content,
+                superseded.similarity
+              );
+
+              if (temporalResult.shouldSupersede) {
+                console.log(`[SEMANTIC-TEMPORAL] ${temporalResult.explanation}`);
+              }
+
               await this.db.query(`
                 UPDATE persistent_memories
                 SET is_current = false,
