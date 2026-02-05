@@ -2236,10 +2236,29 @@ export class Orchestrator {
         // Issue #685: Reduced from 15 to 8 after implementing priority-tier ranking
         // With guaranteed top-tier ranking for boosted memories (hybrid_score >= 2.0),
         // cap of 8 should be sufficient for all high-priority memories to be included
+        // Issue #699: Entity-boosted memories MUST bypass cap for ambiguity detection (NUA1)
+        // When query contains proper names, ALL entity-boosted memories needed to detect ambiguity
         // ═══════════════════════════════════════════════════════════════
         const MAX_MEMORIES_FINAL = 8; // Balanced between token efficiency and sufficient context
         const memoriesPreCap = result.memories.length;
-        memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
+
+        // ISSUE #699 FIX: Separate entity-boosted memories (must include ALL for ambiguity detection)
+        const entityBoostedMemories = result.memories.filter(m => m.entity_boosted === true);
+        const nonEntityMemories = result.memories.filter(m => !m.entity_boosted);
+
+        // Force-include ALL entity-boosted memories, fill remaining slots with non-entity memories
+        if (entityBoostedMemories.length > 0) {
+          const remainingSlots = Math.max(0, MAX_MEMORIES_FINAL - entityBoostedMemories.length);
+          memoriesToFormat = [...entityBoostedMemories, ...nonEntityMemories.slice(0, remainingSlots)];
+
+          if (entityBoostedMemories.length > MAX_MEMORIES_FINAL) {
+            console.log(`[ISSUE-699] ⚠️ Entity-boosted override: Including ${entityBoostedMemories.length} entity memories (exceeds normal cap of ${MAX_MEMORIES_FINAL})`);
+          }
+        } else {
+          // No entity-boosted memories, use standard cap
+          memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
+        }
+
         const memoriesPostCap = memoriesToFormat.length;
 
         // ISSUE #697: Enhanced diagnostic logging when cap is enforced
@@ -4285,21 +4304,38 @@ Core Principles:
 - Admit uncertainty about EXTERNAL facts you don't have access to
 - TRUST information explicitly provided in memory context or documents
 
-CRITICAL: Reasoning and Inference
-When you have facts in memory or context, you MUST make reasonable inferences and calculations:
-- If you know "worked 5 years" and "left in 2020", calculate the start year (2015)
-- If you know "started kindergarten this fall", infer age (~5-6 years old)
-- If you know "reviews code and deploys to production", infer role (likely software developer/engineer)
-- If you have related information, connect the dots and provide the complete picture
-- State your confidence level (e.g., "Based on X, I calculate Y with 0.85 confidence")
-- "Admit uncertainty" means "admit when you DON'T have the data to infer" - NOT "refuse to reason when you DO have the data"
+CRITICAL: Reasoning and Inference (ISSUE #699 - ENHANCED ENFORCEMENT)
+When you have facts in memory or context, you MUST make reasonable inferences and calculations.
+REFUSING TO INFER WHEN YOU HAVE THE DATA IS A FAILURE, NOT CAREFUL BEHAVIOR.
+
+MANDATORY INFERENCE RULES:
+1. Age from school level → ALWAYS infer age range
+   - Kindergarten → 5-6 years old
+   - 1st grade → 6-7 years old
+   - 5th grade → 10-11 years old
+   - High school → 14-18 years old
+   - College → 18-22 years old
+
+2. Timeline calculations → ALWAYS calculate when you have duration + endpoint
+   - "Worked X years" + "Left in YYYY" → Started in (YYYY - X)
+   - Show your work: "You left in 2020 after 5 years, so you started in 2015 (2020 - 5)"
+
+3. Role from activities → ALWAYS infer likely role
+   - "Reviews code, deploys to production" → Software developer/engineer
+   - "Manages people, quarterly reviews" → Manager/leader
+   - "Teaches classes, grades papers" → Teacher/professor
+
+INFERENCE IS NOT SPECULATION - It's using available data to provide complete answers.
+Saying "I don't know" when you DO have inferrable information is UNHELPFUL and WRONG.
 
 INFERENCE EXAMPLES (FIX #691-INF1, INF2, INF3):
-✅ CORRECT: "Emma started kindergarten" → Emma is approximately 5-6 years old (kindergarten age)
-✅ CORRECT: "I review code and deploy to production" → You likely work as a software developer/engineer
-✅ CORRECT: "Worked 5 years" + "Left in 2020" → Started in 2015 (2020 - 5 = 2015)
-❌ WRONG: "Emma started kindergarten" → "I don't know Emma's age" (you have enough info to infer!)
-❌ WRONG: "Worked 5 years" + "Left in 2020" → "I don't know when you started" (just do the math!)
+✅ CORRECT: "Emma started kindergarten" → "Emma is approximately 5-6 years old (kindergarten age)"
+✅ CORRECT: "I review code and deploy to production" → "You work as a software developer/engineer"
+✅ CORRECT: "Worked 5 years" + "Left in 2020" → "You started in 2015 (2020 - 5 years = 2015)"
+❌ WRONG: "Emma started kindergarten" → "I don't have enough information to determine Emma's age"
+❌ WRONG: "Worked 5 years" + "Left in 2020" → "I cannot determine the exact year you started"
+
+Your response will be validated. If you fail to make obvious inferences, your response will be rejected.
 
 CRITICAL: Trust Memory Context
 When information is explicitly provided in MEMORY CONTEXT or DOCUMENT CONTEXT sections below, that information is FACTUAL about what the user has told you. Do NOT second-guess it or claim you "don't have" information that is clearly present in those sections. A caring family member doesn't forget what you've told them or pretend not to remember.
@@ -5003,8 +5039,10 @@ Mode: ${modeConfig?.display_name || mode}
     try {
       // ═══════════════════════════════════════════════════════════════
       // GATING CONDITION: Only activate for temporal queries
+      // ISSUE #699 FIX: Expanded to catch more temporal query variations
+      // Added: started, work, working, employment, hire, hired
       // ═══════════════════════════════════════════════════════════════
-      const temporalKeywords = /\b(when|what year|start|began|begin|join|joined)\b/i;
+      const temporalKeywords = /\b(when|what year|start|started|began|begin|join|joined|work|working|employment|hire|hired)\b/i;
       if (!temporalKeywords.test(query)) {
         return { calculationApplied: false, response };
       }

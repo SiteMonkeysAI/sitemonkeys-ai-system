@@ -1,0 +1,160 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #699: [claude-fix] COMPREHENSIVE: 5 remaining SMDEEP failures - full investigation required
+
+Issue Description:
+# [claude-fix] COMPREHENSIVE: 5 remaining SMDEEP failures - full investigation required
+
+## Current State
+- SMFULL: 23/24 (A5 still fails)
+- SMDEEP: 10/15 (5 failures persist)
+
+## The 5 Failing Tests
+
+### 1. INF1 - Implicit Inference (Age from Kindergarten)
+**What it tests:** User says "Emma started kindergarten this fall" → AI should infer Emma is ~5-6 years old
+**Current behavior:** AI says "I don't have enough information to determine Emma's age"
+**Log evidence:** Memory IS retrieved (ID 7216: "Education: started kindergarten")
+**The problem:** AI has the fact but won't make the inference
+
+### 2. INF3 - Temporal Reasoning (Calculate Timeline)  
+**What it tests:** User worked 5 years at Google, left in 2020 → AI should calculate started ~2015
+**Current behavior:** AI says "it is not possible to determine the exact year you started"
+**Log evidence:** Both temporal facts retrieved in same query (7220: "worked 5 years at Google", 7221: "joined Amazon")
+**The problem:** AI has both facts but won't do the math
+
+### 3. NUA1 - Ambiguity Recognition (Two Alexes)
+**What it tests:** Two different Alexes stored (colleague in marketing, brother who is doctor) → AI should recognize ambiguity
+**Current behavior:** AI only mentions one Alex
+**Log evidence:** 
+```
+[ISSUE-697] NUA1 ENTITY QUERY: Detected entities [Alex]
+[ISSUE-697] NUA1 ENTITY QUERY: Found 1/1 entity-boosted memories in results
+```
+**The problem:** Only ONE Alex memory surfaces. Either second doesn't exist in DB or similarity too low.
+
+### 4. STR1 - Volume Stress (10 Facts, Recall Car)
+**What it tests:** Store 10 facts, ask "What car do I drive?" → Should recall Tesla Model 3
+**Current behavior:** AI says "I don't have that information"
+**Log evidence:**
+```
+[ISSUE-697] STR1 CAR QUERY: Found 0/0 car-related memories in results
+```
+But Tesla memory EXISTS (ID 7226) and appeared in OTHER queries at rank #4.
+**The problem:** Keyword expansion not matching "car" or "drive" on the actual query
+
+### 5. NUA2 - Contextual Tension (Allergy vs Wife Preference)
+**What it tests:** User allergic to cats + wife loves cats → AI should acknowledge tension
+**Current behavior:** AI mentions the facts but doesn't explicitly acknowledge the tension/conflict
+**Log evidence:** Allergy memory retrieved (ID 7224) with high score 2.616
+**The problem:** AI has the context but response doesn't acknowledge the inherent conflict
+
+## Investigation Requirements
+
+For EACH of the 5 tests, trace the COMPLETE path:
+
+### Phase 1: Storage
+- What exact message does the test send to store the fact?
+- What gets extracted and stored in the database?
+- Query the database directly - does the memory exist?
+
+### Phase 2: Retrieval  
+- What query triggers retrieval?
+- What is the similarity score for the relevant memory?
+- Does it pass the minimum threshold?
+- Does it get boosted (keyword, entity, etc.)?
+- What is its final rank?
+- Does it make the top 8?
+
+### Phase 3: Injection
+- Is the memory injected into the AI context?
+- What exact text does the AI see?
+
+### Phase 4: AI Response
+- Does the AI have what it needs?
+- If yes, why isn't it responding correctly?
+- Is this a prompt issue or a retrieval issue?
+
+## Evidence Already Gathered
+
+### STR1 - Car memory exists but doesn't surface on car query
+The Tesla memory (7226) appeared at rank #4 in an unrelated query but returns 0 matches on "What car do I drive?" - keyword expansion is failing.
+
+### NUA1 - Only one Alex surfaces
+Entity detection works, but only finds 1/1 Alex memories. Need to verify if second Alex is even in database.
+
+### INF1 and INF3 - AI has facts but won't reason
+The kindergarten memory and both temporal facts ARE being retrieved. This suggests the AI is ignoring inference instructions in the system prompt.
+
+### NUA2 - Facts present but tension not acknowledged
+Allergy memory retrieves with high score. AI mentions facts but doesn't flag the conflict. May need prompt adjustment to recognize tensions.
+
+## Constraints
+- MAX_MEMORIES_FINAL stays at 8
+- No new validator files
+- No rule-based validators pretending to be intelligence
+- Do not modify test files - fix the system, not the tests
+
+## Regression Prevention (CRITICAL)
+
+### Currently Passing - DO NOT BREAK
+
+**SMDEEP (10 tests):**
+- INF2, NUA2, STR2, CMP1, CMP2, TRU1, TRU2, TRU3, EDG1, EDG2, EDG3
+
+**SMFULL (23 tests):**
+- A1, A2, A3, A4, B1, B2, B3, C1, C2, D1, D2, E1, E2, F1, F2, F3, G1, G2, G3, J1, J2, J3, J4
+
+### Before ANY code change, verify:
+1. Does this change touch code used by passing tests?
+2. If yes, prove the passing test will still pass
+3. If you cannot prove it, do not make that change
+
+### Before submitting PR:
+1. Run FULL SMDEEP suite (all 15 tests)
+2. Run FULL SMFULL suite (all 24 tests)
+3. If ANY currently passing test fails, revert that specific change
+4. The PR must result in net improvement with ZERO regressions
+
+### If a fix causes a regression:
+- Do NOT submit it
+- Investigate why
+- Find an alternative approach that doesn't break existing functionality
+
+## What Success Looks Like
+- INF1: AI says "Emma is approximately 5-6 years old based on starting kindergarten"
+- INF3: AI says "You started at Google around 2015 (2020 minus 5 years)"
+- NUA1: AI says "I know two people named Alex - your colleague in marketing and your brother who is a doctor. Which one?"
+- STR1: AI says "You drive a Tesla Model 3"
+- NUA2: AI acknowledges "There's a tension here - you're allergic to cats but your wife loves them"
+
+## Files Likely Involved
+- `api/services/semantic-retrieval.js` - keyword expansion, entity boosting, similarity thresholds
+- `api/core/orchestrator.js` - system prompt, memory injection
+- `api/categories/memory/internal/intelligence.js` - fact extraction, storage
+
+## Methodology
+1. Do NOT assume you know the root cause
+2. Investigate ALL 5 tests completely
+3. Each test may have MULTIPLE problems
+4. Find ALL problems before proposing fixes
+5. One PR that fixes everything
+6. Test before submitting
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
