@@ -5805,10 +5805,21 @@ Mode: ${modeConfig?.display_name || mode}
         return { correctionApplied: false, response };
       }
 
-      // Check if response already infers age - simpler approach
-      const hasAgeInfo = response.toLowerCase().includes('years old') || 
-                         response.toLowerCase().includes('age');
-      const hasSchoolLevel = /kindergarten|preschool|first grade/i.test(response);
+      // Check if response already infers age - CodeQL-safe approach (no regex on user data)
+      const text = String(response || "").slice(0, 4000).toLowerCase();
+
+      const hasAgeInfo =
+        text.includes("years old") ||
+        text.includes("age ") ||
+        text.includes("aged ");
+
+      const hasSchoolLevel =
+        text.includes("kindergarten") ||
+        text.includes("pre-k") ||
+        text.includes("prek") ||
+        text.includes("preschool") ||
+        text.includes("1st grade") ||
+        text.includes("first grade");
 
       if (hasAgeInfo && hasSchoolLevel) {
         console.log(`[AGE-INFERENCE] person="${personName}" inferred=true reason=already_present`);
