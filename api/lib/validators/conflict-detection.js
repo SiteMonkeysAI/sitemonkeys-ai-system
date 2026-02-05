@@ -123,21 +123,35 @@ class ConflictDetectionValidator {
 
   /**
    * Extract food/item keywords from memories
+   * ISSUE #699 FIX: Expanded beyond food to include pets and other conflict categories
    */
   #extractItems(memories) {
     const items = new Set();
-    const foodCategories = [
+    const conflictCategories = [
+      // Food allergies (original NUA2)
       'seafood', 'shellfish', 'fish', 'shrimp', 'crab', 'lobster', 'clam', 'oyster',
       'nuts', 'peanuts', 'tree nuts', 'almonds', 'cashews', 'walnuts',
       'dairy', 'milk', 'cheese', 'lactose',
       'gluten', 'wheat', 'bread',
-      'eggs', 'soy', 'sesame'
+      'eggs', 'soy', 'sesame',
+
+      // ISSUE #699: Pet/animal conflicts (allergy vs preference)
+      'cat', 'cats', 'kitten', 'kitty', 'feline',
+      'dog', 'dogs', 'puppy', 'canine',
+      'pet', 'pets', 'animal', 'animals',
+      'bird', 'birds', 'parrot',
+      'rabbit', 'hamster', 'guinea pig',
+
+      // Other common conflict areas
+      'smoke', 'smoking', 'cigarette',
+      'alcohol', 'wine', 'beer', 'drink',
+      'meat', 'vegan', 'vegetarian'
     ];
 
     for (const memory of memories) {
       const content = (memory.content || memory.text || '').toLowerCase();
 
-      for (const category of foodCategories) {
+      for (const category of conflictCategories) {
         if (content.includes(category)) {
           items.add(category);
         }
@@ -149,6 +163,7 @@ class ConflictDetectionValidator {
 
   /**
    * Check if there's overlap between allergy items and preference items
+   * ISSUE #699 FIX: Expanded to detect pet and other non-food conflicts
    */
   #checkItemOverlap(allergyItems, preferenceItems) {
     // Direct overlap
@@ -165,12 +180,32 @@ class ConflictDetectionValidator {
       }
     }
 
-    // Category-level overlap
+    // Category-level overlap - Food
     const seafoodItems = ['seafood', 'shellfish', 'fish', 'shrimp', 'crab', 'lobster', 'clam', 'oyster'];
     const hasSeafoodAllergy = allergyItems.some(item => seafoodItems.includes(item));
     const hasSeafoodPreference = preferenceItems.some(item => seafoodItems.includes(item));
 
     if (hasSeafoodAllergy && hasSeafoodPreference) {
+      return true;
+    }
+
+    // ISSUE #699: Category-level overlap - Pets
+    const catItems = ['cat', 'cats', 'kitten', 'kitty', 'feline'];
+    const dogItems = ['dog', 'dogs', 'puppy', 'canine'];
+    const petItems = ['pet', 'pets', 'animal', 'animals'];
+
+    const hasCatAllergy = allergyItems.some(item => catItems.includes(item));
+    const hasCatPreference = preferenceItems.some(item => catItems.includes(item));
+
+    const hasDogAllergy = allergyItems.some(item => dogItems.includes(item));
+    const hasDogPreference = preferenceItems.some(item => dogItems.includes(item));
+
+    const hasPetAllergy = allergyItems.some(item => petItems.includes(item));
+    const hasPetPreference = preferenceItems.some(item => petItems.includes(item));
+
+    if ((hasCatAllergy && hasCatPreference) ||
+        (hasDogAllergy && hasDogPreference) ||
+        (hasPetAllergy && hasPetPreference)) {
       return true;
     }
 

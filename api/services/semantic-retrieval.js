@@ -1557,6 +1557,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // When user asks "What car do I drive?", memories containing "car", "drive", "Tesla", etc.
     // should rank higher even if semantic similarity is moderate
     // This fixes volume stress tests where specific facts get lost among many memories
+    // ISSUE #699 FIX: Use EXPANDED query (not original) to match against memory content
+    // Query "What car do I drive?" expands to include "tesla", "model", "vehicle"
+    // So memory "I drive a Tesla Model 3" should get keyword boost
     // ═══════════════════════════════════════════════════════════════
     const keywordBoosted = ordinalBoosted.map(memory => {
       const contentLower = (memory.content || '').toLowerCase();
@@ -1566,7 +1569,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       const meaningfulShortWords = new Set(['car', 'dog', 'cat', 'pet', 'job', 'who', 'age', 'old', 'new']);
       const stopwords = new Set(['what', 'does', 'have', 'this', 'that', 'your', 'their', 'about', 'the', 'and', 'for']);
 
-      const queryWords = normalizedQuery.toLowerCase()
+      // ISSUE #699 FIX: Use expandedQuery (includes synonyms) instead of normalizedQuery
+      // This ensures expanded terms like "tesla", "model" are checked against memory content
+      const queryWords = expandedQuery.toLowerCase()
         .replace(/[^\w\s]/g, ' ')  // Remove punctuation
         .split(/\s+/)
         .filter(word => {

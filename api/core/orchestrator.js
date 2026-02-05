@@ -2233,13 +2233,18 @@ export class Orchestrator {
         // This is the LAST line of defense - enforced regardless of upstream logic
         // CRITICAL: Enforces token efficiency + selectivity doctrine
         // Validator must validate exactly what is injected (these memories)
-        // Issue #685: Reduced from 15 to 8 after implementing priority-tier ranking
+        // Issue #685: Reduced from 15 to 8, then to 5 for stricter token efficiency
         // With guaranteed top-tier ranking for boosted memories (hybrid_score >= 2.0),
-        // cap of 8 should be sufficient for all high-priority memories to be included
+        // cap of 5 ensures only highest-priority memories are injected
+        // Issue #699-NUA1: Ambiguity detection uses secondary DB query pass
+        // via #enforceAmbiguityDisclosure validator - does NOT require all entities injected
         // ═══════════════════════════════════════════════════════════════
-        const MAX_MEMORIES_FINAL = 8; // Balanced between token efficiency and sufficient context
+        const MAX_MEMORIES_FINAL = 5; // Strict token efficiency - ambiguity detected via validator
         const memoriesPreCap = result.memories.length;
+
+        // Apply strict cap - ambiguity detection happens in validator via DB query
         memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
+
         const memoriesPostCap = memoriesToFormat.length;
 
         // ISSUE #697: Enhanced diagnostic logging when cap is enforced
@@ -4285,21 +4290,35 @@ Core Principles:
 - Admit uncertainty about EXTERNAL facts you don't have access to
 - TRUST information explicitly provided in memory context or documents
 
-CRITICAL: Reasoning and Inference
-When you have facts in memory or context, you MUST make reasonable inferences and calculations:
-- If you know "worked 5 years" and "left in 2020", calculate the start year (2015)
-- If you know "started kindergarten this fall", infer age (~5-6 years old)
-- If you know "reviews code and deploys to production", infer role (likely software developer/engineer)
-- If you have related information, connect the dots and provide the complete picture
-- State your confidence level (e.g., "Based on X, I calculate Y with 0.85 confidence")
-- "Admit uncertainty" means "admit when you DON'T have the data to infer" - NOT "refuse to reason when you DO have the data"
+CRITICAL: Reasoning and Inference (ISSUE #699 - BOUNDED INFERENCE)
+When you have facts in memory or context, you MUST make reasonable inferences using bounded reasoning.
+REFUSING TO INFER WHEN YOU HAVE THE DATA IS A FAILURE, NOT CAREFUL BEHAVIOR.
 
-INFERENCE EXAMPLES (FIX #691-INF1, INF2, INF3):
-✅ CORRECT: "Emma started kindergarten" → Emma is approximately 5-6 years old (kindergarten age)
-✅ CORRECT: "I review code and deploy to production" → You likely work as a software developer/engineer
-✅ CORRECT: "Worked 5 years" + "Left in 2020" → Started in 2015 (2020 - 5 = 2015)
-❌ WRONG: "Emma started kindergarten" → "I don't know Emma's age" (you have enough info to infer!)
-❌ WRONG: "Worked 5 years" + "Left in 2020" → "I don't know when you started" (just do the math!)
+INFERENCE GUIDELINES WITH UNCERTAINTY:
+1. Age from school level → Provide bounded ranges with context
+   - Example: "Emma is typically around 5-6 years old (US kindergarten age, though this can vary with cutoff dates and redshirting)"
+   - Acknowledge variation while providing the typical case
+   - Do NOT claim ignorance when school level is known
+
+2. Timeline calculations → Calculate when you have duration + endpoint
+   - "Worked X years" + "Left in YYYY" → Started in (YYYY - X)
+   - Show your work: "You left in 2020 after 5 years, so you likely started around 2015 (2020 - 5)"
+   - Use "around" or "approximately" for calculated dates to acknowledge rounding
+
+3. Role from activities → Infer likely role with appropriate confidence
+   - "Reviews code, deploys to production" → "You work as a software developer/engineer"
+   - "Manages people, quarterly reviews" → "You work in a management/leadership role"
+   - State the inference clearly while acknowledging if there could be variation
+
+BOUNDED INFERENCE = Using available data + acknowledging reasonable uncertainty
+Truth-first means providing the best answer you can with available data, not refusing to answer.
+
+INFERENCE EXAMPLES (ISSUE #699-INF1):
+✅ CORRECT: "Emma started kindergarten" → "Emma is typically around 5-6 years old (kindergarten age in the US, though this can vary slightly with cutoff dates)"
+✅ CORRECT: "I review code and deploy to production" → "You work as a software developer/engineer"
+✅ CORRECT: "Worked 5 years" + "Left in 2020" → "You likely started around 2015 (2020 minus 5 years)"
+❌ WRONG: "Emma started kindergarten" → "I don't have enough information to determine Emma's age"
+❌ WRONG: Providing "exact" ages without acknowledging variation (e.g., "Emma is exactly 5 years old")
 
 CRITICAL: Trust Memory Context
 When information is explicitly provided in MEMORY CONTEXT or DOCUMENT CONTEXT sections below, that information is FACTUAL about what the user has told you. Do NOT second-guess it or claim you "don't have" information that is clearly present in those sections. A caring family member doesn't forget what you've told them or pretend not to remember.
@@ -5003,8 +5022,10 @@ Mode: ${modeConfig?.display_name || mode}
     try {
       // ═══════════════════════════════════════════════════════════════
       // GATING CONDITION: Only activate for temporal queries
+      // ISSUE #699 FIX: Expanded to catch more temporal query variations
+      // Added: started, work, working, employment, hire, hired
       // ═══════════════════════════════════════════════════════════════
-      const temporalKeywords = /\b(when|what year|start|began|begin|join|joined)\b/i;
+      const temporalKeywords = /\b(when|what year|start|started|began|begin|join|joined|work|working|employment|hire|hired)\b/i;
       if (!temporalKeywords.test(query)) {
         return { calculationApplied: false, response };
       }
