@@ -2233,9 +2233,11 @@ export class Orchestrator {
         // This is the LAST line of defense - enforced regardless of upstream logic
         // CRITICAL: Enforces token efficiency + selectivity doctrine
         // Validator must validate exactly what is injected (these memories)
-        // Issue #685: Increased from 5 to 15 for better context (A5, NUA1, STR1 fixes)
+        // Issue #685: Reduced from 15 to 8 after implementing priority-tier ranking
+        // With guaranteed top-tier ranking for boosted memories (hybrid_score >= 2.0),
+        // cap of 8 should be sufficient for all high-priority memories to be included
         // ═══════════════════════════════════════════════════════════════
-        const MAX_MEMORIES_FINAL = 15; // Increased from 5 for Issue #685 - balance token efficiency with sufficient context
+        const MAX_MEMORIES_FINAL = 8; // Balanced between token efficiency and sufficient context
         const memoriesPreCap = result.memories.length;
         memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
         const memoriesPostCap = memoriesToFormat.length;
