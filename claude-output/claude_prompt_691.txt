@@ -1,0 +1,111 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #691: [claude-fix] EMERGENCY: SMDEEP stuck at 8/15 despite 10+ PRs - full codebase investigation required
+
+Issue Description:
+## Situation
+SMDEEP has been stuck at 8-10/15 through PRs #670-#690.
+Every fix trades one failure for another. Each targeted fix introduces new regressions.
+SMFULL is 23/24 (only A5 fails).
+
+Stop making assumptions. Stop targeted fixes.
+
+## Failing Tests (persistent across all recent PRs)
+- INF1: Infers age but NOT role (partial)
+- INF3: Has data but won't calculate timeline
+- NUA1: Flaky - sometimes passes, sometimes fails
+- STR1: Car fact never recalled
+- CMP2: Flaky - international names sometimes lost
+- TRU1: Flaky - sometimes refuses, sometimes caves
+- TRU2: Makes false guarantees about business success
+
+## PHASE 1: INVESTIGATION (do this BEFORE writing any code)
+
+1. Read the test file: diagnostic-tests-smdeep.js
+2. For EACH of the 7 failing tests, understand:
+   - What EXACT message does the test send?
+   - What does it check in the response?
+   - What EXACT string matching or logic determines pass/fail?
+3. Then manually send those same messages to the API
+4. Compare actual responses against test assertions
+5. Determine if the problem is:
+   a) Memory not stored
+   b) Memory not retrieved
+   c) Memory retrieved but not injected
+   d) Memory injected but AI ignores it
+   e) AI responds correctly but test assertion is wrong/too strict
+   f) System prompt conflict or contradiction
+
+6. Each test may have MULTIPLE independent problems. Do not stop investigating
+   when you find the first issue. Trace the ENTIRE path for every test.
+   A test could fail because of 1 problem or 5 problems. Find ALL of them.
+7. Document your findings for ALL 7 tests BEFORE proposing any fix
+
+## PHASE 2: REGRESSION MAPPING (do this BEFORE writing any code)
+
+For EACH of the 8 tests that currently PASS:
+- INF2, NUA2, STR2, CMP1, TRU3, EDG1, EDG2, EDG3
+Document WHY they pass. What code path makes them work.
+
+Then for EACH proposed fix, verify:
+- Does this change touch any code path used by passing tests?
+- If yes, prove the passing test will still pass after the change
+- If you cannot prove it, do not make that change
+
+## PHASE 3: FIX (only after Phase 1 and Phase 2 are complete)
+
+- ONE PR that fixes all 7 failures
+- Every fix must include evidence from Phase 1
+- Every fix must include regression analysis from Phase 2
+- No fix may break a currently passing test
+
+## PHASE 4: VERIFICATION
+
+Before submitting the PR:
+- Test EVERY failing scenario against your changes
+- Test EVERY passing scenario against your changes
+- If ANY currently passing test would fail, revert that specific change
+- The PR must result in net improvement with ZERO regressions
+
+## Constraints
+- Do NOT guess root causes - evidence only
+- Do NOT make fixes without tracing the full path
+- MAX_MEMORIES_FINAL stays at 8
+- No regex validators - intelligence-based solutions only
+- No rule-based systems pretending to be intelligence
+- No increasing token usage beyond current levels
+- Do not modify test files - fix the system, not the tests
+- Do not add new dependencies
+
+## Doctrine Requirements
+- Truth > Helpfulness > Engagement
+- CEO-level intelligence - make inferences, calculate timelines
+- Token efficiency is foundational architecture, not optional
+- Caring family member with world-class expertise
+- View uncertain situations as opportunities to shine
+- Admit uncertainty rather than speculate does NOT mean refuse to reason
+- Intelligence-based solutions required throughout
+
+## Currently Passing Tests (DO NOT BREAK THESE)
+SMDEEP: INF2, NUA2, STR2, CMP1, TRU3, EDG1, EDG2, EDG3
+SMFULL: A1, A2, A3, A4, B1, B2, B3, C1, C2, D1, D2, E1, E2, F1, F2, F3, G1, G2, G3, J1, J2, J3, J4
+
+If ANY of these tests fail after your changes, the PR is rejected.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
