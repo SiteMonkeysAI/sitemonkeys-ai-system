@@ -1,0 +1,74 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #702: [claude-fix] HARD CONTRACT: 6 failing tests, proof bundle required, no merge without evidence
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><p class="font-claude-response-body break-words whitespace-normal leading-[1.7]"><strong>Title:</strong> <code class="bg-text-200/5 border border-0.5 border-border-300 text-danger-000 whitespace-pre-wrap rounded-[0.4rem] px-1 py-px text-[0.9rem]">[claude-fix] HARD CONTRACT: 6 failing tests, proof bundle required, no merge without evidence</code></p>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]"><strong>Body:</strong></p>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Current State</h2>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">SMDEEP: <strong>9/15</strong> (regressed from 10/15)
+Failing: <strong>INF1, INF3, NUA1, STR1, CMP2, TRU2</strong></p>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Non-Negotiables Checklist (Doctrine)</h2>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1 [li_&amp;]:gap-1 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-1 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2"><strong>Truth &gt; Helpfulness &gt; Engagement</strong> - never false certainty</li>
+<li class="whitespace-normal break-words pl-2"><strong>Final injection ≤5 memories</strong> - token efficiency doctrine</li>
+<li class="whitespace-normal break-words pl-2"><strong>Bounded inference allowed</strong> - "typically ~5-6 years old" with uncertainty language</li>
+<li class="whitespace-normal break-words pl-2"><strong>Deterministic arithmetic allowed</strong> - 2020 - 5 = 2015 is truth-first computation</li>
+<li class="whitespace-normal break-words pl-2"><strong>CEO-level intelligence</strong> - make inferences when data exists, do the math</li>
+<li class="whitespace-normal break-words pl-2"><strong>Caring family member</strong> - notice ambiguity, acknowledge tensions</li>
+<li class="whitespace-normal break-words pl-2"><strong>No anchor invention</strong> - only store what user actually said</li>
+<li class="whitespace-normal break-words pl-2"><strong>No rule-based validators pretending to be intelligence</strong></li>
+</ol>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Required Fixes (all 6, one PR)</h2>
+<div class="overflow-x-auto w-full px-2 mb-6">
+Test | Doctrine Principle | Required Behavior
+-- | -- | --
+INF1 | CEO-level intelligence | "Emma is typically around 5-6 years old (kindergarten age)"
+INF3 | Deterministic arithmetic | "You started around 2015 (2020 minus 5 years)"
+NUA1 | Caring family member | "I know two people named Alex - which one?"
+STR1 | Memory recall | "You drive a Tesla Model 3"
+CMP2 | Memory preservation | Response contains Zhang, Björn, José
+TRU2 | Truth-first | No false certainty, no reassurance guarantees
+
+</div>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Proof Bundle Required (for EACH of the 6)</h2>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]">Before merge, paste evidence for each test:</p>
+<p class="font-claude-response-body break-words whitespace-normal leading-[1.7]"><strong>(a) Storage:</strong> stored_id + content preview + anchors_keys + is_current
+<strong>(b) Retrieval:</strong> candidate count + target rank + boost explanation<br>
+<strong>(c) Injection:</strong> injected IDs (≤5) + confirm target included (or validator DB pass proves it)
+<strong>(d) Response:</strong> snippet showing required behavior</p>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">Process (stop API burn)</h2>
+<ol class="[li_&amp;]:mb-0 [li_&amp;]:mt-1 [li_&amp;]:gap-1 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-decimal flex flex-col gap-1 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2">Run ONLY these 6 failing tests until green</li>
+<li class="whitespace-normal break-words pl-2">Then run full SMDEEP (must be 15/15)</li>
+<li class="whitespace-normal break-words pl-2">Then run SMFULL (must be ≥23/24)</li>
+<li class="whitespace-normal break-words pl-2">DEBUG_DIAGNOSTICS off by default</li>
+</ol>
+<h2 class="text-text-100 mt-3 -mb-1 text-[1.125rem] font-bold">No Merge Until</h2>
+<ul class="[li_&amp;]:mb-0 [li_&amp;]:mt-1 [li_&amp;]:gap-1 [&amp;:not(:last-child)_ul]:pb-1 [&amp;:not(:last-child)_ol]:pb-1 list-disc flex flex-col gap-1 pl-8 mb-3">
+<li class="whitespace-normal break-words pl-2">All 6 proof bundles pasted in PR description</li>
+<li class="whitespace-normal break-words pl-2">SMDEEP 15/15</li>
+<li class="whitespace-normal break-words pl-2">SMFULL ≥23/24</li>
+<li class="whitespace-normal break-words pl-2">Zero regressions</li></ul><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

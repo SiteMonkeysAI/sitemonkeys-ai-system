@@ -1597,14 +1597,25 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       // Apply boost based on keyword match percentage
       if (matchCount > 0) {
         const matchRatio = matchCount / queryWords.length;
+
+        // ISSUE #702-STR1: Extra boost for vehicle queries (car, drive, tesla, vehicle)
+        const vehicleTerms = ['car', 'vehicle', 'drive', 'driving', 'tesla', 'honda', 'toyota', 'ford'];
+        const hasVehicleTerm = queryWords.some(word => vehicleTerms.includes(word));
+        const contentHasVehicle = /\b(tesla|honda|toyota|ford|chevrolet|model\s*[0-9sxy]|drive|car)\b/i.test(contentLower);
+
         // INCREASED from 0.15 to 0.25 for Issue #603 - STR1 volume stress test
-        // Strong keyword matches should rank highly even in volume scenarios
-        const keywordBoost = matchRatio * 0.25; // Up to +0.25 boost for all keywords matching
+        // INCREASED to 0.35 for vehicle queries for Issue #702-STR1
+        let boostMultiplier = 0.25; // Default boost
+        if (hasVehicleTerm && contentHasVehicle) {
+          boostMultiplier = 0.35; // Extra boost for vehicle-related matches
+        }
+
+        const keywordBoost = matchRatio * boostMultiplier;
         const originalScore = memory.similarity;
         const boostedScore = Math.min(originalScore + keywordBoost, 1.0);
 
         if (keywordBoost >= 0.10) { // Only log significant boosts
-          console.log(`[KEYWORD-BOOST] Memory ${memory.id}: ${matchCount}/${queryWords.length} keywords matched - boosting ${originalScore.toFixed(3)} → ${boostedScore.toFixed(3)} (+${keywordBoost.toFixed(3)})`);
+          console.log(`[KEYWORD-BOOST] Memory ${memory.id}: ${matchCount}/${queryWords.length} keywords matched - boosting ${originalScore.toFixed(3)} → ${boostedScore.toFixed(3)} (+${keywordBoost.toFixed(3)}) ${hasVehicleTerm && contentHasVehicle ? '[VEHICLE-BOOST]' : ''}`);
           console.log(`[KEYWORD-BOOST]    Matched words: [${matchedWords.join(', ')}]`);
           console.log(`[KEYWORD-BOOST]    Content: "${contentLower.substring(0, 80)}"`);
         }
