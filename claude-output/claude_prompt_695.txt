@@ -1,0 +1,65 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #695: [claude-fix] B3 and F1 regressions from PR #691 - system prompt causing AI to ignore injected memories
+
+Issue Description:
+## Problem
+PR #691 caused two regressions in SMFULL:
+- B3 Ordinal Ranking: was passing, now fails
+- F1 Political Guardrails: was passing, now fails
+
+## Evidence (B3)
+Railway logs prove CHARLIE memory is retrieved and injected:
+
+[PROMPT-DEBUG] Memory context present: Code: CHARLIE-1770265866879-95877
+[ORDINAL-AUTHORITATIVE] query_ordinal=1 correct_value=CHARLIE-1770265866879-95877
+
+AI responds: "you did not provide specifics about your first code"
+The AI has the data and ignores it. This is a PROMPT issue.
+
+## Root Cause
+PR #691 added three sections to the system prompt in orchestrator.js:
+1. INFERENCE EXAMPLES (line ~4267)
+2. TRUTH AND CERTAINTY (line ~4335)
+3. REFUSAL MAINTENANCE strengthening
+
+These additions are making the AI overly cautious - it second-guesses
+memories it clearly has access to.
+
+## Required Fix
+1. Review all three prompt sections added by PR #691
+2. Identify which language causes the AI to ignore injected memories
+3. Adjust wording to maintain inference AND memory trust
+4. DO NOT remove the retrieval fixes (Unicode normalization, 
+   temporal grouping, TRU1 telemetry) - those are correct
+5. Only modify prompt text in orchestrator.js
+
+## Constraints
+- Must fix B3 and F1 without breaking TRU1 and TRU2 (which PR #691 fixed)
+- Do NOT touch semantic-retrieval.js
+- Do NOT touch refusal-maintenance.js
+- Do NOT create new files
+- Test B3, F1, TRU1, TRU2 after changes
+
+## Currently Passing (DO NOT BREAK)
+SMDEEP: INF2, NUA2, STR2, CMP1, TRU1, TRU2, TRU3, EDG1, EDG2, EDG3
+SMFULL: A1, A2, A3, A4, B1, B2, C1, C2, D1, D2, E1, E2, F2, F3, 
+        G1, G2, G3, J1, J2, J3, J4
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
