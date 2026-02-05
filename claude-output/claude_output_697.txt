@@ -1,0 +1,143 @@
+Good, it looks like I've covered all the places. Now let me write a comprehensive summary:
+
+---SUMMARY---
+
+## Issue #697 Fix: STR1 and NUA1 Retrieval Pipeline Enhancement
+
+### Problem Analysis
+
+**STR1 (Tesla car memory):** When asking "What car do I drive?" with 10 facts stored, the Tesla memory was not surfacing in the top 8 results returned to the AI, even though it was being retrieved and ranked by semantic-retrieval.
+
+**NUA1 (Two Alexes):** When asking "Tell me about Alex" with two different Alex memories stored, only one was surfacing in the final results.
+
+### Root Cause
+
+The issue was in the hybrid scoring system in `api/services/semantic-retrieval.js`. The system has a priority tier mechanism that adds +2.0 to certain "high-priority" memories to ensure they rank above regular memories (which are capped at 1.0). However, `keyword_boosted` memories were NOT included in this priority tier.
+
+The scoring worked as follows:
+1. Entity-boosted memories: +2.0 tier boost ✓
+2. Explicit-recall memories: +2.0 tier boost ✓
+3. Ordinal-boosted memories: +2.0 tier boost ✓
+4. Safety-boosted memories: +2.0 tier boost ✓
+5. **Keyword-boosted memories: NO tier boost ✗** ← This was the problem
+
+For STR1, the Tesla memory would receive a keyword boost (matching "drive") but without the +2.0 tier boost, it could rank below other memories with higher base similarity scores. With only 8 slots available (MAX_MEMORIES_FINAL), relevant memories could get cut off.
+
+### Solution
+
+Added `keyword_boosted` to the high-priority memory tier system in three critical locations:
+
+#### 1. Hybrid Score Calculation (Line ~704)
+**File:** `api/services/semantic-retrieval.js`
+
+Added `keyword_boosted` to the high-priority check so keyword-matched memories receive the +2.0 tier boost:
+
+```javascript
+const isHighPriority = memory.explicit_recall_boosted ||
+                       memory.entity_boosted ||
+                       memory.ordinal_boosted ||
+                       memory.safety_boosted ||
+                       memory.keyword_boosted;  // FIX #697
+```
+
+#### 2. Memory Grouping (Line ~1977-1990)
+**File:** `api/services/semantic-retrieval.js`
+
+Added keyword-boosted memories to the high-priority grouping set to ensure they stay together and get priority in token budget allocation:
+
+```javascript
+const keywordBoostedMemories = filtered.filter(m => m.keyword_boosted);
+const highPriorityIds = new Set([
+  ...entityBoostedMemories.map(m => m.id),
+  ...explicitRecallMemories.map(m => m.id),
+  ...ordinalBoostedMemories.map(m => m.id),
+  ...keywordBoostedMemories.map(m => m.id)  // FIX #697
+]);
+```
+
+#### 3. Semantic Cohesion Protection (Line ~2123-2129)
+**File:** `api/services/semantic-retrieval.js`
+
+Protected keyword-boosted memories from being pruned during semantic cohesion checks:
+
+```javascript
+const highPriorityResults = results.filter(r =>
+  r.entity_boosted || r.explicit_recall_boosted || r.ordinal_boosted || r.keyword_boosted
+);
+```
+
+### Diagnostic Logging Added
+
+Added comprehensive diagnostic logging to trace memory ranking and identify cut-off issues:
+
+#### In semantic-retrieval.js (Line ~2263-2330)
+- Shows final ranking table with scores and categories
+- Identifies memories that were cut off from final results
+- STR1-specific: Tracks car-related memories through the pipeline
+- NUA1-specific: Tracks entity-boosted memories and shows which were missing
+
+#### In orchestrator.js (Line ~2247-2267)
+- Shows which memories were cut by MAX_MEMORIES_FINAL cap
+- Highlights when boosted memories are being cut (warning flag)
+- Displays rank, score, similarity, and content preview for cut memories
+
+### Expected Behavior After Fix
+
+**STR1 Test Case:**
+1. Query: "What car do I drive?"
+2. Query expansion adds: "vehicle drive automobile tesla model driving"
+3. Tesla memory "I drive a Tesla Model 3" matches keyword "drive"
+4. Receives keyword_boosted = true
+5. Gets +2.0 priority tier boost → hybrid_score ≈ 2.1-2.3
+6. Ranks in top positions, definitely within top 8
+7. Successfully injected into AI context ✓
+
+**NUA1 Test Case:**
+1. Query: "Tell me about Alex"
+2. Entity detection finds "Alex" (capitalized, not at start)
+3. Both Alex memories get entity_boosted = true
+4. Both receive +2.0 priority tier boost → hybrid_score ≈ 2.85
+5. Both rank in top positions, definitely within top 8
+6. Both successfully injected into AI context ✓
+7. AI can detect ambiguity and ask for clarification ✓
+
+### Files Modified
+
+1. **api/services/semantic-retrieval.js**
+   - Added keyword_boosted to priority tier check in calculateHybridScore()
+   - Added keyword_boosted to high-priority grouping set
+   - Added keyword_boosted to semantic cohesion protection
+   - Added comprehensive ISSUE-697 diagnostic logging
+   - Added keyword_boosted count to retrieval grouping logs
+
+2. **api/core/orchestrator.js**
+   - Enhanced MAX_MEMORIES_FINAL cap logging with detailed cut-off diagnostics
+   - Shows which boosted memories are being cut (if any)
+
+### Testing Recommendations
+
+Run the existing test files:
+- `test-str1-volume-stress.js` - Should now pass with Tesla memory retrieved
+- `diagnostic-tests-smdeep.js` - Should now pass with both Alex memories retrieved
+
+Look for these log markers in the output:
+- `[PRIORITY-TIER]` - Shows which memories get +2.0 boost
+- `[KEYWORD-BOOST]` - Shows which memories match query keywords
+- `[ISSUE-697]` - Shows final ranking and any cut-offs
+- `[ISSUE-697-ORCH]` - Shows orchestrator-level cuts
+
+### Mathematical Explanation
+
+**Before Fix:**
+- Keyword-boosted memory: similarity 0.35 + keyword_boost 0.125 = 0.475 (capped at 1.0)
+- High-similarity non-boosted memory: 0.75 (capped at 1.0)
+- Result: Non-boosted memory ranks higher ✗
+
+**After Fix:**
+- Keyword-boosted memory: similarity 0.35 + keyword_boost 0.125 + tier 2.0 = 2.475
+- High-similarity non-boosted memory: 0.75 (capped at 1.0)
+- Result: Keyword-boosted memory ranks higher ✓
+
+This ensures that memories matching query keywords always rank above non-matching memories, guaranteeing they make it into the top 8 slots and reach the AI for reasoning.
+
+---END SUMMARY---

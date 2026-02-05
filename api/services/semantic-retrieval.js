@@ -696,29 +696,33 @@ function calculateHybridScore(memory, options = {}) {
 
   // ═══════════════════════════════════════════════════════════════
   // CRITICAL FIX #685: High-priority memory ranking guarantee
+  // ENHANCEMENT #697: Include keyword_boosted in priority tier
   // Ensure boosted memories ALWAYS rank above non-boosted memories
   // by adding a priority tier that exceeds the 1.0 cap
   // This fixes the ranking issue where non-boosted high-similarity
   // memories could outrank boosted low-similarity memories
+  // FIX #697-STR1: keyword_boosted now included to fix car/Tesla retrieval
   // ═══════════════════════════════════════════════════════════════
-  const isHighPriority = memory.explicit_recall_boosted || 
-                         memory.entity_boosted || 
+  const isHighPriority = memory.explicit_recall_boosted ||
+                         memory.entity_boosted ||
                          memory.ordinal_boosted ||
-                         memory.safety_boosted;
-  
+                         memory.safety_boosted ||
+                         memory.keyword_boosted;  // FIX #697: Include keyword matches
+
   if (isHighPriority) {
     // Add priority tier: high-priority memories get +2.0 to their score
     // This ensures they ALWAYS rank above non-boosted memories
     // (non-boosted max is 1.0, boosted min becomes 2.0)
     score += 2.0;
-    
+
     // Log priority boost for diagnostics
     const priorityTypes = [];
     if (memory.explicit_recall_boosted) priorityTypes.push('explicit_recall');
     if (memory.entity_boosted) priorityTypes.push('entity');
     if (memory.ordinal_boosted) priorityTypes.push('ordinal');
     if (memory.safety_boosted) priorityTypes.push('safety');
-    
+    if (memory.keyword_boosted) priorityTypes.push('keyword');  // FIX #697
+
     console.log(`[PRIORITY-TIER] Memory ${memory.id}: High-priority types=[${priorityTypes.join(', ')}], adding +2.0 tier boost`);
     console.log(`[PRIORITY-TIER]   Final hybrid_score: ${score.toFixed(3)} (guaranteed top-tier ranking)`);
   } else {
@@ -1974,12 +1978,15 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const entityBoostedMemories = filtered.filter(m => m.entity_boosted);
     const explicitRecallMemories = filtered.filter(m => m.explicit_recall_boosted);
     const ordinalBoostedMemories = filtered.filter(m => m.ordinal_boosted);
-    
+    const keywordBoostedMemories = filtered.filter(m => m.keyword_boosted);  // FIX #697-STR1
+
     // Collect IDs of high-priority memories to track what we've already added
+    // FIX #697-STR1: Include keyword_boosted memories in high-priority set
     const highPriorityIds = new Set([
       ...entityBoostedMemories.map(m => m.id),
       ...explicitRecallMemories.map(m => m.id),
-      ...ordinalBoostedMemories.map(m => m.id)
+      ...ordinalBoostedMemories.map(m => m.id),
+      ...keywordBoostedMemories.map(m => m.id)  // FIX #697-STR1
     ]);
     
     // Group related memories by detected entities
@@ -2027,6 +2034,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     console.log(`  Entity-boosted: ${entityBoostedMemories.length}`);
     console.log(`  Explicit-recall: ${explicitRecallMemories.length}`);
     console.log(`  Ordinal-boosted: ${ordinalBoostedMemories.length}`);
+    console.log(`  Keyword-boosted: ${keywordBoostedMemories.length}`);  // FIX #697-STR1
     console.log(`  Related groups: ${relatedGroups.size}`);
     
     // First pass: Add ALL high-priority memories together (they come as a group)
@@ -2113,14 +2121,15 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           console.log(`[SEMANTIC-COHESION] ⚠️  Cohesion ${avgCohesion.toFixed(3)} below threshold ${MIN_COHESION}`);
           console.log(`[SEMANTIC-COHESION] Dropping lowest-scoring memories to restore cohesion`);
           
-          // Keep high-priority memories (entity-boosted, explicit-recall, ordinal-boosted)
-          const highPriorityResults = results.filter(r => 
-            r.entity_boosted || r.explicit_recall_boosted || r.ordinal_boosted
+          // Keep high-priority memories (entity-boosted, explicit-recall, ordinal-boosted, keyword-boosted)
+          // FIX #697-STR1: Include keyword_boosted in cohesion protection
+          const highPriorityResults = results.filter(r =>
+            r.entity_boosted || r.explicit_recall_boosted || r.ordinal_boosted || r.keyword_boosted
           );
-          
+
           // Sort non-high-priority by score
           const normalResults = results
-            .filter(r => !r.entity_boosted && !r.explicit_recall_boosted && !r.ordinal_boosted)
+            .filter(r => !r.entity_boosted && !r.explicit_recall_boosted && !r.ordinal_boosted && !r.keyword_boosted)
             .sort((a, b) => b.hybrid_score - a.hybrid_score);
           
           // Gradually drop low-scoring memories and recalculate cohesion
@@ -2259,6 +2268,78 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           console.error(`[SEMANTIC-IMPORTANCE] ⚠️ Failed to update importance: ${err.message}`);
         });
     }
+
+    // ═══════════════════════════════════════════════════════════════
+    // ISSUE #697: STR1 & NUA1 DIAGNOSTIC - Show final ranking with positions
+    // Track exactly what memories are being returned and their rank positions
+    // ═══════════════════════════════════════════════════════════════
+    console.log('[ISSUE-697] ═══════════════════════════════════════════════════════');
+    console.log(`[ISSUE-697] FINAL RESULTS: Returning ${results.length} memories`);
+    console.log('[ISSUE-697] Rank | ID | Score | Sim | Category | Content Preview');
+    console.log('[ISSUE-697] -----|-----|-------|-----|----------|------------------');
+    results.forEach((mem, idx) => {
+      const rank = idx + 1;
+      const id = String(mem.id).padEnd(5);
+      const score = (mem.hybrid_score || 0).toFixed(3);
+      const sim = (mem.similarity || 0).toFixed(3);
+      const cat = (mem.category_name || 'unknown').substring(0, 10).padEnd(10);
+      const preview = (mem.content || '').substring(0, 50);
+      console.log(`[ISSUE-697]  #${rank.toString().padStart(2)}  | ${id} | ${score} | ${sim} | ${cat} | ${preview}`);
+    });
+
+    // Check if there are high-ranking memories that got cut off
+    if (filtered.length > results.length) {
+      const cutOff = filtered.slice(results.length, Math.min(filtered.length, results.length + 5));
+      console.log('[ISSUE-697] ');
+      console.log(`[ISSUE-697] MEMORIES CUT OFF: ${filtered.length - results.length} memories didn't make it`);
+      console.log('[ISSUE-697] Next 5 memories that were cut:');
+      cutOff.forEach((mem, idx) => {
+        const rank = results.length + idx + 1;
+        const id = String(mem.id).padEnd(5);
+        const score = (mem.hybrid_score || 0).toFixed(3);
+        const sim = (mem.similarity || 0).toFixed(3);
+        const cat = (mem.category_name || 'unknown').substring(0, 10).padEnd(10);
+        const preview = (mem.content || '').substring(0, 50);
+        console.log(`[ISSUE-697]  #${rank.toString().padStart(2)}  | ${id} | ${score} | ${sim} | ${cat} | ${preview}`);
+      });
+    }
+
+    // STR1-specific: Check for car/vehicle keywords in results and filtered
+    if (isCarQuery) {
+      const carInResults = results.filter(m => /car|tesla|model|vehicle|drive/i.test(m.content || ''));
+      const carInFiltered = filtered.filter(m => /car|tesla|model|vehicle|drive/i.test(m.content || ''));
+      console.log('[ISSUE-697] ');
+      console.log(`[ISSUE-697] STR1 CAR QUERY: Found ${carInResults.length}/${carInFiltered.length} car-related memories in results`);
+      if (carInFiltered.length > carInResults.length) {
+        const missing = carInFiltered.filter(m => !results.find(r => r.id === m.id));
+        console.log(`[ISSUE-697] STR1 MISSING: ${missing.length} car memories were filtered but not returned`);
+        missing.forEach(mem => {
+          const rank = filtered.indexOf(mem) + 1;
+          console.log(`[ISSUE-697]   Rank #${rank}: ID ${mem.id}, Score ${(mem.hybrid_score || 0).toFixed(3)}, "${(mem.content || '').substring(0, 60)}"`);
+        });
+      }
+    }
+
+    // NUA1-specific: Check for entity-boosted memories
+    if (detectedEntities.length > 0) {
+      const entitiesInResults = results.filter(m => m.entity_boosted);
+      const entitiesInFiltered = filtered.filter(m => m.entity_boosted);
+      console.log('[ISSUE-697] ');
+      console.log(`[ISSUE-697] NUA1 ENTITY QUERY: Detected entities [${detectedEntities.join(', ')}]`);
+      console.log(`[ISSUE-697] NUA1 ENTITY QUERY: Found ${entitiesInResults.length}/${entitiesInFiltered.length} entity-boosted memories in results`);
+      if (entitiesInFiltered.length > entitiesInResults.length) {
+        const missing = entitiesInFiltered.filter(m => !results.find(r => r.id === m.id));
+        console.log(`[ISSUE-697] NUA1 MISSING: ${missing.length} entity-boosted memories were filtered but not returned`);
+        missing.forEach(mem => {
+          const rank = filtered.indexOf(mem) + 1;
+          const entities = mem.matched_entities ? mem.matched_entities.join(', ') : 'unknown';
+          console.log(`[ISSUE-697]   Rank #${rank}: ID ${mem.id}, Score ${(mem.hybrid_score || 0).toFixed(3)}, Entities [${entities}]`);
+          console.log(`[ISSUE-697]     Content: "${(mem.content || '').substring(0, 80)}"`);
+        });
+      }
+    }
+    console.log('[ISSUE-697] ═══════════════════════════════════════════════════════');
+    // ═══════════════════════════════════════════════════════════════
 
     // Clean up results (remove embeddings from response to save bandwidth)
     const cleanResults = results.map(({ embedding, ...rest }) => ({

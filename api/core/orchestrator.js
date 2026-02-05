@@ -2242,9 +2242,32 @@ export class Orchestrator {
         memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
         const memoriesPostCap = memoriesToFormat.length;
 
-        // Log if cap was enforced
+        // ISSUE #697: Enhanced diagnostic logging when cap is enforced
         if (memoriesPreCap > memoriesPostCap) {
           this.log(`[ORCHESTRATOR] Hard cap enforced: ${memoriesPreCap} → ${memoriesPostCap} memories`);
+
+          // Show what was cut off
+          const cutOffMemories = result.memories.slice(MAX_MEMORIES_FINAL);
+          console.log('[ISSUE-697-ORCH] ═══════════════════════════════════════════════════════');
+          console.log(`[ISSUE-697-ORCH] ORCHESTRATOR CAP: ${cutOffMemories.length} memories cut by MAX_MEMORIES_FINAL=${MAX_MEMORIES_FINAL}`);
+          console.log('[ISSUE-697-ORCH] Memories that were CUT OFF:');
+          cutOffMemories.slice(0, 5).forEach((mem, idx) => {
+            const originalRank = MAX_MEMORIES_FINAL + idx + 1;
+            const score = (mem.hybrid_score || 0).toFixed(3);
+            const sim = (mem.similarity || 0).toFixed(3);
+            const preview = (mem.content || '').substring(0, 60);
+            console.log(`[ISSUE-697-ORCH]   Was rank #${originalRank}: ID ${mem.id}, Score ${score}, Sim ${sim}`);
+            console.log(`[ISSUE-697-ORCH]     Content: "${preview}"`);
+
+            // Check for special markers
+            const isEntityBoosted = mem.entity_boosted || false;
+            const isKeywordBoosted = mem.keyword_boosted || false;
+            const isExplicitRecall = mem.explicit_recall_boosted || false;
+            if (isEntityBoosted || isKeywordBoosted || isExplicitRecall) {
+              console.log(`[ISSUE-697-ORCH]     ⚠️ BOOSTED MEMORY CUT: entity=${isEntityBoosted}, keyword=${isKeywordBoosted}, explicit=${isExplicitRecall}`);
+            }
+          });
+          console.log('[ISSUE-697-ORCH] ═══════════════════════════════════════════════════════');
         }
 
         // FOUNDER DIAGNOSTIC #579-A5: Log memory injection details

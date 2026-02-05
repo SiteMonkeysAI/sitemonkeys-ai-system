@@ -1,0 +1,51 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #697: [claude-fix] STR1 and NUA1: Retrieval pipeline not surfacing relevant memories
+
+Issue Description:
+## Problem
+STR1: Car fact stored but never recalled (dog and color work)
+NUA1: Two Alexes stored but only one surfaces
+
+Both tests have the data stored. Both fail at retrieval.
+
+## Evidence Needed
+For STR1, trace what happens when user asks "What car do I drive?"
+- Is the Tesla memory in the database?
+- Is it in the candidate set?
+- What is its similarity score?
+- What is its final ranking?
+- Does it make the top 8 cap?
+
+For NUA1, trace what happens when user asks "Tell me about Alex"
+- Are BOTH Alex memories retrieved?
+- What are their scores?
+- Do both make top 8?
+
+## Do NOT
+- Change system prompts
+- Add new validators
+- Increase MAX_MEMORIES_FINAL
+
+## DO
+- Add diagnostic logging to trace exactly where car/Alex memories drop out
+- Find the mathematical reason they don't rank high enough
+- Fix the ranking or boost logic so relevant memories surface
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
