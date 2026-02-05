@@ -5805,9 +5805,12 @@ Mode: ${modeConfig?.display_name || mode}
         return { correctionApplied: false, response };
       }
 
-      // Check if response already infers age (contains numbers 3-18 and "years old" or "age")
-      const ageInferencePattern = /\b([3-9]|1[0-8])\b.*?\b(years?\s+old|age)\b|kindergarten.*?\b([5-6]|five|six)\b/i;
-      if (ageInferencePattern.test(response)) {
+      // Check if response already infers age - simpler approach
+      const hasAgeInfo = response.toLowerCase().includes('years old') || 
+                         response.toLowerCase().includes('age');
+      const hasSchoolLevel = /kindergarten|preschool|first grade/i.test(response);
+
+      if (hasAgeInfo && hasSchoolLevel) {
         console.log(`[AGE-INFERENCE] person="${personName}" inferred=true reason=already_present`);
         return { correctionApplied: false, response };
       }
