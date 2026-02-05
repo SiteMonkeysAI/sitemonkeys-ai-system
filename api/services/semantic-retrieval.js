@@ -519,11 +519,15 @@ function buildPrefilterQuery(options) {
     categories = null,
     includeAllModes = false,
     allowCrossMode = false,
-    limit = RETRIEVAL_CONFIG.maxCandidates
+    limit = RETRIEVAL_CONFIG.maxCandidates,
+    intent = null  // FIX #683: Accept intent for EXPLICIT_RECALL queries
   } = options;
 
   console.log('[MODE-DIAG] Mode from options:', mode);
   console.log('[MODE-DIAG] allowCrossMode:', allowCrossMode);
+  if (intent) {
+    console.log(`[MODE-DIAG] Intent type: ${intent.type}`);
+  }
 
   const params = [userId];
   let paramIndex = 2;
@@ -576,6 +580,17 @@ function buildPrefilterQuery(options) {
     paramIndex++;
   }
 
+  // FIX #683: For EXPLICIT_RECALL queries, include an OR condition to fetch memories with explicit_token anchors
+  // This ensures that memories like "ZEBRA-XXX" are ALWAYS in the candidate set, even if semantic similarity is low
+  let whereClauses = conditions.join(' AND ');
+
+  if (intent && intent.type === 'EXPLICIT_RECALL') {
+    // Add OR condition: also fetch memories that have explicit_token anchors
+    // This uses PostgreSQL's JSONB operators to check if metadata has explicit_token anchors
+    console.log(`[FIX-683] 🎯 EXPLICIT_RECALL intent detected - including memories with explicit_token anchors`);
+    whereClauses = `(${whereClauses}) OR (user_id = $1 AND metadata->'anchors' ? 'explicit_token' AND embedding IS NOT NULL AND embedding_status = 'ready' AND (is_current = true OR is_current IS NULL))`;
+  }
+
   // Build query with ordering by relevance_score (importance), then recency
   // Cast vector type to text for JSON parsing in Node.js
   const sql = `
@@ -593,7 +608,7 @@ function buildPrefilterQuery(options) {
       EXTRACT(EPOCH FROM (NOW() - created_at)) / 86400 as days_ago,
       metadata
     FROM persistent_memories
-    WHERE ${conditions.join(' AND ')}
+    WHERE ${whereClauses}
     ORDER BY relevance_score DESC, created_at DESC
     LIMIT $${paramIndex}
   `;
@@ -945,7 +960,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       categories: effectiveCategories, // Use merged categories
       includeAllModes,
       allowCrossMode,
-      limit: RETRIEVAL_CONFIG.maxCandidates
+      limit: RETRIEVAL_CONFIG.maxCandidates,
+      intent  // FIX #683: Pass intent to ensure explicit_token anchors are included for EXPLICIT_RECALL
     });
 
     const { rows: candidates } = await pool.query(sql, params);
