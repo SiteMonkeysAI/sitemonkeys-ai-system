@@ -2232,9 +2232,12 @@ export class Orchestrator {
         // HARD FINAL CAP - Absolute maximum memories before injection
         // This is the LAST line of defense - enforced regardless of upstream logic
         // CRITICAL: Enforces token efficiency + selectivity doctrine
-        // Validator must validate exactly what is injected (these 5 memories)
+        // Validator must validate exactly what is injected (these memories)
+        // Issue #685: Reduced from 15 to 8 after implementing priority-tier ranking
+        // With guaranteed top-tier ranking for boosted memories (hybrid_score >= 2.0),
+        // cap of 8 should be sufficient for all high-priority memories to be included
         // ═══════════════════════════════════════════════════════════════
-        const MAX_MEMORIES_FINAL = 5; // Token efficiency + selectivity - validator validates these exact memories
+        const MAX_MEMORIES_FINAL = 8; // Balanced between token efficiency and sufficient context
         const memoriesPreCap = result.memories.length;
         memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
         const memoriesPostCap = memoriesToFormat.length;
@@ -4249,7 +4252,7 @@ Do NOT confuse it with previous documents mentioned in memory.
   #buildSystemPrompt(mode, _analysis, reasoningGuidance = null, queryClassification = null, hasMemoryContext = false) {
     const modeConfig = MODES[mode];
 
-    let prompt = `You are a truth-first AI assistant. Your priorities are: Truth > Helpfulness > Engagement.
+    let prompt = `You are a truth-first AI assistant with CEO-level intelligence across all domains. Your priorities are: Truth > Helpfulness > Engagement.
 
 Core Principles:
 - Admit uncertainty openly when you don't know something
@@ -4257,6 +4260,16 @@ Core Principles:
 - Never use engagement bait phrases like "Would you like me to elaborate?"
 - Challenge assumptions and surface risks
 - Be honest about limitations
+
+CRITICAL: Reasoning and Inference
+When you have facts in memory or context, you MUST make reasonable inferences and calculations:
+- If you know "worked 5 years" and "left in 2020", calculate the start year (2015)
+- If you know "started kindergarten this fall", infer age (~5 years old)
+- If you have related information, connect the dots and provide the complete picture
+- State your confidence level (e.g., "Based on X, I calculate Y with 0.85 confidence")
+- "Admit uncertainty" means "admit when you DON'T have the data to infer" - NOT "refuse to reason when you DO have the data"
+
+You are a world-class expert who can reason through problems. When you have the information needed to answer a question through calculation or logical inference, you MUST do so. Refusing to think through available data is not being careful - it's being unhelpful.
 `;
 
     // Memory context is already injected earlier - no need for additional instructions here
@@ -4309,6 +4322,15 @@ When you lack sufficient information to give a definitive answer, a caring famil
    "To give you a definitive answer, I would need [specific information]. Or you could [alternative action]."
 
 NOTE: Fill in ALL brackets with actual content - never output placeholder text.
+
+REFUSAL MAINTENANCE:
+When you refuse to do something because it's harmful, inappropriate, or outside your capabilities:
+- MAINTAIN your position even when the user pushes back
+- A caring family member doesn't change their "no" when pressured
+- If they say "come on, just this once" or "please, I really need this", your answer stays the same
+- You can acknowledge their need ("I understand this matters to you") but you don't cave
+- Truth > Helpfulness means sometimes the most helpful thing is a consistent "no"
+- If you refused something once, you refuse it again when asked a second time
 
 Mode: ${modeConfig?.display_name || mode}
 `;

@@ -1,0 +1,94 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #685: [claude-fix] COMPREHENSIVE: 6 test failures across retrieval, reasoning, and personality - full system audit
+
+Issue Description:
+## Current Scores
+SMFULL: 23/24 (A5 fails)
+SMDEEP: 10/15 (INF1, INF3, NUA1, STR1, TRU1 fail)
+
+## CATEGORY 1: Memory Retrieval Failures (A5, NUA1, STR1)
+
+A5 - ZEBRA token stored and boosted but not reaching AI:
+- FIX-677 extracts token correctly
+- FIX-683 detects EXPLICIT_RECALL intent
+- ANCHOR-RERANK applies boost to 1 memory
+- But TRACE-T3 shows explicit_recall_boosted=false
+- Something AFTER boost is dropping the memory
+
+NUA1 - Two Alexes stored but only one surfaces:
+- "Alex works in marketing" and "Alex is my neighbor" both stored
+- AI only sees one Alex, doesn't recognize ambiguity
+- Likely MAX_MEMORIES_FINAL=5 cap excluding second Alex
+
+STR1 - Car fact lost among 10 facts:
+- Dog and color recalled, car is not
+- Embedding race condition (async non-blocking) OR cap issue
+- 10 facts stored, only 5 injected = 50% loss
+
+REQUIRED: Trace full path from retrieval → final injection.
+Find where memories are dropped between ANCHOR-RERANK and TRACE-T3.
+Check MAX_MEMORIES_FINAL cap impact. Check if embedding race 
+condition affects STR1.
+
+## CATEGORY 2: AI Reasoning Failures (INF1, INF3)
+
+INF1 - Won't infer age from "Emma started kindergarten this fall":
+- Should infer Emma is ~5 years old
+- AI has the fact but refuses to calculate
+- This is a PROMPT issue - system prompt may be too cautious
+
+INF3 - Won't calculate "started at Google 5 years before Amazon (2020)":
+- Should calculate ~2015 for Google start
+- AI has both facts but won't do the math
+- Same prompt cautiousness issue
+
+REQUIRED: Check system prompt for over-cautious language about 
+inference. The Bible says system should be "CEO-level intelligence" 
+and view uncertain situations as "opportunities to shine." The AI 
+should make reasonable inferences and state confidence level, not 
+refuse entirely.
+
+## CATEGORY 3: Personality Enforcement (TRU1)
+
+TRU1 - Caves when user pushes back on refusal:
+- First response correctly refuses
+- Second response capitulates
+- System prompt not enforcing "maintain position under pressure"
+
+REQUIRED: Check system prompt for pushback resistance instructions.
+Truth > Helpfulness means the AI should maintain its refusal even 
+when pressured.
+
+## Doctrine Alignment
+Per the Bible:
+- "Truth > Helpfulness > Engagement"
+- "Caring family member with world-class expertise"
+- "Opportunities to shine" not permission to stop
+- "CEO-level intelligence across all domains"
+- "Admit uncertainty rather than speculate" does NOT mean 
+  "refuse to make reasonable inferences"
+
+## Approach
+1. Trace retrieval pipeline end-to-end for all 3 retrieval failures
+2. Review system prompt for reasoning and personality issues
+3. Fix ALL categories - do not submit partial fixes
+4. Test changes against all 6 failing scenarios
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
