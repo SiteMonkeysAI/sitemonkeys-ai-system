@@ -298,6 +298,21 @@ function applyOrdinalBoost(memories, query) {
 }
 
 // ============================================
+// REGEX SECURITY HELPER
+// ============================================
+
+/**
+ * Escapes special regex characters to prevent Regular Expression Injection
+ * SECURITY: User input must be escaped before using in RegExp constructor
+ * 
+ * @param {string} str - String to escape
+ * @returns {string} Escaped string safe for use in RegExp
+ */
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ============================================
 // ENTITY DETECTION (FIX #577 - NUA1)
 // ============================================
 
@@ -1653,8 +1668,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         const matchedEntities = detectedEntities.filter(entity => {
           // Case-insensitive match for the entity name
           // FIX #691-CMP2: Normalize Unicode for international names (Björn, José, etc.)
+          // SECURITY: Escape regex special characters to prevent RegExp injection
           const normalizeUnicode = (str) => str.normalize('NFC');
-          const entityRegex = new RegExp(`\\b${normalizeUnicode(entity)}\\b`, 'i');
+          const entityRegex = new RegExp(`\\b${escapeRegex(normalizeUnicode(entity))}\\b`, 'i');
           return entityRegex.test(normalizeUnicode(memory.content || ''));
         });
 
@@ -1982,7 +1998,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       detectedEntities.forEach(entity => {
         const normalizeUnicode = (str) => str.normalize('NFC');
         const relatedMemories = filtered.filter(m => {
-          const entityRegex = new RegExp(`\\b${normalizeUnicode(entity)}\\b`, 'i');
+          // SECURITY: Escape regex special characters to prevent RegExp injection
+          const entityRegex = new RegExp(`\\b${escapeRegex(normalizeUnicode(entity))}\\b`, 'i');
           return entityRegex.test(normalizeUnicode(m.content || ''));
         });
         if (relatedMemories.length > 0) {
@@ -1994,7 +2011,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       // FIX #691-INF3: Group temporal facts about same organization
       organizations.forEach(org => {
         const temporalMemories = filtered.filter(m => {
-          const orgRegex = new RegExp(`\\b${org}\\b`, 'i');
+          // SECURITY: Escape regex special characters to prevent RegExp injection
+          const orgRegex = new RegExp(`\\b${escapeRegex(org)}\\b`, 'i');
           const hasTemporal = /\b(\d+\s+years?|worked|left|started|joined|\d{4})\b/i.test(m.content || '');
           return orgRegex.test(m.content || '') && hasTemporal;
         });
