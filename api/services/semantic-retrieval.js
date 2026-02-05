@@ -86,8 +86,11 @@ const SAFETY_CRITICAL_DOMAINS = {
  * Detect if query involves safety-critical domains and return categories that MUST be checked
  * This is Stage 1 deterministic detection (zero tokens)
  *
+ * FIX #688: Now returns both categories AND whether query is safety-critical
+ * This allows conditional safety boost (only when query warrants it)
+ *
  * @param {string} query - User query text
- * @returns {string[]} Array of safety-critical category names to inject
+ * @returns {{categories: string[], isSafetyCritical: boolean}} Object with categories and flag
  */
 function detectSafetyCriticalCategories(query) {
   const safetyCat = new Set();
@@ -101,7 +104,12 @@ function detectSafetyCriticalCategories(query) {
     }
   }
 
-  return [...safetyCat];
+  const isSafetyCritical = safetyCat.size > 0;
+
+  return {
+    categories: [...safetyCat],
+    isSafetyCritical
+  };
 }
 
 /**
@@ -909,8 +917,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
   }
 
   try {
-    // STEP 0: Detect safety-critical domain intersections (Issue #511)
-    const safetyCriticalCategories = detectSafetyCriticalCategories(query);
+    // STEP 0: Detect safety-critical domain intersections (Issue #511, FIX #688)
+    const safetyCriticalDetection = detectSafetyCriticalCategories(query);
+    const { categories: safetyCriticalCategories, isSafetyCritical } = safetyCriticalDetection;
 
     // STEP 0.25: Merge safety-critical categories with requested categories
     // IMPORTANT: When categories=null (search all), keep it null to search all categories
@@ -1509,9 +1518,16 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       telemetry.recent_unembedded_included = recentScoredMemories.length;
     }
 
-    // CRITICAL FIX #511: Apply safety-critical boost BEFORE hybrid scoring
-    // This ensures allergies and critical health info rise to the top
-    const safetyBoosted = applySafetyCriticalBoost(allScored);
+    // CRITICAL FIX #511, ENHANCED #688: Apply safety-critical boost ONLY when query is safety-critical
+    // This prevents safety memories from crowding out task-relevant memories on unrelated queries
+    // Safety boost still ensures allergies rise to top when query involves food/dining/activities
+    const safetyBoosted = isSafetyCritical
+      ? applySafetyCriticalBoost(allScored)
+      : allScored;  // No boost if query isn't safety-critical
+
+    if (!isSafetyCritical && allScored.some(m => m.category_name === 'health_wellness')) {
+      console.log(`[SAFETY-BOOST-SKIP] ⏭️ Query not safety-critical - skipping safety boost for ${allScored.filter(m => m.category_name === 'health_wellness').length} health_wellness memories`);
+    }
 
     // FIX #555-T3: Apply ordinal-aware boost for queries like "first code" vs "second code"
     // When query contains ordinal indicators, boost memories with matching ordinals
@@ -2173,10 +2189,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     telemetry.total_ms = Date.now() - startTime;
     telemetry.latency_ms = Date.now() - startTime;
 
-    // Add safety-critical telemetry (Issue #511)
-    telemetry.safety_critical_detected = safetyCriticalCategories.length > 0;
+    // Add safety-critical telemetry (Issue #511, FIX #688)
+    telemetry.safety_critical_detected = isSafetyCritical;
     telemetry.safety_categories_injected = safetyCriticalCategories;
     telemetry.safety_memories_boosted = results.filter(r => r.safety_boosted).length;
+    telemetry.safety_boost_applied = isSafetyCritical;  // FIX #688: Track whether boost was applied
 
     // INNOVATION #7: Track semantic access to update importance scores
     // High-importance memories are those frequently semantically relevant to queries
