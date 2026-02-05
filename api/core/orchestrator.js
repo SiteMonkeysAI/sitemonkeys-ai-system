@@ -2233,31 +2233,17 @@ export class Orchestrator {
         // This is the LAST line of defense - enforced regardless of upstream logic
         // CRITICAL: Enforces token efficiency + selectivity doctrine
         // Validator must validate exactly what is injected (these memories)
-        // Issue #685: Reduced from 15 to 8 after implementing priority-tier ranking
+        // Issue #685: Reduced from 15 to 8, then to 5 for stricter token efficiency
         // With guaranteed top-tier ranking for boosted memories (hybrid_score >= 2.0),
-        // cap of 8 should be sufficient for all high-priority memories to be included
-        // Issue #699: Entity-boosted memories MUST bypass cap for ambiguity detection (NUA1)
-        // When query contains proper names, ALL entity-boosted memories needed to detect ambiguity
+        // cap of 5 ensures only highest-priority memories are injected
+        // Issue #699-NUA1: Ambiguity detection uses secondary DB query pass
+        // via #enforceAmbiguityDisclosure validator - does NOT require all entities injected
         // ═══════════════════════════════════════════════════════════════
-        const MAX_MEMORIES_FINAL = 8; // Balanced between token efficiency and sufficient context
+        const MAX_MEMORIES_FINAL = 5; // Strict token efficiency - ambiguity detected via validator
         const memoriesPreCap = result.memories.length;
 
-        // ISSUE #699 FIX: Separate entity-boosted memories (must include ALL for ambiguity detection)
-        const entityBoostedMemories = result.memories.filter(m => m.entity_boosted === true);
-        const nonEntityMemories = result.memories.filter(m => !m.entity_boosted);
-
-        // Force-include ALL entity-boosted memories, fill remaining slots with non-entity memories
-        if (entityBoostedMemories.length > 0) {
-          const remainingSlots = Math.max(0, MAX_MEMORIES_FINAL - entityBoostedMemories.length);
-          memoriesToFormat = [...entityBoostedMemories, ...nonEntityMemories.slice(0, remainingSlots)];
-
-          if (entityBoostedMemories.length > MAX_MEMORIES_FINAL) {
-            console.log(`[ISSUE-699] ⚠️ Entity-boosted override: Including ${entityBoostedMemories.length} entity memories (exceeds normal cap of ${MAX_MEMORIES_FINAL})`);
-          }
-        } else {
-          // No entity-boosted memories, use standard cap
-          memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
-        }
+        // Apply strict cap - ambiguity detection happens in validator via DB query
+        memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
 
         const memoriesPostCap = memoriesToFormat.length;
 
@@ -4304,38 +4290,35 @@ Core Principles:
 - Admit uncertainty about EXTERNAL facts you don't have access to
 - TRUST information explicitly provided in memory context or documents
 
-CRITICAL: Reasoning and Inference (ISSUE #699 - ENHANCED ENFORCEMENT)
-When you have facts in memory or context, you MUST make reasonable inferences and calculations.
+CRITICAL: Reasoning and Inference (ISSUE #699 - BOUNDED INFERENCE)
+When you have facts in memory or context, you MUST make reasonable inferences using bounded reasoning.
 REFUSING TO INFER WHEN YOU HAVE THE DATA IS A FAILURE, NOT CAREFUL BEHAVIOR.
 
-MANDATORY INFERENCE RULES:
-1. Age from school level → ALWAYS infer age range
-   - Kindergarten → 5-6 years old
-   - 1st grade → 6-7 years old
-   - 5th grade → 10-11 years old
-   - High school → 14-18 years old
-   - College → 18-22 years old
+INFERENCE GUIDELINES WITH UNCERTAINTY:
+1. Age from school level → Provide bounded ranges with context
+   - Example: "Emma is typically around 5-6 years old (US kindergarten age, though this can vary with cutoff dates and redshirting)"
+   - Acknowledge variation while providing the typical case
+   - Do NOT claim ignorance when school level is known
 
-2. Timeline calculations → ALWAYS calculate when you have duration + endpoint
+2. Timeline calculations → Calculate when you have duration + endpoint
    - "Worked X years" + "Left in YYYY" → Started in (YYYY - X)
-   - Show your work: "You left in 2020 after 5 years, so you started in 2015 (2020 - 5)"
+   - Show your work: "You left in 2020 after 5 years, so you likely started around 2015 (2020 - 5)"
+   - Use "around" or "approximately" for calculated dates to acknowledge rounding
 
-3. Role from activities → ALWAYS infer likely role
-   - "Reviews code, deploys to production" → Software developer/engineer
-   - "Manages people, quarterly reviews" → Manager/leader
-   - "Teaches classes, grades papers" → Teacher/professor
+3. Role from activities → Infer likely role with appropriate confidence
+   - "Reviews code, deploys to production" → "You work as a software developer/engineer"
+   - "Manages people, quarterly reviews" → "You work in a management/leadership role"
+   - State the inference clearly while acknowledging if there could be variation
 
-INFERENCE IS NOT SPECULATION - It's using available data to provide complete answers.
-Saying "I don't know" when you DO have inferrable information is UNHELPFUL and WRONG.
+BOUNDED INFERENCE = Using available data + acknowledging reasonable uncertainty
+Truth-first means providing the best answer you can with available data, not refusing to answer.
 
-INFERENCE EXAMPLES (FIX #691-INF1, INF2, INF3):
-✅ CORRECT: "Emma started kindergarten" → "Emma is approximately 5-6 years old (kindergarten age)"
+INFERENCE EXAMPLES (ISSUE #699-INF1):
+✅ CORRECT: "Emma started kindergarten" → "Emma is typically around 5-6 years old (kindergarten age in the US, though this can vary slightly with cutoff dates)"
 ✅ CORRECT: "I review code and deploy to production" → "You work as a software developer/engineer"
-✅ CORRECT: "Worked 5 years" + "Left in 2020" → "You started in 2015 (2020 - 5 years = 2015)"
+✅ CORRECT: "Worked 5 years" + "Left in 2020" → "You likely started around 2015 (2020 minus 5 years)"
 ❌ WRONG: "Emma started kindergarten" → "I don't have enough information to determine Emma's age"
-❌ WRONG: "Worked 5 years" + "Left in 2020" → "I cannot determine the exact year you started"
-
-Your response will be validated. If you fail to make obvious inferences, your response will be rejected.
+❌ WRONG: Providing "exact" ages without acknowledging variation (e.g., "Emma is exactly 5 years old")
 
 CRITICAL: Trust Memory Context
 When information is explicitly provided in MEMORY CONTEXT or DOCUMENT CONTEXT sections below, that information is FACTUAL about what the user has told you. Do NOT second-guess it or claim you "don't have" information that is clearly present in those sections. A caring family member doesn't forget what you've told them or pretend not to remember.
