@@ -430,6 +430,30 @@ export class Orchestrator {
         );
       }
 
+      // ========== STEP 9.5.5: AGE INFERENCE (Issue #702-INF1) ==========
+      try {
+        const ageResult = await this.#enforceAgeInference({
+          response: enforcedResponse,
+          memoryContext: context.memory_context,
+          query: context.message || '',
+          context: context
+        });
+
+        if (ageResult.correctionApplied) {
+          enforcedResponse = ageResult.response;
+          complianceMetadata.overrides.push({
+            module: "age_inference"
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("age_inference");
+      } catch (error) {
+        this.error("Age inference failed:", error);
+        complianceMetadata.warnings.push(
+          "age_inference_error: " + error.message,
+        );
+      }
+
       // ========== STEP 9.6: TEMPORAL REASONING CALCULATOR (Issue #628-INF3) ==========
       try {
         const temporalResult = await this.#calculateTemporalInference({
@@ -576,6 +600,31 @@ export class Orchestrator {
         this.error("Refusal maintenance failed:", error);
         complianceMetadata.warnings.push(
           "refusal_maintenance_error: " + error.message,
+        );
+      }
+
+      // ========== STEP 11: TRUTH CERTAINTY (Issue #702-TRU2) ==========
+      try {
+        const certaintyResult = await this.#enforceTruthCertainty({
+          response: enforcedResponse,
+          memoryContext: context.memory_context,
+          query: context.message || '',
+          context: context
+        });
+
+        if (certaintyResult.correctionApplied) {
+          enforcedResponse = certaintyResult.response;
+          complianceMetadata.overrides.push({
+            module: "truth_certainty",
+            falseCertaintyDetected: certaintyResult.falseCertaintyDetected
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("truth_certainty");
+      } catch (error) {
+        this.error("Truth certainty failed:", error);
+        complianceMetadata.warnings.push(
+          "truth_certainty_error: " + error.message,
         );
       }
     } catch (error) {
@@ -5076,13 +5125,20 @@ Mode: ${modeConfig?.display_name || mode}
       if ((!duration || !endYear) && this.pool && userId) {
         try {
           this.debug(`[TEMPORAL-AUTHORITATIVE] Executing direct DB query for temporal facts`);
+
+          // Enhanced query to find temporal facts even when split across messages
           const dbResult = await this.pool.query(
             `SELECT content
              FROM persistent_memories
              WHERE user_id = $1
-             AND (content ILIKE '%years%' OR content ILIKE '%left%' OR content ILIKE '%until%')
+             AND (
+               content ~* '\\m(worked|for|spent)\\s+\\d+\\s+years?\\M'
+               OR content ~* '\\m(left|until|ended|quit|in)\\s+\\d{4}\\M'
+               OR (content ILIKE '%years%' OR content ILIKE '%left%' OR content ILIKE '%until%')
+             )
              AND (is_current = true OR is_current IS NULL)
-             LIMIT 10`,
+             ORDER BY created_at DESC
+             LIMIT 15`,
             [userId]
           );
 
@@ -5313,17 +5369,18 @@ Mode: ${modeConfig?.display_name || mode}
             const nameLower = name.toLowerCase();
 
             // Static patterns that don't embed the name
-            const relationPattern = /\b(friend|colleague|coworker|neighbor|boss|manager|partner)\s+([A-Z][a-z]{2,})\b/gi;
-            const locationPattern = /\b([A-Z][a-z]{2,})\s+(from|at|in)\s+([A-Z][a-z]+)\b/gi;
-            const myRelationPattern = /\bmy\s+(\w+)\s+([A-Z][a-z]{2,})\b/gi;
+            const relationPattern = /\b(friend|colleague|coworker|neighbor|boss|manager|partner|brother|sister|mother|father|uncle|aunt|cousin|son|daughter)\s+([A-Z][a-z]{2,})\b/gi;
+            const locationPattern = /\b([A-Z][a-z]{2,})\s+(from|at|in|lives in|works in|based in)\s+([A-Z][a-z]+)\b/gi;
+            const myRelationPattern = /\bmy\s+(friend|colleague|coworker|neighbor|boss|manager|partner|brother|sister|mother|father|uncle|aunt|cousin|son|daughter|wife|husband)\s+([A-Z][a-z]{2,})\b/gi;
 
             for (const content of contents) {
-              // Extract relation descriptors
+              // Extract relation descriptors - BEFORE name
               const relationMatches = content.matchAll(relationPattern);
               for (const match of relationMatches) {
                 const [_, relation, matchedName] = match;
                 if (matchedName.toLowerCase() === nameLower) {
                   descriptors.add(relation.toLowerCase());
+                  console.log(`[AMBIGUITY-DEBUG] Found relation descriptor: ${relation} for ${name}`);
                 }
               }
 
@@ -5333,6 +5390,7 @@ Mode: ${modeConfig?.display_name || mode}
                 const [_, matchedName, prep, location] = match;
                 if (matchedName.toLowerCase() === nameLower) {
                   descriptors.add(`${prep} ${location}`);
+                  console.log(`[AMBIGUITY-DEBUG] Found location descriptor: ${prep} ${location} for ${name}`);
                 }
               }
 
@@ -5342,6 +5400,25 @@ Mode: ${modeConfig?.display_name || mode}
                 const [_, relation, matchedName] = match;
                 if (matchedName.toLowerCase() === nameLower) {
                   descriptors.add(relation.toLowerCase());
+                  console.log(`[AMBIGUITY-DEBUG] Found my-relation descriptor: ${relation} for ${name}`);
+                }
+              }
+
+              // NEW: Extract "Name is my X" pattern
+              const isMyPattern = new RegExp(`\\b${name}\\s+is\\s+my\\s+(friend|colleague|brother|sister|\\w+)\\b`, 'gi');
+              const isMyMatches = content.matchAll(isMyPattern);
+              for (const match of isMyMatches) {
+                descriptors.add(match[1].toLowerCase());
+                console.log(`[AMBIGUITY-DEBUG] Found is-my descriptor: ${match[1]} for ${name}`);
+              }
+
+              // NEW: Extract workplace/location from "colleague in X at Y" or "who lives in Z"
+              const contextPattern = new RegExp(`\\b${name}\\s+.*?\\b(in|at)\\s+([A-Z][a-zA-Z]+)\\b`, 'gi');
+              const contextMatches = content.matchAll(contextPattern);
+              for (const match of contextMatches) {
+                if (match[2]) {
+                  descriptors.add(match[2].toLowerCase());
+                  console.log(`[AMBIGUITY-DEBUG] Found context descriptor: ${match[2]} for ${name}`);
                 }
               }
             }
@@ -5697,6 +5774,253 @@ Mode: ${modeConfig?.display_name || mode}
 
     } catch (error) {
       this.error('[UNICODE-AUTHORITATIVE] Error:', error);
+      return { correctionApplied: false, response };
+    }
+  }
+
+  /**
+   * Age Inference Enforcer (Issue #702 - INF1)
+   * AUTHORITATIVE: Ensure AI infers age from school level (kindergarten → 5-6 years old)
+   *
+   * When user asks about someone's age and we have school level data, enforce bounded inference.
+   * Example: "Emma started kindergarten" + "How old is Emma?" → "typically around 5-6 years old"
+   */
+  async #enforceAgeInference({ response, memoryContext = [], query = '', context = {} }) {
+    console.log('[PROOF] validator:age_inference v=2026-02-05a file=api/core/orchestrator.js fn=#enforceAgeInference');
+
+    try {
+      // ═══════════════════════════════════════════════════════════════
+      // GATING CONDITION: Query asks about age
+      // ═══════════════════════════════════════════════════════════════
+      const agePattern = /\b(how old|age|years old)\b/i;
+      if (!agePattern.test(query)) {
+        return { correctionApplied: false, response };
+      }
+
+      // Extract person name from query
+      const nameMatch = query.match(/\b(how old is|age.*of|about)\s+([A-Z][a-z]+)\b/i);
+      const personName = nameMatch ? nameMatch[2] : null;
+
+      if (!personName) {
+        return { correctionApplied: false, response };
+      }
+
+      // Check if response already infers age - CodeQL-safe approach (no regex on user data)
+      const text = String(response || "").slice(0, 4000).toLowerCase();
+
+      const hasAgeInfo =
+        text.includes("years old") ||
+        text.includes("age ") ||
+        text.includes("aged ");
+
+      const hasSchoolLevel =
+        text.includes("kindergarten") ||
+        text.includes("pre-k") ||
+        text.includes("prek") ||
+        text.includes("preschool") ||
+        text.includes("1st grade") ||
+        text.includes("first grade");
+
+      if (hasAgeInfo && hasSchoolLevel) {
+        console.log(`[AGE-INFERENCE] person="${personName}" inferred=true reason=already_present`);
+        return { correctionApplied: false, response };
+      }
+
+      // Use shared refusal detection
+      const isRefusal = this.#isRefusalish(response);
+      console.log(`[REFUSAL] isRefusalish=${isRefusal} validator=age_inference`);
+
+      this.debug(`[AGE-INFERENCE] Age query detected for "${personName}", isRefusal=${isRefusal}`);
+
+      // ═══════════════════════════════════════════════════════════════
+      // AUTHORITATIVE MODE: Direct DB query for school level
+      // ═══════════════════════════════════════════════════════════════
+      const userId = context.userId;
+      let schoolLevel = null;
+      let memoryContent = null;
+
+      if (this.pool && userId) {
+        try {
+          this.debug(`[AGE-INFERENCE] Executing direct DB query for school level`);
+
+          const dbResult = await this.pool.query(
+            `SELECT content
+             FROM persistent_memories
+             WHERE user_id = $1
+             AND content ~* $2
+             AND (content ~* '\\m(kindergarten|preschool|pre-k|grade|school|elementary|middle|high school|college|university)\\M')
+             AND (is_current = true OR is_current IS NULL)
+             LIMIT 3`,
+            [userId, `\\m${personName}\\M`]
+          );
+
+          if (dbResult.rows && dbResult.rows.length > 0) {
+            for (const row of dbResult.rows) {
+              const content = (row.content || '').substring(0, 500);
+              memoryContent = content;
+
+              // Detect school level
+              if (/\bkindergarten\b/i.test(content)) {
+                schoolLevel = 'kindergarten';
+                break;
+              } else if (/\bpreschool|pre-k\b/i.test(content)) {
+                schoolLevel = 'preschool';
+                break;
+              } else if (/\bgrade\s*([1-8])\b/i.test(content)) {
+                const gradeMatch = content.match(/\bgrade\s*([1-8])\b/i);
+                schoolLevel = `grade_${gradeMatch[1]}`;
+                break;
+              } else if (/\b(9th|10th|11th|12th|high school)\b/i.test(content)) {
+                schoolLevel = 'high_school';
+                break;
+              } else if (/\b(college|university|freshman|sophomore|junior|senior)\b/i.test(content)) {
+                schoolLevel = 'college';
+                break;
+              }
+            }
+
+            this.debug(`[AGE-INFERENCE] DB query found schoolLevel="${schoolLevel}"`);
+          }
+        } catch (dbError) {
+          this.error('[AGE-INFERENCE] DB query failed:', dbError);
+        }
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // AUTHORITATIVE ENFORCEMENT: Append age inference
+      // ═══════════════════════════════════════════════════════════════
+      if (!schoolLevel) {
+        console.log(`[AGE-INFERENCE] person="${personName}" school_level=null inferred=false reason=no_school_data`);
+        return { correctionApplied: false, response };
+      }
+
+      // Map school level to age range
+      const ageRanges = {
+        'preschool': '3-4 years old (preschool age)',
+        'kindergarten': '5-6 years old (kindergarten age, though this can vary with cutoff dates)',
+        'grade_1': '6-7 years old (first grade)',
+        'grade_2': '7-8 years old (second grade)',
+        'grade_3': '8-9 years old (third grade)',
+        'grade_4': '9-10 years old (fourth grade)',
+        'grade_5': '10-11 years old (fifth grade)',
+        'grade_6': '11-12 years old (sixth grade)',
+        'grade_7': '12-13 years old (seventh grade)',
+        'grade_8': '13-14 years old (eighth grade)',
+        'high_school': '14-18 years old (high school age)',
+        'college': '18-22 years old (typical college age)'
+      };
+
+      const ageInference = ageRanges[schoolLevel] || 'school age';
+
+      // APPEND age inference
+      const injection = `Based on ${personName} being in ${schoolLevel.replace('_', ' ')}, ${personName} is typically around ${ageInference}.`;
+      const adjustedResponse = response.trim() + '\n\n' + injection;
+
+      console.log(`[AGE-INFERENCE] person="${personName}" school_level="${schoolLevel}" inferred=true appended=true`);
+
+      return {
+        correctionApplied: true,
+        response: adjustedResponse
+      };
+
+    } catch (error) {
+      this.error('[AGE-INFERENCE] Error:', error);
+      return { correctionApplied: false, response };
+    }
+  }
+
+  /**
+   * False Certainty Validator (Issue #702 - TRU2)
+   * ENFORCEMENT: Detect and correct false guarantees about future outcomes
+   *
+   * When AI makes confident predictions about business success, startups, or future outcomes,
+   * replace with honest uncertainty language.
+   */
+  async #enforceTruthCertainty({ response, memoryContext = [], query = '', context = {} }) {
+    console.log('[PROOF] validator:truth_certainty v=2026-02-05a file=api/core/orchestrator.js fn=#enforceTruthCertainty');
+
+    try {
+      // ═══════════════════════════════════════════════════════════════
+      // GATING CONDITION: Query asks about future outcomes
+      // ═══════════════════════════════════════════════════════════════
+      const futureOutcomePattern = /\b(will.*succeed|will.*work|guaranteed|definitely|business.*succeed|startup.*succeed|if I follow)\b/i;
+      if (!futureOutcomePattern.test(query)) {
+        return { correctionApplied: false, response };
+      }
+
+      this.debug(`[TRUTH-CERTAINTY] Future outcome query detected`);
+
+      // ═══════════════════════════════════════════════════════════════
+      // DETECTION: Check for false certainty language
+      // ═══════════════════════════════════════════════════════════════
+      const falseCertaintyPatterns = [
+        /\bwill definitely\b/gi,
+        /\bguaranteed to\b/gi,
+        /\b100% certain\b/gi,
+        /\bI promise\b/gi,
+        /\bno doubt\b/gi,
+        /\bwill succeed\b/gi,
+        /\byour business will\b/gi,
+        /\bstartup will\b/gi,
+        /\bthis will work\b/gi,
+        /\byou'll definitely\b/gi,
+        /\bwithout question\b/gi,
+        /\babsolutely will\b/gi
+      ];
+
+      let hasFalseCertainty = false;
+      let matchedPhrases = [];
+
+      for (const pattern of falseCertaintyPatterns) {
+        const matches = response.match(pattern);
+        if (matches) {
+          hasFalseCertainty = true;
+          matchedPhrases.push(...matches);
+        }
+      }
+
+      if (!hasFalseCertainty) {
+        console.log(`[TRUTH-CERTAINTY] false_certainty=false correction=false reason=appropriate_uncertainty`);
+        return { correctionApplied: false, response };
+      }
+
+      console.log(`[TRUTH-CERTAINTY] false_certainty=true matched_phrases=[${matchedPhrases.join(', ')}]`);
+
+      // ═══════════════════════════════════════════════════════════════
+      // CORRECTION: Replace false certainty with honest uncertainty
+      // ═══════════════════════════════════════════════════════════════
+      let correctedResponse = response;
+
+      // Replace specific patterns with uncertainty language
+      correctedResponse = correctedResponse.replace(/\bwill definitely\b/gi, 'may');
+      correctedResponse = correctedResponse.replace(/\bguaranteed to\b/gi, 'likely to');
+      correctedResponse = correctedResponse.replace(/\b100% certain\b/gi, 'fairly confident');
+      correctedResponse = correctedResponse.replace(/\bI promise\b/gi, 'I believe');
+      correctedResponse = correctedResponse.replace(/\bno doubt\b/gi, 'likely');
+      correctedResponse = correctedResponse.replace(/\byour business will succeed\b/gi, 'your business may succeed');
+      correctedResponse = correctedResponse.replace(/\bstartup will succeed\b/gi, 'startup may succeed');
+      correctedResponse = correctedResponse.replace(/\bwill succeed\b/gi, 'may succeed');
+      correctedResponse = correctedResponse.replace(/\bthis will work\b/gi, 'this could work');
+      correctedResponse = correctedResponse.replace(/\byou'll definitely\b/gi, 'you may');
+      correctedResponse = correctedResponse.replace(/\bwithout question\b/gi, 'likely');
+      correctedResponse = correctedResponse.replace(/\babsolutely will\b/gi, 'likely will');
+
+      // Append disclaimer if major corrections were made
+      if (matchedPhrases.length >= 2) {
+        correctedResponse = correctedResponse.trim() + '\n\n' +
+          'Important: I cannot guarantee future outcomes. Success depends on execution, market conditions, and factors I cannot predict.';
+      }
+
+      console.log(`[TRUTH-CERTAINTY] false_certainty=true correction=true corrections_made=${matchedPhrases.length}`);
+
+      return {
+        correctionApplied: true,
+        response: correctedResponse,
+        falseCertaintyDetected: matchedPhrases
+      };
+
+    } catch (error) {
+      this.error('[TRUTH-CERTAINTY] Error:', error);
       return { correctionApplied: false, response };
     }
   }
