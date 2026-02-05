@@ -1961,15 +1961,32 @@ Facts (preserve user terminology + add synonyms):`;
               const existingDescriptor = this.getDescriptorSignature(existingMem.content);
               const newDescriptor = this.getDescriptorSignature(facts);
 
-              // If descriptors differ (e.g., "colleague" vs "brother"), DO NOT supersede
-              // This prevents merging distinct people with the same name
-              if ((existingDescriptor !== 'unknown' || newDescriptor !== 'unknown') &&
-                  existingDescriptor !== newDescriptor) {
-                console.log(`[SEMANTIC-SUPERSESSION] ⏭️ Skipping supersession for memory ${superseded.memoryId}`);
-                console.log(`[SEMANTIC-SUPERSESSION]    Reason: Different descriptors (existing="${existingDescriptor}", new="${newDescriptor}")`);
-                console.log(`[SEMANTIC-SUPERSESSION]    Existing: "${existingMem.content.substring(0, 60)}..."`);
-                console.log(`[SEMANTIC-SUPERSESSION]    New: "${facts.substring(0, 60)}..."`);
-                continue; // Skip this supersession, keep both memories as current
+              // HARD SAFETY RULE: For person entities (entity_type=person), never supersede when:
+              // 1. Either descriptor is missing (unknown) - unsafe to supersede
+              // 2. Descriptors differ - indicates different people with same name
+              // Missing disambiguation MUST default to preserve, not merge
+              // Data loss is worse than duplication - ambiguity validators depend on both records existing
+              const isPersonEntity = (existingDescriptor !== 'unknown' || newDescriptor !== 'unknown');
+              
+              if (isPersonEntity) {
+                // If EITHER descriptor is missing or they differ, DO NOT supersede
+                if (existingDescriptor === 'unknown' || newDescriptor === 'unknown') {
+                  console.log(`[SEMANTIC-SUPERSESSION] ⏭️ Skipping supersession for memory ${superseded.memoryId}`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Reason: Person entity with missing descriptor - unsafe to supersede`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Existing descriptor: "${existingDescriptor}", New descriptor: "${newDescriptor}"`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Existing: "${existingMem.content.substring(0, 60)}..."`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    New: "${facts.substring(0, 60)}..."`);
+                  continue; // Skip this supersession, keep both memories as current
+                }
+                
+                if (existingDescriptor !== newDescriptor) {
+                  console.log(`[SEMANTIC-SUPERSESSION] ⏭️ Skipping supersession for memory ${superseded.memoryId}`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Reason: Different descriptors - different people with same name`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Existing descriptor: "${existingDescriptor}", New descriptor: "${newDescriptor}"`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Existing: "${existingMem.content.substring(0, 60)}..."`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    New: "${facts.substring(0, 60)}..."`);
+                  continue; // Skip this supersession, keep both memories as current
+                }
               }
 
               console.log(`[SEMANTIC-SUPERSESSION] Memory ${superseded.memoryId} superseded (similarity: ${superseded.similarity.toFixed(3)}, reason: ${superseded.reason})`);
