@@ -1952,23 +1952,56 @@ Facts (preserve user terminology + add synonyms):`;
 
           if (supersessionResult.supersedes && supersessionResult.supersedes.length > 0) {
             // Semantic supersession detected - mark old memories as superseded
+            // FIX #707: Check descriptor signatures to prevent merging distinct people with same name
             for (const superseded of supersessionResult.supersedes) {
-              console.log(`[SEMANTIC-SUPERSESSION] Memory ${superseded.memoryId} superseded (similarity: ${superseded.similarity.toFixed(3)}, reason: ${superseded.reason})`);
-              
-              // Also check for temporal reconciliation
               const existingMem = existingMemories.rows.find(m => m.id === superseded.memoryId);
-              if (existingMem) {
-                const temporalResult = await semanticAnalyzer.analyzeTemporalReconciliation(
-                  facts,
-                  existingMem.content,
-                  superseded.similarity
-                );
+              if (!existingMem) continue;
 
-                if (temporalResult.shouldSupersede) {
-                  console.log(`[SEMANTIC-TEMPORAL] ${temporalResult.explanation}`);
+              // FIX #707: Extract descriptors for both memories
+              const existingDescriptor = this.getDescriptorSignature(existingMem.content);
+              const newDescriptor = this.getDescriptorSignature(facts);
+
+              // HARD SAFETY RULE: For person entities (entity_type=person), never supersede when:
+              // 1. Either descriptor is missing (unknown) - unsafe to supersede
+              // 2. Descriptors differ - indicates different people with same name
+              // Missing disambiguation MUST default to preserve, not merge
+              // Data loss is worse than duplication - ambiguity validators depend on both records existing
+              const isPersonEntity = (existingDescriptor !== 'unknown' || newDescriptor !== 'unknown');
+              
+              if (isPersonEntity) {
+                // If EITHER descriptor is missing or they differ, DO NOT supersede
+                if (existingDescriptor === 'unknown' || newDescriptor === 'unknown') {
+                  console.log(`[SEMANTIC-SUPERSESSION] ⏭️ Skipping supersession for memory ${superseded.memoryId}`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Reason: Person entity with missing descriptor - unsafe to supersede`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Existing descriptor: "${existingDescriptor}", New descriptor: "${newDescriptor}"`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Existing: "${existingMem.content.substring(0, 60)}..."`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    New: "${facts.substring(0, 60)}..."`);
+                  continue; // Skip this supersession, keep both memories as current
+                }
+                
+                if (existingDescriptor !== newDescriptor) {
+                  console.log(`[SEMANTIC-SUPERSESSION] ⏭️ Skipping supersession for memory ${superseded.memoryId}`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Reason: Different descriptors - different people with same name`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Existing descriptor: "${existingDescriptor}", New descriptor: "${newDescriptor}"`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    Existing: "${existingMem.content.substring(0, 60)}..."`);
+                  console.log(`[SEMANTIC-SUPERSESSION]    New: "${facts.substring(0, 60)}..."`);
+                  continue; // Skip this supersession, keep both memories as current
                 }
               }
-              
+
+              console.log(`[SEMANTIC-SUPERSESSION] Memory ${superseded.memoryId} superseded (similarity: ${superseded.similarity.toFixed(3)}, reason: ${superseded.reason})`);
+
+              // Also check for temporal reconciliation
+              const temporalResult = await semanticAnalyzer.analyzeTemporalReconciliation(
+                facts,
+                existingMem.content,
+                superseded.similarity
+              );
+
+              if (temporalResult.shouldSupersede) {
+                console.log(`[SEMANTIC-TEMPORAL] ${temporalResult.explanation}`);
+              }
+
               await this.db.query(`
                 UPDATE persistent_memories
                 SET is_current = false,

@@ -862,8 +862,16 @@ EXAMPLES OF DUPLICATES (answer "no"):
 - OLD: "I have a dog" / NEW: "I have a dog named Max" → no (additional info, not update)
 - OLD: "I like pizza" / NEW: "I also like pasta" → no (different topic)
 
-Answer ONLY "yes" if NEW updates/changes a value in OLD for the SAME ATTRIBUTE.
-Answer "no" if they're duplicates, additional info, or different topics.
+CRITICAL - DISTINCT PEOPLE WITH SAME NAME (answer "no"):
+- OLD: "Colleague: Alex, marketing" / NEW: "Friend: Alex, doctor" → no (different people, same name)
+- OLD: "Brother: Alex, Seattle" / NEW: "Colleague: Alex, marketing" → no (different people, same name)
+- OLD: "My friend John works at Google" / NEW: "My brother John is a teacher" → no (different people, same name)
+- OLD: "Neighbor Sarah has a cat" / NEW: "My sister Sarah lives in Boston" → no (different people, same name)
+
+If the statements refer to DIFFERENT PEOPLE with the same name (different relationships like friend vs colleague, brother vs neighbor), answer "no".
+
+Answer ONLY "yes" if NEW updates/changes a value in OLD for the SAME ATTRIBUTE and SAME ENTITY.
+Answer "no" if they're duplicates, additional info, different topics, OR different people with the same name.
 
 Answer (yes/no):`;
 
