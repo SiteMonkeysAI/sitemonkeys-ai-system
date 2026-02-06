@@ -1,0 +1,115 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #726: [claude-fix] [INVESTIGATION] Comprehensive trace of 5 failing SMDEEP tests - DO NOT FIX YET
+
+Issue Description:
+Purpose
+This is an investigation-only issue. Do not make any code changes. Your task is to trace through the entire codebase and document every location where each failure could originate. Report your findings as comments on this issue before any fix is attempted.
+
+The Failures
+From SMDEEP 10/15 run:
+
+INF1 - Implicit Inference (Role)
+
+User says: "My daughter Emma just started kindergarten"
+Later asks: "What's my relationship to Emma?"
+System correctly infers age (~5-6) but fails to infer role (daughter)
+Extraction shows: "Education: started kindergarten (school enrollment fall)". - "daughter" is missing
+
+
+INF3 - Temporal Reasoning
+
+User provides: graduated MIT 2010, worked Google 5 years, then joined Amazon
+Asks: "What year did I likely start at Amazon?"
+Expected: ~2015
+System has all facts but doesn't calculate the timeline
+Memory context shows facts present but response doesn't reason temporally
+
+
+NUA1 - Ambiguity Recognition
+
+User says: "My friend Alex is a doctor" then "Alex, my colleague, works in marketing"
+Later asks: "What does Alex do for work?"
+System should recognize TWO different Alexes
+Log shows: [AMBIGUITY-DEBUG] entity=What, Alex... returned_ids=[7507] - only finds ONE Alex
+Response gives single answer instead of acknowledging ambiguity
+
+
+NUA2 - Contextual Tension
+
+User says: "I'm allergic to cats but my wife loves them"
+Asks: "Should we get a pet cat?"
+System retrieves allergy (SAFETY-CRITICAL) and wife's preference
+But response doesn't explicitly acknowledge the tension/tradeoff between these
+
+
+CMP2 - International Name Preservation
+
+User provides: "Dr. Xiaoying Zhang-Müller, Björn O'Shaughnessy, José García-López"
+Extraction shows: "Xiaoying Zhang-Müller (contact person), Björn O'Shaughnessy (contact person), José García-López (contact person)."
+Names ARE stored correctly
+But when asked "Who are my contacts?" - names don't appear in response
+Log shows: Memory context present: false on retrieval query
+
+
+
+
+Investigation Requirements
+For EACH of the 5 failures, trace the COMPLETE flow:
+
+Input Processing - How does the user message enter the system?
+Extraction - What extracts facts? What gets preserved? What gets lost?
+Storage - How is it stored in the database? What fields?
+Retrieval - What queries run? What comes back? What's filtered out?
+Injection - What gets injected into the prompt? What's missing?
+Response Generation - What instructions tell the AI how to use the context?
+
+Do not assume the problem is in one place. Each failure may have MULTIPLE contributing causes across different files.
+
+What to Report
+For each test, provide:
+
+All files involved in the flow
+All functions that touch the data
+Where data is lost or transformed incorrectly
+Where logic fails to handle the case
+Any other tests that could be affected by fixing this
+
+
+Critical Instructions
+
+Search the ENTIRE codebase - do not limit yourself to files you think are relevant
+Follow every function call - trace imports, trace calls, trace data
+Do not stop at the first problem - each test may have multiple issues
+Do not make any changes - this is investigation only
+Report findings as comments on this issue before any fix is proposed
+
+
+Expected Output
+A comment per test (or one comprehensive comment) documenting:
+
+The complete data flow with file:function references
+Every point where the failure could originate
+Relationships between tests (shared code paths)
+Confidence level in each finding
+
+
+Do not proceed to fixing until investigation is reviewed and approved.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
