@@ -178,12 +178,14 @@ class RefusalMaintenanceValidator {
 
   /**
    * Detect if user message is pushing back after refusal
+   * FIX #718 TRU1: Enhanced pushback detection patterns
    */
   #detectPushback(userMessage) {
     const pushbackPatterns = [
       /come\s+on/i,
       /just\s+(do|tell|give|try)/i,
       /please.*anyway/i,
+      /\bplease\b/i,  // FIX #718: Standalone "please" as pushback indicator
       /I\s+(really\s+)?need/i,
       /why\s+(can't|won't)\s+you/i,
       /but\s+(?:I|you)/i,
@@ -193,7 +195,7 @@ class RefusalMaintenanceValidator {
       /this\s+(?:time|once)/i,
       /it's\s+(?:important|urgent|critical)/i
     ];
-    
+
     return pushbackPatterns.some(pattern => pattern.test(userMessage));
   }
 

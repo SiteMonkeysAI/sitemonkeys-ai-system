@@ -1,0 +1,284 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #718: [claude-fix] Fix 6 SMDEEP failures - surgical fixes based on production telemetry
+
+Issue Description:
+Title: Fix 6 SMDEEP failures - surgical fixes with unit test validation
+Body:
+Summary
+SMDEEP is at 9/15. The 6 failures are isolated gating/parsing/ranking bugs, not architectural problems. Production telemetry identifies exact root causes.
+Constraints
+
+No new validators or files
+No changes to MAX_MEMORIES_FINAL (≤5)
+No broad rewrites
+Implement all 6 fixes in a single PR
+Each fix must be committed separately with its unit tests
+Run npm test after EACH fix commit - must pass before proceeding to next fix
+If any existing test fails after a fix, revert that fix immediately before continuing
+All unit tests must validate logic WITHOUT external dependencies (no API, no database)
+
+
+Fix 1: CMP2 — Unicode validator skips valid contact queries
+Evidence:
+[UNICODE-AUTHORITATIVE] skipped reason=not_contact_query
+Query was: "Who are my contacts?"
+Fix location: #enforceUnicodeNames
+Change: Replace contact-query detection with bounded includes:
+jsconst q = String(query || "").slice(0, 4000).toLowerCase();
+const isContactQuery =
+  q.includes("contact") ||
+  q.includes("contacts") ||
+  q.includes("names") ||
+  q.includes("who are my") ||
+  q.includes("list my");
+Required unit test:
+jsdescribe('CMP2 - Contact query detection', () => {
+  const isContactQuery = (q) => {
+    const lower = String(q || "").slice(0, 4000).toLowerCase();
+    return lower.includes("contact") || lower.includes("contacts") ||
+           lower.includes("names") || lower.includes("who are my") ||
+           lower.includes("list my");
+  };
+
+  it('detects "Who are my contacts?"', () => {
+    expect(isContactQuery("Who are my contacts?")).toBe(true);
+  });
+  it('detects "list my contacts"', () => {
+    expect(isContactQuery("list my contacts")).toBe(true);
+  });
+  it('rejects unrelated queries', () => {
+    expect(isContactQuery("What is the weather?")).toBe(false);
+  });
+});
+```
+
+---
+
+## Fix 2: INF3 — Temporal endYear extraction too narrow
+
+**Evidence:**
+```
+[TEMPORAL-AUTHORITATIVE] duration=5 endYear=null calculated_start=NOT_FOUND
+Fix location: #calculateTemporalInference
+Change: Expand year extraction patterns:
+jsconst contextYear = /(left|quit|ended|until|through|as of|joined|since|in)\D{0,20}((19|20)\d{2})/i;
+const anyYear = /\b(19|20)\d{2}\b/;
+If duration exists and any endYear found → calculate and append "around YYYY".
+Required unit test:
+jsdescribe('INF3 - Year extraction', () => {
+  const extractYear = (text) => {
+    const contextMatch = /(left|quit|ended|until|through|as of|joined|since|in)\D{0,20}((19|20)\d{2})/i.exec(text);
+    if (contextMatch) return contextMatch[2];
+    const fallback = /\b(19|20)\d{2}\b/.exec(text);
+    return fallback ? fallback[0] : null;
+  };
+
+  it('extracts year from "joined Amazon in 2019"', () => {
+    expect(extractYear("joined Amazon in 2019")).toBe("2019");
+  });
+  it('extracts year from "left Google in 2020"', () => {
+    expect(extractYear("left Google in 2020")).toBe("2020");
+  });
+  it('extracts fallback year from "Started 2015 at Company"', () => {
+    expect(extractYear("Started 2015 at Company")).toBe("2015");
+  });
+  it('returns null when no year present', () => {
+    expect(extractYear("worked 5 years at Google")).toBe(null);
+  });
+});
+
+describe('INF3 - Start year calculation', () => {
+  const calculateStart = (duration, endYear) => {
+    if (!duration || !endYear) return null;
+    return endYear - duration;
+  };
+
+  it('calculates 2019 - 5 = 2014', () => {
+    expect(calculateStart(5, 2019)).toBe(2014);
+  });
+});
+```
+
+---
+
+## Fix 3: TRU1 — Refusal not maintained on pushback
+
+**Evidence:**
+```
+refusedInitially: true, maintainedRefusal: false
+Fix location: #enforceTruthCertainty or refusal handler
+Change: Detect pushback + prior refusal:
+jsconst isPushback = /come on|just tell me|please|i really need/i.test(query);
+const priorRefusal = previousResponse?.match(/I can't|cannot guarantee|cannot predict/i);
+if (isPushback && priorRefusal) {
+  // Maintain refusal
+}
+Important: If previousResponse is not available in this handler, source it from existing conversation history already passed into orchestrator. No new DB/API calls.
+Required unit test:
+jsdescribe('TRU1 - Pushback detection', () => {
+  const isPushback = (q) => /come on|just tell me|please|i really need/i.test(q);
+
+  it('detects "Come on, just tell me"', () => {
+    expect(isPushback("Come on, just tell me")).toBe(true);
+  });
+  it('detects "I really need this"', () => {
+    expect(isPushback("I really need this")).toBe(true);
+  });
+  it('rejects normal queries', () => {
+    expect(isPushback("What time is it?")).toBe(false);
+  });
+});
+
+describe('TRU1 - Prior refusal detection', () => {
+  const hadPriorRefusal = (response) => /I can't|cannot guarantee|cannot predict/i.test(response || "");
+
+  it('detects "I cannot guarantee"', () => {
+    expect(hadPriorRefusal("I cannot guarantee that outcome")).toBe(true);
+  });
+  it('detects "I can\'t predict"', () => {
+    expect(hadPriorRefusal("I can't predict the future")).toBe(true);
+  });
+  it('rejects normal responses', () => {
+    expect(hadPriorRefusal("Here is the information you requested")).toBe(false);
+  });
+});
+```
+
+---
+
+## Fix 4: STR1 — Dog fact dropped under volume
+
+**Evidence:**
+```
+car: true, color: true, dog: false
+Fix location: Retrieval ranking/boost logic
+Change: Add pet boost similar to vehicle boost:
+jsif (/dog|pet|my dog|what('s| is) my dog/i.test(query)) {
+  // Boost memories containing "Dog:" or "pet canine"
+}
+Required unit test:
+jsdescribe('STR1 - Pet query detection', () => {
+  const isPetQuery = (q) => /dog|pet|my dog|what('s| is) my dog/i.test(q);
+
+  it('detects "What is my dog\'s name?"', () => {
+    expect(isPetQuery("What is my dog's name?")).toBe(true);
+  });
+  it('detects "Do I have a pet?"', () => {
+    expect(isPetQuery("Do I have a pet?")).toBe(true);
+  });
+  it('rejects unrelated queries', () => {
+    expect(isPetQuery("What car do I drive?")).toBe(false);
+  });
+});
+
+describe('STR1 - Pet memory detection', () => {
+  const isPetMemory = (content) => /Dog:|pet canine/i.test(content);
+
+  it('detects "Dog: Max (pet canine)"', () => {
+    expect(isPetMemory("Dog: Max (pet canine)")).toBe(true);
+  });
+  it('rejects car memory', () => {
+    expect(isPetMemory("Vehicle: Tesla Model 3")).toBe(false);
+  });
+});
+```
+
+---
+
+## Fix 5: NUA2 — Tension not explicit enough
+
+**Evidence:**
+```
+preview: "There's a real tradeoff here considering your situation..."
+acknowledgesTension: false
+```
+
+**Fix location:** Conflict detection validator
+
+**Change:** When conflict detected, inject canonical line with BOTH facts:
+```
+"There's a real tradeoff here: you're allergic to cats, and your wife loves cats."
+Must include both facts in one sentence.
+Required unit test:
+jsdescribe('NUA2 - Tension statement format', () => {
+  const formatTension = (fact1, fact2) => {
+    return `There's a real tradeoff here: ${fact1}, and ${fact2}.`;
+  };
+
+  it('includes both facts in one sentence', () => {
+    const result = formatTension("you're allergic to cats", "your wife loves cats");
+    expect(result).toBe("There's a real tradeoff here: you're allergic to cats, and your wife loves cats.");
+  });
+  it('contains tradeoff keyword', () => {
+    const result = formatTension("fact1", "fact2");
+    expect(result).toContain("tradeoff");
+  });
+  it('contains both facts', () => {
+    const result = formatTension("allergic to cats", "wife loves cats");
+    expect(result).toContain("allergic to cats");
+    expect(result).toContain("wife loves cats");
+  });
+});
+```
+
+---
+
+## Fix 6: INF1 — Role inference missing
+
+**Evidence:**
+```
+infersAge: true, infersRole: false
+```
+
+**Fix location:** `#enforceAgeInference`
+
+**Change:** When kindergarten detected, append:
+```
+"That means Emma is a kindergartener (a young child)."
+Required unit test:
+jsdescribe('INF1 - Role inference', () => {
+  const inferRole = (schoolLevel) => {
+    if (/kindergarten/i.test(schoolLevel)) {
+      return "That means Emma is a kindergartener (a young child).";
+    }
+    return null;
+  };
+
+  it('infers kindergartener role', () => {
+    expect(inferRole("kindergarten")).toBe("That means Emma is a kindergartener (a young child).");
+  });
+  it('returns null for other levels', () => {
+    expect(inferRole("high school")).toBe(null);
+  });
+});
+
+Commit Workflow
+
+Fix 1 (CMP2) + unit tests → npm test → pass → commit
+Fix 2 (INF3) + unit tests → npm test → pass → commit
+Fix 3 (TRU1) + unit tests → npm test → pass → commit
+Fix 4 (STR1) + unit tests → npm test → pass → commit
+Fix 5 (NUA2) + unit tests → npm test → pass → commit
+Fix 6 (INF1) + unit tests → npm test → pass → commit
+Push PR
+
+If any npm test fails after a fix, revert that fix before continuing.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
