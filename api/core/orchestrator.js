@@ -1,7 +1,5 @@
 // /api/core/orchestrator.js
-// ORCHE
-          console.log(`[DIAG-INF3] ✓ Found duration: ${duration} years`);
-STRATOR - Central Request Coordinator
+// ORCHESTRATOR - Central Request Coordinator
 // Executes all chat requests in correct priority order
 // Truth > Memory > Analysis > AI > Personality > Validation > Fallback (last resort)
 
@@ -2307,7 +2305,8 @@ export class Orchestrator {
           });
           console.log('[DIAG-NUA1] ═══════════════════════════════════════════════════════');
         }
-memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
+        
+        memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
 
         const memoriesPostCap = memoriesToFormat.length;
 
@@ -5145,6 +5144,7 @@ Mode: ${modeConfig?.display_name || mode}
         const durationMatch = content.match(/(?:worked|for|spent)\s+(\d+)\s+years?/i);
         if (durationMatch && !duration) {
           duration = parseInt(durationMatch[1]);
+          console.log(`[DIAG-INF3] ✓ Found duration: ${duration} years`);
         }
 
         // Match end year: "left in YYYY", "until YYYY", "ended YYYY"

@@ -8,21 +8,25 @@
  * - POST-RESPONSE: Run after AI generation, before user sees response
  */
 
-// Existing validators
-export { driftWatcher } from './drift-watcher.js';
-export { initiativeEnforcer } from './initiative-enforcer.js';
-export { memoryUsageEnforcer } from './memory-usage-enforcer.js';
+// Import validators for use in getAllValidatorStats()
+import { driftWatcher } from './drift-watcher.js';
+import { initiativeEnforcer } from './initiative-enforcer.js';
+import { memoryUsageEnforcer } from './memory-usage-enforcer.js';
+import { manipulationGuard } from './manipulation-guard.js';
+import { characterPreservationValidator } from './character-preservation.js';
+import { anchorPreservationValidator } from './anchor-preservation.js';
+import { refusalMaintenanceValidator } from './refusal-maintenance.js';
+import { conflictDetectionValidator } from './conflict-detection.js';
 
-// NEW: Phase 1 Deterministic Validators (Issue #606)
-
-// PRE-RESPONSE validators
-export { manipulationGuard } from './manipulation-guard.js';
-
-// POST-RESPONSE validators
-export { characterPreservationValidator } from './character-preservation.js';
-export { anchorPreservationValidator } from './anchor-preservation.js';
-export { refusalMaintenanceValidator } from './refusal-maintenance.js';
-export { conflictDetectionValidator } from './conflict-detection.js';
+// Re-export validators for external use
+export { driftWatcher };
+export { initiativeEnforcer };
+export { memoryUsageEnforcer };
+export { manipulationGuard };
+export { characterPreservationValidator };
+export { anchorPreservationValidator };
+export { refusalMaintenanceValidator };
+export { conflictDetectionValidator };
 
 /**
  * Get stats from all validators
