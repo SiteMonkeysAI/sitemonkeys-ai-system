@@ -5121,16 +5121,19 @@ Mode: ${modeConfig?.display_name || mode}
           duration = parseInt(durationMatch[1]);
         }
 
-        // Match end year: "left in YYYY", "until YYYY", "ended YYYY", "joined [next company] in YYYY"
+        // Match end year: "left in YYYY", "until YYYY", "ended YYYY"
         // FIX #718 INF3: Expand year extraction patterns
-        const contextYear = content.match(/(left|quit|ended|until|through|as of|joined|since|in)\D{0,20}((19|20)\d{2})/i);
+        // NOTE: "joined" is a START year, not an END year, so it's excluded from this pattern
+        const contextYear = content.match(/(left|quit|ended|until|through|as of)\D{0,20}((19|20)\d{2})/i);
         if (contextYear && !endYear) {
           endYear = parseInt(contextYear[2]);
         } else if (!endYear) {
-          // Fallback: any 4-digit year
-          const anyYear = content.match(/\b(19|20)\d{2}\b/);
-          if (anyYear) {
-            endYear = parseInt(anyYear[0]);
+          // Fallback: any 4-digit year (but only if no "joined" context)
+          if (!/joined/i.test(content)) {
+            const anyYear = content.match(/\b(19|20)\d{2}\b/);
+            if (anyYear) {
+              endYear = parseInt(anyYear[0]);
+            }
           }
         }
 
@@ -5182,11 +5185,12 @@ Mode: ${modeConfig?.display_name || mode}
 
               if (!endYear) {
                 // FIX #718 INF3: Expand year extraction patterns
-                const contextYear = content.match(/(left|quit|ended|until|through|as of|joined|since|in)\D{0,20}((19|20)\d{2})/i);
+                // NOTE: "joined" is a START year, not an END year, so it's excluded
+                const contextYear = content.match(/(left|quit|ended|until|through|as of)\D{0,20}((19|20)\d{2})/i);
                 if (contextYear) {
                   endYear = parseInt(contextYear[2]);
-                } else {
-                  // Fallback: any 4-digit year
+                } else if (!/joined/i.test(content)) {
+                  // Fallback: any 4-digit year (but only if no "joined" context)
                   const anyYear = content.match(/\b(19|20)\d{2}\b/);
                   if (anyYear) {
                     endYear = parseInt(anyYear[0]);
