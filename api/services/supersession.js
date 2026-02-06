@@ -40,6 +40,110 @@ const SUPERSESSION_CONFIG = {
 };
 
 // ============================================================================
+// LOG HYGIENE HELPERS
+// ============================================================================
+
+/**
+ * Redact PII from log previews.
+ * FIX #710 Requirement 3: Bound log output and redact sensitive data
+ * 
+ * @param {string} content - The content to sanitize
+ * @param {number} maxLength - Maximum preview length (default: 50)
+ * @returns {string} Sanitized preview
+ */
+function sanitizeLogPreview(content, maxLength = 50) {
+  if (!content) return '';
+  
+  let sanitized = content;
+  
+  // Redact phone numbers (various formats)
+  sanitized = sanitized.replace(/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/g, '[PHONE]');
+  sanitized = sanitized.replace(/\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/g, '[PHONE]');
+  sanitized = sanitized.replace(/\+\d{1,3}\s?\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/g, '[PHONE]');
+  sanitized = sanitized.replace(/\d{10}/g, '[PHONE]');
+  
+  // Redact emails
+  sanitized = sanitized.replace(/[\w.+-]+@[\w.-]+\.\w+/g, '[EMAIL]');
+  
+  // Redact salaries (various formats)
+  sanitized = sanitized.replace(/\$\d+[,\d]*/g, '[SALARY]');
+  sanitized = sanitized.replace(/\d+k\b/gi, '[SALARY]');
+  sanitized = sanitized.replace(/(?:USD|EUR|GBP|£|€)\s?\d+[,\d]*/gi, '[SALARY]');
+  
+  // Truncate to max length
+  if (sanitized.length > maxLength) {
+    sanitized = sanitized.substring(0, maxLength) + '...';
+  }
+  
+  return sanitized;
+}
+
+/**
+ * Detect if content contains update intent language.
+ * Used to allow supersession for optional fields when user explicitly updates them.
+ * 
+ * @param {string} content - The content to analyze
+ * @param {string} fingerprint - The fingerprint type
+ * @returns {boolean} True if update intent detected
+ */
+function detectUpdateIntent(content, fingerprint) {
+  if (!content || !fingerprint) return false;
+  
+  const contentLower = content.toLowerCase();
+  
+  // General update phrases that apply to most fields
+  const generalUpdatePatterns = [
+    /\b(?:now|currently|just|recently)\s+(?:i'm|i am|my|we're|we are)\b/i,
+    /\b(?:i|we)\s+(?:moved|changed|updated|switched|got|became|am now|are now)\b/i,
+    /\b(?:my|our)\s+(?:new|current|updated)\b/i,
+    /\b(?:no longer|not anymore|don't have|doesn't have)\b/i,
+    /\b(?:i'm now|i am now|we're now|we are now)\b/i
+  ];
+  
+  // Fingerprint-specific update patterns
+  const specificUpdatePatterns = {
+    user_job_title: [
+      /\b(?:promoted|hired|new (?:job|position|role|title))\b/i,
+      /\b(?:i'm now|i am now)\s+(?:a|an|the)?\s*(?:developer|engineer|manager|designer|director|ceo|founder)/i,
+      /\b(?:became|got promoted to|switched to)\s+(?:a|an|the)?\s*/i
+    ],
+    user_employer: [
+      /\b(?:joined|started at|working at|work at|employed at|new job at|left|quit)\b/i,
+      /\b(?:i work|i'm working|i am working)\s+(?:for|at|with)\b/i,
+      /\b(?:switched|moved|changed)\s+(?:to|jobs)\b/i
+    ],
+    user_location_residence: [
+      /\b(?:moved to|relocated to|living in|based in|live in)\b/i,
+      /\b(?:i'm in|i am in|i'm at|i am at)\b/i,
+      /\b(?:moved|relocated|settled|staying)\s+(?:to|in|at)\b/i
+    ],
+    user_marital_status: [
+      /\b(?:got married|just married|recently married|engaged|divorced|separated|widowed)\b/i,
+      /\b(?:i'm|i am)\s+(?:married|single|divorced|engaged|widowed)\s+now\b/i,
+      /\b(?:my|our)\s+(?:divorce|wedding|marriage|separation)\b/i
+    ],
+    user_pet: [
+      /\b(?:got|adopted|have|own)\s+(?:a|an|my)?\s*(?:dog|cat|pet|bird|fish)\b/i,
+      /\b(?:no longer have|lost|gave away|don't have)\s+(?:a|my)?\s*(?:dog|cat|pet)\b/i,
+      /\b(?:my|our)\s+(?:new|current)?\s*(?:dog|cat|pet)\b/i
+    ]
+  };
+  
+  // Check general update patterns
+  if (generalUpdatePatterns.some(p => p.test(content))) {
+    return true;
+  }
+  
+  // Check fingerprint-specific patterns
+  const specificPatterns = specificUpdatePatterns[fingerprint];
+  if (specificPatterns && specificPatterns.some(p => p.test(content))) {
+    return true;
+  }
+  
+  return false;
+}
+
+// ============================================================================
 // DETERMINISTIC FINGERPRINT PATTERNS (checked FIRST, before any API call)
 // ============================================================================
 
@@ -199,11 +303,141 @@ const FINGERPRINT_PATTERNS = [
 // ============================================================================
 
 /**
+ * Validate that content contains a value signature consistent with the fingerprint.
+ * FIX #710: Prevents misclassification by requiring actual value patterns.
+ *
+ * @param {string} content - The content to validate
+ * @param {string} fingerprint - The fingerprint to validate
+ * @returns {{ hasValueSignature: boolean, reason: string }}
+ */
+function validateValueSignature(content, fingerprint) {
+  const contentLower = content.toLowerCase();
+
+  // Define value signature requirements for sensitive fingerprints
+  const valueSignatureRules = {
+    user_phone_number: {
+      patterns: [
+        /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/,  // 555-123-4567, 555.123.4567, 555 123 4567
+        /\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/,  // (555) 123-4567, (555)123-4567
+        /\+\d{1,3}\s?\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/,  // +1 555-123-4567
+        /\d{10}/  // 5551234567 (10 digits)
+      ],
+      description: 'phone-like digits pattern'
+    },
+    user_email: {
+      patterns: [/[\w.+-]+@[\w.-]+\.\w+/],  // Expanded to include + and more variations
+      description: 'contains @'
+    },
+    user_salary: {
+      patterns: [
+        /\$\d+[,\d]*/, // $95,000 or $95000
+        /\d+k\b/i,  // 95k
+        /(?:USD|EUR|GBP|£|€)\s?\d+[,\d]*/i,  // USD 95000, £95,000, €95000
+        /\d{5,}(?:\.\d{2})?/  // 95000 or 95000.00 (5+ digits)
+      ],
+      description: 'currency/number context'
+    },
+    user_age: {
+      patterns: [
+        /\d{1,3}\s*(?:years?\s*old|yo\b)/,  // 25 years old, 30 yo
+        /\bage\s*(?:is\s*)?\d+/i,  // age is 25, age 30
+        /\bborn\s+in\s+\d{4}/i,  // born in 1990
+        /\bI'm\s+\d{1,3}\b/i,  // I'm 25
+        /\d{1,3}[-\s]year[-\s]old/i  // 25-year-old, 25 year old
+      ],
+      description: 'age-like numeric context'
+    },
+    user_meeting_time: {
+      patterns: [/\d{1,2}:\d{2}/, /\d{1,2}\s*(?:am|pm)/i],
+      description: 'time format'
+    },
+    user_timezone: {
+      patterns: [/\b(?:EST|PST|CST|MST|UTC|GMT|[A-Z]{3})\b/],
+      description: 'timezone code'
+    },
+    user_location_residence: {
+      // Location is less strict - often inferred from context
+      patterns: [/\b[A-Z][a-z]+(?:,?\s+[A-Z]{2})?\b/],
+      description: 'location name',
+      optional: true  // Less strict for location
+    },
+    user_job_title: {
+      // Job titles often don't have strict patterns
+      patterns: [/\b(?:developer|engineer|manager|designer|analyst|consultant|director|ceo|cto|founder|doctor|lawyer|teacher|nurse|accountant|developer|programmer|architect|scientist)\b/i],
+      description: 'job-related terms',
+      optional: true  // Less strict for job titles
+    },
+    user_employer: {
+      // Company names are hard to validate
+      patterns: [/./],  // Any content passes
+      description: 'company name',
+      optional: true  // Less strict for employer
+    },
+    user_name: {
+      patterns: [/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b/],
+      description: 'capitalized name',
+      optional: true  // Names are flexible
+    },
+    user_pet: {
+      patterns: [/\b(?:dog|cat|pet|bird|fish|hamster|rabbit|animal)\b/i],
+      description: 'pet type',
+      optional: true
+    },
+    user_marital_status: {
+      patterns: [/\b(?:married|single|divorced|widowed|engaged|separated|spouse|wife|husband|partner)\b/i],
+      description: 'marital status term',
+      optional: true
+    },
+    user_spouse_name: {
+      patterns: [/\b(?:wife|husband|spouse|partner)\b/i, /\b[A-Z][a-z]+\b/],
+      description: 'spouse context + name',
+      optional: true
+    },
+    user_children_count: {
+      patterns: [/\b(?:\d+|one|two|three|no)\s+(?:kid|child|children|son|daughter)/i],
+      description: 'child count',
+      optional: true
+    },
+    user_favorite_color: {
+      patterns: [/\b(?:red|blue|green|yellow|purple|orange|black|white|pink|brown|grey|gray|color|colour)\b/i],
+      description: 'color name',
+      optional: true
+    }
+  };
+
+  const rule = valueSignatureRules[fingerprint];
+
+  // If no rule defined, assume it's safe (shouldn't happen with proper patterns)
+  if (!rule) {
+    return { hasValueSignature: true, reason: 'no_validation_rule', isOptional: false };
+  }
+
+  // For optional fields, check if patterns match
+  if (rule.optional) {
+    const hasPattern = rule.patterns.some(p => p.test(content));
+    return {
+      hasValueSignature: hasPattern,
+      reason: hasPattern ? `optional_matched_${rule.description}` : `optional_no_${rule.description}`,
+      isOptional: true  // Mark optional fields
+    };
+  }
+
+  // For required fields, at least one pattern MUST match
+  const hasPattern = rule.patterns.some(p => p.test(content));
+  return {
+    hasValueSignature: hasPattern,
+    reason: hasPattern ? rule.description : `missing_${rule.description}`,
+    isOptional: false
+  };
+}
+
+/**
  * Attempt to extract fingerprint using deterministic regex patterns.
  * This runs FIRST, before any API call.
+ * FIX #710: Now validates value signatures before assigning fingerprints.
  *
  * @param {string} content - The content to analyze
- * @returns {{ fingerprint: string|null, confidence: number, method: string }}
+ * @returns {{ fingerprint: string|null, confidence: number, method: string, valueSignature: boolean, isOptional: boolean, updateIntent: boolean }}
  */
 function detectFingerprintDeterministic(content) {
   console.log('[SUPERSESSION-DIAG] ════════════════════════════════════════');
@@ -212,7 +446,7 @@ function detectFingerprintDeterministic(content) {
 
   if (!content || typeof content !== 'string') {
     console.log('[SUPERSESSION-DIAG] ❌ Invalid content type');
-    return { fingerprint: null, confidence: 0, method: 'none' };
+    return { fingerprint: null, confidence: 0, method: 'none', valueSignature: false, isOptional: false, updateIntent: false };
   }
 
   for (const { fingerprint, patterns, confidence } of FINGERPRINT_PATTERNS) {
@@ -223,15 +457,34 @@ function detectFingerprintDeterministic(content) {
       console.log(`[SUPERSESSION-DIAG]   Pattern ${i}: ${pattern.toString().substring(0, 80)}...`);
       console.log(`[SUPERSESSION-DIAG]   Match: ${match ? 'YES - ' + match[0] : 'NO'}`);
       if (match) {
-        console.log(`[SUPERSESSION-DIAG] ✅ PATTERN MATCH FOUND: ${fingerprint}`);
+        // FIX #710: Validate value signature before accepting fingerprint
+        const validation = validateValueSignature(content, fingerprint);
+
+        if (!validation.hasValueSignature) {
+          console.log(`[SUPERSESSION-DIAG] ⚠️ Pattern matched but value signature missing: ${fingerprint}`);
+          console.log(`[SUPERSESSION-DIAG]    Reason: ${validation.reason}`);
+          // FIX #710 Requirement C: Log rejections with sanitized preview
+          const preview = sanitizeLogPreview(content, 50);
+          console.log(`[FINGERPRINT-REJECTED] fingerprint=${fingerprint} reason=no_value_signature preview="${preview}"`);
+          continue;  // Try next pattern
+        }
+
+        console.log(`[SUPERSESSION-DIAG] ✅ PATTERN MATCH FOUND: ${fingerprint} with valid value signature`);
         console.log(`[SUPERSESSION] Deterministic match: ${fingerprint} (confidence: ${confidence})`);
-        return { fingerprint, confidence, method: 'deterministic' };
+
+        // Detect update intent for optional fields
+        const updateIntent = validation.isOptional ? detectUpdateIntent(content, fingerprint) : false;
+        if (validation.isOptional && updateIntent) {
+          console.log(`[SUPERSESSION] ✓ Update intent detected for optional field: ${fingerprint}`);
+        }
+
+        return { fingerprint, confidence, method: 'deterministic', valueSignature: true, isOptional: validation.isOptional, updateIntent };
       }
     }
   }
 
   console.log('[SUPERSESSION-DIAG] ❌ No pattern matches found');
-  return { fingerprint: null, confidence: 0, method: 'none' };
+  return { fingerprint: null, confidence: 0, method: 'none', valueSignature: false, isOptional: false, updateIntent: false };
 }
 
 // ============================================================================
@@ -312,7 +565,7 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
 
     if (!fingerprint || fingerprint === 'null' || fingerprint.toLowerCase() === 'null') {
       console.log(`[SUPERSESSION] Model returned null (${timeMs}ms)`);
-      return { fingerprint: null, confidence: 0, method: 'model', timeMs };
+      return { fingerprint: null, confidence: 0, method: 'model', timeMs, valueSignature: false, isOptional: false };
     }
 
     // Validate it's one of our known fingerprints
@@ -325,20 +578,37 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
 
     if (!allValid.includes(fingerprint)) {
       console.log(`[SUPERSESSION] Model returned unknown fingerprint: ${fingerprint}`);
-      return { fingerprint: null, confidence: 0, method: 'model', timeMs };
+      return { fingerprint: null, confidence: 0, method: 'model', timeMs, valueSignature: false, isOptional: false };
     }
 
-    console.log(`[SUPERSESSION] Model match: ${fingerprint} (${timeMs}ms)`);
-    return { fingerprint, confidence: 0.75, method: 'model', timeMs };
+    // FIX #710: Validate value signature even for model-detected fingerprints
+    const validation = validateValueSignature(content, fingerprint);
+
+    if (!validation.hasValueSignature) {
+      console.log(`[SUPERSESSION] Model detected ${fingerprint} but value signature missing: ${validation.reason} (${timeMs}ms)`);
+      // FIX #710 Requirement C: Log rejections with sanitized preview
+      const preview = sanitizeLogPreview(content, 50);
+      console.log(`[FINGERPRINT-REJECTED] fingerprint=${fingerprint} reason=model_no_value_signature preview="${preview}"`);
+      return { fingerprint: null, confidence: 0, method: 'model_rejected', timeMs, valueSignature: false, isOptional: false, updateIntent: false };
+    }
+
+    // Detect update intent for optional fields
+    const updateIntent = validation.isOptional ? detectUpdateIntent(content, fingerprint) : false;
+    if (validation.isOptional && updateIntent) {
+      console.log(`[SUPERSESSION] ✓ Update intent detected for optional field: ${fingerprint}`);
+    }
+
+    console.log(`[SUPERSESSION] Model match: ${fingerprint} with valid value signature (${timeMs}ms)`);
+    return { fingerprint, confidence: 0.75, method: 'model', timeMs, valueSignature: true, isOptional: validation.isOptional, updateIntent };
 
   } catch (error) {
     const timeMs = Date.now() - startTime;
     if (error.name === 'AbortError') {
       console.log(`[SUPERSESSION] Model timeout after ${timeMs}ms`);
-      return { fingerprint: null, confidence: 0, method: 'timeout', error: 'timeout', timeMs };
+      return { fingerprint: null, confidence: 0, method: 'timeout', error: 'timeout', timeMs, valueSignature: false, isOptional: false, updateIntent: false };
     }
     console.error(`[SUPERSESSION] Model error: ${error.message}`);
-    return { fingerprint: null, confidence: 0, method: 'error', error: error.message, timeMs };
+    return { fingerprint: null, confidence: 0, method: 'error', error: error.message, timeMs, valueSignature: false, isOptional: false, updateIntent: false };
   }
 }
 
@@ -349,17 +619,18 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
 /**
  * Generate fact fingerprint from content.
  * Uses deterministic regex patterns FIRST, then model-assist as fallback.
- * 
+ * FIX #710: Now includes value signature validation in return type.
+ *
  * @param {string} content - The content to analyze
  * @param {object} options - Options
- * @returns {Promise<{ fingerprint: string|null, confidence: number, method: string }>}
+ * @returns {Promise<{ fingerprint: string|null, confidence: number, method: string, valueSignature: boolean, isOptional: boolean, updateIntent: boolean }>}
  */
 export async function generateFactFingerprint(content, options = {}) {
   const { skipModel = false } = options;
 
   // Step 1: Try deterministic detection (instant, free, reliable)
   const deterministicResult = detectFingerprintDeterministic(content);
-  
+
   if (deterministicResult.fingerprint) {
     return deterministicResult;
   }
@@ -370,7 +641,7 @@ export async function generateFactFingerprint(content, options = {}) {
     return modelResult;
   }
 
-  return { fingerprint: null, confidence: 0, method: 'skipped' };
+  return { fingerprint: null, confidence: 0, method: 'skipped', valueSignature: false, isOptional: false, updateIntent: false };
 }
 
 // ============================================================================
@@ -393,14 +664,46 @@ export async function storeWithSupersession(pool, memoryData) {
     content,
     factFingerprint,
     fingerprintConfidence = 0.5,
+    valueSignature = false,  // FIX #710: Accept value signature validation
+    isOptional = false,  // FIX #710: Accept optional field flag
+    updateIntent = false,  // FIX #710: Accept update intent detection
     mode = 'truth-general',
     categoryName = 'general',
     tokenCount = 0,
     metadata = {}  // FIX #659: Accept metadata parameter
   } = memoryData;
 
-  // If no fingerprint, this isn't a superseding fact - use normal storage
-  if (!factFingerprint) {
+  // FIX #710 - SUPERSESSION SAFETY GATE (Updated with update-intent awareness)
+  // For supersession to occur, ALL of these must be true:
+  // 1. fingerprint != null/"none"
+  // 2. fingerprintConfidence >= 0.85 (high confidence threshold)
+  // 3. Value signature is present (validated pattern match)
+  // 4. EITHER field is NOT optional OR update intent is detected
+  //    - Required fields (phone/email/salary/age): always supersede when valid
+  //    - Optional fields (job_title/location/employer/etc): supersede only with update intent
+  //
+  // If any condition fails, treat as non-superseding fact (safe default)
+  const supersessionSafe = factFingerprint &&
+                          factFingerprint !== 'none' &&
+                          fingerprintConfidence >= 0.85 &&
+                          valueSignature === true &&
+                          (isOptional === false || updateIntent === true);
+
+  if (!supersessionSafe) {
+    // Log why supersession was blocked
+    if (factFingerprint && factFingerprint !== 'none') {
+      if (fingerprintConfidence < 0.85) {
+        console.log(`[SUPERSESSION-SAFETY-GATE] ⚠️ Blocking supersession - confidence too low: ${fingerprintConfidence} < 0.85`);
+      }
+      if (valueSignature !== true) {
+        console.log(`[SUPERSESSION-SAFETY-GATE] ⚠️ Blocking supersession - value signature missing or invalid`);
+      }
+      if (isOptional === true && updateIntent === false) {
+        console.log(`[SUPERSESSION-SAFETY-GATE] ⚠️ Blocking supersession - optional field without update intent`);
+      }
+      console.log(`[SUPERSESSION-SAFETY-GATE] Treating as non-superseding fact: fingerprint=${factFingerprint}, confidence=${fingerprintConfidence}, valueSignature=${valueSignature}, isOptional=${isOptional}, updateIntent=${updateIntent}`);
+    }
+    // Use normal storage (no supersession)
     return storeWithoutSupersession(pool, memoryData);
   }
 
@@ -533,6 +836,7 @@ export async function storeWithSupersession(pool, memoryData) {
 
 /**
  * Store memory without supersession check (for non-fingerprinted content)
+ * FIX #710: Enhanced to accept metadata parameter for consistency
  */
 async function storeWithoutSupersession(pool, memoryData) {
   const {
@@ -540,21 +844,24 @@ async function storeWithoutSupersession(pool, memoryData) {
     content,
     mode = 'truth-general',
     categoryName = 'general',
-    tokenCount = 0
+    tokenCount = 0,
+    metadata = {}  // FIX #710: Accept metadata parameter
   } = memoryData;
 
   try {
     const result = await pool.query(`
       INSERT INTO persistent_memories (
         user_id, content, category_name, token_count,
-        is_current, mode, embedding_status, created_at
-      ) VALUES ($1, $2, $3, $4, true, $5, 'pending', NOW())
+        is_current, mode, embedding_status, created_at, metadata
+      ) VALUES ($1, $2, $3, $4, true, $5, 'pending', NOW(), $6)
       RETURNING id
     `, [
       userId,
       content,
       categoryName,
-      tokenCount || Math.ceil(content.length / 4)
+      tokenCount || Math.ceil(content.length / 4),
+      mode,
+      JSON.stringify(metadata)
     ]);
 
     console.log(`[SUPERSESSION] Stored non-superseding memory ID ${result.rows[0].id}`);
