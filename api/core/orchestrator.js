@@ -5735,10 +5735,16 @@ Mode: ${modeConfig?.display_name || mode}
                 console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: anchors_keys=[${keys.join(', ')}]`);
 
                 // Extract unicode names from anchors.unicode
+                // FIX #718 CMP2: For contact queries, preserve ALL names from anchors.unicode
+                // not just names with diacritics (e.g., "Zhang Wei" is international but ASCII)
                 if (anchors.unicode && Array.isArray(anchors.unicode)) {
                   for (const name of anchors.unicode) {
-                    if (typeof name === 'string' && unicodePattern.test(name)) {
-                      unicodeNames.push(name);
+                    if (typeof name === 'string' && name.trim().length > 0) {
+                      // For contact queries: Accept all names (including ASCII international names)
+                      // For other contexts: Only names with unicode diacritics
+                      if (isContactQuery || unicodePattern.test(name)) {
+                        unicodeNames.push(name);
+                      }
                     }
                   }
                   console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: unicode_names_from_anchors=[${anchors.unicode.join(', ')}]`);
@@ -5748,12 +5754,13 @@ Mode: ${modeConfig?.display_name || mode}
               }
 
               // Fallback: extract from content if no anchors exist
-              if (!anchors || !anchors.unicode) {
+              if (!anchors || !anchors.unicode || anchors.unicode.length === 0) {
                 const content = (row.content || '').substring(0, 500);
                 const nameMatches = content.matchAll(/\b([A-ZÀ-ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]+)?)\b/g);
                 for (const match of nameMatches) {
                   const name = match[1];
-                  if (unicodePattern.test(name)) {
+                  // FIX #718 CMP2: For contact queries, accept all capitalized names
+                  if (isContactQuery || unicodePattern.test(name)) {
                     unicodeNames.push(name);
                   }
                 }
