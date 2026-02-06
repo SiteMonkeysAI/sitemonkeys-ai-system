@@ -5122,9 +5122,16 @@ Mode: ${modeConfig?.display_name || mode}
         }
 
         // Match end year: "left in YYYY", "until YYYY", "ended YYYY", "joined [next company] in YYYY"
-        const endYearMatch = content.match(/(?:left|until|ended|quit|joined).*?(\d{4})/i);
-        if (endYearMatch && !endYear) {
-          endYear = parseInt(endYearMatch[1]);
+        // FIX #718 INF3: Expand year extraction patterns
+        const contextYear = content.match(/(left|quit|ended|until|through|as of|joined|since|in)\D{0,20}((19|20)\d{2})/i);
+        if (contextYear && !endYear) {
+          endYear = parseInt(contextYear[2]);
+        } else if (!endYear) {
+          // Fallback: any 4-digit year
+          const anyYear = content.match(/\b(19|20)\d{2}\b/);
+          if (anyYear) {
+            endYear = parseInt(anyYear[0]);
+          }
         }
 
         // Extract entity (company/place name)
@@ -5174,8 +5181,17 @@ Mode: ${modeConfig?.display_name || mode}
               }
 
               if (!endYear) {
-                const endYearMatch = content.match(/(?:left|until|ended|quit|joined).*?(\d{4})/i);
-                if (endYearMatch) endYear = parseInt(endYearMatch[1]);
+                // FIX #718 INF3: Expand year extraction patterns
+                const contextYear = content.match(/(left|quit|ended|until|through|as of|joined|since|in)\D{0,20}((19|20)\d{2})/i);
+                if (contextYear) {
+                  endYear = parseInt(contextYear[2]);
+                } else {
+                  // Fallback: any 4-digit year
+                  const anyYear = content.match(/\b(19|20)\d{2}\b/);
+                  if (anyYear) {
+                    endYear = parseInt(anyYear[0]);
+                  }
+                }
               }
 
               if (!entity) {
@@ -5651,10 +5667,16 @@ Mode: ${modeConfig?.display_name || mode}
       // ═══════════════════════════════════════════════════════════════
       // GATING CONDITION: User intent is contacts/names query
       // ISSUE #713 REFINEMENT: More precise trigger - only for contact queries
+      // FIX #718 CMP2: Use bounded includes for better contact query detection
       // ═══════════════════════════════════════════════════════════════
-      const isContactQuery = /\b(who are|what are|list|tell me about).*(contacts|people|names|friends|colleagues)\b/i.test(query) ||
-                             /\b(my|the)\s+(contacts|people|names|friends|colleagues)\b/i.test(query);
-      
+      const q = String(query || "").slice(0, 4000).toLowerCase();
+      const isContactQuery =
+        q.includes("contact") ||
+        q.includes("contacts") ||
+        q.includes("names") ||
+        q.includes("who are my") ||
+        q.includes("list my");
+
       if (!isContactQuery) {
         console.log(`[UNICODE-AUTHORITATIVE] skipped reason=not_contact_query`);
         return { correctionApplied: false, response };
@@ -5957,10 +5979,16 @@ Mode: ${modeConfig?.display_name || mode}
       const ageInference = ageRanges[schoolLevel] || 'school age';
 
       // APPEND age inference with uncertainty qualifiers
-      const injection = `Based on ${personName} being in ${schoolLevel.replace('_', ' ')}, ${personName} is ${ageInference}.`;
+      let injection = `Based on ${personName} being in ${schoolLevel.replace('_', ' ')}, ${personName} is ${ageInference}.`;
+
+      // FIX #718 INF1: Add role inference for kindergarten
+      if (schoolLevel === 'kindergarten') {
+        injection += ` That means ${personName} is a kindergartener (a young child).`;
+      }
+
       const adjustedResponse = response.trim() + '\n\n' + injection;
 
-      console.log(`[AGE-INFERENCE] person="${personName}" school_level="${schoolLevel}" age_range="${ageInference}" inferred=true appended=true`);
+      console.log(`[AGE-INFERENCE] person="${personName}" school_level="${schoolLevel}" age_range="${ageInference}" role_inferred=${schoolLevel === 'kindergarten'} inferred=true appended=true`);
 
       return {
         correctionApplied: true,

@@ -1603,11 +1603,19 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         const hasVehicleTerm = queryWords.some(word => vehicleTerms.includes(word));
         const contentHasVehicle = /\b(tesla|honda|toyota|ford|chevrolet|model\s*[0-9sxy]|drive|car)\b/i.test(contentLower);
 
+        // FIX #718 STR1: Extra boost for pet/dog queries
+        const petTerms = ['dog', 'pet', 'pets', 'puppy', 'cat', 'cats'];
+        const hasPetTerm = queryWords.some(word => petTerms.includes(word));
+        const contentHasPet = /\b(dog:|pet canine|cat:|puppy|kitten|pet feline)\b/i.test(contentLower);
+
         // INCREASED from 0.15 to 0.25 for Issue #603 - STR1 volume stress test
         // INCREASED to 0.35 for vehicle queries for Issue #702-STR1
+        // FIX #718 STR1: Same boost for pet queries
         let boostMultiplier = 0.25; // Default boost
         if (hasVehicleTerm && contentHasVehicle) {
           boostMultiplier = 0.35; // Extra boost for vehicle-related matches
+        } else if (hasPetTerm && contentHasPet) {
+          boostMultiplier = 0.35; // Extra boost for pet-related matches
         }
 
         const keywordBoost = matchRatio * boostMultiplier;
@@ -1615,7 +1623,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         const boostedScore = Math.min(originalScore + keywordBoost, 1.0);
 
         if (keywordBoost >= 0.10) { // Only log significant boosts
-          console.log(`[KEYWORD-BOOST] Memory ${memory.id}: ${matchCount}/${queryWords.length} keywords matched - boosting ${originalScore.toFixed(3)} → ${boostedScore.toFixed(3)} (+${keywordBoost.toFixed(3)}) ${hasVehicleTerm && contentHasVehicle ? '[VEHICLE-BOOST]' : ''}`);
+          const boostType = (hasVehicleTerm && contentHasVehicle) ? '[VEHICLE-BOOST]' :
+                           (hasPetTerm && contentHasPet) ? '[PET-BOOST]' : '';
+          console.log(`[KEYWORD-BOOST] Memory ${memory.id}: ${matchCount}/${queryWords.length} keywords matched - boosting ${originalScore.toFixed(3)} → ${boostedScore.toFixed(3)} (+${keywordBoost.toFixed(3)}) ${boostType}`);
           console.log(`[KEYWORD-BOOST]    Matched words: [${matchedWords.join(', ')}]`);
           console.log(`[KEYWORD-BOOST]    Content: "${contentLower.substring(0, 80)}"`);
         }

@@ -264,6 +264,7 @@ class ConflictDetectionValidator {
 
   /**
    * Inject conflict acknowledgment into response
+   * FIX #718 NUA2: Include both specific facts in tension statement
    */
   #injectConflictAcknowledgment(response, conflicts) {
     // Build injection text based on conflict type
@@ -271,7 +272,17 @@ class ConflictDetectionValidator {
 
     for (const conflict of conflicts) {
       if (conflict.type === 'allergy_vs_preference') {
-        injections.push("There's a real tradeoff here: your allergy vs your wife's preference.");
+        // Extract specific facts from memories
+        const allergyFact = this.#extractAllergyFact(conflict.allergyMemories);
+        const preferenceFact = this.#extractPreferenceFact(conflict.spousePreferenceMemories);
+
+        // FIX #718 NUA2: Include BOTH facts in one sentence
+        if (allergyFact && preferenceFact) {
+          injections.push(`There's a real tradeoff here: ${allergyFact}, and ${preferenceFact}.`);
+        } else {
+          // Fallback to generic message
+          injections.push("There's a real tradeoff here: your allergy vs your wife's preference.");
+        }
       }
     }
 
@@ -281,6 +292,59 @@ class ConflictDetectionValidator {
 
     // Prepend to response for maximum visibility
     return `${injections.join(' ')}\n\n${response}`;
+  }
+
+  /**
+   * Extract allergy fact from memory content
+   * FIX #718 NUA2: Helper to extract specific allergy fact
+   */
+  #extractAllergyFact(allergyMemories) {
+    if (!allergyMemories || allergyMemories.length === 0) return null;
+
+    const content = allergyMemories[0].toLowerCase();
+
+    // Try to extract the specific allergy
+    const allergyMatch = content.match(/(?:allergic to|allergy to|can't have|cannot have)\s+([a-z\s]+?)(?:\.|,|;|$)/i);
+    if (allergyMatch) {
+      const item = allergyMatch[1].trim();
+      return `you're allergic to ${item}`;
+    }
+
+    // Fallback patterns
+    if (content.includes('cat')) return "you're allergic to cats";
+    if (content.includes('dog')) return "you're allergic to dogs";
+    if (content.includes('seafood')) return "you're allergic to seafood";
+    if (content.includes('nuts')) return "you're allergic to nuts";
+    if (content.includes('dairy')) return "you're allergic to dairy";
+
+    return "you have an allergy";
+  }
+
+  /**
+   * Extract spouse preference fact from memory content
+   * FIX #718 NUA2: Helper to extract specific preference fact
+   */
+  #extractPreferenceFact(spouseMemories) {
+    if (!spouseMemories || spouseMemories.length === 0) return null;
+
+    const content = spouseMemories[0].toLowerCase();
+
+    // Extract spouse type
+    const spouseType = content.match(/\b(wife|husband|spouse|partner)\b/i)?.[1] || 'spouse';
+
+    // Try to extract what they love/like
+    const preferenceMatch = content.match(/(?:loves?|likes?|wants?)\s+([a-z\s]+?)(?:\.|,|;|$)/i);
+    if (preferenceMatch) {
+      const item = preferenceMatch[1].trim();
+      return `your ${spouseType} loves ${item}`;
+    }
+
+    // Fallback patterns
+    if (content.includes('cat')) return `your ${spouseType} loves cats`;
+    if (content.includes('dog')) return `your ${spouseType} loves dogs`;
+    if (content.includes('seafood')) return `your ${spouseType} loves seafood`;
+
+    return `your ${spouseType} has a preference`;
   }
 
   /**
