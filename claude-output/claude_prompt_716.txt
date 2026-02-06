@@ -1,0 +1,73 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #716: [claude-fix] CRITICAL: Fingerprinter misclassifies facts → cross-domain supersession/data loss
+
+Issue Description:
+## Problem (Confirmed via logs)
+Fingerprinting is misclassifying facts into unrelated identity buckets, which causes cross-domain supersession and data loss.
+
+Examples observed:
+- "Vehicle: Tesla Model 3 (car automobile drive)" → fingerprint: user_phone_number
+- "Education: started kindergarten (school enrollment fall)" → fingerprint: user_pet
+- "Restaurant: Chez Panisse (favorite dining establishment)" → fingerprint: user_timezone
+- "Activity: learning piano (practice music instrument)" → fingerprint: user_salary
+- "Programming language: Python (favorite language)" → fingerprint: user_age
+- "Business plan: SaaS platform" → fingerprint: user_salary
+
+Impact:
+1) Unrelated memories supersede each other (is_current=false) due to shared wrong fingerprint
+2) Random regressions: fixing one area breaks others because stored data is deleted/overwritten
+3) STR/NUA/INF failures become impossible to stabilize because ground truth is corrupted
+
+This is a system integrity failure, not a test harness issue.
+
+## Root Cause Hypothesis
+Fingerprint detection in `api/core/intelligence/semantic_analyzer.js` (or equivalent) is assigning fingerprints based on weak lexical/semantic cues (e.g., “Model” → phone_number), producing high-confidence wrong matches.
+
+## Required Fix (Non-negotiable)
+### A) Supersession Safety Gate (must ship even if fingerprinting is improved)
+For any supersession decision, require ALL of:
+- fingerprint != null/"none"
+- fingerprintConfidence >= 0.85 (or system-defined high threshold)
+- AND the extracted facts contain a value pattern consistent with the fingerprint:
+  - user_phone_number: phone-like digits pattern
+  - user_email: contains '@'
+  - user_salary: contains currency/number context
+  - user_age: contains age-like numeric context
+If not, set fingerprint="none" and DO NOT supersede.
+
+### B) Fingerprinting must be strict and value-driven
+- Only assign fingerprints for fields with clear value signatures (email/phone/salary/date/etc.)
+- If confidence is low or value signature is missing → fingerprint="none"
+- Do not assign sensitive identity fingerprints (salary/age/etc.) from generic topic words.
+
+### C) Instrumentation (required for proof)
+Log a single structured line whenever fingerprint is assigned:
+[FINGERPRINT] id=... fingerprint=... confidence=... method=... value_signature=true/false source_preview="..."
+
+## Acceptance Criteria
+- Tesla / restaurant / hobby / programming language facts MUST NOT be assigned phone/email/salary/age fingerprints.
+- For the examples above, expected fingerprint = "none" (safe) unless the system has a dedicated non-superseding tag system.
+- After fix: unrelated memories no longer supersede each other (verify is_current remains true on both).
+
+## Files
+- api/core/intelligence/semantic_analyzer.js (fingerprint detection)
+- api/memory/intelligent-storage.js (supersession gate / enforcement)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

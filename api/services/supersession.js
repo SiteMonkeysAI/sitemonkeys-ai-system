@@ -673,7 +673,7 @@ export async function storeWithSupersession(pool, memoryData) {
     metadata = {}  // FIX #659: Accept metadata parameter
   } = memoryData;
 
-  // FIX #710 - SUPERSESSION SAFETY GATE (Updated with update-intent awareness)
+  // FIX #716 - SUPERSESSION SAFETY GATE (Enhanced for issue #716)
   // For supersession to occur, ALL of these must be true:
   // 1. fingerprint != null/"none"
   // 2. fingerprintConfidence >= 0.85 (high confidence threshold)
@@ -688,6 +688,10 @@ export async function storeWithSupersession(pool, memoryData) {
                           fingerprintConfidence >= 0.85 &&
                           valueSignature === true &&
                           (isOptional === false || updateIntent === true);
+
+  // FIX #716: Structured logging for instrumentation (Requirement C)
+  const preview = sanitizeLogPreview(content, 50);
+  console.log(`[FINGERPRINT] id=${factFingerprint || 'none'} fingerprint=${factFingerprint || 'none'} confidence=${fingerprintConfidence} method=supersession_gate value_signature=${valueSignature} source_preview="${preview}"`);
 
   if (!supersessionSafe) {
     // Log why supersession was blocked

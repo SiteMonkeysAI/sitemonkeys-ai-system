@@ -1,0 +1,147 @@
+Now let me create a summary of the changes made:
+
+---SUMMARY---
+
+## Fixed Issue #716: CRITICAL Fingerprinter Misclassification → Cross-Domain Supersession/Data Loss
+
+### Problem Analysis
+The fingerprinting system in `detectFingerprintFromFacts` was misclassifying facts into unrelated identity buckets due to weak lexical/semantic cues:
+- "Vehicle: Tesla Model 3 (car automobile drive)" → misclassified as `user_phone_number`
+- "Education: started kindergarten (school enrollment fall)" → misclassified as `user_pet`
+- "Restaurant: Chez Panisse (favorite dining establishment)" → misclassified as `user_timezone`
+- "Activity: learning piano (practice music instrument)" → misclassified as `user_salary`
+- "Programming language: Python (favorite language)" → misclassified as `user_age`
+
+This caused unrelated memories to supersede each other, leading to data loss and system integrity failures.
+
+### Root Cause
+The fingerprint detection logic was assigning fingerprints based solely on semantic indicators (keywords like "Model" → phone_number) without validating that the content actually contained values consistent with that fingerprint type (e.g., phone-like digit patterns for phone numbers).
+
+### Implementation
+
+#### A) Supersession Safety Gate (api/memory/intelligent-storage.js)
+**File**: `api/memory/intelligent-storage.js`
+
+Enhanced `detectFingerprintFromFacts()` method with:
+
+1. **Strict Value Signature Validation**: Added `valueSignatureRules` that define required value patterns for sensitive fingerprints:
+   - `user_phone_number`: Requires phone-like digits pattern (555-123-4567, etc.)
+   - `user_email`: Requires '@' pattern
+   - `user_salary`: Requires currency/number context ($95k, $95,000, etc.)
+   - `user_age`: Requires age-like numeric context (25 years old, age 30, etc.)
+   - `user_meeting_time`: Requires time format (3pm, 14:30, etc.)
+   - `user_timezone`: Requires timezone code (EST, PST, etc.)
+
+2. **Required vs Optional Field Logic**:
+   - **Required fields** (phone/email/salary/age/meeting_time/timezone): MUST have value signature, otherwise fingerprint=`none`
+   - **Optional fields** (job_title/location/employer/pet/etc.): Value signature not strictly required
+
+3. **Enhanced Return Type**: Now returns `{ fingerprint, confidence, method, valueSignature, isOptional }`
+
+4. **Structured Logging**: Implemented instrumentation with single-line structured logs:
+   ```
+   [FINGERPRINT] id=... fingerprint=... confidence=... method=... value_signature=true/false source_preview="..."
+   ```
+
+#### B) Fingerprinting Strictness (api/memory/intelligent-storage.js)
+**Changes to canonical patterns**:
+
+Added `requireValueSignature` flag to each pattern:
+- Sensitive identity fingerprints (salary/age/phone/email/meeting_time/timezone): `requireValueSignature: true`
+- Optional fields (job_title/employer/location/pet/etc.): `requireValueSignature: false`
+
+For required fields, if semantic indicator matches but value signature is missing:
+- Fingerprint is **rejected** (set to `none`)
+- Logged with structured format
+- **No supersession occurs** (safe default)
+
+#### C) Metadata Propagation
+**File**: `api/memory/intelligent-storage.js`
+
+Updated metadata construction to include:
+- `valueSignature`: Boolean flag indicating if value pattern was validated
+- `isOptional`: Boolean flag indicating if field is optional
+
+These fields are propagated through:
+1. `detectFingerprintFromFacts()` → returns `{ ..., valueSignature, isOptional }`
+2. `regularMetadata` → stores both flags
+3. `storeWithSupersession()` → receives both flags via `memoryData` parameter
+
+#### D) Supersession Service Safety Gate (api/services/supersession.js)
+**File**: `api/services/supersession.js`
+
+Enhanced the existing supersession safety gate (already in place from Fix #710):
+
+1. **Updated Documentation**: Added FIX #716 comments to clarify the enhancement
+2. **Structured Logging**: Added instrumentation at the supersession gate entry point:
+   ```javascript
+   console.log(`[FINGERPRINT] id=${factFingerprint} fingerprint=${factFingerprint} confidence=${fingerprintConfidence} method=supersession_gate value_signature=${valueSignature} source_preview="${preview}"`);
+   ```
+3. **Existing Safety Logic** (already present, now documented):
+   - Requires `fingerprintConfidence >= 0.85`
+   - Requires `valueSignature === true`
+   - Requires `isOptional === false` OR `updateIntent === true`
+   - If any condition fails → stores as non-superseding fact
+
+### Acceptance Criteria Validation
+
+✅ **Tesla / restaurant / hobby / programming language facts MUST NOT be assigned phone/email/salary/age fingerprints**
+- Implemented: These facts lack value signatures (no phone digits, no $amounts, no age numbers)
+- Result: Fingerprint detection rejects them → `fingerprint=none`
+
+✅ **Expected fingerprint = "none" unless dedicated non-superseding tag system exists**
+- Implemented: Value signature validation ensures only facts with actual value patterns get fingerprints
+
+✅ **After fix: unrelated memories no longer supersede each other**
+- Implemented: Without fingerprints, memories store as separate facts (both `is_current=true`)
+- Safety gate prevents cross-domain supersession
+
+### Testing Verification
+
+To verify the fix works:
+
+1. **Test case: Vehicle fact**
+   ```
+   Input: "Vehicle: Tesla Model 3 (car automobile drive)"
+   Expected: fingerprint=none, valueSignature=false
+   Result: No supersession with phone/email/salary facts
+   ```
+
+2. **Test case: Valid salary**
+   ```
+   Input: "Income: $95,000 (salary compensation)"
+   Expected: fingerprint=user_salary, valueSignature=true
+   Result: Supersedes old salary facts correctly
+   ```
+
+3. **Test case: Job title without value**
+   ```
+   Input: "Job: software engineer"
+   Expected: fingerprint=user_job_title, valueSignature=false, isOptional=true
+   Result: No supersession unless update intent detected
+   ```
+
+### Files Modified
+
+1. **api/memory/intelligent-storage.js**
+   - Enhanced `detectFingerprintFromFacts()` with value signature validation
+   - Added `valueSignatureRules` configuration
+   - Updated canonical patterns with `requireValueSignature` flags
+   - Enhanced return types and metadata propagation
+   - Added structured logging
+
+2. **api/services/supersession.js**
+   - Enhanced supersession safety gate documentation (FIX #716)
+   - Added structured logging at gate entry point
+   - Existing safety logic preserved and validated
+
+### Log Format (Requirement C)
+
+All fingerprint assignments now log structured single-line format:
+```
+[FINGERPRINT] id=<id> fingerprint=<fp> confidence=<conf> method=<method> value_signature=<bool> source_preview="<sanitized>"
+```
+
+This allows for easy debugging and verification of fingerprint assignments in production logs.
+
+---END SUMMARY---

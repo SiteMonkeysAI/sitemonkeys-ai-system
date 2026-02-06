@@ -87,7 +87,7 @@ export class IntelligentMemoryStorage {
 
   /**
    * Detect fingerprint from EXTRACTED FACTS using semantic pattern matching
-   * This is the CRITICAL FIX for Issue #498
+   * FIX #716: Enhanced with strict value signature validation to prevent misclassification
    *
    * Instead of running brittle regex on raw user input, we detect fingerprints
    * on the CLEANED/COMPRESSED facts that the system already extracts.
@@ -98,15 +98,60 @@ export class IntelligentMemoryStorage {
    * - Innovation #3: Enables supersession by identifying updatable facts
    *
    * @param {string} facts - Extracted facts (compressed, cleaned content)
-   * @returns {Promise<{ fingerprint: string|null, confidence: number, method: string }>}
+   * @returns {Promise<{ fingerprint: string|null, confidence: number, method: string, valueSignature: boolean, isOptional: boolean }>}
    */
   async detectFingerprintFromFacts(facts) {
     if (!facts || typeof facts !== 'string') {
-      return { fingerprint: null, confidence: 0, method: 'invalid_input' };
+      return { fingerprint: null, confidence: 0, method: 'invalid_input', valueSignature: false, isOptional: false };
     }
 
     const factsLower = facts.toLowerCase();
     console.log('[SEMANTIC-FINGERPRINT] Analyzing facts:', facts.substring(0, 100));
+
+    // FIX #716: Define strict value signature rules for sensitive fingerprints
+    // These rules prevent misclassification by requiring actual value patterns
+    const valueSignatureRules = {
+      user_phone_number: {
+        patterns: [
+          /\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/,  // 555-123-4567
+          /\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/,  // (555) 123-4567
+          /\+\d{1,3}\s?\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/,  // +1 555-123-4567
+          /\d{10}/  // 5551234567
+        ],
+        required: true
+      },
+      user_email: {
+        patterns: [/[\w.+-]+@[\w.-]+\.\w+/],
+        required: true
+      },
+      user_salary: {
+        patterns: [
+          /\$\d+[,\d]*/,  // $95,000
+          /\d+k\b/i,  // 95k
+          /(?:USD|EUR|GBP|£|€)\s?\d+[,\d]*/i,  // USD 95000
+          /\d{5,}(?:\.\d{2})?/  // 95000
+        ],
+        required: true
+      },
+      user_age: {
+        patterns: [
+          /\d{1,3}\s*(?:years?\s*old|yo\b)/,
+          /\bage\s*(?:is\s*)?\d+/i,
+          /\bborn\s+in\s+\d{4}/i,
+          /\bI'm\s+\d{1,3}\b/i,
+          /\d{1,3}[-\s]year[-\s]old/i
+        ],
+        required: true
+      },
+      user_meeting_time: {
+        patterns: [/\d{1,2}:\d{2}/, /\d{1,2}\s*(?:am|pm)/i],
+        required: true
+      },
+      user_timezone: {
+        patterns: [/\b(?:EST|PST|CST|MST|UTC|GMT|[A-Z]{3})\b/],
+        required: true
+      }
+    };
 
     // CANONICAL FACT PATTERNS - Semantic, comprehensive detection
     // These patterns work on CLEANED facts, not raw user input
@@ -118,29 +163,34 @@ export class IntelligentMemoryStorage {
         // Using bounded patterns to prevent ReDoS vulnerability
         // Pattern matches: $123, $1,234, $123.45, $1,234.56, 123k, 90k, 12345 (5-9 digits)
         valuePatterns: [/\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?/, /\$\d+/, /\d{1,6}k\b/i, /\d{5,9}/],
-        confidence: 0.90
+        confidence: 0.90,
+        requireValueSignature: true  // FIX #716: Require value signature
       },
       {
         id: 'user_job_title',
         semanticIndicators: ['job', 'position', 'role', 'title', 'work as', 'employed as', 'engineer', 'manager', 'developer', 'analyst', 'director'],
-        confidence: 0.85
+        confidence: 0.85,
+        requireValueSignature: false  // Optional field - no strict requirement
       },
       {
         id: 'user_employer',
         semanticIndicators: ['company', 'employer', 'work at', 'employed by', 'organization', 'firm', 'working for'],
-        confidence: 0.85
+        confidence: 0.85,
+        requireValueSignature: false  // Optional field - no strict requirement
       },
       {
         id: 'user_phone_number',
         semanticIndicators: ['phone', 'number', 'call', 'mobile', 'cell', 'telephone', 'reach'],
         valuePatterns: [/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/, /\(\d{3}\)\s?\d{3}[-.\s]?\d{4}/],
-        confidence: 0.95
+        confidence: 0.95,
+        requireValueSignature: true  // FIX #716: Require value signature
       },
       {
         id: 'user_email',
         semanticIndicators: ['email', 'e-mail', 'mail', 'contact'],
         valuePatterns: [/[\w.-]+@[\w.-]+\.\w+/],
-        confidence: 0.95
+        confidence: 0.95,
+        requireValueSignature: true  // FIX #716: Require value signature
       },
       {
         id: 'user_location',
@@ -148,107 +198,153 @@ export class IntelligentMemoryStorage {
         // Value patterns are optional - location is often detected by semantic indicators alone
         // Pattern matches city names like "Austin", "Austin Texas", "Seattle, WA"
         valuePatterns: [/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?(?:,?\s*[A-Z]{2})?\b/],
-        confidence: 0.85
+        confidence: 0.85,
+        requireValueSignature: false  // Optional field - no strict requirement
       },
       {
         id: 'user_name',
         semanticIndicators: ['name', 'called', 'i\'m', 'i am'],
-        confidence: 0.85
+        confidence: 0.85,
+        requireValueSignature: false  // Optional field - no strict requirement
       },
       {
         id: 'user_allergy',
         semanticIndicators: ['allergy', 'allergic', 'intolerant', 'cannot eat', 'reaction to', 'peanut', 'shellfish', 'lactose', 'anaphylaxis', 'sensitivity'],
         priority: 'critical',  // CRITICAL - Safety critical
-        confidence: 0.95  // HIGH - Safety critical
+        confidence: 0.95,  // HIGH - Safety critical
+        requireValueSignature: false  // Health info - semantic indicators sufficient
       },
       {
         id: 'user_medical',
         semanticIndicators: ['medical', 'condition', 'diagnosis', 'disease', 'illness', 'health', 'doctor'],
-        confidence: 0.90  // HIGH - Health critical
+        confidence: 0.90,  // HIGH - Health critical
+        requireValueSignature: false  // Health info - semantic indicators sufficient
       },
       {
         id: 'user_age',
         semanticIndicators: ['age', 'years old', 'born', 'birthday'],
         valuePatterns: [/\d{1,3}\s*years/, /\d{1,3}\s*old/, /age\s*\d+/],
-        confidence: 0.90
+        confidence: 0.90,
+        requireValueSignature: true  // FIX #716: Require value signature
       },
       {
         id: 'user_marital_status',
         semanticIndicators: ['married', 'single', 'divorced', 'engaged', 'spouse', 'wife', 'husband', 'partner'],
-        confidence: 0.90
+        confidence: 0.90,
+        requireValueSignature: false  // Optional field - no strict requirement
       },
       {
         id: 'user_spouse_name',
         semanticIndicators: ['wife', 'husband', 'spouse', 'partner', 'married to'],
-        confidence: 0.85
+        confidence: 0.85,
+        requireValueSignature: false  // Optional field - no strict requirement
       },
       {
         id: 'user_children_count',
         semanticIndicators: ['child', 'children', 'kid', 'son', 'daughter'],
-        confidence: 0.85
+        confidence: 0.85,
+        requireValueSignature: false  // Optional field - no strict requirement
       },
       {
         id: 'user_pet',
         semanticIndicators: ['pet', 'dog', 'cat', 'bird', 'fish', 'animal'],
-        confidence: 0.80
+        confidence: 0.80,
+        requireValueSignature: false  // Optional field - no strict requirement
       },
       {
         id: 'user_meeting_time',
         semanticIndicators: ['meeting', 'appointment', 'call', 'scheduled', 'rescheduled', 'moved', 'changed'],
         valuePatterns: [/\d{1,2}:\d{2}/, /\d{1,2}\s?(am|pm)/i, /\d{1,2}pm/i],
-        confidence: 0.90
+        confidence: 0.90,
+        requireValueSignature: true  // FIX #716: Require value signature
       },
       {
         id: 'user_favorite_color',
         semanticIndicators: ['favorite color', 'favourite color', 'color', 'like', 'prefer'],
-        confidence: 0.80
+        confidence: 0.80,
+        requireValueSignature: false  // Optional field - no strict requirement
       },
       {
         id: 'user_timezone',
         semanticIndicators: ['timezone', 'time zone', 'est', 'pst', 'cst', 'mst', 'utc', 'gmt'],
-        confidence: 0.85
+        confidence: 0.85,
+        requireValueSignature: true  // FIX #716: Require value signature
       }
     ];
 
-    // Semantic matching: Check for indicator presence + value patterns (if required)
+    // FIX #716: Semantic matching with strict value signature validation
+    // Check for indicator presence + value patterns (if required)
     for (const pattern of canonicalPatterns) {
       const hasIndicator = pattern.semanticIndicators.some(ind => factsLower.includes(ind.toLowerCase()));
 
       if (hasIndicator) {
-        // If value patterns exist, verify at least one matches
-        if (pattern.valuePatterns) {
-          const hasValue = pattern.valuePatterns.some(vp => vp.test(facts));
-          if (hasValue) {
-            console.log(`[SEMANTIC-FINGERPRINT] ✅ Detected ${pattern.id} from facts (indicator + value, confidence: ${pattern.confidence})`);
-            return {
-              fingerprint: pattern.id,
-              confidence: pattern.confidence,
-              method: 'semantic_facts_with_value'
-            };
-          } else {
-            // Indicator found but no value - assign with LOWER confidence
-            // This ensures supersession still triggers, just with less certainty
-            console.log(`[SEMANTIC-FINGERPRINT] ⚠️ Found ${pattern.id} indicator but no value pattern - assigning with reduced confidence`);
-            return {
-              fingerprint: pattern.id,
-              confidence: pattern.confidence * 0.6,  // 60% of normal confidence
-              method: 'semantic_indicator_only'
-            };
+        // FIX #716: Validate value signature for sensitive fingerprints
+        if (pattern.requireValueSignature) {
+          const signatureRule = valueSignatureRules[pattern.id];
+          if (!signatureRule) {
+            console.log(`[SEMANTIC-FINGERPRINT] ⚠️ Missing value signature rule for ${pattern.id} - treating as none`);
+            continue;
           }
-        } else {
-          // No value pattern required, indicator is sufficient
-          console.log(`[SEMANTIC-FINGERPRINT] ✅ Detected ${pattern.id} from facts (semantic indicator, confidence: ${pattern.confidence})`);
+
+          const hasValueSignature = signatureRule.patterns.some(vp => vp.test(facts));
+          if (!hasValueSignature) {
+            // FIX #716: Reject fingerprint assignment if value signature missing
+            const preview = facts.substring(0, 50);
+            console.log(`[FINGERPRINT] id=${pattern.id} fingerprint=none confidence=0 method=rejected_no_value_signature value_signature=false source_preview="${preview}"`);
+            continue;  // Try next pattern - do not assign this fingerprint
+          }
+
+          // Value signature validated - assign fingerprint
+          console.log(`[FINGERPRINT] id=${pattern.id} fingerprint=${pattern.id} confidence=${pattern.confidence} method=semantic_with_value_signature value_signature=true source_preview="${facts.substring(0, 50)}"`);
           return {
             fingerprint: pattern.id,
             confidence: pattern.confidence,
-            method: 'semantic_facts'
+            method: 'semantic_facts_with_value',
+            valueSignature: true,
+            isOptional: false  // FIX #716: Required fields are not optional
+          };
+        }
+
+        // Optional fields - check if value patterns exist and match
+        if (pattern.valuePatterns) {
+          const hasValue = pattern.valuePatterns.some(vp => vp.test(facts));
+          if (hasValue) {
+            console.log(`[FINGERPRINT] id=${pattern.id} fingerprint=${pattern.id} confidence=${pattern.confidence} method=semantic_optional_with_value value_signature=true source_preview="${facts.substring(0, 50)}"`);
+            return {
+              fingerprint: pattern.id,
+              confidence: pattern.confidence,
+              method: 'semantic_facts_with_value',
+              valueSignature: true,
+              isOptional: true  // FIX #716: Optional fields are marked as optional
+            };
+          } else {
+            // Indicator found but no value - assign with LOWER confidence (optional fields only)
+            console.log(`[FINGERPRINT] id=${pattern.id} fingerprint=${pattern.id} confidence=${pattern.confidence * 0.6} method=semantic_indicator_only value_signature=false source_preview="${facts.substring(0, 50)}"`);
+            return {
+              fingerprint: pattern.id,
+              confidence: pattern.confidence * 0.6,  // 60% of normal confidence
+              method: 'semantic_indicator_only',
+              valueSignature: false,
+              isOptional: true  // FIX #716: Optional fields are marked as optional
+            };
+          }
+        } else {
+          // No value pattern required, indicator is sufficient (optional fields only)
+          console.log(`[FINGERPRINT] id=${pattern.id} fingerprint=${pattern.id} confidence=${pattern.confidence} method=semantic_facts value_signature=false source_preview="${facts.substring(0, 50)}"`);
+          return {
+            fingerprint: pattern.id,
+            confidence: pattern.confidence,
+            method: 'semantic_facts',
+            valueSignature: false,
+            isOptional: true  // FIX #716: Optional fields are marked as optional
           };
         }
       }
     }
 
     console.log('[SEMANTIC-FINGERPRINT] ❌ No fingerprint detected in facts');
-    return { fingerprint: null, confidence: 0, method: 'no_match' };
+    console.log(`[FINGERPRINT] id=none fingerprint=none confidence=0 method=no_match value_signature=false source_preview="${facts.substring(0, 50)}"`);
+    return { fingerprint: null, confidence: 0, method: 'no_match', valueSignature: false, isOptional: false };
   }
 
   /**
@@ -1045,6 +1141,7 @@ export class IntelligentMemoryStorage {
         console.log('[FLOW] Step 4: Storing new memory (supersession handled internally if applicable)...');
 
         // FIX #670: Start with base metadata
+        // FIX #716: Include valueSignature and isOptional from fingerprint detection
         let regularMetadata = {
           original_tokens: originalTokens,
           compressed_tokens: compressedTokens,
@@ -1052,6 +1149,8 @@ export class IntelligentMemoryStorage {
           user_priority: userPriorityDetected,
           fingerprint: fingerprintResult.fingerprint,
           fingerprintConfidence: fingerprintResult.confidence,
+          valueSignature: fingerprintResult.valueSignature || false,  // FIX #716: Pass value signature validation result
+          isOptional: fingerprintResult.isOptional || false,  // FIX #716: Pass optional field flag
           importance_score: importanceScore,
           original_user_phrase: userMessage.substring(0, 200)  // CRITICAL FIX #504: Store original for fallback matching
         };
@@ -2023,11 +2122,14 @@ Facts (preserve user terminology + add synonyms):`;
       if (fingerprintResult.fingerprint && fingerprintResult.confidence >= 0.5) {
         console.log(`[INTELLIGENT-STORAGE] ✨ Routing through supersession for fingerprint: ${fingerprintResult.fingerprint} (confidence: ${fingerprintResult.confidence})`);
 
+        // FIX #716: Pass valueSignature and isOptional to supersession service
         const supersessionResult = await storeWithSupersession(this.db, {
           userId,
           content: facts,
           factFingerprint: fingerprintResult.fingerprint,
           fingerprintConfidence: fingerprintResult.confidence,
+          valueSignature: metadata.valueSignature || false,  // FIX #716: Pass value signature validation result
+          isOptional: metadata.isOptional || false,  // FIX #716: Pass optional field flag
           mode: normalizedMode,  // CRITICAL FIX: Use normalized mode (hyphen, not underscore)
           categoryName: category,
           tokenCount,
