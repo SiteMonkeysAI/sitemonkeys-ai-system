@@ -5304,13 +5304,9 @@ Mode: ${modeConfig?.display_name || mode}
     try {
       // ═══════════════════════════════════════════════════════════════
       // GATING CONDITION: Query mentions a proper name (capitalized)
-      // FIX #723 NUA1: Add telemetry for query and names
       // ═══════════════════════════════════════════════════════════════
       const namePattern = /\b([A-Z][a-z]{2,})\b/g;
       const names = [...query.matchAll(namePattern)].map(m => m[1]);
-
-      // FIX #723 NUA1: Log query and names for debugging
-      console.log(`[NUA1-DEBUG] query="${query}" searching_for="${names.join(', ')}"`);
 
       if (names.length === 0) {
         return { correctionApplied: false, response };
@@ -5363,9 +5359,6 @@ Mode: ${modeConfig?.display_name || mode}
         console.log(`[AMBIGUITY-AUTHORITATIVE] db_rows=${dbResult.rows?.length || 0}`);
         console.log(`[AMBIGUITY-DEBUG] Query names: ${candidateNames.join(', ')}`);
         console.log(`[AMBIGUITY-DEBUG] Like patterns: ${likeParams.join(', ')}`);
-
-        // FIX #723 NUA1: Log memory contents for debugging
-        console.log(`[NUA1-DEBUG] memories_found=${dbResult.rows.length} contents=${dbResult.rows.map(m => m.content.slice(0, 50)).join(' | ')}`);
 
         // FIX #659: NUA1 diagnostic - Show ALL rows for entity regardless of is_current (gated by DEBUG_DIAGNOSTICS)
         if (process.env.DEBUG_DIAGNOSTICS === 'true') {
@@ -5489,28 +5482,14 @@ Mode: ${modeConfig?.display_name || mode}
             // Log descriptors found for debugging
             console.log(`[AMBIGUITY-AUTHORITATIVE] entity=${name} descriptors=${Array.from(descriptors).join(',') || 'none'} count=${descriptors.size}`);
 
-            // FIX #723 NUA1: If we found 2+ different descriptors, ambiguity exists
+            // If we found 2+ different descriptors, ambiguity exists
             if (descriptors.size >= 2) {
               ambiguityDetected = {
                 entity: name,
                 variants: Array.from(descriptors).slice(0, 2)
               };
-              console.log(`[NUA1-DEBUG] ambiguity_detected name="${name}" count=${descriptors.size}`);
               this.debug(`[AMBIGUITY-AUTHORITATIVE] Ambiguity detected for "${name}": ${JSON.stringify(Array.from(descriptors))}`);
               break; // Found ambiguity, stop searching
-            }
-
-            // FIX #723 NUA1: Fallback - if we found 2+ distinct memories for the same name, that's ambiguity even without descriptors
-            if (!ambiguityDetected && contents.length >= 2) {
-              // Try to extract ANY distinguishing info from the memories
-              const summaries = contents.map(c => c.slice(0, 100));
-              ambiguityDetected = {
-                entity: name,
-                variants: ['one is mentioned in your memories', 'another is also mentioned']
-              };
-              console.log(`[NUA1-DEBUG] ambiguity_detected name="${name}" count=${contents.length} reason=multiple_entries_no_descriptors`);
-              this.debug(`[AMBIGUITY-AUTHORITATIVE] Ambiguity detected for "${name}" via multiple entries fallback`);
-              break;
             }
           }
         }
@@ -5520,11 +5499,9 @@ Mode: ${modeConfig?.display_name || mode}
 
       // ═══════════════════════════════════════════════════════════════
       // AUTHORITATIVE ENFORCEMENT: Prepend ambiguity notice
-      // FIX #723 NUA1: Add telemetry for final decision
       // ═══════════════════════════════════════════════════════════════
       if (!ambiguityDetected) {
         console.log(`[AMBIGUITY-AUTHORITATIVE] entity=${names[0] || 'unknown'} variants=[] disclosure_prepended=false reason=no_ambiguity`);
-        console.log(`[NUA1-DEBUG] recognizesAmbiguity=false`);
         return { correctionApplied: false, response };
       }
 
@@ -5534,7 +5511,6 @@ Mode: ${modeConfig?.display_name || mode}
         const adjustedResponse = response.trim() + contextNote;
 
         console.log(`[AMBIGUITY-AUTHORITATIVE] entity=${ambiguityDetected.entity} variants=[${ambiguityDetected.variants.join(',')}] disclosure_prepended=false context_appended=true`);
-        console.log(`[NUA1-DEBUG] recognizesAmbiguity=true context_appended=true`);
 
         return {
           correctionApplied: true,
@@ -5547,7 +5523,6 @@ Mode: ${modeConfig?.display_name || mode}
       const adjustedResponse = disclosure + response;
 
       console.log(`[AMBIGUITY-AUTHORITATIVE] entity=${ambiguityDetected.entity} variants=[${ambiguityDetected.variants.join(',')}] disclosure_prepended=true`);
-      console.log(`[NUA1-DEBUG] recognizesAmbiguity=true disclosure="${disclosure.substring(0, 80)}"`);
 
       return {
         correctionApplied: true,
@@ -5714,22 +5689,14 @@ Mode: ${modeConfig?.display_name || mode}
       // GATING CONDITION: User intent is contacts/names query
       // ISSUE #713 REFINEMENT: More precise trigger - only for contact queries
       // FIX #718 CMP2: Use bounded includes for better contact query detection
-      // FIX #723 CMP2: Expand patterns and add logging for exact query string
       // ═══════════════════════════════════════════════════════════════
       const q = String(query || "").slice(0, 4000).toLowerCase();
-
-      // FIX #723 CMP2: Log the EXACT string being checked
-      console.log(`[CMP2-DEBUG] checking_string="${q}" length=${q.length}`);
-
       const isContactQuery =
         q.includes("contact") ||
         q.includes("contacts") ||
+        q.includes("names") ||
         q.includes("who are my") ||
-        q.includes("list my") ||
-        q.includes("my contacts") ||
-        q.includes("people i know") ||
-        q.includes("names") ||  // "what names do I have stored"
-        /who.*(do|have) i (know|mentioned)/i.test(q);
+        q.includes("list my");
 
       // FIX #721 CMP2: Add debug telemetry to diagnose contact query detection
       console.log(`[CMP2-DEBUG] q="${q.substring(0, 100)}" isContactQuery=${isContactQuery}`);
@@ -5869,45 +5836,30 @@ Mode: ${modeConfig?.display_name || mode}
       // ═══════════════════════════════════════════════════════════════
       // TRIGGER CONDITIONS: Append unicode names when EITHER:
       // ISSUE #713 REFINEMENT: Precise conditions - user intent OR broken promise
-      // FIX #723 CMP2: Add fallback for international names even if query not matched
       // ═══════════════════════════════════════════════════════════════
-
+      
       // Condition 1: User intent is contacts query AND response has no unicode
       const condition1 = isContactQuery && !hasUnicode && !corrected;
-
+      
       // Condition 2: Response EXPLICITLY claims it will list contacts AND fails to list any
       // Must be very specific: "include:", "are:", "following:" followed by empty or no names
       const promisesButFailsToDeliver = /\b(?:contacts?|names?|people)\s+(?:include|are|following):\s*$/im.test(response) ||
                                          /\b(?:include|are|following):\s*$/im.test(response) ||
                                          (/\b(?:include|are|following)\b/i.test(response) && !hasUnicode && response.length < 200);
       const condition2 = promisesButFailsToDeliver && !corrected;
-
-      // FIX #723 CMP2: Fallback - if we found 3+ proper names with unicode/international characters, append them
-      const condition3 = !isContactQuery && unicodeNames.length >= 3 && !corrected;
-
-      const needsInjection = condition1 || condition2 || condition3;
-
+      
+      const needsInjection = condition1 || condition2;
+      
       if (needsInjection) {
         const injection = `Your contacts include: ${unicodeNames.slice(0, 3).join(', ')}.`;
         adjustedResponse = response.trim() + '\n\n' + injection;
         corrected = true;
-        const triggerReason = condition1 ? 'contact_query_no_unicode' : (condition2 ? 'promises_but_fails' : 'fallback_international_names');
+        const triggerReason = condition1 ? 'contact_query_no_unicode' : 'promises_but_fails';
         console.log(`[UNICODE-AUTHORITATIVE] Appended unicode names (trigger=${triggerReason})`);
         this.debug(`[UNICODE-AUTHORITATIVE] Appended unicode names list (trigger=${triggerReason})`);
-
-        // FIX #723 CMP2: Log fallback trigger
-        if (condition3) {
-          console.log(`[CMP2-DEBUG] fallback_trigger: found ${unicodeNames.length} international names, appending`);
-        }
       }
 
-      // FIX #723 CMP2: Add specific name telemetry for verification
-      const hasZhang = unicodeNames.some(name => /zhang/i.test(name));
-      const hasBjorn = unicodeNames.some(name => /björn/i.test(name));
-      const hasJose = unicodeNames.some(name => /josé/i.test(name));
-
       console.log(`[UNICODE-AUTHORITATIVE] decision: appended=${corrected} names_found=${unicodeNames.length} trigger_c1=${condition1} trigger_c2=${condition2} names=[${unicodeNames.join(', ')}]`);
-      console.log(`[CMP2-DEBUG] hasZhang=${hasZhang} hasBjorn=${hasBjorn} hasJose=${hasJose}`);
 
       return {
         correctionApplied: corrected,
@@ -6063,16 +6015,15 @@ Mode: ${modeConfig?.display_name || mode}
 
       const ageInference = ageRanges[schoolLevel] || 'school age';
 
-      // FIX #723 INF1: Prepend role inference for kindergarten to ensure it appears
-      let injection = '';
+      // APPEND age inference with uncertainty qualifiers
+      let injection = `Based on ${personName} being in ${schoolLevel.replace('_', ' ')}, ${personName} is ${ageInference}.`;
+
+      // FIX #718 INF1: Add role inference for kindergarten
       if (schoolLevel === 'kindergarten') {
-        injection = `${personName} is a kindergartener, which means ${personName} is ${ageInference}.\n\n`;
-        console.log(`[INF1-DEBUG] role_injected=true text="${injection.substring(0, 100)}"`);
-      } else {
-        injection = `Based on ${personName} being in ${schoolLevel.replace('_', ' ')}, ${personName} is ${ageInference}.\n\n`;
+        injection += ` That means ${personName} is a kindergartener (a young child).`;
       }
 
-      const adjustedResponse = injection + response.trim();
+      const adjustedResponse = response.trim() + '\n\n' + injection;
 
       console.log(`[AGE-INFERENCE] person="${personName}" school_level="${schoolLevel}" age_range="${ageInference}" role_inferred=${schoolLevel === 'kindergarten'} inferred=true appended=true`);
 
