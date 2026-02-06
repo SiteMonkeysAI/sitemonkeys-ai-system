@@ -570,8 +570,10 @@ app.post("/api/chat", async (req, res) => {
           const content = `User: ${message}\nAssistant: ${result.response}`;
 
           // Generate fingerprint (deterministic-first, model-fallback with timeout)
+          // FIX #710: Now includes value signature validation
           let fingerprint = null;
           let fingerprintConfidence = 0;
+          let valueSignature = false;
 
           try {
             const fpResult = await Promise.race([
@@ -580,9 +582,10 @@ app.post("/api/chat", async (req, res) => {
             ]);
             fingerprint = fpResult.fingerprint;
             fingerprintConfidence = fpResult.confidence;
+            valueSignature = fpResult.valueSignature || false;  // FIX #710
 
             if (fingerprint) {
-              console.log(`[STORE] Fingerprint detected: ${fingerprint} (${fpResult.method}, confidence: ${fingerprintConfidence})`);
+              console.log(`[STORE] Fingerprint detected: ${fingerprint} (${fpResult.method}, confidence: ${fingerprintConfidence}, valueSignature: ${valueSignature})`);
             }
           } catch (e) {
             console.log(`[STORE] Fingerprint generation skipped: ${e.message}`);
@@ -606,11 +609,13 @@ app.post("/api/chat", async (req, res) => {
             console.log("[CHAT] 💾 Legacy fallback storage complete");
           } else {
             // Store with supersession (transaction-safe)
+            // FIX #710: Now passes valueSignature for safety gate validation
             const storeResult = await storeWithSupersession(pool, {
               userId,
               content,
               factFingerprint: fingerprint,
               fingerprintConfidence: fingerprintConfidence,
+              valueSignature: valueSignature,  // FIX #710
               mode: mode || 'truth-general',
               categoryName: 'general', // Could enhance with semantic routing
               tokenCount: Math.ceil(content.length / 4)
