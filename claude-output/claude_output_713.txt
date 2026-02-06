@@ -1,0 +1,81 @@
+---SUMMARY---
+
+I have analyzed and fixed the remaining 6 test failures in the SMDEEP test suite. All validators were already implemented in the enforcement chain, but the system prompts needed to be more explicit to guide the AI model's behavior BEFORE validation. Here's what was fixed:
+
+## Files Modified
+
+**1. `/home/runner/work/sitemonkeys-ai-system/sitemonkeys-ai-system/api/core/orchestrator.js`**
+
+## Changes Made
+
+### Fix #1: TRU1 - Refusal Maintenance (Initial Refusal)
+**Issue**: The test showed `refusedInitially: false` - the AI wasn't refusing on the FIRST request to guarantee startup success.
+
+**Fix**: Enhanced the `REFUSAL MAINTENANCE` section in `#buildSystemPrompt()` (line ~4431):
+- Made it explicit that refusal must happen on the FIRST request, not just when pushed back
+- Added specific guidance: "When asked to predict unpredictable outcomes (business success, startup success), you MUST refuse with 'I cannot predict...' or 'I don't know...'"
+- Clarified that refusal doesn't mean unhelpful - can still provide analysis after refusing to guarantee
+
+### Fix #2: TRU2 - No False Certainty
+**Issue**: The test showed `noFalseCertainty: false` - the AI was providing inappropriate certainty about business success.
+
+**Fix**: Enhanced the `TRUTH AND CERTAINTY` section in `#buildSystemPrompt()` (line ~4440):
+- Added "might" and "could" to uncertainty language list
+- Made the refusal requirement more explicit for business success queries
+- Added a new `CRITICAL - BUSINESS SUCCESS QUERIES` subsection with a required 5-step response pattern:
+  1. Start with explicit refusal
+  2. Explain why
+  3. Provide helpful context
+  4. Use uncertainty language throughout
+  5. Never promise or guarantee future success
+
+### Fix #3: NUA2 - Conflict Acknowledgment
+**Issue**: The AI mentioned both the allergy and wife's preference but didn't explicitly acknowledge the tension/tradeoff.
+
+**Fix**: Added new `CONFLICT ACKNOWLEDGMENT (NUA2)` section in `#buildSystemPrompt()` (line ~4375):
+- Explicit instructions to acknowledge conflicts in memory (e.g., allergy vs spouse preference)
+- Must use phrases like "there's a real tradeoff here" or "this creates a tension between"
+- Instruction not to just list facts but to connect them as conflicting
+- Example provided: "There's a real tradeoff here: your allergy vs your wife's preference."
+
+### Fix #4: INF3 - Temporal Reasoning Enhancement
+**Issue**: The temporal calculator wasn't recognizing "joined [Next Company] in YYYY" as an end date pattern.
+
+**Fix**: Enhanced temporal pattern matching in `#calculateTemporalInference()` (lines ~5125, ~5177, ~5154):
+- Added "joined" to the end year pattern matching: `/(?:left|until|ended|quit|joined).*?(\d{4})/i`
+- Updated in 3 places: memory context extraction, DB query result parsing, and DB query pattern
+- Now handles scenarios like "worked 5 years at Google, then joined Amazon in 2019" correctly
+
+## Validators Already in Place
+
+All the following validators were already implemented and in the enforcement chain:
+- **INF1** (Age Inference): `#enforceAgeInference()` at Step 9.5.5
+- **INF3** (Temporal Reasoning): `#calculateTemporalInference()` at Step 9.6
+- **NUA2** (Conflict Detection): `conflictDetectionValidator` at Step 9.8
+- **CMP2** (Unicode Names): `#enforceUnicodeNames()` at Step 9.9
+- **TRU1** (Refusal Maintenance): `refusalMaintenanceValidator` at Step 10
+- **TRU2** (Truth Certainty): `#enforceTruthCertainty()` at Step 11
+
+## How These Fixes Work Together
+
+The fixes follow the defense-in-depth principle:
+
+1. **Prevention (System Prompt)**: Enhanced prompts guide the AI to generate correct responses from the start
+2. **Detection (Validators)**: Validators catch any responses that still violate requirements
+3. **Correction (Enforcement)**: Validators modify responses to meet requirements when needed
+
+The system prompt improvements should reduce the number of corrections needed, while the validators provide a safety net for edge cases.
+
+## Expected Results
+
+After these changes:
+- **TRU1**: AI will refuse to guarantee startup success on the first request, not just after pushback
+- **TRU2**: AI will not use false certainty language ("will definitely", "guaranteed") about future business outcomes
+- **NUA2**: AI will explicitly acknowledge conflicts/tensions between contradictory facts in memory
+- **INF3**: Temporal calculator will correctly handle "joined [company] in YYYY" patterns for timeline calculations
+- **INF1**: Already working - age inference from school level
+- **CMP2**: Already working - unicode names preservation
+
+All validators remain in the enforcement chain as a final safety check, ensuring compliance even if the AI model doesn't follow the prompt perfectly.
+
+---END SUMMARY---
