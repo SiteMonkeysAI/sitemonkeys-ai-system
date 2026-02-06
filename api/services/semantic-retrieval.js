@@ -917,20 +917,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     console.error(`[RETRIEVAL-ENTRY] Received userId:`, userId);
     console.error(`[RETRIEVAL-ENTRY] Type:`, typeof userId);
     console.error(`[SECURITY] This validation prevents cross-user memory leakage`);
-    
-  // DIAGNOSTIC: CMP2 - Log retrieval details for name preservation tests
-  if (message && /who are my|my contacts|my key contacts/i.test(message)) {
-    console.log('[DIAG-CMP2] ═══════════════════════════════════════════════════════');
-    console.log(`[DIAG-CMP2] Query: "${message}"`);
-    console.log(`[DIAG-CMP2] Retrieved ${rankedMemories.length} memories`);
-    rankedMemories.slice(0, 10).forEach((mem, idx) => {
-      const preview = (mem.content || '').substring(0, 100).replace(/\n/g, ' ');
-      console.log(`[DIAG-CMP2]   #${idx + 1} Sim:${(mem.similarity || 0).toFixed(3)} "${preview}"`);
-    });
-    console.log('[DIAG-CMP2] ═══════════════════════════════════════════════════════');
-  }
-
-return {
+    return {
       success: false,
       error: 'userId is required and must be a non-empty string',
       memories: [],
@@ -2388,6 +2375,18 @@ return {
     }));
 
     console.log(`[SEMANTIC RETRIEVAL] ✅ Found ${results.length} memories for "${query.substring(0, 50)}..." (${telemetry.total_ms}ms)`);
+
+    // DIAGNOSTIC: CMP2 - Log retrieval details for name preservation tests
+    if (query && /who are my|my contacts|my key contacts/i.test(query)) {
+      console.log('[DIAG-CMP2] ═══════════════════════════════════════════════════════');
+      console.log(`[DIAG-CMP2] Query: "${query}"`);
+      console.log(`[DIAG-CMP2] Retrieved ${cleanResults.length} memories`);
+      cleanResults.slice(0, 10).forEach((mem, idx) => {
+        const preview = (mem.content || '').substring(0, 100).replace(/\n/g, ' ');
+        console.log(`[DIAG-CMP2]   #${idx + 1} Sim:${(mem.similarity || 0).toFixed(3)} "${preview}"`);
+      });
+      console.log('[DIAG-CMP2] ═══════════════════════════════════════════════════════');
+    }
 
     return {
       success: true,
