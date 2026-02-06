@@ -19,7 +19,7 @@ class ConflictDetectionValidator {
    */
   async validate({ response, memoryContext = [], query = '', context = {} }) {
     // EXECUTION PROOF - Verify conflict detection validator is active (NUA2)
-    console.log('[PROOF] validator:conflict-detection v=2026-02-06a file=api/lib/validators/conflict-detection.js fn=validate');
+    console.log('[PROOF] validator:conflict-detection v=2026-01-30a file=api/lib/validators/conflict-detection.js fn=validate');
 
     try {
       // Extract potential conflicts from memory context
