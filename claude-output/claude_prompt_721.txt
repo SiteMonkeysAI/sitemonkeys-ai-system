@@ -1,0 +1,164 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #721: [claude-fix] Title: Fix 5 SMDEEP failures - root causes identified from production telemetry
+
+Issue Description:
+Summary
+SMDEEP is at 10/15. TRU1 now passes. The remaining 5 failures have clear root causes identified from production logs.
+Constraints
+
+No new validators or files
+No changes to MAX_MEMORIES_FINAL (≤5)
+No broad rewrites
+Each fix must address the specific root cause shown in telemetry
+
+
+Fix 1: CMP2 — isContactQuery detection not matching
+Evidence:
+[UNICODE-AUTHORITATIVE] decision: appended=false names_found=33 trigger_c1=false trigger_c2=false
+Query was "Who are my contacts?" but trigger_c1=false.
+Root cause: The isContactQuery check is not matching. Either:
+
+The includes() logic isn't running
+The query string isn't being passed correctly
+There's a case sensitivity or whitespace issue
+
+Required fix: Add telemetry to show exactly what q contains when the check runs:
+jsconsole.log(`[CMP2-DEBUG] q="${q}" isContactQuery=${isContactQuery}`);
+```
+
+Then fix whatever is causing the mismatch. The query "Who are my contacts?" must result in `trigger_c1=true`.
+
+**Required telemetry after fix:**
+```
+[UNICODE-AUTHORITATIVE] trigger_c1=true names_appended=true
+```
+
+---
+
+## Fix 2: INF3 — Two code paths, only one works
+
+**Evidence:**
+```
+// This works:
+[TEMPORAL-AUTHORITATIVE] entity=Google duration=5 end_year=2019 calculated_start=2014 db_query=false appended=true
+
+// This fails:
+[TEMPORAL-AUTHORITATIVE] duration=5 endYear=null db_query=true calculated_start=NOT_FOUND appended=false
+```
+
+**Root cause:** When `db_query=false`, year extraction works. When `db_query=true`, it fails. There are two different code paths and only one has the fix.
+
+**Required fix:** Find the `db_query=true` code path and apply the same year extraction logic that works in the `db_query=false` path.
+
+**Required telemetry after fix:**
+```
+[TEMPORAL-AUTHORITATIVE] duration=5 endYear=2019 calculated_start=2014 appended=true
+```
+Regardless of `db_query` value.
+
+---
+
+## Fix 3: NUA2 — Canonical sentence not being used
+
+**Evidence:**
+```
+[CONFLICT-VALIDATOR] Injected conflict acknowledgment for 1 conflict(s)
+[ORCHESTRATOR] [ENFORCEMENT] - conflict_detection: applied
+```
+
+But test output shows:
+```
+"There's a real tradeoff here given the information you've provided. On the one hand, your wife loves cats..."
+```
+
+**Root cause:** The validator "injects" but the actual output is a different sentence. Either:
+- The canonical sentence isn't being generated correctly
+- Something overwrites it after injection
+- The injection prepends but the AI generates its own version that appears first
+
+**Required fix:** 
+1. Log the exact sentence being injected
+2. Ensure it matches: `"There's a real tradeoff here: you're allergic to cats, and your wife loves cats."`
+3. Ensure nothing overwrites it
+
+**Required telemetry after fix:**
+```
+[CONFLICT-VALIDATOR] Injected: "There's a real tradeoff here: you're allergic to cats, and your wife loves cats."
+```
+
+---
+
+## Fix 4: STR1 — Memory retrieved but AI ignores it
+
+**Evidence:**
+```
+[KEYWORD-BOOST] Memory 7392: 3/9 keywords matched - boosting 0.523 → 0.640 (+0.117) [PET-BOOST]
+[ISSUE-697]  # 1  | 7392  | 2.573 | 0.448 | tools_tech | "Dog: Max (pet canine)".
+```
+
+Dog memory is rank #1. But test shows `dog: false`.
+
+**Root cause:** This is NOT a retrieval problem. The memory is retrieved and ranked first. The AI is not including it in the response.
+
+**Required fix:** This requires either:
+- Deterministic injection of the dog fact into the response (like vehicle injection)
+- Or investigation of why AI ignores rank #1 memory
+
+Add telemetry showing what memories are actually injected into the prompt vs what appears in response.
+
+---
+
+## Fix 5: INF1 — Age query detection too narrow
+
+**Evidence:**
+```
+[AGE-INFERENCE] skipped reason=age_not_explicitly_asked
+```
+This appears for EVERY query, including the one asking about Emma's age.
+
+**Root cause:** The check for "age explicitly asked" is not matching the actual test query.
+
+**Required fix:** 
+1. Log the query being checked: `[AGE-INFERENCE] query="${query}"`
+2. Expand detection to match the actual test query (likely "How old is Emma?" or similar)
+
+**Required telemetry after fix:**
+```
+[AGE-INFERENCE] query="How old is Emma?" age_asked=true person="Emma" inferred=true
+
+Diagnostic Requirements
+For each fix, before implementing, add debug logging to show:
+
+The exact input being checked
+The exact condition being evaluated
+Why it passes or fails
+
+This prevents another cycle of "code looks right but doesn't work."
+
+Commit Workflow
+
+Add debug telemetry for all 5 issues
+Deploy and run SMDEEP once to capture debug output
+Fix each issue based on actual debug data
+Run SMDEEP again to verify
+
+Do not guess at fixes. Use telemetry to confirm root cause first.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
