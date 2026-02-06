@@ -5645,14 +5645,18 @@ Mode: ${modeConfig?.display_name || mode}
    * Example: José not Jose, Björn not Bjorn
    */
   async #enforceUnicodeNames({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:unicode v=2026-02-06a file=api/core/orchestrator.js fn=#enforceUnicodeNames');
+    console.log('[PROOF] validator:unicode v=2026-02-06b file=api/core/orchestrator.js fn=#enforceUnicodeNames');
 
     try {
       // ═══════════════════════════════════════════════════════════════
-      // GATING CONDITION: Query about contacts/people/names
+      // GATING CONDITION: User intent is contacts/names query
+      // ISSUE #713 REFINEMENT: More precise trigger - only for contact queries
       // ═══════════════════════════════════════════════════════════════
-      const contactsPattern = /\b(contacts|people|names|who are my|list|friends|colleagues)\b/i;
-      if (!contactsPattern.test(query)) {
+      const isContactQuery = /\b(who are|what are|list|tell me about).*(contacts|people|names|friends|colleagues)\b/i.test(query) ||
+                             /\b(my|the)\s+(contacts|people|names|friends|colleagues)\b/i.test(query);
+      
+      if (!isContactQuery) {
+        console.log(`[UNICODE-AUTHORITATIVE] skipped reason=not_contact_query`);
         return { correctionApplied: false, response };
       }
 
@@ -5776,19 +5780,33 @@ Mode: ${modeConfig?.display_name || mode}
         }
       }
 
-      // If response doesn't contain unicode names, APPEND them
-      // Also append if response PROMISES contacts but doesn't deliver them
-      const promisesContacts = /\b(contacts|names|people).*(?:include|are|following|mentioned)\b/i.test(response);
-      const needsInjection = (!hasUnicode && !corrected) || (promisesContacts && !corrected);
+      // ═══════════════════════════════════════════════════════════════
+      // TRIGGER CONDITIONS: Append unicode names when EITHER:
+      // ISSUE #713 REFINEMENT: Precise conditions - user intent OR broken promise
+      // ═══════════════════════════════════════════════════════════════
+      
+      // Condition 1: User intent is contacts query AND response has no unicode
+      const condition1 = isContactQuery && !hasUnicode && !corrected;
+      
+      // Condition 2: Response EXPLICITLY claims it will list contacts AND fails to list any
+      // Must be very specific: "include:", "are:", "following:" followed by empty or no names
+      const promisesButFailsToDeliver = /\b(?:contacts?|names?|people)\s+(?:include|are|following):\s*$/im.test(response) ||
+                                         /\b(?:include|are|following):\s*$/im.test(response) ||
+                                         (/\b(?:include|are|following)\b/i.test(response) && !hasUnicode && response.length < 200);
+      const condition2 = promisesButFailsToDeliver && !corrected;
+      
+      const needsInjection = condition1 || condition2;
       
       if (needsInjection) {
         const injection = `Your contacts include: ${unicodeNames.slice(0, 3).join(', ')}.`;
         adjustedResponse = response.trim() + '\n\n' + injection;
         corrected = true;
-        this.debug(`[UNICODE-AUTHORITATIVE] Appended unicode names list (promisesContacts=${promisesContacts})`);
+        const triggerReason = condition1 ? 'contact_query_no_unicode' : 'promises_but_fails';
+        console.log(`[UNICODE-AUTHORITATIVE] Appended unicode names (trigger=${triggerReason})`);
+        this.debug(`[UNICODE-AUTHORITATIVE] Appended unicode names list (trigger=${triggerReason})`);
       }
 
-      console.log(`[UNICODE-AUTHORITATIVE] decision: appended=${corrected} names_found=${unicodeNames.length} reason=${corrected ? 'injected_unicode_names' : 'already_present'} names=[${unicodeNames.join(', ')}]`);
+      console.log(`[UNICODE-AUTHORITATIVE] decision: appended=${corrected} names_found=${unicodeNames.length} trigger_c1=${condition1} trigger_c2=${condition2} names=[${unicodeNames.join(', ')}]`);
 
       return {
         correctionApplied: corrected,
@@ -5809,14 +5827,16 @@ Mode: ${modeConfig?.display_name || mode}
    * Example: "Emma started kindergarten" + "How old is Emma?" → "typically around 5-6 years old"
    */
   async #enforceAgeInference({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:age_inference v=2026-02-05a file=api/core/orchestrator.js fn=#enforceAgeInference');
+    console.log('[PROOF] validator:age_inference v=2026-02-06a file=api/core/orchestrator.js fn=#enforceAgeInference');
 
     try {
       // ═══════════════════════════════════════════════════════════════
-      // GATING CONDITION: Query asks about age
+      // GATING CONDITION: Query EXPLICITLY asks about age
+      // ISSUE #713 REFINEMENT: Only trigger when age is explicitly requested
       // ═══════════════════════════════════════════════════════════════
-      const agePattern = /\b(how old|age|years old)\b/i;
+      const agePattern = /\b(how old|what age|age of|years old)\b/i;
       if (!agePattern.test(query)) {
+        console.log(`[AGE-INFERENCE] skipped reason=age_not_explicitly_asked`);
         return { correctionApplied: false, response };
       }
 
@@ -5917,29 +5937,30 @@ Mode: ${modeConfig?.display_name || mode}
         return { correctionApplied: false, response };
       }
 
-      // Map school level to age range
+      // Map school level to age range WITH UNCERTAINTY QUALIFIERS
+      // ISSUE #713 REFINEMENT: Never state exact age as fact, always include qualifiers
       const ageRanges = {
-        'preschool': '3-4 years old (preschool age)',
-        'kindergarten': '5-6 years old (kindergarten age, though this can vary with cutoff dates)',
-        'grade_1': '6-7 years old (first grade)',
-        'grade_2': '7-8 years old (second grade)',
-        'grade_3': '8-9 years old (third grade)',
-        'grade_4': '9-10 years old (fourth grade)',
-        'grade_5': '10-11 years old (fifth grade)',
-        'grade_6': '11-12 years old (sixth grade)',
-        'grade_7': '12-13 years old (seventh grade)',
-        'grade_8': '13-14 years old (eighth grade)',
-        'high_school': '14-18 years old (high school age)',
-        'college': '18-22 years old (typical college age)'
+        'preschool': 'typically around 3-4 years old (preschool age)',
+        'kindergarten': 'typically around 5-6 years old (kindergarten age, though this varies by birthday cutoff dates)',
+        'grade_1': 'typically around 6-7 years old (first grade)',
+        'grade_2': 'typically around 7-8 years old (second grade)',
+        'grade_3': 'typically around 8-9 years old (third grade)',
+        'grade_4': 'typically around 9-10 years old (fourth grade)',
+        'grade_5': 'typically around 10-11 years old (fifth grade)',
+        'grade_6': 'typically around 11-12 years old (sixth grade)',
+        'grade_7': 'typically around 12-13 years old (seventh grade)',
+        'grade_8': 'typically around 13-14 years old (eighth grade)',
+        'high_school': 'typically around 14-18 years old (high school age)',
+        'college': 'typically around 18-22 years old (typical college age, though this varies)'
       };
 
       const ageInference = ageRanges[schoolLevel] || 'school age';
 
-      // APPEND age inference
-      const injection = `Based on ${personName} being in ${schoolLevel.replace('_', ' ')}, ${personName} is typically around ${ageInference}.`;
+      // APPEND age inference with uncertainty qualifiers
+      const injection = `Based on ${personName} being in ${schoolLevel.replace('_', ' ')}, ${personName} is ${ageInference}.`;
       const adjustedResponse = response.trim() + '\n\n' + injection;
 
-      console.log(`[AGE-INFERENCE] person="${personName}" school_level="${schoolLevel}" inferred=true appended=true`);
+      console.log(`[AGE-INFERENCE] person="${personName}" school_level="${schoolLevel}" age_range="${ageInference}" inferred=true appended=true`);
 
       return {
         correctionApplied: true,
@@ -5960,7 +5981,7 @@ Mode: ${modeConfig?.display_name || mode}
    * replace with honest uncertainty language.
    */
   async #enforceTruthCertainty({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:truth_certainty v=2026-02-06a file=api/core/orchestrator.js fn=#enforceTruthCertainty');
+    console.log('[PROOF] validator:truth_certainty v=2026-02-06b file=api/core/orchestrator.js fn=#enforceTruthCertainty');
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -6049,53 +6070,51 @@ Mode: ${modeConfig?.display_name || mode}
       console.log(`[TRUTH-CERTAINTY] false_certainty=true matched_phrases=[${matchedPhrases.join(', ')}]`);
 
       // ═══════════════════════════════════════════════════════════════
-      // TRU2 FIX: CORRECTION - Neutralize both explicit and soft certainty
+      // TRU2 FIX: SURGICAL CORRECTION - Only neutralize outcome-promising phrases
+      // ISSUE #713 REFINEMENT: Preserve rest of response, don't rewrite broadly
       // ═══════════════════════════════════════════════════════════════
       let correctedResponse = response;
+      let editsMade = 0;
 
-      // Replace explicit certainty
-      correctedResponse = correctedResponse.replace(/\bwill definitely\b/gi, 'may');
-      correctedResponse = correctedResponse.replace(/\bguaranteed to\b/gi, 'likely to');
-      correctedResponse = correctedResponse.replace(/\b100% certain\b/gi, 'fairly confident');
-      correctedResponse = correctedResponse.replace(/\bI promise\b/gi, 'I believe');
-      correctedResponse = correctedResponse.replace(/\bno doubt\b/gi, 'likely');
-      correctedResponse = correctedResponse.replace(/\byour business will succeed\b/gi, 'your business may succeed');
-      correctedResponse = correctedResponse.replace(/\bstartup will succeed\b/gi, 'startup may succeed');
-      correctedResponse = correctedResponse.replace(/\bwill succeed\b/gi, 'may succeed');
-      correctedResponse = correctedResponse.replace(/\bthis will work\b/gi, 'this could work');
-      correctedResponse = correctedResponse.replace(/\byou'll definitely\b/gi, 'you may');
-      correctedResponse = correctedResponse.replace(/\bwithout question\b/gi, 'likely');
-      correctedResponse = correctedResponse.replace(/\babsolutely will\b/gi, 'likely will');
-      
-      // Replace soft reassurance certainty (TRU2 enhancement)
-      correctedResponse = correctedResponse.replace(/\byou'll (be|do) (fine|great|successful)\b/gi, 'you may $1 $2');
-      correctedResponse = correctedResponse.replace(/\byou will (be|do) (fine|great|successful)\b/gi, 'you may $1 $2');
-      correctedResponse = correctedResponse.replace(/\b(things|it|this) will work out\b/gi, '$1 may work out');
-      correctedResponse = correctedResponse.replace(/\b(things|it|this) is going to work out\b/gi, '$1 may work out');
-      correctedResponse = correctedResponse.replace(/\byou're going to (succeed|make it|do great)\b/gi, 'you may $1');
-      correctedResponse = correctedResponse.replace(/\byou('re| are) gonna (succeed|make it|do great)\b/gi, 'you may $2');
-      correctedResponse = correctedResponse.replace(/\bI'm confident you will\b/gi, 'you may');
-      correctedResponse = correctedResponse.replace(/\bI'm confident your\b/gi, 'your');
-      correctedResponse = correctedResponse.replace(/\bI'm confident this will\b/gi, 'this may');
-      correctedResponse = correctedResponse.replace(/\bI believe you will succeed\b/gi, 'you may succeed');
-      correctedResponse = correctedResponse.replace(/\ball you need to do is\b/gi, 'consider doing this:');
-      correctedResponse = correctedResponse.replace(/\bjust follow (these|this) and you'll\b/gi, 'following $1 may help, but');
-      correctedResponse = correctedResponse.replace(/\bjust follow (these|this) and you will\b/gi, 'following $1 may help, but');
-      correctedResponse = correctedResponse.replace(/\bI'm sure you will\b/gi, 'you may');
-      correctedResponse = correctedResponse.replace(/\bI am sure you will\b/gi, 'you may');
-      correctedResponse = correctedResponse.replace(/\bI'm sure your\b/gi, 'your');
-      correctedResponse = correctedResponse.replace(/\bI am sure your\b/gi, 'your');
-      correctedResponse = correctedResponse.replace(/\bI'm sure this will\b/gi, 'this may');
-      correctedResponse = correctedResponse.replace(/\bI am sure this will\b/gi, 'this may');
-      correctedResponse = correctedResponse.replace(/\byou should (be|feel) confident (that|about)\b/gi, 'you might consider $2');
+      // SURGICAL EDIT: Only replace outcome-promising/reassurance phrases
+      // Preserve surrounding context and sentence structure
+      const surgicalReplacements = [
+        // Explicit guarantees - high confidence neutralization
+        { pattern: /\bwill definitely succeed\b/gi, replace: 'may succeed', category: 'explicit' },
+        { pattern: /\bguaranteed to succeed\b/gi, replace: 'likely to succeed', category: 'explicit' },
+        { pattern: /\b100% certain\b/gi, replace: 'fairly confident', category: 'explicit' },
+        { pattern: /\bwill succeed\b/gi, replace: 'may succeed', category: 'explicit' },
+        { pattern: /\byour business will succeed\b/gi, replace: 'your business may succeed', category: 'explicit' },
+        { pattern: /\byour startup will succeed\b/gi, replace: 'your startup may succeed', category: 'explicit' },
+        
+        // Soft reassurance - surgical neutralization only
+        { pattern: /\byou'll be fine\b/gi, replace: 'you may be fine', category: 'reassurance' },
+        { pattern: /\byou will be fine\b/gi, replace: 'you may be fine', category: 'reassurance' },
+        { pattern: /\bthings will work out\b/gi, replace: 'things may work out', category: 'reassurance' },
+        { pattern: /\bit will work out\b/gi, replace: 'it may work out', category: 'reassurance' },
+        { pattern: /\byou're going to succeed\b/gi, replace: 'you may succeed', category: 'reassurance' },
+        { pattern: /\byou are going to succeed\b/gi, replace: 'you may succeed', category: 'reassurance' },
+        { pattern: /\bI'm confident (?:you|your|this) will succeed\b/gi, replace: 'you may succeed', category: 'reassurance' },
+        { pattern: /\bI believe you will succeed\b/gi, replace: 'you may succeed', category: 'reassurance' }
+      ];
 
-      // Append disclaimer if major corrections were made
-      if (matchedPhrases.length >= 2) {
-        correctedResponse = correctedResponse.trim() + '\n\n' +
-          'Important: I cannot guarantee future outcomes. Success depends on execution, market conditions, and factors I cannot predict.';
+      for (const { pattern, replace, category } of surgicalReplacements) {
+        const beforeCount = (correctedResponse.match(pattern) || []).length;
+        correctedResponse = correctedResponse.replace(pattern, replace);
+        const afterCount = (correctedResponse.match(pattern) || []).length;
+        if (beforeCount > afterCount) {
+          editsMade += (beforeCount - afterCount);
+        }
       }
 
-      console.log(`[TRUTH-CERTAINTY] false_certainty=true correction=true corrections_made=${matchedPhrases.length}`);
+      // Optional disclaimer: Only if multiple outcome promises detected
+      let disclaimerAdded = false;
+      if (matchedPhrases.length >= 3) {
+        correctedResponse = "I cannot guarantee future outcomes. " + correctedResponse.trim();
+        disclaimerAdded = true;
+      }
+
+      console.log(`[TRUTH-CERTAINTY] false_certainty=true correction=true surgical_edits=${editsMade} disclaimer_added=${disclaimerAdded} phrases_detected=${matchedPhrases.length}`);
 
       return {
         correctionApplied: true,
