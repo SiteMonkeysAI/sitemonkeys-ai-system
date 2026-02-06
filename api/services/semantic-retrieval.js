@@ -917,7 +917,20 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     console.error(`[RETRIEVAL-ENTRY] Received userId:`, userId);
     console.error(`[RETRIEVAL-ENTRY] Type:`, typeof userId);
     console.error(`[SECURITY] This validation prevents cross-user memory leakage`);
-    return {
+    
+  // DIAGNOSTIC: CMP2 - Log retrieval details for name preservation tests
+  if (message && /who are my|my contacts|my key contacts/i.test(message)) {
+    console.log('[DIAG-CMP2] ═══════════════════════════════════════════════════════');
+    console.log(`[DIAG-CMP2] Query: "${message}"`);
+    console.log(`[DIAG-CMP2] Retrieved ${rankedMemories.length} memories`);
+    rankedMemories.slice(0, 10).forEach((mem, idx) => {
+      const preview = (mem.content || '').substring(0, 100).replace(/\n/g, ' ');
+      console.log(`[DIAG-CMP2]   #${idx + 1} Sim:${(mem.similarity || 0).toFixed(3)} "${preview}"`);
+    });
+    console.log('[DIAG-CMP2] ═══════════════════════════════════════════════════════');
+  }
+
+return {
       success: false,
       error: 'userId is required and must be a non-empty string',
       memories: [],

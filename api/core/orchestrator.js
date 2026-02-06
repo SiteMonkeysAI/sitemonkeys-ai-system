@@ -1,5 +1,7 @@
 // /api/core/orchestrator.js
-// ORCHESTRATOR - Central Request Coordinator
+// ORCHE
+          console.log(`[DIAG-INF3] ✓ Found duration: ${duration} years`);
+STRATOR - Central Request Coordinator
 // Executes all chat requests in correct priority order
 // Truth > Memory > Analysis > AI > Personality > Validation > Fallback (last resort)
 
@@ -2292,7 +2294,20 @@ export class Orchestrator {
         const memoriesPreCap = result.memories.length;
 
         // Apply strict cap - ambiguity detection happens in validator via DB query
-        memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
+        
+        // DIAGNOSTIC: NUA1 - Log all memory scores before cap (especially for ambiguity testing)
+        if (result.memories && result.memories.length > 0) {
+          console.log('[DIAG-NUA1] ═══════════════════════════════════════════════════════');
+          console.log(`[DIAG-NUA1] Retrieved ${result.memories.length} memories before MAX_MEMORIES_FINAL cap`);
+          result.memories.forEach((mem, idx) => {
+            const preview = (mem.content || '').substring(0, 80).replace(/\n/g, ' ');
+            const score = (mem.hybrid_score || mem.similarity || 0).toFixed(3);
+            const will_inject = idx < MAX_MEMORIES_FINAL ? 'INJECT' : 'CUT';
+            console.log(`[DIAG-NUA1]   #${idx + 1} [${will_inject}] ID:${mem.id} Score:${score} "${preview}"`);
+          });
+          console.log('[DIAG-NUA1] ═══════════════════════════════════════════════════════');
+        }
+memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
 
         const memoriesPostCap = memoriesToFormat.length;
 
@@ -5120,6 +5135,10 @@ Mode: ${modeConfig?.display_name || mode}
       let entity = null;
 
       for (const memory of memories) {
+        // DIAGNOSTIC: INF3 - Log pattern matching for temporal extraction
+        const contentPreview = (memory.content || '').substring(0, 120);
+        console.log(`[DIAG-INF3] Testing memory: "${contentPreview}"`);
+
         const content = (memory.content || '').substring(0, 500); // Slice for safety
 
         // Match duration: "worked X years", "X years at", "for X years"
