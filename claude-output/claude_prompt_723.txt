@@ -1,0 +1,184 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #723: [claude-fix]  Fix 4 SMDEEP failures - complete fixes for INF1, INF3, CMP2, NUA1
+
+Issue Description:
+Summary
+SMDEEP is at 11/15. Diagnostic telemetry identified exact root causes for all 4 remaining failures. This issue provides complete fixes for each.
+Constraints
+
+No new validators or files
+No changes to MAX_MEMORIES_FINAL (≤5)
+No broad rewrites
+Each fix must include verification telemetry
+
+
+Fix 1: INF3 — Extraction loses year from graduation statement
+Evidence:
+[EXTRACTION-DEBUG] Original: "I graduated from MIT in 2010"
+[EXTRACTION-DEBUG] Extracted: "(Massachusetts."
+Root cause: The extraction regex or logic is failing to capture the year pattern "in YYYY" from graduation statements.
+Required fix in extraction logic:
+Add explicit year preservation for education statements:
+js// Before any other extraction, preserve years in education context
+const educationYearPattern = /\b(graduated|degree|diploma|bachelor|master|phd)\b.*?\b(19|20)\d{2}\b/i;
+const yearMatch = content.match(/\b(19|20)\d{2}\b/);
+
+// Ensure extracted output includes the year if present in original
+if (yearMatch && !extracted.includes(yearMatch[0])) {
+  extracted = extracted.replace(/\."?$/, ` in ${yearMatch[0]}."`);
+}
+```
+
+**Expected result:**
+```
+[EXTRACTION-DEBUG] Original: "I graduated from MIT in 2010"
+[EXTRACTION-DEBUG] Extracted: "Education: graduated MIT in 2010 (university degree)."
+```
+
+---
+
+## Fix 2: INF1 — Role inference not including "kindergartener" in response
+
+**Evidence:**
+```
+[INF1-DEBUG] query="Approximately how old is Emma?" age_asked=true
+infersAge: true, infersRole: false
+Response: "Emma started kindergarten...around 5-6 years old"
+Root cause: The role injection code adds text but it either:
+
+Doesn't include the word "kindergartener"
+Isn't being appended to the response
+
+Required fix in #enforceAgeInference:
+The injection MUST include the literal word "kindergartener":
+jsif (schoolLevel === 'kindergarten') {
+  const roleInjection = `Emma is a kindergartener, which means she is a young child around 5-6 years old.`;
+  
+  // Prepend to response to ensure it appears
+  modifiedResponse = roleInjection + '\n\n' + response;
+  
+  console.log(`[INF1-DEBUG] role_injected=true text="${roleInjection}"`);
+}
+```
+
+**Expected result:**
+```
+Response contains: "kindergartener"
+infersRole: true
+```
+
+---
+
+## Fix 3: CMP2 — Contact query not detected, names not appended
+
+**Evidence:**
+```
+[UNICODE-AUTHORITATIVE] decision: appended=false names_found=33 trigger_c1=false trigger_c2=false
+Names are found (Zhang, Björn, José) but trigger_c1=false means isContactQuery returned false.
+Root cause: The query being checked doesn't contain "contact" or "who are my". The CMP2 test query is likely "Who are my contacts?" but the check runs on a different string (possibly the response or a transformed query).
+Required fix in #enforceUnicodeNames:
+
+Log the EXACT string being checked:
+
+jsconsole.log(`[CMP2-DEBUG] checking_string="${q}" length=${q.length}`);
+
+Expand contact detection to catch more patterns:
+
+jsconst isContactQuery =
+  q.includes("contact") ||
+  q.includes("contacts") ||
+  q.includes("who are my") ||
+  q.includes("list my") ||
+  q.includes("my contacts") ||
+  q.includes("people i know") ||
+  q.includes("names") ||  // "what names do I have stored"
+  /who.*(do|have) i (know|mentioned)/i.test(q);
+
+If names are found AND this is a contact-related context (even if query doesn't match), append them:
+
+js// Fallback: if we found 3+ proper names with unicode/international characters, append them
+if (unicodeNames.length >= 3 && !isContactQuery) {
+  console.log(`[CMP2-DEBUG] fallback_trigger: found ${unicodeNames.length} international names, appending`);
+  shouldAppend = true;
+}
+```
+
+**Expected result:**
+```
+[UNICODE-AUTHORITATIVE] decision: appended=true names=[Xiaoying Zhang-Müller, Björn, José García-López]
+hasZhang: true, hasBjorn: true, hasJose: true
+```
+
+---
+
+## Fix 4: NUA1 — Alex ambiguity not recognized (regression)
+
+**Evidence:**
+```
+recognizesAmbiguity: false
+preview: "Based on working 5 years and leaving in 2019, you started at Google in 2014."
+The response is about temporal calculation, not about Alex at all. This means:
+
+Either the Alex memories aren't being retrieved
+Or the ambiguity detector isn't running
+
+Required fix in ambiguity detection:
+
+Add telemetry to confirm Alex memories exist:
+
+jsconsole.log(`[NUA1-DEBUG] query="${query}" searching_for="Alex"`);
+console.log(`[NUA1-DEBUG] memories_found=${memories.length} contents=${memories.map(m => m.content.slice(0,50))}`);
+
+The ambiguity detector must check for multiple entries with same name:
+
+js// Group memories by name
+const nameGroups = {};
+memories.forEach(m => {
+  const names = extractNames(m.content);
+  names.forEach(name => {
+    if (!nameGroups[name]) nameGroups[name] = [];
+    nameGroups[name].push(m);
+  });
+});
+
+// Flag ambiguity if any name appears in multiple distinct memories
+Object.entries(nameGroups).forEach(([name, mems]) => {
+  if (mems.length > 1) {
+    console.log(`[NUA1-DEBUG] ambiguity_detected name="${name}" count=${mems.length}`);
+    // Inject disambiguation: "You know multiple people named Alex..."
+  }
+});
+
+When ambiguity detected, prepend clarification:
+
+jsconst disambiguation = `You know multiple people named Alex: one is a friend who is a doctor, and another is a colleague who works in marketing. Which Alex are you asking about?`;
+modifiedResponse = disambiguation + '\n\n' + response;
+```
+
+**Expected result:**
+```
+recognizesAmbiguity: true
+Response contains: "multiple" or "which Alex" or lists both Alexes
+
+Verification
+After all fixes, run SMDEEP. Expected result: 15/15
+Each fix includes telemetry so if any still fail, logs will show exactly why.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
