@@ -1486,7 +1486,27 @@ Facts (preserve user terminology + add synonyms):`;
     const tokenPattern = /\b[A-Z]+-\d+-[A-Z0-9]+\b|\b[A-Z]+-\d{10,}\b|\bDr\.\s*[A-Z]+-\d+\b|\b[A-Z0-9]{12,}\b/gi;
     const originalTokens = originalMessage.match(tokenPattern) || [];
 
-    if (originalTokens.length === 0) {
+    if (originalTokens.length === 0
+      // DIAGNOSTIC: INF1 - Log relationship keyword preservation
+      if (userMessage && /daughter|son|mother|father|brother|sister|wife|husband/i.test(userMessage)) {
+        console.log('[DIAG-INF1] ═══════════════════════════════════════════════════════');
+        console.log(`[DIAG-INF1] Input: "${userMessage.substring(0, 150)}"`);
+        console.log(`[DIAG-INF1] Output: "${facts.substring(0, 150)}"`);
+        
+        // Check if relationship keyword was preserved
+        const relationshipKeywords = ['daughter', 'son', 'mother', 'father', 'brother', 'sister', 'wife', 'husband'];
+        const inputKeywords = relationshipKeywords.filter(kw => new RegExp(kw, 'i').test(userMessage));
+        const outputKeywords = relationshipKeywords.filter(kw => new RegExp(kw, 'i').test(facts));
+        
+        console.log(`[DIAG-INF1] Relationship keywords in input: [${inputKeywords.join(', ')}]`);
+        console.log(`[DIAG-INF1] Relationship keywords in output: [${outputKeywords.join(', ')}]`);
+        
+        const preserved = inputKeywords.every(kw => outputKeywords.includes(kw));
+        console.log(`[DIAG-INF1] Preservation status: ${preserved ? '✓ PRESERVED' : '✗ LOST'}`);
+        console.log('[DIAG-INF1] ═══════════════════════════════════════════════════════');
+      }
+
+) {
       return facts; // No special tokens to protect
     }
 

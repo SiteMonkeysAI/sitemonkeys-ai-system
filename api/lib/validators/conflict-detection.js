@@ -116,7 +116,21 @@ class ConflictDetectionValidator {
           spousePreferenceMemories: spousePreferenceMemories.map(m => m.content || m.text)
         });
       }
+ 
+    // DIAGNOSTIC: NUA2 - Log conflict detection results
+    console.log('[DIAG-NUA2] ═══════════════════════════════════════════════════════');
+    console.log(`[DIAG-NUA2] Checked ${memories.length} memories for conflicts`);
+    console.log(`[DIAG-NUA2] Allergy memories found: ${allergyMemories.length}`);
+    console.log(`[DIAG-NUA2] Spouse preference memories found: ${spousePreferenceMemories.length}`);
+    console.log(`[DIAG-NUA2] Total conflicts detected: ${conflicts.length}`);
+    if (conflicts.length > 0) {
+      conflicts.forEach((c, idx) => {
+        console.log(`[DIAG-NUA2]   Conflict #${idx + 1}: ${c.type} - ${c.description}`);
+      });
     }
+    console.log('[DIAG-NUA2] ═══════════════════════════════════════════════════════');
+
+   }
 
     return conflicts;
   }
