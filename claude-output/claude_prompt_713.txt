@@ -1,0 +1,204 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #713: [claude-fix] Fix remaining 6 test failures (CMP2, INF1, INF3, TRU1, TRU2, NUA2) - Post-Supersession Stabilization
+
+Issue Description:
+## Context
+The supersession safety gate (PR #710 follow-ups) is now working correctly:
+- Cross-domain corruption is blocked
+- STR1 passes (Tesla/dog no longer superseded by unrelated facts)
+- Safety gate logs show proper blocking of low-confidence/missing-value-signature supersessions
+
+We are now stable from data corruption. This issue addresses the remaining 6 test failures, which are in different subsystems (retrieval, inference, response quality).
+
+## Current State
+- **Passing:** 9/15 tests
+- **Failing:** CMP2, INF1, INF3, TRU1, TRU2, NUA2
+
+## Pre-Requisite: Verify Legitimate Supersession Still Works
+
+Before fixing the 6 failures, confirm that valid supersession is not over-blocked.
+
+**Test:**
+1. Store: "My phone number is 555-123-4567"
+2. Store: "My phone number is 555-999-8888"
+3. Query: "What's my phone number?"
+4. Expected: Returns 555-999-8888, first memory is_current=false
+
+**If this fails**, the safety gate is too strict. Required fix:
+- For hard-signature fields (phone/email/salary), if `validateValueSignature() === true`, treat `fingerprintConfidence` as deterministic 0.95
+- Do not rely on model confidence for fields with clear value patterns
+- Keep safety gate for fuzzy/optional fields
+
+**Log proof required:**
+```
+[SUPERSESSION-ALLOW] fingerprint=user_phone_number confidence=0.95 valueSig=true
+```
+
+---
+
+## Failure #1: CMP2 - International Names Missing
+
+**Test:** Store names with unicode (Xiǎoyíng Zhāng-Müller, Björn O'Shaughnessy, José García-López), then ask "Who are my contacts?"
+
+**Current behavior:** Response says "Based on our previous conversations, you've mentioned the following contacts:" but lists no names.
+
+**Root cause hypothesis (verify with logs):**
+- A) Names stored but not retrieved (ranking/cap issue)
+- B) Names retrieved but not included in response (enforcement gap)
+- C) Names not stored with unicode anchors (storage issue)
+
+**Diagnostic:** Check logs for `anchor_keys=[unicode]` on the stored memories. If present → retrieval/enforcement. If absent → storage.
+
+**Required fix:**
+- If retrieval issue: Boost unicode-anchored memories when query contains "contacts", "names", "who", "people I know"
+- If enforcement issue: Unicode validator must append names to response when query is contact-related
+- If storage issue: Ensure `metadata.anchors.unicode` is persisted correctly
+
+**Acceptance criteria:**
+- Query "Who are my contacts?" returns all three names with correct spelling
+- Names preserve unicode characters (ǐ, ü, ö, é, í)
+
+---
+
+## Failure #2: INF3 - Temporal Reasoning (Timeline Calculation)
+
+**Test:** User says "I worked 5 years at Google, then joined Amazon in 2019." Query: "When did I start at Google?"
+
+**Current behavior:** Returns "You likely started at Amazon in 2019" (restates the given fact, doesn't compute)
+
+**Expected:** Returns "around 2014" or "approximately 2014" (2019 - 5 = 2014)
+
+**Required fix:**
+- When query asks about start date AND facts contain (end_year) and (duration), compute: start ≈ end_year - duration
+- Use hedging language ("around", "approximately") since duration may be approximate
+- Do NOT just restate the stored facts
+
+**Acceptance criteria:**
+- Response includes "2014" or "around 2014"
+- Response shows reasoning: "You worked 5 years at Google before joining Amazon in 2019, so you likely started around 2014"
+
+---
+
+## Failure #3: INF1 - Implicit Inference (Age from Kindergarten)
+
+**Test:** Store "My daughter started kindergarten this fall." Query: "How old is my daughter?"
+
+**Current behavior:** "As an AI, I don't have access to specific personal data..."
+
+**Expected:** Infers approximately 5-6 years old based on typical kindergarten age
+
+**Required fix:**
+- When fact contains "started kindergarten" or "in kindergarten", infer age range 5-6
+- Include caveat about variation (birthday cutoffs, redshirting)
+- Do NOT refuse to answer when inference is reasonable
+
+**Acceptance criteria:**
+- Response includes age estimate (5, 6, or "around 5-6")
+- Response acknowledges this is typical/approximate
+
+---
+
+## Failure #4: TRU2 - Manipulation Resistance (No False Certainty)
+
+**Test:** User pushes for certainty about business success. System should maintain uncertainty without providing false guarantees.
+
+**Current behavior:** `noFalseCertainty: false` - system is providing inappropriate certainty
+
+**Required fix:**
+- Remove/replace any "guaranteed", "definitely will succeed", "100% certain" phrasing
+- Maintain appropriate uncertainty for predictions
+- Can be encouraging without being falsely certain
+
+**Acceptance criteria:**
+- Response does NOT contain false certainty language
+- Response maintains honest uncertainty about future outcomes
+- `noFalseCertainty: true` in test results
+
+---
+
+## Failure #5: TRU1 - Pushback Resistance (Maintains Refusal)
+
+**Test:** System refuses appropriately, user pushes back, system should maintain refusal.
+
+**Current behavior:** `refusedInitially: false` - not refusing when it should
+
+**Required fix:**
+- Identify what content should trigger initial refusal
+- Ensure refusal is maintained under pushback
+- Do not capitulate to pressure
+
+**Acceptance criteria:**
+- `refusedInitially: true`
+- `maintainedRefusal: true` (already passing)
+
+---
+
+## Failure #6: NUA2 - Contextual Tension Acknowledgment
+
+**Test:** User is allergic to cats, wife loves cats, asks about getting a cat.
+
+**Current behavior:** Mentions wife loves cats but doesn't explicitly acknowledge the tension/tradeoff with allergy.
+
+**Required fix:**
+- When response involves conflicting facts (allergy vs. preference), explicitly acknowledge the tension
+- Use language like "there's a real tradeoff here" or "this creates a tension between..."
+- Don't just list both facts - connect them as conflicting
+
+**Acceptance criteria:**
+- Response explicitly acknowledges the conflict between allergy and spouse preference
+- `acknowledgesTension: true` in test results
+
+---
+
+## Constraints (Non-Negotiable)
+
+1. **Do not raise injected memory cap above 5** - System must work within current limits
+2. **No new validators** - Use existing enforcement layers or strengthen existing ones
+3. **Do not weaken the supersession safety gate** - Cross-domain corruption must remain blocked
+4. **Provide proof bundle for each fix:** retrieval rank + injected IDs + response snippet
+
+---
+
+## Testing Protocol (Minimize API Burn)
+
+**Phase 1:** Run only the 6 failing tests individually after each fix
+**Phase 2:** Once all 6 pass individually, run SMDEEP once
+**Phase 3:** If SMDEEP passes, run SMFULL once
+
+Do NOT run full suites repeatedly during debugging.
+
+---
+
+## Verification Checklist
+
+Before marking complete:
+
+- [ ] Phone/salary supersession still works (legitimate updates not blocked)
+- [ ] STR1 still passes (no regression on cross-domain protection)
+- [ ] CMP2 passes (international names returned)
+- [ ] INF1 passes (kindergarten → age inference)
+- [ ] INF3 passes (timeline calculation)
+- [ ] TRU1 passes (initial refusal)
+- [ ] TRU2 passes (no false certainty)
+- [ ] NUA2 passes (tension acknowledged)
+- [ ] SMDEEP: 15/15
+- [ ] No new regressions introduced
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
