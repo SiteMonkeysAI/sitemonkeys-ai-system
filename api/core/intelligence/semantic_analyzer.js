@@ -2,16 +2,16 @@
 // SEMANTIC ANALYZER - Real embedding-based semantic understanding
 // Uses OpenAI embeddings for intent/domain classification, not pattern matching
 
-import OpenAI from "openai";
-import { driftWatcher } from "../../lib/validators/drift-watcher.js";
-import { costTracker } from "../../utils/cost-tracker.js";
+import OpenAI from 'openai';
+import { driftWatcher } from '../../lib/validators/drift-watcher.js';
+import { costTracker } from '../../utils/cost-tracker.js';
 
 export class SemanticAnalyzer {
   constructor() {
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || "sk-dummy-key-for-testing",
+      apiKey: process.env.OPENAI_API_KEY || 'sk-dummy-key-for-testing',
     });
-    this.embeddingModel = "text-embedding-3-small";
+    this.embeddingModel = 'text-embedding-3-small';
     this.embeddingCache = new Map();
     this.maxCacheSize = 500;
 
@@ -43,20 +43,17 @@ export class SemanticAnalyzer {
 
     try {
       this.logger.log(
-        "Initializing SemanticAnalyzer - pre-computing category embeddings in parallel...",
+        'Initializing SemanticAnalyzer - pre-computing category embeddings in parallel...',
       );
 
       // Intent category representative phrases
       const intentPhrases = {
-        question: "What is this? How does it work? Can you explain?",
-        command: "Please do this. Create that. Build this for me.",
+        question: 'What is this? How does it work? Can you explain?',
+        command: 'Please do this. Create that. Build this for me.',
         discussion: "Let's talk about this topic. I want to explore this idea.",
-        problem_solving:
-          "I have a problem. How do I solve this? I need help fixing this.",
-        decision_making:
-          "Should I do this or that? What's the best option? Help me choose.",
-        emotional_expression:
-          "I feel frustrated. I'm excited about this. This worries me.",
+        problem_solving: 'I have a problem. How do I solve this? I need help fixing this.',
+        decision_making: "Should I do this or that? What's the best option? Help me choose.",
+        emotional_expression: "I feel frustrated. I'm excited about this. This worries me.",
         information_sharing:
           "I want to tell you about this. Here's what happened. This is important to know.",
       };
@@ -66,36 +63,28 @@ export class SemanticAnalyzer {
       // Separates "API token" from "cryptocurrency token" through contextual clustering
       const domainPhrases = {
         business:
-          "revenue growth, market strategy, customer acquisition, business model, profitability, scaling operations, entrepreneurship, company management",
+          'revenue growth, market strategy, customer acquisition, business model, profitability, scaling operations, entrepreneurship, company management',
         technical:
-          "software development, coding, system architecture, API integration, debugging, technical implementation, programming, computer systems, technology tools, API tokens, session tokens, authentication tokens, JWT tokens, OAuth tokens, refresh tokens, access tokens, API rate limiting, rate limits, API quotas, token expiration, session management, API keys, authentication headers, bearer tokens, token-based authentication, API endpoints, REST API, GraphQL API, API gateway, middleware, backend services, database queries, connection pooling, cache management, request throttling, concurrent requests, API versioning, SDK integration, webhook handling, payload validation, request signing, token refresh flow, session persistence, distributed systems, microservices architecture",
+          'software development, coding, system architecture, API integration, debugging, technical implementation, programming, computer systems, technology tools, API tokens, session tokens, authentication tokens, JWT tokens, OAuth tokens, refresh tokens, access tokens, API rate limiting, rate limits, API quotas, token expiration, session management, API keys, authentication headers, bearer tokens, token-based authentication, API endpoints, REST API, GraphQL API, API gateway, middleware, backend services, database queries, connection pooling, cache management, request throttling, concurrent requests, API versioning, SDK integration, webhook handling, payload validation, request signing, token refresh flow, session persistence, distributed systems, microservices architecture',
         personal:
-          "relationships, family matters, personal growth, social connections, life decisions, personal experiences, friendships, social life",
+          'relationships, family matters, personal growth, social connections, life decisions, personal experiences, friendships, social life',
         health:
-          "medical concerns, wellness, fitness, symptoms, healthcare, mental health, physical wellbeing, exercise, nutrition, doctor visits",
+          'medical concerns, wellness, fitness, symptoms, healthcare, mental health, physical wellbeing, exercise, nutrition, doctor visits',
         financial:
-          "money management, investments, budgeting, financial planning, savings, debt, income, cryptocurrency prices, stock market, Bitcoin price, Ethereum price, crypto tokens, payment tokens, financial tokens, utility tokens, security tokens, token sale, ICO, token economics, tokenomics, DeFi tokens, NFT tokens, blockchain tokens, digital assets, crypto portfolio, token trading, token staking",
+          'money management, investments, budgeting, financial planning, savings, debt, income, cryptocurrency prices, stock market, Bitcoin price, Ethereum price, crypto tokens, payment tokens, financial tokens, utility tokens, security tokens, token sale, ICO, token economics, tokenomics, DeFi tokens, NFT tokens, blockchain tokens, digital assets, crypto portfolio, token trading, token staking',
         creative:
-          "artistic projects, creative writing, design work, creative problem solving, artistic expression, music, art, design",
+          'artistic projects, creative writing, design work, creative problem solving, artistic expression, music, art, design',
         general:
-          "everyday questions, general knowledge, casual conversation, various topics, common inquiries, weather, news, current events, factual information",
+          'everyday questions, general knowledge, casual conversation, various topics, common inquiries, weather, news, current events, factual information',
       };
 
       // Configurable timeout (default 20 seconds, can be overridden via environment variable)
-      const timeoutMs = parseInt(
-        process.env.SEMANTIC_INIT_TIMEOUT_MS || "20000",
-        10,
-      );
+      const timeoutMs = parseInt(process.env.SEMANTIC_INIT_TIMEOUT_MS || '20000', 10);
 
       // Create timeout promise
       const timeoutPromise = new Promise((_, reject) =>
         setTimeout(
-          () =>
-            reject(
-              new Error(
-                `Embedding initialization timeout after ${timeoutMs}ms`,
-              ),
-            ),
+          () => reject(new Error(`Embedding initialization timeout after ${timeoutMs}ms`)),
           timeoutMs,
         ),
       );
@@ -103,21 +92,17 @@ export class SemanticAnalyzer {
       // Create parallel embedding computation promise
       const embeddingPromise = (async () => {
         // Launch all embedding computations in parallel
-        const intentPromises = Object.entries(intentPhrases).map(
-          async ([intent, phrase]) => {
-            const embedding = await this.#getEmbedding(phrase);
-            this.logger.log(`✓ Pre-computed embedding for intent: ${intent}`);
-            return [intent, embedding];
-          },
-        );
+        const intentPromises = Object.entries(intentPhrases).map(async ([intent, phrase]) => {
+          const embedding = await this.#getEmbedding(phrase);
+          this.logger.log(`✓ Pre-computed embedding for intent: ${intent}`);
+          return [intent, embedding];
+        });
 
-        const domainPromises = Object.entries(domainPhrases).map(
-          async ([domain, phrase]) => {
-            const embedding = await this.#getEmbedding(phrase);
-            this.logger.log(`✓ Pre-computed embedding for domain: ${domain}`);
-            return [domain, embedding];
-          },
-        );
+        const domainPromises = Object.entries(domainPhrases).map(async ([domain, phrase]) => {
+          const embedding = await this.#getEmbedding(phrase);
+          this.logger.log(`✓ Pre-computed embedding for domain: ${domain}`);
+          return [domain, embedding];
+        });
 
         // Wait for all embeddings to complete in parallel
         this.logger.log(
@@ -139,14 +124,12 @@ export class SemanticAnalyzer {
       await Promise.race([embeddingPromise, timeoutPromise]);
 
       const initTime = Date.now() - initStartTime;
-      this.logger.log(
-        `✅ SemanticAnalyzer initialization complete in ${initTime}ms`,
-      );
+      this.logger.log(`✅ SemanticAnalyzer initialization complete in ${initTime}ms`);
       return true;
     } catch (error) {
       const initTime = Date.now() - initStartTime;
 
-      if (error.message.includes("timeout")) {
+      if (error.message.includes('timeout')) {
         this.logger.error(
           `⚠️ Initialization timed out after ${initTime}ms - entering fallback mode`,
           error,
@@ -179,9 +162,7 @@ export class SemanticAnalyzer {
         general: new Array(1536).fill(0),
       };
 
-      this.logger.log(
-        "🔄 System will continue with degraded semantic analysis (fallback mode)",
-      );
+      this.logger.log('🔄 System will continue with degraded semantic analysis (fallback mode)');
 
       // Return true to allow system to continue - fallback analysis will be used
       return true;
@@ -207,30 +188,16 @@ export class SemanticAnalyzer {
       const domainResult = await this.#classifyDomain(queryEmbedding);
 
       // STEP 4: Calculate complexity (multi-factor)
-      const complexityResult = await this.#calculateComplexity(
-        query,
-        queryEmbedding,
-      );
+      const complexityResult = await this.#calculateComplexity(query, queryEmbedding);
 
       // STEP 5: Detect emotional tone
-      const emotionalResult = await this.#detectEmotionalTone(
-        query,
-        queryEmbedding,
-      );
+      const emotionalResult = await this.#detectEmotionalTone(query, queryEmbedding);
 
       // STEP 6: Detect context signals
-      const contextSignals = this.#detectContextSignals(
-        query,
-        queryEmbedding,
-        context,
-      );
+      const contextSignals = this.#detectContextSignals(query, queryEmbedding, context);
 
       // STEP 7: Determine reasoning needs
-      const reasoningNeeds = this.#assessReasoningNeeds(
-        query,
-        queryEmbedding,
-        intentResult,
-      );
+      const reasoningNeeds = this.#assessReasoningNeeds(query, queryEmbedding, intentResult);
 
       // STEP 8: Track performance (EXISTING)
       const processingTime = Date.now() - startTime;
@@ -262,7 +229,7 @@ export class SemanticAnalyzer {
       // ========== DRIFT VALIDATION (NEW) ==========
       const driftCheck = await driftWatcher.validate({
         semanticAnalysis: semanticResult,
-        response: "",
+        response: '',
         context: context,
       });
 
@@ -281,12 +248,12 @@ export class SemanticAnalyzer {
         }
 
         if (!driftCheck.domainValid) {
-          semanticResult.domain = "general";
+          semanticResult.domain = 'general';
           semanticResult.domainConfidence = 0.5;
         }
 
         if (!driftCheck.intentValid) {
-          semanticResult.intent = "question";
+          semanticResult.intent = 'question';
           semanticResult.intentConfidence = 0.5;
         }
 
@@ -295,15 +262,10 @@ export class SemanticAnalyzer {
 
       // ========== REAL COST TRACKING (NEW) ==========
       if (context.sessionId && cost > 0) {
-        await costTracker.recordCost(
-          context.sessionId,
-          cost,
-          "semantic_analysis",
-          {
-            mode: context.mode,
-            cacheHit: cacheHit,
-          },
-        );
+        await costTracker.recordCost(context.sessionId, cost, 'semantic_analysis', {
+          mode: context.mode,
+          cacheHit: cacheHit,
+        });
       }
 
       this.logger.log(
@@ -312,7 +274,7 @@ export class SemanticAnalyzer {
 
       return semanticResult;
     } catch (error) {
-      this.logger.error("Semantic analysis failed", error);
+      this.logger.error('Semantic analysis failed', error);
 
       // Return degraded analysis (basic heuristics as fallback)
       return this.#generateFallbackAnalysis(query, context);
@@ -337,7 +299,7 @@ export class SemanticAnalyzer {
       const response = await this.openai.embeddings.create({
         model: this.embeddingModel,
         input: text.substring(0, 8000), // API limit: 8191 tokens
-        encoding_format: "float",
+        encoding_format: 'float',
       });
 
       const embedding = response.data[0].embedding;
@@ -351,7 +313,7 @@ export class SemanticAnalyzer {
 
       return embedding;
     } catch (error) {
-      this.logger.error("Embedding generation failed", error);
+      this.logger.error('Embedding generation failed', error);
 
       // Return zero vector as fallback
       return new Array(1536).fill(0);
@@ -398,15 +360,10 @@ export class SemanticAnalyzer {
       };
 
       let maxSimilarity = -1;
-      let bestIntent = "question";
+      let bestIntent = 'question';
 
-      for (const [intent, intentEmbedding] of Object.entries(
-        intentCategories,
-      )) {
-        const similarity = this.#cosineSimilarity(
-          queryEmbedding,
-          intentEmbedding,
-        );
+      for (const [intent, intentEmbedding] of Object.entries(intentCategories)) {
+        const similarity = this.#cosineSimilarity(queryEmbedding, intentEmbedding);
 
         if (similarity > maxSimilarity) {
           maxSimilarity = similarity;
@@ -421,9 +378,9 @@ export class SemanticAnalyzer {
         confidence: confidence,
       };
     } catch (error) {
-      this.logger.error("Intent classification failed", error);
+      this.logger.error('Intent classification failed', error);
       return {
-        intent: "question",
+        intent: 'question',
         confidence: 0.5,
       };
     }
@@ -442,15 +399,10 @@ export class SemanticAnalyzer {
       };
 
       let maxSimilarity = -1;
-      let bestDomain = "general";
+      let bestDomain = 'general';
 
-      for (const [domain, domainEmbedding] of Object.entries(
-        domainCategories,
-      )) {
-        const similarity = this.#cosineSimilarity(
-          queryEmbedding,
-          domainEmbedding,
-        );
+      for (const [domain, domainEmbedding] of Object.entries(domainCategories)) {
+        const similarity = this.#cosineSimilarity(queryEmbedding, domainEmbedding);
 
         if (similarity > maxSimilarity) {
           maxSimilarity = similarity;
@@ -465,9 +417,9 @@ export class SemanticAnalyzer {
         confidence: confidence,
       };
     } catch (error) {
-      this.logger.error("Domain classification failed", error);
+      this.logger.error('Domain classification failed', error);
       return {
-        domain: "general",
+        domain: 'general',
         confidence: 0.5,
       };
     }
@@ -481,25 +433,18 @@ export class SemanticAnalyzer {
 
       // Factor 1: Conceptual depth
       const words = query.split(/\s+/);
-      const avgWordLength =
-        words.reduce((sum, w) => sum + w.length, 0) / words.length;
+      const avgWordLength = words.reduce((sum, w) => sum + w.length, 0) / words.length;
       factors.conceptualDepth = Math.min(avgWordLength / 10, 1.0);
 
       // Factor 2: Interdependencies
       const questionMarks = (query.match(/\?/g) || []).length;
-      const conjunctions = (
-        query.match(/\b(and|or|but|however|therefore|because)\b/gi) || []
-      ).length;
-      factors.interdependencies = Math.min(
-        (questionMarks + conjunctions) / 5,
-        1.0,
-      );
+      const conjunctions = (query.match(/\b(and|or|but|however|therefore|because)\b/gi) || [])
+        .length;
+      factors.interdependencies = Math.min((questionMarks + conjunctions) / 5, 1.0);
 
       // Factor 3: Ambiguity
       const ambiguousTerms = (
-        query.match(
-          /\b(maybe|might|could|possibly|probably|somewhat|kind of)\b/gi,
-        ) || []
+        query.match(/\b(maybe|might|could|possibly|probably|somewhat|kind of)\b/gi) || []
       ).length;
       factors.ambiguity = Math.min(ambiguousTerms / 3, 1.0);
 
@@ -526,7 +471,7 @@ export class SemanticAnalyzer {
         factors: factors,
       };
     } catch (error) {
-      this.logger.error("Complexity calculation failed", error);
+      this.logger.error('Complexity calculation failed', error);
       return {
         overall: 0.5,
         factors: {
@@ -544,27 +489,19 @@ export class SemanticAnalyzer {
   async #detectEmotionalTone(query, queryEmbedding) {
     try {
       const toneReferences = {
-        positive:
-          "I'm excited, this is great, feeling happy, wonderful news, so glad",
-        negative:
-          "I'm frustrated, this is terrible, feeling sad, bad news, disappointed",
-        urgent:
-          "need immediately, critical, emergency, right now, asap, urgent",
-        anxious:
-          "I'm worried, concerned about, nervous, afraid, stressed, uncertain",
-        neutral:
-          "information please, looking into, considering, checking on, wondering",
+        positive: "I'm excited, this is great, feeling happy, wonderful news, so glad",
+        negative: "I'm frustrated, this is terrible, feeling sad, bad news, disappointed",
+        urgent: 'need immediately, critical, emergency, right now, asap, urgent',
+        anxious: "I'm worried, concerned about, nervous, afraid, stressed, uncertain",
+        neutral: 'information please, looking into, considering, checking on, wondering',
       };
 
       let maxSimilarity = -1;
-      let detectedTone = "neutral";
+      let detectedTone = 'neutral';
 
       for (const [tone, phrase] of Object.entries(toneReferences)) {
         const toneEmbedding = await this.#getEmbedding(phrase);
-        const similarity = this.#cosineSimilarity(
-          queryEmbedding,
-          toneEmbedding,
-        );
+        const similarity = this.#cosineSimilarity(queryEmbedding, toneEmbedding);
 
         if (similarity > maxSimilarity) {
           maxSimilarity = similarity;
@@ -579,9 +516,9 @@ export class SemanticAnalyzer {
         weight: weight,
       };
     } catch (error) {
-      this.logger.error("Emotional tone detection failed", error);
+      this.logger.error('Emotional tone detection failed', error);
       return {
-        tone: "neutral",
+        tone: 'neutral',
         weight: 0,
       };
     }
@@ -596,22 +533,19 @@ export class SemanticAnalyzer {
       const personal = personalIndicators.test(query);
 
       // Temporal context
-      let temporal = "general";
+      let temporal = 'general';
       if (/\b(now|today|currently|right now|immediate)\b/i.test(query)) {
-        temporal = "immediate";
+        temporal = 'immediate';
       } else if (/\b(recently|lately|this week|past few|last)\b/i.test(query)) {
-        temporal = "recent";
-      } else if (
-        /\b(future|later|eventually|someday|planning)\b/i.test(query)
-      ) {
-        temporal = "future";
+        temporal = 'recent';
+      } else if (/\b(future|later|eventually|someday|planning)\b/i.test(query)) {
+        temporal = 'future';
       }
 
       // Memory requirement signals
       const memoryIndicators =
         /\b(remember|recall|told you|mentioned before|we discussed|last time)\b/i;
-      const needsMemory =
-        memoryIndicators.test(query) || (personal && context.availableMemory);
+      const needsMemory = memoryIndicators.test(query) || (personal && context.availableMemory);
 
       return {
         personal: personal,
@@ -619,10 +553,10 @@ export class SemanticAnalyzer {
         needsMemory: needsMemory,
       };
     } catch (error) {
-      this.logger.error("Context signal detection failed", error);
+      this.logger.error('Context signal detection failed', error);
       return {
         personal: false,
-        temporal: "general",
+        temporal: 'general',
         needsMemory: false,
       };
     }
@@ -635,19 +569,17 @@ export class SemanticAnalyzer {
       // Calculation indicators
       const calculationPatterns =
         /\b(calculate|compute|how much|total|sum|average|cost|price|\d+)\b/i;
-      const requiresCalculation =
-        calculationPatterns.test(query) && /\d/.test(query);
+      const requiresCalculation = calculationPatterns.test(query) && /\d/.test(query);
 
       // Comparison indicators
-      const comparisonPatterns =
-        /\b(compare|versus|vs|better|worse|difference|which|between)\b/i;
+      const comparisonPatterns = /\b(compare|versus|vs|better|worse|difference|which|between)\b/i;
       const requiresComparison = comparisonPatterns.test(query);
 
       // Creativity indicators
       const creativityPatterns =
         /\b(create|design|imagine|innovative|new idea|brainstorm|creative)\b/i;
       const requiresCreativity =
-        creativityPatterns.test(query) || intentResult.intent === "discussion";
+        creativityPatterns.test(query) || intentResult.intent === 'discussion';
 
       return {
         calculation: requiresCalculation,
@@ -655,7 +587,7 @@ export class SemanticAnalyzer {
         creativity: requiresCreativity,
       };
     } catch (error) {
-      this.logger.error("Reasoning needs assessment failed", error);
+      this.logger.error('Reasoning needs assessment failed', error);
       return {
         calculation: false,
         comparison: false,
@@ -675,7 +607,7 @@ export class SemanticAnalyzer {
 
       this.embeddingCache.set(text, embedding);
     } catch (error) {
-      this.logger.error("Cache write failed", error);
+      this.logger.error('Cache write failed', error);
     }
   }
 
@@ -698,13 +630,9 @@ export class SemanticAnalyzer {
     return {
       ...this.stats,
       cacheHitRate:
-        this.stats.totalAnalyses > 0
-          ? this.stats.cacheHits / this.stats.totalAnalyses
-          : 0,
+        this.stats.totalAnalyses > 0 ? this.stats.cacheHits / this.stats.totalAnalyses : 0,
       avgCostPerQuery:
-        this.stats.totalAnalyses > 0
-          ? this.stats.totalCost / this.stats.totalAnalyses
-          : 0,
+        this.stats.totalAnalyses > 0 ? this.stats.totalCost / this.stats.totalAnalyses : 0,
     };
   }
 
@@ -726,11 +654,15 @@ export class SemanticAnalyzer {
 
       // Define importance archetype phrases
       const importanceArchetypes = {
-        healthCritical: "severe allergy, life-threatening condition, emergency medical information, anaphylaxis, critical health issue, deadly reaction, severe medical condition, emergency contact, blood type",
-        lifeImpacting: "family members, spouse name, children names, home address, employer, job title, salary, important personal information, contact details",
-        urgent: "immediate action needed, time-sensitive information, critical deadline, urgent matter, must remember this",
-        highPriority: "important preference, significant decision, key information, should remember, meaningful detail",
-        standard: "general information, casual fact, minor detail, everyday information"
+        healthCritical:
+          'severe allergy, life-threatening condition, emergency medical information, anaphylaxis, critical health issue, deadly reaction, severe medical condition, emergency contact, blood type',
+        lifeImpacting:
+          'family members, spouse name, children names, home address, employer, job title, salary, important personal information, contact details',
+        urgent:
+          'immediate action needed, time-sensitive information, critical deadline, urgent matter, must remember this',
+        highPriority:
+          'important preference, significant decision, key information, should remember, meaningful detail',
+        standard: 'general information, casual fact, minor detail, everyday information',
       };
 
       // Calculate similarity to each archetype
@@ -741,35 +673,35 @@ export class SemanticAnalyzer {
       }
 
       // Determine importance based on highest similarity
-      let importanceScore = 0.50;
-      let reasoning = "standard information";
+      let importanceScore = 0.5;
+      let reasoning = 'standard information';
 
       if (similarities.healthCritical > 0.75) {
         importanceScore = 0.95;
-        reasoning = "health-critical or life-threatening information (semantic)";
-      } else if (similarities.lifeImpacting > 0.70) {
+        reasoning = 'health-critical or life-threatening information (semantic)';
+      } else if (similarities.lifeImpacting > 0.7) {
         importanceScore = 0.85;
-        reasoning = "life-impacting personal information (semantic)";
+        reasoning = 'life-impacting personal information (semantic)';
       } else if (similarities.urgent > 0.65) {
-        importanceScore = 0.80;
-        reasoning = "urgent or time-sensitive information (semantic)";
-      } else if (similarities.highPriority > 0.60) {
-        importanceScore = 0.70;
-        reasoning = "high-priority information (semantic)";
+        importanceScore = 0.8;
+        reasoning = 'urgent or time-sensitive information (semantic)';
+      } else if (similarities.highPriority > 0.6) {
+        importanceScore = 0.7;
+        reasoning = 'high-priority information (semantic)';
       }
 
       // Category boost for health-related content
       if (category === 'health_wellness' || category === 'health') {
         importanceScore = Math.max(importanceScore, 0.75);
-        reasoning += " + health category boost";
+        reasoning += ' + health category boost';
       }
 
       this.logger.log(`Importance: ${importanceScore.toFixed(2)} - ${reasoning}`);
 
       return { importanceScore, reasoning };
     } catch (error) {
-      this.logger.error("Importance analysis failed", error);
-      return { importanceScore: 0.50, reasoning: "fallback default" };
+      this.logger.error('Importance analysis failed', error);
+      return { importanceScore: 0.5, reasoning: 'fallback default' };
     }
   }
 
@@ -800,7 +732,9 @@ export class SemanticAnalyzer {
             try {
               memoryEmbedding = JSON.parse(memory.embedding);
             } catch (error) {
-              this.logger.error(`Failed to parse embedding for memory ${memory.id}: ${error.message}`);
+              this.logger.error(
+                `Failed to parse embedding for memory ${memory.id}: ${error.message}`,
+              );
               memoryEmbedding = await this.#getEmbedding(memory.content);
             }
           } else {
@@ -821,19 +755,21 @@ export class SemanticAnalyzer {
             supersedes.push({
               memoryId: memory.id,
               similarity: similarity,
-              reason: `Updated information (similarity: ${similarity.toFixed(3)})`
+              reason: `Updated information (similarity: ${similarity.toFixed(3)})`,
             });
-            this.logger.log(`Supersession detected: memory ${memory.id} (similarity: ${similarity.toFixed(3)})`);
+            this.logger.log(
+              `Supersession detected: memory ${memory.id} (similarity: ${similarity.toFixed(3)})`,
+            );
           }
         }
       }
 
       return {
         supersedes: supersedes,
-        isNewFact: supersedes.length === 0
+        isNewFact: supersedes.length === 0,
       };
     } catch (error) {
-      this.logger.error("Supersession analysis failed", error);
+      this.logger.error('Supersession analysis failed', error);
       return { supersedes: [], isNewFact: true };
     }
   }
@@ -879,7 +815,7 @@ Answer (yes/no):`;
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 10
+        max_tokens: 10,
       });
 
       const answer = response.choices[0].message.content.trim().toLowerCase();
@@ -891,7 +827,7 @@ Answer (yes/no):`;
 
       return isUpdate;
     } catch (error) {
-      this.logger.error("Supersession confirmation failed", error);
+      this.logger.error('Supersession confirmation failed', error);
       return false; // Conservative: don't supersede if unsure
     }
   }
@@ -907,17 +843,23 @@ Answer (yes/no):`;
   async analyzeIntent(message) {
     try {
       // First, check for memory visibility intent using semantic similarity
-      const memoryVisibilityPhrases = "what do you remember about me, what do you know about me, show my memories, list what you stored, tell me what you remember";
+      const memoryVisibilityPhrases =
+        'what do you remember about me, what do you know about me, show my memories, list what you stored, tell me what you remember';
       const messageEmbedding = await this.#getEmbedding(message);
       const memoryVisibilityEmbedding = await this.#getEmbedding(memoryVisibilityPhrases);
-      const memoryVisibilitySimilarity = this.#cosineSimilarity(messageEmbedding, memoryVisibilityEmbedding);
+      const memoryVisibilitySimilarity = this.#cosineSimilarity(
+        messageEmbedding,
+        memoryVisibilityEmbedding,
+      );
 
       if (memoryVisibilitySimilarity > 0.75) {
-        this.logger.log(`Memory visibility intent detected (similarity: ${memoryVisibilitySimilarity.toFixed(3)})`);
+        this.logger.log(
+          `Memory visibility intent detected (similarity: ${memoryVisibilitySimilarity.toFixed(3)})`,
+        );
         return {
           intent: 'MEMORY_VISIBILITY',
           confidence: memoryVisibilitySimilarity,
-          specificIntent: 'memory_visibility'
+          specificIntent: 'memory_visibility',
         };
       }
 
@@ -925,10 +867,10 @@ Answer (yes/no):`;
       const standardIntent = await this.#classifyIntent(messageEmbedding);
       return {
         intent: standardIntent.intent,
-        confidence: standardIntent.confidence
+        confidence: standardIntent.confidence,
       };
     } catch (error) {
-      this.logger.error("Intent analysis failed", error);
+      this.logger.error('Intent analysis failed', error);
       return { intent: 'question', confidence: 0.5 };
     }
   }
@@ -943,21 +885,24 @@ Answer (yes/no):`;
   async hasTemporalContent(content) {
     try {
       // Temporal archetype - covers explicit times AND semantic scheduling language
-      const temporalArchetype = "meeting time changed, appointment rescheduled, event moved, schedule updated, time changed, pushed back, moved to later, reschedule, postponed, bumped, sync moved, standup changed, calendar update, meeting at 3pm, appointment at 2pm, scheduled for tomorrow, event on Monday";
-      
+      const temporalArchetype =
+        'meeting time changed, appointment rescheduled, event moved, schedule updated, time changed, pushed back, moved to later, reschedule, postponed, bumped, sync moved, standup changed, calendar update, meeting at 3pm, appointment at 2pm, scheduled for tomorrow, event on Monday';
+
       const contentEmbedding = await this.#getEmbedding(content);
       const temporalEmbedding = await this.#getEmbedding(temporalArchetype);
-      
+
       const similarity = this.#cosineSimilarity(contentEmbedding, temporalEmbedding);
-      
+
       if (similarity > 0.65) {
-        console.log(`[SEMANTIC-TEMPORAL-DETECT] Temporal content detected, similarity: ${similarity.toFixed(3)}`);
+        console.log(
+          `[SEMANTIC-TEMPORAL-DETECT] Temporal content detected, similarity: ${similarity.toFixed(3)}`,
+        );
         return true;
       }
-      
+
       return false;
     } catch (error) {
-      this.logger.error("Temporal detection failed", error);
+      this.logger.error('Temporal detection failed', error);
       return false; // Conservative fallback
     }
   }
@@ -984,16 +929,16 @@ Answer (yes/no):`;
       if (similarity > 0.75) {
         const preview = newContent.substring(0, 50);
         console.log(`[SEMANTIC-TEMPORAL] Temporal update detected, using newer: ${preview}`);
-        return { 
-          shouldSupersede: true, 
+        return {
+          shouldSupersede: true,
           reason: 'temporal_update',
-          explanation: `High similarity (${similarity.toFixed(3)}) with temporal content - newer replaces older`
+          explanation: `High similarity (${similarity.toFixed(3)}) with temporal content - newer replaces older`,
         };
       }
 
       return { shouldSupersede: false, reason: 'similarity_too_low' };
     } catch (error) {
-      this.logger.error("Temporal reconciliation failed", error);
+      this.logger.error('Temporal reconciliation failed', error);
       return { shouldSupersede: false, reason: 'error' };
     }
   }
@@ -1001,14 +946,12 @@ Answer (yes/no):`;
   // ==================== FALLBACK ANALYSIS ====================
 
   #generateFallbackAnalysis(query, _context) {
-    this.logger.error(
-      "Using fallback analysis due to semantic analysis failure",
-    );
+    this.logger.error('Using fallback analysis due to semantic analysis failure');
 
     return {
-      intent: query.includes("?") ? "question" : "command",
+      intent: query.includes('?') ? 'question' : 'command',
       intentConfidence: 0.3,
-      domain: "general",
+      domain: 'general',
       domainConfidence: 0.3,
       complexity: 0.5,
       complexityFactors: {
@@ -1017,10 +960,10 @@ Answer (yes/no):`;
         ambiguity: 0,
         expertiseRequired: false,
       },
-      emotionalTone: "neutral",
+      emotionalTone: 'neutral',
       emotionalWeight: 0,
       personalContext: /\b(my|I|me)\b/i.test(query),
-      temporalContext: "general",
+      temporalContext: 'general',
       requiresMemory: false,
       requiresCalculation: /\d/.test(query),
       requiresComparison: /\b(vs|versus|compare)\b/i.test(query),
@@ -1030,7 +973,7 @@ Answer (yes/no):`;
       cacheHit: false,
       cost: 0,
       fallbackUsed: true,
-      driftWarning: "Fallback analysis used - semantic analyzer unavailable",
+      driftWarning: 'Fallback analysis used - semantic analyzer unavailable',
     };
   }
 }
