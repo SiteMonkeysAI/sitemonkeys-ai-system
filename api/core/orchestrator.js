@@ -4220,6 +4220,13 @@ When using this memory context, a caring family member would naturally apply tem
       // Extract numerical data from memory
       const { highlighted: memoryText, numbers: numericalData } = this.#extractNumericalData(context.memory);
 
+      // FIX #721 STR1: Log what memories are being injected
+      const memoryLines = memoryText.split('\n').filter(line => line.trim().length > 0);
+      console.log(`[STR1-DEBUG] Injecting ${memoryLines.length} memory lines into prompt`);
+      memoryLines.slice(0, 5).forEach((line, idx) => {
+        console.log(`[STR1-DEBUG]   Memory ${idx + 1}: "${line.substring(0, 100)}"`);
+      });
+
       contextStr += `
 ═══════════════════════════════════════════════════════════════
 🧠 PERSISTENT MEMORY CONTEXT - READ ALL ${memoryCount} ITEMS BEFORE RESPONDING
@@ -5178,9 +5185,15 @@ Mode: ${modeConfig?.display_name || mode}
             for (const row of dbResult.rows) {
               const content = (row.content || '').substring(0, 500);
 
+              // FIX #721 INF3: Add debug telemetry for DB query path
+              console.log(`[INF3-DEBUG] DB row content: "${content.substring(0, 150)}"`);
+
               if (!duration) {
                 const durationMatch = content.match(/(?:worked|for|spent)\s+(\d+)\s+years?/i);
-                if (durationMatch) duration = parseInt(durationMatch[1]);
+                if (durationMatch) {
+                  duration = parseInt(durationMatch[1]);
+                  console.log(`[INF3-DEBUG] Found duration=${duration} from DB`);
+                }
               }
 
               if (!endYear) {
@@ -5189,12 +5202,16 @@ Mode: ${modeConfig?.display_name || mode}
                 const contextYear = content.match(/(left|quit|ended|until|through|as of)\D{0,20}((19|20)\d{2})/i);
                 if (contextYear) {
                   endYear = parseInt(contextYear[2]);
+                  console.log(`[INF3-DEBUG] Found endYear=${endYear} from contextYear match in DB`);
                 } else if (!/joined/i.test(content)) {
                   // Fallback: any 4-digit year (but only if no "joined" context)
                   const anyYear = content.match(/\b(19|20)\d{2}\b/);
                   if (anyYear) {
                     endYear = parseInt(anyYear[0]);
+                    console.log(`[INF3-DEBUG] Found endYear=${endYear} from anyYear fallback in DB`);
                   }
+                } else {
+                  console.log(`[INF3-DEBUG] Skipped year extraction (contains 'joined')`);
                 }
               }
 
@@ -5681,6 +5698,9 @@ Mode: ${modeConfig?.display_name || mode}
         q.includes("who are my") ||
         q.includes("list my");
 
+      // FIX #721 CMP2: Add debug telemetry to diagnose contact query detection
+      console.log(`[CMP2-DEBUG] q="${q.substring(0, 100)}" isContactQuery=${isContactQuery}`);
+
       if (!isContactQuery) {
         console.log(`[UNICODE-AUTHORITATIVE] skipped reason=not_contact_query`);
         return { correctionApplied: false, response };
@@ -5866,9 +5886,15 @@ Mode: ${modeConfig?.display_name || mode}
       // ═══════════════════════════════════════════════════════════════
       // GATING CONDITION: Query EXPLICITLY asks about age
       // ISSUE #713 REFINEMENT: Only trigger when age is explicitly requested
+      // FIX #721 INF1: Add query logging and expand detection patterns
       // ═══════════════════════════════════════════════════════════════
-      const agePattern = /\b(how old|what age|age of|years old)\b/i;
-      if (!agePattern.test(query)) {
+      const agePattern = /\b(how old|what age|age of|years old|old is)\b/i;
+      const ageAsked = agePattern.test(query);
+
+      // FIX #721 INF1: Add debug telemetry
+      console.log(`[INF1-DEBUG] query="${query}" age_asked=${ageAsked}`);
+
+      if (!ageAsked) {
         console.log(`[AGE-INFERENCE] skipped reason=age_not_explicitly_asked`);
         return { correctionApplied: false, response };
       }
