@@ -1360,6 +1360,9 @@ Facts (preserve user terminology + add synonyms):`;
       const temporalDurationPattern = /(?:worked|for|spent)\s+\d+\s+(?:years?|months?)/i;
       const temporalEndPattern = /(?:left|until|ended|quit).*?(?:in|at)?\s*\d{4}/i;
 
+      // FIX #723-INF3: Preserve graduation/education years (e.g., "graduated from MIT in 2010")
+      const educationYearPattern = /\b(?:graduated|degree|diploma|bachelor|master|phd|doctorate|attended|finished)\b.*?\b(?:in|at)?\s*(19|20)\d{2}\b/i;
+
       // CodeQL Fix: Bound input before regex to prevent polynomial regex performance issues
       const safeUserMsg = userMsg.substring(0, 500);
       const safeFacts = facts.substring(0, 500);
@@ -1369,6 +1372,10 @@ Facts (preserve user terminology + add synonyms):`;
 
       const inputHasEnd = temporalEndPattern.test(safeUserMsg);
       const factsHaveEnd = temporalEndPattern.test(safeFacts);
+
+      // FIX #723-INF3: Check if education year was preserved
+      const inputHasEducationYear = educationYearPattern.test(safeUserMsg);
+      const factsHaveEducationYear = educationYearPattern.test(safeFacts);
 
       let missingTemporal = [];
 
@@ -1385,6 +1392,19 @@ Facts (preserve user terminology + add synonyms):`;
         if (match) {
           console.warn('[EXTRACTION-FIX #633-INF3] Input had end date but extraction lost it');
           missingTemporal.push(match[0]);
+        }
+      }
+
+      // FIX #723-INF3: Re-inject education year if lost
+      if (inputHasEducationYear && !factsHaveEducationYear) {
+        const match = safeUserMsg.match(educationYearPattern);
+        if (match) {
+          console.warn('[EXTRACTION-FIX #723-INF3] Input had education year but extraction lost it');
+          // Extract just the year to append
+          const yearMatch = match[0].match(/\b(19|20)\d{2}\b/);
+          if (yearMatch) {
+            missingTemporal.push(`in ${yearMatch[0]}`);
+          }
         }
       }
 
