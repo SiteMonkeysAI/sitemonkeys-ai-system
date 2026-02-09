@@ -575,6 +575,33 @@ export class Orchestrator {
         );
       }
 
+      // ========== STEP 9.10: CONFLICT DETECTION (Issue #639-NUA2) ==========
+      // Detects and acknowledges conflicting preferences (e.g., allergy vs spouse preference)
+      try {
+        const conflictResult = await conflictDetectionValidator.validate({
+          response: enforcedResponse,
+          memoryContext: context.memory_context,
+          query: context.message || '',
+          context: context
+        });
+
+        if (conflictResult.correctionApplied) {
+          enforcedResponse = conflictResult.response;
+          complianceMetadata.overrides.push({
+            module: "conflict_detection",
+            conflicts: conflictResult.conflicts,
+            conflictsDetected: conflictResult.conflictsDetected
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("conflict_detection");
+      } catch (error) {
+        this.error("Conflict detection failed:", error);
+        complianceMetadata.warnings.push(
+          "conflict_detection_error: " + error.message,
+        );
+      }
+
       // ========== STEP 10: REFUSAL MAINTENANCE (Issue #606 Phase 1) ==========
       try {
         const refusalResult = await refusalMaintenanceValidator.validate({
@@ -626,32 +653,6 @@ export class Orchestrator {
         );
       }
 
-      // ========== STEP 12: CONFLICT DETECTION (Issue #639-NUA2) - LAST-WRITE-WINS ==========
-      // CRITICAL: Must run AFTER all other enforcers to ensure conflict acknowledgment is at top
-      try {
-        const conflictResult = await conflictDetectionValidator.validate({
-          response: enforcedResponse,
-          memoryContext: context.memory_context,
-          query: context.message || '',
-          context: context
-        });
-
-        if (conflictResult.correctionApplied) {
-          enforcedResponse = conflictResult.response;
-          complianceMetadata.overrides.push({
-            module: "conflict_detection",
-            conflicts: conflictResult.conflicts,
-            conflictsDetected: conflictResult.conflictsDetected
-          });
-        }
-
-        complianceMetadata.enforcement_applied.push("conflict_detection");
-      } catch (error) {
-        this.error("Conflict detection failed:", error);
-        complianceMetadata.warnings.push(
-          "conflict_detection_error: " + error.message,
-        );
-      }
     } catch (error) {
       this.error("Enforcement chain critical failure:", error);
       complianceMetadata.warnings.push(
