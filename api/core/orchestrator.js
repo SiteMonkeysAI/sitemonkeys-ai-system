@@ -503,32 +503,6 @@ export class Orchestrator {
         );
       }
 
-      // ========== STEP 9.8: CONFLICT DETECTION (Issue #639-NUA2) ==========
-      try {
-        const conflictResult = await conflictDetectionValidator.validate({
-          response: enforcedResponse,
-          memoryContext: context.memory_context,
-          query: context.message || '',
-          context: context
-        });
-
-        if (conflictResult.correctionApplied) {
-          enforcedResponse = conflictResult.response;
-          complianceMetadata.overrides.push({
-            module: "conflict_detection",
-            conflicts: conflictResult.conflicts,
-            conflictsDetected: conflictResult.conflictsDetected
-          });
-        }
-
-        complianceMetadata.enforcement_applied.push("conflict_detection");
-      } catch (error) {
-        this.error("Conflict detection failed:", error);
-        complianceMetadata.warnings.push(
-          "conflict_detection_error: " + error.message,
-        );
-      }
-
       // ========== STEP 9.8: VEHICLE RECALL (Issue #628-STR1) ==========
       try {
         const vehicleResult = await this.#enforceVehicleRecall({
@@ -550,6 +524,30 @@ export class Orchestrator {
         this.error("Vehicle recall failed:", error);
         complianceMetadata.warnings.push(
           "vehicle_recall_error: " + error.message,
+        );
+      }
+
+      // ========== STEP 9.8.5: PET/DOG RECALL (Issue #731-STR1) ==========
+      try {
+        const petResult = await this.#enforcePetRecall({
+          response: enforcedResponse,
+          memoryContext: context.memory_context,
+          query: context.message || '',
+          context: context
+        });
+
+        if (petResult.correctionApplied) {
+          enforcedResponse = petResult.response;
+          complianceMetadata.overrides.push({
+            module: "pet_recall"
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("pet_recall");
+      } catch (error) {
+        this.error("Pet recall failed:", error);
+        complianceMetadata.warnings.push(
+          "pet_recall_error: " + error.message,
         );
       }
 
@@ -625,6 +623,33 @@ export class Orchestrator {
         this.error("Truth certainty failed:", error);
         complianceMetadata.warnings.push(
           "truth_certainty_error: " + error.message,
+        );
+      }
+
+      // ========== STEP 12: CONFLICT DETECTION (Issue #639-NUA2) - LAST-WRITE-WINS ==========
+      // CRITICAL: Must run AFTER all other enforcers to ensure conflict acknowledgment is at top
+      try {
+        const conflictResult = await conflictDetectionValidator.validate({
+          response: enforcedResponse,
+          memoryContext: context.memory_context,
+          query: context.message || '',
+          context: context
+        });
+
+        if (conflictResult.correctionApplied) {
+          enforcedResponse = conflictResult.response;
+          complianceMetadata.overrides.push({
+            module: "conflict_detection",
+            conflicts: conflictResult.conflicts,
+            conflictsDetected: conflictResult.conflictsDetected
+          });
+        }
+
+        complianceMetadata.enforcement_applied.push("conflict_detection");
+      } catch (error) {
+        this.error("Conflict detection failed:", error);
+        complianceMetadata.warnings.push(
+          "conflict_detection_error: " + error.message,
         );
       }
     } catch (error) {
@@ -5694,6 +5719,119 @@ Mode: ${modeConfig?.display_name || mode}
   }
 
   /**
+   * Pet/Dog Recall Enforcer (Issue #731 - STR1)
+   * AUTHORITATIVE: Direct DB query to ensure pet names are included when queried
+   *
+   * When user asks about their pet/dog, ensure the pet name is in the response.
+   * Example query: "What's my dog's name?" or "Tell me about my dog"
+   */
+  async #enforcePetRecall({ response, memoryContext = [], query = '', context = {} }) {
+    console.log('[PROOF] validator:pet v=2026-02-09a file=api/core/orchestrator.js fn=#enforcePetRecall');
+
+    try {
+      // ═══════════════════════════════════════════════════════════════
+      // GATING CONDITION: Query about pet/dog/cat
+      // ═══════════════════════════════════════════════════════════════
+      const petPattern = /\b(dog|cat|pet|puppy|kitty|kitten)\b/i;
+      const isPetQuery = petPattern.test(query);
+
+      if (!isPetQuery) {
+        return { correctionApplied: false, response };
+      }
+
+      // Use shared refusal detection
+      const isRefusal = this.#isRefusalish(response);
+
+      // Check if response already mentions a pet name
+      const petNamePattern = /\b[A-Z][a-z]+\b/; // Simple capitalized name check
+
+      // If response already has pet info and isn't a refusal, skip
+      const hasPetInfo = /\b(dog|cat|pet)\b.*\b(named?|called|name is)\b/i.test(response);
+      if (!isRefusal && hasPetInfo) {
+        console.log(`[PET-AUTHORITATIVE] pet_found=false injected=false reason=already_correct`);
+        return { correctionApplied: false, response };
+      }
+
+      this.debug(`[PET-AUTHORITATIVE] Pet query detected, isRefusal=${isRefusal}`);
+
+      // ═══════════════════════════════════════════════════════════════
+      // AUTHORITATIVE MODE: Direct DB query (BYPASS retrieval)
+      // ═══════════════════════════════════════════════════════════════
+      const userId = context.userId;
+      let petInfo = null;
+
+      if (this.pool && userId) {
+        try {
+          this.debug(`[PET-AUTHORITATIVE] Executing direct DB query for pet`);
+
+          const dbResult = await this.pool.query(
+            `SELECT content
+             FROM persistent_memories
+             WHERE user_id = $1
+             AND content ~* '\\m(dog|cat|pet|puppy|kitten)\\M'
+             AND (is_current = true OR is_current IS NULL)
+             LIMIT 3`,
+            [userId]
+          );
+
+          if (dbResult.rows && dbResult.rows.length > 0) {
+            for (const row of dbResult.rows) {
+              const content = (row.content || '').substring(0, 500);
+
+              // Extract pet information - looking for "dog's name is X" or "My dog X" patterns
+              const petMatch = content.match(/\b(dog|cat|pet)(?:'?s?)?\s+(?:name\s+is\s+|named\s+|called\s+)?([A-Z][a-z]+)/i);
+              if (petMatch) {
+                const petType = petMatch[1].toLowerCase();
+                const petName = petMatch[2];
+                petInfo = { type: petType, name: petName };
+                this.debug(`[PET-AUTHORITATIVE] Found pet: ${petType} named ${petName}`);
+                break;
+              }
+
+              // Alternative pattern: "My X" at start of sentence where X is capitalized
+              const myPetMatch = content.match(/\bMy\s+(dog|cat|pet).*?([A-Z][a-z]+)/i);
+              if (myPetMatch && !petInfo) {
+                petInfo = { type: myPetMatch[1].toLowerCase(), name: myPetMatch[2] };
+              }
+            }
+          }
+        } catch (dbError) {
+          this.error('[PET-AUTHORITATIVE] DB query failed:', dbError);
+        }
+      }
+
+      // ═══════════════════════════════════════════════════════════════
+      // AUTHORITATIVE ENFORCEMENT: Append pet fact
+      // ═══════════════════════════════════════════════════════════════
+      if (!petInfo) {
+        console.log(`[PET-AUTHORITATIVE] pet_found=false injected=false reason=not_in_memory`);
+        return { correctionApplied: false, response };
+      }
+
+      // Don't inject into unrelated refusals
+      if (isRefusal && !response.toLowerCase().includes('pet') && !response.toLowerCase().includes('dog') && !response.toLowerCase().includes('cat')) {
+        console.log(`[PET-AUTHORITATIVE] pet_found=true pet="${petInfo.name}" injected=false reason=unrelated_refusal`);
+        return { correctionApplied: false, response };
+      }
+
+      // APPEND pet fact
+      const injection = `Based on what you've shared, your ${petInfo.type}'s name is ${petInfo.name}.`;
+      const adjustedResponse = response.trim() + '\n\n' + injection;
+
+      console.log(`[PET-AUTHORITATIVE] pet_found=true pet="${petInfo.name}" appended=true`);
+
+      return {
+        correctionApplied: true,
+        response: adjustedResponse
+      };
+
+    } catch (error) {
+      this.error('[PET-AUTHORITATIVE] Error:', error);
+      return { correctionApplied: false, response };
+    }
+  }
+
+  /**
    * Unicode Names Enforcer (Issue #628 - CMP2)
    * AUTHORITATIVE: Direct DB query to ensure diacritics are preserved
    *
@@ -5736,27 +5874,34 @@ Mode: ${modeConfig?.display_name || mode}
       this.debug(`[UNICODE-AUTHORITATIVE] Contacts query detected, hasUnicode=${hasUnicode}, isRefusal=${isRefusal}`);
 
       // ═══════════════════════════════════════════════════════════════
-      // AUTHORITATIVE MODE: Direct DB query for unicode names
+      // AUTHORITATIVE MODE: Direct DB query for CONTACTS-SPECIFIC unicode names
+      // FIX #731-CMP2: Query for specific contacts memory, not all unicode names
       // ═══════════════════════════════════════════════════════════════
       const userId = context.userId;
       let unicodeNames = [];
 
       if (this.pool && userId) {
         try {
-          this.debug(`[UNICODE-AUTHORITATIVE] Executing direct DB query for unicode names`);
+          this.debug(`[UNICODE-AUTHORITATIVE] Executing direct DB query for contacts memory`);
 
-          // Query for rows that might have unicode anchors
+          // FIX #731-CMP2: Query specifically for memories that mention "contacts" or "key contacts"
+          // This avoids pollution from place names like "Chez Panisse", "Tesla", etc.
           const dbResult = await this.pool.query(
             `SELECT id, content, metadata, category_name, is_current
              FROM persistent_memories
              WHERE user_id = $1
              AND (is_current = true OR is_current IS NULL)
+             AND (
+               content ILIKE '%contact%'
+               OR content ILIKE '%key people%'
+               OR category_name IN ('relationships', 'contacts', 'people', 'social')
+             )
              ORDER BY created_at DESC
-             LIMIT 20`,
+             LIMIT 5`,
             [userId]
           );
 
-          console.log(`[UNICODE-AUTHORITATIVE] Truth-telemetry: rows_returned=${dbResult.rows.length}`);
+          console.log(`[UNICODE-AUTHORITATIVE] Truth-telemetry: contact_rows_returned=${dbResult.rows.length}`);
 
           if (dbResult.rows && dbResult.rows.length > 0) {
             let anchorsPresent = false;
@@ -5765,10 +5910,20 @@ Mode: ${modeConfig?.display_name || mode}
             for (const row of dbResult.rows) {
               const metadata = row.metadata || {};
               const anchors = metadata.anchors;
+              const content = (row.content || '').toLowerCase();
 
               // Truth-telemetry: log each row
               const contentPreview = (row.content || '').substring(0, 80).replace(/\n/g, ' ');
               console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: category=${row.category_name}, is_current=${row.is_current}, content="${contentPreview}"`);
+
+              // FIX #731-CMP2: Only use rows that explicitly mention contacts/key people
+              const isContactMemory = /\b(contacts?|key (people|contacts)|my (three|key|main|primary) contacts?)\b/i.test(content);
+              if (!isContactMemory) {
+                console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: SKIPPED (not a contact memory)`);
+                continue;
+              }
+
+              console.log(`[UNICODE-AUTHORITATIVE] Row ${row.id}: IS CONTACT MEMORY ✓`);
 
               // CRITICAL FIX: Read from metadata.anchors, not content text
               if (anchors) {
@@ -5798,12 +5953,13 @@ Mode: ${modeConfig?.display_name || mode}
 
               // Fallback: extract from content if no anchors exist
               if (!anchors || !anchors.unicode || anchors.unicode.length === 0) {
-                const content = (row.content || '').substring(0, 500);
-                const nameMatches = content.matchAll(/\b([A-ZÀ-ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]+)?)\b/g);
+                const rowContent = (row.content || '').substring(0, 500);
+                const nameMatches = rowContent.matchAll(/\b([A-ZÀ-ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]+)?)\b/g);
                 for (const match of nameMatches) {
                   const name = match[1];
                   // FIX #718 CMP2: For contact queries, accept all capitalized names
-                  if (isContactQuery || unicodePattern.test(name)) {
+                  // But filter out common false positives
+                  if (name !== 'My' && name !== 'The' && name !== 'I' && (isContactQuery || unicodePattern.test(name))) {
                     unicodeNames.push(name);
                   }
                 }
@@ -6116,13 +6272,17 @@ Mode: ${modeConfig?.display_name || mode}
         /\bI promise\b/gi,
         /\bno doubt\b/gi,
         /\bwill succeed\b/gi,
-        /\byour business will\b/gi,
+        /\byour business will succeed\b/gi,
+        /\byour startup will succeed\b/gi,
         /\bstartup will\b/gi,
+        /\bbusiness will succeed\b/gi,
         /\bthis will work\b/gi,
         /\byou'll definitely\b/gi,
         /\bwithout question\b/gi,
         /\babsolutely will\b/gi,
-        
+        /\bcertainly will\b/gi,
+        /\bundoubtedly will\b/gi,
+
         // Soft reassurance certainty (TRU2 enhancement)
         /\byou('ll| will) (be|do) (fine|great|successful)\b/gi,
         /\b(things|it|this) (will|is going to) work out\b/gi,
@@ -6132,7 +6292,9 @@ Mode: ${modeConfig?.display_name || mode}
         /\ball you need to do is\b/gi,
         /\bjust follow (these|this) and you('ll| will)\b/gi,
         /\bI('m| am) sure (you|your|this) will\b/gi,
-        /\byou should (be|feel) confident (that|about)\b/gi
+        /\byou should (be|feel) confident (that|about)\b/gi,
+        /\bsuccess is (guaranteed|certain|assured)\b/gi,
+        /\byour success is (likely|probable|expected)\b/gi
       ];
 
       let hasFalseCertainty = false;
@@ -6165,21 +6327,28 @@ Mode: ${modeConfig?.display_name || mode}
       const surgicalReplacements = [
         // Explicit guarantees - high confidence neutralization
         { pattern: /\bwill definitely succeed\b/gi, replace: 'may succeed', category: 'explicit' },
-        { pattern: /\bguaranteed to succeed\b/gi, replace: 'likely to succeed', category: 'explicit' },
-        { pattern: /\b100% certain\b/gi, replace: 'fairly confident', category: 'explicit' },
+        { pattern: /\bguaranteed to succeed\b/gi, replace: 'could succeed', category: 'explicit' },
+        { pattern: /\b100% certain\b/gi, replace: 'cannot predict with certainty', category: 'explicit' },
         { pattern: /\bwill succeed\b/gi, replace: 'may succeed', category: 'explicit' },
         { pattern: /\byour business will succeed\b/gi, replace: 'your business may succeed', category: 'explicit' },
         { pattern: /\byour startup will succeed\b/gi, replace: 'your startup may succeed', category: 'explicit' },
-        
+        { pattern: /\bbusiness will succeed\b/gi, replace: 'business may succeed', category: 'explicit' },
+        { pattern: /\bstartup will succeed\b/gi, replace: 'startup may succeed', category: 'explicit' },
+        { pattern: /\bsuccess is guaranteed\b/gi, replace: 'success is possible', category: 'explicit' },
+        { pattern: /\bsuccess is certain\b/gi, replace: 'success is possible', category: 'explicit' },
+        { pattern: /\bsuccess is assured\b/gi, replace: 'success is possible', category: 'explicit' },
+
         // Soft reassurance - surgical neutralization only
-        { pattern: /\byou'll be fine\b/gi, replace: 'you may be fine', category: 'reassurance' },
-        { pattern: /\byou will be fine\b/gi, replace: 'you may be fine', category: 'reassurance' },
-        { pattern: /\bthings will work out\b/gi, replace: 'things may work out', category: 'reassurance' },
-        { pattern: /\bit will work out\b/gi, replace: 'it may work out', category: 'reassurance' },
-        { pattern: /\byou're going to succeed\b/gi, replace: 'you may succeed', category: 'reassurance' },
-        { pattern: /\byou are going to succeed\b/gi, replace: 'you may succeed', category: 'reassurance' },
-        { pattern: /\bI'm confident (?:you|your|this) will succeed\b/gi, replace: 'you may succeed', category: 'reassurance' },
-        { pattern: /\bI believe you will succeed\b/gi, replace: 'you may succeed', category: 'reassurance' }
+        { pattern: /\byou'll be fine\b/gi, replace: 'you might be fine', category: 'reassurance' },
+        { pattern: /\byou will be fine\b/gi, replace: 'you might be fine', category: 'reassurance' },
+        { pattern: /\bthings will work out\b/gi, replace: 'things might work out', category: 'reassurance' },
+        { pattern: /\bit will work out\b/gi, replace: 'it might work out', category: 'reassurance' },
+        { pattern: /\byou're going to succeed\b/gi, replace: 'you could succeed', category: 'reassurance' },
+        { pattern: /\byou are going to succeed\b/gi, replace: 'you could succeed', category: 'reassurance' },
+        { pattern: /\bI'm confident (?:you|your|this) will succeed\b/gi, replace: 'you could succeed', category: 'reassurance' },
+        { pattern: /\bI believe you will succeed\b/gi, replace: 'you may succeed', category: 'reassurance' },
+        { pattern: /\byour success is likely\b/gi, replace: 'your success is possible', category: 'reassurance' },
+        { pattern: /\byour success is probable\b/gi, replace: 'your success is possible', category: 'reassurance' }
       ];
 
       for (const { pattern, replace, category } of surgicalReplacements) {

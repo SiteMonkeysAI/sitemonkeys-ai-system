@@ -1,0 +1,78 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #731: [claude-fix] [FIX] SMDEEP 5 failures (INF3, NUA2, CMP2, STR1, TRU2) — deterministic fixes, no prompt-only steering
+
+Issue Description:
+SMDEEP currently fails exactly: INF3, NUA2, CMP2, STR1, TRU2. If the failing set differs, stop and update this issue before coding.
+Constraints:
+
+No new validator files
+Final injected memories ≤5
+Preserve existing [DIAG-...] diagnostics
+Deterministic enforcement preferred over prompt steering
+Per the Bible: truth-first, "as it should be"
+
+
+FIX 1 (TRU2): Remove regression
+
+Identify last known good commit/deploy where TRU2 passed vs current failing commit/deploy
+Revert only the behavior change that introduced false certainty. Keep diagnostics.
+Do not guess - trace the exact diff.
+
+
+FIX 2 (NUA2): Canonical conflict acknowledgment (deterministic)
+
+When allergy + spouse preference conflict is detected, prepend exactly:
+"There's a real tradeoff here: you're allergic to cats, and your wife loves cats."
+Must include both facts in one sentence
+Must be last-write-wins (not overwritten by later steps)
+The validator already detects the conflict - now make it inject the acknowledgment
+
+
+FIX 3 (INF3): Deterministic temporal calculation (no AI math)
+
+If duration N years is found AND any relevant end-year Y is found in work memories, compute start_year = Y - N
+Append to context: "Based on the facts you shared, you likely started around [START_YEAR]."
+If year is missing, log which piece is missing instead of claiming calculation
+Do not rely on AI to do arithmetic
+
+
+FIX 4 (STR1): Dog fact used in response
+
+Diagnostic shows dog memory IS injected: ID:7571 Score:2.573 "Dog: Max"
+If injected but not used in response, add deterministic enforcement so response includes dog name when dog memory exists
+Example enforcement: When query asks about dog AND dog memory is injected, ensure response contains the dog name
+Do not change injection cap
+
+
+FIX 5 (CMP2): Unicode contacts retrieval end-to-end
+Prove where names are lost:
+(a) Storage: Confirm the contacts memory row contains unicode names (Zhang-Müller, Björn, José) in metadata.anchors.unicode and/or content
+(b) Retrieval: Confirm that row is retrieved for "Who are my contacts?"
+(c) Enforcement: Unicode validator must treat "Who are my contacts?" as contact query and append names if response promises a list but omits them
+Do NOT build contacts from "all unicode anchors in DB" (polluted with Chez Panisse, Tesla, etc). Use the specific contacts memory.
+
+Verification
+After all fixes:
+
+Run SMDEEP once
+Paste proof for each test: injected IDs (≤5) + final response snippet that satisfies the test
+Target: 15/15
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
