@@ -5173,18 +5173,31 @@ Mode: ${modeConfig?.display_name || mode}
         }
 
         // Match end year: "left in YYYY", "until YYYY", "ended YYYY"
-        // FIX #718 INF3: Expand year extraction patterns
+        // FIX #731 INF3: More robust year extraction - match "in YYYY" pattern first
         // NOTE: "joined" is a START year, not an END year, so it's excluded from this pattern
-        const contextYear = content.match(/(left|quit|ended|until|through|as of)\D{0,20}((19|20)\d{2})/i);
-        if (contextYear && !endYear) {
-          endYear = parseInt(contextYear[2]);
-        } else if (!endYear) {
-          // Fallback: any 4-digit year (but only if no "joined" context)
-          if (!/joined/i.test(content)) {
-            const anyYear = content.match(/\b(19|20)\d{2}\b/);
-            if (anyYear) {
-              endYear = parseInt(anyYear[0]);
-            }
+        
+        // First try: "left/quit/ended ... in YYYY" (most common)
+        const leftInYear = content.match(/\b(left|quit|ended)\b.*?\bin\s+((19|20)\d{2})/i);
+        if (leftInYear && !endYear) {
+          endYear = parseInt(leftInYear[2]);
+          console.log(`[DIAG-INF3] ✓ Found endYear from "left...in YYYY": ${endYear}`);
+        }
+        
+        // Second try: "until YYYY" or "through YYYY"
+        if (!endYear) {
+          const untilYear = content.match(/\b(until|through)\s+((19|20)\d{2})/i);
+          if (untilYear) {
+            endYear = parseInt(untilYear[2]);
+            console.log(`[DIAG-INF3] ✓ Found endYear from "until/through YYYY": ${endYear}`);
+          }
+        }
+        
+        // Fallback: any 4-digit year (but only if no "joined" context which indicates start year)
+        if (!endYear && !/\b(joined|started|began)\b/i.test(content)) {
+          const anyYear = content.match(/\b(19|20)\d{2}\b/);
+          if (anyYear) {
+            endYear = parseInt(anyYear[0]);
+            console.log(`[DIAG-INF3] ✓ Found endYear from any year fallback: ${endYear}`);
           }
         }
 
@@ -5241,21 +5254,33 @@ Mode: ${modeConfig?.display_name || mode}
               }
 
               if (!endYear) {
-                // FIX #718 INF3: Expand year extraction patterns
-                // NOTE: "joined" is a START year, not an END year, so it's excluded
-                const contextYear = content.match(/(left|quit|ended|until|through|as of)\D{0,20}((19|20)\d{2})/i);
-                if (contextYear) {
-                  endYear = parseInt(contextYear[2]);
-                  console.log(`[INF3-DEBUG] Found endYear=${endYear} from contextYear match in DB`);
-                } else if (!/joined/i.test(content)) {
-                  // Fallback: any 4-digit year (but only if no "joined" context)
+                // FIX #731 INF3: Use same extraction logic as memory context path
+                
+                // First try: "left/quit/ended ... in YYYY" (most common)
+                const leftInYear = content.match(/\b(left|quit|ended)\b.*?\bin\s+((19|20)\d{2})/i);
+                if (leftInYear) {
+                  endYear = parseInt(leftInYear[2]);
+                  console.log(`[INF3-DEBUG] Found endYear=${endYear} from "left...in YYYY" in DB`);
+                }
+                
+                // Second try: "until YYYY" or "through YYYY"
+                if (!endYear) {
+                  const untilYear = content.match(/\b(until|through)\s+((19|20)\d{2})/i);
+                  if (untilYear) {
+                    endYear = parseInt(untilYear[2]);
+                    console.log(`[INF3-DEBUG] Found endYear=${endYear} from "until/through YYYY" in DB`);
+                  }
+                }
+                
+                // Fallback: any 4-digit year (but only if no "joined" context which indicates start year)
+                if (!endYear && !/\b(joined|started|began)\b/i.test(content)) {
                   const anyYear = content.match(/\b(19|20)\d{2}\b/);
                   if (anyYear) {
                     endYear = parseInt(anyYear[0]);
-                    console.log(`[INF3-DEBUG] Found endYear=${endYear} from anyYear fallback in DB`);
+                    console.log(`[INF3-DEBUG] Found endYear=${endYear} from any year fallback in DB`);
                   }
-                } else {
-                  console.log(`[INF3-DEBUG] Skipped year extraction (contains 'joined')`);
+                } else if (!endYear) {
+                  console.log(`[INF3-DEBUG] Skipped year extraction (contains join/start/began keywords)`);
                 }
               }
 
@@ -5884,8 +5909,9 @@ Mode: ${modeConfig?.display_name || mode}
         try {
           this.debug(`[UNICODE-AUTHORITATIVE] Executing direct DB query for contacts memory`);
 
-          // FIX #731-CMP2: Query specifically for memories that mention "contacts" or "key contacts"
-          // This avoids pollution from place names like "Chez Panisse", "Tesla", etc.
+          // FIX #731-CMP2: Query for memories containing unicode names
+          // Don't filter by category - unicode contacts can be in any category
+          // Look for content that mentions contacts/key people AND has unicode anchors
           const dbResult = await this.pool.query(
             `SELECT id, content, metadata, category_name, is_current
              FROM persistent_memories
@@ -5894,10 +5920,10 @@ Mode: ${modeConfig?.display_name || mode}
              AND (
                content ILIKE '%contact%'
                OR content ILIKE '%key people%'
-               OR category_name IN ('relationships', 'contacts', 'people', 'social')
+               OR metadata->'anchors'->'unicode' IS NOT NULL
              )
              ORDER BY created_at DESC
-             LIMIT 5`,
+             LIMIT 10`,
             [userId]
           );
 

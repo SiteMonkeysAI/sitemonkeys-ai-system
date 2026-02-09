@@ -344,7 +344,7 @@ class ConflictDetectionValidator {
 
   /**
    * Extract spouse preference fact from memory content
-   * FIX #718 NUA2: Helper to extract specific preference fact
+   * FIX #731 NUA2: Improved extraction to handle "wants to adopt X" patterns
    */
   #extractPreferenceFact(spouseMemories) {
     if (!spouseMemories || spouseMemories.length === 0) return null;
@@ -354,16 +354,26 @@ class ConflictDetectionValidator {
     // Extract spouse type
     const spouseType = content.match(/\b(wife|husband|spouse|partner)\b/i)?.[1] || 'spouse';
 
-    // Try to extract what they love/like
-    const preferenceMatch = content.match(/(?:loves?|likes?|wants?)\s+([a-z\s]+?)(?:\.|,|;|$)/i);
+    // Try to extract what they love/like/want
+    // First try: "wants to adopt/get X" pattern
+    const wantsToPattern = content.match(/(?:wants? to|would like to)\s+(?:adopt|get|have)\s+(?:a\s+)?([a-z]+)/i);
+    if (wantsToPattern) {
+      const item = wantsToPattern[1].trim();
+      // Convert singular to plural for common cases
+      const pluralItem = item === 'cat' ? 'cats' : item === 'dog' ? 'dogs' : item;
+      return `your ${spouseType} wants to adopt ${pluralItem}`;
+    }
+    
+    // Second try: simple "loves/likes X" pattern
+    const preferenceMatch = content.match(/(?:loves?|likes?)\s+([a-z\s]+?)(?:\.|,|;|$)/i);
     if (preferenceMatch) {
       const item = preferenceMatch[1].trim();
       return `your ${spouseType} loves ${item}`;
     }
 
     // Fallback patterns
-    if (content.includes('cat')) return `your ${spouseType} loves cats`;
-    if (content.includes('dog')) return `your ${spouseType} loves dogs`;
+    if (content.includes('cat')) return `your ${spouseType} wants cats`;
+    if (content.includes('dog')) return `your ${spouseType} wants dogs`;
     if (content.includes('seafood')) return `your ${spouseType} loves seafood`;
 
     return `your ${spouseType} has a preference`;
