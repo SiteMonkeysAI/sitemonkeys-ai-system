@@ -1191,18 +1191,6 @@ CRITICAL RULES:
    - If space limited, use extreme brevity but keep ALL facts
    - Format: "Dog: Max. Color: blue. Car: Tesla Model 3. Job: software engineer." etc.
 
-19. *** CRITICAL: PRESERVE RELATIONSHIP FACTS (FIX #734-INF1) ***
-   - When user mentions a relationship, extract BOTH the relationship AND the related fact
-   - "My daughter Emma started kindergarten" → Extract TWO facts:
-     1. "Relationship: Emma is your daughter (child kid family)"
-     2. "Education: Emma started kindergarten (age 5-6)"
-   - "My wife Sarah wants to adopt a cat" → Extract TWO facts:
-     1. "Relationship: Sarah is your wife (spouse partner family)"
-     2. "Preference: Sarah wants to adopt a cat (desire wish)"
-   - Relationship keywords: daughter, son, wife, husband, mother, father, sister, brother, friend, colleague, boss, partner
-   - ALWAYS preserve the name with the relationship: "Emma is your daughter" not just "has daughter"
-   - This is DETERMINISTIC preservation of user-stated facts, NOT inference
-
 Examples:
 Input User: "I make 55k a year" | AI: "That's a good starting salary..."
 Output: "Income: make 55k ($55,000/year salary pay compensation earnings)"
@@ -1253,14 +1241,6 @@ NOT: "Worked at Google" without duration/end date
 Input User: "My car is a Tesla Model 3" | AI: "Nice vehicle..."
 Output: "Vehicle: Tesla Model 3 (car automobile drive)"
 NOT: "Has car" without make/model
-
-Input User: "My daughter Emma just started kindergarten" | AI: "That's exciting..."
-Output: "Relationship: Emma is your daughter (child kid family). Education: Emma started kindergarten (age 5-6 school)"
-NOT: "Education: started kindergarten" without the relationship fact
-
-Input User: "My wife Sarah really wants to adopt a cat" | AI: "That's something to consider..."
-Output: "Relationship: Sarah is your wife (spouse partner family). Preference: Sarah wants to adopt a cat (desire wish pet)"
-NOT: Just one fact without the other
 
 *** CRITICAL ANTI-PATTERN - Issue #540 Fix ***
 Input User: "I just got promoted! My current job title is Senior Architect" |
