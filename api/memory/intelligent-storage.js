@@ -946,6 +946,36 @@ export class IntelligentMemoryStorage {
 
       console.log(`[INTELLIGENT-STORAGE] 📊 Final importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
 
+      // FIX #737 INF1: PRE-EXTRACTION RELATIONSHIP CAPTURE (deterministic, no LLM)
+      // Capture relationship facts BEFORE LLM extraction to prevent loss
+      // Example: "My daughter Emma started kindergarten" → store "Relationship: Emma is your daughter."
+      const relationshipPattern = /\bmy\s+(daughter|son|wife|husband|mother|father|sister|brother|friend|colleague|boss|partner)\s+([A-Z][a-z]+)/gi;
+      const relationshipMatches = [...userMessage.matchAll(relationshipPattern)];
+
+      for (const match of relationshipMatches) {
+        const relationshipType = match[1]; // daughter, son, etc.
+        const personName = match[2]; // Emma, John, etc.
+        const relationshipFact = `Relationship: ${personName} is your ${relationshipType}.`;
+
+        console.log(`[RELATIONSHIP-CAPTURE] detected="my ${relationshipType} ${personName}" stored="${relationshipFact}" fingerprint=null`);
+
+        // Store as separate memory row with null fingerprint (prevents supersession)
+        const relationshipMetadata = {
+          original_tokens: this.countTokens(relationshipFact),
+          compressed_tokens: this.countTokens(relationshipFact),
+          compression_ratio: 1.0,
+          user_priority: false,
+          fingerprint: null, // CRITICAL: null prevents supersession pollution
+          fingerprintConfidence: 0,
+          importance_score: 0.90, // High importance for relationship facts
+          original_user_phrase: match[0], // "my daughter Emma"
+          deterministic_extraction: true
+        };
+
+        // Store in relationships category
+        await this.storeCompressedMemory(userId, 'relationships', relationshipFact, relationshipMetadata, mode);
+      }
+
       // Step 1: Extract facts (compression)
       console.log('[FLOW] Step 1: Extracting key facts from conversation...');
       let facts = await this.extractKeyFacts(userMessage, responseForExtraction);
