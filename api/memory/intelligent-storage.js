@@ -949,15 +949,23 @@ export class IntelligentMemoryStorage {
       // FIX #737 INF1: PRE-EXTRACTION RELATIONSHIP CAPTURE (deterministic, no LLM)
       // Capture relationship facts BEFORE LLM extraction to prevent loss
       // Example: "My daughter Emma started kindergarten" → store "Relationship: Emma is your daughter."
-      const relationshipPattern = /\bmy\s+(daughter|son|wife|husband|mother|father|sister|brother|friend|colleague|boss|partner)\s+([A-Z][a-z]+)/gi;
+      // PR#738 Hardening: Widened regex to support hyphens, apostrophes, diacritics
+      // Uses semantic analyzer for importance (not hardcoded) and correct category (relationships_social)
+      const relationshipPattern = /\bmy\s+(daughter|son|wife|husband|mother|father|sister|brother|friend|colleague|boss|partner)\s+([\w\-'À-ÿ]+)/gi;
       const relationshipMatches = [...userMessage.matchAll(relationshipPattern)];
 
       for (const match of relationshipMatches) {
         const relationshipType = match[1]; // daughter, son, etc.
-        const personName = match[2]; // Emma, John, etc.
+        const personName = match[2]; // Emma, John, O'Brien, Jean-Paul, José, etc.
         const relationshipFact = `Relationship: ${personName} is your ${relationshipType}.`;
 
-        console.log(`[RELATIONSHIP-CAPTURE] detected="my ${relationshipType} ${personName}" stored="${relationshipFact}" fingerprint=null`);
+        // Calculate importance using semantic analyzer (not hardcoded)
+        const relationshipImportance = await semanticAnalyzer.analyzeContentImportance(
+          relationshipFact,
+          'relationships_social'
+        );
+
+        console.log(`[RELATIONSHIP-CAPTURE] detected="my ${relationshipType} ${personName}" stored="${relationshipFact}" importance=${relationshipImportance.importanceScore.toFixed(2)} fingerprint=null`);
 
         // Store as separate memory row with null fingerprint (prevents supersession)
         const relationshipMetadata = {
@@ -967,13 +975,13 @@ export class IntelligentMemoryStorage {
           user_priority: false,
           fingerprint: null, // CRITICAL: null prevents supersession pollution
           fingerprintConfidence: 0,
-          importance_score: 0.90, // High importance for relationship facts
+          importance_score: relationshipImportance.importanceScore, // Use semantic analyzer, not hardcoded
           original_user_phrase: match[0], // "my daughter Emma"
           deterministic_extraction: true
         };
 
-        // Store in relationships category
-        await this.storeCompressedMemory(userId, 'relationships', relationshipFact, relationshipMetadata, mode);
+        // Store in correct category: relationships_social (not 'relationships')
+        await this.storeCompressedMemory(userId, 'relationships_social', relationshipFact, relationshipMetadata, mode);
       }
 
       // Step 1: Extract facts (compression)
