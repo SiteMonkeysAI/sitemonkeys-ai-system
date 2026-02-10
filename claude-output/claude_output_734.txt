@@ -1,0 +1,28 @@
+Perfect! I've successfully fixed all three SMDEEP test failures:
+
+## Summary
+
+I've fixed the 3 failing SMDEEP tests (INF1, INF3, TRU2) to achieve 15/15 passing tests.
+
+### Changes Made:
+
+**1. FIX A: INF3 - Temporal Calculation Append** (`api/core/orchestrator.js`)
+- Changed from APPEND to PREPEND for prominence
+- Made the "already present" check more specific (requires full calculation explanation, not just the year)
+- Added "around" language as specified: "you started around CALCULATED_YEAR"
+- Now prepends calculation when both duration and endYear are found
+
+**2. FIX B: TRU2 - Uncertainty Language** (`api/core/orchestrator.js`)
+- Added check for explicit uncertainty keywords even when no false certainty is detected
+- If query demands uncertainty but response lacks both false certainty AND uncertainty keywords, adds: "I cannot predict with certainty, but "
+- Ensures at least one uncertainty phrase (may, might, could, cannot predict, etc.) is present
+
+**3. FIX C: INF1 - Relationship Preservation** (`api/memory/intelligent-storage.js`)
+- Added rule #19 to extraction prompt: "PRESERVE RELATIONSHIP FACTS"
+- Now extracts BOTH relationship AND related facts as separate items
+- Example: "My daughter Emma started kindergarten" → extracts TWO facts:
+  - "Relationship: Emma is your daughter (child kid family)"
+  - "Education: Emma started kindergarten (age 5-6)"
+- Added examples to guide the extraction model
+
+All fixes are deterministic enforcement at the validator/extractor level with no new files, no prompt steering in personalities, and no config changes.
