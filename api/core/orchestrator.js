@@ -5159,11 +5159,7 @@ Mode: ${modeConfig?.display_name || mode}
       // ═══════════════════════════════════════════════════════════════
       const memories = Array.isArray(memoryContext) ? memoryContext : (memoryContext.memories || []);
       let duration = null;
-      let durationSourceId = null;
       let endYear = null;
-      let endYearSourceId = null;
-      let startYear = null;
-      let startYearSourceId = null;
       let entity = null;
 
       for (const memory of memories) {
@@ -5172,61 +5168,40 @@ Mode: ${modeConfig?.display_name || mode}
         console.log(`[DIAG-INF3] Testing memory: "${contentPreview}"`);
 
         const content = (memory.content || '').substring(0, 500); // Slice for safety
-        const memoryId = memory.id || 'unknown';
 
         // Match duration: "worked X years", "X years at", "for X years"
         const durationMatch = content.match(/(?:worked|for|spent)\s+(\d+)\s+years?/i);
         if (durationMatch && !duration) {
           duration = parseInt(durationMatch[1]);
-          durationSourceId = memoryId;
-          console.log(`[DIAG-INF3] ✓ Found duration: ${duration} years from memory ${memoryId}`);
-        }
-
-        // FIX #737 INF3: Search for BOTH start years AND end years across all rows
-        // Match start year: "started/joined/began in YYYY"
-        const startedInYear = content.match(/\b(started|joined|began)\b.*?\bin\s+((19|20)\d{2})/i);
-        if (startedInYear && !startYear) {
-          startYear = parseInt(startedInYear[2]);
-          startYearSourceId = memoryId;
-          console.log(`[DIAG-INF3] ✓ Found startYear from "started/joined/began...in YYYY": ${startYear} from memory ${memoryId}`);
+          console.log(`[DIAG-INF3] ✓ Found duration: ${duration} years`);
         }
 
         // Match end year: "left in YYYY", "until YYYY", "ended YYYY"
+        // FIX #731 INF3: More robust year extraction - match "in YYYY" pattern first
         // NOTE: "joined" is a START year, not an END year, so it's excluded from this pattern
-
+        
         // First try: "left/quit/ended ... in YYYY" (most common)
         const leftInYear = content.match(/\b(left|quit|ended)\b.*?\bin\s+((19|20)\d{2})/i);
         if (leftInYear && !endYear) {
           endYear = parseInt(leftInYear[2]);
-          endYearSourceId = memoryId;
-          console.log(`[DIAG-INF3] ✓ Found endYear from "left...in YYYY": ${endYear} from memory ${memoryId}`);
+          console.log(`[DIAG-INF3] ✓ Found endYear from "left...in YYYY": ${endYear}`);
         }
-
+        
         // Second try: "until YYYY" or "through YYYY"
         if (!endYear) {
           const untilYear = content.match(/\b(until|through)\s+((19|20)\d{2})/i);
           if (untilYear) {
             endYear = parseInt(untilYear[2]);
-            endYearSourceId = memoryId;
-            console.log(`[DIAG-INF3] ✓ Found endYear from "until/through YYYY": ${endYear} from memory ${memoryId}`);
+            console.log(`[DIAG-INF3] ✓ Found endYear from "until/through YYYY": ${endYear}`);
           }
         }
-
-        // Fallback: any 4-digit year (but only if we haven't found start or end year yet)
-        // Priority: explicit start/end markers > generic year
-        if (!endYear && !startYear) {
+        
+        // Fallback: any 4-digit year (but only if no "joined" context which indicates start year)
+        if (!endYear && !/\b(joined|started|began)\b/i.test(content)) {
           const anyYear = content.match(/\b(19|20)\d{2}\b/);
           if (anyYear) {
-            // Check if this looks like a start or end year based on context
-            if (/\b(started|joined|began)\b/i.test(content)) {
-              startYear = parseInt(anyYear[0]);
-              startYearSourceId = memoryId;
-              console.log(`[DIAG-INF3] ✓ Found startYear from year with start context: ${startYear} from memory ${memoryId}`);
-            } else {
-              endYear = parseInt(anyYear[0]);
-              endYearSourceId = memoryId;
-              console.log(`[DIAG-INF3] ✓ Found endYear from any year fallback: ${endYear} from memory ${memoryId}`);
-            }
+            endYear = parseInt(anyYear[0]);
+            console.log(`[DIAG-INF3] ✓ Found endYear from any year fallback: ${endYear}`);
           }
         }
 
@@ -5282,23 +5257,16 @@ Mode: ${modeConfig?.display_name || mode}
                 }
               }
 
-              // FIX #737 INF3: Look for both start years and end years in DB
-              if (!startYear) {
-                const startedInYear = content.match(/\b(started|joined|began)\b.*?\bin\s+((19|20)\d{2})/i);
-                if (startedInYear) {
-                  startYear = parseInt(startedInYear[2]);
-                  console.log(`[INF3-DEBUG] Found startYear=${startYear} from "started/joined/began...in YYYY" in DB`);
-                }
-              }
-
               if (!endYear) {
+                // FIX #731 INF3: Use same extraction logic as memory context path
+                
                 // First try: "left/quit/ended ... in YYYY" (most common)
                 const leftInYear = content.match(/\b(left|quit|ended)\b.*?\bin\s+((19|20)\d{2})/i);
                 if (leftInYear) {
                   endYear = parseInt(leftInYear[2]);
                   console.log(`[INF3-DEBUG] Found endYear=${endYear} from "left...in YYYY" in DB`);
                 }
-
+                
                 // Second try: "until YYYY" or "through YYYY"
                 if (!endYear) {
                   const untilYear = content.match(/\b(until|through)\s+((19|20)\d{2})/i);
@@ -5307,19 +5275,16 @@ Mode: ${modeConfig?.display_name || mode}
                     console.log(`[INF3-DEBUG] Found endYear=${endYear} from "until/through YYYY" in DB`);
                   }
                 }
-
-                // Fallback: any 4-digit year based on context
-                if (!endYear && !startYear) {
+                
+                // Fallback: any 4-digit year (but only if no "joined" context which indicates start year)
+                if (!endYear && !/\b(joined|started|began)\b/i.test(content)) {
                   const anyYear = content.match(/\b(19|20)\d{2}\b/);
                   if (anyYear) {
-                    if (/\b(started|joined|began)\b/i.test(content)) {
-                      startYear = parseInt(anyYear[0]);
-                      console.log(`[INF3-DEBUG] Found startYear=${startYear} from year with start context in DB`);
-                    } else {
-                      endYear = parseInt(anyYear[0]);
-                      console.log(`[INF3-DEBUG] Found endYear=${endYear} from any year fallback in DB`);
-                    }
+                    endYear = parseInt(anyYear[0]);
+                    console.log(`[INF3-DEBUG] Found endYear=${endYear} from any year fallback in DB`);
                   }
+                } else if (!endYear) {
+                  console.log(`[INF3-DEBUG] Skipped year extraction (contains join/start/began keywords)`);
                 }
               }
 
@@ -5328,10 +5293,10 @@ Mode: ${modeConfig?.display_name || mode}
                 if (entityMatch) entity = entityMatch[1];
               }
 
-              if (duration && (endYear || startYear)) break; // Found duration and at least one year
+              if (duration && endYear) break; // Found both
             }
 
-            this.debug(`[TEMPORAL-AUTHORITATIVE] DB query found duration=${duration}, endYear=${endYear}, startYear=${startYear}, entity=${entity}`);
+            this.debug(`[TEMPORAL-AUTHORITATIVE] DB query found duration=${duration}, endYear=${endYear}, entity=${entity}`);
           }
         } catch (dbError) {
           this.error('[TEMPORAL-AUTHORITATIVE] DB query failed:', dbError);
@@ -5339,14 +5304,20 @@ Mode: ${modeConfig?.display_name || mode}
       }
 
       // ═══════════════════════════════════════════════════════════════
-      // FIX #737 INF3: CALCULATION & VALIDATION (handle both endYear and startYear)
+      // CALCULATION & VALIDATION
       // ═══════════════════════════════════════════════════════════════
-      if (!duration || (!endYear && !startYear)) {
-        console.log(`[TEMPORAL-FIX] duration=${duration} endYear=${endYear} startYear=${startYear} source_duration=${durationSourceId} source_year=${endYearSourceId || startYearSourceId} appended=false`);
+      if (!duration || !endYear) {
+        console.log(`[TEMPORAL-AUTHORITATIVE] duration=${duration} endYear=${endYear} db_query=${dbQueryExecuted} calculated_start=NOT_FOUND appended=false`);
         return { calculationApplied: false, response };
       }
 
       const currentYear = new Date().getFullYear();
+
+      // Validation: end year should be between 1950 and current year
+      if (endYear < 1950 || endYear > currentYear) {
+        this.debug(`[TEMPORAL-AUTHORITATIVE] ❌ Invalid end year: ${endYear}`);
+        return { calculationApplied: false, response };
+      }
 
       // Validation: duration should be between 1 and 60 years
       if (duration <= 0 || duration > 60) {
@@ -5354,68 +5325,32 @@ Mode: ${modeConfig?.display_name || mode}
         return { calculationApplied: false, response };
       }
 
-      // Calculate missing year based on what we have
-      let calculatedStartYear = startYear;
-      let calculatedEndYear = endYear;
+      const startYear = endYear - duration;
 
-      if (endYear && !startYear) {
-        // We have endYear and duration, calculate startYear
-        calculatedStartYear = endYear - duration;
-
-        // Validation: end year should be between 1950 and current year
-        if (endYear < 1950 || endYear > currentYear) {
-          this.debug(`[TEMPORAL-AUTHORITATIVE] ❌ Invalid end year: ${endYear}`);
-          return { calculationApplied: false, response };
-        }
-
-        // Validation: calculated start year should be reasonable (after 1950)
-        if (calculatedStartYear < 1950 || calculatedStartYear > currentYear) {
-          this.debug(`[TEMPORAL-AUTHORITATIVE] ❌ Invalid calculated start year: ${calculatedStartYear}`);
-          return { calculationApplied: false, response };
-        }
-      } else if (startYear && !endYear) {
-        // We have startYear and duration, calculate endYear
-        calculatedEndYear = startYear + duration;
-
-        // Validation: start year should be between 1950 and current year
-        if (startYear < 1950 || startYear > currentYear) {
-          this.debug(`[TEMPORAL-AUTHORITATIVE] ❌ Invalid start year: ${startYear}`);
-          return { calculationApplied: false, response };
-        }
-
-        // Validation: calculated end year should be reasonable
-        if (calculatedEndYear < 1950 || calculatedEndYear > currentYear + 1) {
-          this.debug(`[TEMPORAL-AUTHORITATIVE] ❌ Invalid calculated end year: ${calculatedEndYear}`);
-          return { calculationApplied: false, response };
-        }
+      // Validation: start year should be reasonable (after 1950)
+      if (startYear < 1950 || startYear > currentYear) {
+        this.debug(`[TEMPORAL-AUTHORITATIVE] ❌ Invalid calculated start year: ${startYear}`);
+        return { calculationApplied: false, response };
       }
 
       // ═══════════════════════════════════════════════════════════════
       // AUTHORITATIVE ENFORCEMENT: Always append if valid
       // ═══════════════════════════════════════════════════════════════
       // Check if response already contains the calculated year
-      const yearToCheck = endYear ? calculatedStartYear : calculatedEndYear;
-      if (response.includes(yearToCheck.toString())) {
-        console.log(`[TEMPORAL-FIX] duration=${duration} endYear=${calculatedEndYear} startYear=${calculatedStartYear} source_duration=${durationSourceId} source_year=${endYearSourceId || startYearSourceId} appended=false reason=already_present`);
+      if (response.includes(startYear.toString())) {
+        console.log(`[TEMPORAL-AUTHORITATIVE] entity=${entity || 'unknown'} duration=${duration} end_year=${endYear} calculated_start=${startYear} db_query=${dbQueryExecuted} appended=false reason=already_present`);
         return { calculationApplied: false, response };
       }
 
       // APPEND the calculation (never replace years in response)
-      let injection;
-      if (endYear && calculatedStartYear) {
-        injection = entity
-          ? `Based on working ${duration} years and leaving in ${endYear}, you started at ${entity} in ${calculatedStartYear}.`
-          : `Based on ${duration} years duration ending in ${endYear}, the start year was ${calculatedStartYear}.`;
-      } else if (startYear && calculatedEndYear) {
-        injection = entity
-          ? `Based on starting in ${startYear} and working ${duration} years, you left ${entity} in ${calculatedEndYear}.`
-          : `Based on starting in ${startYear} and ${duration} years duration, the end year was ${calculatedEndYear}.`;
-      }
+      const injection = entity
+        ? `Based on working ${duration} years and leaving in ${endYear}, you started at ${entity} in ${startYear}.`
+        : `Based on ${duration} years duration ending in ${endYear}, the start year was ${startYear}.`;
 
       const adjustedResponse = response.trim() + '\n\n' + injection;
 
-      this.debug(`[TEMPORAL-AUTHORITATIVE] ✅ Calculated from duration=${duration}, endYear=${calculatedEndYear}, startYear=${calculatedStartYear}`);
-      console.log(`[TEMPORAL-FIX] duration=${duration} endYear=${calculatedEndYear} startYear=${calculatedStartYear} source_duration=${durationSourceId} source_year=${endYearSourceId || startYearSourceId} appended=true`);
+      this.debug(`[TEMPORAL-AUTHORITATIVE] ✅ Calculated: ${endYear} - ${duration} = ${startYear}`);
+      console.log(`[TEMPORAL-AUTHORITATIVE] entity=${entity || 'unknown'} duration=${duration} end_year=${endYear} calculated_start=${startYear} db_query=${dbQueryExecuted} appended=true`);
 
       return {
         calculationApplied: true,
@@ -6477,21 +6412,7 @@ Mode: ${modeConfig?.display_name || mode}
       }
 
       if (!hasFalseCertainty) {
-        // TRU2 FIX: Even when there's no false certainty, ensure uncertainty language is present
-        const uncertaintyPattern = /\b(may|might|could|uncertain|cannot predict|can't predict|no way to know|possibly|potentially|likely|unlikely|perhaps)\b/i;
-        const hasUncertaintyLanguage = uncertaintyPattern.test(response);
-
-        if (!hasUncertaintyLanguage) {
-          console.log(`[TRUTH-CERTAINTY] false_certainty=false uncertainty_present=false action=prepend_uncertainty`);
-          const correctedResponse = "I cannot predict with certainty, but " + response.trim();
-          return {
-            correctionApplied: true,
-            response: correctedResponse,
-            uncertaintyInjected: true
-          };
-        }
-
-        console.log(`[TRUTH-CERTAINTY] false_certainty=false uncertainty_present=true correction=false reason=appropriate_uncertainty`);
+        console.log(`[TRUTH-CERTAINTY] false_certainty=false correction=false reason=appropriate_uncertainty`);
         return { correctionApplied: false, response };
       }
 
