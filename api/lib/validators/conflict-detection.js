@@ -318,53 +318,75 @@ class ConflictDetectionValidator {
 
   /**
    * Extract allergy fact from memory content
-   * FIX #718 NUA2: Helper to extract specific allergy fact
+   * FIX #731 NUA2: Use EXACT stored allergy text, not synthesized wording
    */
   #extractAllergyFact(allergyMemories) {
     if (!allergyMemories || allergyMemories.length === 0) return null;
 
-    const content = allergyMemories[0].toLowerCase();
+    const originalContent = allergyMemories[0]; // Keep original case
+    const content = originalContent.toLowerCase();
 
-    // Try to extract the specific allergy
-    const allergyMatch = content.match(/(?:allergic to|allergy to|can't have|cannot have)\s+([a-z\s]+?)(?:\.|,|;|$)/i);
+    // Extract the EXACT allergy phrase from the original text
+    // Pattern: "I'm [severity] allergic to [item]" or "I have [type] allergy"
+    
+    // Try to capture the complete allergy statement
+    const allergyMatch = originalContent.match(/\b(I(?:'m| am)\s+(?:severely\s+)?allergic\s+to\s+[a-z\s]+)/i);
     if (allergyMatch) {
-      const item = allergyMatch[1].trim();
+      // Convert "I'm" to "you're"
+      const statement = allergyMatch[1]
+        .replace(/^I'm\s+/i, "you're ")
+        .replace(/^I am\s+/i, "you are ");
+      return statement;
+    }
+
+    // Fallback: simple extraction
+    const simpleMatch = content.match(/(?:allergic to|allergy to)\s+([a-z\s]+?)(?:\.|,|;|$)/i);
+    if (simpleMatch) {
+      const item = simpleMatch[1].trim();
       return `you're allergic to ${item}`;
     }
 
-    // Fallback patterns
+    // Last resort fallback patterns
     if (content.includes('cat')) return "you're allergic to cats";
     if (content.includes('dog')) return "you're allergic to dogs";
     if (content.includes('seafood')) return "you're allergic to seafood";
-    if (content.includes('nuts')) return "you're allergic to nuts";
-    if (content.includes('dairy')) return "you're allergic to dairy";
 
     return "you have an allergy";
   }
 
   /**
    * Extract spouse preference fact from memory content
-   * FIX #718 NUA2: Helper to extract specific preference fact
+   * FIX #731 NUA2: Use EXACT stored preference text, not synthesized wording
    */
   #extractPreferenceFact(spouseMemories) {
     if (!spouseMemories || spouseMemories.length === 0) return null;
 
-    const content = spouseMemories[0].toLowerCase();
+    const originalContent = spouseMemories[0]; // Keep original case
+    const content = originalContent.toLowerCase();
 
     // Extract spouse type
     const spouseType = content.match(/\b(wife|husband|spouse|partner)\b/i)?.[1] || 'spouse';
 
-    // Try to extract what they love/like
-    const preferenceMatch = content.match(/(?:loves?|likes?|wants?)\s+([a-z\s]+?)(?:\.|,|;|$)/i);
-    if (preferenceMatch) {
-      const item = preferenceMatch[1].trim();
-      return `your ${spouseType} loves ${item}`;
+    // Extract the EXACT preference phrase from the original text
+    // Pattern: "[spouse] [verb] [object]"
+    // Examples: "wife really wants to adopt a cat", "wife loves cats", "husband likes dogs"
+    
+    // Try to find the complete phrase after the spouse mention
+    const afterSpouse = originalContent.match(/\b(wife|husband|spouse|partner)\s+(.+?)(?:\.|$)/i);
+    if (afterSpouse) {
+      const prefPhrase = afterSpouse[2].trim();
+      // Use the exact phrase: "your [spouse] [exact phrase]"
+      return `your ${spouseType} ${prefPhrase}`;
     }
 
-    // Fallback patterns
-    if (content.includes('cat')) return `your ${spouseType} loves cats`;
-    if (content.includes('dog')) return `your ${spouseType} loves dogs`;
-    if (content.includes('seafood')) return `your ${spouseType} loves seafood`;
+    // Fallback: try to construct from common patterns but use original text
+    const preferenceMatch = originalContent.match(/\b(wife|husband|spouse|partner)\s+(really\s+)?(wants?|would\s+like|loves?|likes?|prefers?)\s+(to\s+)?(.+?)(?:\.|,|;|$)/i);
+    if (preferenceMatch) {
+      const verb = preferenceMatch[3];
+      const toPhrase = preferenceMatch[4] || '';
+      const object = preferenceMatch[5].trim();
+      return `your ${spouseType} ${preferenceMatch[2] || ''}${verb} ${toPhrase}${object}`;
+    }
 
     return `your ${spouseType} has a preference`;
   }
