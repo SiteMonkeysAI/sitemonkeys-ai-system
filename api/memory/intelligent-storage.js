@@ -951,21 +951,40 @@ export class IntelligentMemoryStorage {
       // Example: "My daughter Emma started kindergarten" → store "Relationship: Emma is your daughter."
       // PR#738 Hardening: Widened regex to support hyphens, apostrophes, diacritics
       // Uses semantic analyzer for importance (not hardcoded) and correct category (relationships_social)
+      // PR#738 Safety: Validates names to prevent false-positive captures
       const relationshipPattern = /\bmy\s+(daughter|son|wife|husband|mother|father|sister|brother|friend|colleague|boss|partner)\s+([\w\-'À-ÿ]+)/gi;
       const relationshipMatches = [...userMessage.matchAll(relationshipPattern)];
+
+      // PR#738: False-positive prevention gate
+      const falsePositives = new Set(['what', 'then', 'approximately', 'just', 'really', 'today', 'now', 'here', 'there']);
+      const isValidName = (name) => /^[A-ZÀ-Ý]/.test(name) && !falsePositives.has(name.toLowerCase());
 
       for (const match of relationshipMatches) {
         const relationshipType = match[1]; // daughter, son, etc.
         const personName = match[2]; // Emma, John, O'Brien, Jean-Paul, José, etc.
+
+        // PR#738: Validate name before storing (prevent false positives like "my friend What")
+        if (!isValidName(personName)) {
+          console.log(`[RELATIONSHIP-CAPTURE] skipped="my ${relationshipType} ${personName}" reason=invalid_name`);
+          continue;
+        }
+
         const relationshipFact = `Relationship: ${personName} is your ${relationshipType}.`;
 
         // Calculate importance using semantic analyzer (not hardcoded)
-        const relationshipImportance = await semanticAnalyzer.analyzeContentImportance(
-          relationshipFact,
-          'relationships_social'
-        );
+        // PR#738: Add try-catch with safe fallback since this makes API calls
+        let importanceScore = 0.5; // Safe fallback
+        try {
+          const relationshipImportance = await semanticAnalyzer.analyzeContentImportance(
+            relationshipFact,
+            'relationships_social'
+          );
+          importanceScore = relationshipImportance.importanceScore;
+        } catch (error) {
+          console.log(`[RELATIONSHIP-CAPTURE] importance calculation failed, using fallback 0.5: ${error.message}`);
+        }
 
-        console.log(`[RELATIONSHIP-CAPTURE] detected="my ${relationshipType} ${personName}" stored="${relationshipFact}" importance=${relationshipImportance.importanceScore.toFixed(2)} fingerprint=null`);
+        console.log(`[RELATIONSHIP-CAPTURE] detected="my ${relationshipType} ${personName}" stored="${relationshipFact}" importance=${importanceScore.toFixed(2)} fingerprint=null`);
 
         // Store as separate memory row with null fingerprint (prevents supersession)
         const relationshipMetadata = {
@@ -975,7 +994,7 @@ export class IntelligentMemoryStorage {
           user_priority: false,
           fingerprint: null, // CRITICAL: null prevents supersession pollution
           fingerprintConfidence: 0,
-          importance_score: relationshipImportance.importanceScore, // Use semantic analyzer, not hardcoded
+          importance_score: importanceScore, // Use semantic analyzer with safe fallback
           original_user_phrase: match[0], // "my daughter Emma"
           deterministic_extraction: true
         };
