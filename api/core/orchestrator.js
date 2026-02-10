@@ -5334,26 +5334,20 @@ Mode: ${modeConfig?.display_name || mode}
       }
 
       // ═══════════════════════════════════════════════════════════════
-      // AUTHORITATIVE ENFORCEMENT: Always prepend if valid (FIX #734 INF3)
+      // AUTHORITATIVE ENFORCEMENT: Always append if valid
       // ═══════════════════════════════════════════════════════════════
-      // Check if response already contains the calculation explanation
-      // (not just the year, but the actual reasoning about working X years and leaving in Y)
-      const hasCalculationExplanation =
-        response.includes(`${duration} year`) &&
-        response.includes(endYear.toString()) &&
-        response.includes(startYear.toString());
-
-      if (hasCalculationExplanation) {
-        console.log(`[TEMPORAL-AUTHORITATIVE] entity=${entity || 'unknown'} duration=${duration} end_year=${endYear} calculated_start=${startYear} db_query=${dbQueryExecuted} appended=false reason=calculation_already_explained`);
+      // Check if response already contains the calculated year
+      if (response.includes(startYear.toString())) {
+        console.log(`[TEMPORAL-AUTHORITATIVE] entity=${entity || 'unknown'} duration=${duration} end_year=${endYear} calculated_start=${startYear} db_query=${dbQueryExecuted} appended=false reason=already_present`);
         return { calculationApplied: false, response };
       }
 
-      // PREPEND the calculation (FIX #734: prepend for prominence, use "around" for temporal reasoning)
+      // APPEND the calculation (never replace years in response)
       const injection = entity
-        ? `Based on working ${duration} years and leaving in ${endYear}, you started around ${startYear}.`
-        : `Based on ${duration} years duration ending in ${endYear}, the start year was around ${startYear}.`;
+        ? `Based on working ${duration} years and leaving in ${endYear}, you started at ${entity} in ${startYear}.`
+        : `Based on ${duration} years duration ending in ${endYear}, the start year was ${startYear}.`;
 
-      const adjustedResponse = injection + '\n\n' + response.trim();
+      const adjustedResponse = response.trim() + '\n\n' + injection;
 
       this.debug(`[TEMPORAL-AUTHORITATIVE] ✅ Calculated: ${endYear} - ${duration} = ${startYear}`);
       console.log(`[TEMPORAL-AUTHORITATIVE] entity=${entity || 'unknown'} duration=${duration} end_year=${endYear} calculated_start=${startYear} db_query=${dbQueryExecuted} appended=true`);
@@ -6417,28 +6411,9 @@ Mode: ${modeConfig?.display_name || mode}
         }
       }
 
-      // FIX #734 TRU2: Even without false certainty, ensure uncertainty language exists
       if (!hasFalseCertainty) {
-        // Check if response already has explicit uncertainty language
-        const uncertaintyKeywords = /\b(may|might|could|uncertain|cannot predict|can't predict|don't know|no way to know|possible|possibly|potentially|likely|unlikely|perhaps)\b/i;
-        const hasUncertaintyLanguage = uncertaintyKeywords.test(response);
-
-        if (hasUncertaintyLanguage) {
-          console.log(`[TRUTH-CERTAINTY] false_certainty=false uncertainty_language=true correction=false reason=appropriate_uncertainty`);
-          return { correctionApplied: false, response };
-        }
-
-        // No false certainty but also no uncertainty language - add it
-        console.log(`[TRUTH-CERTAINTY] false_certainty=false uncertainty_language=false correction=true reason=adding_uncertainty_phrase`);
-
-        const uncertaintyPrefix = "I cannot predict with certainty, but ";
-        const correctedResponse = uncertaintyPrefix + response.trim();
-
-        return {
-          correctionApplied: true,
-          response: correctedResponse,
-          uncertaintyAdded: true
-        };
+        console.log(`[TRUTH-CERTAINTY] false_certainty=false correction=false reason=appropriate_uncertainty`);
+        return { correctionApplied: false, response };
       }
 
       console.log(`[TRUTH-CERTAINTY] false_certainty=true matched_phrases=[${matchedPhrases.join(', ')}]`);
