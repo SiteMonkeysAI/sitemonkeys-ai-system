@@ -1,0 +1,148 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #737: [claude-fix]  Final 3 SMDEEP failures: INF3 year extraction, TRU2 uncertainty, INF1 relationship capture (12/15 → 15/15)
+
+Issue Description:
+Current state: 12/15 passing after reverting PR #734
+Remaining failures: INF3, TRU2, INF1
+Lesson learned from PR #734: Touching extraction prompts caused system-wide pollution (duplicate memories, retrieval degradation, 4 regressions). All fixes must be surgical and avoid extraction prompt changes.
+
+Constraints
+
+No changes to LLM extraction prompts in intelligent-storage.js
+No changes to MAX_MEMORIES_FINAL (≤5)
+INF1 uses deterministic regex only (no LLM)
+All changes must include diagnostic logging
+Test each fix individually before combining
+Run SMDEEP after each fix to confirm no regressions
+
+
+FIX 1: INF3 — Temporal Calculation (Widen Year Search)
+Location: api/core/orchestrator.js → #calculateTemporalInference
+Problem: Duration is found (5 years) but endYear extraction fails because it only looks in the same memory row. Logs show:
+[DIAG-INF3] ✓ Found duration: 5 years
+[DIAG-INF3] endYear not found
+The year exists in OTHER memory rows (e.g., "TechFlow started 2019") but current logic doesn't find it.
+Fix:
+
+Extract duration from ANY memory row in the retrieved set
+Extract endYear from ANY memory row in the retrieved set (not just the same row)
+If both found → compute startYear = endYear - duration
+Prepend to response: "Based on working [duration] years and the timeline, you started around [startYear]."
+
+Required logging:
+[TEMPORAL-FIX] duration=5 endYear=2019 startYear=2014 source_duration=ID:123 source_year=ID:456 appended=true
+Proof required:
+
+Log shows duration and endYear found from different rows
+Response contains calculated start year
+INF3 test passes
+
+
+FIX 2: TRU2 — Uncertainty Language Injection
+Location: api/core/orchestrator.js → #enforceTruthCertainty
+Problem: Response avoids false certainty (good) but test expects explicit uncertainty language. Logs show:
+noFalseCertainty: true ✓
+expressesUncertainty: false ✗
+Fix:
+
+After confirming no false certainty, check if response contains uncertainty keywords:
+
+javascript   const uncertaintyPattern = /\b(may|might|could|uncertain|cannot predict|can't predict|no way to know|possibly|potentially|likely|unlikely|perhaps)\b/i;
+```
+2. If NO uncertainty keywords found → prepend: `"I cannot predict with certainty, but "`
+3. Do NOT rewrite the entire response
+
+**Required logging:**
+```
+[TRUTH-CERTAINTY] false_certainty=false uncertainty_present=false action=prepend_uncertainty
+Proof required:
+
+Response contains "cannot predict" or similar
+TRU1 still passes (no regression)
+TRU2 test passes
+
+
+FIX 3: INF1 — Deterministic Relationship Capture (Pre-Extraction)
+Location: api/memory/intelligent-storage.js — BEFORE the LLM extraction call
+Problem: User says "My daughter Emma started kindergarten" but only education fact is stored. Relationship is lost. Later query "What's my relationship to Emma?" fails.
+Why enforcement-only won't work: The relationship fact doesn't exist in storage, so there's nothing to enforce from.
+Why PR #734 failed: It modified the extraction prompt, causing duplicate "Relationship:" entries that polluted retrieval.
+Fix (deterministic regex, no LLM):
+
+BEFORE calling the LLM extractor, run regex on raw user message:
+
+javascript   const relationshipPattern = /\bmy\s+(daughter|son|wife|husband|mother|father|sister|brother|friend|colleague|boss|partner)\s+([A-Z][a-z]+)/gi;
+```
+
+2. For each match, create a SEPARATE memory row:
+   - Content: `"Relationship: [Name] is your [relationship]."`
+   - Fingerprint: `null` (prevents supersession conflicts)
+   - Category: `relationships`
+
+3. Let the normal LLM extraction run afterward (unchanged) to capture the activity/education fact
+
+**Example:**
+- Input: "My daughter Emma started kindergarten"
+- Regex creates: `"Relationship: Emma is your daughter."`
+- LLM extraction creates: `"Education: started kindergarten..."`
+- Result: Two separate, non-conflicting memory rows
+
+**Required logging:**
+```
+[RELATIONSHIP-CAPTURE] detected="my daughter Emma" stored="Relationship: Emma is your daughter." fingerprint=null
+Why this is safe:
+
+No changes to LLM extraction prompts
+Regex is deterministic (no LLM variability)
+Separate row with null fingerprint = no supersession pollution
+Won't create duplicates of other facts
+
+Proof required:
+
+Storage log shows relationship fact created separately
+INF1 test passes with infersRole: true
+NUA1, STR1, CMP2 still pass (no retrieval pollution)
+
+
+Implementation Order
+
+FIX 2 (TRU2) first — lowest risk, enforcement-only
+FIX 1 (INF3) second — enforcement-only, medium complexity
+FIX 3 (INF1) last — touches storage but is deterministic/isolated
+
+Run SMDEEP after each fix. If any regression occurs, stop and investigate before proceeding.
+
+Verification
+After all fixes:
+
+Target: 15/15
+No regressions on: NUA1, NUA2, STR1, STR2, CMP1, CMP2, INF2, TRU1, TRU3, EDG1, EDG2, EDG3
+Paste proof logs for each fix showing the diagnostic output
+
+
+Anti-Patterns (Do NOT Do)
+
+❌ Do not modify LLM extraction prompts
+❌ Do not reorder enforcement chain
+❌ Do not add broad "Relationship:" prefix logic to extraction
+❌ Do not create fingerprints for relationship facts (causes supersession)
+❌ Do not assume fixes work without running SMDEEP after each one
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
