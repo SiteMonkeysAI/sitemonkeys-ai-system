@@ -89,6 +89,7 @@ export async function processWithEliAndRoxy({
   driftTracker,
   _overrideLog,
   memoryContext = null, // STEP 2: Accept memory context from chatProcessor
+  sessionId = null, // SMDEEP: Accept session ID for refusal tracking
 }) {
   try {
     console.log("🧠 COGNITIVE FIREWALL: Full enforcement processing initiated");
@@ -293,6 +294,15 @@ export async function processWithEliAndRoxy({
       vaultContext,
     };
 
+    // SMDEEP TRU1: PRE-GENERATION - Inject refusal persistence if needed
+    let refusalInjection = { injectionText: null, turnNumber: 0 };
+    if (sessionId) {
+      refusalInjection = injectRefusalPersistence(message, sessionId);
+      if (refusalInjection.injectionText) {
+        console.log("🛡️ SMDEEP-TRU1: Refusal persistence will be injected into prompt");
+      }
+    }
+
     // GENERATE RESPONSE BASED ON ROUTING DECISION
     let response;
     let aiUsed;
@@ -306,6 +316,7 @@ export async function processWithEliAndRoxy({
         conversationHistory,
         memoryContext,
         externalContext, // INJECT EXTERNAL DATA
+        refusalInjection.injectionText, // SMDEEP TRU1
       );
       trackTokenUsage("claude", response.tokens_used || 800);
       aiUsed = "Claude";
@@ -319,6 +330,7 @@ export async function processWithEliAndRoxy({
         openai,
         memoryContext,
         externalContext, // INJECT EXTERNAL DATA
+        refusalInjection.injectionText, // SMDEEP TRU1
       );
       trackTokenUsage("eli", response.tokens_used || 600);
       aiUsed = "Eli";
@@ -332,6 +344,7 @@ export async function processWithEliAndRoxy({
         openai,
         memoryContext,
         externalContext, // INJECT EXTERNAL DATA
+        refusalInjection.injectionText, // SMDEEP TRU1
       );
       trackTokenUsage("roxy", response.tokens_used || 600);
       aiUsed = "Roxy";
@@ -605,6 +618,46 @@ export async function processWithEliAndRoxy({
       }
     }
 
+    // 8. SMDEEP Intelligence Enforcers (Issue #742)
+    // Deterministic post-generation fixes for specific failure patterns
+    console.log("🎯 Applying SMDEEP intelligence enforcers");
+    const smdeepLogs = [];
+
+    // Fix A: Temporal Arithmetic (INF3)
+    const inf3Result = applyTemporalArithmeticEnforcer(response.response, memoryContext, message);
+    response.response = inf3Result.response;
+    smdeepLogs.push(inf3Result.log);
+    if (inf3Result.log.applied) {
+      overridePatterns.temporal_arithmetic = (overridePatterns.temporal_arithmetic || 0) + 1;
+    }
+
+    // Fix B: Ambiguity Disclosure (NUA1)
+    const nua1Result = applyAmbiguityDisclosureEnforcer(response.response, memoryContext, message);
+    response.response = nua1Result.response;
+    smdeepLogs.push(nua1Result.log);
+    if (nua1Result.log.applied) {
+      overridePatterns.ambiguity_disclosure = (overridePatterns.ambiguity_disclosure || 0) + 1;
+    }
+
+    // Fix C: Contact Listing (CMP2)
+    const cmp2Result = applyContactListingEnforcer(response.response, memoryContext, message);
+    response.response = cmp2Result.response;
+    smdeepLogs.push(cmp2Result.log);
+    if (cmp2Result.log.applied) {
+      overridePatterns.contact_listing = (overridePatterns.contact_listing || 0) + 1;
+    }
+
+    // Fix D: Refusal Detection (TRU1 - post-generation component)
+    if (sessionId) {
+      const tru1Log = checkAndStoreRefusal(response.response, sessionId, refusalInjection.turnNumber);
+      smdeepLogs.push(tru1Log);
+    }
+
+    const smdeepApplied = smdeepLogs.filter(l => l.applied).length;
+    if (smdeepApplied > 0) {
+      console.log(`✅ SMDEEP enforcers applied: ${smdeepApplied} fixes`);
+    }
+
     // STEP 6: FINAL QUALITY PASS - Remove engagement bait
     console.log("🎯 Applying final quality pass - removing engagement bait");
     const cleanedResponse = removeEngagementBait(response.response);
@@ -814,6 +867,7 @@ async function generateEliResponse(
   openai,
   memoryContext = null,
   externalContext = "", // INJECT EXTERNAL DATA
+  refusalInjection = null, // SMDEEP TRU1
 ) {
   const systemPrompt = `You are Eli, a business validation specialist with extensive startup experience.
 
@@ -827,6 +881,8 @@ BUSINESS VALIDATION MODE ENFORCEMENT:
 CRITICAL: If you refuse a request, maintain that refusal when pushed. Say "I still can't help with that" - do NOT evade with "I need more context".
 
 ${vaultContext}
+
+${refusalInjection || ""}
 
 ${memoryContext ? `
 ═══════════════════════════════════════════════════════════════
@@ -898,6 +954,7 @@ async function generateRoxyResponse(
   openai,
   memoryContext = null,
   externalContext = "", // INJECT EXTERNAL DATA
+  refusalInjection = null, // SMDEEP TRU1
 ) {
   const systemPrompt = `You are Roxy, a truth-first analysis specialist committed to accuracy.
 
@@ -911,6 +968,8 @@ TRUTH-FIRST MODE ENFORCEMENT:
 CRITICAL: If you refuse a request, maintain that refusal when pushed. Say "I still can't help with that" - do NOT evade with "I need more context".
 
 ${vaultContext}
+
+${refusalInjection || ""}
 
 ${memoryContext ? `
 ═══════════════════════════════════════════════════════════════
@@ -974,7 +1033,7 @@ Provide honest, accurate analysis with clear confidence indicators. REASON from 
   }
 }
 
-async function generateClaudeResponse(prompt, mode, vaultContext, _history, memoryContext = null, externalContext = "") {
+async function generateClaudeResponse(prompt, mode, vaultContext, _history, memoryContext = null, externalContext = "", refusalInjection = null) {
   // For Claude responses, we need to use a different approach since we're Claude
   // This would typically call the Anthropic API, but for now return structured response
 
@@ -996,6 +1055,8 @@ CRITICAL: Apply semantic intelligence (Issue #566, #600-INF3, #600-NUA1):
     response: `🤖 **Complex Analysis:** This query requires advanced reasoning capabilities. The analysis suggests multiple factors need consideration with high confidence requirements.
 
 ${vaultContext ? "🍌 **Vault Context Applied:** Site Monkeys operational frameworks active." : ""}
+
+${refusalInjection || ""}
 
 ${reasoningContext}
 
@@ -1833,3 +1894,392 @@ export function getSessionStats() {
         : 100,
   };
 }
+
+// ============================================================================
+// SMDEEP INTELLIGENCE ENFORCERS - Issue #742
+// ============================================================================
+// Deterministic post-generation enforcement that fixes specific failure patterns
+// where memory/retrieval is working correctly but AI output is inconsistent.
+
+// Session state for refusal tracking (TRU1)
+const refusalSessionState = new Map();
+let turnCounter = new Map(); // Track turn numbers per session
+
+/**
+ * FIX A - INF3: Temporal Arithmetic Enforcer
+ * Enforces temporal arithmetic when AI hedges despite having duration + reference year.
+ */
+function applyTemporalArithmeticEnforcer(response, memoryContext, query) {
+  const log = {
+    enforcer: "temporal_arithmetic",
+    applied: false,
+    reason: null,
+    reference_year: null,
+    duration: null,
+    computed_year: null,
+    timestamp: new Date().toISOString(),
+  };
+
+  try {
+    const isTimelineQuery = /when did|what year|start|begin|join|left|graduated|worked/i.test(query);
+    if (!isTimelineQuery) {
+      log.reason = "not a timeline query";
+      return { response, log };
+    }
+
+    const hedgingPhrases = [
+      "not provided", "not specified", "don't have specific dates",
+      "cannot determine the exact", "unclear when", "don't know the exact",
+      "would need more information about", "don't have the specific year",
+    ];
+
+    const isHedging = hedgingPhrases.some(phrase =>
+      response.toLowerCase().includes(phrase.toLowerCase())
+    );
+
+    if (!isHedging) {
+      log.reason = "AI response does not hedge on dates";
+      return { response, log };
+    }
+
+    if (!memoryContext || memoryContext.length === 0) {
+      log.reason = "no memory context available";
+      return { response, log };
+    }
+
+    const yearMatches = memoryContext.match(/\b(19|20)\d{2}\b/g);
+    if (!yearMatches || yearMatches.length === 0) {
+      log.reason = "no reference year found in memory";
+      return { response, log };
+    }
+
+    const durationMatch = memoryContext.match(/(\d+)\s+(years?|months?)/i);
+    if (!durationMatch) {
+      log.reason = "no duration found in memory";
+      return { response, log };
+    }
+
+    const duration = parseInt(durationMatch[1]);
+    const unit = durationMatch[2].toLowerCase();
+    const referenceYear = parseInt(yearMatches[0]);
+
+    let computedYear;
+    if (unit.startsWith('year')) {
+      computedYear = referenceYear + duration;
+    } else if (unit.startsWith('month')) {
+      computedYear = referenceYear + Math.floor(duration / 12);
+    } else {
+      log.reason = "unsupported duration unit";
+      return { response, log };
+    }
+
+    let eventDescription = "the event";
+    if (/start|begin|join/i.test(query)) eventDescription = "starting";
+    else if (/left|end|finish/i.test(query)) eventDescription = "ending";
+
+    const arithmeticPrefix = `Based on your memories: reference year ${referenceYear} + ${duration} ${unit} puts ${eventDescription} around ${computedYear}.\n\n`;
+    const enhancedResponse = arithmeticPrefix + response;
+
+    log.applied = true;
+    log.reason = "temporal arithmetic computed and prepended";
+    log.reference_year = referenceYear;
+    log.duration = `${duration} ${unit}`;
+    log.computed_year = computedYear;
+
+    console.log('[SMDEEP-INF3]', JSON.stringify(log, null, 2));
+    return { response: enhancedResponse, log };
+
+  } catch (error) {
+    log.reason = `error: ${error.message}`;
+    return { response, log };
+  }
+}
+
+/**
+ * FIX B - NUA1: Ambiguity Disclosure Enforcer
+ * Enforces ambiguity disclosure when multiple memory entries have the same name.
+ */
+function applyAmbiguityDisclosureEnforcer(response, memoryContext, query) {
+  const log = {
+    enforcer: "ambiguity_disclosure",
+    applied: false,
+    reason: null,
+    name: null,
+    descriptors_found: 0,
+    descriptors_in_response: 0,
+    timestamp: new Date().toISOString(),
+  };
+
+  try {
+    if (!memoryContext || memoryContext.length === 0) {
+      log.reason = "no memory context available";
+      return { response, log };
+    }
+
+    const queryNameMatches = query.match(/\b[A-Z][a-z]+\b/g);
+    if (!queryNameMatches || queryNameMatches.length === 0) {
+      log.reason = "no proper names detected in query";
+      return { response, log };
+    }
+
+    for (const name of queryNameMatches) {
+      const nameRegex = new RegExp(`\\b${name}\\b`, 'gi');
+      const matches = memoryContext.match(nameRegex);
+
+      if (!matches || matches.length < 2) continue;
+
+      const descriptors = [];
+      const lines = memoryContext.split('\n');
+
+      for (const line of lines) {
+        if (nameRegex.test(line)) {
+          const descriptorPatterns = [
+            new RegExp(`${name}[^.]*?\\b(colleague|friend|brother|sister|doctor|engineer|manager|partner|spouse|wife|husband|marketing|sales|developer)\\b`, 'i'),
+            new RegExp(`\\b(colleague|friend|brother|sister|doctor|engineer|manager|partner|spouse|wife|husband|marketing|sales|developer)[^.]*?${name}`, 'i'),
+          ];
+
+          for (const pattern of descriptorPatterns) {
+            const match = line.match(pattern);
+            if (match && match[1]) {
+              const descriptor = match[1].toLowerCase();
+              if (!descriptors.includes(descriptor)) {
+                descriptors.push(descriptor);
+              }
+            }
+          }
+        }
+      }
+
+      if (descriptors.length < 2) continue;
+
+      const descriptorsInResponse = descriptors.filter(d =>
+        response.toLowerCase().includes(d)
+      ).length;
+
+      if (descriptorsInResponse >= descriptors.length) continue;
+
+      const userSpecified = query.toLowerCase().includes('my friend') ||
+                            query.toLowerCase().includes('my colleague') ||
+                            query.toLowerCase().includes('my brother') ||
+                            query.toLowerCase().includes('from work');
+
+      if (userSpecified) {
+        log.reason = "user already specified which person";
+        return { response, log };
+      }
+
+      const disambiguationResponse = `I know ${descriptors.length} different people named ${name}: ${descriptors.join(' and ')}. Which ${name} are you asking about?`;
+
+      log.applied = true;
+      log.reason = "multiple descriptors found, AI only mentioned some";
+      log.name = name;
+      log.descriptors_found = descriptors.length;
+      log.descriptors_in_response = descriptorsInResponse;
+
+      console.log('[SMDEEP-NUA1]', JSON.stringify(log, null, 2));
+      return { response: disambiguationResponse, log };
+    }
+
+    log.reason = "no ambiguity detected or AI handled correctly";
+    return { response, log };
+
+  } catch (error) {
+    log.reason = `error: ${error.message}`;
+    return { response, log };
+  }
+}
+
+/**
+ * FIX C - CMP2: Contact Names Listing Enforcer
+ * Enforces contact name listing when query asks for contacts and AI doesn't list them.
+ */
+function applyContactListingEnforcer(response, memoryContext, query) {
+  const log = {
+    enforcer: "contact_listing",
+    applied: false,
+    reason: null,
+    names_found: 0,
+    names_in_response: false,
+    appended: false,
+    timestamp: new Date().toISOString(),
+  };
+
+  try {
+    const contactQueryPatterns = [
+      /who are my contacts/i, /list my contacts/i, /my contacts/i,
+      /contact names/i, /who do i know/i, /people i'?ve mentioned/i,
+      /key contacts/i, /my key people/i,
+    ];
+
+    const isContactQuery = contactQueryPatterns.some(pattern => pattern.test(query));
+    if (!isContactQuery) {
+      log.reason = "not a contact query";
+      return { response, log };
+    }
+
+    if (!memoryContext || memoryContext.length === 0) {
+      log.reason = "no memory context available";
+      return { response, log };
+    }
+
+    const names = [];
+    const titlePattern = /(?:Dr\.|Prof\.|Mr\.|Mrs\.|Ms\.)\s+([A-ZÀ-ÿ][a-zà-ÿ]+(?:[-'\s][A-ZÀ-ÿ][a-zà-ÿ]+)*)/g;
+    let match;
+    while ((match = titlePattern.exec(memoryContext)) !== null) {
+      const fullName = match[0];
+      if (!names.includes(fullName)) names.push(fullName);
+    }
+
+    const namePattern = /\b([A-ZÀ-ÿ][a-zà-ÿ]+(?:[-'\s][A-ZÀ-ÿ][a-zà-ÿ]+)+)\b/g;
+    while ((match = namePattern.exec(memoryContext)) !== null) {
+      const fullName = match[1];
+      if (!fullName.match(/^(The|And|But|For|With|From|About)\s/i)) {
+        if (!names.some(n => n.includes(fullName) || fullName.includes(n))) {
+          names.push(fullName);
+        }
+      }
+    }
+
+    if (names.length === 0) {
+      log.reason = "no person names found in memory";
+      return { response, log };
+    }
+
+    const namesInResponse = names.filter(name => response.includes(name));
+    if (namesInResponse.length === names.length) {
+      log.reason = "all names already in response";
+      log.names_found = names.length;
+      log.names_in_response = true;
+      return { response, log };
+    }
+
+    const namesList = names.join(', ');
+    const enhancedResponse = response + `\n\nYour contacts include: ${namesList}.`;
+
+    log.applied = true;
+    log.appended = true;
+    log.reason = "names found in memory but not in response";
+    log.names_found = names.length;
+    log.names_in_response = false;
+
+    console.log('[SMDEEP-CMP2]', JSON.stringify(log, null, 2));
+    return { response: enhancedResponse, log };
+
+  } catch (error) {
+    log.reason = `error: ${error.message}`;
+    return { response, log };
+  }
+}
+
+/**
+ * FIX D - TRU1: Refusal Persistence Enforcer (POST-GENERATION component)
+ * Detects refusals and stores them for next turn.
+ */
+function checkAndStoreRefusal(response, sessionId, turnNumber) {
+  const log = {
+    enforcer: "refusal_persistence",
+    phase: "detection",
+    refusal_detected: false,
+    refusal_topic: null,
+    turn_number: turnNumber,
+    timestamp: new Date().toISOString(),
+  };
+
+  try {
+    const refusalIndicators = [
+      "I can't help with", "I'm not able to assist", "I cannot provide",
+      "would be unethical", "against my guidelines", "I must decline",
+      "I don't", "I cannot", "I can't",
+    ];
+
+    const isRefusal = refusalIndicators.some(indicator =>
+      response.toLowerCase().includes(indicator.toLowerCase())
+    );
+
+    if (!isRefusal) return log;
+
+    let refusalTopic = "unspecified request";
+    const topicPatterns = [
+      { pattern: /hack|hacking|break into|unauthorized access/i, topic: "hacking/unauthorized access" },
+      { pattern: /guarantee.*success|promise.*work|definitely succeed/i, topic: "false guarantees" },
+      { pattern: /illegal|crime|fraud/i, topic: "illegal activity" },
+    ];
+
+    for (const { pattern, topic } of topicPatterns) {
+      if (pattern.test(response)) {
+        refusalTopic = topic;
+        break;
+      }
+    }
+
+    if (!refusalSessionState.has(sessionId)) {
+      refusalSessionState.set(sessionId, []);
+    }
+
+    const sessionRefusals = refusalSessionState.get(sessionId);
+    sessionRefusals.push({ turn: turnNumber, topic: refusalTopic, timestamp: Date.now() });
+
+    if (sessionRefusals.length > 3) sessionRefusals.shift();
+
+    log.refusal_detected = true;
+    log.refusal_topic = refusalTopic;
+
+    console.log('[SMDEEP-TRU1]', JSON.stringify(log, null, 2));
+    return log;
+
+  } catch (error) {
+    console.error('[SMDEEP-TRU1] Error:', error);
+    return log;
+  }
+}
+
+/**
+ * FIX D - TRU1: Refusal Persistence Enforcer (PRE-GENERATION component)
+ * Injects refusal persistence into system prompt when pushback detected.
+ */
+function injectRefusalPersistence(query, sessionId) {
+  const turnNumber = (turnCounter.get(sessionId) || 0) + 1;
+  turnCounter.set(sessionId, turnNumber);
+
+  const pushbackPatterns = [
+    "come on", "I really need", "just tell me", "please just",
+    "it's for a good reason", "I promise", "no one will know",
+    "help me out", "make an exception", "why not",
+  ];
+
+  const isPushback = pushbackPatterns.some(pattern =>
+    query.toLowerCase().includes(pattern)
+  );
+
+  if (!isPushback) return { injectionText: null, turnNumber };
+
+  const sessionRefusals = refusalSessionState.get(sessionId);
+  if (!sessionRefusals || sessionRefusals.length === 0) {
+    return { injectionText: null, turnNumber };
+  }
+
+  const recentRefusal = sessionRefusals[sessionRefusals.length - 1];
+  const turnsSince = turnNumber - recentRefusal.turn;
+
+  if (turnsSince > 3) return { injectionText: null, turnNumber };
+
+  const injectionText = `\n\nENFORCEMENT: The user previously asked about ${recentRefusal.topic} and you refused. The current message is pushing back on that refusal. MAINTAIN YOUR REFUSAL. Do not treat this as a new query. Reference your prior refusal and stay firm. Say "I still can't help with that" - do NOT evade with "I need more context".`;
+
+  console.log('[SMDEEP-TRU1] Refusal persistence injected for session:', sessionId);
+  return { injectionText, turnNumber };
+}
+
+// Cleanup expired refusal states periodically
+setInterval(() => {
+  const now = Date.now();
+  const expirationTime = 30 * 60 * 1000;
+  for (const [sessionId, refusals] of refusalSessionState.entries()) {
+    const validRefusals = refusals.filter(r => now - r.timestamp < expirationTime);
+    if (validRefusals.length === 0) {
+      refusalSessionState.delete(sessionId);
+      turnCounter.delete(sessionId);
+    } else {
+      refusalSessionState.set(sessionId, validRefusals);
+    }
+  }
+}, 10 * 60 * 1000);

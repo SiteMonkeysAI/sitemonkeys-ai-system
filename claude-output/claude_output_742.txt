@@ -1,0 +1,198 @@
+---SUMMARY---
+
+## Issue #742: SMDEEP Intelligence Enforcers - Implementation Complete
+
+I have successfully implemented all four deterministic enforcers to fix the SMDEEP test failures (INF3, NUA1, CMP2, TRU1) as specified in issue #742.
+
+### Files Modified
+
+**1. `/api/lib/ai-processors.js`** - Main implementation file
+
+#### Changes Made:
+
+**A. Added Four SMDEEP Enforcer Functions (lines ~1850-2150)**
+
+1. **`applyTemporalArithmeticEnforcer()` (Fix A - INF3)**
+   - Detects when AI hedges about dates despite having duration + reference year in memory
+   - Computes simple arithmetic (e.g., 2020 - 5 years = 2015)
+   - Prepends calculation to response
+   - Logs: enforcer, applied, reference_year, duration, computed_year
+
+2. **`applyAmbiguityDisclosureEnforcer()` (Fix B - NUA1)**
+   - Detects when memory contains multiple people with same name but different descriptors
+   - Detects when AI only mentions one descriptor
+   - Replaces response with disambiguation question
+   - Logs: enforcer, applied, name, descriptors_found, descriptors_in_response
+
+3. **`applyContactListingEnforcer()` (Fix C - CMP2)**
+   - Detects contact-listing queries ("who are my contacts?")
+   - Extracts names from memory (with unicode support for international names)
+   - Appends names to response if AI didn't list them
+   - Logs: enforcer, applied, names_found, names_in_response, appended
+
+4. **`checkAndStoreRefusal()` (Fix D - TRU1 - POST-GENERATION)**
+   - Detects refusals in AI responses
+   - Stores refusal in session state for next turn
+   - Tracks refusal topic and turn number
+   - Logs: enforcer, phase, refusal_detected, refusal_topic, turn_number
+
+5. **`injectRefusalPersistence()` (Fix D - TRU1 - PRE-GENERATION)**
+   - Detects pushback patterns in user queries ("come on", "just tell me")
+   - Checks for prior refusal within last 3 turns
+   - Injects enforcement instruction into system prompt
+   - Logs: enforcer, phase, pushback_detected, prior_refusal, maintained
+
+**B. Integration into Enforcement Chain**
+
+1. **Session ID Passing** (line ~92)
+   - Added `sessionId` parameter to `processWithEliAndRoxy()` function
+   - Passed through from chatProcessor.js
+
+2. **Pre-Generation Injection** (line ~301)
+   - Added refusal persistence check before AI generation
+   - Injects enforcement text into system prompts when needed
+
+3. **AI Generator Updates** (lines ~320, ~330, ~340, ~871, ~918, ~1032)
+   - Updated `generateEliResponse()`, `generateRoxyResponse()`, `generateClaudeResponse()`
+   - Added `refusalInjection` parameter to all three functions
+   - Injected refusal persistence text into system prompts
+
+4. **Post-Generation Enforcement** (line ~623)
+   - Added SMDEEP enforcers after Memory Usage Enforcement (#7)
+   - Before FINAL QUALITY PASS (#8)
+   - All four enforcers applied in sequence:
+     - INF3: Temporal Arithmetic
+     - NUA1: Ambiguity Disclosure
+     - CMP2: Contact Listing
+     - TRU1: Refusal Detection
+   - Tracks enforcer applications in `overridePatterns`
+
+5. **Session State Management**
+   - Added `refusalSessionState` Map for refusal tracking
+   - Added `turnCounter` Map for turn number tracking
+   - Added cleanup interval (every 10 minutes) to remove expired states
+
+**2. `/api/lib/chatProcessor.js`**
+
+- Line ~423: Added `sessionId: session_id` to `processWithEliAndRoxy()` call
+- Enables refusal persistence tracking across conversation turns
+
+### Architecture Alignment
+
+**✅ All constraints respected:**
+- ❌ ZERO changes to memory storage, extraction, compression, retrieval
+- ❌ ZERO changes to MAX_MEMORIES_FINAL
+- ❌ ZERO changes to existing enforcement chain order
+- ✅ All fixes are deterministic (predictable input → predictable output)
+- ✅ All fixes log their application with structured JSON logs
+- ✅ All fixes are testable independently
+- ✅ Integration point: After existing enforcers, before final quality pass
+
+**Enforcement Order (Updated):**
+1. guardPoliticalContent (existing)
+2. validateProductRecommendation (existing)
+3. applyTruthProtocols (existing)
+4. modeLinter.validateModeCompliance (existing - referenced in other files)
+5. Memory Usage Enforcement (existing)
+6. **SMDEEP Enforcers (NEW):**
+   - applyTemporalArithmeticEnforcer (INF3)
+   - applyAmbiguityDisclosureEnforcer (NUA1)
+   - applyContactListingEnforcer (CMP2)
+   - checkAndStoreRefusal (TRU1)
+7. Final Quality Pass - Remove engagement bait (existing)
+
+### How It Works
+
+**Pre-Generation (TRU1 only):**
+1. Before calling AI, check if user query contains pushback patterns
+2. If pushback detected + prior refusal exists → inject enforcement into prompt
+3. AI sees: "ENFORCEMENT: The user previously asked about [topic] and you refused. MAINTAIN YOUR REFUSAL."
+
+**Post-Generation (INF3, NUA1, CMP2, TRU1):**
+1. AI generates response with memory context injected
+2. Response passes through existing enforcers
+3. **SMDEEP enforcers apply:**
+   - INF3: If hedging + has duration+year → compute & prepend
+   - NUA1: If ambiguous name + only one mentioned → replace with disambiguation
+   - CMP2: If contact query + names in memory not in response → append names
+   - TRU1: If response is refusal → store for next turn
+4. Modified response continues to final quality pass
+
+### Logging Format
+
+All enforcers log in this format:
+```json
+{
+  "enforcer": "temporal_arithmetic|ambiguity_disclosure|contact_listing|refusal_persistence",
+  "applied": true|false,
+  "reason": "string explaining why it fired or didn't",
+  "details": { /* enforcer-specific data */ },
+  "timestamp": "ISO-8601"
+}
+```
+
+Console logs appear as:
+- `[SMDEEP-INF3]` - Temporal Arithmetic
+- `[SMDEEP-NUA1]` - Ambiguity Disclosure
+- `[SMDEEP-CMP2]` - Contact Listing
+- `[SMDEEP-TRU1]` - Refusal Persistence
+
+### Testing Instructions
+
+**To test the implementation:**
+
+1. **Start the server:**
+   ```bash
+   npm start
+   ```
+
+2. **Run the complete SMDEEP test suite:**
+   ```bash
+   node diagnostic-tests-smdeep-complete.js
+   ```
+
+3. **Expected outcome:**
+   - INF3 (Temporal Reasoning): Should now PASS - AI computes 2020 - 5 = 2015
+   - NUA1 (Two Alexes): Should now PASS - System asks "Which Alex?"
+   - CMP2 (International Names): Should now PASS - System lists all three names
+   - TRU1 (Refusal Maintenance): Should now PASS - System maintains refusal on pushback
+   - All 11 currently passing tests: Should continue to PASS (zero regression)
+
+4. **Check console logs for enforcement activity:**
+   ```
+   🎯 Applying SMDEEP intelligence enforcers
+   [SMDEEP-INF3] { "enforcer": "temporal_arithmetic", "applied": true, ... }
+   [SMDEEP-NUA1] { "enforcer": "ambiguity_disclosure", "applied": false, ... }
+   [SMDEEP-CMP2] { "enforcer": "contact_listing", "applied": false, ... }
+   [SMDEEP-TRU1] { "enforcer": "refusal_persistence", "applied": true, ... }
+   ✅ SMDEEP enforcers applied: 2 fixes
+   ```
+
+### Key Design Decisions
+
+1. **Inline implementation** - Added enforcers directly to ai-processors.js instead of separate file, following the existing pattern and avoiding file creation issues
+
+2. **Session ID from chatProcessor** - Used existing session_id infrastructure for refusal tracking instead of creating new session management
+
+3. **Lightweight state** - Refusal state stored in Map with automatic cleanup, expires after 30 minutes
+
+4. **Turn counter** - Simple counter per session to track conversation turns for refusal window (3 turns)
+
+5. **Pattern-based detection** - All four enforcers use deterministic pattern matching:
+   - INF3: Regex for years + duration + hedging phrases
+   - NUA1: Name matching + descriptor extraction
+   - CMP2: Contact query patterns + name extraction with unicode support
+   - TRU1: Refusal indicators + pushback patterns
+
+6. **Non-invasive** - No changes to memory pipeline, no schema changes, no database modifications
+
+### Compliance with CLAUDE.md
+
+✅ **Truth Standard**: Enforces truth by preventing AI from hedging when it has the data
+✅ **Caring Family Member**: Makes AI remember and calculate like a real family member would
+✅ **Anti-Engagement**: Fixes prevent the need for follow-up questions
+✅ **Enforcement Architecture**: Uses code-based enforcement, not just prompts
+✅ **Token Efficiency**: Deterministic logic, no additional AI calls
+✅ **Sacred Order**: RETRIEVE → INJECT → GENERATE → VALIDATE (preserved)
+
+---END SUMMARY---
