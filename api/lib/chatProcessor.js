@@ -420,6 +420,7 @@ export async function processRequest(requestBody) {
       userPreference: user_preference,
       openai,
       memoryContext, // STEP 1: Pass memory context to AI processor
+      sessionId: session_id, // Issue #744: Pass session ID for refusal tracking
     });
 
     // GENERATE MODE FINGERPRINT

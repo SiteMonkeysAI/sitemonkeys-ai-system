@@ -90,15 +90,67 @@ class PersistentMemoryOrchestrator {
         };
       }
 
-      // Format memories as a readable string
-      const memoryText = memories
-        .map((m, idx) => {
-          const category = m.category_name || "general";
+      // Format memories as a readable string with enhanced structure (Issue #744)
+      // Group by category and detect ambiguities/completeness
+      const categorizedMemories = {};
+      const personNames = {}; // Track person names to detect duplicates
+
+      // Group memories by category
+      memories.forEach((m) => {
+        const category = m.category_name || "general";
+        if (!categorizedMemories[category]) {
+          categorizedMemories[category] = [];
+        }
+        categorizedMemories[category].push(m);
+
+        // Track person names for ambiguity detection
+        if (category.toLowerCase().includes('person') || category.toLowerCase().includes('contact') || category.toLowerCase().includes('relationship')) {
+          const content = m.content || "";
+          // Extract first word as potential name (simple heuristic)
+          const nameMatch = content.match(/^([A-Z][a-z]+)/);
+          if (nameMatch) {
+            const firstName = nameMatch[1];
+            if (!personNames[firstName]) {
+              personNames[firstName] = [];
+            }
+            personNames[firstName].push(content);
+          }
+        }
+      });
+
+      // Detect duplicate names
+      const duplicateNames = Object.keys(personNames).filter(name => personNames[name].length > 1);
+
+      // Build formatted memory text with category headers
+      let memoryText = "";
+      let sectionIndex = 0;
+
+      for (const [category, categoryMemories] of Object.entries(categorizedMemories)) {
+        sectionIndex++;
+
+        // Add category header
+        const isListType = category.toLowerCase().includes('contact') ||
+                          category.toLowerCase().includes('favorite') ||
+                          categoryMemories.length > 2;
+
+        const completeLabel = isListType ? " [COMPLETE LIST]" : "";
+        memoryText += `\n── ${category.toUpperCase()}${completeLabel} ──\n`;
+
+        // Add individual memories
+        categoryMemories.forEach((m, idx) => {
           const subcategory = m.subcategory_name || "";
           const content = m.content || "";
-          return `[Memory ${idx + 1}] (${category}${subcategory ? "/" + subcategory : ""}): ${content}`;
-        })
-        .join("\n\n");
+          memoryText += `  ${idx + 1}. ${subcategory ? `(${subcategory}) ` : ""}${content}\n`;
+        });
+      }
+
+      // Add disambiguation note if needed
+      if (duplicateNames.length > 0) {
+        memoryText += `\n[NOTE: Multiple people share these names - verify which one the user means: ${duplicateNames.join(', ')}]\n`;
+      }
+
+      // Trim leading newline
+      memoryText = memoryText.trim();
 
       this.logger.log(
         `Successfully retrieved ${memories.length} memories, ${memoryText.length} characters`,
