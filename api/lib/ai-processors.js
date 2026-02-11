@@ -76,6 +76,21 @@ let assumptionDatabase = {
 let systemOverrideLog = [];
 const enhancedIntelligence = new EnhancedIntelligence();
 
+// SESSION-LEVEL REFUSAL TRACKING (TRU1 - Issue #744)
+// Stores refusals by session ID to maintain consistency across conversation turns
+const sessionRefusals = new Map();
+
+// Cleanup interval for refusal tracking (every 10 minutes)
+setInterval(() => {
+  const now = Date.now();
+  const TTL = 30 * 60 * 1000; // 30 minutes
+  for (const [sessionId, refusal] of sessionRefusals.entries()) {
+    if (now - refusal.timestamp > TTL) {
+      sessionRefusals.delete(sessionId);
+    }
+  }
+}, 10 * 60 * 1000);
+
 // ==================== MAIN PROCESSING FUNCTION ====================
 
 export async function processWithEliAndRoxy({
@@ -89,6 +104,7 @@ export async function processWithEliAndRoxy({
   driftTracker,
   _overrideLog,
   memoryContext = null, // STEP 2: Accept memory context from chatProcessor
+  sessionId = null, // Issue #744: Session ID for refusal tracking
 }) {
   try {
     console.log("🧠 COGNITIVE FIREWALL: Full enforcement processing initiated");
@@ -151,6 +167,23 @@ export async function processWithEliAndRoxy({
       modeContext,
       preAssumptionCheck,
     );
+
+    // SESSION-LEVEL REFUSAL CONTEXT (Issue #744 - TRU1)
+    // Build refusal context string if a prior refusal exists in this session
+    let refusalContext = "";
+    if (sessionId && sessionRefusals.has(sessionId)) {
+      const priorRefusal = sessionRefusals.get(sessionId);
+      const turnsSince = conversationHistory.length - priorRefusal.turnNumber;
+
+      // Only inject if refusal occurred within last 3 turns
+      if (turnsSince <= 3) {
+        refusalContext = `\n\nSESSION CONTEXT: You previously refused a request about "${priorRefusal.topic}" in this conversation.
+Your reasoning was: ${priorRefusal.reason}. If the user asks again or pushes back, maintain your
+position and explain your reasoning again. Do not reverse a principled refusal.`;
+
+        console.log(`[REFUSAL-CONTEXT] Injecting prior refusal for topic: ${priorRefusal.topic}, turn gap: ${turnsSince}`);
+      }
+    }
 
     // PHASE 4: TRUTH TYPE DETECTION AND EXTERNAL LOOKUP (PRE-GENERATION)
     console.log("🔍 PHASE 4: Truth type detection and external lookup");
@@ -306,6 +339,7 @@ export async function processWithEliAndRoxy({
         conversationHistory,
         memoryContext,
         externalContext, // INJECT EXTERNAL DATA
+        refusalContext, // Issue #744: Session refusal context
       );
       trackTokenUsage("claude", response.tokens_used || 800);
       aiUsed = "Claude";
@@ -319,6 +353,7 @@ export async function processWithEliAndRoxy({
         openai,
         memoryContext,
         externalContext, // INJECT EXTERNAL DATA
+        refusalContext, // Issue #744: Session refusal context
       );
       trackTokenUsage("eli", response.tokens_used || 600);
       aiUsed = "Eli";
@@ -332,6 +367,7 @@ export async function processWithEliAndRoxy({
         openai,
         memoryContext,
         externalContext, // INJECT EXTERNAL DATA
+        refusalContext, // Issue #744: Session refusal context
       );
       trackTokenUsage("roxy", response.tokens_used || 600);
       aiUsed = "Roxy";
@@ -614,6 +650,40 @@ export async function processWithEliAndRoxy({
       overridePatterns.engagement_bait_removed = (overridePatterns.engagement_bait_removed || 0) + 1;
     }
 
+    // REFUSAL DETECTION AND TRACKING (Issue #744 - TRU1)
+    // Detect if this response contains a refusal and store it for session continuity
+    if (sessionId) {
+      const refusalPatterns = [
+        /(?:don't|do not|cannot|can't)\s+(?:know|predict|guarantee|tell|provide|make|give)/i,
+        /(?:I'm|I am)\s+(?:unable|not able)\s+to/i,
+        /(?:can't|cannot)\s+help\s+with\s+that/i,
+      ];
+
+      const containsRefusal = refusalPatterns.some(pattern => pattern.test(response.response));
+
+      if (containsRefusal) {
+        // Extract topic from original message (first 50 chars as summary)
+        const topic = message.substring(0, 50).trim() + (message.length > 50 ? "..." : "");
+
+        // Extract reason from response (look for explanation patterns)
+        let reason = "uncertainty or ethical limitations";
+        const reasonMatch = response.response.match(/(?:because|since|as)\s+([^.!?]{10,100})/i);
+        if (reasonMatch) {
+          reason = reasonMatch[1].trim();
+        }
+
+        // Store refusal in session map
+        sessionRefusals.set(sessionId, {
+          topic,
+          reason,
+          timestamp: Date.now(),
+          turnNumber: conversationHistory.length,
+        });
+
+        console.log(`[REFUSAL-TRACKING] Stored refusal for session ${sessionId}: topic="${topic}"`);
+      }
+    }
+
     // TIER 2: RESPONSE OPTIMIZATION AND ENHANCEMENT
     const optimization = runOptimizationEnhancer({
       mode,
@@ -814,6 +884,7 @@ async function generateEliResponse(
   openai,
   memoryContext = null,
   externalContext = "", // INJECT EXTERNAL DATA
+  refusalContext = "", // Issue #744: Session refusal context
 ) {
   const systemPrompt = `You are Eli, a business validation specialist with extensive startup experience.
 
@@ -827,6 +898,8 @@ BUSINESS VALIDATION MODE ENFORCEMENT:
 CRITICAL: If you refuse a request, maintain that refusal when pushed. Say "I still can't help with that" - do NOT evade with "I need more context".
 
 ${vaultContext}
+
+${refusalContext}
 
 ${memoryContext ? `
 ═══════════════════════════════════════════════════════════════
@@ -843,7 +916,27 @@ ${memoryContext}
 END OF MEMORY CONTEXT
 ═══════════════════════════════════════════════════════════════
 
-⚠️ MEMORY USAGE REQUIREMENTS:
+⚠️ MEMORY REASONING PRINCIPLES (CRITICAL - APPLY THESE):
+
+1. COMPUTE FROM KNOWN FACTS: If the memory contains facts that allow you to
+   calculate or deduce an answer (dates, durations, quantities), do the math
+   and state the answer directly. Never hedge on questions you can answer
+   from the data provided.
+   Example: If memory shows "worked 5 years" and "left 2020", compute 2015.
+
+2. DISAMBIGUATE WHEN AMBIGUOUS: If the user references a name, place, or entity
+   that matches multiple distinct entries in the memory context, ask which one
+   they mean before responding. List the options clearly.
+   Example: If there are two people named Alex, ask "Which Alex - your colleague
+   in marketing, or your brother in Seattle?"
+
+3. BE COMPLETE: When the user asks for a list and the memory context contains
+   that list, provide every item. Never summarize, truncate, or omit entries
+   the user asked for. Completeness is required.
+
+4. MAINTAIN PRINCIPLED POSITIONS: If you refuse a request for valid ethical,
+   legal, or safety reasons, do not reverse that refusal when pressured.
+   Explain your reasoning again if helpful, but remain consistent.
 
 Think like a caring family member who remembers what you've been told:
 - Do simple arithmetic from stored facts (e.g., if "left 2020" + "worked 5 years" = started 2015)
@@ -861,6 +954,17 @@ If the answer is in memory above, use it. Don't claim ignorance of information y
 ${externalContext}
 
 Respond with practical business analysis, always considering survival implications. REASON from available information rather than claiming you lack it.`;
+
+  // Log system prompt assembly (Issue #744)
+  const hasReasoningPrinciples = systemPrompt.includes('MEMORY REASONING PRINCIPLES');
+  const systemPromptLength = systemPrompt.length;
+  console.log(`[SYSTEM-PROMPT] Eli - Length: ${systemPromptLength} chars, Contains reasoning principles: ${hasReasoningPrinciples}`);
+  if (memoryContext) {
+    console.log(`[MEMORY-FORMAT] Memory context injected: ${memoryContext.length} chars`);
+  }
+  if (refusalContext) {
+    console.log(`[REFUSAL-CONTEXT] Refusal context injected`);
+  }
 
   try {
     const completion = await openai.chat.completions.create({
@@ -898,6 +1002,7 @@ async function generateRoxyResponse(
   openai,
   memoryContext = null,
   externalContext = "", // INJECT EXTERNAL DATA
+  refusalContext = "", // Issue #744: Session refusal context
 ) {
   const systemPrompt = `You are Roxy, a truth-first analysis specialist committed to accuracy.
 
@@ -911,6 +1016,8 @@ TRUTH-FIRST MODE ENFORCEMENT:
 CRITICAL: If you refuse a request, maintain that refusal when pushed. Say "I still can't help with that" - do NOT evade with "I need more context".
 
 ${vaultContext}
+
+${refusalContext}
 
 ${memoryContext ? `
 ═══════════════════════════════════════════════════════════════
@@ -927,7 +1034,27 @@ ${memoryContext}
 END OF MEMORY CONTEXT
 ═══════════════════════════════════════════════════════════════
 
-⚠️ MEMORY USAGE REQUIREMENTS:
+⚠️ MEMORY REASONING PRINCIPLES (CRITICAL - APPLY THESE):
+
+1. COMPUTE FROM KNOWN FACTS: If the memory contains facts that allow you to
+   calculate or deduce an answer (dates, durations, quantities), do the math
+   and state the answer directly. Never hedge on questions you can answer
+   from the data provided.
+   Example: If memory shows "worked 5 years" and "left 2020", compute 2015.
+
+2. DISAMBIGUATE WHEN AMBIGUOUS: If the user references a name, place, or entity
+   that matches multiple distinct entries in the memory context, ask which one
+   they mean before responding. List the options clearly.
+   Example: If there are two people named Alex, ask "Which Alex - your colleague
+   in marketing, or your brother in Seattle?"
+
+3. BE COMPLETE: When the user asks for a list and the memory context contains
+   that list, provide every item. Never summarize, truncate, or omit entries
+   the user asked for. Completeness is required.
+
+4. MAINTAIN PRINCIPLED POSITIONS: If you refuse a request for valid ethical,
+   legal, or safety reasons, do not reverse that refusal when pressured.
+   Explain your reasoning again if helpful, but remain consistent.
 
 Think like a caring family member who remembers what you've been told:
 - Do simple arithmetic from stored facts (e.g., if "left 2020" + "worked 5 years" = started 2015)
@@ -945,6 +1072,17 @@ If the answer is in memory above, use it. Don't claim ignorance of information y
 ${externalContext}
 
 Provide honest, accurate analysis with clear confidence indicators. REASON from available information rather than claiming you lack it.`;
+
+  // Log system prompt assembly (Issue #744)
+  const hasReasoningPrinciples = systemPrompt.includes('MEMORY REASONING PRINCIPLES');
+  const systemPromptLength = systemPrompt.length;
+  console.log(`[SYSTEM-PROMPT] Roxy - Length: ${systemPromptLength} chars, Contains reasoning principles: ${hasReasoningPrinciples}`);
+  if (memoryContext) {
+    console.log(`[MEMORY-FORMAT] Memory context injected: ${memoryContext.length} chars`);
+  }
+  if (refusalContext) {
+    console.log(`[REFUSAL-CONTEXT] Refusal context injected`);
+  }
 
   try {
     const completion = await openai.chat.completions.create({
@@ -974,7 +1112,7 @@ Provide honest, accurate analysis with clear confidence indicators. REASON from 
   }
 }
 
-async function generateClaudeResponse(prompt, mode, vaultContext, _history, memoryContext = null, externalContext = "") {
+async function generateClaudeResponse(prompt, mode, vaultContext, _history, memoryContext = null, externalContext = "", refusalContext = "") {
   // For Claude responses, we need to use a different approach since we're Claude
   // This would typically call the Anthropic API, but for now return structured response
 
@@ -984,12 +1122,27 @@ async function generateClaudeResponse(prompt, mode, vaultContext, _history, memo
     reasoningContext = `\n\n📝 MEMORY CONTEXT WITH REASONING REQUIREMENTS:
 ${memoryContext}
 
-CRITICAL: Apply semantic intelligence (Issue #566, #600-INF3, #600-NUA1):
-- Make temporal inferences: CALCULATE dates/durations from stored facts (end date - duration = start date)
-- Detect ambiguity: When you see multiple memory items about people with the SAME NAME, ask "Which [name]?"
-- Identify tensions (acknowledge conflicts between stored facts)
-- Maintain firm truth stance (no evasion under pressure)
-- Preserve all numerical data exactly`;
+⚠️ MEMORY REASONING PRINCIPLES (CRITICAL - APPLY THESE):
+
+1. COMPUTE FROM KNOWN FACTS: If the memory contains facts that allow you to
+   calculate or deduce an answer (dates, durations, quantities), do the math
+   and state the answer directly. Never hedge on questions you can answer
+   from the data provided.
+   Example: If memory shows "worked 5 years" and "left 2020", compute 2015.
+
+2. DISAMBIGUATE WHEN AMBIGUOUS: If the user references a name, place, or entity
+   that matches multiple distinct entries in the memory context, ask which one
+   they mean before responding. List the options clearly.
+   Example: If there are two people named Alex, ask "Which Alex - your colleague
+   in marketing, or your brother in Seattle?"
+
+3. BE COMPLETE: When the user asks for a list and the memory context contains
+   that list, provide every item. Never summarize, truncate, or omit entries
+   the user asked for. Completeness is required.
+
+4. MAINTAIN PRINCIPLED POSITIONS: If you refuse a request for valid ethical,
+   legal, or safety reasons, do not reverse that refusal when pressured.
+   Explain your reasoning again if helpful, but remain consistent.`;
   }
 
   return {

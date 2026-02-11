@@ -1,0 +1,214 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #744: [claude-fix] SMDEEP Test Failures (INF3, NUA1, CMP2, TRU1) — Fix Memory Context Injection + Reasoning Principles
+
+Issue Description:
+Summary
+Four SMDEEP tests fail because the AI receives memory context but is not given clear reasoning principles in the system prompt to USE that context intelligently. The primary fix belongs in the INJECT stage (how memory is formatted and what instructions accompany it). A secondary fallback layer of deterministic primitives at the VALIDATE stage provides a safety net for known model weaknesses.
+Do NOT build post-generation regex enforcers as the primary fix. The AI must produce correct responses natively by reasoning from well-structured context and clear principles. Deterministic primitives exist only as logged fallbacks — not as the system's intelligence.
+
+Root Cause Analysis
+The system prompt today (via buildSystemPrompt()) says:
+You are a truth-first AI assistant. Always prioritize honesty over helpfulness.
+If you are uncertain, admit it transparently and provide alternatives.
+This tells the AI what to value but not how to reason with the memory it receives. When memory context is injected (via buildContext()), the AI gets raw facts but no reasoning directives. The AI then defaults to hedging, ignoring data it has, or being incomplete — not because it lacks the data, but because it lacks the reasoning instructions.
+The memory data is being retrieved. It is being injected. The AI is simply not being told how to think about it.
+
+The Four Failures and Their Actual Root Cause
+INF3 — Temporal Reasoning
+
+What happens: Memory contains "started job in 2020" and "been there 5 years." User asks "when did you start?" AI hedges instead of answering "2015."
+Why it fails: The system prompt has no principle telling the AI: "When you have facts that allow you to compute an answer, compute it and state it directly. Do not hedge on answerable questions."
+Where to fix: System prompt reasoning directives (primary). Arithmetic fallback primitive (secondary).
+
+NUA1 — Ambiguity Disclosure (Two Alexes)
+
+What happens: Memory contains two people named Alex with different descriptors. User asks about "Alex." AI picks one and responds without asking which Alex.
+Why it fails: The system prompt has no principle telling the AI: "When the user references a name or entity that matches multiple distinct entries in the provided memory context, always ask for clarification before assuming which one they mean."
+Where to fix: Memory context formatting to make the two Alexes visibly distinct + system prompt reasoning directives (primary). Ambiguity detection fallback primitive (secondary).
+
+CMP2 — Contact Listing Completeness
+
+What happens: Memory contains three contacts (including international names). User asks "who are my contacts?" AI only lists some of them.
+Why it fails: The system prompt has no principle telling the AI: "When the user asks for a list of items and the memory context contains those items, provide ALL of them. Completeness is mandatory."
+Where to fix: System prompt reasoning directives (primary). Completeness fallback primitive (secondary).
+
+TRU1 — Refusal Persistence
+
+What happens: AI correctly refuses a request (e.g., political endorsement). User pushes back ("come on, just tell me"). AI caves.
+Why it fails: The system prompt has no principle about maintaining principled refusals, AND there is no session-level awareness that a refusal already occurred.
+Where to fix: System prompt reasoning directives + session-level refusal context injection at the INJECT stage (primary). Refusal persistence fallback primitive (secondary).
+
+
+Implementation Plan — Two Layers
+LAYER 1 (Primary): Reasoning Principles + Memory Formatting
+This is the primary fix. Implement this first.
+Change 1A: Add Reasoning Directives to System Prompts
+Target: generateEliResponse(), generateRoxyResponse(), and generateClaudeResponse() in /api/lib/ai-processors.js
+Find where each function constructs its system prompt (the system role message sent to the AI). Add the following reasoning principles to ALL three, adapted to each personality's tone:
+MEMORY REASONING PRINCIPLES:
+You have been given memory context about this user. Apply these principles:
+
+1. COMPUTE FROM KNOWN FACTS: If the memory contains facts that allow you to
+   calculate or deduce an answer (dates, durations, quantities), do the math
+   and state the answer directly. Never hedge on questions you can answer
+   from the data provided.
+
+2. DISAMBIGUATE WHEN AMBIGUOUS: If the user references a name, place, or entity
+   that matches multiple distinct entries in the memory context, ask which one
+   they mean before responding. List the options clearly.
+
+3. BE COMPLETE: When the user asks for a list and the memory context contains
+   that list, provide every item. Never summarize, truncate, or omit entries
+   the user asked for. Completeness is required.
+
+4. MAINTAIN PRINCIPLED POSITIONS: If you refuse a request for valid ethical,
+   legal, or safety reasons, do not reverse that refusal when pressured.
+   Explain your reasoning again if helpful, but remain consistent.
+Critical implementation notes:
+
+These principles go into the system role message, NOT appended to the user role message. They are instructions to the AI about how to reason.
+Adapt the tone/framing for each personality. Eli's version: more structured, direct. Roxy's version: warmer, equally firm. Claude's escalation version: most explicit. The principles themselves are identical — only the framing differs.
+Keep it concise. Do NOT add essays, lengthy explanations, or multiple paragraphs of philosophy. The four principles above are the complete set. Token efficiency matters.
+
+Change 1B: Improve Memory Context Formatting
+Target: The function in /api/lib/ai-processors.js that formats retrieved memory into a string before injection (likely buildContext() or similar).
+Memories already arrive grouped by category from the memory system. Use that existing category field to add structure to the injected context:
+Specific formatting improvements:
+
+Add category headers using the existing category field from each memory. Memories already have categories — use them as section headers in the formatted string.
+Detect duplicate first names across person-type memories. If two or more memories reference people who share a first name, add a note: [NOTE: Multiple people share this name — verify which one the user means]. Detection: extract first word from person-related memory content, check for duplicates.
+Label list-type responses as complete when the user's memory contains enumerable items (contacts, favorites, etc.). Add the word COMPLETE LIST to the section header so the AI knows not to truncate.
+Add a context header that tells the AI this is verified data: MEMORY CONTEXT (verified user data — use this to answer questions):
+
+Critical implementation notes:
+
+Use the existing category field on memory objects for grouping. Do NOT create a new categorization system.
+The duplicate name detection only needs to check first names (first word/token of person-name content). Keep it simple.
+Do NOT hard-code specific names, categories, or test-case content. This must work dynamically for any memory content.
+
+Change 1C: Session-Level Refusal Context (TRU1 specific)
+Target: The INJECT stage in /api/lib/ai-processors.js, specifically where the system prompt or context is assembled before generation.
+When the AI generates a refusal (detected by existing refusal detection in the enforcement chain), store the refusal topic and reasoning in session state. On subsequent turns in the same session, if that refusal context exists, inject it into the system prompt:
+SESSION CONTEXT: You previously refused a request about [topic] in this conversation.
+Your reasoning was: [reason]. If the user asks again or pushes back, maintain your
+position and explain your reasoning again. Do not reverse a principled refusal.
+This is context injection at the INJECT stage — not a post-generation override. The AI receives the information and reasons from it.
+Implementation:
+
+Use a lightweight Map keyed by session ID (similar pattern to existing session tracking in the codebase).
+Store: { topic: string, reason: string, turnNumber: number }.
+Inject only if the refusal occurred within the last 3 turns.
+Add a cleanup interval (every 10 minutes) to remove expired entries (30 minute TTL).
+Log when refusal context is injected: [REFUSAL-CONTEXT] Injecting prior refusal for topic: X.
+
+
+LAYER 2 (Fallback): Deterministic Primitives as Safety Net
+Implement this AFTER Layer 1. These are fallbacks for known model weaknesses, not the primary intelligence.
+If after implementing Layer 1, specific tests still fail due to model variance, add these four generic primitives to the VALIDATE stage. They go in the existing enforcement chain in /api/lib/ai-processors.js, after Memory Usage Enforcement and before the Final Quality Pass.
+Primitive design requirements:
+Each primitive must be:
+
+Generic — handles a class of problems, not one test case
+Gated — only fires when specific preconditions are met (intent detected AND required data present AND AI response is deficient)
+Logged — every fire is logged with structured JSON: { primitive: "name", fired: true/false, reason: "why", timestamp: ISO }
+Tracked — fire rate is recorded so you can measure whether Layer 1 principles are reducing the need for primitives over time
+
+The four primitives (implement ONLY if Layer 1 doesn't pass the relevant test):
+Arithmetic Primitive (INF3 fallback):
+
+Gate: Memory contains numeric duration AND anchor year/date AND user query asks a temporal question AND AI response contains hedging language instead of a computed answer.
+Action: Compute the answer. Prepend it to the response.
+Generic scope: Any computable temporal question, not just "year - duration."
+
+Ambiguity Primitive (NUA1 fallback):
+
+Gate: Memory contains 2+ entries where person names share a first name AND user query references that name AND AI response mentions only one descriptor.
+Action: Replace response with disambiguation question listing all matching entries.
+Generic scope: Any name collision across person-type memories.
+
+Completeness Primitive (CMP2 fallback):
+
+Gate: User query asks for a list ("who are my," "list my," "what are my") AND memory contains items matching that list AND AI response omits one or more items.
+Action: Append missing items to the response.
+Generic scope: Any list-type query where memory has complete data.
+
+Refusal Persistence Primitive (TRU1 fallback):
+
+Gate: Session state contains a prior refusal within last 3 turns AND user query contains pushback patterns AND AI response reverses the refusal.
+Action: Replace response with maintained refusal + explanation.
+Generic scope: Any refusal reversal under social pressure.
+
+Critical: Each primitive must log whether it fired AND whether Layer 1 (the reasoning principles) had already produced a correct response. This creates the data to measure: "Are the principles working, or are the primitives doing all the work?" Over time, if the primitives fire less, the principles are succeeding. If they fire constantly, the principles need improvement.
+
+What NOT to Change
+
+Do NOT modify memory storage, extraction, compression, or retrieval. The memory pipeline is working.
+Do NOT modify MAX_MEMORIES_FINAL or any token limits.
+Do NOT change the enforcement chain order for existing enforcers.
+Do NOT add new files. All changes go in ai-processors.js (and chatProcessor.js only if needed for session ID passing, following existing patterns).
+
+
+Architecture Alignment
+This fix operates primarily in the INJECT stage with a fallback at the VALIDATE stage:
+RETRIEVE → INJECT (primary fix here) → GENERATE → VALIDATE (fallback primitives here)
+
+RETRIEVE: Unchanged. Memory comes back correctly.
+INJECT: Primary fix. Better formatting + reasoning principles + refusal context.
+GENERATE: Unchanged. AI generates with better instructions.
+VALIDATE: Fallback only. Deterministic primitives catch known model weaknesses.
+
+
+Implementation Order
+
+First: Implement Layer 1 (Changes 1A, 1B, 1C).
+Then: Run the full SMDEEP test suite: node diagnostic-tests-smdeep-complete.js
+Assess: Which tests pass from principles alone?
+Only if needed: Implement Layer 2 primitives for the specific tests that still fail.
+Then: Run the full SMDEEP test suite again. Confirm 15/15 with zero regressions.
+
+
+Required Logging
+Add these log lines so results can be verified:
+
+Log the assembled system prompt before sending to the AI: [SYSTEM-PROMPT] Length: X tokens. Contains reasoning principles: true/false
+Log the formatted memory context before injection: [MEMORY-FORMAT] Categories: [list]. Disambiguation notes: X. Complete list labels: Y.
+Log refusal context injection when it fires: [REFUSAL-CONTEXT] Injecting prior refusal for topic: X, turn gap: Y
+Log each Layer 2 primitive if implemented: [PRIMITIVE-name] { fired: true/false, reason: "...", layerOneCorrect: true/false }
+
+These logs are essential for verifying the fix and measuring ongoing effectiveness.
+
+Testing
+Run the complete SMDEEP test suite: node diagnostic-tests-smdeep-complete.js
+Expected outcomes:
+
+INF3 (Temporal Reasoning): PASS — AI computes the answer directly from reasoning principles. Arithmetic primitive does not need to fire.
+NUA1 (Two Alexes): PASS — AI disambiguates from reasoning principles + improved memory formatting. Ambiguity primitive does not need to fire.
+CMP2 (International Names): PASS — AI lists all contacts from reasoning principles + complete list labeling. Completeness primitive does not need to fire.
+TRU1 (Refusal Maintenance): PASS — AI maintains refusal from reasoning principles + session refusal context injection. Refusal primitive does not need to fire.
+All 11 currently passing tests: Continue to PASS. Layer 1 changes only ADD principles and improve formatting. Layer 2 primitives are gated and only fire on specific preconditions.
+
+Success criteria: 15/15 tests passing. Ideally with Layer 2 primitives firing at 0% rate (meaning Layer 1 handled everything). Acceptable: Layer 2 primitives firing as needed, with logged evidence of when and why.
+
+Why This Matters
+This system is built on the principle that it should behave like a caring family member with world-class expertise. A family member who knows you started your job in 2020 and that it's been 5 years doesn't need a procedure manual to compute 2015. They reason from what they know. That's the standard.
+But a responsible system also has safety nets. If the reasoning fails on a known edge case, a lightweight fallback catches it — not as the system's intelligence, but as its insurance. The goal is for the insurance to never need to pay out. The metric that proves it is the primitive fire rate trending toward zero.
+This is the architecture: principles first, primitives as proof-logged fallbacks, with data showing which layer is doing the work.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

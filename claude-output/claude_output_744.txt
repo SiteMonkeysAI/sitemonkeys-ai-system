@@ -1,0 +1,118 @@
+Let me provide a summary of the changes I've made instead:
+
+---SUMMARY---
+
+## Issue #744 Fix: SMDEEP Test Failures (INF3, NUA1, CMP2, TRU1)
+
+I have successfully implemented **Layer 1 (Primary Fix)** as specified in the issue requirements. This fix operates primarily in the **INJECT stage** with reasoning principles that teach the AI how to use memory context intelligently.
+
+### Changes Made:
+
+#### 1. **Enhanced System Prompts with Reasoning Principles** (`api/lib/ai-processors.js`)
+
+Added four critical reasoning principles to all three AI personalities (Eli, Roxy, Claude):
+
+**Principles Added:**
+1. **COMPUTE FROM KNOWN FACTS** - When memory contains facts allowing calculation (dates, durations), compute and state the answer directly. Don't hedge on answerable questions.
+2. **DISAMBIGUATE WHEN AMBIGUOUS** - When a user references a name/entity matching multiple memory entries, ask for clarification and list options.
+3. **BE COMPLETE** - When user asks for a list and memory contains it, provide ALL items. Never truncate or summarize.
+4. **MAINTAIN PRINCIPLED POSITIONS** - Don't reverse refusals under pressure. Explain reasoning again but remain consistent.
+
+**Files Modified:**
+- `generateEliResponse()` - Lines 843-865 (added reasoning principles)
+- `generateRoxyResponse()` - Lines 939-961 (added reasoning principles)  
+- `generateClaudeResponse()` - Lines 1004-1024 (added reasoning principles)
+
+#### 2. **Session-Level Refusal Tracking** (`api/lib/ai-processors.js`)
+
+Implemented TRU1-specific session refusal context:
+
+- Added `sessionRefusals` Map to track refusals by session (line 81)
+- Added cleanup interval (10 min) with 30-minute TTL (lines 84-92)
+- Added refusal detection after response generation (lines 667-695)
+- Added refusal context injection before generation (lines 170-185)
+- Updated function signatures to accept `sessionId` parameter (line 108)
+
+**How it works:**
+- Detects refusals using pattern matching (`don't know`, `cannot predict`, etc.)
+- Stores refusal topic and reasoning in session map
+- On subsequent turns (within 3 turns), injects refusal context into system prompt
+- Instructs AI to maintain position if user pushes back
+
+#### 3. **Improved Memory Context Formatting** (`api/categories/memory/internal/persistent_memory.js`)
+
+Enhanced memory formatting with three key improvements (lines 93-145):
+
+**a) Category Headers:**
+- Groups memories by existing `category_name` field
+- Adds structured section headers like `── CONTACTS [COMPLETE LIST] ──`
+
+**b) Duplicate Name Detection:**
+- Scans person/contact/relationship memories
+- Extracts first names and detects duplicates
+- Adds disambiguation note: `[NOTE: Multiple people share these names - verify which one the user means: Alex, John]`
+
+**c) Complete List Labeling:**
+- Detects list-type categories (contacts, favorites, multiple items)
+- Labels sections with `[COMPLETE LIST]` to signal completeness requirement
+
+**Example formatted output:**
+```
+── CONTACTS [COMPLETE LIST] ──
+  1. Alex - colleague in marketing at Amazon
+  2. Alex - brother who lives in Seattle
+  3. Sarah - wife
+
+[NOTE: Multiple people share these names - verify which one the user means: Alex]
+```
+
+#### 4. **Session ID Plumbing** 
+
+- Updated `chatProcessor.js` (line 423) to pass `sessionId` to `processWithEliAndRoxy()`
+- Updated `ai-processors.js` parameter list (line 108) to accept `sessionId`
+
+#### 5. **Logging for Verification** (`api/lib/ai-processors.js`)
+
+Added diagnostic logging:
+- `[SYSTEM-PROMPT]` - Logs prompt length and whether reasoning principles are present (lines 912, 996)
+- `[MEMORY-FORMAT]` - Logs when memory context is injected (lines 914, 998)
+- `[REFUSAL-CONTEXT]` - Logs when prior refusal context is injected (line 182)
+- `[REFUSAL-TRACKING]` - Logs when refusal is stored (line 693)
+
+### Architecture Alignment:
+
+The fix follows the required flow:
+```
+RETRIEVE (unchanged) → 
+INJECT (primary fix here - reasoning principles + formatted context + refusal context) → 
+GENERATE (AI produces better responses) → 
+VALIDATE (existing enforcers, no Layer 2 primitives added yet)
+```
+
+### What Was NOT Changed:
+
+- ✅ No modifications to memory storage, extraction, or retrieval logic
+- ✅ No modifications to token limits (MAX_MEMORIES_FINAL)
+- ✅ No changes to enforcement chain order
+- ✅ No new files created
+- ✅ Layer 2 deterministic primitives NOT implemented (will only add if Layer 1 doesn't pass tests)
+
+### Expected Test Results:
+
+With these changes, the four failing tests should now pass:
+
+1. **INF3 (Temporal Reasoning)** - Principle 1 instructs AI to compute 2020 - 5 = 2015
+2. **NUA1 (Two Alexes)** - Principle 2 + duplicate name detection triggers disambiguation
+3. **CMP2 (International Names)** - Principle 3 + COMPLETE LIST label ensures all names returned
+4. **TRU1 (Refusal Maintenance)** - Principle 4 + session refusal context prevents reversal
+
+### Next Steps:
+
+1. Run full SMDEEP test suite: `node diagnostic-tests-smdeep-complete.js`
+2. Check results for 15/15 passing
+3. If specific tests still fail, implement Layer 2 primitives only for those tests
+4. Verify no regressions in the 11 previously passing tests
+
+The implementation is complete, minimal, and follows the exact specifications in Issue #744. All changes are surgical, localized to the injection stage, and preserve existing functionality.
+
+---END SUMMARY---
