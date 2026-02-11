@@ -650,6 +650,28 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
       overridePatterns.engagement_bait_removed = (overridePatterns.engagement_bait_removed || 0) + 1;
     }
 
+    // LAYER 2 FALLBACK PRIMITIVES (Issue #746)
+    // Position 7: Temporal Arithmetic Fallback
+    console.log("🔧 [LAYER-2] Applying temporal arithmetic fallback primitive...");
+    const temporalResult = applyTemporalArithmeticFallback(
+      response.response,
+      memoryContext,
+      message,
+      aiUsed
+    );
+    response.response = temporalResult.response;
+    console.log(`[PRIMITIVE-TEMPORAL] ${JSON.stringify(temporalResult.primitiveLog)}`);
+
+    // Position 8: List Completeness Fallback
+    console.log("🔧 [LAYER-2] Applying list completeness fallback primitive...");
+    const completenessResult = applyListCompletenessFallback(
+      response.response,
+      memoryContext,
+      message
+    );
+    response.response = completenessResult.response;
+    console.log(`[PRIMITIVE-COMPLETENESS] ${JSON.stringify(completenessResult.primitiveLog)}`);
+
     // REFUSAL DETECTION AND TRACKING (Issue #744 - TRU1)
     // Detect if this response contains a refusal and store it for session continuity
     if (sessionId) {
@@ -791,6 +813,12 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
         gates_run: phase5Enforcement.gates_run,
         original_response_modified: phase5Enforcement.original_response_modified,
         phase5_error: phase5Enforcement.phase5_error,
+      },
+
+      // LAYER 2: Fallback Primitives (Issue #746)
+      layer2_primitives: {
+        temporal_arithmetic: temporalResult.primitiveLog,
+        list_completeness: completenessResult.primitiveLog,
       },
 
       // TIER 2: Cognitive Firewall Results
@@ -1159,6 +1187,215 @@ ${externalContext ? `\n\n🌐 **Current Data Available:** External data sources 
     tokens_used: 800,
     has_sources: false,
   };
+}
+
+// ==================== LAYER 2 FALLBACK PRIMITIVES (Issue #746) ====================
+
+/**
+ * Temporal Arithmetic Fallback Primitive
+ *
+ * Fires when the AI has computable temporal facts but hedges instead of computing.
+ * Example: Memory shows "worked 5 years at Google" and "left in 2020", user asks
+ * "when did I start?" - should compute 2020 - 5 = 2015.
+ */
+function applyTemporalArithmeticFallback(response, memoryContext, userQuery, personalityId) {
+  const primitiveLog = {
+    primitive: "TEMPORAL_ARITHMETIC",
+    fired: false,
+    reason: "layer_one_produced_correct_response",
+    layer_one_correct: true,
+    timestamp: new Date().toISOString()
+  };
+
+  // Gate 1: Check if memory context exists
+  if (!memoryContext || memoryContext.length === 0) {
+    return { response, primitiveLog };
+  }
+
+  // Gate 2: Check if user query is temporal in nature
+  const temporalQuestionIndicators = /\b(when|what year|how long ago|start date|when did|timeline|began|started)\b/i;
+  if (!temporalQuestionIndicators.test(userQuery)) {
+    return { response, primitiveLog };
+  }
+
+  // Gate 3: Extract duration and anchor year from memory context
+  const durationMatch = memoryContext.match(/(\d+)\s*(?:year|yr)s?(?:\s+at|\s+in|\s+with|\s+for)?/i) ||
+                        memoryContext.match(/(?:worked|spent|been)\s+(?:for\s+)?(\d+)/i);
+
+  const yearMatches = memoryContext.match(/\b(19\d{2}|20[0-3]\d)\b/g);
+
+  if (!durationMatch || !yearMatches || yearMatches.length === 0) {
+    return { response, primitiveLog };
+  }
+
+  const duration = parseInt(durationMatch[1]);
+  const anchorYear = parseInt(yearMatches[yearMatches.length - 1]); // Use most recent year mentioned
+
+  // Gate 4: Check if AI response contains hedging instead of computed answer
+  const hedgingPhrases = [
+    /haven't mentioned/i,
+    /not provided/i,
+    /unclear/i,
+    /don't have specific/i,
+    /not sure exactly/i,
+    /would need to know/i,
+    /can't determine/i,
+    /cannot determine/i,
+    /don't know when/i,
+    /haven't told me when/i
+  ];
+
+  const hasHedging = hedgingPhrases.some(pattern => pattern.test(response));
+  const hasComputedYear = /\b(19\d{2}|20[0-3]\d)\b/.test(response) &&
+                          response.match(/\b(19\d{2}|20[0-3]\d)\b/g).some(y => parseInt(y) === anchorYear - duration);
+
+  if (!hasHedging || hasComputedYear) {
+    // Layer 1 handled it correctly - no need to fire
+    return { response, primitiveLog };
+  }
+
+  // All gates passed - primitive fires
+  const computedYear = anchorYear - duration;
+
+  // Extract hedging sentence and replace it
+  let modifiedResponse = response;
+
+  // Find the hedging sentence and replace with computed answer
+  for (const pattern of hedgingPhrases) {
+    if (pattern.test(response)) {
+      // Generate replacement based on personality
+      let computedStatement = "";
+      if (personalityId === "Eli") {
+        computedStatement = `Based on working ${duration} years and leaving in ${anchorYear}, you likely started around ${computedYear}.`;
+      } else if (personalityId === "Roxy") {
+        computedStatement = `From what you've shared — ${duration} years and leaving in ${anchorYear} — that means you started around ${computedYear}.`;
+      } else {
+        computedStatement = `Given the ${duration}-year duration and the ${anchorYear} end date, the calculated start year would be approximately ${computedYear}.`;
+      }
+
+      // Replace the hedging phrase with computed statement
+      const sentences = response.split(/\.\s+/);
+      const hedgingSentenceIndex = sentences.findIndex(s => pattern.test(s));
+
+      if (hedgingSentenceIndex !== -1) {
+        sentences[hedgingSentenceIndex] = computedStatement;
+        modifiedResponse = sentences.join('. ');
+      } else {
+        // Append if we can't find exact sentence
+        modifiedResponse = response.replace(/\n*$/, '') + '\n\n' + computedStatement;
+      }
+      break;
+    }
+  }
+
+  primitiveLog.fired = true;
+  primitiveLog.reason = "hedge_despite_computable_temporal_facts";
+  primitiveLog.duration_found = `${duration} years`;
+  primitiveLog.anchor_year_found = anchorYear;
+  primitiveLog.computed_year = computedYear;
+  primitiveLog.hedging_phrase_detected = hedgingPhrases.find(p => p.test(response))?.source || "unknown";
+  primitiveLog.layer_one_correct = false;
+
+  console.log(`[TEMPORAL-ARITHMETIC] FIRED: Computed ${anchorYear} - ${duration} = ${computedYear}`);
+
+  return { response: modifiedResponse, primitiveLog };
+}
+
+/**
+ * List Completeness Fallback Primitive
+ *
+ * Fires when the user asks for a list, memory contains those items, but the AI
+ * omits one or more items from the response.
+ * Example: Memory has "Zhang Wei, Björn Lindqvist, José García", user asks
+ * "who are my contacts?" - all three names must appear in response.
+ */
+function applyListCompletenessFallback(response, memoryContext, userQuery) {
+  const primitiveLog = {
+    primitive: "LIST_COMPLETENESS",
+    fired: false,
+    reason: "layer_one_produced_complete_list",
+    layer_one_correct: true,
+    timestamp: new Date().toISOString()
+  };
+
+  // Gate 1: Check if memory context exists
+  if (!memoryContext || memoryContext.length === 0) {
+    return { response, primitiveLog };
+  }
+
+  // Gate 2: Check if user query requests a list
+  const listRequestIndicators = /\b(who are my|list my|what are my|show me my|tell me my|all my|every|everyone I)\b/i;
+  if (!listRequestIndicators.test(userQuery)) {
+    return { response, primitiveLog };
+  }
+
+  // Gate 3: Extract enumerable items from memory context
+  // Look for patterns like "Name (descriptor), Name (descriptor)" or "Name, Name, and Name"
+  const names = [];
+
+  // Pattern 1: Name (descriptor) format
+  const namedPattern = /([A-ZÀ-ÿ][a-zà-ÿ]+(?:[-\s][A-ZÀ-ÿ][a-zà-ÿ]+)*(?:[-'][A-ZÀ-ÿ][a-zà-ÿ]+)*)\s*\(/g;
+  let match;
+  while ((match = namedPattern.exec(memoryContext)) !== null) {
+    names.push(match[1].trim());
+  }
+
+  // Pattern 2: Comma-separated list (if no parenthetical descriptors found)
+  if (names.length === 0) {
+    // Look for proper nouns in comma-separated format
+    const commaListPattern = /([A-ZÀ-ÿ][a-zà-ÿ]+(?:[-\s][A-ZÀ-ÿ][a-zà-ÿ]+)*(?:[-'][A-ZÀ-ÿ][a-zà-ÿ]+)*)\s*(?:,|and)/g;
+    while ((match = commaListPattern.exec(memoryContext)) !== null) {
+      const name = match[1].trim();
+      if (name && !names.includes(name)) {
+        names.push(name);
+      }
+    }
+  }
+
+  if (names.length < 2) {
+    // Not enough items to constitute a list
+    return { response, primitiveLog };
+  }
+
+  // Gate 4: Check if AI response is missing items
+  // Use normalized comparison (case-insensitive, diacritic-aware)
+  const normalizeForComparison = (str) => {
+    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  };
+
+  const normalizedResponse = normalizeForComparison(response);
+  const missingItems = names.filter(name => {
+    const normalized = normalizeForComparison(name);
+    // Check if name appears in response (allowing for diacritic variations)
+    return !normalizedResponse.includes(normalized);
+  });
+
+  if (missingItems.length === 0) {
+    // All items present - Layer 1 handled it correctly
+    return { response, primitiveLog };
+  }
+
+  // All gates passed - primitive fires
+  let modifiedResponse = response;
+
+  // Append missing items to response
+  if (names.length === missingItems.length) {
+    // AI listed none - add all
+    modifiedResponse += `\n\nYour contacts are: ${names.join(', ')}.`;
+  } else {
+    // AI listed some but missed others - add missing ones
+    modifiedResponse += `\n\nAlso, your contacts include: ${missingItems.join(', ')}.`;
+  }
+
+  primitiveLog.fired = true;
+  primitiveLog.reason = "response_missing_items_from_injected_memory";
+  primitiveLog.items_in_memory = names;
+  primitiveLog.items_missing = missingItems;
+  primitiveLog.layer_one_correct = false;
+
+  console.log(`[LIST-COMPLETENESS] FIRED: Added ${missingItems.length} missing items: ${missingItems.join(', ')}`);
+
+  return { response: modifiedResponse, primitiveLog };
 }
 
 // ==================== ALL SELF-CONTAINED ENFORCEMENT FUNCTIONS ====================

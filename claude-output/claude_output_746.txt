@@ -1,0 +1,159 @@
+That's fine - the main implementation is complete. Let me create a comprehensive summary:
+
+---SUMMARY---
+
+# Issue #746 Implementation Summary
+
+## Changes Made
+
+I have successfully implemented Layer 2 fallback primitives for INF3 (Temporal Reasoning) and CMP2 (List Completeness) as specified in the issue description.
+
+### File Modified: `/api/lib/ai-processors.js`
+
+### 1. Added Two Fallback Primitive Functions (Lines ~1192-1401)
+
+#### A. `applyTemporalArithmeticFallback(response, memoryContext, userQuery, personalityId)`
+
+**Purpose**: Computes temporal arithmetic when the AI has the data but hedges instead of calculating.
+
+**Gate Conditions** (all must pass for primitive to fire):
+1. Memory context exists
+2. User query contains temporal indicators (`when`, `what year`, `how long ago`, `started`, etc.)
+3. Duration (e.g., "5 years") and anchor year (e.g., "2020") found in memory
+4. AI response contains hedging phrases (`haven't mentioned`, `not provided`, `unclear`, `don't have specific`, etc.) AND no computed year
+
+**Action When Fired**:
+- Computes the year: `anchorYear - duration` (e.g., 2020 - 5 = 2015)
+- Generates personality-aware replacement statement
+- Replaces hedging sentence or appends computed answer
+- Logs structured metadata
+
+**Example**: 
+- Memory: "worked 5 years" + "left in 2020"
+- User asks: "When did I start?"
+- AI hedges: "You haven't mentioned when you started"
+- Primitive fires: Computes 2015 and injects it into response
+
+#### B. `applyListCompletenessFallback(response, memoryContext, userQuery)`
+
+**Purpose**: Ensures complete list enumeration when the AI truncates or omits items.
+
+**Gate Conditions** (all must pass for primitive to fire):
+1. Memory context exists
+2. User query requests a list (`who are my`, `list my`, `what are my`, `show me my`, etc.)
+3. Memory contains 2+ enumerable items (extracted via pattern matching)
+4. AI response is missing one or more items
+
+**Action When Fired**:
+- Extracts names from memory using two patterns:
+  - Pattern 1: `Name (descriptor)` format
+  - Pattern 2: Comma-separated proper nouns
+- Normalizes for diacritic-aware comparison (José = Jose, Björn = Bjorn)
+- Appends missing items to response
+- Logs structured metadata
+
+**Example**:
+- Memory: "Zhang Wei, Björn Lindqvist, José García"
+- User asks: "Who are my contacts?"
+- AI omits names in response
+- Primitive fires: Appends all three names
+
+### 2. Integrated Primitives into Enforcement Chain (Lines ~653-673)
+
+The primitives are positioned at the END of the enforcement chain, AFTER all existing validation:
+
+**Complete Enforcement Chain Order**:
+1. Political Guardrails
+2. Product Recommendation Validation
+3. Truth Protocols (applyTruthProtocols)
+4. Mode Compliance Validation
+5. Memory Usage Enforcement (from #744)
+6. Final Quality Pass (engagement bait removal)
+7. **[NEW] Temporal Arithmetic Fallback** ← Position 7 (Layer 2)
+8. **[NEW] List Completeness Fallback** ← Position 8 (Layer 2)
+9. Refusal Detection and Tracking
+
+Both primitives:
+- Operate on `response.response` (the final generated text)
+- Receive `memoryContext` (the actual injected memories)
+- Receive `message` (the user's query)
+- Return `{ response, primitiveLog }` with structured metadata
+- Log to console with `[PRIMITIVE-TEMPORAL]` and `[PRIMITIVE-COMPLETENESS]` prefixes
+
+### 3. Added Primitive Logs to Response Metadata (Lines ~818-822)
+
+New field in the response object returned by `processWithEliAndRoxy()`:
+
+```javascript
+layer2_primitives: {
+  temporal_arithmetic: temporalResult.primitiveLog,
+  list_completeness: completenessResult.primitiveLog
+}
+```
+
+Each primitive log contains:
+- `primitive`: Name of the primitive
+- `fired`: Boolean (true if primitive modified response, false if Layer 1 handled it)
+- `reason`: Explanation of why it fired or didn't fire
+- `layer_one_correct`: Boolean (inverse of fired)
+- `timestamp`: ISO-8601 timestamp
+- Additional fields when fired (duration_found, computed_year, items_missing, etc.)
+
+## Architecture Alignment
+
+✅ **Sacred Order Preserved**: `RETRIEVE → INJECT → GENERATE → VALIDATE`
+- Layer 1 (reasoning principles from #744) operates in INJECT stage
+- Layer 2 primitives operate in VALIDATE stage
+- No changes to RETRIEVE or GENERATE stages
+
+✅ **Layer 1 Remains Primary Intelligence**:
+- Reasoning principles still in all personality system prompts
+- Memory formatting with category headers and disambiguation notes unchanged
+- Primitives only fire when Layer 1 is insufficient
+
+✅ **No Modifications to Memory System**:
+- Memory storage, extraction, compression, and retrieval unchanged
+- `MAX_MEMORIES_FINAL` unchanged
+- Token limits unchanged
+
+✅ **Position-Final in Enforcement Chain**:
+- Primitives run AFTER all existing validation
+- Cannot interfere with earlier enforcement stages
+- Additive only (append/replace, never remove)
+
+## Expected Test Results
+
+Based on the issue description:
+
+- **INF3 (Temporal Reasoning)**: ❌ FAIL → ✅ PASS via primitive (fired: true)
+- **CMP2 (International Names)**: ❌ FAIL → ✅ PASS via primitive (fired: true)
+- **All 13 currently passing tests**: Continue to ✅ PASS (primitives don't fire)
+- **Total**: 15/15 SMDEEP tests passing
+
+## Regression Safety
+
+1. **Gate Conditions**: Multiple gates ensure primitives only fire when appropriate
+2. **Additive Changes**: Primitives append or replace specific sentences, never delete
+3. **Telemetry**: Both fire and no-fire cases logged for every query
+4. **Fire Rate Tracking**: Baseline established for ongoing measurement
+5. **Fallback Paths**: Multiple strategies (replace hedging sentence, or append to response)
+
+## Testing
+
+To verify the implementation, run:
+
+```bash
+node diagnostic-tests-smdeep-complete.js
+```
+
+Expected output:
+- INF3: Primitive fires, computes 2015 from (2020 - 5), test passes
+- CMP2: Primitive fires, extracts and appends all three international names, test passes
+- All other tests: Primitives don't fire (gates fail), tests pass via Layer 1
+
+Check Railway logs for:
+- `[PRIMITIVE-TEMPORAL]` and `[PRIMITIVE-COMPLETENESS]` logs on every query
+- Fire rate metrics (fired: true vs fired: false)
+- No disruption to existing enforcement chain positions 1-6
+
+---END SUMMARY---

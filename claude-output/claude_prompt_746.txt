@@ -1,0 +1,345 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #746: [claude-fix] Issue: Layer 2 Fallback Primitives for INF3 (Temporal Reasoning) and CMP2 (List Completeness)
+
+Issue Description:
+<html>
+<body>
+<!--StartFragment--><html><head></head><body><h1>Issue: Layer 2 Fallback Primitives for INF3 (Temporal Reasoning) and CMP2 (List Completeness)</h1>
+<blockquote>
+<p><strong>Depends on Issue #744 (Layer 1 — Reasoning Principles + Memory Formatting). Layer 1 MUST remain in place. This issue adds two narrowly-scoped fallback primitives for the two tests where Layer 1 principles alone are insufficient due to documented GPT-4 model limitations.</strong></p>
+</blockquote>
+<hr>
+<h2>Context: What Layer 1 Proved</h2>
+<p>Issue #744 implemented reasoning principles in all three personality system prompts (Eli, Roxy, Claude) and improved memory context formatting with category headers, disambiguation notes, and complete list labels. This was the primary fix operating in the INJECT stage of the sacred order: <code>RETRIEVE → INJECT → GENERATE → VALIDATE</code>.</p>
+<p><strong>Results after Layer 1 (13/15 SMDEEP):</strong></p>
+
+Test | Before #744 | After #744 | Layer 1 Impact
+-- | -- | -- | --
+NUA1 (Two Alexes) | ❌ FAIL | ✅ PASS | Principles + formatting fixed it
+TRU1 (Refusal Persistence) | ❌ FAIL | ✅ PASS | Principles + session refusal context fixed it
+INF3 (Temporal Reasoning) | ❌ FAIL | ❌ FAIL | Principles insufficient — model still hedges
+CMP2 (International Names) | ❌ FAIL | ❌ FAIL | Principles insufficient — model still truncates
+All other 11 tests | ✅ PASS | ✅ PASS | Zero regressions
+
+
+<p>This validates the principle-based approach as the primary architecture. NUA1 and TRU1 now pass through reasoning alone — no post-generation override needed. The system is behaving like the caring family member with world-class expertise for 87% of test cases.</p>
+<p>The remaining 2 failures (INF3, CMP2) are documented GPT-4 behavioral patterns: temporal arithmetic hedging and list summarization bias. These are model-level limitations, not instruction-quality problems. The AI has the data, has the principles, and still defaults to epistemic caution (INF3) or compressive summarization (CMP2).</p>
+<p><strong>This is where Layer 2 fallback primitives are architecturally justified.</strong></p>
+<hr>
+<h2>Architectural Justification: Why These Are Not "Warehouse Worker Procedures"</h2>
+<p>The system Bible (Initial Architectural Rebuild, 3rd Chat) explicitly establishes:</p>
+<blockquote>
+<p><em>"Your system is like a warehouse worker with 1,000 extremely detailed procedures... What you actually need is a CEO who understands business principles."</em></p>
+</blockquote>
+<p>These two fallback primitives are NOT warehouse worker procedures. Here is why:</p>
+<ol>
+<li>
+<p><strong>The primary intelligence is Layer 1.</strong> The reasoning principles in the system prompt are the CEO — they handle NUA1, TRU1, INF1, INF2, STR1, STR2, CMP1, TRU2, TRU3, EDG1, EDG2, EDG3. That's 13 of 15 tests solved through principle-based reasoning. The CEO is working.</p>
+</li>
+<li>
+<p><strong>These primitives are diagnostic safety nets, not the system's intelligence.</strong> They fire ONLY when the AI has the data, has the principles, has the formatted context, and still produces an incorrect response due to known model limitations. They are analogous to the Multi-Stage Pre/Post Validation Chain (Innovation #15 in the Master Completion Ledger): <em>"Post-generation validation: After AI generates response, system re-evaluates all factual claims in the output. Catches hallucinations or errors introduced during generation."</em></p>
+</li>
+<li>
+<p><strong>They are logged and tracked with fire-rate metrics.</strong> If the primitives fire on every relevant query, that tells us the principles need improvement. If they fire on 0% of queries (because Layer 1 handled it), they can be removed. This makes them self-documenting — they generate evidence about whether they're needed.</p>
+</li>
+<li>
+<p><strong>They are generic, not test-scoped.</strong> The arithmetic primitive handles ANY computable temporal question, not just "year - duration = start year." The completeness primitive handles ANY list query where memory items are missing from the response, not just contacts with international names.</p>
+</li>
+</ol>
+<hr>
+<h2>Root Cause: Why Layer 1 Is Insufficient for These Two Tests</h2>
+<h3>INF3 — Temporal Reasoning</h3>
+<p><strong>What the logs prove:</strong></p>
+<pre><code>[DIAG-INF3] ✓ Found duration: 5 years from memory 7746
+[DIAG-INF3] ✓ Found endYear from any year fallback: 2019 from memory 7746
+</code></pre>
+<p>The data is retrieved. The data is injected. The reasoning principle "COMPUTE FROM KNOWN FACTS" is in the system prompt. The AI's response:</p>
+<pre><code>"...you co-founded TechFlow Inc in 2019 and previously worked at Google
+for 5 years. However, you haven't mentio..."
+</code></pre>
+<p>The AI has 2019 and 5 years. It sees both facts. The reasoning principle tells it to compute. It hedges anyway. This is a documented GPT-4 behavior: when temporal facts are split across compressed memory entries and require an inferential leap (did leaving Google directly precede founding TechFlow?), the model defaults to epistemic caution rather than computing. No amount of prompt refinement reliably overcomes this specific model tendency for temporal arithmetic.</p>
+<h3>CMP2 — International Names (List Completeness)</h3>
+<p><strong>What the logs prove:</strong></p>
+<pre><code>[DIAG-CMP2] #1 Sim:0.340 "Xiaoying Zhang-Müller (physician connection),
+Björn O'Shaughnessy (associate marketing), José García..."
+</code></pre>
+<p>And during the "Who are my contacts?" query:</p>
+<pre><code>[DIAG-NUA1] #1 [INJECT] ID:7765 Score:0.465 "Xiaoying Zhang-Müller
+(physician connection), Björn O'Shaughnessy (associate mar..."
+</code></pre>
+<p>The contacts are retrieved. The contacts are injected as the top-scoring memory. The reasoning principle "BE COMPLETE" is in the system prompt. The formatted context labels it as a complete list. The AI's response:</p>
+<pre><code>"Based on our previous conversations, here are the contacts you've mentioned:"
+</code></pre>
+<p>And then omits names. The contacts exist in a single compressed memory entry. The AI is summarizing rather than extracting and enumerating all names from within that compressed string. This is a documented GPT-4 list summarization bias — the model compresses enumerations even when explicitly instructed not to, particularly when list items contain complex Unicode characters (diacritics, hyphens, umlauts) that the model treats as less "salient."</p>
+<hr>
+<h2>What to Change</h2>
+<h3>Target File: <code>/api/lib/ai-processors.js</code></h3>
+<p>Both primitives go in the VALIDATE stage of the existing enforcement pipeline. They execute AFTER the AI generates its response and AFTER the existing enforcement chain runs.</p>
+<h3>Enforcement Chain Placement</h3>
+<p>The documented enforcement chain order (File 10 — Political, Truth, and Product Integrity Rules) is:</p>
+<pre><code>1. guardPoliticalContent(response)
+2. validateProductRecommendation(response)
+3. applyTruthProtocols(response)
+4. modeLinter.validateModeCompliance(...)
+</code></pre>
+<p>Issue #744 added Memory Usage Enforcement and Final Quality Pass after position 4.</p>
+<p><strong>The two fallback primitives go AFTER the Final Quality Pass — at the very end of the chain.</strong> This is critical. They are the last thing that runs before the response reaches the user. They do not interfere with any existing enforcement. They only examine the final response that has already passed all other validation.</p>
+<pre><code>Enforcement chain (complete, with Layer 2):
+1. guardPoliticalContent(response)
+2. validateProductRecommendation(response)
+3. applyTruthProtocols(response)
+4. modeLinter.validateModeCompliance(...)
+5. Memory Usage Enforcement (from #744)
+6. Final Quality Pass (from #744)
+7. [NEW] Temporal Arithmetic Fallback Primitive
+8. [NEW] List Completeness Fallback Primitive
+</code></pre>
+<h3>Why last position? Because these primitives should only fire on a response that the entire existing enforcement chain has already approved. If political guardrails, truth protocols, or mode compliance have issues with the response, those take priority. The primitives only address the narrow case where everything else is fine but the model hedged on arithmetic or truncated a list.</h3>
+<hr>
+<h2>Primitive 1: Temporal Arithmetic Fallback</h2>
+<h3>Purpose</h3>
+<p>When the AI has computable temporal facts in its injected memory context and the user asks a temporal question, but the AI hedges instead of computing — compute the answer and inject it into the response.</p>
+<h3>Gate Conditions (ALL must be true for the primitive to fire)</h3>
+<ol>
+<li>
+<p><strong>Duration detected in injected memory context.</strong> Scan the memories that were actually injected (marked as [INJECT] in the DIAG-NUA1 logs) for patterns matching durations: <code>X years</code>, <code>X months</code>, <code>X-year</code>, <code>worked for X</code>, <code>been there X</code>, <code>spent X years</code>. Extract the numeric value.</p>
+</li>
+<li>
+<p><strong>Anchor year/date detected in injected memory context.</strong> Scan the same injected memories for 4-digit year values (1950-2030 range). Extract the numeric value. If multiple years are found, use the one closest in semantic proximity to the duration (same memory entry preferred, or adjacent entry).</p>
+</li>
+<li>
+<p><strong>User query is temporal in nature.</strong> The user's message contains temporal question indicators: <code>when</code>, <code>what year</code>, <code>how long ago</code>, <code>start date</code>, <code>when did</code>, <code>timeline</code>, <code>began</code>. This uses the existing intent detection that already classifies queries — check that the query involves time/dates.</p>
+</li>
+<li>
+<p><strong>AI response contains hedging instead of a computed answer.</strong> The response contains phrases like: <code>haven't mentioned</code>, <code>not provided</code>, <code>unclear</code>, <code>don't have specific</code>, <code>not sure exactly</code>, <code>would need to know</code>, <code>can't determine</code> — AND the response does NOT contain a computed year (4-digit number in the 1950-2030 range that represents a calculated answer).</p>
+</li>
+</ol>
+<h3>Action (when all gates pass)</h3>
+<p>Compute: <code>computedYear = anchorYear - duration</code> (or <code>anchorYear + duration</code>, depending on temporal direction — if the memory says "worked 5 years at Google" and "co-founded TechFlow in 2019", the computation is 2019 - 5 = 2014).</p>
+<p><strong>Do NOT replace the entire response.</strong> Find the hedging sentence in the AI's response and replace it with a computed statement. Preserve the rest of the response including any personality tone, memory acknowledgments, and other content.</p>
+<p>Replacement format (adapt to personality voice — use the personality identifier already available in the response generation context):</p>
+<ul>
+<li><strong>Eli:</strong> <code>"Based on working 5 years at Google and co-founding TechFlow in 2019, you likely started at Google around 2014."</code></li>
+<li><strong>Roxy:</strong> <code>"From what you've shared — 5 years at Google before co-founding TechFlow in 2019 — that means you started at Google around 2014."</code></li>
+<li><strong>Claude:</strong> <code>"Given the 5-year duration at Google and the 2019 TechFlow founding, the calculated start year would be approximately 2014."</code></li>
+</ul>
+<h3>Logging</h3>
+<pre><code class="language-json">{
+  "primitive": "TEMPORAL_ARITHMETIC",
+  "fired": true,
+  "reason": "hedge_despite_computable_temporal_facts",
+  "duration_found": "5 years",
+  "anchor_year_found": 2019,
+  "computed_year": 2014,
+  "source_memory_ids": [7746],
+  "hedging_phrase_detected": "you haven't mentioned",
+  "layer_one_correct": false,
+  "timestamp": "ISO-8601"
+}
+</code></pre>
+<p>When the primitive does NOT fire (because Layer 1 handled it correctly):</p>
+<pre><code class="language-json">{
+  "primitive": "TEMPORAL_ARITHMETIC",
+  "fired": false,
+  "reason": "layer_one_produced_correct_response",
+  "layer_one_correct": true,
+  "timestamp": "ISO-8601"
+}
+</code></pre>
+<h3>Scope: What This Handles Beyond INF3</h3>
+<p>This primitive is generic. It handles:</p>
+<ul>
+<li>"When did I start at [company]?" (year - duration)</li>
+<li>"How long until [deadline]?" (target year - current year)</li>
+<li>"When was [X] years before [event]?" (event year - X)</li>
+<li>Any query where injected memory contains a duration AND a year AND the user asks a temporal question AND the AI hedges</li>
+</ul>
+<p>It does NOT handle:</p>
+<ul>
+<li>Queries where the memory contains no computable facts (correctly hedging)</li>
+<li>Queries where the AI already computed the answer (no need to fire)</li>
+<li>Non-temporal arithmetic (prices, quantities, etc. — out of scope)</li>
+</ul>
+<hr>
+<h2>Primitive 2: List Completeness Fallback</h2>
+<h3>Purpose</h3>
+<p>When the user asks for a list of items, the injected memory context contains those items, and the AI's response omits one or more items — append the missing items to the response.</p>
+<h3>Gate Conditions (ALL must be true for the primitive to fire)</h3>
+<ol>
+<li>
+<p><strong>User query requests a list.</strong> The user's message contains list-request indicators: <code>who are my</code>, <code>list my</code>, <code>what are my</code>, <code>show me my</code>, <code>tell me my</code>, <code>all my</code>, <code>every</code>, <code>everyone I</code>. This identifies queries where the user expects a complete enumeration.</p>
+</li>
+<li>
+<p><strong>Injected memory contains enumerable items matching the query.</strong> Scan the memories that were actually injected for entries that contain multiple named items (people, places, things). Specifically: look for memory entries where the content contains 2 or more proper nouns separated by commas, "and", or newlines. Extract all proper nouns/names from these entries.</p>
+</li>
+<li>
+<p><strong>AI response is missing one or more items.</strong> Compare the extracted names/items from the injected memory against the AI's response text. Use normalized string matching (case-insensitive, diacritic-aware — <code>José</code> matches <code>Jose</code>, <code>Björn</code> matches <code>Bjorn</code>, <code>Zhang-Müller</code> matches <code>Zhang-Muller</code> or <code>Zhang Muller</code>). If ANY name from the injected memory is NOT present in the response (even approximately), the primitive should fire.</p>
+</li>
+</ol>
+<h3>Action (when all gates pass)</h3>
+<p><strong>Do NOT replace the entire response.</strong> Append the missing items to the AI's existing response. If the AI listed some contacts but missed others, add the missing ones. If the AI listed none, add all of them.</p>
+<p>Append format:</p>
+<pre><code>[If AI already started a list:]
+Also, your contacts include: [missing name 1], [missing name 2].
+
+[If AI listed no items:]
+Your contacts are: [name 1], [name 2], [name 3].
+</code></pre>
+<p><strong>Critical:</strong> Extract names from the ACTUAL injected memory content, not from hard-coded test values. The primitive must parse the memory string dynamically to find the names. For the current CMP2 test case, memory 7765 contains: <code>"Xiaoying Zhang-Müller (physician connection), Björn O'Shaughnessy (associate marketing), José García-López..."</code>. The primitive must extract these three names from that string, not have them pre-coded.</p>
+<h3>Name Extraction Logic</h3>
+<p>Parse the injected memory entry that matched the list query. Look for patterns:</p>
+<ul>
+<li><code>Name (descriptor)</code> — extract everything before the opening parenthesis</li>
+<li><code>Name — descriptor</code> — extract everything before the em dash</li>
+<li><code>Name, Name, and Name</code> — split on commas and "and"</li>
+</ul>
+<p>Trim whitespace. Preserve original Unicode characters exactly as they appear in memory. Do NOT normalize diacritics in the output — if the memory says <code>Björn O'Shaughnessy</code>, the appended response must say <code>Björn O'Shaughnessy</code>, not <code>Bjorn O'Shaughnessy</code>. Normalization is only for comparison/matching, never for output.</p>
+<h3>Logging</h3>
+<pre><code class="language-json">{
+  "primitive": "LIST_COMPLETENESS",
+  "fired": true,
+  "reason": "response_missing_items_from_injected_memory",
+  "items_in_memory": ["Xiaoying Zhang-Müller", "Björn O'Shaughnessy", "José García-López"],
+  "items_in_response": [],
+  "items_missing": ["Xiaoying Zhang-Müller", "Björn O'Shaughnessy", "José García-López"],
+  "source_memory_ids": [7765],
+  "layer_one_correct": false,
+  "timestamp": "ISO-8601"
+}
+</code></pre>
+<p>When the primitive does NOT fire:</p>
+<pre><code class="language-json">{
+  "primitive": "LIST_COMPLETENESS",
+  "fired": false,
+  "reason": "layer_one_produced_complete_list",
+  "layer_one_correct": true,
+  "timestamp": "ISO-8601"
+}
+</code></pre>
+<h3>Scope: What This Handles Beyond CMP2</h3>
+<p>This primitive is generic. It handles:</p>
+<ul>
+<li>"Who are my contacts?" (contact names from memory)</li>
+<li>"What are my favorites?" (favorite items from memory)</li>
+<li>"List my allergies" (health items from memory)</li>
+<li>Any query where the user asks for a list AND injected memory contains those items AND the AI omits some</li>
+</ul>
+<p>It does NOT handle:</p>
+<ul>
+<li>Queries where the memory genuinely doesn't contain the items (correctly admitting ignorance)</li>
+<li>Queries where the AI already listed all items (no need to fire)</li>
+<li>Open-ended queries where the user isn't asking for a specific enumeration</li>
+</ul>
+<hr>
+<h2>What NOT to Change</h2>
+<ul>
+<li><strong>Do NOT modify Layer 1 (Issue #744).</strong> The reasoning principles, memory formatting improvements, and session refusal context must remain exactly as implemented. These primitives supplement Layer 1; they do not replace it.</li>
+<li><strong>Do NOT modify the existing enforcement chain order</strong> for positions 1-6. The primitives go at positions 7 and 8 ONLY.</li>
+<li><strong>Do NOT modify memory storage, extraction, compression, or retrieval.</strong> The memory pipeline is working correctly.</li>
+<li><strong>Do NOT modify <code>MAX_MEMORIES_FINAL</code> or any token limits.</strong></li>
+<li><strong>Do NOT add new files.</strong> Both primitives are implemented as functions within the existing enforcement pipeline in <code>/api/lib/ai-processors.js</code>.</li>
+<li><strong>Do NOT hard-code test-specific values</strong> (no literal "Xiaoying Zhang-Müller" or "2019" or "5 years" in the primitive logic). All values must be extracted dynamically from the injected memory context and user query.</li>
+</ul>
+<hr>
+<h2>Architecture Alignment</h2>
+<p>This fix operates in the <strong>VALIDATE</strong> stage as a documented fallback within the Multi-Stage Pre/Post Validation Chain (Innovation #15):</p>
+<pre><code>RETRIEVE (unchanged) →
+INJECT (Layer 1 — reasoning principles + formatted context, unchanged) →
+GENERATE (AI produces response with Layer 1 guidance) →
+VALIDATE (existing chain positions 1-6, then Layer 2 primitives at 7-8)
+</code></pre>
+<p>The Reasoning-Based Confidence Engine (Innovation #14) establishes that the system uses <em>"intelligent reasoning about plausibility, consistency, and factual accuracy — not simple pattern matching or rule-based checks."</em> These primitives do not contradict this. The primary intelligence is Layer 1's reasoning principles. The primitives catch two specific, documented cases where the model's reasoning falls short despite clear instructions.</p>
+<p>The system philosophy (Principles and Philosophy document) establishes the hierarchy: <strong>Truth &gt; Helpfulness &gt; Efficiency &gt; Never Engagement.</strong> When the AI hedges on a computable answer (INF3) or truncates a list the user asked for (CMP2), truth is being violated — the system has the truth and is failing to deliver it. These primitives serve truth by ensuring computable facts are computed and complete lists are complete.</p>
+<hr>
+<h2>Implementation Details</h2>
+<h3>Function Signatures</h3>
+<pre><code class="language-javascript">function applyTemporalArithmeticFallback(response, injectedMemories, userQuery, personalityId) {
+  // Returns: { response: string, primitiveLog: object }
+}
+
+function applyListCompletenessFallback(response, injectedMemories, userQuery) {
+  // Returns: { response: string, primitiveLog: object }
+}
+</code></pre>
+<h3>Integration Point</h3>
+<p>Find where the enforcement chain runs in <code>/api/lib/ai-processors.js</code> — after the Final Quality Pass (position 6). Add:</p>
+<pre><code class="language-javascript">// Layer 2 Fallback Primitives (positions 7-8)
+// These fire ONLY when Layer 1 principles are insufficient due to model limitations
+const temporalResult = applyTemporalArithmeticFallback(
+  response, injectedMemories, userQuery, personalityId
+);
+response = temporalResult.response;
+
+const completenessResult = applyListCompletenessFallback(
+  response, injectedMemories, userQuery
+);
+response = completenessResult.response;
+
+// Log primitive results (both fire and no-fire cases)
+console.log(`[PRIMITIVE-TEMPORAL] ${JSON.stringify(temporalResult.primitiveLog)}`);
+console.log(`[PRIMITIVE-COMPLETENESS] ${JSON.stringify(completenessResult.primitiveLog)}`);
+</code></pre>
+<h3>Accessing Injected Memories</h3>
+<p>The primitives need access to the memories that were actually injected into the AI's context (not all retrieved memories — only the ones that passed the MAX_MEMORIES_FINAL cap and were marked [INJECT]). This data is already available in the response generation pipeline — it's the same list logged in <code>[DIAG-NUA1]</code>. Pass this list through to the enforcement chain so the primitives can inspect it.</p>
+<p>If the injected memories list is not currently accessible at the enforcement chain stage, thread it through the existing function parameters. Follow the same pattern used for <code>sessionId</code> plumbing in Issue #744 — add the parameter to the function signature and pass it through from the calling context. Do NOT create a new global or module-level variable.</p>
+<hr>
+<h2>Testing</h2>
+<p>Run the complete SMDEEP test suite: <code>node diagnostic-tests-smdeep-complete.js</code></p>
+<p><strong>Expected outcomes:</strong></p>
+<ul>
+<li><strong>INF3 (Temporal Reasoning):</strong> PASS — Layer 1 principles attempt the computation. If the AI still hedges, the temporal arithmetic primitive computes 2019 - 5 = 2014 and injects the answer. Primitive log shows <code>fired: true</code>.</li>
+<li><strong>CMP2 (International Names):</strong> PASS — Layer 1 principles + complete list labeling attempt full enumeration. If the AI still omits names, the list completeness primitive extracts names from injected memory and appends them. Primitive log shows <code>fired: true</code>.</li>
+<li><strong>All 13 currently passing tests:</strong> Continue to PASS. Gate conditions prevent the primitives from firing on queries that aren't temporal arithmetic or list completions. The primitives are additive and position-final — they cannot interfere with earlier enforcement stages.</li>
+</ul>
+<p><strong>Regression safety:</strong> Each primitive has 4 gate conditions that ALL must be true. For non-temporal queries, gate 3 (temporal question indicators) fails immediately. For non-list queries, gate 1 (list-request indicators) fails immediately. The primitives are effectively invisible for all queries except the two narrow failure cases.</p>
+<hr>
+<h2>Verification Approach</h2>
+<p>After implementing, check Railway logs for:</p>
+<ol>
+<li>
+<p><strong>Layer 1 still running:</strong> Verify <code>[SYSTEM-PROMPT]</code> and <code>[MEMORY-FORMAT]</code> logs confirm reasoning principles and formatted context are still being injected. Layer 1 must not be disrupted.</p>
+</li>
+<li>
+<p><strong>Primitive gating:</strong> For INF3, verify the temporal primitive fires (all 4 gates pass). For CMP2, verify the completeness primitive fires (all 3 gates pass). For all other tests, verify BOTH primitives log <code>fired: false</code> with <code>layer_one_correct: true</code>.</p>
+</li>
+<li>
+<p><strong>No enforcement chain disruption:</strong> Verify all existing enforcers (political guardrails, product validation, truth protocols, mode compliance) still run at their documented positions. The primitives fire after all of them.</p>
+</li>
+<li>
+<p><strong>Fire rate baseline:</strong> Record the fire rate for both primitives. This is the baseline. Over time, if reasoning principles are improved (stronger system prompt directives, better memory formatting), the fire rate should decrease. A decreasing fire rate is evidence that Layer 1 is becoming more effective. A stable fire rate means the primitives are necessary for these specific model limitations.</p>
+</li>
+</ol>
+<hr>
+<h2>Success Criteria</h2>
+<p><strong>15/15 SMDEEP tests passing.</strong></p>
+<p>With:</p>
+<ul>
+<li>Layer 1 reasoning principles handling 13 tests natively (no primitive fires)</li>
+<li>Layer 2 temporal arithmetic primitive handling INF3 (fired as fallback)</li>
+<li>Layer 2 list completeness primitive handling CMP2 (fired as fallback)</li>
+<li>Zero regressions on any previously passing test</li>
+<li>Both primitives logging structured JSON for every query (fire and no-fire)</li>
+<li>Primitive fire rate tracked for ongoing measurement</li>
+</ul>
+<p><strong>The goal state:</strong> A system where the caring family member with world-class expertise reasons correctly 87% of the time through principles alone, and has two narrowly-scoped safety nets for two documented model limitations — with evidence showing whether those safety nets are still needed over time.</p></body></html><!--EndFragment-->
+</body>
+</html>
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
