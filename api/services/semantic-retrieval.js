@@ -983,17 +983,24 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     });
     telemetry.query_embedding_ms = Date.now() - embedStart;
 
+    // DETERMINISTIC FALLBACK: If query embedding fails (429/quota/timeout), use keyword-based retrieval
+    // This ensures the retrieval pipeline NEVER breaks due to OpenAI API failures
+    // Per doctrine: "Under no circumstances should a quota error produce a user-facing 'technical issue' response
+    // or skip the retrieval, injection, or enforcement chain"
+    let queryEmbedding = null;
+    let useKeywordFallback = false;
+    
     if (!queryEmbeddingResult.success) {
       console.log(`[SEMANTIC RETRIEVAL] ⚠️ Query embedding failed: ${queryEmbeddingResult.error}`);
-      return {
-        success: false,
-        error: `Could not embed query: ${queryEmbeddingResult.error}`,
-        memories: [],
-        telemetry
-      };
+      console.log(`[SEMANTIC RETRIEVAL] 🔄 Falling back to keyword-based retrieval (no embedding required)`);
+      useKeywordFallback = true;
+      telemetry.query_embedding_failed = true;
+      telemetry.query_embedding_error = queryEmbeddingResult.error;
+      telemetry.fallback_used = true;
+      telemetry.fallback_reason = 'query_embedding_failed';
+    } else {
+      queryEmbedding = queryEmbeddingResult.embedding;
     }
-
-    const queryEmbedding = queryEmbeddingResult.embedding;
 
     // CRITICAL FIX #562-T2: Use VERY low similarity threshold for memory recall queries
     // These queries are asking "what did I explicitly tell you?" not "find semantically similar content"
@@ -1392,7 +1399,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       };
     }
 
-    // STEP 3: Score candidates with cosine similarity
+    // STEP 3: Score candidates with cosine similarity OR keyword matching (if query embedding failed)
     const scoringStart = Date.now();
 
     // Parse embeddings (handle both FLOAT4[] and vector(1536) types)
@@ -1413,19 +1420,49 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       return { ...c, embedding };
     });
 
-    // Filter to only those with valid embeddings
-    const withEmbeddings = candidatesWithParsedEmbeddings.filter(c =>
-      c.embedding && Array.isArray(c.embedding) && c.embedding.length > 0
-    );
-    telemetry.candidates_with_embeddings = withEmbeddings.length;
-    telemetry.vectors_compared = withEmbeddings.length;
-    telemetry.semantic_candidates = withEmbeddings.length;  // #536: Track semantic candidates for comparison with fallback
+    // DETERMINISTIC FALLBACK: If query embedding failed, use keyword-based scoring for ALL candidates
+    let scored;
+    if (useKeywordFallback) {
+      console.log(`[KEYWORD-FALLBACK] Using keyword-based scoring for all ${candidatesWithParsedEmbeddings.length} candidates (query embedding unavailable)`);
+      
+      // Use the same keyword scoring logic as used for unembedded memories
+      scored = candidatesWithParsedEmbeddings.map(candidate => {
+        const contentLower = (candidate.content || '').toLowerCase();
+        const queryLower = normalizedQuery.toLowerCase();
+        
+        // Extract query terms and count matches
+        const queryTerms = queryLower.split(/\s+/).filter(t => t.length > 3);
+        const matchedTerms = queryTerms.filter(term => contentLower.includes(term)).length;
+        const textSimilarity = queryTerms.length > 0 ? matchedTerms / queryTerms.length : 0;
+        
+        return {
+          ...candidate,
+          similarity: textSimilarity,
+          keyword_fallback: true
+        };
+      });
+      
+      telemetry.candidates_with_embeddings = 0; // No embeddings were used
+      telemetry.vectors_compared = 0;
+      telemetry.semantic_candidates = 0;
+      telemetry.keyword_fallback_candidates = candidatesWithParsedEmbeddings.length;
+      
+    } else {
+      // Normal semantic scoring path
+      // Filter to only those with valid embeddings
+      const withEmbeddings = candidatesWithParsedEmbeddings.filter(c =>
+        c.embedding && Array.isArray(c.embedding) && c.embedding.length > 0
+      );
+      telemetry.candidates_with_embeddings = withEmbeddings.length;
+      telemetry.vectors_compared = withEmbeddings.length;
+      telemetry.semantic_candidates = withEmbeddings.length;  // #536: Track semantic candidates for comparison with fallback
 
-    // Calculate similarity scores
-    const scored = withEmbeddings.map(candidate => ({
-      ...candidate,
-      similarity: cosineSimilarity(queryEmbedding, candidate.embedding)
-    }));
+      // Calculate similarity scores
+      scored = withEmbeddings.map(candidate => ({
+        ...candidate,
+        similarity: cosineSimilarity(queryEmbedding, candidate.embedding)
+      }));
+    }
 
     // ═══════════════════════════════════════════════════════════════
     // CRITICAL FIX #546: Score recent unembedded memories using text matching

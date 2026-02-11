@@ -35,7 +35,14 @@ async function getCachedEmbedding(text) {
     return embedding;
   } catch (error) {
     console.error('[QUERY_CLASSIFIER] Error getting embedding:', error);
-    throw error;
+    // DETERMINISTIC FALLBACK: Return zero vector on API failure (429, quota, timeout, etc.)
+    // This allows classification to continue with safe defaults based on query characteristics
+    // Per doctrine: "No quota error should produce a user-facing 'technical issue' response"
+    console.log('[QUERY_CLASSIFIER] 🔄 Returning zero vector fallback (classification will use query heuristics)');
+    const zeroVector = new Array(1536).fill(0);
+    // Cache the zero vector to avoid repeated API calls for the same failed request
+    embeddingCache.set(cacheKey, zeroVector);
+    return zeroVector;
   }
 }
 
@@ -113,7 +120,21 @@ async function initializeConceptAnchors() {
     return CONCEPT_ANCHORS;
   } catch (error) {
     console.error('[QUERY_CLASSIFIER] Error initializing concept anchors:', error);
-    throw error;
+    // DETERMINISTIC FALLBACK: Return zero vectors for all concept anchors
+    // This allows classification to continue with query heuristics (length, patterns, etc.)
+    // Per doctrine: "No quota error should produce a user-facing 'technical issue' response"
+    console.log('[QUERY_CLASSIFIER] 🔄 Falling back to zero-vector anchors (classification will use query heuristics)');
+    const zeroVector = new Array(1536).fill(0);
+    CONCEPT_ANCHORS = {
+      greeting: zeroVector,
+      simple_factual: zeroVector,
+      news_current_events: zeroVector,
+      emotional_support: zeroVector,
+      decision_making: zeroVector,
+      complex_analytical: zeroVector,
+      technical: zeroVector
+    };
+    return CONCEPT_ANCHORS;
   }
 }
 
