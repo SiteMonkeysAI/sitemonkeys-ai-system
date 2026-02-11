@@ -531,8 +531,9 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     }
 
     // 4. Assumption Detection and Flagging
+    let assumptionDetection = { assumptions: [], enhanced: null };
     try {
-      const assumptionDetection = detectAndFlagAssumptions(
+      assumptionDetection = detectAndFlagAssumptions(
         response.response,
         mode,
       );
@@ -564,8 +565,9 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     }
 
     // 5. Pressure Detection and Resistance
+    let pressureResistance = { pressure_detected: false };
     try {
-      const pressureResistance = applyPressureResistance(
+      pressureResistance = applyPressureResistance(
         response.response,
         message,
         conversationHistory,
