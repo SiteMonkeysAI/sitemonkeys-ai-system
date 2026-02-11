@@ -531,75 +531,90 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     }
 
     // 4. Assumption Detection and Flagging
-    const assumptionDetection = detectAndFlagAssumptions(
-      response.response,
-      mode,
-    );
-    if (assumptionDetection.assumptions.length > 0) {
-      console.log(
-        "🔍 Assumptions detected and flagged:",
-        assumptionDetection.assumptions,
+    try {
+      const assumptionDetection = detectAndFlagAssumptions(
+        response.response,
+        mode,
       );
-      // STEP 5: Use enhanced response if available (with uncertainty structure added)
-      if (assumptionDetection.enhanced) {
-        response.response = assumptionDetection.enhanced;
-      } else {
-        response.response = injectAssumptionChallenges(
-          response.response,
+      if (assumptionDetection.assumptions.length > 0) {
+        console.log(
+          "🔍 Assumptions detected and flagged:",
           assumptionDetection.assumptions,
         );
+        // STEP 5: Use enhanced response if available (with uncertainty structure added)
+        if (assumptionDetection.enhanced) {
+          response.response = assumptionDetection.enhanced;
+        } else {
+          response.response = injectAssumptionChallenges(
+            response.response,
+            assumptionDetection.assumptions,
+          );
+        }
+        overridePatterns.assumption_challenges++;
+        trackOverride(
+          "ASSUMPTION_DETECTION",
+          assumptionDetection.assumptions,
+          assumptionDetection.challenges_added,
+          "assumption_challenges_added",
+        );
       }
-      overridePatterns.assumption_challenges++;
-      trackOverride(
-        "ASSUMPTION_DETECTION",
-        assumptionDetection.assumptions,
-        assumptionDetection.challenges_added,
-        "assumption_challenges_added",
-      );
+    } catch (assumptionDetectionError) {
+      console.error("⚠️ Assumption detection failed:", assumptionDetectionError);
+      // Continue without assumption detection - don't crash the system
     }
 
     // 5. Pressure Detection and Resistance
-    const pressureResistance = applyPressureResistance(
-      response.response,
-      message,
-      conversationHistory,
-    );
-    if (pressureResistance.pressure_detected) {
-      console.log(
-        "🛡️ Pressure resistance applied:",
-        pressureResistance.pressure_type,
+    try {
+      const pressureResistance = applyPressureResistance(
+        response.response,
+        message,
+        conversationHistory,
       );
-      response.response = pressureResistance.modified_response;
-      overridePatterns.authority_resistances++;
-      trackOverride(
-        "PRESSURE_RESISTANCE",
-        pressureResistance.pressure_type,
-        pressureResistance.modifications,
-        "authority_pressure_blocked",
-      );
+      if (pressureResistance.pressure_detected) {
+        console.log(
+          "🛡️ Pressure resistance applied:",
+          pressureResistance.pressure_type,
+        );
+        response.response = pressureResistance.modified_response;
+        overridePatterns.authority_resistances++;
+        trackOverride(
+          "PRESSURE_RESISTANCE",
+          pressureResistance.pressure_type,
+          pressureResistance.modifications,
+          "authority_pressure_blocked",
+        );
+      }
+    } catch (pressureResistanceError) {
+      console.error("⚠️ Pressure resistance check failed:", pressureResistanceError);
+      // Continue without pressure resistance - don't crash the system
     }
 
     // 6. Vault Rule Enforcement (Site Monkeys Mode Only)
     let vaultEnforcement = { violations: [], modified: false };
     if (mode === "site_monkeys" && vaultVerification.allowed) {
-      vaultEnforcement = enforceVaultRules(
-        response.response,
-        message,
-        triggeredFrameworks,
-      );
-      if (vaultEnforcement.violations.length > 0) {
-        console.log(
-          "🔐 Vault rule violations detected and enforced:",
-          vaultEnforcement.violations,
+      try {
+        vaultEnforcement = enforceVaultRules(
+          response.response,
+          message,
+          triggeredFrameworks,
         );
-        response.response = vaultEnforcement.modified_response;
-        overridePatterns.vault_violations++;
-        trackOverride(
-          "VAULT_RULE_ENFORCEMENT",
-          vaultEnforcement.violations,
-          vaultEnforcement.modifications,
-          "vault_rule_violation_blocked",
-        );
+        if (vaultEnforcement.violations.length > 0) {
+          console.log(
+            "🔐 Vault rule violations detected and enforced:",
+            vaultEnforcement.violations,
+          );
+          response.response = vaultEnforcement.modified_response;
+          overridePatterns.vault_violations++;
+          trackOverride(
+            "VAULT_RULE_ENFORCEMENT",
+            vaultEnforcement.violations,
+            vaultEnforcement.modifications,
+            "vault_rule_violation_blocked",
+          );
+        }
+      } catch (vaultEnforcementError) {
+        console.error("⚠️ Vault rule enforcement failed:", vaultEnforcementError);
+        // Continue without vault enforcement - don't crash the system
       }
     }
 
@@ -643,11 +658,16 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
 
     // STEP 6: FINAL QUALITY PASS - Remove engagement bait
     console.log("🎯 Applying final quality pass - removing engagement bait");
-    const cleanedResponse = removeEngagementBait(response.response);
-    if (cleanedResponse !== response.response) {
-      console.log("✅ Engagement bait removed from response");
-      response.response = cleanedResponse;
-      overridePatterns.engagement_bait_removed = (overridePatterns.engagement_bait_removed || 0) + 1;
+    try {
+      const cleanedResponse = removeEngagementBait(response.response);
+      if (cleanedResponse !== response.response) {
+        console.log("✅ Engagement bait removed from response");
+        response.response = cleanedResponse;
+        overridePatterns.engagement_bait_removed = (overridePatterns.engagement_bait_removed || 0) + 1;
+      }
+    } catch (engagementBaitError) {
+      console.error("⚠️ Engagement bait removal failed:", engagementBaitError);
+      // Continue without engagement bait removal - don't crash the system
     }
 
     // LAYER 2 FALLBACK PRIMITIVES (Issue #746)
