@@ -1407,9 +1407,8 @@ export class Orchestrator {
       this.log("[LAYER2] primitives_reached=true");
       
       // Get memory context string for primitives
-      const memoryContextString = memoryContext.memories 
-        ? memoryContext.memories.map(m => m.content).join('\n')
-        : '';
+      // memoryContext.memories is the formatted string of memory content
+      const memoryContextString = memoryContext.memories || '';
       
       // Position 1: Temporal Arithmetic Fallback
       this.log("🔧 [LAYER-2] Applying temporal arithmetic fallback primitive...");
