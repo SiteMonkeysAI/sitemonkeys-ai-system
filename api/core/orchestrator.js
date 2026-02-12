@@ -1416,7 +1416,7 @@ export class Orchestrator {
         aiResponse.response,
         memoryContextString,
         message,
-        aiResponse.model // Use model as personality ID
+        aiResponse.model // Pass AI model identifier (personalityId parameter accepts model name)
       );
       aiResponse.response = temporalResult.response;
       this.log(`[PRIMITIVE-TEMPORAL] ${JSON.stringify(temporalResult.primitiveLog)}`);

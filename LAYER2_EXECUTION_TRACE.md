@@ -108,7 +108,7 @@ Line 1438: const enforcedResult = await this.#runEnforcementChain(
     null,
   );
   ↓
-Line 1429-1443: Doctrine gates
+Line 1429-1443: Doctrine gates (#applyDoctrineGates)
   ↓
 Line 1450-1462: Personality application
   ↓

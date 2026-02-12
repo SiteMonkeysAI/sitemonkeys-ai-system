@@ -2,7 +2,9 @@
 
 /**
  * Isolated test of Layer 2 primitives logic
- * Copies the core logic to avoid import dependencies
+ * NOTE: This duplicates logic from ai-processors.js intentionally for isolation testing.
+ * This allows testing primitive logic without needing OpenAI API keys or database connections.
+ * If primitive implementation changes, update this test accordingly.
  */
 
 console.log("=".repeat(80));
