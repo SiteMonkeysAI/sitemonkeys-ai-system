@@ -53,6 +53,11 @@ import { enforceResponseContract } from "../core/intelligence/responseContractGa
 import { enforceReasoningEscalation } from "./intelligence/reasoningEscalationEnforcer.js";
 import { applyPrincipleBasedReasoning } from "./intelligence/principleBasedReasoning.js";
 import { classifyQueryComplexity } from "./intelligence/queryComplexityClassifier.js";
+// ========== LAYER 2 PRIMITIVES (Issue #746) ==========
+import {
+  applyTemporalArithmeticFallback,
+  applyListCompletenessFallback,
+} from "../lib/ai-processors.js";
 // ================================================
 
 // ==================== CONSTANTS ====================
@@ -1395,6 +1400,37 @@ export class Orchestrator {
       this.log(
         `[AI] Model: ${aiResponse.model}, Cost: $${aiResponse.cost.totalCost.toFixed(4)}, Duration: ${aiCallDuration}ms`,
       );
+
+      // ========== LAYER 2 FALLBACK PRIMITIVES (Issue #746) ==========
+      // CRITICAL: These run IMMEDIATELY after AI generation, before enforcement
+      // They correct specific failure patterns where AI has the data but hedges
+      this.log("[LAYER2] primitives_reached=true");
+      
+      // Get memory context string for primitives
+      const memoryContextString = memoryContext.memories 
+        ? memoryContext.memories.map(m => m.content).join('\n')
+        : '';
+      
+      // Position 1: Temporal Arithmetic Fallback
+      this.log("🔧 [LAYER-2] Applying temporal arithmetic fallback primitive...");
+      const temporalResult = applyTemporalArithmeticFallback(
+        aiResponse.response,
+        memoryContextString,
+        message,
+        aiResponse.model // Use model as personality ID
+      );
+      aiResponse.response = temporalResult.response;
+      this.log(`[PRIMITIVE-TEMPORAL] ${JSON.stringify(temporalResult.primitiveLog)}`);
+
+      // Position 2: List Completeness Fallback
+      this.log("🔧 [LAYER-2] Applying list completeness fallback primitive...");
+      const completenessResult = applyListCompletenessFallback(
+        aiResponse.response,
+        memoryContextString,
+        message
+      );
+      aiResponse.response = completenessResult.response;
+      this.log(`[PRIMITIVE-COMPLETENESS] ${JSON.stringify(completenessResult.primitiveLog)}`);
 
       // ========== RUN ENFORCEMENT CHAIN (BEFORE PERSONALITY) ==========
       // CRITICAL FIX: Enforcement must run BEFORE personality to ensure
