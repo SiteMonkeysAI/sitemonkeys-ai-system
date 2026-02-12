@@ -1220,7 +1220,7 @@ ${externalContext ? `\n\n🌐 **Current Data Available:** External data sources 
  * Example: Memory shows "worked 5 years at Google" and "left in 2020", user asks
  * "when did I start?" - should compute 2020 - 5 = 2015.
  */
-function applyTemporalArithmeticFallback(response, memoryContext, userQuery, personalityId) {
+export function applyTemporalArithmeticFallback(response, memoryContext, userQuery, personalityId) {
   const primitiveLog = {
     primitive: "TEMPORAL_ARITHMETIC",
     fired: false,
@@ -1331,7 +1331,7 @@ function applyTemporalArithmeticFallback(response, memoryContext, userQuery, per
  * Example: Memory has "Zhang Wei, Björn Lindqvist, José García", user asks
  * "who are my contacts?" - all three names must appear in response.
  */
-function applyListCompletenessFallback(response, memoryContext, userQuery) {
+export function applyListCompletenessFallback(response, memoryContext, userQuery) {
   const primitiveLog = {
     primitive: "LIST_COMPLETENESS",
     fired: false,
