@@ -29,7 +29,7 @@ testChars.forEach(({ char, desc }) => {
 console.log("\nTesting the pattern on 'Björn':");
 const pattern1 = /^([A-ZÀ-ÿ][a-zà-ÿ]+(?:[-'\s][A-ZÀ-ÿ][a-zà-ÿ]+)*)$/;
 const pattern2 = /^([A-ZÀ-Ÿ][a-zà-ÿ]+(?:[-'\s][A-ZÀ-Ÿ][a-zà-ÿ]+)*)$/;
-const pattern3 = /^([A-ZÀ-Ÿ\u00C0-\u00FF][a-zà-ÿ\u00E0-\u00FF]+(?:[-'\s][A-ZÀ-Ÿ\u00C0-\u00FF][a-zà-ÿ\u00E0-\u00FF]+)*)$/;
+const pattern3 = /^([A-Z\u00C0-\u00FF][a-z\u00E0-\u00FF]+(?:[-'\s][A-Z\u00C0-\u00FF][a-z\u00E0-\u00FF]+)*)$/;
 
 console.log(`  Pattern 1 [A-ZÀ-ÿ][a-zà-ÿ]+: ${pattern1.test('Björn')}`);
 console.log(`  Pattern 2 [A-ZÀ-Ÿ][a-zà-ÿ]+: ${pattern2.test('Björn')}`);
