@@ -1244,18 +1244,50 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
   const durationMatch = memoryContext.match(/(\d+)\s*(?:year|yr)s?(?:\s+at|\s+in|\s+with|\s+for)?/i) ||
                         memoryContext.match(/(?:worked|spent|been)\s+(?:for\s+)?(\d+)/i);
 
-  const yearMatches = memoryContext.match(/\b(19\d{2}|20[0-3]\d)\b/g);
-
-  if (!durationMatch || !yearMatches || yearMatches.length === 0) {
+  if (!durationMatch) {
     return { response, primitiveLog };
   }
 
   const duration = parseInt(durationMatch[1]);
-  const anchorYear = parseInt(yearMatches[yearMatches.length - 1]); // Use most recent year mentioned
+
+  // Extract endYear and startYear separately, preferring endYear for anchor
+  // endYear: when they LEFT/QUIT/ENDED (use this as anchor for subtraction)
+  // startYear: when they STARTED/JOINED/BEGAN (only use if endYear not available)
+
+  let endYear = null;
+  let startYear = null;
+
+  // Look for end year: "left in YYYY", "quit in YYYY", "ended in YYYY", "until YYYY"
+  const leftMatch = memoryContext.match(/\b(left|quit|ended)\b.*?\bin\s+(19\d{2}|20[0-3]\d)/i);
+  if (leftMatch) {
+    endYear = parseInt(leftMatch[2]);
+  }
+
+  if (!endYear) {
+    const untilMatch = memoryContext.match(/\b(until|through)\s+(19\d{2}|20[0-3]\d)/i);
+    if (untilMatch) {
+      endYear = parseInt(untilMatch[2]);
+    }
+  }
+
+  // Look for start year: "started in YYYY", "joined in YYYY", "began in YYYY"
+  const startedMatch = memoryContext.match(/\b(started|joined|began)\b.*?\bin\s+(19\d{2}|20[0-3]\d)/i);
+  if (startedMatch) {
+    startYear = parseInt(startedMatch[2]);
+  }
+
+  // Determine anchor year: prefer endYear, fallback to startYear
+  const anchorYear = endYear || startYear;
+
+  if (!anchorYear) {
+    return { response, primitiveLog };
+  }
 
   // Gate 4: Check if AI response is missing the computed year
   // The primitive fires when the response DOES NOT contain the correct computed year
-  const computedYear = anchorYear - duration;
+  // When we have endYear, compute: endYear - duration = startYear
+  // When we only have startYear, compute: startYear + duration = endYear (but this is less common)
+  const computedYear = endYear ? (endYear - duration) : (startYear + duration);
   
   // Check if the response contains the computed year
   const yearPattern = /\b(19\d{2}|20[0-3]\d)\b/g;
@@ -1286,14 +1318,26 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
   const hasHedging = hedgingPhrases.some(pattern => pattern.test(response));
 
   // All gates passed - primitive fires
-  // Generate replacement based on personality
+  // Generate replacement based on personality and whether we're computing start or end year
   let computedStatement = "";
-  if (personalityId === "Eli") {
-    computedStatement = `Based on working ${duration} years and leaving in ${anchorYear}, you likely started around ${computedYear}.`;
-  } else if (personalityId === "Roxy") {
-    computedStatement = `From what you've shared — ${duration} years and leaving in ${anchorYear} — that means you started around ${computedYear}.`;
+  if (endYear) {
+    // We have endYear, computing startYear
+    if (personalityId === "Eli") {
+      computedStatement = `Based on working ${duration} years and leaving in ${endYear}, you likely started around ${computedYear}.`;
+    } else if (personalityId === "Roxy") {
+      computedStatement = `From what you've shared — ${duration} years and leaving in ${endYear} — that means you started around ${computedYear}.`;
+    } else {
+      computedStatement = `Given the ${duration}-year duration and the ${endYear} end date, the calculated start year would be approximately ${computedYear}.`;
+    }
   } else {
-    computedStatement = `Given the ${duration}-year duration and the ${anchorYear} end date, the calculated start year would be approximately ${computedYear}.`;
+    // We only have startYear, computing endYear
+    if (personalityId === "Eli") {
+      computedStatement = `Based on working ${duration} years and starting in ${startYear}, you likely left around ${computedYear}.`;
+    } else if (personalityId === "Roxy") {
+      computedStatement = `From what you've shared — ${duration} years and starting in ${startYear} — that means you left around ${computedYear}.`;
+    } else {
+      computedStatement = `Given the ${duration}-year duration and the ${startYear} start date, the calculated end year would be approximately ${computedYear}.`;
+    }
   }
 
   let modifiedResponse = response;
@@ -1325,11 +1369,14 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
   primitiveLog.reason = "response_missing_computable_temporal_fact";
   primitiveLog.duration_found = `${duration} years`;
   primitiveLog.anchor_year_found = anchorYear;
+  primitiveLog.anchor_type = endYear ? "endYear" : "startYear";
+  primitiveLog.end_year = endYear || null;
+  primitiveLog.start_year = startYear || null;
   primitiveLog.computed_year = computedYear;
   primitiveLog.hedging_detected = hasHedging;
   primitiveLog.layer_one_correct = false;
 
-  console.log(`[TEMPORAL-ARITHMETIC] FIRED: Computed ${anchorYear} - ${duration} = ${computedYear}`);
+  console.log(`[TEMPORAL-ARITHMETIC] FIRED: Using ${endYear ? 'endYear' : 'startYear'} as anchor: ${anchorYear} ${endYear ? '-' : '+'} ${duration} = ${computedYear}`);
 
   return { response: modifiedResponse, primitiveLog };
 }

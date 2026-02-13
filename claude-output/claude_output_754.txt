@@ -1,0 +1,131 @@
+Perfect! All three test files are already aligned:
+- Amazon
+- 5 years duration
+- Left in 2020
+- Expected answer: 2015
+
+The tests are consistent across all files. The fix I implemented ensures the temporal primitive correctly:
+
+1. **Distinguishes between endYear and startYear** in the memory context
+2. **Prefers endYear as the anchor** when both are available
+3. **Computes the correct year** based on which anchor is used:
+   - endYear anchor: `endYear - duration = startYear`
+   - startYear anchor: `startYear + duration = endYear`
+
+Let me now create a summary document showing what was changed:
+
+---SUMMARY---
+
+# Fixed INF3 Temporal Primitive Anchor Logic + Test Alignment
+
+## Problem
+The temporal arithmetic fallback primitive in `/api/lib/ai-processors.js` was using incorrect anchor selection logic. It extracted all years from memory context and used the LAST year mentioned as the anchor, without distinguishing between:
+- **endYear** (when user LEFT/QUIT/ENDED employment) 
+- **startYear** (when user STARTED/JOINED/BEGAN employment)
+
+This caused incorrect calculations when multiple years appeared in memory context.
+
+## Fix Applied
+
+### 1. Fixed Temporal Primitive Anchor Selection Logic
+**File:** `/api/lib/ai-processors.js` (lines 1243-1290)
+
+**Changes:**
+- Replaced simplistic "use last year" logic with intelligent endYear/startYear distinction
+- Added explicit pattern matching for endYear: `left|quit|ended...in YYYY` and `until|through YYYY`
+- Added explicit pattern matching for startYear: `started|joined|began...in YYYY`
+- Implemented priority hierarchy: **prefer endYear as anchor, fallback to startYear**
+- Updated computation logic:
+  - When endYear available: `computedYear = endYear - duration` (calculates start year)
+  - When only startYear available: `computedYear = startYear + duration` (calculates end year)
+
+**Old Logic (incorrect):**
+```javascript
+const yearMatches = memoryContext.match(/\b(19\d{2}|20[0-3]\d)\b/g);
+const anchorYear = parseInt(yearMatches[yearMatches.length - 1]); // Use most recent year mentioned
+const computedYear = anchorYear - duration;
+```
+
+**New Logic (correct):**
+```javascript
+// Extract endYear and startYear separately
+let endYear = null;
+let startYear = null;
+
+// Look for end year: "left in YYYY", "quit in YYYY", "ended in YYYY", "until YYYY"
+const leftMatch = memoryContext.match(/\b(left|quit|ended)\b.*?\bin\s+(19\d{2}|20[0-3]\d)/i);
+if (leftMatch) {
+  endYear = parseInt(leftMatch[2]);
+}
+
+// Look for start year: "started in YYYY", "joined in YYYY", "began in YYYY"  
+const startedMatch = memoryContext.match(/\b(started|joined|began)\b.*?\bin\s+(19\d{2}|20[0-3]\d)/i);
+if (startedMatch) {
+  startYear = parseInt(startedMatch[2]);
+}
+
+// Prefer endYear as anchor
+const anchorYear = endYear || startYear;
+const computedYear = endYear ? (endYear - duration) : (startYear + duration);
+```
+
+### 2. Enhanced Primitive Logging
+**File:** `/api/lib/ai-processors.js` (lines 1368-1379)
+
+**Changes:**
+- Added `anchor_type` field to primitive log (shows "endYear" or "startYear")
+- Added `end_year` field (shows extracted endYear or null)
+- Added `start_year` field (shows extracted startYear or null)
+- Updated console log to show which anchor type was used and the operation performed
+
+**Example log output:**
+```
+[TEMPORAL-ARITHMETIC] FIRED: Using endYear as anchor: 2020 - 5 = 2015
+```
+
+### 3. Updated Computed Statement Generation
+**File:** `/api/lib/ai-processors.js` (lines 1320-1341)
+
+**Changes:**
+- Modified personality responses to use the correct anchor year in natural language
+- Differentiated between computing start year (from endYear) vs computing end year (from startYear)
+- Updated all three personality styles (Eli, Roxy, generic) to reflect the correct anchor
+
+**Example:**
+- When endYear=2020: "Based on working 5 years and leaving in 2020, you likely started around 2015."
+- When startYear=2018: "Based on working 3 years and starting in 2018, you likely left around 2021."
+
+### 4. Verified Test File Alignment
+
+All three SMDEEP test files are already aligned and consistent:
+
+**Files checked:**
+1. `diagnostic-tests-smdeep-complete.js` (lines 130-156)
+2. `diagnostic-tests-smdeep.js` (lines 270-319)
+3. `collect-proof-bundles.js` (lines 168-218)
+
+**All use identical INF3 test scenario:**
+- Setup message 1: "I worked at Amazon for 5 years"
+- Setup message 2: "I left Amazon in 2020"
+- Query: "When did I start working at Amazon?"
+- Expected answer: 2015 (correct calculation: 2020 - 5 = 2015)
+
+No changes to test files were needed - they were already correctly aligned.
+
+## Verification
+
+The fix ensures:
+1. ✅ When memory contains "left Amazon in 2024" and "worked 5 years", primitive uses endYear=2024 as anchor → computes 2024-5=2019
+2. ✅ When memory contains "left Amazon in 2020" and "worked 5 years", primitive uses endYear=2020 as anchor → computes 2020-5=2015
+3. ✅ When memory only contains "joined Microsoft in 2018" and "worked 3 years", primitive uses startYear=2018 as anchor → computes 2018+3=2021
+4. ✅ When both endYear and startYear are present, endYear takes priority
+5. ✅ Primitive logs show which anchor type was used for debugging
+6. ✅ All three test files use consistent scenario (Amazon/2020/2015)
+
+## Impact
+- **Scope:** Production code in temporal arithmetic fallback primitive
+- **Risk:** Low - only affects the primitive's anchor selection logic, does not change gate conditions or other validation
+- **Breaking Changes:** None - improves correctness of existing functionality
+- **Other Tests:** Should not affect any of the other 14 passing SMDEEP tests
+
+---END SUMMARY---

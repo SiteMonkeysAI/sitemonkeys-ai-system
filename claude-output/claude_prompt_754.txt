@@ -1,0 +1,46 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #754: [claude-fix] INF3 Temporal Primitive Anchor Logic + Test Alignment
+
+Issue Description:
+Issue: INF3 Temporal Reasoning — Test/System Misalignment
+The SMDEEP test suite INF3 test currently fails at 13/15. The test setup, the stored memories, the temporal primitive's computation, and the expected answer are all out of sync. This needs to be aligned end-to-end so the system genuinely performs correct temporal arithmetic AND the test validates that real capability.
+What's happening now:
+The test stores facts about working at Google for 5 years, and the memory system captures "left Google in 2024" and "worked 5 years at Google." The correct temporal inference from that data is 2024 - 5 = 2019 (started at Google ~2019). But the test expects ~2015, which doesn't match any derivable calculation from the stored data.
+The temporal primitive fired once during testing with anchor_year: 2019, duration: 5, computed_year: 2014 — it used the wrong anchor. It should use endYear (2024) when available, not startYear (2019, which is actually TechFlow's founding year bleeding into the Google memory).
+What needs to be fixed (3 things):
+
+Temporal primitive anchor selection — In the temporal arithmetic fallback function in /api/lib/ai-processors.js, when both endYear and startYear are available from memory parsing, the primitive must prefer endYear as the anchor for subtraction: computed_year = endYear - duration. Only fall back to startYear - duration when endYear is not available. This is the production logic fix — it affects all temporal calculations system-wide, not just the test. Verify this by checking the DIAG-INF3 logs: they show Found endYear from "left...in YYYY": 2024 and Found duration: 5 years — the primitive has both values but uses the wrong one.
+Main SMDEEP test file — Find the file that produces the Passed: X/15 output with the reasonsTemporally check. Update the INF3 test so the setup messages, the question asked, and the expected answer are all internally consistent. The setup should store two clear facts (duration + end date), the question should ask for a year that requires subtracting duration from end date, and the expected answer should be the correct result of that subtraction. Make sure the setup doesn't include unrelated facts (like TechFlow founding year) that could contaminate the temporal memory. A clean scenario would be: store "I worked at Google for 5 years" and "I left Google in 2024", then ask "What year did I start at Google?" expecting 2019. Keep it simple — one employer, two facts, one derivable answer.
+Diagnostic test files — Align diagnostic-tests-smdeep.js, diagnostic-tests-smdeep-complete.js, and collect-proof-bundles.js with the same scenario used in the main SMDEEP test. All test files should use identical setup messages, the same question, and the same expected answer so diagnostics accurately reflect what the main suite tests.
+
+Do NOT:
+
+Change the temporal primitive to only work for one specific test scenario
+Add hardcoded year values or special cases
+Modify any other system code besides the anchor selection logic in the temporal primitive
+Break any of the other 14 passing tests
+
+Verify by:
+
+Confirming the temporal primitive logs show computed_year: 2019 when given endYear: 2024 and duration: 5
+Running full SMDEEP suite and confirming INF3 passes while all other 14 tests still pass
+Checking Railway logs for [PRIMITIVE-TEMPORAL] showing the correct anchor selection
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
