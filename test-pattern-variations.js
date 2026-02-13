@@ -31,9 +31,9 @@ testNames.forEach(name => {
 console.log("\n");
 
 // Approach 3: Even simpler - just match sequences of word-like chars with separators
-const pattern3 = /^([A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*(?:[-\s][A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*)*)$/;
+const pattern3 = /^([A-ZÀ-ÿ][A-Za-zÀ-ÿ']*(?:[-\s][A-ZÀ-ÿ][A-Za-zÀ-ÿ']*)*)$/;
 console.log("Pattern 3: More flexible character matching");
-console.log("  /^([A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*(?:[-\\s][A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*)*)$/");
+console.log("  /^([A-ZÀ-ÿ][A-Za-zÀ-ÿ']*(?:[-\\s][A-ZÀ-ÿ][A-Za-zÀ-ÿ']*)*)$/");
 testNames.forEach(name => {
   const match = name.match(pattern3);
   console.log(`  "${name}": ${match ? "✅ " + match[1] : "❌ NO MATCH"}`);
