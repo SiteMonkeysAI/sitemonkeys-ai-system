@@ -1384,8 +1384,12 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
     // - Hyphenated names (e.g., "Zhang-Müller") 
     // - Names with apostrophes (e.g., "O'Brien", "O'Shaughnessy")
     // - International characters (e.g., "José", "Björn")
-    // The pattern allows uppercase letters within name parts to handle cases like "O'Shaughnessy"
-    const properNamePattern = /^([A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*(?:[-\s][A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*)*)$/;
+    // Pattern breakdown:
+    //   [A-ZÀ-ÿ] - First letter must be uppercase (including accented chars)
+    //   (?:[a-zà-ÿ']|[A-ZÀ-ÿ])* - Following letters can be lowercase, apostrophe, or uppercase (for O'Shaughnessy)
+    //   (?:[-\s]...)* - Optionally followed by hyphen/space and another name part with same pattern
+    const PROPER_NAME_WITH_INTL_CHARS = /^([A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*(?:[-\s][A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*)*)$/;
+    const properNamePattern = PROPER_NAME_WITH_INTL_CHARS;
     
     for (const part of parts) {
       const trimmed = part.trim();

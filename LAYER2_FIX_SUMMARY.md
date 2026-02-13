@@ -20,8 +20,8 @@ if (!hasHedging || hasComputedYear) {
 ```
 
 **Problem:** The condition `if (!hasHedging || hasComputedYear)` meant:
-- Return early if NO hedging detected OR if computed year is present
-- This caused the primitive to NOT fire when response had no hedging phrases but was still missing the year
+- Return early if no hedging detected OR if computed year is present
+- This caused the primitive to not fire when response had no hedging phrases but was still missing the year
 - Example: "I need more information" has no hedging → returns early → primitive doesn't fire
 
 **Fixed Code:**
