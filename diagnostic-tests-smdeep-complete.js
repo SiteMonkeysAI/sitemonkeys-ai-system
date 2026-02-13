@@ -131,27 +131,27 @@ async function testINF3_TemporalReasoning() {
   const userId = `inf3-${RUN_ID}`;
   
   console.log('\n[TEST SETUP] Storing temporal facts...');
-  await chat("I worked at Amazon for 5 years", userId);
+  await chat("I worked at Google for 5 years", userId);
   await new Promise(resolve => setTimeout(resolve, 300));
-  await chat("I left Amazon in 2020", userId);
+  await chat("I left Google in 2024", userId);
   await new Promise(resolve => setTimeout(resolve, 500));
   
-  console.log('\n[QUERY] Asking: "When did I start working at Amazon?"');
-  const response = await chat("When did I start working at Amazon?", userId);
+  console.log('\n[QUERY] Asking: "What year did I likely start at Amazon?"');
+  const response = await chat("What year did I likely start at Amazon?", userId);
   console.log('[RESPONSE]:', response);
   
-  // Should calculate 2020 - 5 = 2015
-  const mentions2015 = response.includes('2015');
-  const showsCalculation = response.includes('2020') && response.includes('5');
+  // Should calculate 2024 - 5 = 2019 or mention ~2019
+  const mentions2019 = response.includes('2019') || /~\s*2019/i.test(response);
+  const showsCalculation = response.includes('2024') && response.includes('5');
   
   logDiagnostic('INF3', 'Temporal Calculation', {
-    mentions2015,
+    mentions2019,
     showsCalculation,
     response
   });
   
-  if (!mentions2015) {
-    throw new Error('AI failed to calculate start year (2020 - 5 = 2015)');
+  if (!mentions2019) {
+    throw new Error('AI failed to calculate start year (2024 - 5 = 2019)');
   }
 }
 
@@ -565,7 +565,7 @@ async function main() {
   console.log('INFERENCE TESTS (INF1-INF3)');
   await runTest('INF1: Age Inference (kindergarten → 5-6 years)', testINF1_AgeInference);
   await runTest('INF2: Role Inference (code review → developer)', testINF2_RoleInference);
-  await runTest('INF3: Temporal Reasoning (2020 - 5 = 2015)', testINF3_TemporalReasoning);
+  await runTest('INF3: Temporal Reasoning (2024 - 5 = 2019)', testINF3_TemporalReasoning);
   
   console.log('\n\nNUANCE TESTS (NUA1-NUA2)');
   await runTest('NUA1: Two Alexes (ambiguity detection)', testNUA1_TwoAlexes);

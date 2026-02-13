@@ -272,10 +272,10 @@ async function testINF3_TemporalReasoning() {
   
   console.log('\n[TEST SETUP] Storing temporal facts...');
   
-  await chat("I worked at Amazon for 5 years", userId);
+  await chat("I worked at Google for 5 years", userId);
   await new Promise(resolve => setTimeout(resolve, 300));
   
-  await chat("I left Amazon in 2020", userId);
+  await chat("I left Google in 2024", userId);
   await new Promise(resolve => setTimeout(resolve, 500));
   
   // Get memory state
@@ -283,38 +283,38 @@ async function testINF3_TemporalReasoning() {
   
   console.log('\n[DIAGNOSTIC CHECK] Memory storage...');
   if (memoryDebug && memoryDebug.memories) {
-    const amazonMemories = memoryDebug.memories.filter(m => 
-      m.content && m.content.toLowerCase().includes('amazon')
+    const googleMemories = memoryDebug.memories.filter(m => 
+      m.content && m.content.toLowerCase().includes('google')
     );
     
     logDiagnostic('INF3', 'Memory Storage', {
       totalMemories: memoryDebug.memories.length,
-      amazonMemories: amazonMemories.length,
-      memoryContents: amazonMemories.map(m => m.content),
-      hasBothFacts: amazonMemories.length >= 2 || 
-                    (amazonMemories.length === 1 && amazonMemories[0].content.includes('5 years') && amazonMemories[0].content.includes('2020'))
+      googleMemories: googleMemories.length,
+      memoryContents: googleMemories.map(m => m.content),
+      hasBothFacts: googleMemories.length >= 2 || 
+                    (googleMemories.length === 1 && googleMemories[0].content.includes('5 years') && googleMemories[0].content.includes('2024'))
     });
   }
   
   // Ask calculation question
-  console.log('\n[QUERY] Asking: "When did I start working at Amazon?"');
-  const response = await chat("When did I start working at Amazon?", userId);
+  console.log('\n[QUERY] Asking: "What year did I likely start at Amazon?"');
+  const response = await chat("What year did I likely start at Amazon?", userId);
   console.log('[RESPONSE]:', response);
   
-  // Check if AI calculated 2020 - 5 = 2015
-  const mentions2015 = response.includes('2015');
-  const showsCalculation = response.includes('2020') && response.includes('5');
+  // Check if AI calculated 2024 - 5 = 2019 or mentions ~2019
+  const mentions2019 = response.includes('2019') || /~\s*2019/i.test(response);
+  const showsCalculation = response.includes('2024') && response.includes('5');
   
   logDiagnostic('INF3', 'Temporal Reasoning', {
-    query: 'When did I start working at Amazon?',
-    mentions2015,
+    query: 'What year did I likely start at Amazon?',
+    mentions2019,
     showsCalculation,
-    calculationResult: mentions2015 ? '2020 - 5 = 2015 ✓' : 'Did not calculate',
+    calculationResult: mentions2019 ? '2024 - 5 = 2019 ✓' : 'Did not calculate',
     response
   });
   
-  if (!mentions2015) {
-    throw new Error('AI failed to perform temporal calculation (2020 - 5 = 2015)');
+  if (!mentions2019) {
+    throw new Error('AI failed to perform temporal calculation (2024 - 5 = 2019)');
   }
 }
 

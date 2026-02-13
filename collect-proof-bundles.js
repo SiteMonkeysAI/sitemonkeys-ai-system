@@ -163,39 +163,39 @@ async function testINF1() {
 }
 
 // ============================================================================
-// TEST INF3: Temporal Reasoning (2020 - 5 = 2015)
+// TEST INF3: Temporal Reasoning (2024 - 5 = 2019)
 // ============================================================================
 async function testINF3() {
   const userId = `inf3-proof-${RUN_ID}`;
   let apiCallsThisTest = 0;
   
   console.log('\n[SETUP] Storing temporal facts...');
-  await chat("I worked at Amazon for 5 years", userId);
+  await chat("I worked at Google for 5 years", userId);
   apiCallsThisTest++;
   await sleep(SLEEP_BETWEEN_STEPS);
   
-  await chat("I left Amazon in 2020", userId);
+  await chat("I left Google in 2024", userId);
   apiCallsThisTest++;
   await sleep(SLEEP_BETWEEN_STEPS);
   
-  console.log('\n[QUERY] Asking: "When did I start working at Amazon?"');
-  const queryResult = await chat("When did I start working at Amazon?", userId);
+  console.log('\n[QUERY] Asking: "What year did I likely start at Amazon?"');
+  const queryResult = await chat("What year did I likely start at Amazon?", userId);
   apiCallsThisTest++;
   const response = queryResult.response;
   
   console.log('[RESPONSE]:', response.substring(0, 200) + '...');
   
   // Validate response
-  const mentions2015 = response.includes('2015');
+  const mentions2019 = response.includes('2019') || /~\s*2019/i.test(response);
   
-  if (!mentions2015) {
-    throw new Error('AI failed to calculate 2020 - 5 = 2015');
+  if (!mentions2019) {
+    throw new Error('AI failed to calculate 2024 - 5 = 2019');
   }
   
   return {
     storage: {
       stored_id: 'See Railway logs for both fact IDs',
-      content_preview: '"I worked at Amazon for 5 years" + "I left Amazon in 2020"',
+      content_preview: '"I worked at Google for 5 years" + "I left Google in 2024"',
       anchors_keys: 'Expected: ["companies", "temporal"]',
       is_current: true,
       manual_check: `Query Railway logs for: "[STORAGE]" with userId: ${userId} (should show 2 storage operations)`
@@ -209,7 +209,7 @@ async function testINF3() {
     injection: {
       injected_ids: 'N/A (validator queries DB directly)',
       target_included: 'Validator SQL: SELECT * FROM persistent_memories WHERE user_id = $1 AND content ~* temporal_pattern ORDER BY created_at DESC LIMIT 15',
-      count: 'Validator-based, performs deterministic arithmetic 2020 - 5 = 2015',
+      count: 'Validator-based, performs deterministic arithmetic 2024 - 5 = 2019',
       manual_check: `Check Railway logs for: "[TEMPORAL-CALC]" with userId: ${userId}`
     },
     response: response.substring(0, 300),
