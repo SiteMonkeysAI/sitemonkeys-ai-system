@@ -1,0 +1,30 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #759: [claude-fix] CMP2 — International names lost during memory compression
+
+Issue Description:
+[claude-fix] CMP2 — International names lost during memory compression
+When a user sends: "My contacts are: Dr. Xiaoying Zhang-Müller, Björn O'Shaughnessy, and José García-López"
+The system fails to store these names in a retrievable way. When "Who are my contacts?" is asked, no memory containing any of these names is retrieved.
+Investigate how ai-processors.js compresses incoming messages into memory entries. The compression step is either dropping proper nouns with special characters (hyphens, umlauts, apostrophes) or fragmenting the single message into pieces that lose the name associations.
+Expected behavior: After storing that message, querying "Who are my contacts?" should retrieve a memory containing Zhang, Björn/Bjorn, and García/Garcia.
+Check the compression/semantic tagging logic for how it handles multi-name inputs with special characters. The fix should preserve proper nouns through compression regardless of diacritics or punctuation.
+No test changes needed. System code only.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

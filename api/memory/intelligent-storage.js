@@ -1165,24 +1165,29 @@ export class IntelligentMemoryStorage {
 CRITICAL RULES:
 1. ALWAYS preserve exact alphanumeric identifiers (e.g., ECHO-123-ABC, ALPHA-456)
 2. ALWAYS preserve names exactly as written (e.g., Dr. Smith, Dr. FOXTROT-123)
-3. ALWAYS preserve numbers, codes, IDs, license plates, serial numbers VERBATIM
-4. ALWAYS preserve salary/income amounts EXACTLY including casual formats:
+3. *** CRITICAL: PRESERVE INTERNATIONAL NAMES WITH ALL SPECIAL CHARACTERS ***
+   - Names with diacritics: José, Björn, François, Zoë (keep accents exactly)
+   - Names with hyphens: García-López, Zhang-Müller, O'Brien (keep hyphens/apostrophes)
+   - Multi-part names: Dr. Xiaoying Zhang-Müller, María José García (keep all parts)
+   - DO NOT simplify: "José García-López" must stay "José García-López" (not "Jose Garcia Lopez")
+4. ALWAYS preserve numbers, codes, IDs, license plates, serial numbers VERBATIM
+5. ALWAYS preserve salary/income amounts EXACTLY including casual formats:
    - "55k" → store as "55k" AND "$55,000"
    - "70K" → store as "70K" AND "$70,000"
    - "$85,000" → store as "$85,000"
    - Include BOTH the user's exact term AND a searchable synonym
-5. Handle casual income terminology - preserve the user's verb:
+6. Handle casual income terminology - preserve the user's verb:
    - "I make 55k" → "Income: make 55k ($55,000)"
    - "They pay me 70k" → "Income: pay 70k ($70,000)"
    - "My compensation is $85k" → "Income: compensation $85k ($85,000)"
    - "I earn 90k" → "Income: earn 90k ($90,000)"
-6. ALWAYS preserve times, dates, and numeric values EXACTLY (e.g., 3pm, 4pm, Tuesday)
-7. Never generalize unique identifiers into descriptions like "identifier" or "code"
-8. If user says "My X is Y", output MUST contain Y exactly
-9. PRIORITIZE extracting from the USER's message - the AI response is context only
-10. Include searchable synonyms in parentheses for better retrieval matching
+7. ALWAYS preserve times, dates, and numeric values EXACTLY (e.g., 3pm, 4pm, Tuesday)
+8. Never generalize unique identifiers into descriptions like "identifier" or "code"
+9. If user says "My X is Y", output MUST contain Y exactly
+10. PRIORITIZE extracting from the USER's message - the AI response is context only
+11. Include searchable synonyms in parentheses for better retrieval matching
 
-11. *** CRITICAL: NEVER EXTRACT HISTORICAL CONTEXT FROM ASSISTANT RESPONSES ***
+12. *** CRITICAL: NEVER EXTRACT HISTORICAL CONTEXT FROM ASSISTANT RESPONSES ***
    The Assistant's response often includes historical context for continuity.
    This historical context is NOT new information and must NOT be stored.
 
@@ -1202,7 +1207,7 @@ CRITICAL RULES:
    and now you're a Senior Architect" - extract ONLY "Senior Architect" from
    the USER's message, NOT "Junior Developer" from the Assistant's response.
 
-12. UPDATE LANGUAGE means NEW VALUE IS PRIMARY:
+13. UPDATE LANGUAGE means NEW VALUE IS PRIMARY:
    - "increased to $X" → Current income: $X (not the old value)
    - "raised to $X" → Current income: $X
    - "bumped to $X" → Current income: $X
@@ -1211,23 +1216,23 @@ CRITICAL RULES:
    - "promoted... $X" → Current income: $X
    - The word "now" or "increased/raised/bumped" signals the NEW value
 
-13. When message contains BOTH old and new values, extract ONLY the new:
+14. When message contains BOTH old and new values, extract ONLY the new:
    - "Was $50k, now $70k" → Income: $70k (ignore $50k)
    - "Increased from $60k to $80k" → Income: $80k (ignore $60k)
 
-14. LOCATION UPDATES supersede old locations:
+15. LOCATION UPDATES supersede old locations:
    - "moved to Austin" → Current location: Austin (not previous city)
    - "relocated to Denver" → Current location: Denver
    - "now living in Seattle" → Current location: Seattle
    - The words "moved", "relocated", "now living" signal NEW location
 
-15. SALARY VALUES without $ are still salary:
+16. SALARY VALUES without $ are still salary:
    - "90k" = $90,000
    - "75k a year" = $75,000/year
    - "making 85" in salary context = $85,000
    - Always extract the NUMERIC VALUE as income
 
-16. *** CRITICAL: PRESERVE TEMPORAL PATTERNS EXACTLY FOR REASONING ***
+17. *** CRITICAL: PRESERVE TEMPORAL PATTERNS EXACTLY FOR REASONING ***
    - "worked 5 years" → preserve exactly (NOT "worked for duration")
    - "left in 2020" → preserve exactly (NOT "left recently")
    - "spent 3 months" → preserve exactly
@@ -1236,13 +1241,13 @@ CRITICAL RULES:
    - Pattern forms: "worked/for/spent X years/months" AND "left/until/ended/quit in/at YYYY"
    - Temporal patterns are CRITICAL for calculating start dates from (duration + end date)
 
-17. VEHICLE INFORMATION must be preserved (FIX #648-STR1):
+18. VEHICLE INFORMATION must be preserved (FIX #648-STR1):
    - Car make/model: "Tesla Model 3", "Honda Civic", "Toyota Camry"
    - Always preserve brand + model exactly
    - CRITICAL: Vehicle info is HIGH PRIORITY - never drop it
    - When multiple facts present, vehicle is CRITICAL and must be extracted
 
-18. WHEN MULTIPLE FACTS PROVIDED (10+), extract ALL of them:
+19. WHEN MULTIPLE FACTS PROVIDED (10+), extract ALL of them:
    - User provided each fact intentionally
    - Do not prioritize or drop ANY facts
    - If space limited, use extreme brevity but keep ALL facts
@@ -1298,6 +1303,12 @@ NOT: "Worked at Google" without duration/end date
 Input User: "My car is a Tesla Model 3" | AI: "Nice vehicle..."
 Output: "Vehicle: Tesla Model 3 (car automobile drive)"
 NOT: "Has car" without make/model
+
+Input User: "My contacts are: Dr. Xiaoying Zhang-Müller, Björn O'Shaughnessy, and José García-López" | AI: "I'll remember those contacts..."
+Output: "Contacts: Dr. Xiaoying Zhang-Müller, Björn O'Shaughnessy, José García-López"
+NOT: "Contacts: Dr. Xiaoying Zhang Muller, Bjorn O Shaughnessy, Jose Garcia Lopez" (WRONG - special characters removed)
+NOT: "Has contacts" or "Three contacts" (WRONG - names lost)
+CRITICAL: Keep ALL diacritics (ü, ö, é), hyphens, apostrophes exactly as written
 
 *** CRITICAL ANTI-PATTERN - Issue #540 Fix ***
 Input User: "I just got promoted! My current job title is Senior Architect" |
@@ -1411,6 +1422,32 @@ Facts (preserve user terminology + add synonyms):`;
       if (missingBrandNames.length > 0) {
         console.warn(`[EXTRACTION-FIX #566-STR1] Re-injecting ${missingBrandNames.length} lost brand names:`, missingBrandNames);
         facts += '\n' + missingBrandNames.join(', ');
+      }
+
+      // FIX #759-CMP2: Protect international names with special characters
+      // Extract names from input and verify they survived compression
+      const inputNames = this.extractUnicodeNames(userMsg);
+      if (inputNames.length > 0) {
+        console.log(`[EXTRACTION-FIX #759] Verifying ${inputNames.length} international names survived extraction:`, inputNames);
+
+        // Normalize for comparison (diacritic-aware)
+        const normalizeForComparison = (str) => {
+          return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        };
+
+        const normalizedFacts = normalizeForComparison(facts);
+        const missingNames = inputNames.filter(name => {
+          const normalized = normalizeForComparison(name);
+          return !normalizedFacts.includes(normalized);
+        });
+
+        if (missingNames.length > 0) {
+          console.warn(`[EXTRACTION-FIX #759-CMP2] Re-injecting ${missingNames.length} lost international names:`, missingNames);
+          // Preserve original names with all special characters
+          facts += '\nContacts: ' + missingNames.join(', ');
+        } else {
+          console.log(`[EXTRACTION-FIX #759] All ${inputNames.length} international names preserved in extraction`);
+        }
       }
 
       // FIX #633-INF3: Verify temporal patterns survived extraction
