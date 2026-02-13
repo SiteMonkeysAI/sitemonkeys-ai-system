@@ -1253,7 +1253,21 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
   const duration = parseInt(durationMatch[1]);
   const anchorYear = parseInt(yearMatches[yearMatches.length - 1]); // Use most recent year mentioned
 
-  // Gate 4: Check if AI response contains hedging instead of computed answer
+  // Gate 4: Check if AI response is missing the computed year
+  // The primitive fires when the response DOES NOT contain the correct computed year
+  const computedYear = anchorYear - duration;
+  
+  // Check if the response contains the computed year
+  const yearPattern = /\b(19\d{2}|20[0-3]\d)\b/g;
+  const yearsInResponse = response.match(yearPattern) || [];
+  const hasComputedYear = yearsInResponse.some(y => parseInt(y) === computedYear);
+
+  if (hasComputedYear) {
+    // Layer 1 handled it correctly - the computed year is in the response
+    return { response, primitiveLog };
+  }
+  
+  // Response is missing the computed year - check if it's hedging or just wrong
   const hedgingPhrases = [
     /haven't mentioned/i,
     /not provided/i,
@@ -1264,58 +1278,55 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
     /can't determine/i,
     /cannot determine/i,
     /don't know when/i,
-    /haven't told me when/i
+    /haven't told me when/i,
+    /need more information/i,
+    /would need to/i
   ];
 
   const hasHedging = hedgingPhrases.some(pattern => pattern.test(response));
-  const hasComputedYear = /\b(19\d{2}|20[0-3]\d)\b/.test(response) &&
-                          response.match(/\b(19\d{2}|20[0-3]\d)\b/g).some(y => parseInt(y) === anchorYear - duration);
-
-  if (!hasHedging || hasComputedYear) {
-    // Layer 1 handled it correctly - no need to fire
-    return { response, primitiveLog };
-  }
 
   // All gates passed - primitive fires
-  const computedYear = anchorYear - duration;
+  // Generate replacement based on personality
+  let computedStatement = "";
+  if (personalityId === "Eli") {
+    computedStatement = `Based on working ${duration} years and leaving in ${anchorYear}, you likely started around ${computedYear}.`;
+  } else if (personalityId === "Roxy") {
+    computedStatement = `From what you've shared — ${duration} years and leaving in ${anchorYear} — that means you started around ${computedYear}.`;
+  } else {
+    computedStatement = `Given the ${duration}-year duration and the ${anchorYear} end date, the calculated start year would be approximately ${computedYear}.`;
+  }
 
-  // Extract hedging sentence and replace it
   let modifiedResponse = response;
 
-  // Find the hedging sentence and replace with computed answer
-  for (const pattern of hedgingPhrases) {
-    if (pattern.test(response)) {
-      // Generate replacement based on personality
-      let computedStatement = "";
-      if (personalityId === "Eli") {
-        computedStatement = `Based on working ${duration} years and leaving in ${anchorYear}, you likely started around ${computedYear}.`;
-      } else if (personalityId === "Roxy") {
-        computedStatement = `From what you've shared — ${duration} years and leaving in ${anchorYear} — that means you started around ${computedYear}.`;
-      } else {
-        computedStatement = `Given the ${duration}-year duration and the ${anchorYear} end date, the calculated start year would be approximately ${computedYear}.`;
-      }
+  if (hasHedging) {
+    // Find the hedging sentence and replace with computed answer
+    for (const pattern of hedgingPhrases) {
+      if (pattern.test(response)) {
+        // Replace the hedging phrase with computed statement
+        const sentences = response.split(/\.\s+/);
+        const hedgingSentenceIndex = sentences.findIndex(s => pattern.test(s));
 
-      // Replace the hedging phrase with computed statement
-      const sentences = response.split(/\.\s+/);
-      const hedgingSentenceIndex = sentences.findIndex(s => pattern.test(s));
-
-      if (hedgingSentenceIndex !== -1) {
-        sentences[hedgingSentenceIndex] = computedStatement;
-        modifiedResponse = sentences.join('. ');
-      } else {
-        // Append if we can't find exact sentence
-        modifiedResponse = response.replace(/\n*$/, '') + '\n\n' + computedStatement;
+        if (hedgingSentenceIndex !== -1) {
+          sentences[hedgingSentenceIndex] = computedStatement;
+          modifiedResponse = sentences.join('. ');
+        } else {
+          // Append if we can't find exact sentence
+          modifiedResponse = response.replace(/\n*$/, '') + '\n\n' + computedStatement;
+        }
+        break;
       }
-      break;
     }
+  } else {
+    // No hedging detected, but response is still missing the year - append it
+    modifiedResponse = response.replace(/\n*$/, '') + '\n\n' + computedStatement;
   }
 
   primitiveLog.fired = true;
-  primitiveLog.reason = "hedge_despite_computable_temporal_facts";
+  primitiveLog.reason = "response_missing_computable_temporal_fact";
   primitiveLog.duration_found = `${duration} years`;
   primitiveLog.anchor_year_found = anchorYear;
   primitiveLog.computed_year = computedYear;
-  primitiveLog.hedging_phrase_detected = hedgingPhrases.find(p => p.test(response))?.source || "unknown";
+  primitiveLog.hedging_detected = hasHedging;
   primitiveLog.layer_one_correct = false;
 
   console.log(`[TEMPORAL-ARITHMETIC] FIRED: Computed ${anchorYear} - ${duration} = ${computedYear}`);
@@ -1364,12 +1375,23 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
 
   // Pattern 2: Comma-separated list (if no parenthetical descriptors found)
   if (names.length === 0) {
-    // Look for proper nouns in comma-separated format
-    const commaListPattern = /([A-ZÀ-ÿ][a-zà-ÿ]+(?:[-\s][A-ZÀ-ÿ][a-zà-ÿ]+)*(?:[-'][A-ZÀ-ÿ][a-zà-ÿ]+)*)\s*(?:,|and)/g;
-    while ((match = commaListPattern.exec(memoryContext)) !== null) {
-      const name = match[1].trim();
-      if (name && !names.includes(name)) {
-        names.push(name);
+    // Split by common separators and extract proper nouns
+    // This handles: "Name1, Name2, Name3" or "Name1, Name2 and Name3"
+    const parts = memoryContext.split(/[,;]|(?:\s+and\s+)/).map(s => s.trim());
+    
+    // Pattern for proper names with support for:
+    // - Multi-part names (e.g., "Zhang Wei")
+    // - Hyphenated names (e.g., "Zhang-Müller") 
+    // - Names with apostrophes (e.g., "O'Brien", "O'Shaughnessy")
+    // - International characters (e.g., "José", "Björn")
+    // The pattern allows uppercase letters within name parts to handle cases like "O'Shaughnessy"
+    const properNamePattern = /^([A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*(?:[-\s][A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*)*)$/;
+    
+    for (const part of parts) {
+      const trimmed = part.trim();
+      const nameMatch = trimmed.match(properNamePattern);
+      if (nameMatch && !names.includes(nameMatch[1])) {
+        names.push(nameMatch[1]);
       }
     }
   }
