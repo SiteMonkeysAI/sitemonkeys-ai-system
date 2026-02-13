@@ -31,10 +31,10 @@ function applyListCompletenessFallback(response, memoryContext, userQuery) {
     names.push(match[1].trim());
   }
 
-  // FIXED: Better pattern that handles O'Shaughnessy correctly
+  // FIXED: Better pattern that handles O'Shaughnessy correctly, ReDoS-safe
   if (names.length === 0) {
     const parts = memoryContext.split(/[,;]|(?:\s+and\s+)/).map(s => s.trim());
-    const properNamePattern = /^([A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*(?:[-\s][A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*)*)$/;
+    const properNamePattern = /^([A-ZÀ-ÿ][a-zA-ZÀ-ÿ']*(?:[-\s][A-ZÀ-ÿ][a-zA-ZÀ-ÿ']*)*)$/;
     
     for (const part of parts) {
       const trimmed = part.trim();

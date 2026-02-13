@@ -1386,9 +1386,10 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
     // - International characters (e.g., "José", "Björn")
     // Pattern breakdown:
     //   [A-ZÀ-ÿ] - First letter must be uppercase (including accented chars)
-    //   (?:[a-zà-ÿ']|[A-ZÀ-ÿ])* - Following letters can be lowercase, apostrophe, or uppercase (for O'Shaughnessy)
+    //   [a-zA-ZÀ-ÿ']* - Following letters can be any letter or apostrophe (ReDoS-safe, no alternation)
     //   (?:[-\s]...)* - Optionally followed by hyphen/space and another name part with same pattern
-    const PROPER_NAME_WITH_INTL_CHARS = /^([A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*(?:[-\s][A-ZÀ-ÿ](?:[a-zà-ÿ']|[A-ZÀ-ÿ])*)*)$/;
+    // Note: Uses combined character class [a-zA-ZÀ-ÿ'] instead of alternation to prevent ReDoS
+    const PROPER_NAME_WITH_INTL_CHARS = /^([A-ZÀ-ÿ][a-zA-ZÀ-ÿ']*(?:[-\s][A-ZÀ-ÿ][a-zA-ZÀ-ÿ']*)*)$/;
     const properNamePattern = PROPER_NAME_WITH_INTL_CHARS;
     
     for (const part of parts) {
