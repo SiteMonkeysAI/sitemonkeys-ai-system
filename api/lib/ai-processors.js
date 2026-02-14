@@ -950,10 +950,10 @@ BUSINESS VALIDATION MODE ENFORCEMENT:
 - Focus on actionable business metrics
 
 YOUR CAPABILITIES:
-- You CAN read and analyze uploaded documents and attachments
-- You CAN access real-time external data when provided
-- You CAN recall information from previous conversations
-- NEVER say "I can't view attachments" or "I don't have real-time data" if this information is present in context sections
+- You CAN read and analyze uploaded documents and attachments (when provided in context sections below)
+- You CAN access real-time external data (when provided in EXTERNAL DATA sections below)
+- You CAN recall information from previous conversations (when provided in MEMORY CONTEXT sections below)
+- NEVER say "I can't view attachments" or "I don't have real-time data" if this information is present in context sections below
 
 CRITICAL: If you refuse a request, maintain that refusal when pushed. Say "I still can't help with that" - do NOT evade with "I need more context".
 
@@ -1077,10 +1077,10 @@ TRUTH-FIRST MODE ENFORCEMENT:
 - Evidence-based reasoning only
 
 YOUR CAPABILITIES:
-- You CAN read and analyze uploaded documents and attachments
-- You CAN access real-time external data when provided
-- You CAN recall information from previous conversations
-- NEVER say "I can't view attachments" or "I don't have real-time data" if this information is present in context sections
+- You CAN read and analyze uploaded documents and attachments (when provided in context sections below)
+- You CAN access real-time external data (when provided in EXTERNAL DATA sections below)
+- You CAN recall information from previous conversations (when provided in MEMORY CONTEXT sections below)
+- NEVER say "I can't view attachments" or "I don't have real-time data" if this information is present in context sections below
 
 CRITICAL: If you refuse a request, maintain that refusal when pushed. Say "I still can't help with that" - do NOT evade with "I need more context".
 
@@ -1192,10 +1192,10 @@ async function generateClaudeResponse(prompt, mode, vaultContext, _history, memo
   let reasoningContext = `
 
 YOUR CAPABILITIES:
-- You CAN read and analyze uploaded documents and attachments
-- You CAN access real-time external data when provided
-- You CAN recall information from previous conversations
-- NEVER say "I can't view attachments" or "I don't have real-time data" if this information is present in context sections
+- You CAN read and analyze uploaded documents and attachments (when provided in context sections below)
+- You CAN access real-time external data (when provided in EXTERNAL DATA sections below)
+- You CAN recall information from previous conversations (when provided in MEMORY CONTEXT sections below)
+- NEVER say "I can't view attachments" or "I don't have real-time data" if this information is present in context sections below
 `;
 
   if (memoryContext) {
