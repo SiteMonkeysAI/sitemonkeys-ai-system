@@ -468,12 +468,14 @@ export class IntelligentMemoryStorage {
 
     console.log(`[STORAGE-CONTRACT] unicode_input="${safeContent.substring(0, 100)}"`);
 
-    // Pattern 1: Multi-word names like "José García-López"
-    const multiWordPattern = /(?:[A-Z][a-zÀ-ÿ]+[-\s]?)+[A-ZÀ-ÿ][a-zÀ-ÿ]+/g;
+    // Pattern 1: Multi-word names like "José García-López", "O'Shaughnessy", "Zhang-Müller"
+    // Uses Unicode property escapes for proper international character support
+    // Supports hyphens and apostrophes (both straight ' and curly ') within names
+    const multiWordPattern = /\p{Lu}\p{L}*(?:[-'']\p{L}+)*(?:\s+\p{Lu}\p{L}*(?:[-'']\p{L}+)*)+/gu;
 
     // Pattern 2: Single words with diacritics like "Björn", "José"
-    // Must have at least one diacritic character (À-ÿ)
-    const singleWordPattern = /\b[A-ZÀ-ÿ][a-zÀ-ÿ]*[À-ÿ][a-zÀ-ÿ]*\b/g;
+    // Must have at least one non-ASCII letter
+    const singleWordPattern = /\b\p{Lu}\p{L}*[^\u0000-\u007F]\p{L}*\b/gu;
 
     // Pattern 3: CJK names (Chinese, Japanese, Korean characters)
     // Matches 2-4 consecutive CJK characters
@@ -481,7 +483,7 @@ export class IntelligentMemoryStorage {
 
     // Pattern 4: Capitalized words adjacent to CJK (like "Zhang Wei")
     // This catches romanized Asian names near context clues
-    const cjkAdjacentPattern = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?\b/g;
+    const cjkAdjacentPattern = /\b\p{Lu}\p{L}+(?:\s+\p{Lu}\p{L}+)?\b/gu;
 
     const multiMatches = safeContent.match(multiWordPattern) || [];
     const singleMatches = safeContent.match(singleWordPattern) || [];
@@ -503,9 +505,10 @@ export class IntelligentMemoryStorage {
       .map(m => m.replace(/[.,;:!?'")\]}>]+$/, '').trim())
       .filter(m => m.length > 0)
       .filter(m => {
-        // Keep if: has diacritic, has CJK, or is multi-word capitalized
-        return /[À-ÿ\u4E00-\u9FFF\u3040-\u309F\u30A0-\u30FF]/.test(m) ||
-               /^[A-Z][a-z]+\s+[A-Z][a-z]+/.test(m);
+        // Keep if: has non-ASCII letter, has CJK, is multi-word capitalized, or has hyphen/apostrophe
+        return /[^\u0000-\u007F]/.test(m) ||
+               /^\p{Lu}\p{L}+\s+\p{Lu}\p{L}+/u.test(m) ||
+               /[-'']/.test(m);
       });
 
     if (unicodeNames.length > 0) {
