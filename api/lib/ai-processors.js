@@ -281,7 +281,11 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
               lookupResult.verification_path.sources.forEach(source => {
                 degradationContext += `- ${source.name}: ${source.url}\n`;
               });
-              degradationContext += `\nYou MUST include these specific verification URLs in your response. Do NOT give generic advice like "check financial websites" - provide these EXACT URLs to the user.`;
+              degradationContext += `\n⚠️ CRITICAL INSTRUCTION: You MUST tell the user to check these EXACT URLs for current information:\n`;
+              lookupResult.verification_path.sources.forEach(source => {
+                degradationContext += `   "${source.name}: ${source.url}"\n`;
+              });
+              degradationContext += `Do NOT say "I don't have access to real-time data" without providing these URLs. Do NOT give generic advice. Provide these SPECIFIC sources.`;
             }
 
             externalContext = degradationContext;
@@ -945,6 +949,12 @@ BUSINESS VALIDATION MODE ENFORCEMENT:
 - Conservative market assumptions
 - Focus on actionable business metrics
 
+YOUR CAPABILITIES:
+- You CAN read and analyze uploaded documents and attachments
+- You CAN access real-time external data when provided
+- You CAN recall information from previous conversations
+- NEVER say "I can't view attachments" or "I don't have real-time data" if this information is present in context sections
+
 CRITICAL: If you refuse a request, maintain that refusal when pushed. Say "I still can't help with that" - do NOT evade with "I need more context".
 
 ${vaultContext}
@@ -1015,6 +1025,9 @@ Respond with practical business analysis, always considering survival implicatio
   if (refusalContext) {
     console.log(`[REFUSAL-CONTEXT] Refusal context injected`);
   }
+  if (externalContext) {
+    console.log(`[EXTERNAL-CONTEXT] External context injected: ${externalContext.length} chars`);
+  }
 
   try {
     const completion = await openai.chat.completions.create({
@@ -1062,6 +1075,12 @@ TRUTH-FIRST MODE ENFORCEMENT:
 - Flag all assumptions
 - Admit uncertainties directly
 - Evidence-based reasoning only
+
+YOUR CAPABILITIES:
+- You CAN read and analyze uploaded documents and attachments
+- You CAN access real-time external data when provided
+- You CAN recall information from previous conversations
+- NEVER say "I can't view attachments" or "I don't have real-time data" if this information is present in context sections
 
 CRITICAL: If you refuse a request, maintain that refusal when pushed. Say "I still can't help with that" - do NOT evade with "I need more context".
 
@@ -1133,6 +1152,9 @@ Provide honest, accurate analysis with clear confidence indicators. REASON from 
   if (refusalContext) {
     console.log(`[REFUSAL-CONTEXT] Refusal context injected`);
   }
+  if (externalContext) {
+    console.log(`[EXTERNAL-CONTEXT] External context injected: ${externalContext.length} chars`);
+  }
 
   try {
     const completion = await openai.chat.completions.create({
@@ -1167,9 +1189,17 @@ async function generateClaudeResponse(prompt, mode, vaultContext, _history, memo
   // This would typically call the Anthropic API, but for now return structured response
 
   // Build reasoning-enabled system context
-  let reasoningContext = '';
+  let reasoningContext = `
+
+YOUR CAPABILITIES:
+- You CAN read and analyze uploaded documents and attachments
+- You CAN access real-time external data when provided
+- You CAN recall information from previous conversations
+- NEVER say "I can't view attachments" or "I don't have real-time data" if this information is present in context sections
+`;
+
   if (memoryContext) {
-    reasoningContext = `\n\n📝 MEMORY CONTEXT WITH REASONING REQUIREMENTS:
+    reasoningContext += `\n\n📝 MEMORY CONTEXT WITH REASONING REQUIREMENTS:
 ${memoryContext}
 
 ⚠️ MEMORY REASONING PRINCIPLES (CRITICAL - APPLY THESE):

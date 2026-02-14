@@ -1,0 +1,146 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #763: [claude-fix] CRITICAL: External Data Injection Pipeline Broken — Attachments, Real-Time Data, Web Search All Failing
+
+Issue Description:
+# CRITICAL: External Data Injection Pipeline Broken — Attachments, Real-Time Data, Web Search All Failing
+
+## Priority: HIGH
+## Constraint: ZERO REGRESSION — All existing test results (60/61 comprehensive, 12-14/15 SMDEEP) must be preserved
+
+---
+
+## Problem Summary
+
+The system's external data injection pipeline has stopped working across ALL external sources. This previously worked correctly. The failures span:
+
+1. **File/Attachment Loading** — User uploads a file, system says "I can't view attachments"
+2. **Real-Time Price Data** — User asks gold price, system says "I don't have real-time data"
+3. **Web/News Search** — User asks about current events, system says "I can't browse the internet"
+4. **API Data Feeds** — External source integration not firing
+
+## Evidence (Direct User Interaction)
+
+### Attachment Failure
+```
+User: [uploads file] Can you tell me what that attachment is about
+Roxy: I'm sorry, but as an AI, I don't have the ability to view or interpret attachments.
+```
+**Expected**: System reads attachment content and summarizes it.
+
+### Real-Time Data Failure
+```
+User: What's the current price of gold
+Eli: I'm sorry, but I don't have real-time data capabilities... I don't have access to real-time external data feeds or the ability to browse the internet.
+```
+**Note**: The response footer DOES show pricing data `(Key details: Pricing: $90,700, $91,047)` — meaning the data IS being retrieved somewhere but NOT injected into the AI prompt context. The AI doesn't know it has the data.
+
+### Partial Success (Bitcoin)
+```
+User: Can you tell me the current value of a one Bitcoin
+Roxy: The current value of one Bitcoin... is $69,798.
+```
+**Note**: This partially worked — Roxy returned a value. But it's unclear if this is from actual real-time data or cached/training data.
+
+### News/Current Events Failure
+```
+User: Trump says that a meeting with Bill Maher is what?
+Eli: I'm sorry... I don't have access to real-time news or the ability to browse the internet.
+```
+
+### Recent Events Failure
+```
+User: Who won the 2026 Super Bowl
+Roxy: I'm sorry, but I don't have the information about the 2026 Super Bowl winner...
+```
+
+## Critical Observation
+
+The `(Key details: Pricing: $90,700...)` footer in the gold price response is VERY telling. It means:
+- The external data retrieval pipeline IS executing
+- Price data IS being fetched
+- But the data is NOT being injected into the AI's context/prompt
+- OR the AI prompt is not being told to USE the injected data
+- OR the system prompt is missing instructions about external data capabilities
+
+This suggests a **prompt injection or context assembly bug**, not a data fetching bug.
+
+## Investigation Roadmap
+
+### Step 1: Trace the Attachment Pipeline
+- Find where uploaded files are processed (likely in the request handler or middleware)
+- Check if `documentContext` or equivalent field is being populated from uploaded files
+- Check if the AI system prompt tells the AI it can read attachments
+- Look for recent changes that may have removed or broken file content injection
+- Key files: `server.js`, `ai-processors.js`, any middleware handling multipart uploads
+
+### Step 2: Trace the External Data Pipeline
+- Find the web search / API integration code (likely a tool or plugin system)
+- Check if external data fetching is being triggered on relevant queries
+- Check where fetched data gets injected into the AI prompt
+- The footer showing `(Key details: Pricing: ...)` means data IS fetched — find where that data is supposed to enter the prompt context
+- Key files: `ai-processors.js`, any files with `search`, `web`, `external`, `realtime`, `api` in their names
+
+### Step 3: Check the System Prompt / Context Assembly
+- Review the system prompt being sent to GPT-4
+- Verify it includes instructions about:
+  - Reading uploaded documents/attachments
+  - Using real-time data when available
+  - Accessing web search results
+  - NOT saying "I can't browse the internet" when tools are available
+- Check if recent changes accidentally removed or altered these instructions
+- Key files: `ai-processors.js` (look for system prompt construction), any `prompt` or `template` files
+
+### Step 4: Check for Regression from Recent PRs
+- PR #759 (international name protection) — modified `intelligent-storage.js`
+- PR #761 (regex fix) — modified `intelligent-storage.js`
+- Neither SHOULD affect external data injection, but verify no side effects
+- Check if any other PRs were merged recently that touch the request pipeline
+
+### Step 5: Verify the Request Payload
+- Log the full payload being sent to GPT-4 for a query like "What's the current price of gold?"
+- Specifically check:
+  - Is there a `tools` array with web search capabilities?
+  - Is there external data in the `messages` or system prompt?
+  - Is the `documentContext` field populated when a file is uploaded?
+
+## What NOT To Change
+- Memory storage/retrieval pipeline (working at 97-98%)
+- `extractUnicodeNames` or compression logic (just fixed)
+- Mode routing or cross-mode transfer (working)
+- Personality system (working)
+- Greeting/response intelligence (working)
+- Any test detection logic
+
+## Expected Outcome
+After investigation and fix:
+1. Uploaded files are readable — AI summarizes attachment content
+2. Real-time price queries return current data with the AI acknowledging it has the data
+3. Current events/news queries attempt web search and return results
+4. AI NEVER says "I can't browse the internet" when external tools are configured
+5. All existing tests continue to pass at current rates
+
+## How To Validate
+1. Upload a document and ask "What is this about?" — should get a summary
+2. Ask "What's the current price of gold?" — should get a real-time price
+3. Ask "Who won the 2026 Super Bowl?" — should get Philadelphia Eagles
+4. Run SMDEEP v1.2 — should maintain 12-14/15
+5. Run 53-Innovation v2.1 — should maintain 60-61/61
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
