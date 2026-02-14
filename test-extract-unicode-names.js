@@ -140,14 +140,30 @@ tests.forEach((test, idx) => {
   
   console.log(`Result: ${JSON.stringify(result)}`);
   
-  const success = result.length >= test.minExpected;
+  // Check minimum count
+  const hasMinimum = result.length >= test.minExpected;
+  
+  // Check if all expected names are present
+  const allExpectedFound = test.expected.every(expectedName => 
+    result.some(resultName => resultName.includes(expectedName) || expectedName.includes(resultName))
+  );
+  
+  const success = hasMinimum && allExpectedFound;
   
   if (success) {
     console.log('✅ PASS');
     passed++;
   } else {
     console.log('❌ FAIL');
-    console.log(`   Expected at least ${test.minExpected} names, got ${result.length}`);
+    if (!hasMinimum) {
+      console.log(`   Expected at least ${test.minExpected} names, got ${result.length}`);
+    }
+    if (!allExpectedFound) {
+      const missing = test.expected.filter(expectedName => 
+        !result.some(resultName => resultName.includes(expectedName) || expectedName.includes(resultName))
+      );
+      console.log(`   Missing expected names: ${JSON.stringify(missing)}`);
+    }
     failed++;
   }
 });
