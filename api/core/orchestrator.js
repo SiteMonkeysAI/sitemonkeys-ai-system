@@ -2104,6 +2104,15 @@ export class Orchestrator {
         },
         reasoning_escalation: reasoningEscalationResult,
         response_contract: response_contract,
+
+        // ISSUE #776 FIX 1: Source tracking for memory tagging
+        // This information tells server.js whether to tag stored memories with source types
+        sources: {
+          hasDocuments: context.sources?.hasDocuments || false,
+          hasExternal: context.sources?.hasExternal || false,
+          hasVault: context.sources?.hasVault || false,
+          hasMemory: context.sources?.hasMemory || false,
+        },
       };
     } catch (error) {
       this.error(`Request failed: ${error.message}`, error);

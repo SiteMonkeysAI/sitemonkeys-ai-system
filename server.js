@@ -541,10 +541,26 @@ app.post("/api/chat", async (req, res) => {
           const category = routing.primaryCategory;
           console.log(`[CHAT] [STORAGE] Routed to category: ${category}`);
 
+          // ISSUE #776 FIX 1: Tag response with source type before storage
+          let taggedResponse = result.response;
+          
+          // If this response was about an uploaded document, tag it
+          if (result.sources?.hasDocuments) {
+            taggedResponse = `[SOURCE:document] ${taggedResponse}`;
+            console.log('[STORE] Tagged memory with [SOURCE:document]');
+          }
+
+          // If this response used external real-time data, tag it with timestamp
+          if (result.sources?.hasExternal) {
+            const timestamp = new Date().toISOString();
+            taggedResponse = `[SOURCE:external_data:${timestamp}] ${taggedResponse}`;
+            console.log(`[STORE] Tagged memory with [SOURCE:external_data:${timestamp}]`);
+          }
+
           const storageResult = await intelligentStorage.storeWithIntelligence(
             userId,
             message,
-            result.response,
+            taggedResponse,
             category,
           );
 
@@ -567,7 +583,21 @@ app.post("/api/chat", async (req, res) => {
           console.log("[CHAT] [STORAGE] Using supersession-aware storage...");
 
           // Combine message and response for storage
-          const content = `User: ${message}\nAssistant: ${result.response}`;
+          let content = `User: ${message}\nAssistant: ${result.response}`;
+
+          // ISSUE #776 FIX 1: Tag memory with source type for filtering on retrieval
+          // If this response was about an uploaded document, tag it
+          if (result.sources?.hasDocuments) {
+            content = `[SOURCE:document] ${content}`;
+            console.log('[STORE] Tagged memory with [SOURCE:document]');
+          }
+
+          // If this response used external real-time data, tag it with timestamp
+          if (result.sources?.hasExternal) {
+            const timestamp = new Date().toISOString();
+            content = `[SOURCE:external_data:${timestamp}] ${content}`;
+            console.log(`[STORE] Tagged memory with [SOURCE:external_data:${timestamp}]`);
+          }
 
           // Generate fingerprint (deterministic-first, model-fallback with timeout)
           // FIX #710: Now includes value signature validation and update intent detection
@@ -599,10 +629,27 @@ app.post("/api/chat", async (req, res) => {
           const pool = global.memorySystem?.pool;
           if (!pool) {
             console.error("[CHAT] [STORAGE] No database pool available, falling back to legacy storage");
+            
+            // ISSUE #776 FIX 1: Tag response with source type before legacy storage
+            let taggedResponse = result.response;
+            
+            // If this response was about an uploaded document, tag it
+            if (result.sources?.hasDocuments) {
+              taggedResponse = `[SOURCE:document] ${taggedResponse}`;
+              console.log('[STORE] Tagged memory with [SOURCE:document]');
+            }
+
+            // If this response used external real-time data, tag it with timestamp
+            if (result.sources?.hasExternal) {
+              const timestamp = new Date().toISOString();
+              taggedResponse = `[SOURCE:external_data:${timestamp}] ${taggedResponse}`;
+              console.log(`[STORE] Tagged memory with [SOURCE:external_data:${timestamp}]`);
+            }
+            
             const storageResult = await global.memorySystem.storeMemory(
               userId,
               message,
-              result.response,
+              taggedResponse,
               {
                 mode: mode,
                 sessionId: sessionId,
