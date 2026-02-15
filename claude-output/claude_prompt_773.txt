@@ -1,0 +1,221 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #773: [claude-fix] AUDIT: Complete Injection System — Full Mapping and Problem Identification
+
+Issue Description:
+# AUDIT: Complete Injection System — Full Mapping and Problem Identification
+
+## Priority: HIGH
+## THIS IS A READ-ONLY AUDIT — DO NOT CHANGE ANY CODE
+
+---
+
+## CRITICAL INSTRUCTION
+
+This is an AUDIT ONLY. You are NOT fixing anything. You are mapping the entire injection system and documenting what you find. 
+
+**Your deliverable is a detailed report as your PR description. No code changes.**
+
+If you find problems, DOCUMENT them with exact file paths, line numbers, and what's wrong. Do NOT fix them. We will review your findings and create targeted fix issues afterward.
+
+Create a single markdown file at the project root called `INJECTION_AUDIT_REPORT.md` containing all your findings. That is the ONLY file you create. You modify ZERO existing files.
+
+---
+
+## What "Injection" Means In This System
+
+This system has multiple pipelines that inject external context into the AI prompt before it's sent to the language model. The AI's response quality depends on ALL of these working correctly. They include:
+
+1. **Document/Attachment Injection** — User uploads a file, content is extracted and injected into the prompt
+2. **External Data Injection** — Real-time data from APIs (CoinGecko, Google News RSS, Wikipedia, etc.) injected into the prompt
+3. **Memory Injection** — Previously stored user memories retrieved and injected into the prompt
+4. **Vault Injection** — Protected business content from Google Drive vault injected into the prompt
+5. **External Context from Graceful Degradation** — When API lookups fail, fallback URLs and instructions injected into the prompt
+
+All of these converge in the orchestrator's prompt assembly before being sent to the AI model.
+
+## What To Audit
+
+### PART 1: Document/Attachment Injection Pipeline
+
+Trace the COMPLETE path from user clicking upload to content appearing in the AI prompt:
+
+1. **Frontend upload handler**
+   - File: `public/index.html`
+   - Find: The hourglass button click handler and `handleAnalysisUpload` function
+   - Document: How is FormData constructed? What field name? Is file input cleared after upload?
+   - Document: What happens to the response from `/api/upload-for-analysis`?
+   - Document: Is there any caching, variable persistence, or state that could cause stale data?
+
+2. **Upload endpoint**
+   - File: `api/upload-for-analysis.js` and route in `server.js`
+   - Document: How is the file received (multer config, field name)?
+   - Document: How is text extracted from the file? What formats supported?
+   - Document: Where does the extracted text go? Is it returned in the response? Stored in a variable? Cached?
+   - Document: Is there any persistence between requests (module-level variables, Maps, caches)?
+
+3. **Document content flow to orchestrator**
+   - File: `server.js` (chat endpoint) and `api/core/orchestrator.js`
+   - Document: How does document content get from the upload response to the orchestrator?
+   - Document: Is it passed as a parameter? Stored in a session? Retrieved from a cache?
+   - Document: In the orchestrator, what variable holds document content? How is it populated per-request?
+
+4. **Document injection into prompt**
+   - File: `api/core/orchestrator.js` — `#buildContextString` method
+   - Document: Where exactly is `context.documents` interpolated into the prompt string?
+   - Document: What is the format/template used?
+   - Document: Is truncation applied (PR #771)?
+   - Document: Could memory content override or compete with document content?
+
+5. **Document content stored as memory**
+   - Document: After a document is analyzed, is its content stored as a memory?
+   - Document: If yes, what happens when a NEW document is uploaded — does the old document's memory compete with the new document's fresh content?
+   - Document: Is there any deduplication or replacement logic for document-derived memories?
+
+### PART 2: External Data Injection Pipeline
+
+Trace the COMPLETE path from query classification to external data appearing in the AI prompt:
+
+1. **Truth Type Detection**
+   - File: `api/core/intelligence/truthTypeDetector.js`
+   - Document: How are queries classified (VOLATILE, SEMI_STABLE, PERMANENT)?
+   - Document: What triggers an external lookup?
+
+2. **Source Selection**
+   - File: `api/core/intelligence/externalLookupEngine.js`
+   - Document: What sources are configured? List ALL of them with their URLs and auth requirements
+   - Document: How does `selectSourcesForQuery` route different query types to different sources?
+   - Document: Which sources are FREE (no auth) vs require API keys?
+   - Document: What is the COMMODITIES source configuration and why does it return 401/403?
+   - Document: For precious metals queries (gold, silver), what SHOULD happen vs what DOES happen?
+
+3. **Data Fetching**
+   - Document: How are API calls made? Timeout settings? Error handling?
+   - Document: What happens when a source returns an error (401, 403, 404, timeout)?
+   - Document: How does the fallback chain work between multiple sources?
+
+4. **Graceful Degradation**
+   - Document: When ALL sources fail, what gets injected into the prompt?
+   - Document: Are verification URLs provided? What format?
+   - Document: Is the degradation instruction strong enough for the AI to follow?
+
+5. **External data injection into prompt**
+   - File: `api/core/orchestrator.js`
+   - Document: Where is external data injected into the prompt? What variable? What format?
+   - Document: Is it labeled as "EXTERNAL DATA" in the prompt? How does the AI know this is external data vs memory?
+   - Document: What is the `[PROMPT-DEBUG] External context length: N chars` showing for each query type?
+
+6. **Data stored as memory**
+   - Document: Is external data (prices, news) stored as memories after retrieval?
+   - Document: If yes, when external lookup FAILS on next query, does old external data in memory get injected as if it's current?
+   - Document: Is there any labeling to distinguish "this is a stored old price" vs "this is a freshly fetched price"?
+
+### PART 3: Memory Injection Pipeline
+
+1. **Memory retrieval**
+   - File: `api/services/semantic-retrieval.js`
+   - Document: How are memories scored and selected?
+   - Document: What is MAX_MEMORIES_FINAL cap?
+   - Document: How does cross-mode transfer work?
+
+2. **Memory injection into prompt**
+   - File: `api/core/orchestrator.js`
+   - Document: Where in the prompt does memory context appear?
+   - Document: What section header is used? (MEMORY CONTEXT, etc.)
+   - Document: How does the AI distinguish memory data from external data from document data?
+
+### PART 4: Vault Injection Pipeline
+
+1. **Vault loading**
+   - Document: How is vault content loaded from Google Drive?
+   - Document: When is it injected? What queries trigger vault injection?
+   - Document: Where in the prompt does it appear?
+
+### PART 5: Prompt Assembly — Where Everything Converges
+
+1. **The complete prompt structure**
+   - File: `api/core/orchestrator.js` — `#buildContextString` and `#routeToAI`
+   - Document: Map the EXACT order of all sections in the final prompt:
+     - System prompt / personality
+     - Capability statements
+     - Memory context
+     - External data
+     - Document content
+     - Vault content
+     - User message
+   - Document: What is the approximate token usage of each section?
+   - Document: Is there a total token budget check before sending to the model?
+   - Document: What model is being used? What is its context window limit?
+
+## Report Format
+
+Your `INJECTION_AUDIT_REPORT.md` should have this structure:
+
+```
+# Injection System Audit Report
+## Date: [today]
+## Auditor: Claude Code
+
+### 1. Document Pipeline
+- Frontend: [findings with file:line references]
+- Upload endpoint: [findings]
+- Flow to orchestrator: [findings]
+- Prompt injection: [findings]
+- Memory storage: [findings]
+- STATUS: [WORKING / PARTIALLY WORKING / BROKEN]
+- PROBLEMS FOUND: [list with file:line]
+
+### 2. External Data Pipeline  
+- Sources configured: [full list]
+- Working sources: [list]
+- Broken sources: [list with error codes]
+- Routing logic: [findings]
+- Graceful degradation: [findings]
+- STATUS: [WORKING / PARTIALLY WORKING / BROKEN]
+- PROBLEMS FOUND: [list with file:line]
+
+### 3. Memory Pipeline
+- [findings]
+- STATUS: [WORKING / PARTIALLY WORKING / BROKEN]
+
+### 4. Vault Pipeline
+- [findings]  
+- STATUS: [WORKING / PARTIALLY WORKING / BROKEN]
+
+### 5. Prompt Assembly
+- Section order: [exact order]
+- Token budget: [breakdown]
+- Model used: [name and context limit]
+- PROBLEMS FOUND: [list]
+
+### 6. SUMMARY OF ALL PROBLEMS
+[Numbered list of every problem found, ranked by severity]
+[Each with exact file:line reference]
+[Each with suggested fix approach — but NO actual fixes]
+```
+
+## What You MUST NOT Do
+- Do NOT modify any existing files
+- Do NOT fix any bugs you find
+- Do NOT refactor or reorganize anything
+- Do NOT add logging or debugging code
+- Do NOT change any configuration
+- The ONLY file you create is `INJECTION_AUDIT_REPORT.md`
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
