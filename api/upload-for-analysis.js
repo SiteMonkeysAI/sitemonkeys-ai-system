@@ -569,6 +569,6 @@ async function handleAnalysisUpload(req, res) {
 }
 
 // Export with different names to avoid conflicts - EXACT PATTERN
-// Accept field name "file" to match test suite expectations
-export const analysisMiddleware = upload.array("file", 10);
+// Accept field name "files" to match frontend FormData
+export const analysisMiddleware = upload.array("files", 10);
 export { handleAnalysisUpload, handleMulterError };
