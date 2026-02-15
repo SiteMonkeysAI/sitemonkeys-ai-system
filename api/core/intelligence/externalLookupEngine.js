@@ -85,9 +85,11 @@ export const API_SOURCES = {
     {
       name: 'Metals-Live Gold/Silver API',
       url: () => {
-        const apiKey = process.env.METALS_API_KEY || 'FREE';
-        if (apiKey === 'FREE') {
-          console.warn('[externalLookupEngine] Using FREE tier for Metals-API. Set METALS_API_KEY for production.');
+        const apiKey = process.env.METALS_API_KEY;
+        // ISSUE #776 FIX 3: Don't use fake 'FREE' key - let selectSourcesForQuery skip if not set
+        if (!apiKey) {
+          console.log('[externalLookupEngine] METALS_API_KEY not set, this source should be skipped');
+          return null;
         }
         return `https://www.metals-api.com/api/latest?access_key=${apiKey}&base=USD&symbols=XAU,XAG`;
       },
@@ -103,9 +105,11 @@ export const API_SOURCES = {
     {
       name: 'Goldapi.io Free Tier',
       buildUrl: (query) => {
-        const apiKey = process.env.GOLDAPI_KEY || 'goldapi-demo-key';
-        if (apiKey === 'goldapi-demo-key') {
-          console.warn('[externalLookupEngine] Using demo key for Goldapi.io. Set GOLDAPI_KEY for production.');
+        const apiKey = process.env.GOLDAPI_KEY;
+        // ISSUE #776 FIX 3: Don't use fake demo key - let selectSourcesForQuery skip if not set
+        if (!apiKey) {
+          console.log('[externalLookupEngine] GOLDAPI_KEY not set, this source should be skipped');
+          return null;
         }
         const lowerQuery = query.toLowerCase();
         let symbol = 'XAU'; // Gold default
@@ -630,11 +634,48 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return [];
   }
 
-  // Commodity prices - use metals/commodity API
-  if (lowerQuery.match(/gold|silver|platinum|palladium/) &&
-      lowerQuery.match(/price|cost|value|ounce/i)) {
-    console.log('[externalLookupEngine] Precious metals price query detected - using COMMODITIES sources');
-    return API_SOURCES.COMMODITIES;
+  // Commodity prices - use metals/commodity API with news fallback
+  // ISSUE #776 FIX 3: Add Google News RSS as fallback when commodity APIs fail
+  if (lowerQuery.match(/gold|silver|platinum|palladium|copper|oil|commodity|commodities/) &&
+      lowerQuery.match(/price|cost|value|ounce|barrel/i)) {
+    console.log('[externalLookupEngine] Commodity price query detected - using COMMODITIES sources with news fallback');
+
+    // Build sources array: commodity APIs first, news RSS as fallback
+    const commoditySources = [];
+
+    // Only add Metals-API if key is set
+    if (process.env.METALS_API_KEY) {
+      commoditySources.push(API_SOURCES.COMMODITIES[0]);
+    } else {
+      console.log('[externalLookupEngine] METALS_API_KEY not set, skipping Metals-API source');
+    }
+
+    // Only add Goldapi.io if key is set
+    if (process.env.GOLDAPI_KEY) {
+      commoditySources.push(API_SOURCES.COMMODITIES[1]);
+    } else {
+      console.log('[externalLookupEngine] GOLDAPI_KEY not set, skipping Goldapi.io source');
+    }
+
+    // FALLBACK: Add Google News RSS for commodity price queries
+    // Commodity prices are newsworthy and often appear in news articles
+    commoditySources.push({
+      name: 'Google News RSS (commodity fallback)',
+      buildUrl: (query) => `https://news.google.com/rss/search?q=${encodeURIComponent(query + ' price today')}&hl=en-US&gl=US&ceid=US:en`,
+      parser: 'rss',
+      type: 'news_fallback',
+      extract: (text) => {
+        const items = [];
+        const itemRegex = /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
+        let match;
+        while ((match = itemRegex.exec(text)) !== null && items.length < 5) {
+          items.push({ title: match[1], source: match[2], date: match[3] });
+        }
+        return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
+      }
+    });
+
+    return commoditySources;
   }
 
   // Oil/gas commodities - still no API source, use graceful degradation
