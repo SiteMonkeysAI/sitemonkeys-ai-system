@@ -4350,6 +4350,17 @@ If you're asking about something you've told me before, I should be able to find
 
     // ========== DOCUMENT CONTEXT (Issue #407 Fix + Enhancement) ==========
     if (context.sources?.hasDocuments && context.documents) {
+      // CRITICAL FIX (Issue #771): Truncate document content BEFORE injection to prevent context_length_exceeded
+      // Token budget: 8192 total - 2500 (system) - 1500 (memory) - 200 (external) - 100 (user) = ~3800 remaining
+      // Safe limit: 6000 chars (~1500 tokens) with safety margin
+      const MAX_DOCUMENT_CHARS = 6000;
+      if (context.documents.length > MAX_DOCUMENT_CHARS) {
+        const originalLength = context.documents.length;
+        context.documents = context.documents.substring(0, MAX_DOCUMENT_CHARS) +
+          '\n\n[Document truncated from ' + originalLength + ' characters. Ask about specific sections for more detail.]';
+        console.log(`[DOCUMENT-TRUNCATE] Truncated document from ${originalLength} to ${MAX_DOCUMENT_CHARS} chars`);
+      }
+
       const extracted = context.extractionMetadata;
       
       if (extracted && extracted.coverage < 1.0) {
