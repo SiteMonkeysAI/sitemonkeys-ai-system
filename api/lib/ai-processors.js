@@ -324,10 +324,30 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     // Create context object for personality frameworks (matches orchestrator.js pattern)
     // FIX #766: Include documentContext if available
     let documentContextString = "";
-    if (typeof documentContext === 'string' && documentContext.length > 0) {
+    
+    // Check 4: Handle different documentContext types (string, object, array)
+    if (Array.isArray(documentContext)) {
+      // Multiple files - concatenate with separators
+      documentContextString = documentContext
+        .map((doc, idx) => {
+          const content = typeof doc === 'string' ? doc : (doc?.content || '');
+          return `=== File ${idx + 1} ===\n${content}`;
+        })
+        .join('\n\n');
+      console.log(`[FILE-CONTENT] Multiple files detected: ${documentContext.length} files`);
+    } else if (typeof documentContext === 'string' && documentContext.trim().length > 0) {
+      // Check 2: Add trim check to handle whitespace-only strings
       documentContextString = documentContext;
     } else if (documentContext && typeof documentContext === 'object' && documentContext.content) {
       documentContextString = documentContext.content;
+    }
+    
+    // Check 1: Token budget limit - truncate large files to prevent token limit issues
+    const MAX_DOCUMENT_CHARS = 8000; // ~2000 tokens for GPT-4
+    if (documentContextString.length > MAX_DOCUMENT_CHARS) {
+      console.log(`[FILE-CONTENT] Truncating document context from ${documentContextString.length} to ${MAX_DOCUMENT_CHARS} chars`);
+      documentContextString = documentContextString.substring(0, MAX_DOCUMENT_CHARS) + 
+        '\n\n[... Content truncated due to length. Total length: ' + documentContextString.length + ' characters]';
     }
 
     const context = {
