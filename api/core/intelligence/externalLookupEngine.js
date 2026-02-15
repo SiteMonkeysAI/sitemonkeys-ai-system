@@ -77,9 +77,54 @@ export const API_SOURCES = {
   // STOCKS: Removed - no free API available without authentication
   // Graceful degradation will direct users to finance.yahoo.com or similar
   STOCKS: [],
-  // COMMODITIES: Removed - no free API available without authentication
-  // Graceful degradation will direct users to kitco.com or similar
-  COMMODITIES: [],
+  // COMMODITIES: Using Metals-Live API (free tier, no auth required)
+  // Note: These APIs use free/demo keys with rate limits. For production use:
+  // - Set METALS_API_KEY environment variable for metals-api.com
+  // - Set GOLDAPI_KEY environment variable for goldapi.io
+  COMMODITIES: [
+    {
+      name: 'Metals-Live Gold/Silver API',
+      url: () => {
+        const apiKey = process.env.METALS_API_KEY || 'FREE';
+        if (apiKey === 'FREE') {
+          console.warn('[externalLookupEngine] Using FREE tier for Metals-API. Set METALS_API_KEY for production.');
+        }
+        return `https://www.metals-api.com/api/latest?access_key=${apiKey}&base=USD&symbols=XAU,XAG`;
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        if (!json || !json.rates) return null;
+        const goldPrice = json.rates.XAU ? `Gold: $${(1 / json.rates.XAU).toFixed(2)}/oz` : null;
+        const silverPrice = json.rates.XAG ? `Silver: $${(1 / json.rates.XAG).toFixed(2)}/oz` : null;
+        return [goldPrice, silverPrice].filter(Boolean).join(', ');
+      }
+    },
+    {
+      name: 'Goldapi.io Free Tier',
+      buildUrl: (query) => {
+        const apiKey = process.env.GOLDAPI_KEY || 'goldapi-demo-key';
+        if (apiKey === 'goldapi-demo-key') {
+          console.warn('[externalLookupEngine] Using demo key for Goldapi.io. Set GOLDAPI_KEY for production.');
+        }
+        const lowerQuery = query.toLowerCase();
+        let symbol = 'XAU'; // Gold default
+        if (lowerQuery.includes('silver')) symbol = 'XAG';
+        if (lowerQuery.includes('platinum')) symbol = 'XPT';
+        if (lowerQuery.includes('palladium')) symbol = 'XPD';
+        return `https://www.goldapi.io/api/${symbol}/${apiKey}`;
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        if (!json || !json.price) return null;
+        const metal = json.metal || 'Metal';
+        const price = json.price;
+        const unit = json.price_gram ? '/gram' : '/oz';
+        return `${metal}: $${price}${unit}`;
+      }
+    }
+  ],
   GOVERNMENT: [
     {
       name: 'Wikipedia Political Leaders',
@@ -585,11 +630,17 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return [];
   }
 
-  // Commodity prices - use metals/commodity API (currently disabled pending proper API)
-  if (lowerQuery.match(/gold|silver|platinum|palladium|oil|crude|natural gas/) &&
-      lowerQuery.match(/price|cost|value|ounce|barrel/i)) {
-    // Return empty for graceful degradation until proper API configured
-    console.log('[externalLookupEngine] Commodity price query detected - no API configured');
+  // Commodity prices - use metals/commodity API
+  if (lowerQuery.match(/gold|silver|platinum|palladium/) &&
+      lowerQuery.match(/price|cost|value|ounce/i)) {
+    console.log('[externalLookupEngine] Precious metals price query detected - using COMMODITIES sources');
+    return API_SOURCES.COMMODITIES;
+  }
+
+  // Oil/gas commodities - still no API source, use graceful degradation
+  if (lowerQuery.match(/oil|crude|natural gas/) &&
+      lowerQuery.match(/price|cost|value|barrel/i)) {
+    console.log('[externalLookupEngine] Oil/gas commodity query detected - no API configured');
     return [];
   }
 
@@ -729,9 +780,17 @@ export async function performLookup(query, sources, truthType = null) {
 
       try {
         // Build URL if function provided - use cleaned search query
-        const fetchUrl = source.buildUrl ? source.buildUrl(searchQuery) : source.url;
+        // Handle url as function (for dynamic API keys) or buildUrl function
+        let fetchUrl;
+        if (source.buildUrl) {
+          fetchUrl = source.buildUrl(searchQuery);
+        } else if (typeof source.url === 'function') {
+          fetchUrl = source.url(searchQuery);
+        } else {
+          fetchUrl = source.url;
+        }
         
-        // Skip this source if buildUrl returned null (couldn't extract required info)
+        // Skip this source if buildUrl/url returned null (couldn't extract required info)
         if (!fetchUrl) {
           console.log(`[externalLookupEngine] ${source.name} buildUrl returned null - skipping source`);
           continue;
