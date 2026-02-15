@@ -1,0 +1,102 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #771: [claude-fix]
+
+Issue Description:
+# FIX: Document content exceeds model token limit — add truncation in orchestrator
+
+## Priority: HIGH
+## Constraint: ZERO REGRESSION — This fix must ONLY add truncation logic. No refactoring, no restructuring, no changes to any other pipeline.
+
+---
+
+## Problem
+
+File uploads now successfully reach the backend (PR #769 fixed the 400 error). However, when document content is injected into the AI prompt, it exceeds the model's 8192 token context window, causing a crash.
+
+### Exact error from Railway logs:
+```
+code: 'context_length_exceeded'
+message: "This model's maximum context length is 8192 tokens. 
+However, your messages resulted in 12242 tokens."
+at Orchestrator.processRequest (orchestrator.js:1371:26)
+at #routeToAI (orchestrator.js:3860:13)
+[ORCHESTRATOR] [FALLBACK] Emergency fallback triggered
+```
+
+A 3,282-word document caused 12,242 tokens total — 4,050 tokens over the 8192 limit.
+
+## Root Cause
+
+Document content enters the prompt at the orchestrator level (`#buildContextString` or the method that feeds `#routeToAI`) with NO character/token limit. The system prompt + memory context + document content + user message exceeds the model's context window.
+
+Note: PR #766 added 8000-char truncation in `ai-processors.js`, but the active code path goes through `orchestrator.js`, NOT `ai-processors.js`. The truncation exists but in the wrong location.
+
+## Exact Fix Required
+
+### What to do:
+
+Find the SINGLE location in `orchestrator.js` where document content (variable likely named `documentContext`, `documentContent`, `fileContent`, or similar) is concatenated into the prompt string that gets sent to `#routeToAI`. 
+
+At THAT location — and ONLY that location — add truncation:
+
+```javascript
+// Add BEFORE the document content enters the prompt string
+const MAX_DOCUMENT_CHARS = 6000; // ~1500 tokens, safe within 8192 budget
+if (documentContext && documentContext.length > MAX_DOCUMENT_CHARS) {
+  const originalLength = documentContext.length;
+  documentContext = documentContext.substring(0, MAX_DOCUMENT_CHARS) + 
+    '\n\n[Document truncated from ' + originalLength + ' characters. Ask about specific sections for more detail.]';
+  console.log(`[DOCUMENT-TRUNCATE] Truncated document from ${originalLength} to ${MAX_DOCUMENT_CHARS} chars`);
+}
+```
+
+### What NOT to do:
+- Do NOT change how documents are uploaded, parsed, or stored
+- Do NOT change the file upload endpoint or multer configuration
+- Do NOT change memory retrieval, storage, or injection
+- Do NOT change the external lookup engine or any API sources
+- Do NOT change mode routing, personality system, or validators
+- Do NOT change the model selection logic
+- Do NOT change ai-processors.js (its truncation is correct for its own code path)
+- Do NOT change any test detection logic
+- Do NOT refactor or reorganize any existing code
+- Do NOT add new parameters to existing functions
+- This is a 5-10 line addition at ONE location. If the fix requires more than that, stop and explain why.
+
+## Token Budget Math
+
+The 8192 token budget must accommodate:
+- System prompt + personality + capability statements: ~2500 tokens
+- Memory context (up to 5 injected memories): ~1500 tokens
+- External data context: ~200 tokens
+- User message: ~100 tokens
+- **Remaining for document: ~3800 tokens ≈ ~15,000 characters**
+
+6000 characters (~1500 tokens) is conservative and safe. If you want to be more generous, 12000 characters (~3000 tokens) would also work but with less safety margin.
+
+## Validation After Fix
+1. Upload the 151,971-word document → AI gives truncated summary, NO crash
+2. Upload the 3,282-word document → AI analyzes content, NO context_length_exceeded error
+3. `[DOCUMENT-TRUNCATE]` appears in Railway logs for the large file
+4. No other log lines change — memory retrieval, external lookup, mode routing all identical
+5. Queries WITHOUT documents continue working exactly as before
+6. Run both test suites → maintain 60/61 and 12-14/15
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
