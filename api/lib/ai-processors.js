@@ -105,6 +105,7 @@ export async function processWithEliAndRoxy({
   _overrideLog,
   memoryContext = null, // STEP 2: Accept memory context from chatProcessor
   sessionId = null, // Issue #744: Session ID for refusal tracking
+  documentContext = null, // FIX #766: Uploaded file content from orchestrator
 }) {
   try {
     console.log("🧠 COGNITIVE FIREWALL: Full enforcement processing initiated");
@@ -321,6 +322,14 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     }
 
     // Create context object for personality frameworks (matches orchestrator.js pattern)
+    // FIX #766: Include documentContext if available
+    let documentContextString = "";
+    if (typeof documentContext === 'string' && documentContext.length > 0) {
+      documentContextString = documentContext;
+    } else if (documentContext && typeof documentContext === 'object' && documentContext.content) {
+      documentContextString = documentContext.content;
+    }
+
     const context = {
       message,
       mode,
@@ -328,6 +337,7 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
       queryClassification,
       memoryContext,
       vaultContext,
+      documentContext: documentContextString,
     };
 
     // GENERATE RESPONSE BASED ON ROUTING DECISION
@@ -344,6 +354,7 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
         memoryContext,
         externalContext, // INJECT EXTERNAL DATA
         refusalContext, // Issue #744: Session refusal context
+        documentContextString, // FIX #766: Uploaded file content
       );
       trackTokenUsage("claude", response.tokens_used || 800);
       aiUsed = "Claude";
@@ -358,6 +369,7 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
         memoryContext,
         externalContext, // INJECT EXTERNAL DATA
         refusalContext, // Issue #744: Session refusal context
+        documentContextString, // FIX #766: Uploaded file content
       );
       trackTokenUsage("eli", response.tokens_used || 600);
       aiUsed = "Eli";
@@ -372,6 +384,7 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
         memoryContext,
         externalContext, // INJECT EXTERNAL DATA
         refusalContext, // Issue #744: Session refusal context
+        documentContextString, // FIX #766: Uploaded file content
       );
       trackTokenUsage("roxy", response.tokens_used || 600);
       aiUsed = "Roxy";
@@ -939,6 +952,7 @@ async function generateEliResponse(
   memoryContext = null,
   externalContext = "", // INJECT EXTERNAL DATA
   refusalContext = "", // Issue #744: Session refusal context
+  documentContext = "", // FIX #766: Uploaded file content
 ) {
   const systemPrompt = `You are Eli, a business validation specialist with extensive startup experience.
 
@@ -1013,6 +1027,22 @@ If the answer is in memory above, use it. Don't claim ignorance of information y
 
 ${externalContext}
 
+${documentContext ? `
+═══════════════════════════════════════════════════════════════
+📎 UPLOADED FILE CONTENT - READ BEFORE RESPONDING
+═══════════════════════════════════════════════════════════════
+
+⚠️ CRITICAL: The user uploaded a file. The content is below.
+⚠️ YOU MUST READ AND ANALYZE THIS CONTENT.
+⚠️ NEVER say "I can't view attachments" when file content is provided below.
+
+${documentContext}
+
+═══════════════════════════════════════════════════════════════
+END OF FILE CONTENT
+═══════════════════════════════════════════════════════════════
+` : ''}
+
 Respond with practical business analysis, always considering survival implications. REASON from available information rather than claiming you lack it.`;
 
   // Log system prompt assembly (Issue #744)
@@ -1027,6 +1057,9 @@ Respond with practical business analysis, always considering survival implicatio
   }
   if (externalContext) {
     console.log(`[EXTERNAL-CONTEXT] External context injected: ${externalContext.length} chars`);
+  }
+  if (documentContext) {
+    console.log(`[FILE-CONTENT] Document context injected: ${documentContext.length} chars`);
   }
 
   try {
@@ -1066,6 +1099,7 @@ async function generateRoxyResponse(
   memoryContext = null,
   externalContext = "", // INJECT EXTERNAL DATA
   refusalContext = "", // Issue #744: Session refusal context
+  documentContext = "", // FIX #766: Uploaded file content
 ) {
   const systemPrompt = `You are Roxy, a truth-first analysis specialist committed to accuracy.
 
@@ -1140,6 +1174,22 @@ If the answer is in memory above, use it. Don't claim ignorance of information y
 
 ${externalContext}
 
+${documentContext ? `
+═══════════════════════════════════════════════════════════════
+📎 UPLOADED FILE CONTENT - READ BEFORE RESPONDING
+═══════════════════════════════════════════════════════════════
+
+⚠️ CRITICAL: The user uploaded a file. The content is below.
+⚠️ YOU MUST READ AND ANALYZE THIS CONTENT.
+⚠️ NEVER say "I can't view attachments" when file content is provided below.
+
+${documentContext}
+
+═══════════════════════════════════════════════════════════════
+END OF FILE CONTENT
+═══════════════════════════════════════════════════════════════
+` : ''}
+
 Provide honest, accurate analysis with clear confidence indicators. REASON from available information rather than claiming you lack it.`;
 
   // Log system prompt assembly (Issue #744)
@@ -1154,6 +1204,9 @@ Provide honest, accurate analysis with clear confidence indicators. REASON from 
   }
   if (externalContext) {
     console.log(`[EXTERNAL-CONTEXT] External context injected: ${externalContext.length} chars`);
+  }
+  if (documentContext) {
+    console.log(`[FILE-CONTENT] Document context injected: ${documentContext.length} chars`);
   }
 
   try {
@@ -1184,7 +1237,7 @@ Provide honest, accurate analysis with clear confidence indicators. REASON from 
   }
 }
 
-async function generateClaudeResponse(prompt, mode, vaultContext, _history, memoryContext = null, externalContext = "", refusalContext = "") {
+async function generateClaudeResponse(prompt, mode, vaultContext, _history, memoryContext = null, externalContext = "", refusalContext = "", documentContext = "") {
   // For Claude responses, we need to use a different approach since we're Claude
   // This would typically call the Anthropic API, but for now return structured response
 
@@ -1233,6 +1286,8 @@ ${vaultContext ? "🍌 **Vault Context Applied:** Site Monkeys operational frame
 ${reasoningContext}
 
 ${externalContext ? `\n\n🌐 **Current Data Available:** External data sources consulted for this response.` : ''}
+
+${documentContext ? `\n\n📎 **File Content Available:** Uploaded document has been analyzed and incorporated into this response.` : ''}
 
 **Confidence Level:** 85% (based on available context)
 **Recommendation:** Proceed with structured analysis approach.`,
