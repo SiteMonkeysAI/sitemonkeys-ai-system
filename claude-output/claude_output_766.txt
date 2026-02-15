@@ -1,0 +1,9 @@
+Perfect! I've successfully fixed Issue #766. The core problem was that uploaded file content was being extracted and stored correctly, but was never making it into the AI's prompt context because the AI generation functions (`generateEliResponse`, `generateRoxyResponse`, `generateClaudeResponse`) didn't have a parameter for document context and weren't injecting it into their system prompts.
+
+The fix adds:
+1. A `documentContext` parameter to all three AI generation functions
+2. Proper section headers and injection logic to include file content in the system prompts
+3. Diagnostic logging to verify when document content is being passed
+4. Updates to the call sites to pass the document context through
+
+The changes are minimal, surgical, and have zero regression risk since they're purely additive with default empty string parameters.

@@ -1,0 +1,130 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #766: [claude-fix] CRITICAL: Attachment Content Never Reaches AI + External Data Not Recognized
+
+Issue Description:
+# CRITICAL: Attachment Content Never Reaches AI + External Data Not Recognized
+
+## Priority: HIGH
+## Constraint: ZERO REGRESSION on existing tests
+
+---
+
+## Two Distinct Problems
+
+### Problem 1: Uploaded File Content Never Enters the Pipeline
+
+**Evidence:** When a user uploads a file and asks "Can you tell me what that attachment is about":
+
+1. Frontend shows `📤 Uploading 1 file(s) for analysis...` — upload appears to succeed
+2. Backend logs show the message arriving: `Input message: Can you tell me what that attachment is about`
+3. Memory retrieval fires (irrelevant system architecture memories)
+4. External lookup engine fires and correctly says "No reliable parseable source"
+5. **NO log line anywhere shows file content being read, parsed, or injected into the prompt**
+6. AI responds: "I can't analyze uploaded attachments"
+
+**The file content simply never makes it into the AI's context.** The capability statement from PR #763 ("You CAN read attachments when provided in context sections below") is correct but there IS no context section with file content.
+
+**Investigation needed:**
+- Where does the frontend send uploaded files? (multipart form data? base64 in JSON? separate upload endpoint?)
+- Where does the backend receive and process uploaded files? Look for multer, busboy, formidable, or manual multipart parsing
+- Where should parsed file content be injected into the prompt context? Look for `documentContext`, `attachmentContent`, `fileContent`, `uploadedDocument` or similar variables
+- Is there middleware that was previously extracting file content that has been disabled or broken?
+- Check `server.js` route handlers for the chat endpoint — is the file data being received at all?
+- Check if there's a separate upload endpoint that should store files and return a reference
+- **This previously worked** — look at git history for any changes to file handling in the last 2-3 months
+
+### Problem 2: External Data Injected as Memory, AI Doesn't Recognize It
+
+**Evidence:** Gold price query:
+- External lookup fails (APIs return 401/403)
+- BUT memory ID:8414 contains `"Pricing: $90,700, $91,047"` from a previous successful lookup
+- This memory gets INJECTED with score 3.085 (highest relevance)
+- Footer shows `(Key details: Pricing: $90,700, $91,047)` — data IS present
+- Eli STILL says "I don't have real-time data access"
+
+**Root cause theory:** The pricing data is injected as MEMORY CONTEXT, but the capability statement says "You CAN access real-time external data (when provided in EXTERNAL DATA sections below)." The AI sees pricing data in memory but doesn't recognize it as "external data" because it's not in an EXTERNAL DATA section. The conditional qualifier is actually making things WORSE.
+
+**Investigation needed:**
+- When external lookup succeeds (like Bitcoin/CoinGecko), how is that data labeled in the prompt? Is it in an `EXTERNAL DATA` section?
+- When external lookup fails and falls back to graceful degradation, the data from memory doesn't match the expected section name
+- The capability statement conditions ("when provided in EXTERNAL DATA sections below") may need to also reference MEMORY CONTEXT sections
+- OR: The graceful degradation should inject data into an EXTERNAL DATA section even when it comes from cached/memory sources
+
+**Compare Bitcoin vs Gold in the logs:**
+- Bitcoin: CoinGecko succeeds → data injected via external context (35 chars) → AI uses it ✅
+- Gold: APIs fail → graceful degradation → old pricing data in MEMORY → AI ignores it ❌
+
+The difference is WHERE the data appears in the prompt, not WHETHER it's there.
+
+---
+
+## What This Means For The Fix
+
+PR #763 was necessary but incomplete:
+- ✅ Fixed commodity query routing (gold queries now go to COMMODITIES sources)
+- ✅ Added capability statements (correct but insufficient)
+- ✅ Added logging (helpful for this diagnosis)
+- ❌ Commodity APIs still fail (need working free APIs or real keys)
+- ❌ File upload content never enters pipeline (separate bug, not related to external lookup)
+- ❌ Capability statement conditions may prevent AI from using data in memory sections
+
+## Recommended Fix Approach
+
+### For Attachments (highest priority):
+1. Trace the file upload path from frontend to backend
+2. Find where file content extraction previously worked
+3. Restore file content injection into the prompt context
+4. Add a `[FILE-CONTENT]` or `[ATTACHMENT]` log line when file content is injected so we can verify
+
+### For External Data Recognition:
+1. Find working free commodity APIs that don't require auth keys (similar to CoinGecko approach)
+2. When graceful degradation provides data from memory, wrap it in an EXTERNAL DATA section header so the AI recognizes it
+3. Consider softening the capability statement conditions — instead of "when provided in EXTERNAL DATA sections below", use "when provided in any context section below including EXTERNAL DATA and MEMORY CONTEXT"
+
+### For Gold Price Specifically:
+The immediate fix is adding real API keys to Railway environment variables:
+- `METALS_API_KEY` for metals-api.com
+- `GOLDAPI_KEY` for goldapi.io
+OR find free alternatives that work like CoinGecko does for crypto.
+
+## Files To Investigate
+- `server.js` — chat endpoint route handler, file upload handling
+- `api/core/orchestrator.js` — prompt assembly, context injection
+- `api/lib/ai-processors.js` — system prompt construction, where context sections are labeled
+- `api/core/intelligence/externalLookupEngine.js` — graceful degradation output format
+- Frontend code — how files are sent in chat requests
+- Any middleware files handling multipart/file uploads
+
+## What NOT To Change
+- Memory storage/retrieval pipeline
+- Mode routing / cross-mode transfer
+- Unicode/compression handling
+- Personality system
+- Any existing test detection logic
+
+## Validation After Fix
+1. Upload a PDF and ask "What is this about?" → AI summarizes the document
+2. Upload an image and ask "What do you see?" → AI describes the image
+3. Ask "What is the current price of gold?" → Returns real-time data (or directs to source with specific URLs)
+4. Ask "What is the price of Bitcoin?" → Returns CoinGecko data (should continue working)
+5. Run SMDEEP v1.2 → maintain 12-14/15
+6. Run 53-Innovation v2.1 → maintain 60-61/61
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
