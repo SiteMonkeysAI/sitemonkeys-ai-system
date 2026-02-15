@@ -78,10 +78,19 @@ export const API_SOURCES = {
   // Graceful degradation will direct users to finance.yahoo.com or similar
   STOCKS: [],
   // COMMODITIES: Using Metals-Live API (free tier, no auth required)
+  // Note: These APIs use free/demo keys with rate limits. For production use:
+  // - Set METALS_API_KEY environment variable for metals-api.com
+  // - Set GOLDAPI_KEY environment variable for goldapi.io
   COMMODITIES: [
     {
       name: 'Metals-Live Gold/Silver API',
-      url: 'https://www.metals-api.com/api/latest?access_key=FREE&base=USD&symbols=XAU,XAG',
+      url: () => {
+        const apiKey = process.env.METALS_API_KEY || 'FREE';
+        if (apiKey === 'FREE') {
+          console.warn('[externalLookupEngine] Using FREE tier for Metals-API. Set METALS_API_KEY for production.');
+        }
+        return `https://www.metals-api.com/api/latest?access_key=${apiKey}&base=USD&symbols=XAU,XAG`;
+      },
       parser: 'json',
       type: 'api',
       extract: (json) => {
@@ -94,13 +103,16 @@ export const API_SOURCES = {
     {
       name: 'Goldapi.io Free Tier',
       buildUrl: (query) => {
+        const apiKey = process.env.GOLDAPI_KEY || 'goldapi-demo-key';
+        if (apiKey === 'goldapi-demo-key') {
+          console.warn('[externalLookupEngine] Using demo key for Goldapi.io. Set GOLDAPI_KEY for production.');
+        }
         const lowerQuery = query.toLowerCase();
         let symbol = 'XAU'; // Gold default
         if (lowerQuery.includes('silver')) symbol = 'XAG';
         if (lowerQuery.includes('platinum')) symbol = 'XPT';
         if (lowerQuery.includes('palladium')) symbol = 'XPD';
-        // Using demo key - replace with actual key if available
-        return `https://www.goldapi.io/api/USD/${symbol}`;
+        return `https://www.goldapi.io/api/${symbol}/${apiKey}`;
       },
       parser: 'json',
       type: 'api',
@@ -768,9 +780,17 @@ export async function performLookup(query, sources, truthType = null) {
 
       try {
         // Build URL if function provided - use cleaned search query
-        const fetchUrl = source.buildUrl ? source.buildUrl(searchQuery) : source.url;
+        // Handle url as function (for dynamic API keys) or buildUrl function
+        let fetchUrl;
+        if (source.buildUrl) {
+          fetchUrl = source.buildUrl(searchQuery);
+        } else if (typeof source.url === 'function') {
+          fetchUrl = source.url(searchQuery);
+        } else {
+          fetchUrl = source.url;
+        }
         
-        // Skip this source if buildUrl returned null (couldn't extract required info)
+        // Skip this source if buildUrl/url returned null (couldn't extract required info)
         if (!fetchUrl) {
           console.log(`[externalLookupEngine] ${source.name} buildUrl returned null - skipping source`);
           continue;

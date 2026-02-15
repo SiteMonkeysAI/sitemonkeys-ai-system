@@ -41,5 +41,7 @@ Optional:
 - `VALIDATION_ENABLED` - Enable validation layer (default: true)
 - `ENABLE_INTELLIGENT_STORAGE` - Enable intelligent memory storage (default: false)
 - `ENABLE_INTELLIGENT_ROUTING` - Enable intelligent category routing (default: false)
+- `METALS_API_KEY` - API key for metals-api.com (commodity prices, optional - uses free tier if not set)
+- `GOLDAPI_KEY` - API key for goldapi.io (commodity prices, optional - uses demo key if not set)
 
 See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete setup instructions.
