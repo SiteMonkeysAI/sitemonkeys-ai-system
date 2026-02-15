@@ -1,0 +1,337 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #776: [claude-fix] COMPREHENSIVE FIX: Injection Pipeline Restoration — All Confirmed Problems
+
+Issue Description:
+# COMPREHENSIVE FIX: Injection Pipeline Restoration — All Confirmed Problems
+
+## Priority: CRITICAL
+## Constraint: ZERO REGRESSION
+## Based on: Dual AI audit (Claude Code #773 + Copilot independent verification) — both confirmed identical findings
+
+---
+
+## CRITICAL INSTRUCTIONS
+
+This issue addresses ALL confirmed high-severity and medium-severity injection pipeline problems in ONE comprehensive fix. This is intentional — piecemeal fixes have caused build/break cycles. This fix must be complete and correct.
+
+### Rules:
+1. **Investigate BEFORE changing** — for each fix below, verify the file:line references are still accurate before editing
+2. **Each fix is independent** — if one fix cannot be completed safely, skip it and note why. Do NOT let one failure block others.
+3. **No refactoring** — only add or modify what is specified. Do not reorganize code, rename variables, or "improve" anything not listed.
+4. **Test after EACH fix** — the system must remain deployable after each individual change
+5. **Total changes should be under 150 lines across all files** — if significantly more is needed, stop and explain why
+
+---
+
+## FIX 1: Add `source_type` labeling to memory storage
+### Severity: 🔴 HIGH — Root cause of Problems #4 AND #8
+### Files: `api/core/orchestrator.js` (memory storage section, ~line 1560-1750)
+
+### Problem:
+When the AI generates a response about a document or external data, that response is stored as a regular memory with no way to distinguish it from a normal user conversation. This causes:
+- Old document analysis competing with new document uploads (Problem #4)
+- Yesterday's Bitcoin price being treated as current data (Problem #8)
+
+### What to do:
+Find where `storeConversation()` or `storeWithSupersession()` is called (~line 1560-1750). At the point where the memory content is being prepared for storage, add a `source_type` tag to the content string itself.
+
+**Do NOT alter the database schema.** Instead, prepend a tag to the stored content:
+
+```javascript
+// Before storing memory, tag the content with its source type
+let contentToStore = aiResponse;
+
+// If this response was about an uploaded document, tag it
+if (context.sources?.hasDocuments) {
+  contentToStore = `[SOURCE:document] ${contentToStore}`;
+}
+
+// If this response used external real-time data, tag it  
+if (context.externalData?.success) {
+  contentToStore = `[SOURCE:external_data:${new Date().toISOString()}] ${contentToStore}`;
+}
+```
+
+This is non-destructive — existing memories are unaffected, and the tag is just a string prefix.
+
+### Then: In memory retrieval, deprioritize stale tagged memories
+
+Find where memories are scored/filtered in the orchestrator (near where `DIAG-NUA1` logs appear, the memory injection section).
+
+When a NEW document is present (`context.sources?.hasDocuments === true`), filter OUT memories tagged with `[SOURCE:document]`:
+
+```javascript
+// If user has uploaded a new document, exclude old document memories
+if (context.sources?.hasDocuments && memory.content?.startsWith('[SOURCE:document]')) {
+  console.log(`[MEMORY-FILTER] Excluding old document memory ID:${memory.id} — new document present`);
+  continue; // skip this memory
+}
+```
+
+When external data was freshly fetched, filter OUT old external data memories:
+
+```javascript
+// If fresh external data available, exclude stale external data memories
+if (context.externalData?.success && memory.content?.startsWith('[SOURCE:external_data:')) {
+  console.log(`[MEMORY-FILTER] Excluding stale external data memory ID:${memory.id} — fresh data available`);
+  continue;
+}
+```
+
+### What NOT to do:
+- Do NOT run ALTER TABLE or change the database schema
+- Do NOT change how memories are retrieved from the database (the SQL query)
+- Do NOT change the semantic similarity scoring
+- Do NOT change cross-category safety checks or the safety boost logic
+- Do NOT change how memories are displayed in the prompt template
+
+---
+
+## FIX 2: Fix document storage key from "latest" to unique ID
+### Severity: 🟡 MEDIUM — Problem #2
+### File: `api/upload-for-analysis.js` (~line 534)
+
+### Problem:
+All uploaded documents are stored with the key `"latest"`, meaning each new upload overwrites the previous one in the backend Map.
+
+### What to do:
+Change the single line:
+```javascript
+// BEFORE (line 534):
+extractedDocuments.set("latest", { ... });
+
+// AFTER:
+const documentKey = `doc_${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9]/g, '_')}`;
+extractedDocuments.set(documentKey, { ... });
+```
+
+Also find where `extractedDocuments.get("latest")` is called in the orchestrator (`orchestrator.js:3356` per audit) and change it to get the MOST RECENT document:
+
+```javascript
+// BEFORE:
+const latestDoc = extractedDocuments.get("latest");
+
+// AFTER:
+// Get the most recently added document from the Map
+let latestDoc = null;
+let latestTimestamp = 0;
+for (const [key, doc] of extractedDocuments.entries()) {
+  if (doc.timestamp > latestTimestamp) {
+    latestTimestamp = doc.timestamp;
+    latestDoc = doc;
+  }
+}
+```
+
+### What NOT to do:
+- Do NOT change the extractedDocuments Map structure or max capacity
+- Do NOT change the auto-cleanup timer (60 seconds, 10 minutes age)
+- Do NOT change the multer configuration
+- Do NOT change the frontend upload handler
+
+---
+
+## FIX 3: Add commodity fallback to Google News RSS
+### Severity: 🟡 MEDIUM — Problems #6 and #7
+### File: `api/core/intelligence/externalLookupEngine.js`
+
+### Problem:
+Precious metals queries (gold, silver) are routed ONLY to Metals-API (401) and Goldapi.io (403). When both fail, the system returns graceful degradation instead of trying Google News RSS, which is free, working, and can provide commodity pricing from news articles.
+
+### What to do:
+Find the `selectSourcesForQuery` function. Find where COMMODITIES type queries are routed. Add Google News RSS as a FALLBACK source for commodity queries:
+
+```javascript
+// In the source selection for COMMODITIES queries, add news RSS as fallback
+// After the existing COMMODITIES sources, add:
+if (queryType === 'COMMODITIES' || query.match(/\b(gold|silver|platinum|palladium|copper|oil|commodity|commodities)\b/i)) {
+  // Try dedicated commodity APIs first (if keys are set)
+  sources.push(...commoditySources);
+  
+  // FALLBACK: Also try Google News RSS — commodity prices are news topics
+  sources.push({
+    name: 'Google News RSS (commodity fallback)',
+    url: () => `https://news.google.com/rss/search?q=${encodeURIComponent(query + ' price today')}&hl=en-US&gl=US&ceid=US:en`,
+    parser: 'rss',
+    type: 'news_fallback'
+  });
+}
+```
+
+**Key principle**: Don't remove the commodity API sources — just add the news fallback AFTER them. If someone later sets real API keys, the dedicated sources will work and the news fallback won't be needed.
+
+### Also: Remove hardcoded fake API keys
+Find lines ~90 and ~115 where `'FREE'` and `'goldapi-demo-key'` are used as fallback values. Change them so if the env var isn't set, the source is SKIPPED entirely rather than making a doomed API call:
+
+```javascript
+// BEFORE:
+const apiKey = process.env.METALS_API_KEY || 'FREE';
+
+// AFTER:
+const apiKey = process.env.METALS_API_KEY;
+if (!apiKey) {
+  console.log('[externalLookupEngine] METALS_API_KEY not set, skipping Metals-API source');
+  // Don't add this source — let it fall through to news fallback
+} else {
+  sources.push(metalsApiSource);
+}
+```
+
+Same pattern for `GOLDAPI_KEY`.
+
+### What NOT to do:
+- Do NOT remove the Metals-API or Goldapi.io source definitions (they work if real keys are provided later)
+- Do NOT change CoinGecko, Wikipedia, Exchange Rates, or Google News RSS configurations
+- Do NOT change the truth type detector or hierarchy router
+- Do NOT change the graceful degradation protocol
+- Do NOT change the TTL cache manager
+
+---
+
+## FIX 4: Add external data to token budget enforcement
+### Severity: 🔴 HIGH — Problem #11
+### File: `api/core/orchestrator.js` (~line 3700-3720 per audit, near `#routeToAI`)
+
+### Problem:
+Token budget calculation accounts for system prompt, memory, vault, and documents — but NOT external data. External data can be up to 15,000 chars (~3,750 tokens). Combined worst case: 8,825 tokens vs 8,192 model limit = 633 tokens over.
+
+### What to do:
+Find where external data is added to the context (in `#buildContextString`, near line 4162-4203 per audit). Add truncation for external data similar to how PR #771 handles document truncation:
+
+```javascript
+// BEFORE external data is injected into prompt string:
+const MAX_EXTERNAL_CHARS = 4000; // ~1000 tokens, leaving room for other sections
+if (externalDataString && externalDataString.length > MAX_EXTERNAL_CHARS) {
+  const originalLength = externalDataString.length;
+  externalDataString = externalDataString.substring(0, MAX_EXTERNAL_CHARS) +
+    '\n\n[External data truncated from ' + originalLength + ' characters to fit token budget.]';
+  console.log(`[EXTERNAL-TRUNCATE] Truncated external data from ${originalLength} to ${MAX_EXTERNAL_CHARS} chars`);
+}
+```
+
+Find the variable name used for external data in `#buildContextString` — it may be `externalContext`, `externalDataStr`, or similar. Apply truncation to THAT variable, following the same pattern as the document truncation at line 4354-4362.
+
+### What NOT to do:
+- Do NOT change the document truncation (PR #771, working)
+- Do NOT change memory truncation or retrieval limits
+- Do NOT change the model selection or API call configuration
+- Do NOT change the vault content loading
+
+---
+
+## FIX 5: Allow document injection alongside vault in Site Monkeys mode
+### Severity: 🟡 MEDIUM — Problem #10
+### File: `api/core/orchestrator.js` (~line 4243)
+
+### Problem:
+In Site Monkeys mode, when vault content is present, an early `return contextStr;` at line 4243 prevents document content from being injected. Users cannot analyze uploaded documents while in Site Monkeys mode.
+
+### What to do:
+Remove the early return. Instead, inject BOTH vault and document content, with vault taking priority for business questions:
+
+```javascript
+// BEFORE (line 4243):
+return contextStr;  // <-- This prevents documents from being injected
+
+// AFTER:
+// Don't return early — continue to document injection section below
+// Vault content is already in contextStr, documents will be added after
+```
+
+If the early return is needed for a different reason, instead add a conditional:
+
+```javascript
+// Only skip document injection if there's no document uploaded
+if (!context.sources?.hasDocuments) {
+  return contextStr;
+}
+// Otherwise, fall through to add document content alongside vault
+```
+
+### What NOT to do:
+- Do NOT change how vault content is loaded or formatted
+- Do NOT change vault priority for business policy claims
+- Do NOT change the vault template or section headers
+- Do NOT change mode routing logic
+
+---
+
+## WHAT MUST NOT BE CHANGED (across all fixes)
+
+These systems are WORKING correctly per both audits. Do NOT touch them:
+
+- ✅ Memory retrieval semantic scoring (cosine similarity)
+- ✅ Cross-category safety checks (allergy checking on restaurant queries)
+- ✅ Safety boost (+0.25 for health/allergy memories)
+- ✅ Early classification optimization (skip memory for greetings)
+- ✅ Numerical data extraction
+- ✅ Truth type detector (Stage 1 deterministic rules)
+- ✅ Hierarchy router (business policy vs objective factual)
+- ✅ TTL cache manager
+- ✅ CoinGecko, Google News RSS, Wikipedia, Exchange Rates API configurations
+- ✅ Graceful degradation three-step protocol (DISCLOSE → PROVIDE → PATH)
+- ✅ Frontend upload handler and hourglass button
+- ✅ Multer configuration (PR #769)
+- ✅ Document truncation (PR #771)
+- ✅ Unicode/compression handling (PR #759, #761)
+- ✅ Test detection logic
+- ✅ Mode routing and personality switching
+- ✅ Prompt section headers and template formatting
+- ✅ Cross-mode transfer logic
+
+---
+
+## VALIDATION AFTER ALL FIXES
+
+### Document pipeline:
+1. Upload Document A → AI analyzes Document A ✅
+2. Upload Document B → AI analyzes Document B (NOT A) ✅
+3. Upload document in Site Monkeys mode → AI analyzes document (vault still present for business questions) ✅
+4. Upload large document → truncated with notice, no crash ✅
+
+### External data pipeline:
+5. "What's the price of Bitcoin?" → CoinGecko returns data, AI gives confident answer ✅
+6. "What's the price of gold?" → Falls back to Google News RSS, AI provides best available info ✅
+7. "What's in the news about Trump?" → Google News RSS returns data ✅
+8. No `context_length_exceeded` errors even with external data + memory + documents ✅
+
+### Memory pipeline:
+9. Upload new document → old document memories NOT injected alongside new content ✅
+10. Fresh external data available → stale external data memories NOT injected ✅
+11. Normal conversation memories → work exactly as before ✅
+12. Cross-category safety checks → still fire for restaurant/allergy queries ✅
+
+### Test suites:
+13. 53-innovation suite → maintain 60/61 (98%) ✅
+14. SMDEEP → maintain 12-14/15 (80-93%) ✅
+
+---
+
+## IMPLEMENTATION ORDER
+
+1. Fix 4 first (token budget) — prevents crashes, lowest risk
+2. Fix 3 second (commodity fallback) — adds capability, no existing code modified
+3. Fix 1 third (source_type tagging) — fixes the two high-severity memory problems
+4. Fix 2 fourth (document key) — prevents document overwrites
+5. Fix 5 last (vault + document) — changes control flow, highest risk
+
+If any fix cannot be completed safely, SKIP IT and document why. The other fixes should still be applied independently.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

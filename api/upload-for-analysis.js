@@ -526,12 +526,16 @@ async function handleAnalysisUpload(req, res) {
     };
 
     // Store extracted content for chat system access
+    // ISSUE #776 FIX 2: Use unique key instead of "latest" to prevent overwrites
     results.forEach((file) => {
       if (file.contentExtracted) {
         const documentId = `${Date.now()}_${file.filename}`;
         const timestamp = new Date().toISOString();
-        
-        extractedDocuments.set("latest", {
+
+        // Create unique key for each document instead of overwriting "latest"
+        const documentKey = `doc_${Date.now()}_${file.filename.replace(/[^a-zA-Z0-9]/g, '_')}`;
+
+        extractedDocuments.set(documentKey, {
           id: documentId,
           filename: file.filename,
           content: file.docxAnalysis.preview,
@@ -543,7 +547,7 @@ async function handleAnalysisUpload(req, res) {
         });
 
         console.log(
-          `[${timestamp}] [STORAGE] Stored document for chat: ${file.filename} (${file.docxAnalysis.wordCount} words, ${file.docxAnalysis.fullText.length} chars)`,
+          `[${timestamp}] [STORAGE] Stored document with key "${documentKey}" for chat: ${file.filename} (${file.docxAnalysis.wordCount} words, ${file.docxAnalysis.fullText.length} chars)`,
         );
       }
     });

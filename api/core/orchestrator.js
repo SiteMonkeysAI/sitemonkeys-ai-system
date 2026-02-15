@@ -2104,6 +2104,15 @@ export class Orchestrator {
         },
         reasoning_escalation: reasoningEscalationResult,
         response_contract: response_contract,
+
+        // ISSUE #776 FIX 1: Source tracking for memory tagging
+        // This information tells server.js whether to tag stored memories with source types
+        sources: {
+          hasDocuments: context.sources?.hasDocuments || false,
+          hasExternal: context.sources?.hasExternal || false,
+          hasVault: context.sources?.hasVault || false,
+          hasMemory: context.sources?.hasMemory || false,
+        },
       };
     } catch (error) {
       this.error(`Request failed: ${error.message}`, error);
@@ -2371,6 +2380,38 @@ export class Orchestrator {
         }
         
         memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
+
+        // ISSUE #776 FIX 1: Filter out stale source-tagged memories when fresh data is available
+        // When a NEW document is uploaded, exclude old document analysis memories
+        // When fresh external data is fetched, exclude stale external data memories
+        const hasNewDocument = context.sources?.hasDocuments;
+        const hasFreshExternalData = context.sources?.hasExternal;
+
+        if (hasNewDocument || hasFreshExternalData) {
+          const originalCount = memoriesToFormat.length;
+          memoriesToFormat = memoriesToFormat.filter((memory) => {
+            const content = memory.content || '';
+
+            // If user has uploaded a new document, exclude old document memories
+            if (hasNewDocument && content.startsWith('[SOURCE:document]')) {
+              console.log(`[MEMORY-FILTER] Excluding old document memory ID:${memory.id} — new document present`);
+              return false;
+            }
+
+            // If fresh external data available, exclude stale external data memories
+            if (hasFreshExternalData && content.startsWith('[SOURCE:external_data:')) {
+              console.log(`[MEMORY-FILTER] Excluding stale external data memory ID:${memory.id} — fresh data available`);
+              return false;
+            }
+
+            return true; // Keep all other memories
+          });
+
+          const filteredCount = originalCount - memoriesToFormat.length;
+          if (filteredCount > 0) {
+            console.log(`[MEMORY-FILTER] Filtered out ${filteredCount} stale source-tagged memories`);
+          }
+        }
 
         const memoriesPostCap = memoriesToFormat.length;
 
@@ -2677,8 +2718,18 @@ export class Orchestrator {
         this.log("[DOCUMENTS] Found document in documentContext parameter");
       }
       // Priority 2: Check extractedDocuments Map (uploaded files)
+      // ISSUE #776 FIX 2: Get the most recently added document from the Map
       else {
-        const latestDoc = extractedDocuments.get("latest");
+        // Find the most recent document by iterating through the Map
+        let latestDoc = null;
+        let latestTimestamp = 0;
+        for (const [key, doc] of extractedDocuments.entries()) {
+          if (doc.timestamp > latestTimestamp) {
+            latestTimestamp = doc.timestamp;
+            latestDoc = doc;
+          }
+        }
+
         if (latestDoc) {
           documentContent = latestDoc.fullContent || latestDoc.content;
           filename = latestDoc.filename || filename;
@@ -4162,6 +4213,39 @@ export class Orchestrator {
     // ========== PHASE 4: INJECT EXTERNAL DATA FIRST (IF AVAILABLE) ==========
     if (context.sources?.hasExternal && context.external) {
       const externalData = context.external;
+
+      // CRITICAL FIX (Issue #776, Fix 4): Truncate external data to fit token budget
+      // Token budget: 8192 total - system prompt, memory, documents, etc.
+      // Safe limit: 4000 chars (~1000 tokens) for external data to prevent context_length_exceeded
+      const MAX_EXTERNAL_CHARS = 4000;
+      let totalExternalChars = 0;
+      let truncatedSources = [];
+      let wasTruncated = false;
+
+      if (externalData.sources && externalData.sources.length > 0) {
+        for (const source of externalData.sources) {
+          const sourceText = source.text || '';
+          if (totalExternalChars + sourceText.length <= MAX_EXTERNAL_CHARS) {
+            truncatedSources.push(source);
+            totalExternalChars += sourceText.length;
+          } else {
+            const remainingChars = MAX_EXTERNAL_CHARS - totalExternalChars;
+            if (remainingChars > 200) {
+              // Include partial source if there's meaningful space left
+              truncatedSources.push({
+                ...source,
+                text: sourceText.substring(0, remainingChars) + '\n\n[Source truncated to fit token budget]',
+                length: remainingChars
+              });
+              totalExternalChars = MAX_EXTERNAL_CHARS;
+            }
+            wasTruncated = true;
+            console.log(`[EXTERNAL-TRUNCATE] Truncated external data at source ${truncatedSources.length + 1}/${externalData.sources.length}, total: ${totalExternalChars} chars`);
+            break;
+          }
+        }
+      }
+
       contextStr += `
 ═══════════════════════════════════════════════════════════════
 🌐 EXTERNAL REAL-TIME DATA - VERIFIED FROM AUTHORITATIVE SOURCES
@@ -4172,14 +4256,14 @@ Use this information to provide accurate, up-to-date answers.
 
 Query: ${externalData.query}
 Retrieved: ${externalData.timestamp}
-Total sources: ${externalData.sources?.length || 0}
-Total text: ${externalData.total_text_length} characters
+Total sources: ${externalData.sources?.length || 0}${wasTruncated ? ' (truncated to fit token budget)' : ''}
+Total text: ${totalExternalChars} characters${wasTruncated ? ' (limited from ' + externalData.total_text_length + ')' : ''}
 
 `;
 
-      // Include text from each source
-      if (externalData.sources && externalData.sources.length > 0) {
-        externalData.sources.forEach((source, idx) => {
+      // Include text from each source (now using truncated sources)
+      if (truncatedSources.length > 0) {
+        truncatedSources.forEach((source, idx) => {
           contextStr += `
 ────────────────────────────────────────────────────────────────
 SOURCE ${idx + 1}: ${source.source}
@@ -4281,7 +4365,13 @@ When using this memory context, a caring family member would naturally apply tem
 `;
       }
 
-      return contextStr;
+      // ISSUE #776 FIX 5: Allow document injection alongside vault in Site Monkeys mode
+      // Only skip document injection if there's no document uploaded
+      // This allows users to analyze documents while in Site Monkeys mode
+      if (!context.sources?.hasDocuments) {
+        return contextStr;
+      }
+      // Otherwise, fall through to add document content alongside vault
     }
 
     // ========== FALLBACK: NO VAULT - USE DOCUMENTS AND MEMORY ==========
