@@ -3319,20 +3319,14 @@ export class Orchestrator {
    * CRITICAL: Must be called before AI routing to prevent token overflow
    */
   #enforceTokenBudget(memory, documents, vault) {
-    // ISSUE #784 FIX: Reduce token budget to fit GPT-4's 8K context window
-    // GPT-4 context: 8,192 tokens total
-    // Budget breakdown:
-    // - System prompt: ~1,500 tokens
-    // - User message: ~200 tokens
-    // - Conversation history: ~300 tokens
-    // - External data (Phase 4): ~500 tokens
-    // - Buffer for output: ~200 tokens
-    // = ~2,700 tokens reserved, leaving ~5,500 for memory/docs/vault
+    // Token budget for context sources
+    // Large contexts (>6K tokens) auto-escalate to Claude (200K window)
+    // GPT-4 queries stay under 6K context to fit 8K window with 2K output buffer
     const BUDGET = {
-      MEMORY: 1500,      // Reduced from 2500
-      DOCUMENTS: 2000,   // Reduced from 3000
-      VAULT: 2000,       // Reduced from 9000 (vault queries should use Claude)
-      TOTAL: 5500,       // Reduced from 15000 to fit GPT-4's 8K window
+      MEMORY: 2500,      // Bible spec: memory extraction targets up to 2,400 tokens
+      DOCUMENTS: 3000,   // Bible spec: document handling supports up to 10K tokens
+      VAULT: 9000,       // Vault queries auto-route to Claude (has 200K window)
+      TOTAL: 15000,      // Large contexts trigger Claude escalation at 6K threshold
     };
 
     // Enforce memory budget (≤2,500 tokens)
@@ -3700,7 +3694,9 @@ export class Orchestrator {
       }
 
       // PRIORITY 2: Token budget check (high token count prefers Claude)
-      if (context.totalTokens > 10000) {
+      // ISSUE #784 FIX: Lower threshold from 10K to 6K to prevent GPT-4 context overflow
+      // GPT-4 has 8K context (6K input + 2K output). Queries >6K route to Claude (200K window)
+      if (context.totalTokens > 6000) {
         useClaude = true;
         routingReason.push(`high_token_count:${context.totalTokens}`);
       }
