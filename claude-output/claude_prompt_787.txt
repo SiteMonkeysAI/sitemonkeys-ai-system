@@ -1,0 +1,168 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #787: [claude-fix] 🔴 CRITICAL: Claude Escalation Threshold Checks Wrong Token Count — Ghost Errors Continue
+
+Issue Description:
+# 🔴 CRITICAL: Claude Escalation Threshold Checks Wrong Token Count — Ghost Errors Continue
+
+## Context
+
+PR #785 correctly identified GPT-4's 8K context window as the root cause of ghost errors. The fix lowered the Claude escalation threshold from 10K to 6K tokens. **But the ghost errors continue because the escalation check only counts context tokens (memory + documents + vault), NOT the full payload sent to GPT-4.**
+
+The escalation never triggers because context tokens alone are always under 6K. The system prompt, external data, conversation history, and user message — which together add 2,500-3,000+ tokens — are invisible to the escalation check.
+
+## Evidence From Live Testing (Feb 16, 2026 — Post PR #785)
+
+### Queries that FAILED (ghost error returned):
+
+**Platinum price query:**
+```
+Context assembly: Memory 2489t + Documents 20t = 2,509t  ← Under 6K, no escalation
+Pre-flight breakdown: system=2550t, context=3670t, external=225t, message=13t = ~6,458t total
+Result: "I encountered a technical issue"
+```
+
+**Oil price query:**
+```
+Pre-flight breakdown: system=2550t, context=3660t, external=217t, message=11t = ~6,438t total
+Result: "I encountered a technical issue"
+```
+
+**Silver price query:**
+```
+Pre-flight breakdown: system=2550t, context=3660t, external=219t, message=9t = ~6,438t total
+Result: "I encountered a technical issue"
+```
+
+### Query that SUCCEEDED:
+
+**Bitcoin price query:**
+```
+External data: CoinGecko returned only 35 chars (vs 700+ chars for commodity RSS)
+Result: Successfully returned price of $67,898
+```
+
+### The Pattern
+Every commodity query fetches ~700-750 chars from Google News RSS. Bitcoin fetches 35 chars from CoinGecko. The large RSS payloads push the TOTAL over GPT-4's limit. The small CoinGecko payload doesn't. But the escalation check never sees this because it only looks at `context.totalTokens`.
+
+## Root Cause
+
+**Line 3698 (approx) in orchestrator.js:**
+```javascript
+if (context.totalTokens > 6000) {
+  useClaude = true;
+  routingReason.push(`high_token_count:${context.totalTokens}`);
+}
+```
+
+`context.totalTokens` only includes memory + documents + vault. It does NOT include:
+- System prompt (~2,550 tokens)
+- External data (0-225 tokens depending on query)
+- User message (variable)
+- Conversation history (variable, grows over session)
+
+For the failing queries:
+- `context.totalTokens` = ~2,509 (under 6K threshold — no escalation)
+- Actual total sent to GPT-4 = ~6,458 (over GPT-4's safe input limit)
+
+The escalation check passes, the query goes to GPT-4, GPT-4 rejects it, the user gets the ghost error.
+
+## Required Fix
+
+### Fix 1: Escalation Check Must Use Full Payload Estimate
+
+The Claude escalation decision must account for ALL tokens that will be sent to GPT-4, not just context. Calculate the full estimated payload BEFORE deciding which model to use:
+
+```
+fullEstimate = systemPromptTokens + context.totalTokens + externalDataTokens + messageTokens + historyTokens
+```
+
+If `fullEstimate` exceeds GPT-4's safe input limit (~6,000 tokens, reserving 2K for output), escalate to Claude.
+
+### Fix 2: Pre-flight Must Actually Block, Not Just Log
+
+The pre-flight check added in PR #785 is calculating the breakdown correctly:
+```
+[AI-PREFLIGHT] Breakdown: system=2550t, context=3670t, external=225t, message=13t, history=0t
+```
+
+But the query STILL goes to GPT-4 and fails. The pre-flight is logging but not blocking. If the pre-flight detects the total exceeds the model's limit, it must either:
+- Route to Claude instead, OR
+- Truncate context to fit, OR
+- Return a clear error BEFORE hitting the API
+
+Currently it does none of these — it logs and proceeds to fail.
+
+### Fix 3: Move Escalation Decision AFTER External Data Is Known
+
+The current flow appears to be:
+```
+1. Assemble context (memory + docs + vault)
+2. Check escalation threshold ← HERE (only sees context)
+3. Fetch external data
+4. Build full prompt
+5. Pre-flight check ← Sees full total but doesn't block
+6. Send to GPT-4 ← Fails
+```
+
+The escalation decision happens at step 2, before external data is fetched at step 3. So external data tokens are invisible to the escalation check. Either:
+- Move the escalation decision to AFTER external data is assembled, OR
+- Make the pre-flight check (step 5) capable of rerouting to Claude when it detects overflow
+
+## Investigation Requirements
+
+Before implementing, verify:
+
+- [ ] **Where exactly is the escalation decision made?** Find the exact line where `useClaude` is set based on token count. Confirm it only sees `context.totalTokens`.
+- [ ] **Where is the pre-flight check?** Confirm it logs but doesn't block or reroute. Find what happens after the log line — does execution continue to the GPT-4 API call regardless?
+- [ ] **What is the actual GPT-4 error?** The enhanced error logging from PR #785 Fix 1 should now capture the actual API error. Check Railway logs for the failed platinum/oil/silver queries — what error did OpenAI return? Is it `context_length_exceeded`, `rate_limit`, or something else?
+- [ ] **Is the system prompt really 2,550 tokens?** The pre-flight says `system=2550t`. Verify this is accurate. If the system prompt is even larger than estimated, the safe threshold needs to be lower.
+- [ ] **Does conversation history accumulate?** The pre-flight shows `history=0t` for these queries. But in longer sessions, does history grow? If so, queries that work early in a session could fail later as history accumulates.
+
+## Fix Standards
+
+Same as previous issues — non-negotiable:
+- ES6 modules only
+- Zero regression (simple queries must still go to GPT-4 for cost efficiency)
+- Align with the Bible (GPT-4 primary, Claude for escalation — the routing architecture already exists, it just needs the right trigger)
+- Log the routing decision so we can verify in Railway logs which model was chosen and why
+- Do NOT reduce token budgets — the budgets are correct per the Bible specs, the routing needs to handle them
+
+## What Success Looks Like
+
+After this fix:
+- Platinum/oil/silver price queries route to Claude and return real answers
+- Bitcoin continues to route to GPT-4 (small payload, fits fine)
+- Simple memory queries continue to route to GPT-4 (small payload)
+- Document analysis with large documents routes to Claude
+- Railway logs show `[ESCALATION] Routing to Claude: fullEstimate=6458t exceeds GPT-4 limit of 6000t`
+- Zero ghost errors for queries that have valid external data
+
+## Reference
+
+- PR #785 pre-flight logging proves the token math
+- Bible: AI routing architecture (GPT-4 primary, Claude escalation)
+- GPT-4 model: 8,192 token context window (confirmed in code as model string `"gpt-4"`)
+- Claude model: 200K context window
+
+---
+
+*The diagnosis was right. The threshold change was right in principle. But the check looks at the wrong number. Fix the calculation, and every query currently failing will route to Claude and succeed.*
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

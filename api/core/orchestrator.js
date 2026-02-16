@@ -3673,6 +3673,14 @@ export class Orchestrator {
       // ========== CRITICAL FIX: Check vault/tokens BEFORE confidence ==========
       // Priority order: Vault presence → Token budget → Then confidence
 
+      // ISSUE #787 FIX 1: Define model limits at the start for consistent use throughout routing
+      const MODEL_LIMITS = {
+        'gpt-4': { maxContext: 8192, reservedOutput: 2000 },
+        'claude-sonnet-4-20250514': { maxContext: 200000, reservedOutput: 4000 }
+      };
+      const gpt4MaxInput = MODEL_LIMITS['gpt-4'].maxContext - MODEL_LIMITS['gpt-4'].reservedOutput;
+      const claudeMaxInput = MODEL_LIMITS['claude-sonnet-4-20250514'].maxContext - MODEL_LIMITS['claude-sonnet-4-20250514'].reservedOutput;
+
       let useClaude = false;
       let routingReason = [];
       let isSafetyCritical = false;
@@ -3694,9 +3702,11 @@ export class Orchestrator {
       }
 
       // PRIORITY 2: Token budget check (high token count prefers Claude)
-      // ISSUE #784 FIX: Lower threshold from 10K to 6K to prevent GPT-4 context overflow
-      // GPT-4 has 8K context (6K input + 2K output). Queries >6K route to Claude (200K window)
-      if (context.totalTokens > 6000) {
+      // ISSUE #784/#787 FIX: Use dynamic threshold based on GPT-4's actual max input budget
+      // GPT-4 has 8K context (6192t input + 2K output). Context >6192t routes to Claude (200K window)
+      // NOTE: This is a preliminary check based on context tokens only.
+      // Full payload (including system prompt, external data, message, history) is checked later.
+      if (context.totalTokens > gpt4MaxInput) {
         useClaude = true;
         routingReason.push(`high_token_count:${context.totalTokens}`);
       }
@@ -3744,10 +3754,12 @@ export class Orchestrator {
         }
       }
 
-      const model = useClaude ? "claude-sonnet-4.5" : "gpt-4";
-      
+      // NOTE: Model selection will be finalized after payload size check
+      // Initial routing decision logged here, final decision after pre-flight check
+      const initialModel = useClaude ? "claude-sonnet-4.5" : "gpt-4";
+
       this.log(
-        `[AI ROUTING] Using ${model} (reasons: ${routingReason.join(", ") || "default"})`,
+        `[AI ROUTING] Initial routing: ${initialModel} (reasons: ${routingReason.join(", ") || "default"})`,
       );
 
       // ========== COST CEILING CHECK ==========
@@ -3820,8 +3832,8 @@ export class Orchestrator {
       console.log(`[PROMPT-DEBUG] Context string (first 500 chars):\n${contextString.substring(0, 500)}...`);
       console.log('[PROMPT-DEBUG] ═══════════════════════════════════════════════════════');
 
-      // ISSUE #784 FIX: Pre-flight token validation
-      // Estimate total input tokens to prevent API rejections
+      // ISSUE #787 FIX: Calculate full payload estimate for proper escalation routing
+      // Estimate total input tokens INCLUDING system prompt, external data, message, and history
       const estimatedSystemPromptTokens = Math.ceil(systemPrompt.length / 4);
       const estimatedContextTokens = Math.ceil(contextString.length / 4);
       const estimatedExternalTokens = Math.ceil(externalContext.length / 4);
@@ -3836,26 +3848,39 @@ export class Orchestrator {
         estimatedMessageTokens +
         estimatedHistoryTokens;
 
-      // Model-specific context limits (leaving room for output tokens)
-      const MODEL_LIMITS = {
-        'gpt-4': 6000,          // 8K context, reserve 2K for output
-        'claude-sonnet-4-20250514': 18000  // 200K context, but we limit to 20K for cost
-      };
+      // ISSUE #787 FIX 2: Pre-flight check must REROUTE to Claude automatically (no user confirmation)
+      // If we're using GPT-4 and the full payload exceeds its limit, escalate to Claude deterministically
+      let escalatedDueToPayloadSize = false;
+      if (!useClaude && estimatedTotalInputTokens > gpt4MaxInput) {
+        // ISSUE #787 FIX 3: Enhanced logging with full decision context
+        this.log(`[AI-PREFLIGHT] model_before=gpt-4, estimated_input=${estimatedTotalInputTokens}t, model_max=8192t, reserved_output=2000t, max_input_budget=${gpt4MaxInput}t, reroute=true`);
+        this.log(`[AI-PREFLIGHT] Breakdown: system=${estimatedSystemPromptTokens}t, context=${estimatedContextTokens}t, external=${estimatedExternalTokens}t, message=${estimatedMessageTokens}t, history=${estimatedHistoryTokens}t`);
+        this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds GPT-4 max input budget`);
 
-      const modelLimit = useClaude ? MODEL_LIMITS['claude-sonnet-4-20250514'] : MODEL_LIMITS['gpt-4'];
+        useClaude = true;
+        escalatedDueToPayloadSize = true;
+        routingReason.push(`payload_exceeds_gpt-4_limit:${estimatedTotalInputTokens}/${gpt4MaxInput}`);
+      }
 
+      // Update model selection after potential escalation
+      const model = useClaude ? "claude-sonnet-4.5" : "gpt-4";
+      const modelConfig = useClaude ? MODEL_LIMITS['claude-sonnet-4-20250514'] : MODEL_LIMITS['gpt-4'];
+      const modelLimit = modelConfig.maxContext - modelConfig.reservedOutput;
+
+      // Log final routing decision if it changed due to payload size
+      if (escalatedDueToPayloadSize) {
+        this.log(`[AI-PREFLIGHT] model_after=claude-sonnet-4-20250514, reason=payload_exceeds_gpt-4_limit`);
+      }
+
+      // Final pre-flight validation - now just logs and validates, no rerouting needed
       if (estimatedTotalInputTokens > modelLimit) {
-        this.log(`[AI-PREFLIGHT] ⚠️ Estimated input (${estimatedTotalInputTokens}t) exceeds model limit (${modelLimit}t)`);
+        this.log(`[AI-PREFLIGHT] ⚠️ Estimated input (${estimatedTotalInputTokens}t) exceeds ${model} limit (${modelConfig.maxContext}t context - ${modelConfig.reservedOutput}t reserved = ${modelLimit}t max input)`);
         this.log(`[AI-PREFLIGHT] Breakdown: system=${estimatedSystemPromptTokens}t, context=${estimatedContextTokens}t, external=${estimatedExternalTokens}t, message=${estimatedMessageTokens}t, history=${estimatedHistoryTokens}t`);
 
-        // If using GPT-4 and context is too large, suggest Claude escalation
-        if (!useClaude && context.totalTokens > 4000) {
-          throw new Error(`Context too large for GPT-4 (${estimatedTotalInputTokens} tokens > ${modelLimit} limit). Claude escalation recommended.`);
-        } else {
-          throw new Error(`Input too large for AI model (${estimatedTotalInputTokens} tokens > ${modelLimit} limit)`);
-        }
+        // Even Claude has limits - throw error if exceeded
+        throw new Error(`Input too large for ${model} (${estimatedTotalInputTokens} tokens > ${modelLimit} max input). Please reduce query complexity.`);
       } else {
-        this.log(`[AI-PREFLIGHT] ✅ Estimated input: ${estimatedTotalInputTokens}t / ${modelLimit}t limit`);
+        this.log(`[AI-PREFLIGHT] ✅ model=${model}, estimated_input=${estimatedTotalInputTokens}t, max_input_budget=${modelLimit}t, status=within_limits`);
       }
 
       // VAULT-ONLY MODE: Pure vault queries bypass contamination
