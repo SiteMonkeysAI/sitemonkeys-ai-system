@@ -2042,26 +2042,13 @@
               mode: getCurrentMode(),
               vault_loaded: isVaultMode(),
               vault_content: vaultContent,
-              document_context:
+              documentContext:
                 extractedDocuments.length > 0 &&
                 (text.toLowerCase().includes("analyze") ||
                   text.toLowerCase().includes("document"))
-                  ? {
-                      filename:
-                        extractedDocuments[extractedDocuments.length - 1]
-                          .filename,
-                      content:
-                        extractedDocuments[extractedDocuments.length - 1]
-                          .fullContent ||
-                        extractedDocuments[extractedDocuments.length - 1]
-                          .content,
-                      contentType:
-                        extractedDocuments[extractedDocuments.length - 1]
-                          .contentType,
-                      wordCount:
-                        extractedDocuments[extractedDocuments.length - 1]
-                          .wordCount,
-                    }
+                  ? extractedDocuments[extractedDocuments.length - 1]
+                      .fullContent ||
+                    extractedDocuments[extractedDocuments.length - 1].content
                   : null,
             }),
           });

@@ -315,6 +315,10 @@ const NEWS_STRUCTURE_PATTERNS = [
   // "What's happening with X" variants
   /\b(news|situation|update|happening|development)\s+(with|about|regarding|on|in)\b/i,
 
+  // ISSUE #779 FIX: "X in the news" patterns (e.g., "Trump's been in the news")
+  /\bin\s+the\s+(news|headlines|media)\b/i,
+  /\bmade\s+(news|headlines)\b/i,
+
   // Current event queries
   /\b(current\s+events?|breaking|this\s+morning|today|yesterday|just\s+now)\b/i,
 
@@ -738,6 +742,16 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   // Wikipedia ONLY for PERMANENT definition/history queries, NOT high-stakes
   if (truthType === TRUTH_TYPES.PERMANENT && !highStakesResult?.isHighStakes) {
     return AUTHORITATIVE_SOURCES.GENERAL;
+  }
+
+  // ISSUE #779 FIX: General fallback for VOLATILE/SEMI_STABLE queries
+  // If no specific category matched but query has freshness/current markers, try news
+  // This catches queries like "what's happening with X" that didn't match specific patterns
+  if ((truthType === TRUTH_TYPES.VOLATILE || truthType === TRUTH_TYPES.SEMI_STABLE) &&
+      (lowerQuery.match(/\b(current|latest|recent|now|today)\b/i) ||
+       lowerQuery.match(/\bwhat'?s\b/i))) {
+    console.log('[externalLookupEngine] Using news fallback for volatile/semi-stable query with freshness markers');
+    return API_SOURCES.NEWS;
   }
 
   // No reliable source available - return empty, trigger graceful degradation

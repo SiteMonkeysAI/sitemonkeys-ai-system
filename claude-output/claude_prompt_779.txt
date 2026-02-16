@@ -1,0 +1,275 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #779: [claude-fix] FIX: Document Upload Pipeline Broken + News Query Routing Missing
+
+Issue Description:
+# FIX: Document Upload Pipeline Broken + News Query Routing Missing
+
+## Priority: CRITICAL
+## Constraint: ZERO REGRESSION — all existing working systems MUST remain untouched
+## Evidence: Railway logs from 2026-02-15T23:30-23:32 show 6 consecutive queries, all producing `[DOCUMENTS] No document found in storage`
+
+---
+
+## CRITICAL INSTRUCTIONS
+
+The previous audit (#773) and comprehensive fix (#776) addressed token budgets, memory tagging, commodity fallback, document key naming, and vault+document coexistence. Those fixes are correct and must NOT be reverted or modified.
+
+However, the audit traced code paths on paper without verifying the RUNTIME data flow. This issue addresses the TWO remaining broken pipelines that were missed:
+
+1. **Document content never reaches the AI** — uploads show in UI but produce `Documents: 0 chars` every time
+2. **General news/current events queries get no external data** — "Trump news" returns `No reliable parseable source available`
+
+### Approach for this issue:
+This is NOT a "fix what you think is wrong" issue. This is a DIAGNOSTIC-FIRST issue.
+
+**PHASE 1: Diagnose (READ ONLY — no code changes)**
+- Trace the ACTUAL runtime flow for document uploads
+- Trace the ACTUAL runtime flow for news queries
+- Document exactly where each pipeline breaks with file:line references
+- Explain WHY it breaks
+
+**PHASE 2: Fix (ONLY after Phase 1 is complete)**
+- Fix ONLY the specific breakpoints identified in Phase 1
+- Minimal changes — under 50 lines per fix
+- Each fix must be independently testable
+
+---
+
+## PROBLEM 1: Document Upload Content Never Reaches AI
+
+### Evidence from Railway logs:
+```
+[ORCHESTRATOR] [DOCUMENTS] No document found in storage
+[ORCHESTRATOR] [DOCUMENTS] No document available
+[CONTEXT] Assembling context - Memory: 9881 chars, Documents: 0 chars, Vault: 0 chars
+```
+This appears for EVERY query, even immediately after `System: 📤 Uploading 1 file(s) for analysis...` confirms the frontend sent a file.
+
+### What the audit found (but didn't verify at runtime):
+The audit traced this path:
+1. Frontend: User clicks hourglass → `handleAnalysisUpload()` → POST to `/api/upload-for-analysis`
+2. Backend: Multer receives file → extracts text → stores in `extractedDocuments` Map
+3. Chat: POST to `/api/chat` with `documentContext` parameter → orchestrator reads it
+
+### What you MUST investigate (Phase 1):
+
+**STEP 1: Does the upload endpoint even receive the file?**
+- File: `api/upload-for-analysis.js`
+- Search the Railway logs for ANY output from this file during the test window (23:30-23:32 UTC)
+- Expected: `[STORAGE] Stored document with key "doc_..." for chat: filename.docx`
+- If this log line is MISSING, the upload request is never reaching the backend
+- Check: Is the upload route correctly registered in `server.js`? What path? Is multer middleware applied?
+
+**STEP 2: If the upload endpoint DOES receive the file, does it store content in the extractedDocuments Map?**
+- File: `api/upload-for-analysis.js` — find the `extractedDocuments` Map (module-level variable)
+- PR #776 changed the key from `"latest"` to `doc_${timestamp}_${filename}` — verify this Map.set() is actually executing
+- Add a temporary log: `console.log('[UPLOAD-DEBUG] extractedDocuments Map size:', extractedDocuments.size, 'keys:', [...extractedDocuments.keys()]);`
+
+**STEP 3: How does document content get from the upload response to the chat request?**
+This is the MOST LIKELY break point. The upload and chat are SEPARATE HTTP requests:
+- Upload: POST `/api/upload-for-analysis` → returns extracted content to frontend
+- Chat: POST `/api/chat` → needs document content passed as `documentContext` parameter
+
+- File: `public/index.html` — find `handleAnalysisUpload()` function (audit says line ~1621-1679)
+- TRACE EXACTLY what happens to the upload response:
+  - Does the frontend store the extracted content in a variable?
+  - When the user sends the next chat message, does `sendMessage()` include `documentContext` in the request body?
+  - What is the exact field name used? (`documentContext`, `document_context`, `documentContent`?)
+  
+- File: `server.js` — find the `/api/chat` route handler
+  - What field name does it read from `req.body`? (`documentContext`, `document_context`?)
+  - Does it pass this to the orchestrator?
+  - Is there a MISMATCH between what the frontend sends and what the backend reads?
+
+**STEP 4: Does the orchestrator's `#loadDocumentContext` method receive the parameter?**
+- File: `api/core/orchestrator.js` — find `#loadDocumentContext` method (audit says ~line 3325-3440)
+- The method checks TWO sources per the audit:
+  1. The `documentContext` parameter passed from server.js
+  2. The `extractedDocuments` Map (server-side storage)
+- If BOTH are empty, it logs `[DOCUMENTS] No document found in storage`
+- Add diagnostic logging at the ENTRY of this method showing what it received
+
+**STEP 5: Is there a contract validator interfering?**
+- The project knowledge shows a `runtime-contract-validation.js` with recovery strategies for `invalid_document_context`
+- File: Find where this validator runs on the chat endpoint
+- Check: Is the validator STRIPPING or TRANSFORMING the documentContext before it reaches the orchestrator?
+- Check: Is the validator rejecting the documentContext and the error is being silently swallowed?
+
+**STEP 6: Is the frontend even calling the upload endpoint?**
+- The `System: 📤 Uploading 1 file(s) for analysis...` message appears — but is this from the frontend's optimistic UI or from an actual successful upload response?
+- File: `public/index.html` — does the "📤 Uploading" message appear BEFORE or AFTER the fetch response?
+- If it appears before, the upload could be failing silently
+
+### Diagnostic deliverable for Problem 1:
+Document the COMPLETE chain with findings:
+```
+Frontend button click → [WORKS/BROKEN at step X]
+Frontend sends POST to /api/upload-for-analysis → [WORKS/BROKEN]
+Upload endpoint receives file → [WORKS/BROKEN] 
+Upload endpoint extracts text → [WORKS/BROKEN]
+Upload endpoint stores in extractedDocuments Map → [WORKS/BROKEN]
+Upload endpoint returns content to frontend → [WORKS/BROKEN]
+Frontend stores content in variable → [WORKS/BROKEN]
+Frontend includes documentContext in next /api/chat POST → [WORKS/BROKEN]
+server.js reads documentContext from req.body → [WORKS/BROKEN]
+Contract validator passes documentContext through → [WORKS/BROKEN]
+Orchestrator receives documentContext parameter → [WORKS/BROKEN]
+Orchestrator #loadDocumentContext finds content → [WORKS/BROKEN]
+Content appears in prompt → [WORKS/BROKEN]
+```
+
+---
+
+## PROBLEM 2: General News/Current Events Queries Get No External Data
+
+### Evidence from Railway logs:
+```
+[externalLookupEngine] Lookup requested for: "Trump's been in the news a lot lately what is the ..."
+[externalLookupEngine] No reliable parseable source available for this query type
+```
+
+### What's happening:
+Google News RSS works for commodity queries (gold price fallback uses it successfully). But when a user asks about news/current events directly (not commodity-related), the `selectSourcesForQuery` function doesn't match any category and returns empty.
+
+### What you MUST investigate (Phase 1):
+
+**STEP 1: Map the complete routing logic in selectSourcesForQuery**
+- File: `api/core/intelligence/externalLookupEngine.js`
+- Find `selectSourcesForQuery` function
+- List EVERY routing condition and what it matches:
+  - Crypto patterns → CoinGecko
+  - Currency patterns → Exchange Rates API
+  - Commodity patterns → COMMODITIES + News RSS fallback (PR #776)
+  - Government/leader patterns → Wikipedia
+  - News/current events patterns → ???
+  
+**STEP 2: Identify the gap**
+- The query "Trump's been in the news" contains the word "news" 
+- Is there a NEWS category routing? If not, that's the gap
+- Google News RSS exists as a source but is only routed for:
+  - Commodity fallback (PR #776 added this)
+  - Is it routed for general news queries? (likely NOT)
+
+**STEP 3: Check what patterns SHOULD trigger Google News RSS**
+- Queries containing: news, latest, recent, headlines, current events, "what's happening", "in the news"
+- Queries about named public figures + current events context
+- Queries with freshness markers that don't match other categories
+
+### Diagnostic deliverable for Problem 2:
+```
+Complete routing table:
+Pattern X → Source Y [WORKING]
+Pattern X → Source Y [WORKING]  
+News/current events → ??? [MISSING/BROKEN]
+```
+
+---
+
+## PHASE 2: FIXES (only after diagnostics are complete)
+
+### For Problem 1:
+Based on diagnostic findings, fix the SPECIFIC breakpoint. The most likely fixes are:
+- **If frontend doesn't send documentContext**: Fix `sendMessage()` in `public/index.html` to include the stored document content
+- **If field name mismatch**: Align frontend and backend field names
+- **If contract validator strips it**: Fix the validator to pass documentContext through
+- **If extractedDocuments Map is empty**: Fix the storage in upload endpoint
+
+### For Problem 2:
+Add a NEWS routing condition in `selectSourcesForQuery`:
+```javascript
+// General news and current events → Google News RSS
+if (lowerQuery.match(/news|headlines|latest.*(?:about|on|regarding)|current events|in the news|what's happening|recent.*(?:developments|events)/i)) {
+  return [{
+    name: 'Google News RSS',
+    buildUrl: (query) => `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`,
+    parser: 'rss',
+    type: 'news',
+    extract: (text) => {
+      // Same RSS parser as commodity fallback
+    }
+  }];
+}
+```
+
+**Also add a GENERAL FALLBACK** at the end of selectSourcesForQuery:
+```javascript
+// If no specific category matched but query has freshness markers, try news
+if (truthType === 'VOLATILE' || truthType === 'SEMI_STABLE') {
+  return [googleNewsRSSSource]; // Better than returning nothing
+}
+```
+
+---
+
+## WHAT MUST NOT BE CHANGED
+
+Everything from PR #776 and the Copilot tagging fix:
+- ✅ External data token truncation (Fix 4)
+- ✅ Commodity fallback to Google News RSS (Fix 3) 
+- ✅ Memory source_type filtering (Fix 1)
+- ✅ Memory source_type tagging in server.js
+- ✅ Document unique key storage (Fix 2)
+- ✅ Vault + document coexistence (Fix 5)
+- ✅ All systems listed in PR #776's "WHAT MUST NOT BE CHANGED" section
+
+Additionally do NOT touch:
+- ✅ CoinGecko, Wikipedia, Exchange Rates API routing (all working)
+- ✅ Truth type detector patterns
+- ✅ Hierarchy router logic
+- ✅ Memory retrieval and semantic scoring
+- ✅ Prompt section headers and templates
+- ✅ Test detection logic
+- ✅ Mode routing
+
+---
+
+## VALIDATION
+
+### Document pipeline (after fix):
+1. Upload a .docx file → check logs for `[STORAGE] Stored document with key`
+2. Ask "explain this document" → AI references document content
+3. `[CONTEXT] Assembling context` shows `Documents: >0 chars`
+4. Upload a SECOND document → AI analyzes the SECOND document, not the first
+
+### News pipeline (after fix):
+5. "What's in the news about Trump?" → Google News RSS returns results, AI summarizes
+6. "Latest developments in AI" → Google News RSS returns results
+7. "What's the price of gold?" → Still uses commodity fallback (no regression)
+8. "What's the price of Bitcoin?" → Still uses CoinGecko (no regression)
+
+### Regression checks:
+9. Run 53-innovation test suite → maintain 60/61 (98%)
+10. Run SMDEEP → maintain 12-14/15 (80-93%)
+11. Memory retrieval working normally
+12. External data tagging with [SOURCE:external_data:timestamp] still appearing in logs
+
+---
+
+## IMPLEMENTATION ORDER
+
+1. Phase 1 diagnostics for Problem 1 (document pipeline)
+2. Phase 1 diagnostics for Problem 2 (news routing)
+3. Document ALL findings before making any changes
+4. Fix Problem 2 first (news routing — simpler, additive only)
+5. Fix Problem 1 second (document pipeline — requires understanding the breakpoint first)
+
+If the document pipeline break is in the frontend (`public/index.html`), note that this is a large file. Make SURGICAL changes only to the upload handler and sendMessage functions. Do NOT reformat, reorganize, or "improve" any other part of the file.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
