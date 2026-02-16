@@ -1,0 +1,113 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #790: [claude-fix] External Market Queries: unblock Claude escalation + stop memory stuffing + handle RSS-without-prices correctly
+
+Issue Description:
+Scope
+
+This issue addresses ONLY external market/commodities/stock quote queries.
+Do not touch memory extraction/storage/supersession logic.
+Do not refactor unrelated enforcement.
+
+Problem A — Claude escalation is being blocked (user_declined_claude)
+
+Observed: Claude escalation safety net is not engaging on overflow cases; logs show user_declined_claude blocking reroute.
+
+Required investigation (no code changes first):
+
+Identify where user_declined_claude is set:
+
+frontend toggle / localStorage?
+
+request body flag?
+
+server default?
+
+Log source + value on every request:
+
+user_declined_claude=<bool> source=<...>
+
+Confirm whether it was explicitly user-selected or defaulted.
+
+Fix requirement:
+
+If the user did not explicitly choose to disable Claude, default must be false.
+
+If set by frontend, add a clear UI control and ensure it does not “stick” silently across unrelated sessions unless designed.
+
+If escalation is required for reliability (payload overflow), the system must either:
+
+reroute anyway, OR
+
+gracefully degrade (reduce context) without throwing “technical issue”.
+
+Problem B — Prompt bloat: irrelevant memory injected into external price queries
+
+Observed: Commodity/stock quote queries are receiving ~2,500 tokens of memory context unrelated to the query, causing unnecessary payload growth and failures.
+
+Fix requirement:
+Implement memory relevance gating before prompt assembly:
+
+For external market queries (commodities/stocks/crypto prices/news):
+
+default memory injection = 0
+
+allow only whitelisted memory if relevant (e.g., preferred currency, preferred markets), otherwise none
+
+Add log:
+
+[MEMORY-GATE] intent=market_query memory_injected_tokens=<n> reason=<why>
+
+Problem C — External data quality: RSS headlines don’t contain live prices
+
+Observed: Google News RSS provides headlines (no spot quotes), so model cannot return “$X” without fabricating.
+
+Fix requirement:
+
+If no live price source configured:
+
+system must answer with headlines-based summary (“drivers,” “direction,” “what’s being reported”)
+
+explicitly state: “No live quote source configured; headlines don’t include spot price”
+
+If paid API keys exist (optional):
+
+use them for exact price
+
+otherwise remain free-only without errors
+
+Add log:
+
+[MARKET-DATA] source=rss has_numeric_quote=false fallback=headlines_summary
+
+[MARKET-DATA] source=metals_api has_numeric_quote=true price=<...> (only if keys exist)
+
+Success Criteria
+
+user_declined_claude no longer blocks escalation unless explicitly set by the user.
+
+“price of platinum / Apple stock price” queries do not inject unrelated memory context.
+
+No more “technical issue” responses when RSS is fetched successfully.
+
+System never invents spot prices from headlines.
+
+Smoke test: run the market query suite 10 times — zero ghost errors; consistent behavior.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
