@@ -1050,7 +1050,8 @@ export async function performLookup(query, sources, truthType = null) {
 
       // ISSUE #790 FIX: Detect if this is a price query using only RSS sources
       // RSS headlines don't contain live spot prices, so we must disclose this
-      const isPriceQuery = query.match(/\b(price|cost|value|quote|trading|today)\b/i) &&
+      // NOTE: "value" removed - too broad (causes false positives for "value of my contract", "value of my home")
+      const isPriceQuery = query.match(/\b(price|cost|quote|trading|today)\b/i) &&
                           (query.match(/\b(gold|silver|platinum|palladium|copper|oil|crude|commodity)\b/i) ||
                            query.match(/\b(stock|share|apple|google|microsoft|tesla)\b/i));
 

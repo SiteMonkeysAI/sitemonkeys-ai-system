@@ -932,8 +932,9 @@ export class Orchestrator {
 
       // ISSUE #790 FIX: Detect external market queries (commodities/stocks/crypto prices)
       // These queries should NOT inject irrelevant memory context
+      // NOTE: "value" removed - too broad (causes false positives for "value of my contract", "value of my home")
       const isMarketQuery = (
-        message.match(/\b(price|cost|value|quote|trading)\b/i) &&
+        message.match(/\b(price|cost|quote|trading)\b/i) &&
         (message.match(/\b(gold|silver|platinum|palladium|copper|oil|crude|commodity|commodities)\b/i) ||
          message.match(/\b(stock|share|market|nasdaq|dow|s&p|apple|google|microsoft|tesla)\b/i) ||
          message.match(/\b(bitcoin|btc|ethereum|eth|crypto|cryptocurrency)\b/i))
