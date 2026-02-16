@@ -929,7 +929,16 @@ export class Orchestrator {
                                 message.match(/\b(name|work|job|salary|age|birthday|address|phone|email|company|boss|team|project)\b/i) ||  // Personal topics
                                 message.match(/\b(when|where|who|which)\b.*\b(I|you|we|my|your|our)\b/i) ||  // Temporal/location + personal
                                 message.match(/['']s\s+(name|age|birthday|job|salary|phone|email|color|breed|model)/i);  // Possessive patterns ("cat's name")
-      
+
+      // ISSUE #790 FIX: Detect external market queries (commodities/stocks/crypto prices)
+      // These queries should NOT inject irrelevant memory context
+      const isMarketQuery = (
+        message.match(/\b(price|cost|value|quote|trading)\b/i) &&
+        (message.match(/\b(gold|silver|platinum|palladium|copper|oil|crude|commodity|commodities)\b/i) ||
+         message.match(/\b(stock|share|market|nasdaq|dow|s&p|apple|google|microsoft|tesla)\b/i) ||
+         message.match(/\b(bitcoin|btc|ethereum|eth|crypto|cryptocurrency)\b/i))
+      );
+
       const skipMemoryForSimpleQuery = earlyClassification && (
         (earlyClassification.classification === 'greeting' && message.length < 50) ||
         (earlyClassification.classification === 'simple_factual' &&
@@ -937,6 +946,9 @@ export class Orchestrator {
          message.length < 50 &&
          !hasPersonalIntent)  // Use enhanced personal-intent detection
       );
+
+      // ISSUE #790 FIX: Skip memory for external market queries
+      const skipMemoryForMarketQuery = isMarketQuery;
 
       // Issue #612 Refinement 2: Additional safety check
       // Even if we think we can skip, check if user has memories first
@@ -951,8 +963,13 @@ export class Orchestrator {
       // Define memoryDuration at higher scope (Issue #446 fix)
       let memoryDuration = 0;
 
-      if (skipMemoryForSimpleQuery && !userHasMemories) {
-        this.log(`[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)}) - user needs direct answer, not biography`);
+      // ISSUE #790 FIX: Skip memory for external market queries OR simple queries
+      if ((skipMemoryForSimpleQuery && !userHasMemories) || skipMemoryForMarketQuery) {
+        if (skipMemoryForMarketQuery) {
+          this.log(`[MEMORY-GATE] intent=market_query memory_injected_tokens=0 reason=external_market_data_query`);
+        } else {
+          this.log(`[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)}) - user needs direct answer, not biography`);
+        }
         memoryContext = {
           hasMemory: false,
           memory: '',
@@ -970,6 +987,12 @@ export class Orchestrator {
         this.log(
           `[MEMORY] Retrieved ${memoryContext.tokens} tokens from ${memoryContext.count} memories (${memoryDuration}ms)`,
         );
+
+        // ISSUE #790 FIX: Log memory injection with gating info
+        if (isMarketQuery && memoryContext.hasMemory) {
+          this.log(`[MEMORY-GATE] intent=market_query memory_injected_tokens=${memoryContext.tokens} reason=whitelisted_relevant_context`);
+        }
+
         // Enhanced telemetry for memory injection verification
         if (memoryContext.hasMemory) {
           this.log(`[MEMORY] ✓ Memory WILL be injected into prompt (${memoryContext.tokens} tokens)`);
@@ -1222,6 +1245,12 @@ export class Orchestrator {
               // Update cache validity if provided
               if (lookupResult.cache_valid_until) {
                 phase4Metadata.cache_valid_until = lookupResult.cache_valid_until;
+              }
+
+              // ISSUE #790 FIX: Capture disclosure from lookupResult if present
+              if (lookupResult.disclosure) {
+                phase4Metadata.disclosure = lookupResult.disclosure;
+                this.log(`[PHASE4] Disclosure required: ${lookupResult.disclosure.substring(0, 100)}...`);
               }
 
               // Log complete lookup success with details
@@ -3728,10 +3757,16 @@ export class Orchestrator {
       // ========== USER CONFIRMATION FOR CLAUDE (BIBLE REQUIREMENT - Section D) ==========
       // "User confirmation required before Claude (except safety-critical)"
       // CRITICAL FIX: Respect user's explicit choice when confirmation is provided
-      
+
+      // ISSUE #790 FIX: Store initial routing decision before user preference check
+      // This allows us to detect payload-overflow escalation later and override user decline
+      const initialRouteDecision = useClaude;
+      const initialRoutingReason = [...routingReason];
+
       // If user explicitly said NO to Claude (claudeConfirmed: false), force GPT-4
+      // BUT: This can be overridden later if payload size requires Claude
       if (context.claudeConfirmed === false) {
-        this.log(`[AI ROUTING] User declined Claude, forcing GPT-4`);
+        this.log(`[AI ROUTING] User declined Claude, initially forcing GPT-4`);
         useClaude = false;
         routingReason = ['user_declined_claude'];
       }
@@ -3817,6 +3852,12 @@ export class Orchestrator {
       let externalContext = "";
       if (phase4Metadata.fetched_content && phase4Metadata.sources_used > 0) {
         externalContext = `\n\n[CURRENT EXTERNAL INFORMATION - Use this to inform your response]\n${phase4Metadata.fetched_content}\n[END EXTERNAL INFORMATION]\n\n`;
+
+        // ISSUE #790 FIX: Add disclosure instruction if present
+        if (phase4Metadata.disclosure) {
+          externalContext += `\n[IMPORTANT DISCLOSURE REQUIRED]\nYou MUST include this disclosure in your response: "${phase4Metadata.disclosure}"\n[END DISCLOSURE]\n\n`;
+        }
+
         console.log(`[PHASE4] Injected external content: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content.length} chars`);
       }
 
@@ -3850,15 +3891,27 @@ export class Orchestrator {
 
       // ISSUE #787 FIX 2: Pre-flight check must REROUTE to Claude automatically (no user confirmation)
       // If we're using GPT-4 and the full payload exceeds its limit, escalate to Claude deterministically
+      // ISSUE #790 FIX: This escalation overrides user_declined_claude - payload size is safety-critical
       let escalatedDueToPayloadSize = false;
       if (!useClaude && estimatedTotalInputTokens > gpt4MaxInput) {
         // ISSUE #787 FIX 3: Enhanced logging with full decision context
         this.log(`[AI-PREFLIGHT] model_before=gpt-4, estimated_input=${estimatedTotalInputTokens}t, model_max=8192t, reserved_output=2000t, max_input_budget=${gpt4MaxInput}t, reroute=true`);
         this.log(`[AI-PREFLIGHT] Breakdown: system=${estimatedSystemPromptTokens}t, context=${estimatedContextTokens}t, external=${estimatedExternalTokens}t, message=${estimatedMessageTokens}t, history=${estimatedHistoryTokens}t`);
-        this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds GPT-4 max input budget`);
+
+        // ISSUE #790 FIX: Check if user declined Claude - if so, log override reason
+        const userDeclinedClaude = context.claudeConfirmed === false;
+        if (userDeclinedClaude) {
+          this.log(`[AI-PREFLIGHT] ⚠️ Overriding user_declined_claude: payload size exceeds GPT-4 capacity`);
+          this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds GPT-4 max input budget (required for reliability)`);
+        } else {
+          this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds GPT-4 max input budget`);
+        }
 
         useClaude = true;
         escalatedDueToPayloadSize = true;
+
+        // ISSUE #790 FIX: Replace user_declined_claude with payload_overflow reason
+        routingReason = routingReason.filter(r => r !== 'user_declined_claude');
         routingReason.push(`payload_exceeds_gpt-4_limit:${estimatedTotalInputTokens}/${gpt4MaxInput}`);
       }
 

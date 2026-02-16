@@ -1048,6 +1048,27 @@ export async function performLookup(query, sources, truthType = null) {
         }
       }
 
+      // ISSUE #790 FIX: Detect if this is a price query using only RSS sources
+      // RSS headlines don't contain live spot prices, so we must disclose this
+      const isPriceQuery = query.match(/\b(price|cost|value|quote|trading|today)\b/i) &&
+                          (query.match(/\b(gold|silver|platinum|palladium|copper|oil|crude|commodity)\b/i) ||
+                           query.match(/\b(stock|share|apple|google|microsoft|tesla)\b/i));
+
+      const onlyRssSources = results.every(r => r.type === 'news_fallback' || r.source.includes('RSS'));
+      const hasNumericQuote = results.some(r => {
+        // Check if the text contains price patterns like "$123.45" or "123.45 USD"
+        return /\$\d+\.?\d*|\d+\.?\d*\s*(USD|usd|dollars?|ounce|oz)/i.test(r.text);
+      });
+
+      if (isPriceQuery && onlyRssSources && !hasNumericQuote) {
+        console.log('[MARKET-DATA] source=rss has_numeric_quote=false fallback=headlines_summary');
+        phase4Metadata.disclosure = (phase4Metadata.disclosure ? phase4Metadata.disclosure + ' ' : '') +
+          "No live quote source configured; headlines don't include spot price. The response is based on market direction and drivers from recent news.";
+      } else if (isPriceQuery && results.some(r => r.type === 'api')) {
+        // Log when we have actual price data from API
+        console.log('[MARKET-DATA] source=api has_numeric_quote=true');
+      }
+
       return {
         success: true,
         from_cache: false,
