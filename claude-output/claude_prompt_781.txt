@@ -1,0 +1,254 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #781: [claude-fix] CRITICAL: Exhaustive System Investigation — All Core Pipelines Broken Post-PR #780
+
+Issue Description:
+# 🔴 CRITICAL: Exhaustive System Investigation — All Core Pipelines Broken Post-PR #780
+
+## Context
+
+PRs #765–#780 (15+ merged PRs) attempted to fix document upload pipeline, injection pipeline, news query routing, field name mismatches, memory source tagging, and attachment content delivery. **None of these fixes resolved the underlying problems.** The system remains in the same broken state as before all PRs were merged.
+
+**This means the previous investigations found symptoms, not root causes.** This issue demands a fundamentally different approach: trace every data flow end-to-end against the specification documents, and **do not stop investigating after finding the first problem in each area.** There are likely multiple cascading failures per pipeline.
+
+---
+
+## 🧠 Investigation Philosophy
+
+> "This is neurosurgery — one mishap kills your patient."
+
+### Mandatory Rules for This Investigation
+
+1. **DO NOT stop at the first problem found.** Previous PRs did this and failed. Every pipeline likely has 2-5 breakpoints, not 1.
+2. **Trace the COMPLETE data flow** from frontend through every middleware, handler, orchestrator step, AI call, and response — for EACH broken feature.
+3. **Cross-reference against the Bible** (specification documents). If the code doesn't match what the specs say should happen, that's the fix target.
+4. **Production-grade only.** No placeholders, no "TODO" logic, no bandaids. Every fix must be complete and correct.
+5. **Zero regression.** Nothing that currently works is allowed to break.
+6. **Evidence-based diagnosis only.** Every claimed problem must include file:line references and actual vs. expected behavior.
+7. **Log everything.** Add diagnostic logging at EVERY handoff point so future debugging isn't blind.
+
+---
+
+## 🔴 BROKEN AREA 1: Memory Retrieval Pipeline
+
+### What the Bible Says Should Happen
+
+Per the specs, the memory retrieval flow is:
+
+```
+User query → RoutingIntelligence.categorizeMemory() → routes to 1 of 11+5 categories
+→ ExtractionEngine pulls relevant entries (sorted by relevance, usage frequency, recency)
+→ Extracts up to 2,400 tokens → applies recency boost + relevance re-score
+→ formatForAI() formats memory for AI input (NO chat replay)
+→ Memory injected into orchestrator context → sent to AI with query
+```
+
+### Known Documented Issues (from specs)
+
+The specs themselves document these as known problems:
+
+- ⚠️ "Retrieval sometimes scrambles content formatting"
+- ⚠️ "Memory is retrieved, but is not always recognized by downstream systems (e.g., Roxy/Eli may say 'you never told me that')"
+- ⚠️ "Memory display/debug logs confirm it's loading — but interpretation logic may be bypassing it"
+
+### What to Investigate (DO NOT SKIP ANY)
+
+- [ ] **1.1 — User ID filtering**: Does EVERY memory query include `WHERE user_id = $1`? Check persistent_memory.js, extraction_engine.js, and any retrieval function. Cross-user leakage is safety-critical.
+- [ ] **1.2 — Embedding generation timing**: When a memory is stored, is the embedding generated synchronously or asynchronously? If async, newly stored memories may be invisible during immediate retrieval. Check if there's a race condition between store and retrieve.
+- [ ] **1.3 — Category routing accuracy**: Send test queries and log which category RoutingIntelligence selects. Are "news" queries, "health" queries, and "financial" queries routing to the correct categories? Log the actual routing decisions.
+- [ ] **1.4 — ExtractionEngine output**: After extraction, what does the actual data look like? Is it structured correctly? Is the token count accurate? Is relevance scoring actually differentiating results or returning flat scores?
+- [ ] **1.5 — formatForAI() output**: What exact string does formatForAI() produce? Is it in a format the AI can actually parse and use? Compare against what the AI prompt expects to receive.
+- [ ] **1.6 — Orchestrator injection point**: In processRequest() / the orchestrator, WHERE exactly is the memory context inserted into the AI call? Is the variable actually being passed through, or is there a scope/naming mismatch that silently drops it?
+- [ ] **1.7 — AI prompt structure**: Does the system prompt tell the AI to USE the injected memory? If the memory is injected but the prompt doesn't reference it, the AI will ignore it.
+- [ ] **1.8 — Personality system handoff**: When Eli or Roxy generates a response, do they receive the memory context? The specs say "Roxy and Eli can request memory context" — verify the personality constructor/function actually receives and uses it.
+
+### Expected Deliverable
+
+For each sub-item above, provide:
+- Current behavior (with evidence)
+- Expected behavior (per spec)
+- Root cause (file:line)
+- Fix (exact code change)
+
+---
+
+## 🔴 BROKEN AREA 2: Document Upload Pipeline
+
+### What the Bible Says Should Happen
+
+Per the specs, the document upload flow is:
+
+```
+User uploads file → POST /upload-file (or /api/chat with attachments)
+→ document-handler.js validates file (10MB max, supported types: .txt, .pdf, .docx)
+→ Text extraction (mammoth for docx, pdf-parse for pdf, fs for txt)
+→ Token counting (Math.ceil(text.length / 4))
+→ Session storage with token limit enforcement (10K tokens per upload session)
+→ documentContext passed to orchestrator → included in AI context
+```
+
+### Critical Red Flag from Specs
+
+The engineering spec shows this endpoint as a **PLACEHOLDER**:
+
+```javascript
+// File upload endpoint (placeholder)
+router.post('/upload-file', async (req, res) => {
+  res.json({
+    status: "success",
+    message: "File upload endpoint - to be implemented",
+    files: []
+  });
+});
+```
+
+**If this placeholder was never replaced with real implementation, that's why uploads "succeed" but content never reaches the AI.** The frontend gets a success response but zero actual processing happens.
+
+### What to Investigate (DO NOT SKIP ANY)
+
+- [ ] **2.1 — Endpoint reality check**: Is the /upload-file endpoint (or equivalent) actually implemented, or is it still the placeholder from the engineering spec? Check routes.js for the actual handler.
+- [ ] **2.2 — Multipart/form-data handling**: Does the server have proper file upload middleware (multer, formidable, etc.)? Without this, req.body will be empty for file uploads even if the endpoint exists.
+- [ ] **2.3 — File extraction pipeline**: If the handler exists, does it actually call mammoth/pdf-parse/fs for text extraction? Trace the exact code path from file receipt to extracted text.
+- [ ] **2.4 — Session storage**: Where is the extracted text stored? Is it in-memory (lost on restart), in the database, or in a session object? How does it get from storage to the orchestrator?
+- [ ] **2.5 — The handoff to orchestrator**: In the /api/chat endpoint, how does `document_context` get populated? Is the frontend sending it? Is the backend retrieving it from session? Trace the exact variable path.
+- [ ] **2.6 — Orchestrator document injection**: In processRequest(), the spec shows `documentContext: document_context || null`. If this is always null because the frontend never sends it (because the upload endpoint is a placeholder), the AI never sees document content.
+- [ ] **2.7 — Frontend upload flow**: What does the frontend JavaScript do when a user uploads a file? Does it call /upload-file first, then include the returned data in the /api/chat call? Or does it try to send the file directly with the chat message?
+- [ ] **2.8 — Field name consistency**: Previous PR #770 fixed field name mismatches. Verify ALL field names match between frontend → backend → orchestrator → AI call. Common mismatch: `document_context` vs `documentContext` vs `attachments`.
+
+---
+
+## 🔴 BROKEN AREA 3: Semantic Routing / News Query Routing
+
+### What the Bible Says Should Happen
+
+Per the specs, semantic routing should:
+
+```
+Query received → RoutingIntelligence analyzes content
+→ Determines which category/categories are relevant
+→ For news/commodity queries: route to external data sources (Google News RSS)
+→ For memory queries: route to appropriate memory category
+→ For vault queries: route to vault content (in Site Monkeys mode)
+→ Routing is intelligent and semantic, NOT keyword-based
+```
+
+### What to Investigate (DO NOT SKIP ANY)
+
+- [ ] **3.1 — Routing intelligence implementation**: Is RoutingIntelligence using actual semantic analysis (embeddings, AI classification) or just keyword matching? The specs require genuine semantic intelligence, not pattern matching.
+- [ ] **3.2 — News/commodity detection**: What patterns or logic detect that a query like "What's the current price of gold?" should trigger an external lookup rather than memory retrieval? Is this logic present and working?
+- [ ] **3.3 — External data source integration**: Is the Google News RSS integration actually implemented and connected? Or is it a stub? Trace from query detection through to actual RSS fetch and response injection.
+- [ ] **3.4 — The injection gap**: PR #777 was titled "Injection Pipeline Restoration" but didn't fix the problem. The external data may be fetched successfully but never injected into the orchestrator's AI context. Trace the data from fetch → return → orchestrator → AI prompt.
+- [ ] **3.5 — Mode-aware routing**: Does routing behave differently in truth-general vs business-validation vs site-monkeys mode? The specs require mode-aware routing. Verify this works for each mode.
+- [ ] **3.6 — Fallback behavior**: When routing fails or is ambiguous, what happens? Does the system fall back gracefully, or does it silently drop the query into a wrong category?
+
+---
+
+## 🔴 BROKEN AREA 4: Injection Pipeline (External Data → AI Context)
+
+### What the Bible Says Should Happen
+
+Per the Phase 4 spec and core architecture:
+
+```
+External data retrieved (news, commodity prices, web data)
+→ Truth validation applied (confidence scoring)
+→ Data formatted for injection
+→ Injected into orchestrator context alongside memory + documents + vault
+→ AI receives complete context: memory + documents + external data + vault + user query
+→ AI generates response using ALL available context
+```
+
+### What to Investigate (DO NOT SKIP ANY)
+
+- [ ] **4.1 — Orchestrator context assembly**: In processRequest(), list EVERY piece of context that gets assembled before the AI call. Is it: user message + memory + documents + external data + vault? Or are some of these missing from the actual implementation?
+- [ ] **4.2 — Variable threading**: Trace each context variable from where it's created to where it's used in the AI call. The most common bug: a variable exists but is passed with the wrong name, or assigned but never included in the final prompt.
+- [ ] **4.3 — AI prompt construction**: How is the final prompt to GPT-4/Claude actually built? Is it a template string? An array of messages? Show the exact code that constructs what the AI receives. If context variables aren't interpolated into this prompt, the AI can't use them.
+- [ ] **4.4 — Token budget management**: If total context exceeds token limits, what gets truncated? Is external data being silently dropped because memory + vault already fills the budget?
+- [ ] **4.5 — Error handling in injection**: If any single data source fails (memory errors, external fetch timeout, document parse failure), does it prevent ALL other context from being injected? A single failure should not poison the entire context.
+- [ ] **4.6 — Response validation**: After the AI responds, does the system validate that the response actually references the injected context? If the system claims ignorance of stored information, that's what the specs call a "catastrophic trust violation."
+
+---
+
+## 🔧 Required Fix Standards
+
+### Every Fix Must Include:
+
+1. **Root cause** — not just "this was broken" but WHY it was broken (design flaw, implementation gap, naming mismatch, missing integration, etc.)
+2. **Spec reference** — which specification document defines the correct behavior
+3. **Complete implementation** — no stubs, no TODOs, no "will implement later"
+4. **Test verification** — how to verify the fix works, including edge cases
+5. **Regression check** — confirmation that nothing else broke
+
+### Code Standards (Non-Negotiable)
+
+- ES6 modules only (`import/export`, no `require()`)
+- Standard error pattern: `try/catch` returning `{ success: boolean, data/error }`
+- All database queries must include `user_id` filtering
+- All async functions must handle timeouts and failures gracefully
+- Logging at every handoff point: `console.log('[MODULE:FUNCTION]', { relevant_data })`
+
+---
+
+## 📋 Investigation Checklist
+
+Before submitting any PR:
+
+- [ ] All 8 memory sub-investigations completed with evidence
+- [ ] All 8 document upload sub-investigations completed with evidence
+- [ ] All 6 routing sub-investigations completed with evidence
+- [ ] All 6 injection pipeline sub-investigations completed with evidence
+- [ ] Each finding includes file:line references
+- [ ] Each fix tested against the specification documents
+- [ ] Zero regression verified
+- [ ] Diagnostic logging added at all handoff points
+- [ ] Complete data flow diagrams for each pipeline (before/after fix)
+
+---
+
+## ⚠️ What NOT to Do
+
+- ❌ Do NOT assume the first problem found is the only problem
+- ❌ Do NOT create separate PRs for each sub-fix (one comprehensive PR)
+- ❌ Do NOT add placeholder logic or "temporary" fixes
+- ❌ Do NOT modify working functionality to accommodate fixes
+- ❌ Do NOT skip the engineering spec placeholder check (Area 2.1 is likely the smoking gun)
+- ❌ Do NOT use keyword matching where the specs require semantic intelligence
+- ❌ Do NOT close this issue until ALL checkboxes above are verified
+
+---
+
+## 📚 Reference Documents (The Bible)
+
+These are the authoritative sources for expected behavior:
+
+- **Master Specification** — system architecture, file structure, memory categories
+- **Engineering Specifications** — module contracts, orchestrator flow, routes, AI router
+- **Technical Standards** — database schema, API patterns, error handling
+- **Implementation Roadmap** — integration flow (chat → memory → intelligence → AI)
+- **Phase 4 Technical Specification** — truth type detection, hierarchy routing, external lookup
+- **Master Completion Ledger** — all 53 innovations and their verification criteria
+- **File 1: System Vision** — memory retrieval, extraction engine, isolation rules
+- **File 2: Persistent Memory Deep Dive** — known issues, design philosophy, dependencies
+- **File 4: System Architecture** — complete file map, dependency graph
+
+---
+
+*This investigation is not about finding A problem. It's about finding ALL problems, fixing them together, and verifying the complete data flow works end-to-end for every pipeline. Previous attempts failed because they stopped too early.*
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

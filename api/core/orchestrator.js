@@ -992,13 +992,22 @@ export class Orchestrator {
       // STEP 2: Load document context (always check if document available)
       // Check extractedDocuments Map first, then use documentContext if provided
       const documentData = await this.#loadDocumentContext(effectiveDocumentContext, sessionId, message);
+
+      // ISSUE #781 FIX: Enhanced document loading diagnostic
+      console.log('[HANDOFF:DOCUMENT-LOAD→CONTEXT] ═══════════════════════════════════');
       if (documentData) {
         this.log(
           `[DOCUMENTS] Loaded ${documentData.tokens} tokens from ${documentData.filename}`,
         );
+        console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] ✅ Document loaded: ${documentData.filename}`);
+        console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] Tokens: ${documentData.tokens}, Source: ${documentData.source}`);
+        console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] Content preview: "${documentData.content.substring(0, 100).replace(/\n/g, ' ')}..."`);
       } else {
         this.log("[DOCUMENTS] No document available");
+        console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] ❌ No document found`);
+        console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] extractedDocuments Map size: ${extractedDocuments.size}`);
       }
+      console.log('[HANDOFF:DOCUMENT-LOAD→CONTEXT] ═══════════════════════════════════');
 
       // STEP 3: Load vault (if Site Monkeys mode and enabled)
       let vaultData = vaultContext
@@ -1037,6 +1046,16 @@ export class Orchestrator {
       context.memory_context = memoryContext.memory_objects || [];  // FIX #659: Pass memory objects to validators
       context.memory_ids = memoryContext.memory_ids || [];  // FIX #659: Pass memory IDs for validator trace
       this.log(`[CONTEXT] Total: ${context.totalTokens} tokens`);
+
+      // ISSUE #781 FIX: Comprehensive context assembly diagnostic
+      console.log('[HANDOFF:CONTEXT-ASSEMBLY→AI] ═══════════════════════════════════');
+      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Total tokens: ${context.totalTokens}`);
+      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Token breakdown:`);
+      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Memory: ${context.tokenBreakdown?.memory || 0}t (${context.sources?.hasMemory ? '✅' : '❌'})`);
+      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Documents: ${context.tokenBreakdown?.documents || 0}t (${context.sources?.hasDocuments ? '✅' : '❌'})`);
+      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Vault: ${context.tokenBreakdown?.vault || 0}t (${context.sources?.hasVault ? '✅' : '❌'})`);
+      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Sources present: memory=${context.sources?.hasMemory}, docs=${context.sources?.hasDocuments}, vault=${context.sources?.hasVault}`);
+      console.log('[HANDOFF:CONTEXT-ASSEMBLY→AI] ═══════════════════════════════════');
 
       // STEP 5: Perform semantic analysis
       const analysisStartTime = Date.now();
@@ -1899,6 +1918,16 @@ export class Orchestrator {
       return {
         success: true,
         response: personalityResponse.response,
+        // ISSUE #781 FIX: Add explicit context status for transparency
+        sources: {
+          memoryLoaded: context.sources?.hasMemory || false,
+          memoryCount: memoryContext.count || 0,
+          documentLoaded: context.sources?.hasDocuments || false,
+          documentName: documentData?.filename || null,
+          documentTokens: documentData?.tokens || 0,
+          vaultLoaded: context.sources?.hasVault || false,
+          externalDataUsed: context.sources?.hasExternal || false,
+        },
         metadata: {
           // Context tracking
           memoryUsed: memoryContext.hasMemory,
@@ -2340,6 +2369,17 @@ export class Orchestrator {
 
       // Store telemetry for response metadata
       this._lastRetrievalTelemetry = telemetry;
+
+      // ISSUE #781 FIX: Add diagnostic logging for memory retrieval
+      console.log('[HANDOFF:MEMORY-RETRIEVAL→FORMAT] ═══════════════════════════════════');
+      console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Retrieved ${result.memories?.length || 0} memories from DB`);
+      console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Total tokens: ${result.tokens || 0}`);
+      console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Retrieval method: ${telemetry.method}`);
+      if (result.memories && result.memories.length > 0) {
+        const firstPreview = result.memories[0].content.substring(0, 100).replace(/\n/g, ' ');
+        console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] First memory preview: "${firstPreview}..."`);
+      }
+      console.log('[HANDOFF:MEMORY-RETRIEVAL→FORMAT] ═══════════════════════════════════');
 
       // Format memories into string for context injection
       // Apply PII sanitization (Innovation #34: Privacy Protection)
@@ -3819,6 +3859,15 @@ export class Orchestrator {
           });
         }
 
+        // ISSUE #781 FIX: Pre-AI-call diagnostic
+        console.log('[HANDOFF:CONTEXT→AI-CLAUDE] ═══════════════════════════════════');
+        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Sending ${messages.length} messages to Claude`);
+        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Total message content: ${messages.reduce((sum, m) => sum + m.content.length, 0)} chars`);
+        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Memory in context: ${context.sources?.hasMemory ? 'YES' : 'NO'}`);
+        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Documents in context: ${context.sources?.hasDocuments ? 'YES' : 'NO'}`);
+        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Vault in context: ${context.sources?.hasVault ? 'YES' : 'NO'}`);
+        console.log('[HANDOFF:CONTEXT→AI-CLAUDE] ═══════════════════════════════════');
+
         const claudeResponse = await this.anthropic.messages.create({
           model: "claude-sonnet-4-20250514",
           max_tokens: 2000,
@@ -3865,6 +3914,15 @@ export class Orchestrator {
             content: `${externalContext}${contextString}\n\n${message}`,
           });
         }
+
+        // ISSUE #781 FIX: Pre-AI-call diagnostic
+        console.log('[HANDOFF:CONTEXT→AI-GPT4] ═══════════════════════════════════');
+        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Sending ${messages.length} messages to GPT-4`);
+        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Total message content: ${messages.reduce((sum, m) => sum + m.content.length, 0)} chars`);
+        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Memory in context: ${context.sources?.hasMemory ? 'YES' : 'NO'}`);
+        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Documents in context: ${context.sources?.hasDocuments ? 'YES' : 'NO'}`);
+        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Vault in context: ${context.sources?.hasVault ? 'YES' : 'NO'}`);
+        console.log('[HANDOFF:CONTEXT→AI-GPT4] ═══════════════════════════════════');
 
         const gptResponse = await this.openai.chat.completions.create({
           model: "gpt-4",
@@ -4400,14 +4458,24 @@ When using this memory context, a caring family member would naturally apply tem
 🧠 PERSISTENT MEMORY CONTEXT - READ ALL ${memoryCount} ITEMS BEFORE RESPONDING
 ═══════════════════════════════════════════════════════════════
 
-⚠️ NOTE: You have access to ${memoryCount} memories from previous conversations.
-If the user asks about something they've told you before, you should find it below.
+⚠️ CRITICAL INSTRUCTION (Issue #781 Fix):
+You have access to ${memoryCount} memories from previous conversations below.
+
+**YOU MUST USE THIS CONTEXT.** If the user asks about something they've previously
+shared, it is in this memory context. DO NOT say "I don't have that information"
+or "you haven't told me" when the information appears below.
+
+A caring family member REMEMBERS what you've shared. That is your role.
 
 ${memoryText}
 
 ═══════════════════════════════════════════════════════════════
 END OF MEMORY CONTEXT (${memoryCount} items total)
-═══════════════════════════════════════════════════════════════`;
+═══════════════════════════════════════════════════════════════
+
+**REMINDER**: If asked about information above, you MUST reference it.
+Claiming ignorance when memory exists is a catastrophic trust violation.
+`;
 
       // If numerical data found, add explicit callout
       if (numericalData.length > 0) {
@@ -4491,10 +4559,15 @@ INSTRUCTION:
 📄 CURRENT DOCUMENT (uploaded just now)
 ═══════════════════════════════════════════════════════════════
 
-⚠️ CRITICAL: When the user asks about "this document", "the document",
-"this file", or "what I just uploaded", they are referring to the
-CURRENT DOCUMENT below. Do NOT reference previous documents from memory
-unless explicitly asked.
+⚠️ CRITICAL INSTRUCTION (Issue #781 Fix):
+When the user asks about "this document", "the document", "this file",
+or "what I just uploaded", they are referring to the CURRENT DOCUMENT below.
+
+**YOU MUST USE THIS DOCUMENT CONTENT.** Do NOT say "I don't see" or "I cannot
+access" when the content is literally provided below. The user uploaded this
+document for you to analyze - it is YOUR JOB to read and understand it.
+
+Do NOT reference previous documents from memory unless explicitly asked.
 
 ${context.documents}
 
@@ -4502,9 +4575,8 @@ ${context.documents}
 END OF CURRENT DOCUMENT
 ═══════════════════════════════════════════════════════════════
 
-INSTRUCTION: Address the user's question about THIS specific document.
-Do NOT confuse it with previous documents mentioned in memory.
-
+**REMINDER**: The document content is above. Answer based on what you see.
+Claiming you cannot access uploaded documents is a system failure.
 `;
       }
     }
