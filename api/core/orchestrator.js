@@ -3319,11 +3319,14 @@ export class Orchestrator {
    * CRITICAL: Must be called before AI routing to prevent token overflow
    */
   #enforceTokenBudget(memory, documents, vault) {
+    // Token budget for context sources
+    // Large contexts (>6K tokens) auto-escalate to Claude (200K window)
+    // GPT-4 queries stay under 6K context to fit 8K window with 2K output buffer
     const BUDGET = {
-      MEMORY: 2500,
-      DOCUMENTS: 3000,
-      VAULT: 9000,
-      TOTAL: 15000,
+      MEMORY: 2500,      // Bible spec: memory extraction targets up to 2,400 tokens
+      DOCUMENTS: 3000,   // Bible spec: document handling supports up to 10K tokens
+      VAULT: 9000,       // Vault queries auto-route to Claude (has 200K window)
+      TOTAL: 15000,      // Large contexts trigger Claude escalation at 6K threshold
     };
 
     // Enforce memory budget (≤2,500 tokens)
@@ -3691,7 +3694,9 @@ export class Orchestrator {
       }
 
       // PRIORITY 2: Token budget check (high token count prefers Claude)
-      if (context.totalTokens > 10000) {
+      // ISSUE #784 FIX: Lower threshold from 10K to 6K to prevent GPT-4 context overflow
+      // GPT-4 has 8K context (6K input + 2K output). Queries >6K route to Claude (200K window)
+      if (context.totalTokens > 6000) {
         useClaude = true;
         routingReason.push(`high_token_count:${context.totalTokens}`);
       }
@@ -3814,6 +3819,44 @@ export class Orchestrator {
       console.log(`[PROMPT-DEBUG] Full system prompt (first 500 chars):\n${systemPrompt.substring(0, 500)}...`);
       console.log(`[PROMPT-DEBUG] Context string (first 500 chars):\n${contextString.substring(0, 500)}...`);
       console.log('[PROMPT-DEBUG] ═══════════════════════════════════════════════════════');
+
+      // ISSUE #784 FIX: Pre-flight token validation
+      // Estimate total input tokens to prevent API rejections
+      const estimatedSystemPromptTokens = Math.ceil(systemPrompt.length / 4);
+      const estimatedContextTokens = Math.ceil(contextString.length / 4);
+      const estimatedExternalTokens = Math.ceil(externalContext.length / 4);
+      const estimatedMessageTokens = Math.ceil(message.length / 4);
+      const estimatedHistoryTokens = Math.ceil(
+        conversationHistory.slice(-5).reduce((sum, msg) => sum + msg.content.length, 0) / 4
+      );
+      const estimatedTotalInputTokens =
+        estimatedSystemPromptTokens +
+        estimatedContextTokens +
+        estimatedExternalTokens +
+        estimatedMessageTokens +
+        estimatedHistoryTokens;
+
+      // Model-specific context limits (leaving room for output tokens)
+      const MODEL_LIMITS = {
+        'gpt-4': 6000,          // 8K context, reserve 2K for output
+        'claude-sonnet-4-20250514': 18000  // 200K context, but we limit to 20K for cost
+      };
+
+      const modelLimit = useClaude ? MODEL_LIMITS['claude-sonnet-4-20250514'] : MODEL_LIMITS['gpt-4'];
+
+      if (estimatedTotalInputTokens > modelLimit) {
+        this.log(`[AI-PREFLIGHT] ⚠️ Estimated input (${estimatedTotalInputTokens}t) exceeds model limit (${modelLimit}t)`);
+        this.log(`[AI-PREFLIGHT] Breakdown: system=${estimatedSystemPromptTokens}t, context=${estimatedContextTokens}t, external=${estimatedExternalTokens}t, message=${estimatedMessageTokens}t, history=${estimatedHistoryTokens}t`);
+
+        // If using GPT-4 and context is too large, suggest Claude escalation
+        if (!useClaude && context.totalTokens > 4000) {
+          throw new Error(`Context too large for GPT-4 (${estimatedTotalInputTokens} tokens > ${modelLimit} limit). Claude escalation recommended.`);
+        } else {
+          throw new Error(`Input too large for AI model (${estimatedTotalInputTokens} tokens > ${modelLimit} limit)`);
+        }
+      } else {
+        this.log(`[AI-PREFLIGHT] ✅ Estimated input: ${estimatedTotalInputTokens}t / ${modelLimit}t limit`);
+      }
 
       // VAULT-ONLY MODE: Pure vault queries bypass contamination
       const isVaultQuery =
@@ -3966,6 +4009,32 @@ export class Orchestrator {
       };
     } catch (error) {
       this.error("[AI] Routing failed", error);
+
+      // ISSUE #784 FIX: Log detailed error information for diagnosis
+      console.error('[AI-ERROR] ═══════════════════════════════════════════════════════');
+      console.error('[AI-ERROR] AI API call failed with error:', error.message);
+      console.error('[AI-ERROR] Error type:', error.constructor.name);
+      console.error('[AI-ERROR] Model attempted:', useClaude ? 'claude-sonnet-4-20250514' : 'gpt-4');
+      console.error('[AI-ERROR] Total context tokens:', context.totalTokens || 'unknown');
+      console.error('[AI-ERROR] Context breakdown:', {
+        memory: context.tokenBreakdown?.memory || 0,
+        documents: context.tokenBreakdown?.documents || 0,
+        vault: context.tokenBreakdown?.vault || 0,
+        total: context.totalTokens || 0
+      });
+
+      // Log specific OpenAI/Anthropic error details if available
+      if (error.response) {
+        console.error('[AI-ERROR] API response status:', error.response.status);
+        console.error('[AI-ERROR] API response data:', JSON.stringify(error.response.data, null, 2));
+      }
+
+      if (error.code) {
+        console.error('[AI-ERROR] Error code:', error.code);
+      }
+
+      console.error('[AI-ERROR] ═══════════════════════════════════════════════════════');
+
       throw new Error(`AI routing failed: ${error.message}`);
     }
   }
@@ -4166,6 +4235,20 @@ export class Orchestrator {
   async #handleEmergencyFallback(error, requestData) {
     try {
       this.log("[FALLBACK] Emergency fallback triggered");
+
+      // ISSUE #784 FIX: Log the actual error that triggered fallback
+      console.error('[FALLBACK-ERROR] ═══════════════════════════════════════════════════════');
+      console.error('[FALLBACK-ERROR] Emergency fallback triggered by error:', error.message);
+      console.error('[FALLBACK-ERROR] Error stack:', error.stack);
+      console.error('[FALLBACK-ERROR] Request context:', {
+        userId: requestData.userId,
+        mode: requestData.mode,
+        messageLength: requestData.message?.length || 0,
+        sessionId: requestData.sessionId,
+        hasDocument: !!requestData.documentContext,
+        hasVault: !!requestData.vaultEnabled
+      });
+      console.error('[FALLBACK-ERROR] ═══════════════════════════════════════════════════════');
 
       const fallbackResponse =
         EMERGENCY_FALLBACKS.system_failure ||
