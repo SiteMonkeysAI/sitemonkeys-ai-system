@@ -1,0 +1,166 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #793: [claude-fix] CRITICAL-context is not defined crashes semantic memory retrieval on every query
+
+Issue Description:
+# [CRITICAL FIX] `context is not defined` crashes semantic memory retrieval on every query
+
+## Priority: P0 — This breaks the primary memory retrieval path for ALL users on EVERY query
+
+## Problem
+
+Every single query triggers this error:
+
+```
+[ORCHESTRATOR ERROR] [MEMORY] Semantic retrieval failed: context is not defined
+```
+
+**Location:** `api/categories/memory/internal/intelligence.js:2010`
+
+The semantic (embedding-based) retrieval path crashes immediately, forcing a fallback to keyword-based retrieval on every request. Keyword fallback works *sometimes* but is significantly less accurate, causing cascading failures across the test suites.
+
+### Secondary Error (Same File)
+
+```
+[PERSISTENT_MEMORY ERROR] Memory retrieval failed: TypeError: this.coreSystem.logExtractionError is not a function
+```
+
+**Location:** `api/categories/memory/internal/intelligence.js:2061`
+
+This fires when the keyword fallback also hits an edge case, causing total retrieval failure for that query (0 memories returned).
+
+## Evidence
+
+### Every query shows both retrieval paths in logs:
+
+```
+[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Retrieved 1 memories from DB    ← semantic found something
+[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Total tokens: 0
+[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Retrieval method: semantic
+
+[ORCHESTRATOR ERROR] [MEMORY] Semantic retrieval failed: context is not defined  ← then crashes
+
+[PERSISTENT_MEMORY] Retrieving memories for user: test-177...     ← falls back to keyword
+[MEMORY-ISOLATION] Retrieving memories for userId: test-177...
+```
+
+### The semantic path FINDS the memories, then crashes before returning them:
+
+```
+[RETRIEVAL-GROUPING] ✅ Added high-priority memory 8444 (9 tokens)
+[HANDOFF:MEMORY-RETRIEVAL→FORMAT] First memory preview: "Relationship: Emma is your daughter...."
+[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Retrieved 1 memories from DB
+
+[ORCHESTRATOR ERROR] [MEMORY] Semantic retrieval failed: context is not defined   ← CRASH
+```
+
+The memory was found, scored, grouped, and formatted — then lost because of a reference to an undefined `context` variable.
+
+## Impact
+
+### Test Suite Failures Directly Caused by This Bug:
+
+**Deep Test (11/15 — 4 failures):**
+- **STR1** (Volume Stress) — Dog name not recalled. Semantic would have found it; keyword fallback missed it
+- **NUA1** (Ambiguity) — Two Alexes not distinguished. Semantic matching needed for entity disambiguation
+- **CMP2** (International Names) — Zhang Wei, Björn, José not found. Keyword fallback can't match these names reliably
+
+**53-Test Suite (55/61 — 6 failures):**
+- **MEM-007** (Allergy prioritization) — "No information about you" for a new user. Semantic retrieval crashed, keyword found nothing
+- **INJ-008** (Mode-aware retrieval) — Memory not retrieved. Semantic crash, keyword fallback couldn't match
+- **UX-046** (Memory visibility) — "First conversation" shown. Same crash pattern
+
+### Estimated Impact of Fix:
+Fixing these two errors could resolve **4-6 test failures** across both suites, potentially improving:
+- Deep test: 11/15 → 13-14/15
+- 53-test: 55/61 → 58-60/61
+
+## Root Cause Hypothesis
+
+A recent PR likely renamed or removed a variable called `context` that is referenced at line 2010 of `intelligence.js`. The error is `ReferenceError: context is not defined`, not `TypeError: cannot read property of undefined`, which means the variable name itself doesn't exist in scope — not that it exists but is null.
+
+**Investigation steps:**
+
+1. Open `api/categories/memory/internal/intelligence.js`
+2. Go to line 2010 — find the reference to `context`
+3. Check git blame: which commit changed this area?
+4. Identify what `context` was supposed to reference (likely `this.context`, `memoryContext`, `retrievalContext`, or a parameter that was renamed)
+5. Also check line 2061 for `this.coreSystem.logExtractionError` — verify `logExtractionError` exists on the coreSystem object
+
+## Fix Requirements
+
+### Fix A: `context is not defined` (line ~2010)
+
+1. Identify what `context` should reference
+2. Restore the correct variable reference
+3. Verify semantic retrieval completes without error
+
+**Add log to confirm fix:**
+```
+[SEMANTIC-RETRIEVAL] ✅ Completed: {memories_found} memories, {tokens} tokens (no fallback needed)
+```
+
+### Fix B: `logExtractionError is not a function` (line ~2061)
+
+1. Check if `logExtractionError` was renamed or removed from coreSystem
+2. Either restore the method or update the call to use the correct method name
+3. If method was intentionally removed, replace with `console.error` or equivalent
+
+### Verification:
+
+After fix, run queries and confirm logs show:
+- ✅ NO `context is not defined` errors
+- ✅ NO `logExtractionError is not a function` errors
+- ✅ `[HANDOFF:MEMORY-RETRIEVAL→FORMAT]` shows memories with non-zero token counts
+- ✅ NO keyword fallback happening (unless semantic genuinely finds nothing)
+
+## Scope
+
+- **ONLY** touch `api/categories/memory/internal/intelligence.js`
+- **DO NOT** modify orchestrator.js, memory retrieval logic, or scoring algorithms
+- **DO NOT** change the fallback behavior — just fix why the primary path crashes
+
+## Success Criteria
+
+1. `context is not defined` error no longer appears in Railway logs
+2. `logExtractionError` error no longer appears in Railway logs  
+3. Semantic retrieval completes successfully and returns memories directly
+4. Keyword fallback only fires when semantic genuinely finds no matches
+5. Run deep test — expect improvement from 11/15 toward 13-14/15
+6. Run 53-test — expect improvement from 55/61 toward 58-60/61
+
+## Testing
+
+```bash
+# After deploying fix, run these and check Railway logs:
+
+# Test 1: Simple recall (should use semantic, not keyword fallback)
+"What's my favorite color?"
+
+# Test 2: Entity recall (semantic needed for name matching)  
+"Who is Emma?"
+
+# Test 3: Multi-fact recall (semantic needed to find related memories)
+"Tell me about my work history"
+
+# Verify: NO "context is not defined" in logs
+# Verify: NO "Keyword fallback loaded" unless semantic found nothing
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

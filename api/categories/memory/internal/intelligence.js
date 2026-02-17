@@ -2058,9 +2058,9 @@ class IntelligenceSystem {
       this.logger.error("Critical error in enhanced extraction:", error);
       // Sanitize userId for error logging (sanitizedUserId may not exist in error path)
       const errorUserId = userId?.trim() || 'unknown';
-      await this.coreSystem.logExtractionError(error, {
+      console.error(`[PERSISTENT_MEMORY ERROR] Extraction failed for user ${errorUserId}: ${error.message}`, {
         userId: errorUserId,
-        query: query.substring(0, 100),
+        query: query?.substring(0, 100),
       });
       return [];
     }

@@ -1,0 +1,25 @@
+The `context` references in other functions are legitimate (they're parameters in different functions like `#runEnforcementChain`). The only undefined `context` was the two lines I fixed in `#retrieveMemoryContext`.
+
+---SUMMARY---
+
+## Changes Made
+
+### Bug A: `context is not defined` — `api/core/orchestrator.js` (line ~2457)
+
+**Root cause:** In the `#retrieveMemoryContext(userId, message, options = {})` method, a PR implementing Issue #776 referenced `context.sources?.hasDocuments` and `context.sources?.hasExternal`, but `context` is not defined in this function's scope. The function parameter is `options`, not `context`.
+
+**Fix:** Changed `context.sources?.hasDocuments` → `options.sources?.hasDocuments` and `context.sources?.hasExternal` → `options.sources?.hasExternal`.
+
+**Effect:** Semantic retrieval no longer crashes with `ReferenceError: context is not defined` after successfully finding memories. The memories found are now actually returned to the caller instead of being lost due to the crash.
+
+Also added the requested success log: `[SEMANTIC-RETRIEVAL] ✅ Completed: N memories, N tokens (no fallback needed)`
+
+### Bug B: `logExtractionError is not a function` — `api/categories/memory/internal/intelligence.js` (line 2061)
+
+**Root cause:** The catch block in `extractEnhanced()` called `await this.coreSystem.logExtractionError(error, {...})`, but `logExtractionError` was never implemented on the `coreSystem` (the `CoreSystem` class in `core.js` has no such method).
+
+**Fix:** Replaced the non-existent `this.coreSystem.logExtractionError(...)` call with a direct `console.error(...)` call that logs the same information.
+
+**Effect:** When the enhanced extraction catches an error, it no longer throws a secondary `TypeError: this.coreSystem.logExtractionError is not a function`, ensuring the `return []` is reached and keyword fallback can proceed cleanly.
+
+---END SUMMARY---
