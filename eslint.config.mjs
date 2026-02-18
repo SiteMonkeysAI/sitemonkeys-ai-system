@@ -6,6 +6,8 @@ export default [
       "build/**",
       ".git/**",
       "api/lib/verifier/**",
+      "test-six-semantic-fixes.js",
+      "verify-semantic-fixes.js",
     ],
   },
   {
