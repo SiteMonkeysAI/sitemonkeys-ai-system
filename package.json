@@ -1,1 +1,46 @@
-{\n  "name": "sitemonkeys-ai-system",\n  "version": "1.0.0",\n  "type": "module",\n  "dependencies": {\n    "@anthropic-ai/sdk": "^0.27.0",\n    "axios": "^1.5.0",\n    "connect-pg-simple": "^10.0.0",\n    "cors": "^2.8.5",\n    "express": "^4.22.1",\n    "express-session": "^1.17.3",\n    "googleapis": "^126.0.1",\n    "jszip": "^3.10.1",\n    "lodash": "^4.17.23",\n    "mammoth": "^1.6.0",\n    "multer": "^2.0.2",\n    "openai": "^4.0.0",\n    "pdf-parse": "^1.1.1",\n    "pg": "^8.11.3",\n    "tiktoken": "^1.0.22",\n    "xml2js": "^0.6.2",\n    "express-rate-limit": "^8.2.1"\n  },\n  "imports": {\n    "#config/*": "./config/*",\n    "#lib/*": "./lib/*"\n  },\n  "scripts": {\n    "fix-database": "node fix_database.js",\n    "start": "node server.js",\n    "test-intelligence": "node test-intelligence-system.js",\n    "test-newline-fix": "node test-newline-fix-unit.js",\n    "test-token-budgets": "node test-token-budgets.js",\n    "test-token-budgets-unit": "node test-token-budgets-unit.js",\n    "validate-deployment": "node deploy-intelligence-upgrade.js",\n    "test:memory": "node scripts/memory-regression-test.js",\n    "lint": "eslint ."\n  },\n  "engines": {\n    "node": ">=14.0.0"\n  },\n  "devDependencies": {\n    "eslint": "^9.38.0",\n    "prettier": "^3.6.2"\n  }\n}
+{
+  "name": "sitemonkeys-ai-system",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.27.0",
+    "axios": "^1.5.0",
+    "connect-pg-simple": "^10.0.0",
+    "cors": "^2.8.5",
+    "express": "^4.22.1",
+    "express-session": "^1.17.3",
+    "googleapis": "^126.0.1",
+    "jszip": "^3.10.1",
+    "lodash": "^4.17.23",
+    "mammoth": "^1.6.0",
+    "multer": "^2.0.2",
+    "openai": "^4.0.0",
+    "pdf-parse": "^1.1.1",
+    "pg": "^8.11.3",
+    "tiktoken": "^1.0.22",
+    "xml2js": "^0.6.2",
+    "express-rate-limit": "^8.2.1"
+  },
+  "imports": {
+    "#config/*": "./config/*",
+    "#lib/*": "./lib/*"
+  },
+  "scripts": {
+    "fix-database": "node fix_database.js",
+    "start": "node server.js",
+    "test-intelligence": "node test-intelligence-system.js",
+    "test-newline-fix": "node test-newline-fix-unit.js",
+    "test-token-budgets": "node test-token-budgets.js",
+    "test-token-budgets-unit": "node test-token-budgets-unit.js",
+    "validate-deployment": "node deploy-intelligence-upgrade.js",
+    "test:memory": "node scripts/memory-regression-test.js",
+    "lint": "eslint ."
+  },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^9.38.0",
+    "prettier": "^3.6.2"
+  }
+}
