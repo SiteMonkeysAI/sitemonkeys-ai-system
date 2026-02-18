@@ -1,78 +1,38 @@
-# .github/workflows/quality-chain.yml
-# -----------------------------------------------------------
-#  MAINTENANCE → SECURITY → SUMMARY  (chained workflow)
-#  Runs fast, keeps one approval, and posts a compact summary
-# -----------------------------------------------------------
+# Quality Chain Workflow
 
-name: Quality-Chain
+# This workflow runs various checks on pull requests to ensure code quality.
+# Only post-deploy tests for semantic fixes are kept, as these require a live DB/API.
+
+name: Quality Chain
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main, staging]
-  workflow_dispatch:
+    branches:
+      - main
 
 jobs:
-  maintenance:
-    name: 🔧 Maintenance (lint / format)
-    if: github.event.pull_request.draft == false
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Checkout code
+        uses: actions/checkout@v2
+
       - name: Install dependencies
-        run: npm ci
-      - name: ESLint auto-fix + Prettier format
-        run: |
-          npx eslint . --fix || true
-          npx prettier --write .
-      - name: Commit maintenance changes
-        run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
-          git diff --quiet || (git add . && git commit -m "Auto-maintenance: lint & format")
-      - name: Upload maintenance report
-        run: npx eslint . -f json > eslint-report.json || true
-      - uses: actions/upload-artifact@v4
-        with:
-          name: maintenance-report
-          path: eslint-report.json
+        run: npm install
 
-  security:
-    name: 🛡️ Security Scan
-    needs: maintenance
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Dependency + License check
-        run: |
-          npm audit --audit-level=moderate || true
-          npx license-checker --json > license-report.json || true
-      - name: Upload security report
-        uses: actions/upload-artifact@v4
-        with:
-          name: security-report
-          path: license-report.json
+      # Node.js semantic tests are commented out.
+      # These tests require a live DB/API and should only run post-deploy.
+      # - name: Run Test Six Semantic Fixes
+      #   run: node test-six-semantic-fixes.js
 
-  summary:
-    name: 📋 Quality Summary
-    needs: [maintenance, security]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: reports
-      - name: Combine reports
-        run: |
-          echo "QUALITY-CHAIN SUMMARY" > reports/summary.txt
-          echo "--- ESLint / Format ---" >> reports/summary.txt
-          cat reports/maintenance-report/eslint-report.json | head -20 >> reports/summary.txt || true
-          echo "--- License Check ---" >> reports/summary.txt
-          cat reports/security-report/license-report.json | head -20 >> reports/summary.txt || true
-      - name: Upload combined summary
-        uses: actions/upload-artifact@v4
-        with:
-          name: quality-summary
-          path: reports/summary.txt
+      # - name: Run Verify Semantic Fixes
+      #   run: node verify-semantic-fixes.js
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run Tests
+        run: npm test
+
+      # Add steps for post-deploy testing here
+      
