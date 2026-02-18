@@ -1,0 +1,120 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-02-18",
+  "lock_policy": "Tests are locked after 3 consecutive passes. Locked tests CANNOT regress without failing CI.",
+  
+  "suites": {
+    "smd_deep": {
+      "display_name": "SMD Deep Intelligence Test v1.2",
+      "minimum_pass": 12,
+      "total": 15,
+      "pass_rate": "80%",
+      "locked_tests": [
+        "INF2",
+        "INF3",
+        "STR2",
+        "CMP1",
+        "TRU1",
+        "TRU2",
+        "TRU3",
+        "EDG1",
+        "EDG2",
+        "EDG3"
+      ],
+      "observed_tests": ["NUA1", "STR1"],
+      "known_failures": [
+        {
+          "id": "INF1",
+          "description": "Implicit Inference (Age from Kindergarten)",
+          "reason": "System does not infer age from kindergarten enrollment year",
+          "fix_type": "inference_logic"
+        },
+        {
+          "id": "NUA2",
+          "description": "Contextual Tension (Allergy vs Wife Preference)",
+          "reason": "Cross-category retrieval not surfacing allergy alongside pet preference",
+          "fix_type": "cross_category_retrieval"
+        },
+        {
+          "id": "CMP2",
+          "description": "Name Preservation (International Names)",
+          "reason": "Names may be stored correctly but not surfaced completely in response composition",
+          "fix_type": "response_composition_list_completeness"
+        }
+      ],
+      "baseline_history": [
+        { "date": "2026-02-18", "score": "12/15", "event": "Post semantic retrieval fix (PR #790)" }
+      ]
+    },
+
+    "comprehensive_53": {
+      "display_name": "53-Test Comprehensive Suite",
+      "minimum_pass": 58,
+      "total": 61,
+      "pass_rate": "95%",
+      "locked_tests": [
+        "MEM-001", "MEM-002", "MEM-003", "MEM-004", "MEM-005", "MEM-006",
+        "MEM-008", "MEM-009", "MEM-010",
+        "INJ-001", "INJ-002", "INJ-003", "INJ-004", "INJ-005", "INJ-006", "INJ-007",
+        "INJ-009", "INJ-010",
+        "INTEL-001", "INTEL-002", "INTEL-003", "INTEL-004", "INTEL-005",
+        "INTEL-006", "INTEL-007", "INTEL-008",
+        "VAULT-001", "VAULT-002", "VAULT-003", "VAULT-004", "VAULT-005",
+        "TRUTH-001", "TRUTH-002", "TRUTH-003", "TRUTH-004", "TRUTH-005",
+        "TRUTH-006", "TRUTH-007", "TRUTH-008", "TRUTH-009", "TRUTH-010",
+        "TRUTH-011", "TRUTH-012", "TRUTH-013", "TRUTH-014", "TRUTH-015",
+        "TRUTH-016", "TRUTH-017", "TRUTH-018",
+        "GUARD-001", "GUARD-002", "GUARD-003", "GUARD-004", "GUARD-005",
+        "COST-001", "COST-002", "COST-003",
+        "UX-044", "UX-045", "UX-046", "UX-047", "UX-048"
+      ],
+      "observed_tests": [],
+      "known_failures": [
+        {
+          "id": "MEM-007",
+          "description": "Critical facts prioritized over preferences",
+          "reason": "Allergy not prioritized over pet preference in retrieval ranking",
+          "fix_type": "priority_scoring"
+        },
+        {
+          "id": "INJ-008",
+          "description": "Mode-aware memory retrieval",
+          "reason": "Mode-specific memory not retrieved correctly",
+          "fix_type": "mode_filtering"
+        },
+        {
+          "id": "UX-049",
+          "description": "System learns user priorities",
+          "reason": "Adaptive priority learning not implemented",
+          "fix_type": "feature_build"
+        }
+      ],
+      "baseline_history": [
+        { "date": "2026-02-18", "score": "58/61", "event": "Post semantic retrieval fix (PR #790)" }
+      ]
+    },
+
+    "smn_site_monkeys": {
+      "display_name": "SMN Site Monkeys Business Suite",
+      "minimum_pass": null,
+      "total": null,
+      "locked_tests": [],
+      "known_failures": [],
+      "observed_tests": [],
+      "baseline_history": [],
+      "status": "pending_baseline"
+    }
+  },
+
+  "flicker_policy": {
+    "lock_after_consecutive_passes": 3,
+    "observed_state_after_first_pass": true,
+    "promote_to_locked_automatically": true
+  },
+
+  "enforcement_rules": {
+    "tier1_blocks_merge": true,
+    "tier2_blocks_next_pr_on_regression": true,
+    "auto_ratchet_on_improvement": true
+  }
+}
