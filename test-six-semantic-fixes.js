@@ -10,6 +10,9 @@
  * 4. TRUTH-018: Temporal Reconciliation
  * 5. UX-044: Cross-Session Continuity
  * 6. UX-046: Memory Visibility
+ * 
+ * NOTE: This test requires DATABASE_URL and OPENAI_API_KEY environment variables.
+ * Skips gracefully if not available.
  */
 
 import { IntelligentMemoryStorage } from './api/memory/intelligent-storage.js';
@@ -18,6 +21,27 @@ import { Orchestrator } from './api/core/orchestrator.js';
 import pg from 'pg';
 
 const { Pool } = pg;
+
+// Check for required environment variables and exit gracefully if missing
+if (!process.env.DATABASE_URL) {
+  console.log('═══════════════════════════════════════════════════════');
+  console.log('  6 SEMANTIC INTELLIGENCE FIXES - VERIFICATION TESTS');
+  console.log('═══════════════════════════════════════════════════════\n');
+  console.log('⚠️  Skipping: DATABASE_URL not available in CI environment');
+  console.log('    This test requires a database connection.');
+  console.log('    To run locally, set DATABASE_URL environment variable.\n');
+  process.exit(0);
+}
+
+if (!process.env.OPENAI_API_KEY) {
+  console.log('═══════════════════════════════════════════════════════');
+  console.log('  6 SEMANTIC INTELLIGENCE FIXES - VERIFICATION TESTS');
+  console.log('═══════════════════════════════════════════════════════\n');
+  console.log('⚠️  Skipping: OPENAI_API_KEY not available in CI environment');
+  console.log('    This test requires OpenAI API access.');
+  console.log('    To run locally, set OPENAI_API_KEY environment variable.\n');
+  process.exit(0);
+}
 
 // Database connection
 const pool = new Pool({
