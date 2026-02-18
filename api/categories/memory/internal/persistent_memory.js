@@ -123,10 +123,10 @@ class PersistentMemoryOrchestrator {
 
       // Build formatted memory text with category headers
       let memoryText = "";
-      let sectionIndex = 0;
+      let _sectionIndex = 0;
 
       for (const [category, categoryMemories] of Object.entries(categorizedMemories)) {
-        sectionIndex++;
+        _sectionIndex++;
 
         // Add category header
         const isListType = category.toLowerCase().includes('contact') ||

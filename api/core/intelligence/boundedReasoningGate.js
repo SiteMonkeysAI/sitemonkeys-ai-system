@@ -512,9 +512,9 @@ const BOUNDED_REASONING_STRUCTURE = {
  * @param {string} response - The AI response
  * @param {object} phase4Metadata - Phase 4 metadata
  * @param {object} context - Context including queryText and queryClassification
- * @param {function} semanticSimilarityFn - Optional similarity function
+ * @param {function} _semanticSimilarityFn - Optional similarity function
  */
-function enforceBoundedReasoning(response, phase4Metadata, context = {}, semanticSimilarityFn = null) {
+function enforceBoundedReasoning(response, phase4Metadata, context = {}, _semanticSimilarityFn = null) {
   // ISSUE #431 FIX: Respect intelligent query classification
   // If semantic classifier determined scaffolding is not needed, pass through
   if (context?.queryClassification?.requiresScaffolding === false) {

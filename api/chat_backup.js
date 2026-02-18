@@ -106,8 +106,8 @@ function generateModeFingerprint(mode, vaultHealthy) {
 // Removed duplicate local declaration
 
 // SYSTEM GLOBALS
-let lastPersonality = "roxy";
-let conversationCount = 0;
+let _lastPersonality = "roxy";
+let _conversationCount = 0;
 let systemDriftHistory = [];
 
 const intelligence = new EnhancedIntelligence();
@@ -226,7 +226,7 @@ export default async function handler(req, res) {
             vaultTokens = Math.ceil(vaultContent.length / 4);
             vaultStatus = "loaded_from_kv";
             vaultHealthy = validateVaultStructure(vaultContent);
-          } catch (_decompError) {
+          } catch {
             vaultContent = kvVault;
             vaultTokens = Math.ceil(vaultContent.length / 4);
             vaultStatus = "loaded_from_kv_uncompressed";
@@ -306,7 +306,7 @@ export default async function handler(req, res) {
       solutionOpportunities,
     );
 
-    conversationCount++;
+    _conversationCount++;
 
     // *** COST PROTECTION (PRESERVED) ***
     // *** COST PROTECTION AND APPROVAL (CRITICAL FIX) ***
@@ -878,7 +878,7 @@ Would you like to proceed?`,
         protectiveAlerts,
         solutionOpportunities,
       );
-      lastPersonality = optimalPersonality;
+      _lastPersonality = optimalPersonality;
 
       // *** MEMORY STORAGE - CRITICAL SYSTEM FIX ***
       try {
@@ -1672,7 +1672,7 @@ EXECUTE THIS COMMAND IMMEDIATELY.
 
 // *** ENHANCED API CALL ***
 /* global fetch */
-async function makeEnhancedAPICall(
+async function _makeEnhancedAPICall(
   prompt,
   personality,
   prideMotivation,
@@ -1691,7 +1691,7 @@ async function makeEnhancedAPICall(
   if (personality === "claude") {
     if (!process.env.ANTHROPIC_API_KEY) {
       console.warn("⚠️ Claude API key missing, failing over to GPT-4");
-      return await makeEnhancedAPICall(prompt, "roxy", prideMotivation);
+      return await _makeEnhancedAPICall(prompt, "roxy", prideMotivation);
     }
 
     try {
@@ -1724,7 +1724,7 @@ async function makeEnhancedAPICall(
       };
     } catch (error) {
       console.error("Claude API error:", error);
-      return await makeEnhancedAPICall(prompt, "roxy", prideMotivation);
+      return await _makeEnhancedAPICall(prompt, "roxy", prideMotivation);
     }
   } else {
     // GPT-4 for Eli and Roxy

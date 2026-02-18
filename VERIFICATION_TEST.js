@@ -12,7 +12,7 @@ console.log("=".repeat(80));
 console.log("");
 
 // Standalone copies of the fixed functions for testing without dependencies
-function applyTemporalArithmeticFallback(response, memoryContext, userQuery, personalityId) {
+function applyTemporalArithmeticFallback(response, memoryContext, userQuery, _personalityId) {
   const primitiveLog = {
     primitive: "TEMPORAL_ARITHMETIC",
     fired: false,

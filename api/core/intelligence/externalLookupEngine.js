@@ -50,7 +50,7 @@ export const API_SOURCES = {
         if (!pairMatch) return null;
 
         const fromCurrency = pairMatch[1].toUpperCase();
-        const toCurrency = pairMatch[2].toUpperCase();
+        const _toCurrency = pairMatch[2].toUpperCase();
 
         // Using exchangerate-api.com free tier
         return `https://open.er-api.com/v6/latest/${fromCurrency}`;
@@ -152,7 +152,7 @@ export const API_SOURCES = {
         // Generic current leader lookup
         const leaderMatch = query.match(/(?:current|who is the)\s+(?:prime minister|president|chancellor|leader)\s+of\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i);
         if (leaderMatch) {
-          const country = leaderMatch[1];
+          const _country = leaderMatch[1];
           // Try to construct Wikipedia URL for that country's leader
           return `https://en.wikipedia.org/api/rest_v1/page/summary/List_of_current_heads_of_state_and_government`;
         }

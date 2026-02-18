@@ -33,7 +33,7 @@ const migrationRateLimiter = rateLimit({
 /**
  * Validates migration is allowed and authenticates request
  */
-function validateMigrationRequest(req, res) {
+function validateMigrationRequest(req, _res) {
   // Check migration lock
   if (process.env.ALLOW_DB_MIGRATION !== 'true') {
     return {
