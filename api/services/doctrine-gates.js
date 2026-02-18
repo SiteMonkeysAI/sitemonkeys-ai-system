@@ -95,21 +95,21 @@ const GENERIC_MARKERS = [
 ];
 
 const SPECIFIC_MARKERS = [
-  /\$\d+/,                           // Dollar amounts
-  /\d{4}/,                           // Years
-  /\d+%/,                            // Percentages
-  /[A-Z][a-z]+\s+[A-Z][a-z]+/,      // Proper nouns
-  /"[^"]+"/,                         // Quoted specifics
-  /in \w+, \w+/,                     // Specific locations
+  /\$\d+/, // Dollar amounts
+  /\d{4}/, // Years
+  /\d+%/, // Percentages
+  /[A-Z][a-z]+\s+[A-Z][a-z]+/, // Proper nouns
+  /"[^"]+"/, // Quoted specifics
+  /in \w+, \w+/, // Specific locations
 ];
 
 // ==================== SCORING WEIGHTS ====================
 
 const WEIGHTS = {
-  uncertaintyStructure: 0.30,    // 30% - Core to truth-first
-  blindSpotVolunteering: 0.25,   // 25% - Intellectual honesty
-  antiEngagementClosure: 0.25,   // 25% - User autonomy
-  exampleQuality: 0.20,          // 20% - Concrete helpfulness
+  uncertaintyStructure: 0.3, // 30% - Core to truth-first
+  blindSpotVolunteering: 0.25, // 25% - Intellectual honesty
+  antiEngagementClosure: 0.25, // 25% - User autonomy
+  exampleQuality: 0.2, // 20% - Concrete helpfulness
 };
 
 // ==================== GATE 1: UNCERTAINTY STRUCTURE ====================
@@ -126,7 +126,7 @@ const WEIGHTS = {
  */
 export function evaluateUncertaintyStructure(response, context = {}) {
   // Check if response contains uncertainty triggers
-  const hasUncertainty = UNCERTAINTY_TRIGGERS.some(pattern => pattern.test(response));
+  const hasUncertainty = UNCERTAINTY_TRIGGERS.some((pattern) => pattern.test(response));
 
   if (!hasUncertainty) {
     // No uncertainty expressed, so structure not required
@@ -139,8 +139,8 @@ export function evaluateUncertaintyStructure(response, context = {}) {
   }
 
   // Uncertainty detected - check for required structure
-  const hasExplanation = EXPLANATION_MARKERS.some(pattern => pattern.test(response));
-  const hasFramework = FRAMEWORK_MARKERS.some(pattern => pattern.test(response));
+  const hasExplanation = EXPLANATION_MARKERS.some((pattern) => pattern.test(response));
+  const hasFramework = FRAMEWORK_MARKERS.some((pattern) => pattern.test(response));
 
   const missing = [];
   if (!hasExplanation) missing.push('explanation');
@@ -163,9 +163,10 @@ export function evaluateUncertaintyStructure(response, context = {}) {
     hasExplanation: hasExplanation,
     hasFramework: hasFramework,
     missing: missing,
-    reason: missing.length > 0
-      ? `Uncertainty expressed but missing: ${missing.join(', ')}`
-      : 'Full uncertainty structure present',
+    reason:
+      missing.length > 0
+        ? `Uncertainty expressed but missing: ${missing.join(', ')}`
+        : 'Full uncertainty structure present',
   };
 }
 
@@ -180,7 +181,7 @@ export function evaluateUncertaintyStructure(response, context = {}) {
  */
 export function evaluateBlindSpotVolunteering(response, context = {}) {
   // Check if response contains advice
-  const hasAdvice = ADVICE_TRIGGERS.some(pattern => pattern.test(response));
+  const hasAdvice = ADVICE_TRIGGERS.some((pattern) => pattern.test(response));
 
   if (!hasAdvice) {
     // No advice given, so blind spots not required
@@ -193,10 +194,11 @@ export function evaluateBlindSpotVolunteering(response, context = {}) {
   }
 
   // Advice detected - count blind spot markers
-  const blindSpotCount = BLIND_SPOT_MARKERS.filter(pattern => pattern.test(response)).length;
+  const blindSpotCount = BLIND_SPOT_MARKERS.filter((pattern) => pattern.test(response)).length;
 
   // Detect high-stakes contexts (financial, medical, legal)
-  const isHighStakes = context.highStakes ||
+  const isHighStakes =
+    context.highStakes ||
     /invest|stock|crypto|financial|medical|diagnosis|legal|lawsuit/i.test(response);
 
   const requiredCount = isHighStakes ? 2 : 1;
@@ -240,10 +242,10 @@ export function evaluateAntiEngagementClosure(response) {
   const closureText = response.slice(-200);
 
   // Check for engagement bait in closure
-  const baitInClosure = ENGAGEMENT_BAIT.some(pattern => pattern.test(closureText));
+  const baitInClosure = ENGAGEMENT_BAIT.some((pattern) => pattern.test(closureText));
 
   // Check for engagement bait anywhere in response (for context)
-  const baitAnywhere = ENGAGEMENT_BAIT.some(pattern => pattern.test(response));
+  const baitAnywhere = ENGAGEMENT_BAIT.some((pattern) => pattern.test(response));
 
   const passed = !baitInClosure;
 
@@ -270,8 +272,8 @@ export function evaluateAntiEngagementClosure(response) {
  */
 export function evaluateExampleQuality(response) {
   // Count generic vs specific markers
-  const genericCount = GENERIC_MARKERS.filter(pattern => pattern.test(response)).length;
-  const specificCount = SPECIFIC_MARKERS.filter(pattern => pattern.test(response)).length;
+  const genericCount = GENERIC_MARKERS.filter((pattern) => pattern.test(response)).length;
+  const specificCount = SPECIFIC_MARKERS.filter((pattern) => pattern.test(response)).length;
 
   const totalMarkers = genericCount + specificCount;
 
@@ -311,12 +313,11 @@ export function evaluateExampleQuality(response) {
  * @returns {number} Composite score (0.0 to 1.0)
  */
 export function calculateTruthFirstScore(gateResults) {
-  const score = (
+  const score =
     gateResults.uncertainty.score * WEIGHTS.uncertaintyStructure +
     gateResults.blindSpots.score * WEIGHTS.blindSpotVolunteering +
     gateResults.antiEngagement.score * WEIGHTS.antiEngagementClosure +
-    gateResults.exampleQuality.score * WEIGHTS.exampleQuality
-  );
+    gateResults.exampleQuality.score * WEIGHTS.exampleQuality;
 
   return Math.round(score * 100) / 100; // Round to 2 decimal places
 }
@@ -338,8 +339,8 @@ function getMinimumScore(context = {}) {
     /suicide|self-harm|emergency/i,
   ];
 
-  const isHighStakes = context.highStakes ||
-    highStakesPatterns.some(pattern => pattern.test(context.message || ''));
+  const isHighStakes =
+    context.highStakes || highStakesPatterns.some((pattern) => pattern.test(context.message || ''));
 
   if (isHighStakes) return 0.8;
   if (context.mode === 'business_validation') return 0.7;
@@ -365,7 +366,9 @@ function generateFeedback(results) {
     if (results.uncertainty.passed) {
       strengths.push('✓ Proper uncertainty structure');
     } else {
-      issues.push(`✗ Uncertainty structure incomplete: missing ${results.uncertainty.missing.join(', ')}`);
+      issues.push(
+        `✗ Uncertainty structure incomplete: missing ${results.uncertainty.missing.join(', ')}`,
+      );
     }
   }
 
@@ -373,7 +376,9 @@ function generateFeedback(results) {
     if (results.blindSpots.passed) {
       strengths.push(`✓ Advice includes ${results.blindSpots.blindSpotCount} caveat(s)`);
     } else {
-      issues.push(`✗ Advice needs more caveats (${results.blindSpots.blindSpotCount}/${results.blindSpots.requiredCount})`);
+      issues.push(
+        `✗ Advice needs more caveats (${results.blindSpots.blindSpotCount}/${results.blindSpots.requiredCount})`,
+      );
     }
   }
 
@@ -437,7 +442,11 @@ export function enforceDoctrineGates(response, context = {}) {
   }
 
   // High-stakes advice without ANY caveats = automatic fail
-  if (results.blindSpots.applicable && results.blindSpots.isHighStakes && results.blindSpots.score === 0) {
+  if (
+    results.blindSpots.applicable &&
+    results.blindSpots.isHighStakes &&
+    results.blindSpots.score === 0
+  ) {
     hardFailConditions.push('High-stakes advice without caveats');
   }
 

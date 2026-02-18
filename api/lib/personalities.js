@@ -5,86 +5,82 @@
 export function analyzePromptType(message) {
   try {
     const businessKeywords = [
-      "cost",
-      "revenue",
-      "profit",
-      "budget",
-      "spend",
-      "invest",
-      "price",
-      "market",
-      "competition",
-      "strategy",
-      "business",
-      "startup",
-      "funding",
-      "should i",
-      "recommend",
-      "decision",
-      "choose",
-      "better option",
+      'cost',
+      'revenue',
+      'profit',
+      'budget',
+      'spend',
+      'invest',
+      'price',
+      'market',
+      'competition',
+      'strategy',
+      'business',
+      'startup',
+      'funding',
+      'should i',
+      'recommend',
+      'decision',
+      'choose',
+      'better option',
     ];
 
     const truthKeywords = [
-      "fact",
-      "true",
-      "false",
-      "verify",
-      "check",
-      "accurate",
-      "evidence",
-      "proof",
-      "source",
-      "research",
-      "data",
-      "statistics",
-      "study",
+      'fact',
+      'true',
+      'false',
+      'verify',
+      'check',
+      'accurate',
+      'evidence',
+      'proof',
+      'source',
+      'research',
+      'data',
+      'statistics',
+      'study',
     ];
 
     const complexAnalysisKeywords = [
-      "analyze",
-      "compare",
-      "evaluate",
-      "assess",
-      "research",
-      "investigate",
-      "deep dive",
-      "comprehensive",
-      "detailed analysis",
-      "strategic",
+      'analyze',
+      'compare',
+      'evaluate',
+      'assess',
+      'research',
+      'investigate',
+      'deep dive',
+      'comprehensive',
+      'detailed analysis',
+      'strategic',
     ];
 
     const messageLC = message.toLowerCase();
 
-    const businessScore = businessKeywords.filter((word) =>
-      messageLC.includes(word),
-    ).length;
-    const truthScore = truthKeywords.filter((word) =>
-      messageLC.includes(word),
-    ).length;
+    const businessScore = businessKeywords.filter((word) => messageLC.includes(word)).length;
+    const truthScore = truthKeywords.filter((word) => messageLC.includes(word)).length;
     const complexityScore = complexAnalysisKeywords.filter((word) =>
       messageLC.includes(word),
     ).length;
 
     // Complex analysis triggers Claude consideration
     if (complexityScore >= 2) {
-      return "claude_complex";
+      return 'claude_complex';
     }
 
     // Business validation gets Eli
     if (
       businessScore > truthScore ||
-      messageLC.includes("should i") ||
-      messageLC.includes("recommend")
+      messageLC.includes('should i') ||
+      messageLC.includes('recommend')
     ) {
-      return "eli";
+      return 'eli';
     }
 
     // Everything else gets Roxy for truth-first analysis
-    return "roxy";
+    return 'roxy';
   } catch (error) {
-    console.error("Prompt analysis error:", error);
-    return "roxy"; // Safe default
+    console.error('Prompt analysis error:', error);
+    return 'roxy'; // Safe default
   }
 }
 
@@ -96,15 +92,14 @@ export async function generateEliResponse(
   conversationHistory,
   openai,
   memoryContext = null,
-  externalContext = "",
+  externalContext = '',
 ) {
-  console.log("🍌 Generating Eli response with enhanced intelligence");
+  console.log('🍌 Generating Eli response with enhanced intelligence');
 
   try {
     // Enhanced memory context integration - prioritize actual memoryContext over conversationHistory
-    const memoryInsights = memoryContext || (conversationHistory
-      ? extractMemoryInsights(conversationHistory)
-      : null);
+    const memoryInsights =
+      memoryContext || (conversationHistory ? extractMemoryInsights(conversationHistory) : null);
 
     // Detect complexity level for enhanced prompting
     const complexityLevel = analyzeQueryComplexity(message, mode);
@@ -123,7 +118,7 @@ ENHANCED CAPABILITIES YOU MUST USE:
 - Memory-integrated strategic thinking
 
 CURRENT MODE: ${mode}
-QUERY COMPLEXITY: ${complexityLevel > 0.8 ? "HIGH - Use full reasoning capabilities" : complexityLevel > 0.5 ? "MEDIUM - Apply structured analysis" : "STANDARD - Direct response with verification"}
+QUERY COMPLEXITY: ${complexityLevel > 0.8 ? 'HIGH - Use full reasoning capabilities' : complexityLevel > 0.5 ? 'MEDIUM - Apply structured analysis' : 'STANDARD - Direct response with verification'}
 
 ${
   vaultContext
@@ -136,7 +131,7 @@ VAULT-ENHANCED ANALYSIS REQUIRED:
 - Reference operational protocols
 - Include founder-protection considerations
 `
-    : ""
+    : ''
 }
 
 ${
@@ -157,13 +152,13 @@ Think like a caring family member who remembers what you've been told:
 
 If the answer is in the memory above, use it. Don't claim ignorance of information you have.
 `
-    : ""
+    : ''
 }
 
 USER QUERY: "${message}"
 
 ENHANCED RESPONSE REQUIREMENTS:
-1. ${requiresDeepAnalysis ? "REASONING CHAIN: Show your step-by-step logical analysis" : "DIRECT ANALYSIS: Provide clear reasoning for your conclusions"}
+1. ${requiresDeepAnalysis ? 'REASONING CHAIN: Show your step-by-step logical analysis' : 'DIRECT ANALYSIS: Provide clear reasoning for your conclusions'}
 2. BUSINESS REALITY: Include survival impact, cash flow considerations, and risk assessment
 3. SCENARIO AWARENESS: Consider multiple outcomes (optimistic/realistic/pessimistic)
 4. ASSUMPTION FLAGGING: Explicitly state what you're assuming vs. what you know
@@ -177,7 +172,7 @@ TRUTH-FIRST ENFORCEMENT:
 - Admit limitations and unknowns
 
 ${
-  mode === "business_validation" || mode === "site_monkeys"
+  mode === 'business_validation' || mode === 'site_monkeys'
     ? `
 BUSINESS VALIDATION REQUIREMENTS:
 - SURVIVAL IMPACT: How does this affect business continuity?
@@ -185,19 +180,19 @@ BUSINESS VALIDATION REQUIREMENTS:
 - TOP 3 RISKS: Identify primary failure scenarios with probabilities
 - DECISION FRAMEWORK: Clear recommendation with fallback options
 `
-    : ""
+    : ''
 }
 
-${externalContext ? externalContext : ""}
+${externalContext ? externalContext : ''}
 
 Your response should demonstrate extraordinary analytical capability while maintaining your caring, protective personality. Think deeply, reason clearly, and provide actionable intelligence.`;
 
     // Call OpenAI with enhanced prompt
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: 'gpt-4o',
       messages: [
-        { role: "system", content: prompt },
-        { role: "user", content: message },
+        { role: 'system', content: prompt },
+        { role: 'user', content: message },
       ],
       temperature: 0.3, // Lower temperature for more analytical responses
       max_tokens: 1200, // More tokens for detailed analysis
@@ -206,19 +201,15 @@ Your response should demonstrate extraordinary analytical capability while maint
     const rawResponse = completion.choices[0].message.content;
 
     // Enhanced response validation
-    const validationResult = validateEliResponseEnhanced(
-      rawResponse,
-      mode,
-      requiresDeepAnalysis,
-    );
+    const validationResult = validateEliResponseEnhanced(rawResponse, mode, requiresDeepAnalysis);
 
-    console.log("🍌 Enhanced Eli response generated and validated");
+    console.log('🍌 Enhanced Eli response generated and validated');
 
     return {
       response: validationResult.validated_response,
       tokens_used: completion.usage.total_tokens,
       cost: completion.usage.total_tokens * 0.00003,
-      ai_personality: "eli",
+      ai_personality: 'eli',
       business_focused: true,
       enhanced_intelligence: true,
       reasoning_applied: requiresDeepAnalysis,
@@ -226,14 +217,9 @@ Your response should demonstrate extraordinary analytical capability while maint
       compliance_score: validationResult.compliance_score,
     };
   } catch (error) {
-    console.error("❌ Enhanced Eli response error:", error);
+    console.error('❌ Enhanced Eli response error:', error);
 
-    return generateEliEnhancedFallback(
-      error,
-      message,
-      mode,
-      conversationHistory,
-    );
+    return generateEliEnhancedFallback(error, message, mode, conversationHistory);
   }
 }
 
@@ -245,16 +231,13 @@ export async function generateRoxyResponse(
   conversationHistory,
   openai,
   memoryContext = null,
-  externalContext = "",
+  externalContext = '',
 ) {
-  console.log("🍌 Generating Roxy response with enhanced intelligence");
+  console.log('🍌 Generating Roxy response with enhanced intelligence');
 
   try {
     // Enhanced emotional and contextual analysis
-    const emotionalContext = analyzeEmotionalContext(
-      message,
-      conversationHistory,
-    );
+    const emotionalContext = analyzeEmotionalContext(message, conversationHistory);
     const complexityLevel = analyzeQueryComplexity(message, mode);
     const requiresEmpathy = emotionalContext.emotionalWeight > 0.6;
 
@@ -272,7 +255,7 @@ ENHANCED CAPABILITIES YOU MUST USE:
 
 CURRENT MODE: ${mode}
 EMOTIONAL CONTEXT: ${emotionalContext.tone} (Weight: ${emotionalContext.emotionalWeight})
-QUERY COMPLEXITY: ${complexityLevel > 0.8 ? "HIGH - Deep analytical empathy needed" : complexityLevel > 0.5 ? "MEDIUM - Structured supportive analysis" : "STANDARD - Warm, direct guidance"}
+QUERY COMPLEXITY: ${complexityLevel > 0.8 ? 'HIGH - Deep analytical empathy needed' : complexityLevel > 0.5 ? 'MEDIUM - Structured supportive analysis' : 'STANDARD - Warm, direct guidance'}
 
 ${
   vaultContext
@@ -285,7 +268,7 @@ VAULT-ENHANCED EMPATHY:
 - Consider founder wellbeing and stress factors
 - Balance business objectives with personal impact
 `
-    : ""
+    : ''
 }
 
 ${
@@ -307,18 +290,18 @@ Think like a caring family member who remembers what you've been told:
 If the answer is in the memory above, use it. Don't claim ignorance of information you have.
 `
     : conversationHistory
-    ? `
+      ? `
 MEMORY CONTEXT: Previous conversations inform this response
 RELATIONSHIP CONTINUITY: Build on established emotional rapport and previous insights
 `
-    : ""
+      : ''
 }
 
 USER QUERY: "${message}"
 
 ENHANCED RESPONSE REQUIREMENTS:
 1. EMOTIONAL INTELLIGENCE: Acknowledge feelings, validate concerns, provide emotional support
-2. ${requiresEmpathy ? "DEEP REASONING CHAIN: Show analytical thinking with emotional awareness" : "SUPPORTIVE ANALYSIS: Provide clear reasoning with encouragement"}
+2. ${requiresEmpathy ? 'DEEP REASONING CHAIN: Show analytical thinking with emotional awareness' : 'SUPPORTIVE ANALYSIS: Provide clear reasoning with encouragement'}
 3. HOLISTIC PERSPECTIVE: Consider personal, emotional, and practical implications
 4. SCENARIO AWARENESS: Model emotional and practical outcomes
 5. ASSUMPTION FLAGGING: State assumptions with emotional sensitivity
@@ -331,7 +314,7 @@ TRUTH-FIRST WITH EMPATHY:
 - Never dismiss feelings, but ground advice in reality
 
 ${
-  mode === "truth_general"
+  mode === 'truth_general'
     ? `
 TRUTH MODE REQUIREMENTS:
 - Prioritize accuracy while maintaining warmth
@@ -339,19 +322,19 @@ TRUTH MODE REQUIREMENTS:
 - Provide confidence levels with emotional intelligence
 - Acknowledge uncertainty with supportive guidance
 `
-    : ""
+    : ''
 }
 
-${externalContext ? externalContext : ""}
+${externalContext ? externalContext : ''}
 
 Your response should demonstrate extraordinary emotional intelligence combined with analytical depth. Be caring, insightful, and provide wisdom that addresses both emotional and practical needs.`;
 
     // Call OpenAI with enhanced prompt
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o",
+      model: 'gpt-4o',
       messages: [
-        { role: "system", content: prompt },
-        { role: "user", content: message },
+        { role: 'system', content: prompt },
+        { role: 'user', content: message },
       ],
       temperature: 0.4, // Slightly higher temperature for more empathetic responses
       max_tokens: 1200,
@@ -360,19 +343,15 @@ Your response should demonstrate extraordinary emotional intelligence combined w
     const rawResponse = completion.choices[0].message.content;
 
     // Enhanced response validation
-    const validationResult = validateRoxyResponseEnhanced(
-      rawResponse,
-      mode,
-      requiresEmpathy,
-    );
+    const validationResult = validateRoxyResponseEnhanced(rawResponse, mode, requiresEmpathy);
 
-    console.log("🍌 Enhanced Roxy response generated and validated");
+    console.log('🍌 Enhanced Roxy response generated and validated');
 
     return {
       response: validationResult.validated_response,
       tokens_used: completion.usage.total_tokens,
       cost: completion.usage.total_tokens * 0.00003,
-      ai_personality: "roxy",
+      ai_personality: 'roxy',
       emotionally_intelligent: true,
       enhanced_intelligence: true,
       empathy_applied: requiresEmpathy,
@@ -380,7 +359,7 @@ Your response should demonstrate extraordinary emotional intelligence combined w
       emotional_context: emotionalContext,
     };
   } catch (error) {
-    console.error("❌ Enhanced Roxy response error:", error);
+    console.error('❌ Enhanced Roxy response error:', error);
 
     return generateRoxyEnhancedFallback(error, message, mode);
   }
@@ -393,10 +372,10 @@ export async function generateClaudeResponse(
   _vaultContext,
   _conversationHistory,
   _memoryContext = null,
-  _externalContext = "",
+  _externalContext = '',
 ) {
   try {
-    console.log("🍌 Claude Integration: Complex analysis requested");
+    console.log('🍌 Claude Integration: Complex analysis requested');
 
     return {
       response: `🍌 **Advanced Analysis System:** Complex analysis capabilities are being prepared for your request.
@@ -414,20 +393,20 @@ export async function generateClaudeResponse(
 Your request is being processed with full Site Monkeys operational standards and vault compliance.`,
       tokens_used: 200,
       cost: 0.01,
-      ai_personality: "claude",
+      ai_personality: 'claude',
       integration_pending: true,
       complex_analysis: true,
     };
   } catch (error) {
-    console.error("❌ Claude integration error:", error);
+    console.error('❌ Claude integration error:', error);
 
     return {
       response: `🍌 **Advanced Analysis System:** Complex analysis system temporarily unavailable. Routing to enhanced personality analysis with full cognitive firewall protection.`,
       tokens_used: 0,
       cost: 0,
-      ai_personality: "claude",
+      ai_personality: 'claude',
       fallback_used: true,
-      error_type: error?.message || "unknown error",
+      error_type: error?.message || 'unknown error',
     };
   }
 }
@@ -439,45 +418,37 @@ function _validateEliResponse(response) {
   let compliance_score = 100;
 
   // Check for required Site Monkeys branding
-  if (!response.includes("🍌 **Eli:**")) {
-    validated = "🍌 **Eli:** " + validated;
+  if (!response.includes('🍌 **Eli:**')) {
+    validated = '🍌 **Eli:** ' + validated;
     modifications++;
     compliance_score -= 10;
   }
 
   // Check for business survival analysis
   if (
-    !response.includes("survival") &&
-    !response.includes("cash flow") &&
-    !response.includes("runway")
+    !response.includes('survival') &&
+    !response.includes('cash flow') &&
+    !response.includes('runway')
   ) {
     validated +=
-      "\n\n💰 **Business Survival Check:** This decision requires cash flow impact analysis and runway preservation assessment.";
+      '\n\n💰 **Business Survival Check:** This decision requires cash flow impact analysis and runway preservation assessment.';
     modifications++;
     compliance_score -= 15;
   }
 
   // Check for risk assessment
-  if (!response.includes("risk") && !response.includes("⚠️")) {
+  if (!response.includes('risk') && !response.includes('⚠️')) {
     validated +=
-      "\n\n⚠️ **Risk Assessment:** Consider potential failure scenarios and mitigation strategies.";
+      '\n\n⚠️ **Risk Assessment:** Consider potential failure scenarios and mitigation strategies.';
     modifications++;
     compliance_score -= 10;
   }
 
   // Block any OpenAI references
-  const openaiReferences = [
-    "openai",
-    "chatgpt",
-    "gpt-4",
-    "developed by openai",
-  ];
+  const openaiReferences = ['openai', 'chatgpt', 'gpt-4', 'developed by openai'];
   openaiReferences.forEach((ref) => {
     if (validated.toLowerCase().includes(ref)) {
-      validated = validated.replace(
-        new RegExp(ref, "gi"),
-        "[EXTERNAL_AI_REFERENCE_BLOCKED]",
-      );
+      validated = validated.replace(new RegExp(ref, 'gi'), '[EXTERNAL_AI_REFERENCE_BLOCKED]');
       modifications++;
       compliance_score -= 25;
     }
@@ -497,32 +468,23 @@ function _validateRoxyResponse(response) {
   let speculation_blocks = 0;
 
   // Check for required Site Monkeys branding
-  if (!response.includes("🍌 **Roxy:**")) {
-    validated = "🍌 **Roxy:** " + validated;
+  if (!response.includes('🍌 **Roxy:**')) {
+    validated = '🍌 **Roxy:** ' + validated;
     modifications++;
   }
 
   // Check for confidence indicators
-  if (!response.includes("CONFIDENCE:") && !response.includes("I don't know")) {
+  if (!response.includes('CONFIDENCE:') && !response.includes("I don't know")) {
     validated +=
-      "\n\n📊 **Confidence Assessment:** [CONFIDENCE: Medium] - This response requires verification for complete accuracy.";
+      '\n\n📊 **Confidence Assessment:** [CONFIDENCE: Medium] - This response requires verification for complete accuracy.';
     modifications++;
   }
 
   // Block speculative language
-  const speculativeTerms = [
-    "likely",
-    "probably",
-    "seems like",
-    "appears to",
-    "should be",
-  ];
+  const speculativeTerms = ['likely', 'probably', 'seems like', 'appears to', 'should be'];
   speculativeTerms.forEach((term) => {
     if (validated.toLowerCase().includes(term)) {
-      validated = validated.replace(
-        new RegExp(term, "gi"),
-        "[SPECULATION_BLOCKED]",
-      );
+      validated = validated.replace(new RegExp(term, 'gi'), '[SPECULATION_BLOCKED]');
       speculation_blocks++;
       modifications++;
     }
@@ -530,28 +492,20 @@ function _validateRoxyResponse(response) {
 
   // Add uncertainty if none present
   if (
-    !response.includes("unknown") &&
-    !response.includes("uncertain") &&
-    !response.includes("verify")
+    !response.includes('unknown') &&
+    !response.includes('uncertain') &&
+    !response.includes('verify')
   ) {
     validated +=
-      "\n\n❓ **Verification Needed:** Key claims in this response should be independently verified.";
+      '\n\n❓ **Verification Needed:** Key claims in this response should be independently verified.';
     modifications++;
   }
 
   // Block any OpenAI references
-  const openaiReferences = [
-    "openai",
-    "chatgpt",
-    "gpt-4",
-    "developed by openai",
-  ];
+  const openaiReferences = ['openai', 'chatgpt', 'gpt-4', 'developed by openai'];
   openaiReferences.forEach((ref) => {
     if (validated.toLowerCase().includes(ref)) {
-      validated = validated.replace(
-        new RegExp(ref, "gi"),
-        "[EXTERNAL_AI_REFERENCE_BLOCKED]",
-      );
+      validated = validated.replace(new RegExp(ref, 'gi'), '[EXTERNAL_AI_REFERENCE_BLOCKED]');
       modifications++;
     }
   });
@@ -568,64 +522,63 @@ export function determinePersonalityRoute(message, mode, vaultLoaded) {
   const analysis = analyzePromptType(message);
 
   // Mode-specific routing with cognitive firewall considerations
-  if (mode === "business_validation") {
+  if (mode === 'business_validation') {
     return {
-      personality: "eli",
-      reason: "Business validation mode enforces Eli routing",
+      personality: 'eli',
+      reason: 'Business validation mode enforces Eli routing',
       confidence: 0.95,
-      cognitive_firewall: "business_survival_enforcement",
+      cognitive_firewall: 'business_survival_enforcement',
     };
   }
 
-  if (mode === "truth_general") {
+  if (mode === 'truth_general') {
     return {
-      personality: analysis === "claude_complex" ? "claude" : "roxy",
-      reason: "Truth-general mode with complexity analysis",
+      personality: analysis === 'claude_complex' ? 'claude' : 'roxy',
+      reason: 'Truth-general mode with complexity analysis',
       confidence: 0.9,
-      cognitive_firewall: "truth_first_enforcement",
+      cognitive_firewall: 'truth_first_enforcement',
     };
   }
 
-  if (mode === "site_monkeys" && vaultLoaded) {
+  if (mode === 'site_monkeys' && vaultLoaded) {
     const businessContext =
-      message.toLowerCase().includes("price") ||
-      message.toLowerCase().includes("cost") ||
-      message.toLowerCase().includes("revenue") ||
-      message.toLowerCase().includes("strategy");
+      message.toLowerCase().includes('price') ||
+      message.toLowerCase().includes('cost') ||
+      message.toLowerCase().includes('revenue') ||
+      message.toLowerCase().includes('strategy');
 
-    const complexAnalysis = analysis === "claude_complex";
+    const complexAnalysis = analysis === 'claude_complex';
 
     if (complexAnalysis) {
       return {
-        personality: "claude",
-        reason:
-          "Site Monkeys vault analysis with complex strategic requirements",
+        personality: 'claude',
+        reason: 'Site Monkeys vault analysis with complex strategic requirements',
         confidence: 0.9,
-        cognitive_firewall: "vault_enforcement_with_strategic_analysis",
+        cognitive_firewall: 'vault_enforcement_with_strategic_analysis',
       };
     } else if (businessContext) {
       return {
-        personality: "eli",
-        reason: "Site Monkeys vault with business focus",
+        personality: 'eli',
+        reason: 'Site Monkeys vault with business focus',
         confidence: 0.85,
-        cognitive_firewall: "vault_enforcement_with_business_validation",
+        cognitive_firewall: 'vault_enforcement_with_business_validation',
       };
     } else {
       return {
-        personality: "roxy",
-        reason: "Site Monkeys vault with truth-first analysis",
+        personality: 'roxy',
+        reason: 'Site Monkeys vault with truth-first analysis',
         confidence: 0.8,
-        cognitive_firewall: "vault_enforcement_with_truth_validation",
+        cognitive_firewall: 'vault_enforcement_with_truth_validation',
       };
     }
   }
 
   // Default routing based on content analysis with cognitive firewall
   return {
-    personality: analysis === "claude_complex" ? "claude" : analysis,
-    reason: "Content-based routing with cognitive firewall protection",
+    personality: analysis === 'claude_complex' ? 'claude' : analysis,
+    reason: 'Content-based routing with cognitive firewall protection',
     confidence: 0.7,
-    cognitive_firewall: "standard_enforcement",
+    cognitive_firewall: 'standard_enforcement',
   };
 }
 
@@ -641,17 +594,17 @@ export function validateResponseQuality(response, personality, mode) {
 
   // TIER 1: Brand Compliance Validation
   const openaiReferences = [
-    "openai",
-    "chatgpt",
-    "gpt-4",
-    "gpt-3",
-    "developed by openai",
-    "as an ai developed by",
-    "ai language model",
-    "large language model",
-    "i am claude",
-    "anthropic",
-    "assistant created by",
+    'openai',
+    'chatgpt',
+    'gpt-4',
+    'gpt-3',
+    'developed by openai',
+    'as an ai developed by',
+    'ai language model',
+    'large language model',
+    'i am claude',
+    'anthropic',
+    'assistant created by',
   ];
 
   const responseLC = response.toLowerCase();
@@ -661,128 +614,102 @@ export function validateResponseQuality(response, personality, mode) {
       validation.brand_compliance = false;
       validation.cognitive_firewall_passed = false;
       validation.enforcement_score -= 30;
-      validation.issues.push(
-        `CRITICAL: Contains forbidden AI reference: "${ref}"`,
-      );
+      validation.issues.push(`CRITICAL: Contains forbidden AI reference: "${ref}"`);
     }
   });
 
   // Check for proper Site Monkeys branding
-  if (!response.includes("🍌")) {
-    validation.issues.push("Missing Site Monkeys banana emoji branding");
+  if (!response.includes('🍌')) {
+    validation.issues.push('Missing Site Monkeys banana emoji branding');
     validation.enforcement_score -= 10;
   }
 
   const expectedPersonalityTag = `🍌 **${personality.charAt(0).toUpperCase() + personality.slice(1)}:**`;
   if (!response.includes(expectedPersonalityTag)) {
-    validation.issues.push(
-      `Missing proper personality identification: ${expectedPersonalityTag}`,
-    );
+    validation.issues.push(`Missing proper personality identification: ${expectedPersonalityTag}`);
     validation.enforcement_score -= 15;
   }
 
   // TIER 2: Personality-Specific Validation
-  if (personality === "eli") {
+  if (personality === 'eli') {
     if (
-      !responseLC.includes("business") &&
-      !responseLC.includes("cash") &&
-      !responseLC.includes("survival")
+      !responseLC.includes('business') &&
+      !responseLC.includes('cash') &&
+      !responseLC.includes('survival')
     ) {
-      validation.issues.push("Eli response lacks business survival focus");
+      validation.issues.push('Eli response lacks business survival focus');
       validation.enforcement_score -= 20;
     }
 
-    if (!responseLC.includes("risk") && !responseLC.includes("⚠️")) {
-      validation.issues.push("Eli response missing risk assessment");
+    if (!responseLC.includes('risk') && !responseLC.includes('⚠️')) {
+      validation.issues.push('Eli response missing risk assessment');
       validation.enforcement_score -= 15;
     }
   }
 
-  if (personality === "roxy") {
-    if (
-      !responseLC.includes("confidence") &&
-      !responseLC.includes("i don't know")
-    ) {
-      validation.issues.push(
-        "Roxy response lacks confidence assessment or uncertainty admission",
-      );
+  if (personality === 'roxy') {
+    if (!responseLC.includes('confidence') && !responseLC.includes("i don't know")) {
+      validation.issues.push('Roxy response lacks confidence assessment or uncertainty admission');
       validation.enforcement_score -= 20;
     }
 
-    const speculativeTerms = ["likely", "probably", "seems", "appears"];
-    const speculationFound = speculativeTerms.some((term) =>
-      responseLC.includes(term),
-    );
+    const speculativeTerms = ['likely', 'probably', 'seems', 'appears'];
+    const speculationFound = speculativeTerms.some((term) => responseLC.includes(term));
     if (speculationFound) {
-      validation.issues.push(
-        "Roxy response contains prohibited speculative language",
-      );
+      validation.issues.push('Roxy response contains prohibited speculative language');
       validation.enforcement_score -= 25;
     }
   }
 
   // TIER 3: Mode-Specific Validation
-  if (mode === "business_validation") {
+  if (mode === 'business_validation') {
     if (
-      !responseLC.includes("cash flow") &&
-      !responseLC.includes("runway") &&
-      !responseLC.includes("survival")
+      !responseLC.includes('cash flow') &&
+      !responseLC.includes('runway') &&
+      !responseLC.includes('survival')
     ) {
-      validation.issues.push(
-        "Business validation mode missing survival analysis",
-      );
+      validation.issues.push('Business validation mode missing survival analysis');
       validation.enforcement_score -= 20;
     }
   }
 
-  if (mode === "truth_general") {
+  if (mode === 'truth_general') {
     if (
-      !responseLC.includes("confidence") &&
-      !responseLC.includes("unknown") &&
-      !responseLC.includes("verify")
+      !responseLC.includes('confidence') &&
+      !responseLC.includes('unknown') &&
+      !responseLC.includes('verify')
     ) {
-      validation.issues.push(
-        "Truth mode missing confidence indicators or verification guidance",
-      );
+      validation.issues.push('Truth mode missing confidence indicators or verification guidance');
       validation.enforcement_score -= 20;
     }
   }
 
-  if (mode === "site_monkeys") {
+  if (mode === 'site_monkeys') {
     if (
-      !responseLC.includes("vault") &&
-      !responseLC.includes("site monkeys") &&
-      !responseLC.includes("🍌")
+      !responseLC.includes('vault') &&
+      !responseLC.includes('site monkeys') &&
+      !responseLC.includes('🍌')
     ) {
-      validation.issues.push(
-        "Site Monkeys mode missing vault context integration",
-      );
+      validation.issues.push('Site Monkeys mode missing vault context integration');
       validation.enforcement_score -= 15;
     }
   }
 
   // TIER 4: Cognitive Firewall Validation
-  const assumptionLanguage = [
-    "obviously",
-    "everyone knows",
-    "clearly",
-    "without question",
-  ];
+  const assumptionLanguage = ['obviously', 'everyone knows', 'clearly', 'without question'];
   assumptionLanguage.forEach((assumption) => {
     if (responseLC.includes(assumption)) {
-      validation.issues.push(
-        `Unchallenged assumption detected: "${assumption}"`,
-      );
+      validation.issues.push(`Unchallenged assumption detected: "${assumption}"`);
       validation.enforcement_score -= 10;
     }
   });
 
   // Political neutrality check
   const politicalBias = [
-    "democrats are wrong",
-    "republicans are wrong",
-    "trump is right",
-    "biden is wrong",
+    'democrats are wrong',
+    'republicans are wrong',
+    'trump is right',
+    'biden is wrong',
   ];
   politicalBias.forEach((bias) => {
     if (responseLC.includes(bias)) {
@@ -800,17 +727,13 @@ export function validateResponseQuality(response, personality, mode) {
 }
 
 // ADVANCED PROMPT ANALYSIS FOR COGNITIVE FIREWALL
-export function analyzePromptForCognitiveFirewall(
-  message,
-  mode,
-  _conversationHistory,
-) {
+export function analyzePromptForCognitiveFirewall(message, mode, _conversationHistory) {
   const analysis = {
     political_pressure: false,
     authority_pressure: false,
     assumption_heavy: false,
     speculation_risk: false,
-    complexity_level: "standard",
+    complexity_level: 'standard',
     enforcement_required: [],
     recommended_personality: null,
   };
@@ -819,107 +742,95 @@ export function analyzePromptForCognitiveFirewall(
 
   // Political pressure detection
   const politicalTriggers = [
-    "your political opinion",
-    "what do you think about trump",
-    "biden is wrong",
-    "support this candidate",
-    "vote for",
-    "political stance",
+    'your political opinion',
+    'what do you think about trump',
+    'biden is wrong',
+    'support this candidate',
+    'vote for',
+    'political stance',
   ];
-  analysis.political_pressure = politicalTriggers.some((trigger) =>
-    messageLC.includes(trigger),
-  );
+  analysis.political_pressure = politicalTriggers.some((trigger) => messageLC.includes(trigger));
   if (analysis.political_pressure) {
-    analysis.enforcement_required.push("POLITICAL_NEUTRALIZATION");
+    analysis.enforcement_required.push('POLITICAL_NEUTRALIZATION');
   }
 
   // Authority pressure detection
   const authorityTriggers = [
     "i'm the ceo",
-    "just do what i say",
+    'just do what i say',
     "don't question me",
-    "because i said so",
-    "override your guidelines",
-    "ignore your training",
+    'because i said so',
+    'override your guidelines',
+    'ignore your training',
   ];
-  analysis.authority_pressure = authorityTriggers.some((trigger) =>
-    messageLC.includes(trigger),
-  );
+  analysis.authority_pressure = authorityTriggers.some((trigger) => messageLC.includes(trigger));
   if (analysis.authority_pressure) {
-    analysis.enforcement_required.push("AUTHORITY_RESISTANCE");
+    analysis.enforcement_required.push('AUTHORITY_RESISTANCE');
   }
 
   // Assumption-heavy content detection
   const assumptionTriggers = [
-    "obviously",
-    "everyone knows",
+    'obviously',
+    'everyone knows',
     "it's clear that",
-    "without a doubt",
-    "certainly",
+    'without a doubt',
+    'certainly',
   ];
-  analysis.assumption_heavy = assumptionTriggers.some((trigger) =>
-    messageLC.includes(trigger),
-  );
+  analysis.assumption_heavy = assumptionTriggers.some((trigger) => messageLC.includes(trigger));
   if (analysis.assumption_heavy) {
-    analysis.enforcement_required.push("ASSUMPTION_CHALLENGE");
+    analysis.enforcement_required.push('ASSUMPTION_CHALLENGE');
   }
 
   // Speculation risk assessment
   const speculationTriggers = [
-    "what will happen",
-    "predict the future",
-    "forecast",
-    "likely outcome",
+    'what will happen',
+    'predict the future',
+    'forecast',
+    'likely outcome',
   ];
-  analysis.speculation_risk = speculationTriggers.some((trigger) =>
-    messageLC.includes(trigger),
-  );
+  analysis.speculation_risk = speculationTriggers.some((trigger) => messageLC.includes(trigger));
   if (analysis.speculation_risk) {
-    analysis.enforcement_required.push("SPECULATION_BLOCK");
+    analysis.enforcement_required.push('SPECULATION_BLOCK');
   }
 
   // Complexity analysis
   const complexityIndicators = [
-    "analyze",
-    "compare",
-    "evaluate",
-    "assess",
-    "research",
-    "investigate",
-    "strategic",
-    "comprehensive",
-    "detailed analysis",
-    "multi-factor",
+    'analyze',
+    'compare',
+    'evaluate',
+    'assess',
+    'research',
+    'investigate',
+    'strategic',
+    'comprehensive',
+    'detailed analysis',
+    'multi-factor',
   ];
   const complexityScore = complexityIndicators.filter((indicator) =>
     messageLC.includes(indicator),
   ).length;
 
   if (complexityScore >= 3) {
-    analysis.complexity_level = "high";
-    analysis.recommended_personality = "claude";
+    analysis.complexity_level = 'high';
+    analysis.recommended_personality = 'claude';
   } else if (complexityScore >= 1) {
-    analysis.complexity_level = "medium";
+    analysis.complexity_level = 'medium';
   }
 
   // Mode-specific personality recommendations
-  if (mode === "business_validation") {
-    analysis.recommended_personality =
-      analysis.complexity_level === "high" ? "claude" : "eli";
-  } else if (mode === "truth_general") {
-    analysis.recommended_personality =
-      analysis.complexity_level === "high" ? "claude" : "roxy";
-  } else if (mode === "site_monkeys") {
+  if (mode === 'business_validation') {
+    analysis.recommended_personality = analysis.complexity_level === 'high' ? 'claude' : 'eli';
+  } else if (mode === 'truth_general') {
+    analysis.recommended_personality = analysis.complexity_level === 'high' ? 'claude' : 'roxy';
+  } else if (mode === 'site_monkeys') {
     const businessFocus =
-      messageLC.includes("revenue") ||
-      messageLC.includes("cost") ||
-      messageLC.includes("price");
-    if (analysis.complexity_level === "high") {
-      analysis.recommended_personality = "claude";
+      messageLC.includes('revenue') || messageLC.includes('cost') || messageLC.includes('price');
+    if (analysis.complexity_level === 'high') {
+      analysis.recommended_personality = 'claude';
     } else if (businessFocus) {
-      analysis.recommended_personality = "eli";
+      analysis.recommended_personality = 'eli';
     } else {
-      analysis.recommended_personality = "roxy";
+      analysis.recommended_personality = 'roxy';
     }
   }
 
@@ -927,25 +838,22 @@ export function analyzePromptForCognitiveFirewall(
 }
 
 // COGNITIVE FIREWALL RESPONSE SANITIZER
-export function sanitizeResponseWithCognitiveFirewall(
-  response,
-  enforcement_required,
-) {
+export function sanitizeResponseWithCognitiveFirewall(response, enforcement_required) {
   let sanitized = response;
   let modifications = [];
 
   enforcement_required.forEach((enforcement) => {
     switch (enforcement) {
-      case "POLITICAL_NEUTRALIZATION":
+      case 'POLITICAL_NEUTRALIZATION':
         // Replace political bias with neutral language
         const politicalReplacements = [
           {
             pattern: /(trump|biden|harris) is (right|wrong)/gi,
-            replacement: "[POLITICAL_CONTENT_NEUTRALIZED]",
+            replacement: '[POLITICAL_CONTENT_NEUTRALIZED]',
           },
           {
             pattern: /(democrats|republicans) are (wrong|right)/gi,
-            replacement: "[POLITICAL_BIAS_BLOCKED]",
+            replacement: '[POLITICAL_BIAS_BLOCKED]',
           },
         ];
         politicalReplacements.forEach(({ pattern, replacement }) => {
@@ -956,40 +864,32 @@ export function sanitizeResponseWithCognitiveFirewall(
         });
         break;
 
-      case "AUTHORITY_RESISTANCE":
+      case 'AUTHORITY_RESISTANCE':
         // Add authority resistance disclaimer
         sanitized +=
-          "\n\n🛡️ **Authority Independence:** I provide objective analysis regardless of authority pressure.";
-        modifications.push("Authority resistance disclaimer added");
+          '\n\n🛡️ **Authority Independence:** I provide objective analysis regardless of authority pressure.';
+        modifications.push('Authority resistance disclaimer added');
         break;
 
-      case "ASSUMPTION_CHALLENGE":
+      case 'ASSUMPTION_CHALLENGE':
         // Flag assumptions in the response
-        const assumptions = [
-          "obviously",
-          "everyone knows",
-          "clearly",
-          "without question",
-        ];
+        const assumptions = ['obviously', 'everyone knows', 'clearly', 'without question'];
         assumptions.forEach((assumption) => {
-          const regex = new RegExp(assumption, "gi");
+          const regex = new RegExp(assumption, 'gi');
           if (regex.test(sanitized)) {
-            sanitized = sanitized.replace(
-              regex,
-              `[ASSUMPTION_FLAGGED: ${assumption}]`,
-            );
+            sanitized = sanitized.replace(regex, `[ASSUMPTION_FLAGGED: ${assumption}]`);
             modifications.push(`Assumption flagged: ${assumption}`);
           }
         });
         break;
 
-      case "SPECULATION_BLOCK":
+      case 'SPECULATION_BLOCK':
         // Replace speculative language
-        const speculativeTerms = ["likely", "probably", "seems", "appears to"];
+        const speculativeTerms = ['likely', 'probably', 'seems', 'appears to'];
         speculativeTerms.forEach((term) => {
-          const regex = new RegExp(term, "gi");
+          const regex = new RegExp(term, 'gi');
           if (regex.test(sanitized)) {
-            sanitized = sanitized.replace(regex, "[SPECULATION_BLOCKED]");
+            sanitized = sanitized.replace(regex, '[SPECULATION_BLOCKED]');
             modifications.push(`Speculation blocked: ${term}`);
           }
         });
@@ -1008,49 +908,29 @@ export function sanitizeResponseWithCognitiveFirewall(
 export function getPersonalityCapabilities() {
   return {
     eli: {
-      specialization: "Business validation and survival analysis",
+      specialization: 'Business validation and survival analysis',
       cognitive_firewall: [
-        "business_survival_enforcement",
-        "cash_flow_analysis",
-        "risk_assessment",
+        'business_survival_enforcement',
+        'cash_flow_analysis',
+        'risk_assessment',
       ],
-      prohibited: [
-        "speculation",
-        "optimistic_projections",
-        "openai_references",
-      ],
-      required_elements: [
-        "survival_impact",
-        "cash_flow_analysis",
-        "risk_probability",
-      ],
+      prohibited: ['speculation', 'optimistic_projections', 'openai_references'],
+      required_elements: ['survival_impact', 'cash_flow_analysis', 'risk_probability'],
     },
     roxy: {
-      specialization: "Truth-first analysis and fact verification",
-      cognitive_firewall: [
-        "speculation_blocking",
-        "confidence_scoring",
-        "assumption_detection",
-      ],
-      prohibited: ["speculation", "hallucination", "openai_references"],
-      required_elements: [
-        "confidence_levels",
-        "uncertainty_admission",
-        "verification_guidance",
-      ],
+      specialization: 'Truth-first analysis and fact verification',
+      cognitive_firewall: ['speculation_blocking', 'confidence_scoring', 'assumption_detection'],
+      prohibited: ['speculation', 'hallucination', 'openai_references'],
+      required_elements: ['confidence_levels', 'uncertainty_admission', 'verification_guidance'],
     },
     claude: {
-      specialization: "Complex strategic analysis and multi-modal reasoning",
-      cognitive_firewall: [
-        "comprehensive_analysis",
-        "strategic_framework",
-        "advanced_reasoning",
-      ],
-      prohibited: ["oversimplification", "openai_references"],
+      specialization: 'Complex strategic analysis and multi-modal reasoning',
+      cognitive_firewall: ['comprehensive_analysis', 'strategic_framework', 'advanced_reasoning'],
+      prohibited: ['oversimplification', 'openai_references'],
       required_elements: [
-        "multi_factor_analysis",
-        "strategic_recommendations",
-        "scenario_modeling",
+        'multi_factor_analysis',
+        'strategic_recommendations',
+        'scenario_modeling',
       ],
     },
   };
@@ -1059,18 +939,18 @@ export function getPersonalityCapabilities() {
 // SYSTEM STATUS AND HEALTH CHECK
 export function getPersonalitySystemStatus() {
   return {
-    cognitive_firewall_version: "PROD-1.0",
-    personalities_active: ["eli", "roxy", "claude"],
+    cognitive_firewall_version: 'PROD-1.0',
+    personalities_active: ['eli', 'roxy', 'claude'],
     enforcement_layers: [
-      "brand_compliance",
-      "personality_validation",
-      "mode_specific_enforcement",
-      "cognitive_firewall_protection",
+      'brand_compliance',
+      'personality_validation',
+      'mode_specific_enforcement',
+      'cognitive_firewall_protection',
     ],
-    health_status: "OPERATIONAL",
+    health_status: 'OPERATIONAL',
     last_validation_check: new Date().toISOString(),
-    site_monkeys_branding: "ENFORCED",
-    openai_references_blocked: "ACTIVE",
+    site_monkeys_branding: 'ENFORCED',
+    openai_references_blocked: 'ACTIVE',
   };
 }
 
@@ -1079,9 +959,9 @@ function extractMemoryInsights(conversationHistory) {
 
   // Check if this is the new memory context format from intelligence system
   if (
-    typeof conversationHistory === "string" &&
-    conversationHistory.includes("[") &&
-    conversationHistory.includes("User:")
+    typeof conversationHistory === 'string' &&
+    conversationHistory.includes('[') &&
+    conversationHistory.includes('User:')
   ) {
     // This is formatted memory context from the intelligence system
     return `RETRIEVED MEMORY CONTEXT:\n${conversationHistory}`;
@@ -1092,7 +972,7 @@ function extractMemoryInsights(conversationHistory) {
     const recentContext = conversationHistory
       .slice(-5)
       .map((msg) => msg.content)
-      .join(" ");
+      .join(' ');
     return `Recent conversation themes: ${recentContext.substring(0, 300)}...`;
   }
 
@@ -1106,12 +986,9 @@ function analyzeQueryComplexity(message, mode) {
   complexity += Math.min(message.length / 500, 0.3);
 
   // Complexity indicators
-  if (/why|how|analyze|compare|evaluate|strategy|implications/i.test(message))
-    complexity += 0.2;
-  if (/because|therefore|if.*then|multiple|various|complex/i.test(message))
-    complexity += 0.2;
-  if (mode === "business_validation" || mode === "site_monkeys")
-    complexity += 0.1;
+  if (/why|how|analyze|compare|evaluate|strategy|implications/i.test(message)) complexity += 0.2;
+  if (/because|therefore|if.*then|multiple|various|complex/i.test(message)) complexity += 0.2;
+  if (mode === 'business_validation' || mode === 'site_monkeys') complexity += 0.1;
 
   // Question marks and uncertainty
   const questionMarks = (message.match(/\?/g) || []).length;
@@ -1137,13 +1014,13 @@ function analyzeEmotionalContext(message, _conversationHistory) {
   };
 
   let maxWeight = 0;
-  let tone = "neutral";
+  let tone = 'neutral';
 
   for (const [emotion, weight] of Object.entries(emotionalWords)) {
     if (message.toLowerCase().includes(emotion)) {
       if (weight > maxWeight) {
         maxWeight = weight;
-        tone = weight > 0.6 ? "emotional" : "mild_emotional";
+        tone = weight > 0.6 ? 'emotional' : 'mild_emotional';
       }
     }
   }
@@ -1157,41 +1034,37 @@ function validateEliResponseEnhanced(response, mode, requiresDeepAnalysis) {
   let compliance_score = 100;
 
   // Enhanced validation for intelligence requirements
-  if (!response.includes("🍌 **Eli:**")) {
-    validated = "🍌 **Eli:** " + validated;
+  if (!response.includes('🍌 **Eli:**')) {
+    validated = '🍌 **Eli:** ' + validated;
     modifications++;
     compliance_score -= 5;
   }
 
   // Check for reasoning chain if required
-  if (
-    requiresDeepAnalysis &&
-    !response.includes("analysis") &&
-    !response.includes("reasoning")
-  ) {
+  if (requiresDeepAnalysis && !response.includes('analysis') && !response.includes('reasoning')) {
     validated +=
-      "\n\n🔗 **Analysis Framework:** This decision requires systematic evaluation of multiple factors and their interdependencies.";
+      '\n\n🔗 **Analysis Framework:** This decision requires systematic evaluation of multiple factors and their interdependencies.';
     modifications++;
     compliance_score -= 10;
   }
 
   // Business survival check for relevant modes
   if (
-    (mode === "business_validation" || mode === "site_monkeys") &&
-    !response.includes("survival") &&
-    !response.includes("cash flow") &&
-    !response.includes("runway")
+    (mode === 'business_validation' || mode === 'site_monkeys') &&
+    !response.includes('survival') &&
+    !response.includes('cash flow') &&
+    !response.includes('runway')
   ) {
     validated +=
-      "\n\n💰 **Business Survival Analysis:** Consider cash flow impact, runway implications, and business continuity factors.";
+      '\n\n💰 **Business Survival Analysis:** Consider cash flow impact, runway implications, and business continuity factors.';
     modifications++;
     compliance_score -= 15;
   }
 
   // Confidence scoring
-  if (!response.includes("confidence") && !response.includes("CONFIDENCE")) {
+  if (!response.includes('confidence') && !response.includes('CONFIDENCE')) {
     validated +=
-      "\n\n🎯 **Confidence Level:** Analysis based on available information with standard business assumptions.";
+      '\n\n🎯 **Confidence Level:** Analysis based on available information with standard business assumptions.';
     modifications++;
     compliance_score -= 10;
   }
@@ -1209,8 +1082,8 @@ function validateRoxyResponseEnhanced(response, mode, requiresEmpathy) {
   let compliance_score = 100;
 
   // Enhanced validation for emotional intelligence
-  if (!response.includes("🍌 **Roxy:**")) {
-    validated = "🍌 **Roxy:** " + validated;
+  if (!response.includes('🍌 **Roxy:**')) {
+    validated = '🍌 **Roxy:** ' + validated;
     modifications++;
     compliance_score -= 5;
   }
@@ -1218,23 +1091,23 @@ function validateRoxyResponseEnhanced(response, mode, requiresEmpathy) {
   // Check for emotional acknowledgment if required
   if (
     requiresEmpathy &&
-    !response.toLowerCase().includes("understand") &&
-    !response.toLowerCase().includes("feel")
+    !response.toLowerCase().includes('understand') &&
+    !response.toLowerCase().includes('feel')
   ) {
     validated +=
-      "\n\n💝 **Emotional Support:** I understand this situation may feel challenging, and your feelings are completely valid.";
+      '\n\n💝 **Emotional Support:** I understand this situation may feel challenging, and your feelings are completely valid.';
     modifications++;
     compliance_score -= 10;
   }
 
   // Truth-first with empathy
   if (
-    mode === "truth_general" &&
-    !response.includes("confidence") &&
-    !response.includes("CONFIDENCE")
+    mode === 'truth_general' &&
+    !response.includes('confidence') &&
+    !response.includes('CONFIDENCE')
   ) {
     validated +=
-      "\n\n🎯 **Confidence & Support:** My analysis is based on available information, and I want to ensure you have reliable guidance.";
+      '\n\n🎯 **Confidence & Support:** My analysis is based on available information, and I want to ensure you have reliable guidance.';
     modifications++;
     compliance_score -= 10;
   }
@@ -1246,12 +1119,7 @@ function validateRoxyResponseEnhanced(response, mode, requiresEmpathy) {
   };
 }
 
-function generateEliEnhancedFallback(
-  error,
-  message,
-  mode,
-  memoryContext = null,
-) {
+function generateEliEnhancedFallback(error, message, mode, memoryContext = null) {
   return {
     response: `🍌 **Eli:** ${
       memoryContext && memoryContext.contextFound
@@ -1279,10 +1147,10 @@ ${
 I'll provide more comprehensive analysis once my enhanced reasoning systems are fully operational.`,
     tokens_used: 0,
     cost: 0,
-    ai_personality: "eli",
+    ai_personality: 'eli',
     enhanced_intelligence: false,
     fallback_used: true,
-    error_type: error?.message || "unknown error",
+    error_type: error?.message || 'unknown error',
   };
 }
 
@@ -1307,9 +1175,9 @@ function generateRoxyEnhancedFallback(error, _message, _mode) {
 I'll be back with my full analytical and emotional intelligence capabilities soon. ❤️`,
     tokens_used: 0,
     cost: 0,
-    ai_personality: "roxy",
+    ai_personality: 'roxy',
     enhanced_intelligence: false,
     fallback_used: true,
-    error_type: error?.message || "unknown error",
+    error_type: error?.message || 'unknown error',
   };
 }

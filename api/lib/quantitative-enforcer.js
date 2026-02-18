@@ -4,50 +4,48 @@
 export const SITE_MONKEYS_PRICING = {
   boost: {
     price: 697,
-    name: "Boost",
-    description: "Basic business validation and setup",
+    name: 'Boost',
+    description: 'Basic business validation and setup',
   },
   climb: {
     price: 1497,
-    name: "Climb",
-    description: "Advanced business optimization",
+    name: 'Climb',
+    description: 'Advanced business optimization',
   },
   lead: {
     price: 2997,
-    name: "Lead",
-    description: "Enterprise-level business transformation",
+    name: 'Lead',
+    description: 'Enterprise-level business transformation',
   },
 };
 
 export const QUANTITATIVE_TRIGGERS = [
-  "budget",
-  "cost",
-  "price",
-  "revenue",
-  "profit",
-  "projection",
-  "forecast",
-  "calculate",
-  "numbers",
-  "financial",
-  "money",
-  "$",
-  "percent",
-  "%",
-  "growth",
-  "margin",
-  "roi",
-  "break-even",
-  "cash flow",
-  "monthly",
-  "yearly",
+  'budget',
+  'cost',
+  'price',
+  'revenue',
+  'profit',
+  'projection',
+  'forecast',
+  'calculate',
+  'numbers',
+  'financial',
+  'money',
+  '$',
+  'percent',
+  '%',
+  'growth',
+  'margin',
+  'roi',
+  'break-even',
+  'cash flow',
+  'monthly',
+  'yearly',
 ];
 
 export function requiresQuantitativeReasoning(message) {
   const messageLower = message.toLowerCase();
-  return QUANTITATIVE_TRIGGERS.some((trigger) =>
-    messageLower.includes(trigger),
-  );
+  return QUANTITATIVE_TRIGGERS.some((trigger) => messageLower.includes(trigger));
 }
 
 // CURRENT BROKEN CODE (containsActualCalculations function):
@@ -64,12 +62,7 @@ export function containsActualCalculations(response) {
 
   return calculationIndicators.some((pattern) => pattern.test(response));
 }
-export function enforceQuantitativeAnalysis(
-  response,
-  originalMessage,
-  expertDomain,
-  vaultContent,
-) {
+export function enforceQuantitativeAnalysis(response, originalMessage, expertDomain, vaultContent) {
   if (!requiresQuantitativeReasoning(originalMessage)) {
     return response; // Not a quantitative request
   }
@@ -94,30 +87,26 @@ ${calculationAnalysis}
 [NOTE: This mathematical analysis was enforced because the system detected a request requiring calculations, not just descriptive business guidance.]`;
 }
 
-export function generateRequiredCalculations(
-  message,
-  expertDomain,
-  vaultContent,
-) {
+export function generateRequiredCalculations(message, expertDomain, vaultContent) {
   const messageLower = message.toLowerCase();
 
   // Site Monkeys financial projections
   if (
-    (messageLower.includes("budget") ||
-      messageLower.includes("projection") ||
-      messageLower.includes("revenue")) &&
-    vaultContent.includes("Site Monkeys")
+    (messageLower.includes('budget') ||
+      messageLower.includes('projection') ||
+      messageLower.includes('revenue')) &&
+    vaultContent.includes('Site Monkeys')
   ) {
     return generateSiteMonkeysProjections(message);
   }
 
   // General business financial analysis
-  if (messageLower.includes("financial") || messageLower.includes("business")) {
+  if (messageLower.includes('financial') || messageLower.includes('business')) {
     return generateBusinessFinancialAnalysis(message);
   }
 
   // Cost analysis
-  if (messageLower.includes("cost") || messageLower.includes("price")) {
+  if (messageLower.includes('cost') || messageLower.includes('price')) {
     return generateCostAnalysis(message);
   }
 
@@ -232,24 +221,19 @@ NOTE: Specific calculations require actual data inputs for meaningful analysis.`
 export function validateCalculationQuality(response) {
   const qualityChecks = {
     has_specific_numbers: /\$[\d,]+/.test(response),
-    has_step_by_step:
-      /=/.test(response) || /\+/.test(response) || /×/.test(response),
+    has_step_by_step: /=/.test(response) || /\+/.test(response) || /×/.test(response),
     has_confidence_levels: /confidence/i.test(response),
     has_assumptions: /assum/i.test(response),
     has_margin_analysis: /margin/i.test(response),
     flags_missing_data: /missing|required|need/i.test(response),
   };
 
-  const qualityScore = Object.values(qualityChecks).filter(
-    (check) => check,
-  ).length;
+  const qualityScore = Object.values(qualityChecks).filter((check) => check).length;
 
   return {
     quality_score: qualityScore,
     max_score: Object.keys(qualityChecks).length,
-    percentage: Math.round(
-      (qualityScore / Object.keys(qualityChecks).length) * 100,
-    ),
+    percentage: Math.round((qualityScore / Object.keys(qualityChecks).length) * 100),
     checks: qualityChecks,
     passes_quality: qualityScore >= 4,
   };
@@ -257,13 +241,13 @@ export function validateCalculationQuality(response) {
 
 export function rejectGenericBusinessSpeak(response) {
   const genericPhrases = [
-    "consider the pricing structure",
-    "analyze the market trends",
-    "evaluate the cost structure",
-    "assess the financial implications",
-    "develop a comprehensive plan",
-    "create projections based on",
-    "model realistic scenarios",
+    'consider the pricing structure',
+    'analyze the market trends',
+    'evaluate the cost structure',
+    'assess the financial implications',
+    'develop a comprehensive plan',
+    'create projections based on',
+    'model realistic scenarios',
   ];
 
   const containsGenericSpeak = genericPhrases.some((phrase) =>
@@ -273,10 +257,9 @@ export function rejectGenericBusinessSpeak(response) {
   if (containsGenericSpeak && !containsActualCalculations(response)) {
     return {
       is_generic: true,
-      rejection_reason:
-        "Response contains generic business advice without actual calculations",
+      rejection_reason: 'Response contains generic business advice without actual calculations',
       required_fix:
-        "Must include specific numbers, step-by-step calculations, and quantitative analysis",
+        'Must include specific numbers, step-by-step calculations, and quantitative analysis',
     };
   }
 
@@ -286,11 +269,7 @@ export function rejectGenericBusinessSpeak(response) {
   };
 }
 
-export function enforceCalculationStandards(
-  response,
-  originalMessage,
-  _expertDomain,
-) {
+export function enforceCalculationStandards(response, originalMessage, _expertDomain) {
   if (!requiresQuantitativeReasoning(originalMessage)) {
     return response;
   }
@@ -320,8 +299,8 @@ Please request specific calculations with actual numbers, not descriptive busine
 - Quality Score: ${qualityCheck.percentage}% (${qualityCheck.quality_score}/${qualityCheck.max_score})
 - Missing Elements: ${Object.entries(qualityCheck.checks)
       .filter(([_key, value]) => !value)
-      .map(([key]) => key.replace(/_/g, " "))
-      .join(", ")}
+      .map(([key]) => key.replace(/_/g, ' '))
+      .join(', ')}
 
 For complete quantitative analysis, consider requesting: specific numbers, step-by-step calculations, confidence levels, and assumption validation.`;
   }

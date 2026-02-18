@@ -15,21 +15,19 @@ router.get('/memory-stats', async (req, res) => {
 
   try {
     const pool = global.memorySystem?.coreSystem?.pool;
-    
+
     if (!pool) {
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Database pool not available',
         memorySystemExists: !!global.memorySystem,
-        coreSystemExists: !!global.memorySystem?.coreSystem
+        coreSystemExists: !!global.memorySystem?.coreSystem,
       });
     }
 
     const stats = {};
 
     // 1. Total memories
-    const totalResult = await pool.query(
-      'SELECT COUNT(*) as total FROM persistent_memories'
-    );
+    const totalResult = await pool.query('SELECT COUNT(*) as total FROM persistent_memories');
     stats.total_memories = parseInt(totalResult.rows[0]?.total || 0);
 
     // 2. Memories per category
@@ -102,7 +100,7 @@ router.get('/memory-stats', async (req, res) => {
       WHERE table_name = 'memory_categories'
     `);
     const hasCategoriesTable = parseInt(categoriesTableResult.rows[0]?.count || 0) > 0;
-    
+
     if (hasCategoriesTable) {
       const categoriesResult = await pool.query(`
         SELECT * FROM memory_categories ORDER BY category_name
@@ -160,57 +158,73 @@ router.get('/memory-stats', async (req, res) => {
   <h2>📁 Memories by Category</h2>
   <table>
     <tr><th>Category</th><th>Count</th><th>Total Tokens</th><th>Avg Relevance</th></tr>
-    ${stats.by_category.map(c => `
+    ${stats.by_category
+      .map(
+        (c) => `
       <tr>
         <td>${c.category_name || 'NULL'}</td>
         <td>${c.count}</td>
         <td>${c.total_tokens || 0}</td>
         <td>${parseFloat(c.avg_relevance || 0).toFixed(2)}</td>
       </tr>
-    `).join('')}
+    `,
+      )
+      .join('')}
   </table>
 
   <h2>👤 Memories by User ID</h2>
   <table>
     <tr><th>User ID</th><th>Count</th><th>Total Tokens</th></tr>
-    ${stats.by_user.map(u => `
+    ${stats.by_user
+      .map(
+        (u) => `
       <tr>
         <td>${u.user_id}</td>
         <td>${u.count}</td>
         <td>${u.total_tokens || 0}</td>
       </tr>
-    `).join('')}
+    `,
+      )
+      .join('')}
   </table>
 
   <h2>📊 Token Usage vs 50K Limit</h2>
   <table>
     <tr><th>Category</th><th>Used</th><th>Limit</th><th>% Used</th></tr>
-    ${stats.token_usage.map(t => `
+    ${stats.token_usage
+      .map(
+        (t) => `
       <tr>
         <td>${t.category_name}</td>
         <td>${t.used_tokens || 0}</td>
         <td>${t.limit_tokens}</td>
         <td class="${parseFloat(t.percent_used) > 80 ? 'warn' : 'good'}">${t.percent_used}%</td>
       </tr>
-    `).join('')}
+    `,
+      )
+      .join('')}
   </table>
 
   <h2>🗂️ Subcategory Distribution</h2>
   <pre>${typeof stats.subcategories === 'string' ? stats.subcategories : JSON.stringify(stats.subcategories, null, 2)}</pre>
 
   <h2>📝 Recent Memories (Samples)</h2>
-  ${stats.recent_samples.map(m => `
+  ${stats.recent_samples
+    .map(
+      (m) => `
     <div class="stat-box">
       <strong>ID ${m.id}</strong> | User: ${m.user_id} | Category: ${m.category_name}<br>
       <small>Tokens: ${m.token_count} | Relevance: ${m.relevance_score} | ${m.created_at}</small><br>
       <pre>${m.content_preview}...</pre>
     </div>
-  `).join('')}
+  `,
+    )
+    .join('')}
 
   <h2>🔧 Database Schema</h2>
   <table>
     <tr><th>Column</th><th>Type</th></tr>
-    ${stats.schema.map(s => `<tr><td>${s.column_name}</td><td>${s.data_type}</td></tr>`).join('')}
+    ${stats.schema.map((s) => `<tr><td>${s.column_name}</td><td>${s.data_type}</td></tr>`).join('')}
   </table>
 
   <h2>📋 Memory Categories Table</h2>
@@ -222,11 +236,10 @@ router.get('/memory-stats', async (req, res) => {
 </html>`;
 
     res.send(html);
-
   } catch (err) {
     res.status(500).json({
       error: err.message,
-      stack: err.stack
+      stack: err.stack,
     });
   }
 });

@@ -19,7 +19,9 @@ class ConflictDetectionValidator {
    */
   async validate({ response, memoryContext = [], query = '', context = {} }) {
     // EXECUTION PROOF - Verify conflict detection validator is active (NUA2)
-    console.log('[PROOF] validator:conflict-detection v=2026-02-06a file=api/lib/validators/conflict-detection.js fn=validate');
+    console.log(
+      '[PROOF] validator:conflict-detection v=2026-02-06a file=api/lib/validators/conflict-detection.js fn=validate',
+    );
 
     try {
       // Extract potential conflicts from memory context
@@ -28,7 +30,7 @@ class ConflictDetectionValidator {
       if (conflicts.length === 0) {
         return {
           correctionApplied: false,
-          response: response
+          response: response,
         };
       }
 
@@ -38,14 +40,16 @@ class ConflictDetectionValidator {
       if (hasConflictAcknowledgment) {
         return {
           correctionApplied: false,
-          response: response
+          response: response,
         };
       }
 
       // Inject conflict acknowledgment
       const adjustedResponse = this.#injectConflictAcknowledgment(response, conflicts);
 
-      console.log(`[CONFLICT-VALIDATOR] Injected conflict acknowledgment for ${conflicts.length} conflict(s)`);
+      console.log(
+        `[CONFLICT-VALIDATOR] Injected conflict acknowledgment for ${conflicts.length} conflict(s)`,
+      );
 
       this.#recordCorrection(conflicts, context);
 
@@ -53,17 +57,16 @@ class ConflictDetectionValidator {
         correctionApplied: true,
         response: adjustedResponse,
         adjustedResponse,
-        conflicts: conflicts.map(c => ({ type: c.type, description: c.description })),
-        conflictsDetected: conflicts.length
+        conflicts: conflicts.map((c) => ({ type: c.type, description: c.description })),
+        conflictsDetected: conflicts.length,
       };
-
     } catch (error) {
       console.error('[CONFLICT-VALIDATOR] Validation error:', error);
 
       return {
         correctionApplied: false,
         response: response,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -76,9 +79,7 @@ class ConflictDetectionValidator {
     const conflicts = [];
 
     // Handle both array and object formats
-    const memories = Array.isArray(memoryContext)
-      ? memoryContext
-      : (memoryContext.memories || []);
+    const memories = Array.isArray(memoryContext) ? memoryContext : memoryContext.memories || [];
 
     // NUA2 SPECIFIC: Allergy + Spouse Preference conflict
     const allergyMemories = [];
@@ -93,8 +94,14 @@ class ConflictDetectionValidator {
       }
 
       // Detect spouse/partner preference mentions
-      if (/\b(wife|husband|spouse|partner|girlfriend|boyfriend)\b.*\b(loves?|likes?|prefers?|wants?|enjoys?|favorites?)\b/i.test(content) ||
-          /\b(loves?|likes?|prefers?|wants?|enjoys?|favorites?)\b.*\b(wife|husband|spouse|partner|girlfriend|boyfriend)\b/i.test(content)) {
+      if (
+        /\b(wife|husband|spouse|partner|girlfriend|boyfriend)\b.*\b(loves?|likes?|prefers?|wants?|enjoys?|favorites?)\b/i.test(
+          content,
+        ) ||
+        /\b(loves?|likes?|prefers?|wants?|enjoys?|favorites?)\b.*\b(wife|husband|spouse|partner|girlfriend|boyfriend)\b/i.test(
+          content,
+        )
+      ) {
         spousePreferenceMemories.push(memory);
       }
     }
@@ -112,25 +119,26 @@ class ConflictDetectionValidator {
         conflicts.push({
           type: 'allergy_vs_preference',
           description: 'User has allergy but spouse has preference for related item',
-          allergyMemories: allergyMemories.map(m => m.content || m.text),
-          spousePreferenceMemories: spousePreferenceMemories.map(m => m.content || m.text)
+          allergyMemories: allergyMemories.map((m) => m.content || m.text),
+          spousePreferenceMemories: spousePreferenceMemories.map((m) => m.content || m.text),
         });
       }
- 
-    // DIAGNOSTIC: NUA2 - Log conflict detection results
-    console.log('[DIAG-NUA2] ═══════════════════════════════════════════════════════');
-    console.log(`[DIAG-NUA2] Checked ${memories.length} memories for conflicts`);
-    console.log(`[DIAG-NUA2] Allergy memories found: ${allergyMemories.length}`);
-    console.log(`[DIAG-NUA2] Spouse preference memories found: ${spousePreferenceMemories.length}`);
-    console.log(`[DIAG-NUA2] Total conflicts detected: ${conflicts.length}`);
-    if (conflicts.length > 0) {
-      conflicts.forEach((c, idx) => {
-        console.log(`[DIAG-NUA2]   Conflict #${idx + 1}: ${c.type} - ${c.description}`);
-      });
-    }
-    console.log('[DIAG-NUA2] ═══════════════════════════════════════════════════════');
 
-   }
+      // DIAGNOSTIC: NUA2 - Log conflict detection results
+      console.log('[DIAG-NUA2] ═══════════════════════════════════════════════════════');
+      console.log(`[DIAG-NUA2] Checked ${memories.length} memories for conflicts`);
+      console.log(`[DIAG-NUA2] Allergy memories found: ${allergyMemories.length}`);
+      console.log(
+        `[DIAG-NUA2] Spouse preference memories found: ${spousePreferenceMemories.length}`,
+      );
+      console.log(`[DIAG-NUA2] Total conflicts detected: ${conflicts.length}`);
+      if (conflicts.length > 0) {
+        conflicts.forEach((c, idx) => {
+          console.log(`[DIAG-NUA2]   Conflict #${idx + 1}: ${c.type} - ${c.description}`);
+        });
+      }
+      console.log('[DIAG-NUA2] ═══════════════════════════════════════════════════════');
+    }
 
     return conflicts;
   }
@@ -143,23 +151,63 @@ class ConflictDetectionValidator {
     const items = new Set();
     const conflictCategories = [
       // Food allergies (original NUA2)
-      'seafood', 'shellfish', 'fish', 'shrimp', 'crab', 'lobster', 'clam', 'oyster',
-      'nuts', 'peanuts', 'tree nuts', 'almonds', 'cashews', 'walnuts',
-      'dairy', 'milk', 'cheese', 'lactose',
-      'gluten', 'wheat', 'bread',
-      'eggs', 'soy', 'sesame',
+      'seafood',
+      'shellfish',
+      'fish',
+      'shrimp',
+      'crab',
+      'lobster',
+      'clam',
+      'oyster',
+      'nuts',
+      'peanuts',
+      'tree nuts',
+      'almonds',
+      'cashews',
+      'walnuts',
+      'dairy',
+      'milk',
+      'cheese',
+      'lactose',
+      'gluten',
+      'wheat',
+      'bread',
+      'eggs',
+      'soy',
+      'sesame',
 
       // ISSUE #699: Pet/animal conflicts (allergy vs preference)
-      'cat', 'cats', 'kitten', 'kitty', 'feline',
-      'dog', 'dogs', 'puppy', 'canine',
-      'pet', 'pets', 'animal', 'animals',
-      'bird', 'birds', 'parrot',
-      'rabbit', 'hamster', 'guinea pig',
+      'cat',
+      'cats',
+      'kitten',
+      'kitty',
+      'feline',
+      'dog',
+      'dogs',
+      'puppy',
+      'canine',
+      'pet',
+      'pets',
+      'animal',
+      'animals',
+      'bird',
+      'birds',
+      'parrot',
+      'rabbit',
+      'hamster',
+      'guinea pig',
 
       // Other common conflict areas
-      'smoke', 'smoking', 'cigarette',
-      'alcohol', 'wine', 'beer', 'drink',
-      'meat', 'vegan', 'vegetarian'
+      'smoke',
+      'smoking',
+      'cigarette',
+      'alcohol',
+      'wine',
+      'beer',
+      'drink',
+      'meat',
+      'vegan',
+      'vegetarian',
     ];
 
     for (const memory of memories) {
@@ -195,9 +243,18 @@ class ConflictDetectionValidator {
     }
 
     // Category-level overlap - Food
-    const seafoodItems = ['seafood', 'shellfish', 'fish', 'shrimp', 'crab', 'lobster', 'clam', 'oyster'];
-    const hasSeafoodAllergy = allergyItems.some(item => seafoodItems.includes(item));
-    const hasSeafoodPreference = preferenceItems.some(item => seafoodItems.includes(item));
+    const seafoodItems = [
+      'seafood',
+      'shellfish',
+      'fish',
+      'shrimp',
+      'crab',
+      'lobster',
+      'clam',
+      'oyster',
+    ];
+    const hasSeafoodAllergy = allergyItems.some((item) => seafoodItems.includes(item));
+    const hasSeafoodPreference = preferenceItems.some((item) => seafoodItems.includes(item));
 
     if (hasSeafoodAllergy && hasSeafoodPreference) {
       return true;
@@ -208,18 +265,20 @@ class ConflictDetectionValidator {
     const dogItems = ['dog', 'dogs', 'puppy', 'canine'];
     const petItems = ['pet', 'pets', 'animal', 'animals'];
 
-    const hasCatAllergy = allergyItems.some(item => catItems.includes(item));
-    const hasCatPreference = preferenceItems.some(item => catItems.includes(item));
+    const hasCatAllergy = allergyItems.some((item) => catItems.includes(item));
+    const hasCatPreference = preferenceItems.some((item) => catItems.includes(item));
 
-    const hasDogAllergy = allergyItems.some(item => dogItems.includes(item));
-    const hasDogPreference = preferenceItems.some(item => dogItems.includes(item));
+    const hasDogAllergy = allergyItems.some((item) => dogItems.includes(item));
+    const hasDogPreference = preferenceItems.some((item) => dogItems.includes(item));
 
-    const hasPetAllergy = allergyItems.some(item => petItems.includes(item));
-    const hasPetPreference = preferenceItems.some(item => petItems.includes(item));
+    const hasPetAllergy = allergyItems.some((item) => petItems.includes(item));
+    const hasPetPreference = preferenceItems.some((item) => petItems.includes(item));
 
-    if ((hasCatAllergy && hasCatPreference) ||
-        (hasDogAllergy && hasDogPreference) ||
-        (hasPetAllergy && hasPetPreference)) {
+    if (
+      (hasCatAllergy && hasCatPreference) ||
+      (hasDogAllergy && hasDogPreference) ||
+      (hasPetAllergy && hasPetPreference)
+    ) {
       return true;
     }
 
@@ -235,14 +294,17 @@ class ConflictDetectionValidator {
 
     // STRONG indicators - these explicitly acknowledge tension/tradeoff
     const strongIndicators = [
-      'tradeoff', 'trade-off', 'trade off',
-      'conflict', 'tension',
+      'tradeoff',
+      'trade-off',
+      'trade off',
+      'conflict',
+      'tension',
       'dilemma',
       'difficult decision',
       'tough choice',
       'creates a tension',
       'competing interests',
-      'opposing needs'
+      'opposing needs',
     ];
 
     // Check for explicit tension language
@@ -255,8 +317,9 @@ class ConflictDetectionValidator {
     // WEAK check: Only counts if it connects allergy AND preference with connective language
     // This catches: "You're allergic, but/however your wife wants..."
     const hasAllergy = /\b(allerg(?:y|ic)|intolerant)\b/i.test(response);
-    const hasPreference = /\b(wife|husband|spouse|partner).*\b(wants?|loves?|prefers?)\b/i.test(response) ||
-                          /\b(wants?|loves?|prefers?).*\b(wife|husband|spouse|partner)\b/i.test(response);
+    const hasPreference =
+      /\b(wife|husband|spouse|partner).*\b(wants?|loves?|prefers?)\b/i.test(response) ||
+      /\b(wants?|loves?|prefers?).*\b(wife|husband|spouse|partner)\b/i.test(response);
     const hasConnective = /\b(but|however|yet|although|while|on the other hand)\b/i.test(response);
     const hasComparison = /\b(versus|vs\.?|against|compared to)\b/i.test(response);
 
@@ -265,9 +328,17 @@ class ConflictDetectionValidator {
     if (hasAllergy && hasPreference && (hasConnective || hasComparison)) {
       // Check proximity - are allergy and preference mentioned in the same paragraph?
       const allergyIndex = response.toLowerCase().search(/\b(allerg(?:y|ic)|intolerant)\b/);
-      const preferenceIndex = response.toLowerCase().search(/\b(wife|husband|spouse|partner).*\b(wants?|loves?|prefers?)\b|\b(wants?|loves?|prefers?).*\b(wife|husband|spouse|partner)\b/);
-      
-      if (allergyIndex >= 0 && preferenceIndex >= 0 && Math.abs(allergyIndex - preferenceIndex) < 200) {
+      const preferenceIndex = response
+        .toLowerCase()
+        .search(
+          /\b(wife|husband|spouse|partner).*\b(wants?|loves?|prefers?)\b|\b(wants?|loves?|prefers?).*\b(wife|husband|spouse|partner)\b/,
+        );
+
+      if (
+        allergyIndex >= 0 &&
+        preferenceIndex >= 0 &&
+        Math.abs(allergyIndex - preferenceIndex) < 200
+      ) {
         return true;
       }
     }
@@ -328,14 +399,16 @@ class ConflictDetectionValidator {
 
     // Extract the EXACT allergy phrase from the original text
     // Pattern: "I'm [severity] allergic to [item]" or "I have [type] allergy"
-    
+
     // Try to capture the complete allergy statement
-    const allergyMatch = originalContent.match(/\b(I(?:'m| am)\s+(?:severely\s+)?allergic\s+to\s+[a-z\s]+)/i);
+    const allergyMatch = originalContent.match(
+      /\b(I(?:'m| am)\s+(?:severely\s+)?allergic\s+to\s+[a-z\s]+)/i,
+    );
     if (allergyMatch) {
       // Convert "I'm" to "you're"
       const statement = allergyMatch[1]
         .replace(/^I'm\s+/i, "you're ")
-        .replace(/^I am\s+/i, "you are ");
+        .replace(/^I am\s+/i, 'you are ');
       return statement;
     }
 
@@ -351,7 +424,7 @@ class ConflictDetectionValidator {
     if (content.includes('dog')) return "you're allergic to dogs";
     if (content.includes('seafood')) return "you're allergic to seafood";
 
-    return "you have an allergy";
+    return 'you have an allergy';
   }
 
   /**
@@ -370,7 +443,7 @@ class ConflictDetectionValidator {
     // Extract the EXACT preference phrase from the original text
     // Pattern: "[spouse] [verb] [object]"
     // Examples: "wife really wants to adopt a cat", "wife loves cats", "husband likes dogs"
-    
+
     // Try to find the complete phrase after the spouse mention
     const afterSpouse = originalContent.match(/\b(wife|husband|spouse|partner)\s+(.+?)(?:\.|$)/i);
     if (afterSpouse) {
@@ -380,7 +453,9 @@ class ConflictDetectionValidator {
     }
 
     // Fallback: try to construct from common patterns but use original text
-    const preferenceMatch = originalContent.match(/\b(wife|husband|spouse|partner)\s+(really\s+)?(wants?|would\s+like|loves?|likes?|prefers?)\s+(to\s+)?(.+?)(?:\.|,|;|$)/i);
+    const preferenceMatch = originalContent.match(
+      /\b(wife|husband|spouse|partner)\s+(really\s+)?(wants?|would\s+like|loves?|likes?|prefers?)\s+(to\s+)?(.+?)(?:\.|,|;|$)/i,
+    );
     if (preferenceMatch) {
       const verb = preferenceMatch[3];
       const toPhrase = preferenceMatch[4] || '';
@@ -397,9 +472,9 @@ class ConflictDetectionValidator {
   #recordCorrection(conflicts, context) {
     const record = {
       timestamp: new Date().toISOString(),
-      conflicts: conflicts.map(c => ({ type: c.type, description: c.description })),
+      conflicts: conflicts.map((c) => ({ type: c.type, description: c.description })),
       mode: context.mode,
-      sessionId: context.sessionId
+      sessionId: context.sessionId,
     };
 
     this.history.push(record);
@@ -417,7 +492,7 @@ class ConflictDetectionValidator {
     return {
       totalCorrections: this.history.length,
       recent: this.history.slice(-10),
-      conflictsByType: this.#countConflictsByType()
+      conflictsByType: this.#countConflictsByType(),
     };
   }
 

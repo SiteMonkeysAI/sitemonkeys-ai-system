@@ -1,28 +1,28 @@
 /**
  * truthTypeDetector.js
  * Phase 4: Dual Hierarchy Truth Validation
- * 
+ *
  * Purpose: Classify claims into VOLATILE / SEMI_STABLE / PERMANENT
  * Two-stage detection: deterministic patterns first (zero cost), AI classifier only if ambiguous
- * 
+ *
  * Location: /api/core/intelligence/truthTypeDetector.js
  */
 
 // Truth type constants
 export const TRUTH_TYPES = {
-  VOLATILE: 'VOLATILE',       // TTL: 5 minutes
+  VOLATILE: 'VOLATILE', // TTL: 5 minutes
   SEMI_STABLE: 'SEMI_STABLE', // TTL: 24 hours
-  PERMANENT: 'PERMANENT',     // TTL: 30 days
+  PERMANENT: 'PERMANENT', // TTL: 30 days
   DOCUMENT_REVIEW: 'DOCUMENT_REVIEW', // Document review/analysis - no external lookup
-  AMBIGUOUS: 'AMBIGUOUS'      // Requires Stage 2 AI classification
+  AMBIGUOUS: 'AMBIGUOUS', // Requires Stage 2 AI classification
 };
 
 // TTL values in milliseconds
 export const TTL_CONFIG = {
-  VOLATILE: 5 * 60 * 1000,           // 5 minutes
-  SEMI_STABLE: 24 * 60 * 60 * 1000,  // 24 hours
+  VOLATILE: 5 * 60 * 1000, // 5 minutes
+  SEMI_STABLE: 24 * 60 * 60 * 1000, // 24 hours
   PERMANENT: 30 * 24 * 60 * 60 * 1000, // 30 days
-  DOCUMENT_REVIEW: 0                   // No caching for document reviews
+  DOCUMENT_REVIEW: 0, // No caching for document reviews
 };
 
 // Stage 1: Deterministic pattern markers (zero token cost)
@@ -35,7 +35,7 @@ const VOLATILE_PATTERNS = [
   /\bwhat('s| is) .* (right now|today|currently)\b/i,
   /\bhow much (is|does|are) .* (cost|worth)\b/i,
   // Event markers (not entity names) - these indicate current/breaking events
-  /\b(attack|election|war|invasion|military|conflict|strike|bombing|sanctions|diplomatic|crisis|coup|protest|riot)\b/i
+  /\b(attack|election|war|invasion|military|conflict|strike|bombing|sanctions|diplomatic|crisis|coup|protest|riot)\b/i,
 ];
 
 const SEMI_STABLE_PATTERNS = [
@@ -45,7 +45,7 @@ const SEMI_STABLE_PATTERNS = [
   /\b(fda|sec|irs|government) (approval|ruling|guidance)\b/i,
   /\b(product spec|specification|version)\b/i,
   /\b(hours|schedule|availability|open|closed)\b/i,
-  /\bis .* (still|currently) (available|supported|active)\b/i
+  /\bis .* (still|currently) (available|supported|active)\b/i,
 ];
 
 const PERMANENT_PATTERNS = [
@@ -60,9 +60,9 @@ const PERMANENT_PATTERNS = [
 
   // CRITICAL FIX (Issue #385, Bug 1.3): Simple arithmetic and factual questions
   // These should NEVER trigger uncertainty disclaimers
-  /^what is \d+[\+\-\*\/\%]\d+/i,  // "what is 2+2", "what is 5*3"
-  /^\d+[\+\-\*\/\%]\d+/,            // "2+2", "5*3"
-  /^calculate \d+/i,                // "calculate 10*5"
+  /^what is \d+[\+\-\*\/\%]\d+/i, // "what is 2+2", "what is 5*3"
+  /^\d+[\+\-\*\/\%]\d+/, // "2+2", "5*3"
+  /^calculate \d+/i, // "calculate 10*5"
   /\bsimple (math|arithmetic|calculation)\b/i,
 
   // Word definitions - language doesn't change
@@ -97,7 +97,7 @@ const PERMANENT_PATTERNS = [
   /\b\d+\s*[×x\*\+\-\/÷]\s*\d+\s*[=\?]/i,
 
   // File format definitions
-  /\bwhat is (a |an )?(zip|pdf|jpg|png|gif|mp3|mp4|csv|json|xml|html|css|javascript) file\b/i
+  /\bwhat is (a |an )?(zip|pdf|jpg|png|gif|mp3|mp4|csv|json|xml|html|css|javascript) file\b/i,
 ];
 
 // High-stakes domains that trigger external lookup regardless of truth type
@@ -144,23 +144,23 @@ export const HIGH_STAKES_DOMAINS = {
     // Substance combination safety
     /\bis it safe to (mix|combine|take|drink|use)\b/i,
     /\b(alcohol|drinking).*(with|and).*(medication|antibiotics|medicine|pills|drugs)\b/i,
-    /\bcan i (take|mix|combine|drink).*(with|and|while)\b/i
+    /\bcan i (take|mix|combine|drink).*(with|and|while)\b/i,
   ],
   LEGAL: [
     /\b(legal|law|lawsuit|court|attorney|lawyer)\b/i,
     /\b(contract|liability|sue|regulation|statute)\b/i,
-    /\b(rights|illegal|criminal|civil)\b/i
+    /\b(rights|illegal|criminal|civil)\b/i,
   ],
   FINANCIAL: [
     /\b(invest|investment|stock|bond|portfolio)\b/i,
     /\b(tax|irs|deduction|credit|filing)\b/i,
-    /\b(loan|mortgage|interest rate|credit score)\b/i
+    /\b(loan|mortgage|interest rate|credit score)\b/i,
   ],
   SAFETY: [
     /\b(recall|warning|hazard|danger|emergency)\b/i,
     /\b(toxic|poisonous|flammable|explosive)\b/i,
-    /\b(safety|risk|accident|injury)\b/i
-  ]
+    /\b(safety|risk|accident|injury)\b/i,
+  ],
 };
 
 /**
@@ -170,8 +170,10 @@ export const HIGH_STAKES_DOMAINS = {
  * @returns {boolean}
  */
 function isStableProcedural(query) {
-  const proceduralPatterns = /\bhow (do|to|can|should) (i |you |we )?(make|cook|boil|bake|tie|fold|write|create|build|fix|clean|wash|open|close|start|stop|grow|plant|cut|slice|chop|spell|pronounce)\b/i;
-  const notCurrentEvents = !/\b(today|now|current|latest|recent|this morning|yesterday|right now)\b/i.test(query);
+  const proceduralPatterns =
+    /\bhow (do|to|can|should) (i |you |we )?(make|cook|boil|bake|tie|fold|write|create|build|fix|clean|wash|open|close|start|stop|grow|plant|cut|slice|chop|spell|pronounce)\b/i;
+  const notCurrentEvents =
+    !/\b(today|now|current|latest|recent|this morning|yesterday|right now)\b/i.test(query);
   return proceduralPatterns.test(query) && notCurrentEvents;
 }
 
@@ -195,32 +197,30 @@ function isDocumentReviewRequest(query) {
     /feedback on/i,
     /evaluate (this|the following)/i,
     /the following is/i,
-    /here is (the|a|my)/i
+    /here is (the|a|my)/i,
   ];
 
-  const hasReviewPattern = reviewPatterns.some(p => p.test(query.slice(0, 500)));
+  const hasReviewPattern = reviewPatterns.some((p) => p.test(query.slice(0, 500)));
 
   // Document structure indicators
   const documentIndicators = [
     /SECTION \d+/i,
-    /^#+\s/m,                    // Markdown headers
+    /^#+\s/m, // Markdown headers
     /Table of Contents/i,
     /Version \d+\.\d+/i,
-    /^[-•]\s/m,                  // Bullet points
+    /^[-•]\s/m, // Bullet points
     /file:/i,
     /implementation/i,
     /specification/i,
-    /architecture/i
+    /architecture/i,
   ];
 
-  const hasDocumentStructure = documentIndicators.filter(p => p.test(query)).length >= 2;
+  const hasDocumentStructure = documentIndicators.filter((p) => p.test(query)).length >= 2;
 
   return {
     isDocument: isLongInput && (hasReviewPattern || hasDocumentStructure),
     confidence: isLongInput ? 0.9 : 0.5,
-    reason: isLongInput
-      ? 'Long-form document detected'
-      : 'Standard query'
+    reason: isLongInput ? 'Long-form document detected' : 'Standard query',
   };
 }
 
@@ -236,7 +236,7 @@ export function detectByPattern(query) {
       confidence: 0,
       stage: 1,
       patterns_matched: [],
-      reason: 'Invalid or empty query'
+      reason: 'Invalid or empty query',
     };
   }
 
@@ -254,8 +254,8 @@ export function detectByPattern(query) {
       patterns_matched: [{ type: TRUTH_TYPES.DOCUMENT_REVIEW, pattern: 'document_review_request' }],
       conflict_detected: false,
       reason: docCheck.reason,
-      skipExternalLookup: true,  // CRITICAL: Don't lookup for documents
-      skipNewsPatterns: true      // CRITICAL: Don't match news patterns
+      skipExternalLookup: true, // CRITICAL: Don't lookup for documents
+      skipNewsPatterns: true, // CRITICAL: Don't match news patterns
     };
   }
 
@@ -267,7 +267,7 @@ export function detectByPattern(query) {
       stage: 1,
       patterns_matched: [{ type: TRUTH_TYPES.PERMANENT, pattern: 'stable_procedural_fact' }],
       conflict_detected: false,
-      reason: 'Stable procedural fact (unchanging process)'
+      reason: 'Stable procedural fact (unchanging process)',
     };
   }
 
@@ -299,7 +299,7 @@ export function detectByPattern(query) {
       confidence: 0,
       stage: 1,
       patterns_matched: [],
-      reason: 'No deterministic patterns matched'
+      reason: 'No deterministic patterns matched',
     };
   }
 
@@ -307,7 +307,7 @@ export function detectByPattern(query) {
   const typeCounts = {
     [TRUTH_TYPES.VOLATILE]: 0,
     [TRUTH_TYPES.SEMI_STABLE]: 0,
-    [TRUTH_TYPES.PERMANENT]: 0
+    [TRUTH_TYPES.PERMANENT]: 0,
   };
 
   for (const match of matchedPatterns) {
@@ -334,7 +334,7 @@ export function detectByPattern(query) {
   }
 
   // Check for conflicting types (multiple types matched)
-  const typesMatched = Object.values(typeCounts).filter(c => c > 0).length;
+  const typesMatched = Object.values(typeCounts).filter((c) => c > 0).length;
   if (typesMatched > 1) {
     // Multiple types matched - VOLATILE wins over all, PERMANENT wins over SEMI_STABLE
     let conflictWinner = winningType;
@@ -354,20 +354,20 @@ export function detectByPattern(query) {
       stage: 1,
       patterns_matched: matchedPatterns,
       conflict_detected: true,
-      reason: conflictReason
+      reason: conflictReason,
     };
   }
 
   // Clean single-type match
-  const confidence = Math.min(0.95, 0.7 + (maxCount * 0.1));
-  
+  const confidence = Math.min(0.95, 0.7 + maxCount * 0.1);
+
   return {
     type: winningType,
     confidence: confidence,
     stage: 1,
     patterns_matched: matchedPatterns,
     conflict_detected: false,
-    reason: `Matched ${maxCount} ${winningType} pattern(s)`
+    reason: `Matched ${maxCount} ${winningType} pattern(s)`,
   };
 }
 
@@ -395,7 +395,7 @@ export function detectHighStakesDomain(query) {
 
   return {
     isHighStakes: matchedDomains.length > 0,
-    domains: matchedDomains
+    domains: matchedDomains,
   };
 }
 
@@ -424,8 +424,9 @@ export async function classifyAmbiguous(query, _context = {}) {
       type: TRUTH_TYPES.SEMI_STABLE,
       confidence: 0.5,
       stage: 2,
-      reasoning: 'Stage 2 classifier defaulting to SEMI_STABLE (balanced default until AI classifier integrated)',
-      tokens_used: 0 // Will be populated when AI classifier is integrated
+      reasoning:
+        'Stage 2 classifier defaulting to SEMI_STABLE (balanced default until AI classifier integrated)',
+      tokens_used: 0, // Will be populated when AI classifier is integrated
     };
   } catch (error) {
     console.error('[truthTypeDetector] Stage 2 classification failed:', error);
@@ -434,7 +435,7 @@ export async function classifyAmbiguous(query, _context = {}) {
       confidence: 0.3,
       stage: 2,
       reasoning: 'Stage 2 failed, defaulting to SEMI_STABLE (safe fallback)',
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -447,13 +448,13 @@ export async function classifyAmbiguous(query, _context = {}) {
  */
 export async function detectTruthType(query, context = {}) {
   const startTime = Date.now();
-  
+
   // Stage 1: Deterministic detection (zero cost)
   const patternResult = detectByPattern(query);
-  
+
   // Check high-stakes domains
   const highStakesResult = detectHighStakesDomain(query);
-  
+
   // If Stage 1 found a clear type, return it
   if (patternResult.type !== TRUTH_TYPES.AMBIGUOUS) {
     return {
@@ -461,19 +462,19 @@ export async function detectTruthType(query, context = {}) {
       ...patternResult,
       high_stakes: highStakesResult,
       ttl_ms: TTL_CONFIG[patternResult.type],
-      detection_time_ms: Date.now() - startTime
+      detection_time_ms: Date.now() - startTime,
     };
   }
-  
+
   // Stage 2: AI classification for ambiguous queries
   const aiResult = await classifyAmbiguous(query, context);
-  
+
   return {
     success: true,
     ...aiResult,
     high_stakes: highStakesResult,
     ttl_ms: TTL_CONFIG[aiResult.type] || TTL_CONFIG.SEMI_STABLE,
-    detection_time_ms: Date.now() - startTime
+    detection_time_ms: Date.now() - startTime,
   };
 }
 
@@ -493,9 +494,9 @@ export function getTTL(truthType) {
  */
 export async function testDetection(query) {
   console.log('[truthTypeDetector] Test detection for:', query);
-  
+
   const result = await detectTruthType(query);
-  
+
   return {
     query: query,
     result: result,
@@ -505,8 +506,8 @@ export async function testDetection(query) {
       stage: result.stage,
       high_stakes: result.high_stakes,
       ttl_ms: result.ttl_ms,
-      detection_time_ms: result.detection_time_ms
-    }
+      detection_time_ms: result.detection_time_ms,
+    },
   };
 }
 
@@ -520,5 +521,5 @@ export default {
   classifyAmbiguous,
   detectTruthType,
   getTTL,
-  testDetection
+  testDetection,
 };

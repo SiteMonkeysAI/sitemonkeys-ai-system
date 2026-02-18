@@ -1,9 +1,9 @@
 /**
  * ONE-TIME MIGRATION ENDPOINT
  * Run the semantic intelligence layer database migration
- * 
+ *
  * Usage: GET /api/migrate-semantic
- * 
+ *
  * DELETE THIS FILE AFTER SUCCESSFUL MIGRATION
  */
 
@@ -14,22 +14,22 @@ export default async function handler(req, res) {
   }
 
   const { Pool } = await import('pg');
-  
+
   // Use existing DATABASE_URL from environment
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
   });
 
   const results = {
     success: false,
     steps: [],
-    errors: []
+    errors: [],
   };
 
   try {
     const client = await pool.connect();
-    
+
     // Step 1: Check if pgvector extension exists
     results.steps.push('Checking pgvector extension...');
     try {
@@ -148,10 +148,10 @@ export default async function handler(req, res) {
       WHERE table_name = 'persistent_memories' 
       AND column_name IN ('embedding', 'fact_fingerprint', 'is_current', 'superseded_by')
     `);
-    
+
     results.verification = verification.rows;
     results.columnsAdded = verification.rows.length;
-    
+
     if (verification.rows.length >= 3) {
       results.steps.push(`✅ Migration verified: ${verification.rows.length} columns confirmed`);
       results.success = true;
@@ -160,7 +160,6 @@ export default async function handler(req, res) {
     }
 
     client.release();
-
   } catch (error) {
     results.errors.push('Connection error: ' + error.message);
     results.steps.push('❌ Migration failed: ' + error.message);
@@ -171,11 +170,14 @@ export default async function handler(req, res) {
   // Return results
   res.status(results.success ? 200 : 500).json({
     ...results,
-    message: results.success 
-      ? '🎉 Migration completed! You can now delete this file.' 
+    message: results.success
+      ? '🎉 Migration completed! You can now delete this file.'
       : '⚠️ Migration had issues. Check errors.',
-    nextSteps: results.success 
-      ? ['1. Run the semantic verification test', '2. Delete api/migrate-semantic.js from your repo']
-      : ['1. Check the errors above', '2. You may need to enable pgvector in Railway PostgreSQL']
+    nextSteps: results.success
+      ? [
+          '1. Run the semantic verification test',
+          '2. Delete api/migrate-semantic.js from your repo',
+        ]
+      : ['1. Check the errors above', '2. You may need to enable pgvector in Railway PostgreSQL'],
   });
 }

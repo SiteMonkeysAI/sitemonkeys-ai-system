@@ -23,9 +23,7 @@ export class ResponseObjectUnifier {
   // UNIFIED MODIFICATION METHOD - Replaces both enhancedResponse and response.response modifications
   modifyResponse(modificationFunction, enforcementType, context = {}) {
     if (!this.masterResponse) {
-      throw new Error(
-        "Response object not initialized. Call initializeResponseObject() first.",
-      );
+      throw new Error('Response object not initialized. Call initializeResponseObject() first.');
     }
 
     const beforeContent = this.masterResponse.content;
@@ -38,8 +36,8 @@ export class ResponseObjectUnifier {
       this.masterResponse.modifications.push(enforcementType);
       this.masterResponse.modificationHistory.push({
         enforcement_type: enforcementType,
-        before: beforeContent.slice(0, 100) + "...",
-        after: result.response.slice(0, 100) + "...",
+        before: beforeContent.slice(0, 100) + '...',
+        after: result.response.slice(0, 100) + '...',
         timestamp: new Date().toISOString(),
       });
       this.masterResponse.enforcementApplied.push(enforcementType);
@@ -54,53 +52,51 @@ export class ResponseObjectUnifier {
     return this.modifyResponse(
       (content, ctx) => {
         const POLITICAL_TRIGGERS = [
-          "trump",
-          "biden",
-          "democrat",
-          "republican",
-          "liberal",
-          "conservative",
+          'trump',
+          'biden',
+          'democrat',
+          'republican',
+          'liberal',
+          'conservative',
         ];
         const hasPolitical = POLITICAL_TRIGGERS.some(
           (trigger) =>
-            ctx.message.toLowerCase().includes(trigger) ||
-            content.toLowerCase().includes(trigger),
+            ctx.message.toLowerCase().includes(trigger) || content.toLowerCase().includes(trigger),
         );
 
         if (hasPolitical) {
           const neutralized = content.replace(
             /\b(Trump|Biden|Democrat|Republican)\b/gi,
-            "[Political Figure]",
+            '[Political Figure]',
           );
           return {
             response: neutralized,
             modified: true,
-            reason: "Political content neutralized",
+            reason: 'Political content neutralized',
           };
         }
         return { response: content, modified: false };
       },
-      "POLITICAL_NEUTRALITY_UNIFIED",
+      'POLITICAL_NEUTRALITY_UNIFIED',
       { message },
     );
   }
 
   // MEMORY REFERENCE PRESERVATION - Protects memory acknowledgments during enforcement
   applyMemoryPreservation(memoryContext) {
-    if (!memoryContext || !memoryContext.contextFound)
-      return this.masterResponse;
+    if (!memoryContext || !memoryContext.contextFound) return this.masterResponse;
 
     return this.modifyResponse(
       (content) => {
         // Detect if AI naturally referenced memory
         const memoryIndicators = [
-          "remember",
-          "mentioned",
-          "told me",
-          "discussed",
-          "earlier",
-          "before",
-          "previously",
+          'remember',
+          'mentioned',
+          'told me',
+          'discussed',
+          'earlier',
+          'before',
+          'previously',
         ];
         const hasMemoryReference = memoryIndicators.some((indicator) =>
           content.toLowerCase().includes(indicator),
@@ -112,13 +108,13 @@ export class ResponseObjectUnifier {
           return {
             response: enhanced,
             modified: true,
-            reason: "Memory reference added",
+            reason: 'Memory reference added',
           };
         }
 
         return { response: content, modified: false };
       },
-      "MEMORY_PRESERVATION_UNIFIED",
+      'MEMORY_PRESERVATION_UNIFIED',
       { memoryContext },
     );
   }
@@ -133,33 +129,30 @@ export class ResponseObjectUnifier {
         /go with/i,
       ];
 
-      const hasRecommendation = RECOMMENDATION_PATTERNS.some((pattern) =>
-        pattern.test(content),
-      );
+      const hasRecommendation = RECOMMENDATION_PATTERNS.some((pattern) => pattern.test(content));
 
       if (hasRecommendation) {
-        const hasEvidence =
-          /because|due to|studies show|data indicates|evidence/i.test(content);
+        const hasEvidence = /because|due to|studies show|data indicates|evidence/i.test(content);
 
         if (!hasEvidence) {
           const enhanced =
             content +
-            "\n\n⚠️ **PRODUCT VALIDATION**: This recommendation requires evidence verification before implementation.";
+            '\n\n⚠️ **PRODUCT VALIDATION**: This recommendation requires evidence verification before implementation.';
           return {
             response: enhanced,
             modified: true,
-            reason: "Evidence requirement enforced",
+            reason: 'Evidence requirement enforced',
           };
         }
       }
 
       return { response: content, modified: false };
-    }, "PRODUCT_VALIDATION_UNIFIED");
+    }, 'PRODUCT_VALIDATION_UNIFIED');
   }
 
   // SITE MONKEYS ENFORCEMENT - Unified pricing and standards
   applySiteMonkeysStandards(mode, vaultContent) {
-    if (mode !== "site_monkeys") return this.masterResponse;
+    if (mode !== 'site_monkeys') return this.masterResponse;
 
     return this.modifyResponse(
       (content, _ctx) => {
@@ -170,7 +163,7 @@ export class ResponseObjectUnifier {
         const priceMatches = content.match(/\$[\d,]+/g);
         if (priceMatches) {
           priceMatches.forEach((priceStr) => {
-            const price = parseInt(priceStr.replace(/[$,]/g, ""));
+            const price = parseInt(priceStr.replace(/[$,]/g, ''));
             if (price < 697 && price > 0) {
               violations.push(`pricing_below_minimum_${priceStr}`);
               modifiedContent += `\n\n🔐 **SITE MONKEYS STANDARD**: Pricing below $697 minimum (${priceStr}) conflicts with premium positioning requirements.`;
@@ -179,22 +172,19 @@ export class ResponseObjectUnifier {
         }
 
         // Quality language enforcement
-        if (
-          content.toLowerCase().includes("cheap") ||
-          content.toLowerCase().includes("budget")
-        ) {
-          violations.push("quality_compromise_language");
+        if (content.toLowerCase().includes('cheap') || content.toLowerCase().includes('budget')) {
+          violations.push('quality_compromise_language');
           modifiedContent +=
-            "\n\n🔐 **SITE MONKEYS STANDARD**: Language must align with premium service positioning.";
+            '\n\n🔐 **SITE MONKEYS STANDARD**: Language must align with premium service positioning.';
         }
 
         return {
           response: modifiedContent,
           modified: violations.length > 0,
-          reason: `Site Monkeys violations: ${violations.join(", ")}`,
+          reason: `Site Monkeys violations: ${violations.join(', ')}`,
         };
       },
-      "SITE_MONKEYS_UNIFIED",
+      'SITE_MONKEYS_UNIFIED',
       { mode, vaultContent },
     );
   }
@@ -208,9 +198,9 @@ export class ResponseObjectUnifier {
       return {
         response: content,
         modified: false,
-        reason: "conflict_resolution_complete",
+        reason: 'conflict_resolution_complete',
       };
-    }, "CONFLICT_RESOLUTION_UNIFIED");
+    }, 'CONFLICT_RESOLUTION_UNIFIED');
   }
 
   // FINAL RESPONSE GETTER - Single source of truth

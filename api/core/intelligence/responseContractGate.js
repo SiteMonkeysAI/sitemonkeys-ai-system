@@ -11,9 +11,13 @@
 const FORMAT_CONSTRAINTS = [
   { pattern: /answer only|only (the |a )?(number|answer|result)/i, style: 'answer_only' },
   { pattern: /one (paragraph|sentence) (max|only|maximum)/i, style: 'single_block' },
-  { pattern: /keep it (short|brief)|be (brief|concise|short)|briefly|make it (short|brief|concise)/i, style: 'minimal' },
+  {
+    pattern:
+      /keep it (short|brief)|be (brief|concise|short)|briefly|make it (short|brief|concise)/i,
+    style: 'minimal',
+  },
   { pattern: /no disclaimers|without disclaimers/i, style: 'no_disclaimers' },
-  { pattern: /reply with only|respond with only/i, style: 'strict_format' }
+  { pattern: /reply with only|respond with only/i, style: 'strict_format' },
 ];
 
 // User patterns that indicate they WANT guidance/steps (keep these sections)
@@ -80,7 +84,7 @@ function extractDocumentTerms(text) {
   // SECURITY: Sanitize input to prevent ReDoS
   const safeText = typeof text === 'string' ? text.slice(0, 50000) : '';
   if (!safeText) return [];
-  
+
   const terms = [];
 
   // CamelCase terms - bounded to prevent ReDoS
@@ -97,7 +101,7 @@ function extractDocumentTerms(text) {
   terms.push(...snakeCase);
 
   // Unique set, lowercased
-  return [...new Set(terms.map(t => t.toLowerCase()))];
+  return [...new Set(terms.map((t) => t.toLowerCase()))];
 }
 
 /**
@@ -112,7 +116,9 @@ function validateResponseRelevance(userQuery, aiResponse, context) {
 
   // Issue #412 Fix: Skip document relevance check if document was blocked
   if (documentMetadata.blocked === true) {
-    console.log('[RESPONSE-CONTRACT] Skipping document relevance check - document was blocked by session limits');
+    console.log(
+      '[RESPONSE-CONTRACT] Skipping document relevance check - document was blocked by session limits',
+    );
     return { valid: true, skipped: true, reason: 'document_blocked' };
   }
 
@@ -122,18 +128,20 @@ function validateResponseRelevance(userQuery, aiResponse, context) {
     const documentTerms = extractDocumentTerms(userQuery);
     const responseTerms = extractDocumentTerms(aiResponse);
 
-    const termOverlap = documentTerms.filter(t => responseTerms.includes(t)).length;
+    const termOverlap = documentTerms.filter((t) => responseTerms.includes(t)).length;
     const relevanceRatio = termOverlap / Math.max(documentTerms.length, 1);
 
     if (relevanceRatio < 0.1) {
       // Issue #412 Fix: If document was extracted (partial), this is a warning not a failure
       if (documentMetadata.extracted === true) {
-        console.log('[RESPONSE-CONTRACT] Response may not fully address partial document extraction');
+        console.log(
+          '[RESPONSE-CONTRACT] Response may not fully address partial document extraction',
+        );
         return {
           valid: true,
           warning: true,
           reason: 'partial_extraction_incomplete_coverage',
-          relevanceScore: relevanceRatio
+          relevanceScore: relevanceRatio,
         };
       }
 
@@ -143,7 +151,7 @@ function validateResponseRelevance(userQuery, aiResponse, context) {
         valid: false,
         reason: 'Response does not address document content',
         recommendation: 'REGENERATE_RESPONSE',
-        relevanceScore: relevanceRatio
+        relevanceScore: relevanceRatio,
       };
     }
   }
@@ -153,7 +161,7 @@ function validateResponseRelevance(userQuery, aiResponse, context) {
     { pattern: /voting is a sacred/i, mismatch: 'political_redirect' },
     { pattern: /Bitcoin.*Ethereum.*price/i, mismatch: 'crypto_injection' },
     { pattern: /focus on the 20%.*80%/i, mismatch: 'generic_productivity' },
-    { pattern: /combine approaches in novel ways/i, mismatch: 'template_injection' }
+    { pattern: /combine approaches in novel ways/i, mismatch: 'template_injection' },
   ];
 
   for (const indicator of misrouteIndicators) {
@@ -164,7 +172,7 @@ function validateResponseRelevance(userQuery, aiResponse, context) {
         return {
           valid: false,
           reason: `Detected misroute: ${indicator.mismatch}`,
-          recommendation: 'REGENERATE_RESPONSE'
+          recommendation: 'REGENERATE_RESPONSE',
         };
       }
     }
@@ -182,7 +190,13 @@ function detectFormatConstraint(query) {
   return null;
 }
 
-function enforceResponseContract(response, query, phase4Metadata = {}, documentMetadata = {}, queryClassification = null) {
+function enforceResponseContract(
+  response,
+  query,
+  phase4Metadata = {},
+  documentMetadata = {},
+  queryClassification = null,
+) {
   // ISSUE #435: If external lookup failed for volatile data, enforce MINIMAL response
   // The user doesn't need 200 words about why we can't answer - they need 20 words + where to find the answer
   const lookupFailed = phase4Metadata?.degraded === true;
@@ -190,16 +204,16 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
   const maxResponseWords = phase4Metadata?.max_response_words || 50;
 
   if (lookupFailed && minimalResponseRequired) {
-    console.log(`[RESPONSE-CONTRACT] External lookup failed - enforcing minimal response (max ${maxResponseWords} words)`);
+    console.log(
+      `[RESPONSE-CONTRACT] External lookup failed - enforcing minimal response (max ${maxResponseWords} words)`,
+    );
 
     // Extract verification path from phase4Metadata
     const verificationSources = phase4Metadata?.verification_path?.sources || [];
     const disclosure = phase4Metadata?.disclosure || "I can't access current data for this query.";
 
     // Build minimal response: disclosure + verification path
-    const sourceLinks = verificationSources
-      .map(s => `${s.name}: ${s.url}`)
-      .join(' or ');
+    const sourceLinks = verificationSources.map((s) => `${s.name}: ${s.url}`).join(' or ');
 
     const minimalResponse = `${disclosure} Check current information at: ${sourceLinks}`;
 
@@ -212,8 +226,8 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
         original_length: response.length,
         final_length: minimalResponse.length,
         words_saved: Math.floor((response.length - minimalResponse.length) / 6),
-        lookup_degraded: true
-      }
+        lookup_degraded: true,
+      },
     };
   }
 
@@ -223,11 +237,13 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
   const respectClassification = queryClassification?.requiresScaffolding === false;
 
   if (respectClassification) {
-    console.log(`[RESPONSE-CONTRACT] Respecting query classification: ${queryClassification.classification} - minimal hygiene only`);
+    console.log(
+      `[RESPONSE-CONTRACT] Respecting query classification: ${queryClassification.classification} - minimal hygiene only`,
+    );
   }
 
   const constraint = detectFormatConstraint(query);
-  const userRequestedGuidance = GUIDANCE_REQUEST_PATTERNS.some(p => p.test(query));
+  const userRequestedGuidance = GUIDANCE_REQUEST_PATTERNS.some((p) => p.test(query));
 
   const result = {
     triggered: constraint !== null,
@@ -237,11 +253,14 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
     stripped_sections: [],
     original_length: response.length,
     user_requested_guidance: userRequestedGuidance,
-    classification_respected: respectClassification
+    classification_respected: respectClassification,
   };
 
   // Issue #380 Fix 6, Issue #412 Fix: Validate response relevance with document metadata
-  const relevanceValidation = validateResponseRelevance(query, response, { phase4Metadata, documentMetadata });
+  const relevanceValidation = validateResponseRelevance(query, response, {
+    phase4Metadata,
+    documentMetadata,
+  });
 
   // Handle skipped validation (blocked document)
   if (relevanceValidation.skipped) {
@@ -279,7 +298,9 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
   for (const pattern of FALSE_CONTINUITY_PATTERNS) {
     const matches = cleanedResponse.match(pattern);
     if (matches) {
-      result.stripped_sections.push(...matches.map(m => `FALSE_CONTINUITY: "${m.substring(0, 40)}..."`));
+      result.stripped_sections.push(
+        ...matches.map((m) => `FALSE_CONTINUITY: "${m.substring(0, 40)}..."`),
+      );
       result.stripped_sections_count += matches.length;
       result.false_continuity_detected = true;
       // Replace with empty string or just the rest of the sentence
@@ -289,15 +310,18 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
 
   // Strip engagement bait endings for simple/factual queries
   // Issue #435: Simple factual answers should end decisively, not invite more questions
-  const isSimpleFact = queryClassification?.classification === 'simple_factual' ||
-                       queryClassification?.classification === 'simple_short' ||
-                       queryClassification?.classification === 'greeting';
+  const isSimpleFact =
+    queryClassification?.classification === 'simple_factual' ||
+    queryClassification?.classification === 'simple_short' ||
+    queryClassification?.classification === 'greeting';
 
   if (isSimpleFact) {
     for (const pattern of ENGAGEMENT_BAIT_ENDINGS) {
       const matches = cleanedResponse.match(pattern);
       if (matches) {
-        result.stripped_sections.push(...matches.map(m => `ENGAGEMENT_BAIT: "${m.substring(0, 30)}..."`));
+        result.stripped_sections.push(
+          ...matches.map((m) => `ENGAGEMENT_BAIT: "${m.substring(0, 30)}..."`),
+        );
         result.stripped_sections_count += matches.length;
         result.engagement_bait_detected = true;
         cleanedResponse = cleanedResponse.replace(pattern, '');
@@ -309,7 +333,7 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
   for (const pattern of ALWAYS_STRIP_SECTIONS) {
     const matches = cleanedResponse.match(pattern);
     if (matches) {
-      result.stripped_sections.push(...matches.map(m => m.substring(0, 50) + '...'));
+      result.stripped_sections.push(...matches.map((m) => m.substring(0, 50) + '...'));
       result.stripped_sections_count += matches.length;
       cleanedResponse = cleanedResponse.replace(pattern, '');
     }
@@ -320,7 +344,7 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
     for (const pattern of ENGAGEMENT_PADDING_SECTIONS) {
       const matches = cleanedResponse.match(pattern);
       if (matches) {
-        result.stripped_sections.push(...matches.map(m => m.substring(0, 50) + '...'));
+        result.stripped_sections.push(...matches.map((m) => m.substring(0, 50) + '...'));
         result.stripped_sections_count += matches.length;
         cleanedResponse = cleanedResponse.replace(pattern, '');
       }
@@ -334,7 +358,7 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
     for (const pattern of STRIPPABLE_SECTIONS) {
       const matches = cleanedResponse.match(pattern);
       if (matches) {
-        result.stripped_sections.push(...matches.map(m => m.substring(0, 50) + '...'));
+        result.stripped_sections.push(...matches.map((m) => m.substring(0, 50) + '...'));
         result.stripped_sections_count += matches.length;
         cleanedResponse = cleanedResponse.replace(pattern, '');
       }
@@ -344,11 +368,11 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
   // For 'single_block', keep only the first paragraph
   if (constraint === 'single_block') {
     // Split by double newlines (paragraph breaks)
-    const paragraphs = cleanedResponse.split(/\n\s*\n/).filter(p => p.trim());
+    const paragraphs = cleanedResponse.split(/\n\s*\n/).filter((p) => p.trim());
     if (paragraphs.length > 0) {
       // Keep just the first substantial paragraph
       // Skip any that are just emoji headers like "🍌 **Roxy:**"
-      let firstReal = paragraphs.find(p => p.trim().length > 50) || paragraphs[0];
+      let firstReal = paragraphs.find((p) => p.trim().length > 50) || paragraphs[0];
       // Remove personality headers if present
       firstReal = firstReal.replace(/^🍌 \*\*(?:Eli|Roxy):\*\*.*?\n+/i, '').trim();
       cleanedResponse = firstReal;
@@ -373,7 +397,7 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
 
     // If still too long, keep only first substantive sections
     if (cleanedResponse.length > 600) {
-      const paragraphs = cleanedResponse.split(/\n\s*\n/).filter(p => p.trim());
+      const paragraphs = cleanedResponse.split(/\n\s*\n/).filter((p) => p.trim());
       cleanedResponse = paragraphs.slice(0, 2).join('\n\n');
     }
   }
@@ -386,15 +410,10 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
     constraint: constraint || 'none',
     hygiene_stripped: result.stripped_sections_count,
     user_requested_guidance: userRequestedGuidance,
-    hygiene_bad: result.hygiene_bad
+    hygiene_bad: result.hygiene_bad,
   });
 
   return { response: cleanedResponse, contract: result };
 }
 
-export {
-  detectFormatConstraint,
-  enforceResponseContract,
-  FORMAT_CONSTRAINTS,
-  STRIPPABLE_SECTIONS
-};
+export { detectFormatConstraint, enforceResponseContract, FORMAT_CONSTRAINTS, STRIPPABLE_SECTIONS };

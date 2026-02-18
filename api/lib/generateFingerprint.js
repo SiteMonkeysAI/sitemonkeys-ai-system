@@ -9,47 +9,47 @@ export function generateFingerprint(
   additionalData = {},
 ) {
   const modeFingerprints = {
-    truth_general: "TG-PROD-001",
-    business_validation: "BV-PROD-001",
-    site_monkeys: "SM-VAULT-LOADED",
+    truth_general: 'TG-PROD-001',
+    business_validation: 'BV-PROD-001',
+    site_monkeys: 'SM-VAULT-LOADED',
   };
 
-  let vaultStatus = "NONE";
+  let vaultStatus = 'NONE';
   if (vaultLoaded) {
-    vaultStatus = "LOADED";
-    if (mode !== "site_monkeys") {
-      modeFingerprints[mode] += " + SM-VAULT-LOADED";
+    vaultStatus = 'LOADED';
+    if (mode !== 'site_monkeys') {
+      modeFingerprints[mode] += ' + SM-VAULT-LOADED';
     }
   }
 
   const complianceDisplay = {
-    COMPLIANT: "PASS",
-    PARTIAL: "WARN",
-    NON_COMPLIANT: "FAIL",
-    UNKNOWN: "UNKNOWN",
+    COMPLIANT: 'PASS',
+    PARTIAL: 'WARN',
+    NON_COMPLIANT: 'FAIL',
+    UNKNOWN: 'UNKNOWN',
   };
 
   const confidenceDisplay =
-    typeof confidence === "string"
+    typeof confidence === 'string'
       ? confidence.toUpperCase()
       : confidence >= 80
-        ? "HIGH"
+        ? 'HIGH'
         : confidence >= 60
-          ? "MEDIUM"
+          ? 'MEDIUM'
           : confidence >= 40
-            ? "LOW"
-            : "UNKNOWN";
+            ? 'LOW'
+            : 'UNKNOWN';
 
   const fingerprintData = {
-    mode: modeFingerprints[mode] || "UNKNOWN-MODE",
+    mode: modeFingerprints[mode] || 'UNKNOWN-MODE',
     vault_loaded: vaultLoaded,
     vault_status: vaultStatus,
     confidence: confidenceDisplay,
-    confidence_score: typeof confidence === "number" ? confidence : null,
+    confidence_score: typeof confidence === 'number' ? confidence : null,
     structure_compliance: structureCompliance,
-    structure_display: complianceDisplay[structureCompliance] || "UNKNOWN",
+    structure_display: complianceDisplay[structureCompliance] || 'UNKNOWN',
     token_cost: tokenCost,
-    cost_display: `$${typeof tokenCost === "number" ? tokenCost.toFixed(4) : "0.0000"}`,
+    cost_display: `$${typeof tokenCost === 'number' ? tokenCost.toFixed(4) : '0.0000'}`,
     timestamp: new Date().toISOString(),
     session_id: additionalData.session_id || null,
     enforcement_layers: additionalData.enforcement_layers || 12,
@@ -80,19 +80,19 @@ export function injectFingerprintIntoResponse(response, fingerprintData) {
 
 export function validateFingerprintStructure(fingerprintData) {
   const requiredFields = [
-    "mode",
-    "vault_loaded",
-    "confidence",
-    "structure_compliance",
-    "token_cost",
-    "timestamp",
-    "enforcement_layers",
+    'mode',
+    'vault_loaded',
+    'confidence',
+    'structure_compliance',
+    'token_cost',
+    'timestamp',
+    'enforcement_layers',
   ];
 
   const validation = {
     valid: true,
     missing_fields: [],
-    data_integrity: "PASS",
+    data_integrity: 'PASS',
   };
 
   requiredFields.forEach((field) => {
@@ -103,7 +103,7 @@ export function validateFingerprintStructure(fingerprintData) {
   });
 
   if (!validation.valid) {
-    validation.data_integrity = "FAIL";
+    validation.data_integrity = 'FAIL';
   }
 
   return validation;

@@ -5,36 +5,36 @@
 // These phrases indicate AI is claiming ignorance when memory was provided
 const IGNORANCE_PHRASES = [
   // Direct ignorance claims
-  "i dont have information",
-  "i dont have any information",
-  "i dont know",
-  "you havent told me",
-  "you didnt tell me",
-  "im not aware",
-  "i dont recall",
-  "you didnt mention",
-  "you havent mentioned",
-  "i have no record",
-  "i dont see any",
-  "i dont have access to",
-  "i dont have that information",
-  "i wasnt told",
-  "you havent shared",
-  "i cant see any information about",
-  "i dont have details about",
-  "no information about",
+  'i dont have information',
+  'i dont have any information',
+  'i dont know',
+  'you havent told me',
+  'you didnt tell me',
+  'im not aware',
+  'i dont recall',
+  'you didnt mention',
+  'you havent mentioned',
+  'i have no record',
+  'i dont see any',
+  'i dont have access to',
+  'i dont have that information',
+  'i wasnt told',
+  'you havent shared',
+  'i cant see any information about',
+  'i dont have details about',
+  'no information about',
   // Memory-related evasions (Issue #579)
-  "no memory of",
-  "dont have any memory",
+  'no memory of',
+  'dont have any memory',
   "don't have any memory",
-  "havent stored",
+  'havent stored',
   "haven't stored",
-  "wasnt provided with",
+  'wasnt provided with',
   "wasn't provided with",
-  "first conversation",
-  "first interaction",
-  "no previous information",
-  "no prior information"
+  'first conversation',
+  'first interaction',
+  'no previous information',
+  'no prior information',
 ];
 
 class MemoryUsageEnforcer {
@@ -51,7 +51,7 @@ class MemoryUsageEnforcer {
       if (!hasMemory || memoryTokens === 0) {
         return {
           violation: false,
-          reason: "no_memory_provided",
+          reason: 'no_memory_provided',
           modified: false,
           response: response,
         };
@@ -72,13 +72,15 @@ class MemoryUsageEnforcer {
       if (!violation) {
         return {
           violation: false,
-          reason: "memory_usage_compliant",
+          reason: 'memory_usage_compliant',
           modified: false,
           response: response,
         };
       }
 
-      console.log(`[MEMORY-ENFORCER] VIOLATION: AI claimed ignorance with ${memoryTokens} tokens of memory`);
+      console.log(
+        `[MEMORY-ENFORCER] VIOLATION: AI claimed ignorance with ${memoryTokens} tokens of memory`,
+      );
 
       this.recordViolation(matchedPhrase, memoryTokens, context);
 
@@ -87,18 +89,18 @@ class MemoryUsageEnforcer {
 
       return {
         violation: true,
-        severity: "high",
-        reason: "claimed_ignorance_with_memory",
+        severity: 'high',
+        reason: 'claimed_ignorance_with_memory',
         matchedPhrase: matchedPhrase,
         memoryTokens: memoryTokens,
         modified: true,
         response: correctedResponse,
       };
     } catch (error) {
-      console.error("[MEMORY-ENFORCER] Error:", error);
+      console.error('[MEMORY-ENFORCER] Error:', error);
       return {
         violation: false,
-        reason: "enforcer_error",
+        reason: 'enforcer_error',
         error: error.message,
         modified: false,
         response: response,

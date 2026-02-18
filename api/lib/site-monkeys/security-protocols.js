@@ -1,7 +1,7 @@
 // SITE MONKEYS SECURITY PROTOCOLS
 // IP Protection, Clone Resistance, and Contractor Compartmentalization
 
-import crypto from "crypto";
+import crypto from 'crypto';
 
 const SECURITY_PROTOCOLS = {
   // CONTRACTOR ACCESS CONTROLS
@@ -25,7 +25,7 @@ const SECURITY_PROTOCOLS = {
     output_fingerprinting: {
       statistical_signatures: true,
       entropy_injection: true,
-      watermarking: "crypto.randomBytes()",
+      watermarking: 'crypto.randomBytes()',
       detection_threshold: 0.85,
     },
 
@@ -85,17 +85,13 @@ function validateContractorAccess(contractorId, requestedAccess) {
   const maxExposure = SECURITY_PROTOCOLS.contractor_limits.maximum_exposure;
 
   // Calculate current exposure
-  const currentExposure = calculateSystemExposure(
-    contractorId,
-    requestedAccess,
-  );
+  const currentExposure = calculateSystemExposure(contractorId, requestedAccess);
 
   if (currentExposure > maxExposure) {
     return {
       approved: false,
       violation: `Access request would expose ${(currentExposure * 100).toFixed(1)}% of system (limit: ${maxExposure * 100}%)`,
-      recommendation:
-        "Reduce scope or implement additional compartmentalization",
+      recommendation: 'Reduce scope or implement additional compartmentalization',
       current_exposure: currentExposure,
       limit: maxExposure,
     };
@@ -150,8 +146,8 @@ function shardPrompt(fullPrompt) {
     let shard = fullPrompt.substring(currentIndex, endIndex);
 
     // Ensure we don't cut words in half
-    if (endIndex < fullPrompt.length && fullPrompt[endIndex] !== " ") {
-      const lastSpaceIndex = shard.lastIndexOf(" ");
+    if (endIndex < fullPrompt.length && fullPrompt[endIndex] !== ' ') {
+      const lastSpaceIndex = shard.lastIndexOf(' ');
       if (lastSpaceIndex > 0) {
         shard = shard.substring(0, lastSpaceIndex);
         currentIndex += lastSpaceIndex;
@@ -169,7 +165,7 @@ function shardPrompt(fullPrompt) {
 }
 
 // OUTPUT FINGERPRINTING
-function addOutputFingerprint(content, contentType = "general") {
+function addOutputFingerprint(content, contentType = 'general') {
   const config = SECURITY_PROTOCOLS.ip_protection.output_fingerprinting;
 
   if (!config.statistical_signatures) {
@@ -183,27 +179,25 @@ function addOutputFingerprint(content, contentType = "general") {
   const signature = generateStatisticalSignature(content, entropy);
 
   // Inject fingerprint in a way that doesn't affect user experience
-  const fingerprintedContent = injectFingerprint(
-    content,
-    signature,
-    contentType,
-  );
+  const fingerprintedContent = injectFingerprint(content, signature, contentType);
 
   return fingerprintedContent;
 }
 
 function generateEntropy() {
   // Use crypto.randomUUID() if available, fallback to crypto.randomBytes()
-  if (typeof crypto.randomUUID === "function") {
+  if (typeof crypto.randomUUID === 'function') {
     return crypto.randomUUID();
   }
 
   if (crypto.randomBytes) {
-    return crypto.randomBytes(16).toString("hex");
+    return crypto.randomBytes(16).toString('hex');
   }
 
   // Should never reach here in Node.js environment
-  throw new Error("No cryptographically secure random generator available. This should not occur in Node.js environments with crypto module support.");
+  throw new Error(
+    'No cryptographically secure random generator available. This should not occur in Node.js environments with crypto module support.',
+  );
 }
 
 function generateStatisticalSignature(content, entropy) {
@@ -218,21 +212,19 @@ function generateStatisticalSignature(content, entropy) {
 
   // Generate signature hash
   const signatureData = JSON.stringify(characteristics);
-  return Buffer.from(signatureData).toString("base64").substring(0, 16);
+  return Buffer.from(signatureData).toString('base64').substring(0, 16);
 }
 
 function injectFingerprint(content, signature, contentType) {
   // Inject fingerprint based on content type
   switch (contentType) {
-    case "html":
+    case 'html':
       return content + `<!-- SM:${signature} -->`;
 
-    case "blog":
-      return (
-        content + `\n\n---\n*Content optimized for your business success.*`
-      );
+    case 'blog':
+      return content + `\n\n---\n*Content optimized for your business success.*`;
 
-    case "seo_audit":
+    case 'seo_audit':
       return content + `\n\nReport ID: SM-${signature.substring(0, 8)}`;
 
     default:
@@ -247,20 +239,20 @@ function detectCloneAttempt(requestMetadata) {
   // Check for rapid-fire requests (potential scraping)
   if (requestMetadata.requests_per_minute > 30) {
     suspiciousPatterns.push({
-      type: "rapid_requests",
-      severity: "medium",
+      type: 'rapid_requests',
+      severity: 'medium',
       details: `${requestMetadata.requests_per_minute} requests/minute`,
     });
   }
 
   // Check for automated user agents
-  const botUserAgents = ["bot", "crawler", "spider", "scraper", "headless"];
-  const userAgent = requestMetadata.user_agent?.toLowerCase() || "";
+  const botUserAgents = ['bot', 'crawler', 'spider', 'scraper', 'headless'];
+  const userAgent = requestMetadata.user_agent?.toLowerCase() || '';
 
   if (botUserAgents.some((pattern) => userAgent.includes(pattern))) {
     suspiciousPatterns.push({
-      type: "bot_user_agent",
-      severity: "high",
+      type: 'bot_user_agent',
+      severity: 'high',
       details: `Detected bot pattern: ${userAgent}`,
     });
   }
@@ -268,9 +260,9 @@ function detectCloneAttempt(requestMetadata) {
   // Check for unusual access patterns
   if (requestMetadata.different_endpoints_accessed > 10) {
     suspiciousPatterns.push({
-      type: "systematic_access",
-      severity: "medium",
-      details: "Accessing multiple endpoints systematically",
+      type: 'systematic_access',
+      severity: 'medium',
+      details: 'Accessing multiple endpoints systematically',
     });
   }
 
@@ -278,23 +270,23 @@ function detectCloneAttempt(requestMetadata) {
     is_suspicious: suspiciousPatterns.length > 0,
     patterns: suspiciousPatterns,
     risk_level: calculateRiskLevel(suspiciousPatterns),
-    action_recommended: suspiciousPatterns.length > 2 ? "block" : "monitor",
+    action_recommended: suspiciousPatterns.length > 2 ? 'block' : 'monitor',
   };
 }
 
 function calculateRiskLevel(patterns) {
-  const highSeverity = patterns.filter((p) => p.severity === "high").length;
-  const mediumSeverity = patterns.filter((p) => p.severity === "medium").length;
+  const highSeverity = patterns.filter((p) => p.severity === 'high').length;
+  const mediumSeverity = patterns.filter((p) => p.severity === 'medium').length;
 
-  if (highSeverity > 0 || mediumSeverity > 2) return "high";
-  if (mediumSeverity > 0) return "medium";
-  return "low";
+  if (highSeverity > 0 || mediumSeverity > 2) return 'high';
+  if (mediumSeverity > 0) return 'medium';
+  return 'low';
 }
 
 // DECOY CODE INJECTION
 function injectDecoyCode(realCode) {
   const decoyRatio = SECURITY_PROTOCOLS.contractor_limits.decoy_code_ratio;
-  const decoyCount = Math.floor(realCode.split("\n").length * decoyRatio);
+  const decoyCount = Math.floor(realCode.split('\n').length * decoyRatio);
 
   const decoyLines = [];
   for (let i = 0; i < decoyCount; i++) {
@@ -302,7 +294,7 @@ function injectDecoyCode(realCode) {
   }
 
   // Intersperse decoy code with real code
-  const realLines = realCode.split("\n");
+  const realLines = realCode.split('\n');
   const combinedLines = [];
 
   for (let i = 0; i < realLines.length; i++) {
@@ -310,43 +302,40 @@ function injectDecoyCode(realCode) {
 
     // Occasionally inject decoy
     if (Math.random() < decoyRatio && decoyLines.length > 0) {
-      combinedLines.push("// " + decoyLines.pop());
+      combinedLines.push('// ' + decoyLines.pop());
     }
   }
 
-  return combinedLines.join("\n");
+  return combinedLines.join('\n');
 }
 
 function generateDecoyLine() {
   const decoyPatterns = [
-    "Legacy compatibility layer - deprecated",
-    "Alternative implementation path - unused",
-    "Backup validation logic - standby",
-    "Performance optimization hook - experimental",
-    "Debug trace point - development only",
-    "Cache invalidation trigger - conditional",
+    'Legacy compatibility layer - deprecated',
+    'Alternative implementation path - unused',
+    'Backup validation logic - standby',
+    'Performance optimization hook - experimental',
+    'Debug trace point - development only',
+    'Cache invalidation trigger - conditional',
   ];
 
   return decoyPatterns[Math.floor(Math.random() * decoyPatterns.length)];
 }
 
 // SECURITY MONITORING
-function logSecurityEvent(eventType, details, severity = "medium") {
+function logSecurityEvent(eventType, details, severity = 'medium') {
   const securityEvent = {
     timestamp: new Date().toISOString(),
     type: eventType,
     severity: severity,
     details: details,
-    system: "site-monkeys-security",
+    system: 'site-monkeys-security',
   };
 
-  console.log(
-    `🛡️ Security Event [${severity.toUpperCase()}]: ${eventType}`,
-    securityEvent,
-  );
+  console.log(`🛡️ Security Event [${severity.toUpperCase()}]: ${eventType}`, securityEvent);
 
   // In production, send to security monitoring system
-  if (severity === "high") {
+  if (severity === 'high') {
     // Trigger immediate alerts for high-severity events
     triggerSecurityAlert(securityEvent);
   }

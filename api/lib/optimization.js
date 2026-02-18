@@ -18,14 +18,11 @@ export function runOptimizationEnhancer({
     let enhancedResponse = baseResponse;
 
     if (vaultLoaded && triggeredFrameworks.length > 0) {
-      enhancedResponse = applyVaultEnhancements(
-        baseResponse,
-        triggeredFrameworks,
-      );
+      enhancedResponse = applyVaultEnhancements(baseResponse, triggeredFrameworks);
     }
 
     // STEP 4: Risk Surface Enhancement
-    if (mode === "business_validation") {
+    if (mode === 'business_validation') {
       enhancedResponse = enhanceBusinessRisks(enhancedResponse);
     }
 
@@ -36,11 +33,11 @@ export function runOptimizationEnhancer({
     return {
       enhancedResponse: enhancedResponse,
       optimization_applied: true,
-      optimization_tags: ["truth_validation", "mode_compliance"],
+      optimization_tags: ['truth_validation', 'mode_compliance'],
       optimizations: qualityMetrics,
     };
   } catch (error) {
-    console.error("Optimization enhancement failed:", error);
+    console.error('Optimization enhancement failed:', error);
     // Return original baseResponse if enhancement fails
     return {
       enhancedResponse: baseResponse,
@@ -88,22 +85,20 @@ function validateTruthContent(baseResponse) {
 
 function checkModeCompliance(baseResponse, mode) {
   switch (mode) {
-    case "truth_general":
+    case 'truth_general':
       return checkTruthModeCompliance(baseResponse);
-    case "business_validation":
+    case 'business_validation':
       return checkBusinessModeCompliance(baseResponse);
     default:
-      return "UNKNOWN_MODE";
+      return 'UNKNOWN_MODE';
   }
 }
 
 function checkTruthModeCompliance(baseResponse) {
   const requiredElements = [/confidence:/i, /(high|medium|low|unknown)/i];
 
-  const compliance = requiredElements.every((element) =>
-    element.test(baseResponse),
-  );
-  return compliance ? "COMPLIANT" : "PARTIAL";
+  const compliance = requiredElements.every((element) => element.test(baseResponse));
+  return compliance ? 'COMPLIANT' : 'PARTIAL';
 }
 
 function checkBusinessModeCompliance(baseResponse) {
@@ -113,13 +108,11 @@ function checkBusinessModeCompliance(baseResponse) {
     /(high|medium|low|critical)/i,
   ];
 
-  const compliance = requiredElements.filter((element) =>
-    element.test(baseResponse),
-  ).length;
+  const compliance = requiredElements.filter((element) => element.test(baseResponse)).length;
 
-  if (compliance >= 2) return "COMPLIANT";
-  if (compliance >= 1) return "PARTIAL";
-  return "NON_COMPLIANT";
+  if (compliance >= 2) return 'COMPLIANT';
+  if (compliance >= 1) return 'PARTIAL';
+  return 'NON_COMPLIANT';
 }
 
 function applyVaultEnhancements(baseResponse, triggeredFrameworks) {
@@ -128,15 +121,15 @@ function applyVaultEnhancements(baseResponse, triggeredFrameworks) {
   // Check triggered frameworks by name
   const frameworkNames = triggeredFrameworks.map((tf) => tf.name || tf);
 
-  if (frameworkNames.includes("pricing_strategy")) {
+  if (frameworkNames.includes('pricing_strategy')) {
     enhanced += `\n\n🍌 SITE MONKEYS CONTEXT: This decision impacts our service pricing strategy and client positioning.`;
   }
 
-  if (frameworkNames.includes("resource_allocation")) {
+  if (frameworkNames.includes('resource_allocation')) {
     enhanced += `\n\n💰 FINANCIAL REALITY: Consider impact on current runway and client commitments.`;
   }
 
-  if (frameworkNames.includes("operational_decisions")) {
+  if (frameworkNames.includes('operational_decisions')) {
     enhanced += `\n\n🎯 BRAND ALIGNMENT: Evaluate consistency with Site Monkeys positioning and values.`;
   }
 
@@ -145,7 +138,7 @@ function applyVaultEnhancements(baseResponse, triggeredFrameworks) {
 
 function enhanceBusinessRisks(baseResponse) {
   // Add proactive risk surfacing if missing
-  if (!baseResponse.toLowerCase().includes("risk")) {
+  if (!baseResponse.toLowerCase().includes('risk')) {
     baseResponse += `\n\n⚠️ ADDITIONAL RISKS TO CONSIDER:
 - Market timing and competitive response
 - Implementation complexity and timeline
@@ -157,7 +150,7 @@ function enhanceBusinessRisks(baseResponse) {
 
 function calculateQualityScore(baseResponse, mode) {
   const metrics = {
-    word_count: baseResponse.split(" ").length,
+    word_count: baseResponse.split(' ').length,
     has_confidence: /confidence:/i.test(baseResponse),
     has_risks: /risk/i.test(baseResponse),
     has_numbers: /\$|\d+%|\d+/.test(baseResponse),
@@ -173,8 +166,8 @@ function calculateQualityScore(baseResponse, mode) {
 
   // Content quality scoring
   if (metrics.has_confidence) score += 25;
-  if (metrics.has_risks && mode === "business_validation") score += 25;
-  if (metrics.has_numbers && mode === "business_validation") score += 20;
+  if (metrics.has_risks && mode === 'business_validation') score += 25;
+  if (metrics.has_numbers && mode === 'business_validation') score += 20;
   if (metrics.has_uncertainty) score += 10; // Truth-positive
 
   return {
@@ -189,15 +182,15 @@ export function generateMetaQuestions(originalResponse, mode) {
   // Generate follow-up questions to challenge assumptions
   const questions = [];
 
-  if (mode === "business_validation") {
+  if (mode === 'business_validation') {
     questions.push("What's the worst-case scenario if this goes wrong?");
-    questions.push("How does this impact your cash runway?");
-    questions.push("What competitors might respond to this move?");
-    questions.push("What assumptions are you making about customer behavior?");
+    questions.push('How does this impact your cash runway?');
+    questions.push('What competitors might respond to this move?');
+    questions.push('What assumptions are you making about customer behavior?');
   } else {
-    questions.push("What additional information would change this assessment?");
-    questions.push("What are the key uncertainties here?");
-    questions.push("How confident should you be in this conclusion?");
+    questions.push('What additional information would change this assessment?');
+    questions.push('What are the key uncertainties here?');
+    questions.push('How confident should you be in this conclusion?');
   }
 
   return questions.slice(0, 2); // Return top 2 most relevant

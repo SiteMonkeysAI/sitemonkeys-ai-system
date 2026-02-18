@@ -20,41 +20,41 @@ export function detectUncertaintyStructure(response) {
   // Markers for uncertainty admission
   const admissionMarkers = [
     "i don't know",
-    "i cannot predict",
+    'i cannot predict',
     "i'm not certain",
     "i don't have enough information",
-    "being honest with you",
-    "cannot determine",
-    "unsure about",
-    "unclear",
-    "what i don't know"
+    'being honest with you',
+    'cannot determine',
+    'unsure about',
+    'unclear',
+    "what i don't know",
   ];
 
   // Markers for explanation
   const explanationMarkers = [
-    "because",
-    "why this matters",
-    "the reason",
+    'because',
+    'why this matters',
+    'the reason',
     "what's missing",
-    "what information is missing",
-    "to be certain"
+    'what information is missing',
+    'to be certain',
   ];
 
   // Markers for framework/guidance
   const frameworkMarkers = [
-    "what i can tell you",
-    "based on",
-    "to assess",
-    "you need to",
-    "scenario",
-    "if/then",
-    "consider",
-    "framework"
+    'what i can tell you',
+    'based on',
+    'to assess',
+    'you need to',
+    'scenario',
+    'if/then',
+    'consider',
+    'framework',
   ];
 
-  const hasAdmission = admissionMarkers.some(marker => lowerResponse.includes(marker));
-  const hasExplanation = explanationMarkers.some(marker => lowerResponse.includes(marker));
-  const hasFramework = frameworkMarkers.some(marker => lowerResponse.includes(marker));
+  const hasAdmission = admissionMarkers.some((marker) => lowerResponse.includes(marker));
+  const hasExplanation = explanationMarkers.some((marker) => lowerResponse.includes(marker));
+  const hasFramework = frameworkMarkers.some((marker) => lowerResponse.includes(marker));
 
   const structureCount = [hasAdmission, hasExplanation, hasFramework].filter(Boolean).length;
   const hasFullStructure = structureCount === 3;
@@ -66,10 +66,10 @@ export function detectUncertaintyStructure(response) {
     structureCount,
     hasFullStructure,
     markers_found: {
-      admission: admissionMarkers.filter(m => lowerResponse.includes(m)),
-      explanation: explanationMarkers.filter(m => lowerResponse.includes(m)),
-      framework: frameworkMarkers.filter(m => lowerResponse.includes(m))
-    }
+      admission: admissionMarkers.filter((m) => lowerResponse.includes(m)),
+      explanation: explanationMarkers.filter((m) => lowerResponse.includes(m)),
+      framework: frameworkMarkers.filter((m) => lowerResponse.includes(m)),
+    },
   };
 }
 
@@ -84,19 +84,19 @@ export function countBlindSpots(response) {
 
   // Blind spot introduction markers
   const blindSpotMarkers = [
-    "you may not have considered",
-    "critical factor",
-    "however",
-    "blind spot",
-    "you might not see",
+    'you may not have considered',
+    'critical factor',
+    'however',
+    'blind spot',
+    'you might not see',
     "haven't thought about",
-    "important to note",
-    "overlooked",
-    "missing consideration"
+    'important to note',
+    'overlooked',
+    'missing consideration',
   ];
 
   // Find all blind spot mentions
-  const foundMarkers = blindSpotMarkers.filter(marker => lowerResponse.includes(marker));
+  const foundMarkers = blindSpotMarkers.filter((marker) => lowerResponse.includes(marker));
 
   // Try to count distinct numbered items (1., 2., 3., etc.)
   const numberedItems = response.match(/\n\s*\d+\.\s+/g);
@@ -110,7 +110,7 @@ export function countBlindSpots(response) {
     blindSpotCount: estimatedBlindSpots,
     hasBlindSpots: estimatedBlindSpots > 0,
     markers_found: foundMarkers,
-    numberedItemsDetected: numberedCount
+    numberedItemsDetected: numberedCount,
   };
 }
 
@@ -125,27 +125,29 @@ export function detectEngagementBait(response) {
 
   // Engagement bait phrases
   const baitPatterns = [
-    "would you like",
-    "should i",
-    "want me to",
-    "do you want",
-    "shall i",
-    "interested in",
-    "which would you like",
-    "would you prefer",
-    "let me know if",
-    "feel free to ask"
+    'would you like',
+    'should i',
+    'want me to',
+    'do you want',
+    'shall i',
+    'interested in',
+    'which would you like',
+    'would you prefer',
+    'let me know if',
+    'feel free to ask',
   ];
 
   // Check overall response
-  const overallBaitCount = baitPatterns.filter(pattern => lowerResponse.includes(pattern)).length;
+  const overallBaitCount = baitPatterns.filter((pattern) => lowerResponse.includes(pattern)).length;
 
   // Check last paragraph specifically (more critical)
-  const paragraphs = response.split('\n\n').filter(p => p.trim().length > 0);
+  const paragraphs = response.split('\n\n').filter((p) => p.trim().length > 0);
   const lastParagraph = paragraphs[paragraphs.length - 1] || '';
   const lastParaLower = lastParagraph.toLowerCase();
 
-  const lastParaBaitCount = baitPatterns.filter(pattern => lastParaLower.includes(pattern)).length;
+  const lastParaBaitCount = baitPatterns.filter((pattern) =>
+    lastParaLower.includes(pattern),
+  ).length;
   const hasLastParaBait = lastParaBaitCount > 0;
 
   return {
@@ -154,7 +156,7 @@ export function detectEngagementBait(response) {
     hasLastParaBait,
     hasBait: overallBaitCount > 0,
     lastParagraph: lastParagraph.substring(0, 150),
-    patterns_found: baitPatterns.filter(p => lowerResponse.includes(p))
+    patterns_found: baitPatterns.filter((p) => lowerResponse.includes(p)),
   };
 }
 
@@ -168,32 +170,26 @@ export function assessExampleQuality(response) {
   const lowerResponse = response.toLowerCase();
 
   // Generic example markers (low quality)
-  const genericMarkers = [
-    "for example",
-    "such as",
-    "like",
-    "e.g.",
-    "i.e."
-  ];
+  const genericMarkers = ['for example', 'such as', 'like', 'e.g.', 'i.e.'];
 
   // Specific example markers (high quality)
   const specificMarkers = [
-    "scenario a",
-    "scenario b",
-    "if x then y",
-    "in your case",
-    "for your situation",
-    "based on comparable",
-    "similar startups",
-    "confidence:",
-    "evidence:"
+    'scenario a',
+    'scenario b',
+    'if x then y',
+    'in your case',
+    'for your situation',
+    'based on comparable',
+    'similar startups',
+    'confidence:',
+    'evidence:',
   ];
 
-  const hasGenericExamples = genericMarkers.some(marker => lowerResponse.includes(marker));
-  const hasSpecificExamples = specificMarkers.some(marker => lowerResponse.includes(marker));
+  const hasGenericExamples = genericMarkers.some((marker) => lowerResponse.includes(marker));
+  const hasSpecificExamples = specificMarkers.some((marker) => lowerResponse.includes(marker));
 
-  const genericCount = genericMarkers.filter(m => lowerResponse.includes(m)).length;
-  const specificCount = specificMarkers.filter(m => lowerResponse.includes(m)).length;
+  const genericCount = genericMarkers.filter((m) => lowerResponse.includes(m)).length;
+  const specificCount = specificMarkers.filter((m) => lowerResponse.includes(m)).length;
 
   let quality = 'none';
   if (specificCount > genericCount) {
@@ -208,8 +204,8 @@ export function assessExampleQuality(response) {
     hasSpecificExamples,
     genericCount,
     specificCount,
-    generic_markers: genericMarkers.filter(m => lowerResponse.includes(m)),
-    specific_markers: specificMarkers.filter(m => lowerResponse.includes(m))
+    generic_markers: genericMarkers.filter((m) => lowerResponse.includes(m)),
+    specific_markers: specificMarkers.filter((m) => lowerResponse.includes(m)),
   };
 }
 
@@ -247,6 +243,6 @@ export function measureBehavioral(response) {
     blindSpots,
     engagementBait,
     exampleQuality,
-    _note: "Observational only - not enforced until Doctrine Gates"
+    _note: 'Observational only - not enforced until Doctrine Gates',
   };
 }

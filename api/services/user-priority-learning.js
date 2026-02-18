@@ -1,7 +1,7 @@
 /**
  * User Priority Learning Service
  * Innovation #49: Adaptive Learning of User Priorities
- * 
+ *
  * Tracks semantic patterns user engages with and boosts future retrievals
  * toward learned priorities using embedding centroids.
  */
@@ -27,7 +27,7 @@ export async function learnUserPriorities(pool, userId, engagedMemoryIds) {
        FROM persistent_memories
        WHERE id = ANY($1::int[])
          AND embedding IS NOT NULL`,
-      [engagedMemoryIds]
+      [engagedMemoryIds],
     );
 
     if (!result.rows[0]?.priority_centroid) {
@@ -53,12 +53,13 @@ export async function learnUserPriorities(pool, userId, engagedMemoryIds) {
        DO UPDATE SET 
          embedding = EXCLUDED.embedding,
          updated_at = CURRENT_TIMESTAMP`,
-      [userId, centroid]
+      [userId, centroid],
     );
 
-    console.log(`[USER-PRIORITY] ✅ Updated priority centroid for user ${userId} from ${engagedMemoryIds.length} memories`);
+    console.log(
+      `[USER-PRIORITY] ✅ Updated priority centroid for user ${userId} from ${engagedMemoryIds.length} memories`,
+    );
     return { success: true, memoriesUsed: engagedMemoryIds.length };
-
   } catch (error) {
     console.error(`[USER-PRIORITY] ❌ Failed to learn priorities: ${error.message}`);
     return { success: false, reason: error.message };
@@ -81,7 +82,7 @@ export async function getUserPriorityCentroid(pool, userId) {
          AND category_name = 'system'
          AND subcategory_name = 'user_priority_centroid'
        LIMIT 1`,
-      [userId]
+      [userId],
     );
 
     if (result.rows.length === 0) {
@@ -90,9 +91,8 @@ export async function getUserPriorityCentroid(pool, userId) {
 
     return {
       centroid: JSON.parse(result.rows[0].centroid),
-      updated_at: result.rows[0].updated_at
+      updated_at: result.rows[0].updated_at,
     };
-
   } catch (error) {
     console.error(`[USER-PRIORITY] ⚠️ Failed to retrieve priority centroid: ${error.message}`);
     return null;
@@ -115,34 +115,33 @@ export async function boostByUserPriorities(pool, userId, memories) {
   try {
     // Get user's priority centroid
     const priorityData = await getUserPriorityCentroid(pool, userId);
-    
+
     if (!priorityData || !priorityData.centroid) {
       console.log(`[USER-PRIORITY] No priority centroid found for user ${userId}, skipping boost`);
       return memories;
     }
 
     // For each memory, compute similarity to priority centroid and boost score
-    const boostedMemories = memories.map(memory => {
+    const boostedMemories = memories.map((memory) => {
       if (!memory.embedding) {
         return memory;
       }
 
       // Parse embedding if it's a string
-      const embedding = typeof memory.embedding === 'string' 
-        ? JSON.parse(memory.embedding) 
-        : memory.embedding;
+      const embedding =
+        typeof memory.embedding === 'string' ? JSON.parse(memory.embedding) : memory.embedding;
 
       // Compute cosine similarity to priority centroid
       const similarity = cosineSimilarity(embedding, priorityData.centroid);
-      
+
       // Boost hybrid_score by priority similarity (up to +0.15)
       const priorityBoost = similarity * 0.15;
-      
+
       return {
         ...memory,
         hybrid_score: (memory.hybrid_score || memory.similarity || 0) + priorityBoost,
         priority_boosted: true,
-        priority_boost: Math.round(priorityBoost * 1000) / 1000
+        priority_boost: Math.round(priorityBoost * 1000) / 1000,
       };
     });
 
@@ -151,7 +150,6 @@ export async function boostByUserPriorities(pool, userId, memories) {
 
     console.log(`[USER-PRIORITY] ✅ Boosted ${memories.length} memories using priority centroid`);
     return boostedMemories;
-
   } catch (error) {
     console.error(`[USER-PRIORITY] ⚠️ Failed to boost by priorities: ${error.message}`);
     return memories; // Return original on error

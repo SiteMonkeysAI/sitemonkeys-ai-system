@@ -2,7 +2,7 @@
 // STREAM PROCESSOR - Real-time data integration and processing
 // Integrates live data streams for current awareness and context
 
-import express from "express";
+import express from 'express';
 
 class StreamProcessor {
   constructor() {
@@ -16,7 +16,7 @@ class StreamProcessor {
 
   async initialize() {
     try {
-      console.log("📡 Initializing stream processor...");
+      console.log('📡 Initializing stream processor...');
 
       // Initialize data processors
       this.initializeDataProcessors();
@@ -31,16 +31,12 @@ class StreamProcessor {
       this.setupStreamMonitoring();
 
       this.initialized = true;
-      console.log(
-        "✅ Stream processor ready - real-time data integration active",
-      );
-      console.log(
-        "📊 Ready to process: market data, financial feeds, business metrics",
-      );
+      console.log('✅ Stream processor ready - real-time data integration active');
+      console.log('📊 Ready to process: market data, financial feeds, business metrics');
 
       return true;
     } catch (error) {
-      console.error("❌ Stream processor initialization failed:", error);
+      console.error('❌ Stream processor initialization failed:', error);
       this.initialized = false;
       return false;
     }
@@ -48,48 +44,48 @@ class StreamProcessor {
 
   initializeDataProcessors() {
     // Market data processor
-    this.dataProcessors.set("market_data", {
-      name: "Market Data Processor",
+    this.dataProcessors.set('market_data', {
+      name: 'Market Data Processor',
       process: this.processMarketData.bind(this),
       relevance_detector: this.detectMarketRelevance.bind(this),
       insights_extractor: this.extractMarketInsights.bind(this),
     });
 
     // Financial data processor
-    this.dataProcessors.set("financial_data", {
-      name: "Financial Data Processor",
+    this.dataProcessors.set('financial_data', {
+      name: 'Financial Data Processor',
       process: this.processFinancialData.bind(this),
       relevance_detector: this.detectFinancialRelevance.bind(this),
       insights_extractor: this.extractFinancialInsights.bind(this),
     });
 
     // Business metrics processor
-    this.dataProcessors.set("business_metrics", {
-      name: "Business Metrics Processor",
+    this.dataProcessors.set('business_metrics', {
+      name: 'Business Metrics Processor',
       process: this.processBusinessMetrics.bind(this),
       relevance_detector: this.detectBusinessRelevance.bind(this),
       insights_extractor: this.extractBusinessInsights.bind(this),
     });
 
     // Competitive intelligence processor
-    this.dataProcessors.set("competitive_intel", {
-      name: "Competitive Intelligence Processor",
+    this.dataProcessors.set('competitive_intel', {
+      name: 'Competitive Intelligence Processor',
       process: this.processCompetitiveIntel.bind(this),
       relevance_detector: this.detectCompetitiveRelevance.bind(this),
       insights_extractor: this.extractCompetitiveInsights.bind(this),
     });
 
     // News and events processor
-    this.dataProcessors.set("news_events", {
-      name: "News and Events Processor",
+    this.dataProcessors.set('news_events', {
+      name: 'News and Events Processor',
       process: this.processNewsEvents.bind(this),
       relevance_detector: this.detectNewsRelevance.bind(this),
       insights_extractor: this.extractNewsInsights.bind(this),
     });
 
     // Customer data processor
-    this.dataProcessors.set("customer_data", {
-      name: "Customer Data Processor",
+    this.dataProcessors.set('customer_data', {
+      name: 'Customer Data Processor',
       process: this.processCustomerData.bind(this),
       relevance_detector: this.detectCustomerRelevance.bind(this),
       insights_extractor: this.extractCustomerInsights.bind(this),
@@ -98,60 +94,60 @@ class StreamProcessor {
 
   initializeAlertThresholds() {
     // Financial alert thresholds
-    this.alertThresholds.set("cash_flow", {
+    this.alertThresholds.set('cash_flow', {
       critical: -50000, // Monthly burn rate increase
       warning: -25000,
-      threshold_type: "negative_change",
+      threshold_type: 'negative_change',
     });
 
-    this.alertThresholds.set("revenue_change", {
+    this.alertThresholds.set('revenue_change', {
       critical: -0.2, // 20% decrease
       warning: -0.1, // 10% decrease
-      threshold_type: "percentage_change",
+      threshold_type: 'percentage_change',
     });
 
     // Market alert thresholds
-    this.alertThresholds.set("competitive_activity", {
+    this.alertThresholds.set('competitive_activity', {
       critical: 5, // Major competitive moves
       warning: 3,
-      threshold_type: "activity_count",
+      threshold_type: 'activity_count',
     });
 
-    this.alertThresholds.set("market_volatility", {
+    this.alertThresholds.set('market_volatility', {
       critical: 0.15, // 15% market movement
       warning: 0.1, // 10% market movement
-      threshold_type: "volatility_measure",
+      threshold_type: 'volatility_measure',
     });
 
     // Customer alert thresholds
-    this.alertThresholds.set("customer_churn", {
+    this.alertThresholds.set('customer_churn', {
       critical: 0.15, // 15% monthly churn
       warning: 0.1, // 10% monthly churn
-      threshold_type: "churn_rate",
+      threshold_type: 'churn_rate',
     });
   }
 
   initializeRealTimeCache() {
     // Cache categories for real-time data
-    this.realTimeCache.set("market_conditions", {
+    this.realTimeCache.set('market_conditions', {
       data: new Map(),
       ttl: 300000, // 5 minutes
       last_updated: null,
     });
 
-    this.realTimeCache.set("financial_metrics", {
+    this.realTimeCache.set('financial_metrics', {
       data: new Map(),
       ttl: 600000, // 10 minutes
       last_updated: null,
     });
 
-    this.realTimeCache.set("competitive_movements", {
+    this.realTimeCache.set('competitive_movements', {
       data: new Map(),
       ttl: 1800000, // 30 minutes
       last_updated: null,
     });
 
-    this.realTimeCache.set("customer_signals", {
+    this.realTimeCache.set('customer_signals', {
       data: new Map(),
       ttl: 900000, // 15 minutes
       last_updated: null,
@@ -172,7 +168,7 @@ class StreamProcessor {
 
   // MAIN STREAM PROCESSING METHOD
   async enrichWithRealTimeData({ query, context, businessWisdom }) {
-    console.log("📊 Enriching with real-time data...");
+    console.log('📊 Enriching with real-time data...');
 
     if (!this.initialized) {
       await this.initialize();
@@ -183,24 +179,13 @@ class StreamProcessor {
       const relevantStreams = this.identifyRelevantStreams(query, context);
 
       // Gather real-time data from relevant streams
-      const realTimeData = await this.gatherRealTimeData(
-        relevantStreams,
-        query,
-        context,
-      );
+      const realTimeData = await this.gatherRealTimeData(relevantStreams, query, context);
 
       // Process and analyze the data
-      const processedData = await this.processStreamData(
-        realTimeData,
-        query,
-        context,
-      );
+      const processedData = await this.processStreamData(realTimeData, query, context);
 
       // Generate real-time insights
-      const realTimeInsights = this.generateRealTimeInsights(
-        processedData,
-        businessWisdom,
-      );
+      const realTimeInsights = this.generateRealTimeInsights(processedData, businessWisdom);
 
       // Check for alerts
       const alerts = this.checkAlerts(processedData);
@@ -211,18 +196,16 @@ class StreamProcessor {
         real_time_insights: realTimeInsights,
         real_time_alerts: alerts,
         real_time_enhancement: true,
-        data_freshness: "current",
+        data_freshness: 'current',
         stream_sources: relevantStreams.map((stream) => stream.source),
         enrichment_timestamp: new Date().toISOString(),
       };
 
-      console.log(
-        `✅ Real-time enrichment complete: ${relevantStreams.length} streams processed`,
-      );
+      console.log(`✅ Real-time enrichment complete: ${relevantStreams.length} streams processed`);
 
       return enrichedContext;
     } catch (error) {
-      console.error("❌ Real-time enrichment failed:", error);
+      console.error('❌ Real-time enrichment failed:', error);
       return {
         ...context,
         real_time_enhancement: false,
@@ -237,54 +220,54 @@ class StreamProcessor {
     // Market data relevance
     if (this.detectMarketRelevance(query, context)) {
       relevantStreams.push({
-        source: "market_data",
-        priority: "high",
-        processor: this.dataProcessors.get("market_data"),
+        source: 'market_data',
+        priority: 'high',
+        processor: this.dataProcessors.get('market_data'),
       });
     }
 
     // Financial data relevance
     if (this.detectFinancialRelevance(query, context)) {
       relevantStreams.push({
-        source: "financial_data",
-        priority: "high",
-        processor: this.dataProcessors.get("financial_data"),
+        source: 'financial_data',
+        priority: 'high',
+        processor: this.dataProcessors.get('financial_data'),
       });
     }
 
     // Business metrics relevance
     if (this.detectBusinessRelevance(query, context)) {
       relevantStreams.push({
-        source: "business_metrics",
-        priority: "medium",
-        processor: this.dataProcessors.get("business_metrics"),
+        source: 'business_metrics',
+        priority: 'medium',
+        processor: this.dataProcessors.get('business_metrics'),
       });
     }
 
     // Competitive intelligence relevance
     if (this.detectCompetitiveRelevance(query, context)) {
       relevantStreams.push({
-        source: "competitive_intel",
-        priority: "high",
-        processor: this.dataProcessors.get("competitive_intel"),
+        source: 'competitive_intel',
+        priority: 'high',
+        processor: this.dataProcessors.get('competitive_intel'),
       });
     }
 
     // News and events relevance
     if (this.detectNewsRelevance(query, context)) {
       relevantStreams.push({
-        source: "news_events",
-        priority: "medium",
-        processor: this.dataProcessors.get("news_events"),
+        source: 'news_events',
+        priority: 'medium',
+        processor: this.dataProcessors.get('news_events'),
       });
     }
 
     // Customer data relevance
     if (this.detectCustomerRelevance(query, context)) {
       relevantStreams.push({
-        source: "customer_data",
-        priority: "high",
-        processor: this.dataProcessors.get("customer_data"),
+        source: 'customer_data',
+        priority: 'high',
+        processor: this.dataProcessors.get('customer_data'),
       });
     }
 
@@ -312,11 +295,7 @@ class StreamProcessor {
           });
         } else {
           // Fetch fresh data
-          const freshData = await this.fetchStreamData(
-            stream.source,
-            query,
-            context,
-          );
+          const freshData = await this.fetchStreamData(stream.source, query, context);
 
           if (freshData) {
             realTimeData.push({
@@ -344,17 +323,17 @@ class StreamProcessor {
     // For now, return intelligent placeholder data
 
     switch (source) {
-      case "market_data":
+      case 'market_data':
         return this.generateMarketData(query, context);
-      case "financial_data":
+      case 'financial_data':
         return this.generateFinancialData(query, context);
-      case "business_metrics":
+      case 'business_metrics':
         return this.generateBusinessMetrics(query, context);
-      case "competitive_intel":
+      case 'competitive_intel':
         return this.generateCompetitiveIntel(query, context);
-      case "news_events":
+      case 'news_events':
         return this.generateNewsEvents(query, context);
-      case "customer_data":
+      case 'customer_data':
         return this.generateCustomerData(query, context);
       default:
         return null;
@@ -369,11 +348,7 @@ class StreamProcessor {
 
       if (processor) {
         try {
-          const processed = await processor.process(
-            streamData.data,
-            query,
-            context,
-          );
+          const processed = await processor.process(streamData.data, query, context);
 
           processedData.push({
             source: streamData.source,
@@ -384,10 +359,7 @@ class StreamProcessor {
             from_cache: streamData.from_cache,
           });
         } catch (error) {
-          console.error(
-            `❌ Failed to process ${streamData.source} data:`,
-            error,
-          );
+          console.error(`❌ Failed to process ${streamData.source} data:`, error);
         }
       }
     }
@@ -409,23 +381,19 @@ class StreamProcessor {
     processedData.forEach((data) => {
       if (data.insights) {
         switch (data.source) {
-          case "market_data":
+          case 'market_data':
             insights.market_insights.push(...data.insights.insights);
-            insights.strategic_implications.push(
-              ...data.insights.strategic_implications,
-            );
+            insights.strategic_implications.push(...data.insights.strategic_implications);
             break;
-          case "financial_data":
+          case 'financial_data':
             insights.financial_insights.push(...data.insights.insights);
             insights.risk_factors.push(...data.insights.risk_factors);
             break;
-          case "competitive_intel":
+          case 'competitive_intel':
             insights.competitive_insights.push(...data.insights.insights);
-            insights.immediate_opportunities.push(
-              ...data.insights.opportunities,
-            );
+            insights.immediate_opportunities.push(...data.insights.opportunities);
             break;
-          case "business_metrics":
+          case 'business_metrics':
             insights.business_insights.push(...data.insights.insights);
             break;
         }
@@ -433,10 +401,7 @@ class StreamProcessor {
     });
 
     // Generate synthesis insights
-    insights.synthesis_insights = this.synthesizeRealTimeInsights(
-      insights,
-      businessWisdom,
-    );
+    insights.synthesis_insights = this.synthesizeRealTimeInsights(insights, businessWisdom);
 
     return insights;
   }
@@ -445,40 +410,29 @@ class StreamProcessor {
     const synthesis = [];
 
     // Synthesize market + financial insights
-    if (
-      insights.market_insights.length > 0 &&
-      insights.financial_insights.length > 0
-    ) {
+    if (insights.market_insights.length > 0 && insights.financial_insights.length > 0) {
       synthesis.push({
-        type: "market_financial_synthesis",
-        insight:
-          "Market conditions and financial performance alignment analysis",
-        importance: "high",
+        type: 'market_financial_synthesis',
+        insight: 'Market conditions and financial performance alignment analysis',
+        importance: 'high',
       });
     }
 
     // Synthesize competitive + business insights
-    if (
-      insights.competitive_insights.length > 0 &&
-      insights.business_insights.length > 0
-    ) {
+    if (insights.competitive_insights.length > 0 && insights.business_insights.length > 0) {
       synthesis.push({
-        type: "competitive_business_synthesis",
-        insight: "Competitive dynamics impact on business performance",
-        importance: "high",
+        type: 'competitive_business_synthesis',
+        insight: 'Competitive dynamics impact on business performance',
+        importance: 'high',
       });
     }
 
     // Add survival-focused synthesis if business wisdom indicates concern
-    if (
-      businessWisdom.applicable_principles?.some(
-        (p) => p.domain === "business_survival",
-      )
-    ) {
+    if (businessWisdom.applicable_principles?.some((p) => p.domain === 'business_survival')) {
       synthesis.push({
-        type: "survival_focused_synthesis",
-        insight: "Real-time data impact on business survival metrics",
-        importance: "critical",
+        type: 'survival_focused_synthesis',
+        insight: 'Real-time data impact on business survival metrics',
+        importance: 'critical',
       });
     }
 
@@ -490,22 +444,20 @@ class StreamProcessor {
 
     processedData.forEach((data) => {
       if (data.processed_data && data.processed_data.metrics) {
-        Object.entries(data.processed_data.metrics).forEach(
-          ([metric, value]) => {
-            const threshold = this.alertThresholds.get(metric);
+        Object.entries(data.processed_data.metrics).forEach(([metric, value]) => {
+          const threshold = this.alertThresholds.get(metric);
 
-            if (threshold) {
-              const alert = this.evaluateThreshold(metric, value, threshold);
-              if (alert) {
-                alerts.push({
-                  ...alert,
-                  source: data.source,
-                  timestamp: data.timestamp,
-                });
-              }
+          if (threshold) {
+            const alert = this.evaluateThreshold(metric, value, threshold);
+            if (alert) {
+              alerts.push({
+                ...alert,
+                source: data.source,
+                timestamp: data.timestamp,
+              });
             }
-          },
-        );
+          }
+        });
       }
     });
 
@@ -514,55 +466,55 @@ class StreamProcessor {
 
   evaluateThreshold(metric, value, threshold) {
     switch (threshold.threshold_type) {
-      case "negative_change":
+      case 'negative_change':
         if (value <= threshold.critical) {
           return {
             metric,
             value,
-            level: "critical",
+            level: 'critical',
             threshold: threshold.critical,
           };
         } else if (value <= threshold.warning) {
           return {
             metric,
             value,
-            level: "warning",
+            level: 'warning',
             threshold: threshold.warning,
           };
         }
         break;
 
-      case "percentage_change":
+      case 'percentage_change':
         if (Math.abs(value) >= Math.abs(threshold.critical)) {
           return {
             metric,
             value,
-            level: "critical",
+            level: 'critical',
             threshold: threshold.critical,
           };
         } else if (Math.abs(value) >= Math.abs(threshold.warning)) {
           return {
             metric,
             value,
-            level: "warning",
+            level: 'warning',
             threshold: threshold.warning,
           };
         }
         break;
 
-      case "activity_count":
+      case 'activity_count':
         if (value >= threshold.critical) {
           return {
             metric,
             value,
-            level: "critical",
+            level: 'critical',
             threshold: threshold.critical,
           };
         } else if (value >= threshold.warning) {
           return {
             metric,
             value,
-            level: "warning",
+            level: 'warning',
             threshold: threshold.warning,
           };
         }
@@ -573,7 +525,7 @@ class StreamProcessor {
   }
 
   // STREAM DATA INGESTION API
-  async ingestStreamData({ source, data, user_id = "default", metadata = {} }) {
+  async ingestStreamData({ source, data, user_id = 'default', metadata = {} }) {
     console.log(`📡 Ingesting stream data from ${source}...`);
 
     try {
@@ -595,9 +547,7 @@ class StreamProcessor {
       const processor = this.dataProcessors.get(source);
       if (processor) {
         streamEntry.processed_data = await processor.process(data);
-        streamEntry.insights = processor.insights_extractor(
-          streamEntry.processed_data,
-        );
+        streamEntry.insights = processor.insights_extractor(streamEntry.processed_data);
         streamEntry.processed = true;
       }
 
@@ -634,13 +584,13 @@ class StreamProcessor {
     return {
       metrics: {
         market_volatility: data.volatility || 0.05,
-        market_trend: data.trend || "stable",
+        market_trend: data.trend || 'stable',
         sector_performance: data.sector_performance || {},
       },
       processed_indicators: {
-        market_sentiment: data.sentiment || "neutral",
+        market_sentiment: data.sentiment || 'neutral',
         economic_indicators: data.economic_indicators || {},
-        industry_health: data.industry_health || "stable",
+        industry_health: data.industry_health || 'stable',
       },
     };
   }
@@ -653,9 +603,9 @@ class StreamProcessor {
         burn_rate: data.burn_rate || 0,
       },
       processed_indicators: {
-        financial_health: data.financial_health || "stable",
-        growth_trajectory: data.growth_trajectory || "stable",
-        profitability_trend: data.profitability_trend || "stable",
+        financial_health: data.financial_health || 'stable',
+        growth_trajectory: data.growth_trajectory || 'stable',
+        profitability_trend: data.profitability_trend || 'stable',
       },
     };
   }
@@ -668,8 +618,8 @@ class StreamProcessor {
         monthly_recurring_revenue: data.mrr || 0,
       },
       processed_indicators: {
-        business_health: data.business_health || "stable",
-        operational_efficiency: data.operational_efficiency || "stable",
+        business_health: data.business_health || 'stable',
+        operational_efficiency: data.operational_efficiency || 'stable',
         growth_metrics: data.growth_metrics || {},
       },
     };
@@ -683,8 +633,8 @@ class StreamProcessor {
         competitive_threats: data.threats || 0,
       },
       processed_indicators: {
-        competitive_position: data.competitive_position || "stable",
-        threat_level: data.threat_level || "low",
+        competitive_position: data.competitive_position || 'stable',
+        threat_level: data.threat_level || 'low',
         opportunities: data.opportunities || [],
       },
     };
@@ -698,9 +648,9 @@ class StreamProcessor {
         relevant_events: data.relevant_events || 0,
       },
       processed_indicators: {
-        public_sentiment: data.public_sentiment || "neutral",
+        public_sentiment: data.public_sentiment || 'neutral',
         industry_trends: data.industry_trends || [],
-        market_impact: data.market_impact || "minimal",
+        market_impact: data.market_impact || 'minimal',
       },
     };
   }
@@ -713,9 +663,9 @@ class StreamProcessor {
         support_tickets: data.support_volume || 0,
       },
       processed_indicators: {
-        customer_health: data.customer_health || "stable",
-        retention_trend: data.retention_trend || "stable",
-        satisfaction_trend: data.satisfaction_trend || "stable",
+        customer_health: data.customer_health || 'stable',
+        retention_trend: data.retention_trend || 'stable',
+        satisfaction_trend: data.satisfaction_trend || 'stable',
       },
     };
   }
@@ -724,9 +674,7 @@ class StreamProcessor {
 
   detectMarketRelevance(query, context) {
     return (
-      /market|industry|economy|sector|economic|volatility|trends/i.test(
-        query,
-      ) ||
+      /market|industry|economy|sector|economic|volatility|trends/i.test(query) ||
       context.competitive_pressure ||
       context.market_analysis_needed
     );
@@ -734,9 +682,7 @@ class StreamProcessor {
 
   detectFinancialRelevance(query, context) {
     return (
-      /financial|revenue|cash|profit|cost|budget|burn rate|runway/i.test(
-        query,
-      ) ||
+      /financial|revenue|cash|profit|cost|budget|burn rate|runway/i.test(query) ||
       context.financial_analysis ||
       context.business_critical
     );
@@ -744,9 +690,8 @@ class StreamProcessor {
 
   detectBusinessRelevance(query, context) {
     return (
-      /business|performance|metrics|growth|efficiency|operations/i.test(
-        query,
-      ) || context.business_context
+      /business|performance|metrics|growth|efficiency|operations/i.test(query) ||
+      context.business_context
     );
   }
 
@@ -766,8 +711,7 @@ class StreamProcessor {
 
   detectCustomerRelevance(query, context) {
     return (
-      /customer|client|user|satisfaction|churn|retention/i.test(query) ||
-      context.customer_analysis
+      /customer|client|user|satisfaction|churn|retention/i.test(query) || context.customer_analysis
     );
   }
 
@@ -780,8 +724,8 @@ class StreamProcessor {
         `Market trend: ${processedData.processed_indicators.market_sentiment}`,
       ],
       strategic_implications: [
-        "Monitor market conditions for strategic timing",
-        "Adjust risk exposure based on volatility",
+        'Monitor market conditions for strategic timing',
+        'Adjust risk exposure based on volatility',
       ],
     };
   }
@@ -793,12 +737,8 @@ class StreamProcessor {
         `Cash flow status: ${processedData.processed_indicators.financial_health}`,
       ],
       risk_factors: [
-        processedData.metrics.cash_flow < 0
-          ? "Negative cash flow detected"
-          : null,
-        processedData.metrics.burn_rate > 50000
-          ? "High burn rate detected"
-          : null,
+        processedData.metrics.cash_flow < 0 ? 'Negative cash flow detected' : null,
+        processedData.metrics.burn_rate > 50000 ? 'High burn rate detected' : null,
       ].filter(Boolean),
     };
   }
@@ -845,10 +785,8 @@ class StreamProcessor {
   generateMarketData(_query, _context) {
     return {
       volatility: Math.random() * 0.1 + 0.02,
-      trend: ["bullish", "bearish", "stable"][Math.floor(Math.random() * 3)],
-      sentiment: ["positive", "negative", "neutral"][
-        Math.floor(Math.random() * 3)
-      ],
+      trend: ['bullish', 'bearish', 'stable'][Math.floor(Math.random() * 3)],
+      sentiment: ['positive', 'negative', 'neutral'][Math.floor(Math.random() * 3)],
       sector_performance: {
         technology: Math.random() * 0.1 - 0.05,
         healthcare: Math.random() * 0.1 - 0.05,
@@ -862,7 +800,7 @@ class StreamProcessor {
       revenue_change: Math.random() * 0.4 - 0.2, // -20% to +20%
       cash_flow: Math.random() * 200000 - 100000, // -100k to +100k
       burn_rate: Math.random() * 100000, // 0 to 100k
-      financial_health: ["excellent", "good", "stable", "concerning"][
+      financial_health: ['excellent', 'good', 'stable', 'concerning'][
         Math.floor(Math.random() * 4)
       ],
     };
@@ -873,9 +811,7 @@ class StreamProcessor {
       cac: Math.random() * 500 + 100, // $100-600 CAC
       ltv: Math.random() * 5000 + 1000, // $1000-6000 LTV
       mrr: Math.random() * 100000 + 50000, // $50k-150k MRR
-      business_health: ["excellent", "good", "stable"][
-        Math.floor(Math.random() * 3)
-      ],
+      business_health: ['excellent', 'good', 'stable'][Math.floor(Math.random() * 3)],
     };
   }
 
@@ -884,14 +820,8 @@ class StreamProcessor {
       competitive_moves: Math.floor(Math.random() * 5),
       market_share_change: Math.random() * 0.1 - 0.05,
       threats: Math.floor(Math.random() * 3),
-      competitive_position: ["strong", "stable", "challenged"][
-        Math.floor(Math.random() * 3)
-      ],
-      opportunities: [
-        "Market expansion",
-        "Product differentiation",
-        "Cost advantage",
-      ],
+      competitive_position: ['strong', 'stable', 'challenged'][Math.floor(Math.random() * 3)],
+      opportunities: ['Market expansion', 'Product differentiation', 'Cost advantage'],
     };
   }
 
@@ -900,9 +830,7 @@ class StreamProcessor {
       sentiment_score: Math.random() * 2 - 1, // -1 to 1
       industry_mentions: Math.floor(Math.random() * 20),
       relevant_events: Math.floor(Math.random() * 5),
-      public_sentiment: ["positive", "neutral", "negative"][
-        Math.floor(Math.random() * 3)
-      ],
+      public_sentiment: ['positive', 'neutral', 'negative'][Math.floor(Math.random() * 3)],
     };
   }
 
@@ -911,9 +839,7 @@ class StreamProcessor {
       churn_rate: Math.random() * 0.15, // 0-15% churn
       satisfaction_score: Math.random() * 0.3 + 0.7, // 0.7-1.0 satisfaction
       support_volume: Math.floor(Math.random() * 100),
-      customer_health: ["excellent", "good", "stable"][
-        Math.floor(Math.random() * 3)
-      ],
+      customer_health: ['excellent', 'good', 'stable'][Math.floor(Math.random() * 3)],
     };
   }
 
@@ -921,7 +847,7 @@ class StreamProcessor {
 
   getCachedData(source) {
     const cache = this.realTimeCache.get(this.getCacheKey(source));
-    return cache ? cache.data.get("latest") : null;
+    return cache ? cache.data.get('latest') : null;
   }
 
   isCacheExpired(source) {
@@ -938,19 +864,19 @@ class StreamProcessor {
     const cache = this.realTimeCache.get(cacheKey);
 
     if (cache) {
-      cache.data.set("latest", data);
+      cache.data.set('latest', data);
       cache.last_updated = new Date().toISOString();
     }
   }
 
   getCacheKey(source) {
     const mapping = {
-      market_data: "market_conditions",
-      financial_data: "financial_metrics",
-      competitive_intel: "competitive_movements",
-      customer_data: "customer_signals",
+      market_data: 'market_conditions',
+      financial_data: 'financial_metrics',
+      competitive_intel: 'competitive_movements',
+      customer_data: 'customer_signals',
     };
-    return mapping[source] || "general";
+    return mapping[source] || 'general';
   }
 
   cleanupExpiredCache() {
@@ -989,9 +915,7 @@ class StreamProcessor {
 
     // Log health status
     if (health.stale_streams > 0) {
-      console.log(
-        `⚠️ Stream health: ${health.stale_streams} stale streams detected`,
-      );
+      console.log(`⚠️ Stream health: ${health.stale_streams} stale streams detected`);
     }
   }
 
@@ -1000,13 +924,9 @@ class StreamProcessor {
     const router = express.Router();
 
     // Generic stream ingestion endpoint
-    router.post("/ingest", async (req, res) => {
+    router.post('/ingest', async (req, res) => {
       try {
-        const {
-          source = "unknown",
-          user_id = "default_user",
-          data = {},
-        } = req.body || {};
+        const { source = 'unknown', user_id = 'default_user', data = {} } = req.body || {};
 
         const result = await this.ingestStreamData({
           source,
@@ -1022,12 +942,12 @@ class StreamProcessor {
     });
 
     // Market data webhook
-    router.post("/market", async (req, res) => {
+    router.post('/market', async (req, res) => {
       try {
         const result = await this.ingestStreamData({
-          source: "market_data",
+          source: 'market_data',
           data: req.body,
-          user_id: req.body.user_id || "default_user",
+          user_id: req.body.user_id || 'default_user',
         });
 
         res.json({ success: true, ...result });
@@ -1037,12 +957,12 @@ class StreamProcessor {
     });
 
     // Financial data webhook
-    router.post("/financial", async (req, res) => {
+    router.post('/financial', async (req, res) => {
       try {
         const result = await this.ingestStreamData({
-          source: "financial_data",
+          source: 'financial_data',
           data: req.body,
-          user_id: req.body.user_id || "default_user",
+          user_id: req.body.user_id || 'default_user',
         });
 
         res.json({ success: true, ...result });
@@ -1062,9 +982,7 @@ class StreamProcessor {
         has_data: cache.data.size > 0,
         last_updated: cache.last_updated,
         age_minutes: cache.last_updated
-          ? Math.floor(
-              (Date.now() - new Date(cache.last_updated).getTime()) / 60000,
-            )
+          ? Math.floor((Date.now() - new Date(cache.last_updated).getTime()) / 60000)
           : null,
         is_fresh: !this.isCacheExpired(key),
       };
@@ -1077,7 +995,7 @@ class StreamProcessor {
       alert_thresholds: this.alertThresholds.size,
       cache_status: cacheStatus,
       monitoring_active: true,
-      webhook_endpoints: ["/ingest", "/market", "/financial"],
+      webhook_endpoints: ['/ingest', '/market', '/financial'],
     };
   }
 
@@ -1085,11 +1003,11 @@ class StreamProcessor {
   async testStreamProcessing() {
     const testStreams = [
       {
-        source: "market_data",
-        data: { volatility: 0.08, trend: "bullish", sentiment: "positive" },
+        source: 'market_data',
+        data: { volatility: 0.08, trend: 'bullish', sentiment: 'positive' },
       },
       {
-        source: "financial_data",
+        source: 'financial_data',
         data: { revenue_change: 0.15, cash_flow: 75000, burn_rate: 45000 },
       },
     ];
@@ -1115,7 +1033,7 @@ class StreamProcessor {
     }
 
     // Test real-time enrichment
-    const testQuery = "What is our competitive position?";
+    const testQuery = 'What is our competitive position?';
     const testContext = { competitive_pressure: true };
 
     try {

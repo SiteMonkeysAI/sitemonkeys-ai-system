@@ -13,7 +13,11 @@
  */
 
 import { retrieveSemanticMemories, getRetrievalStats } from '../services/semantic-retrieval.js';
-import { generateEmbedding, backfillEmbeddings, embedMemory } from '../services/embedding-service.js';
+import {
+  generateEmbedding,
+  backfillEmbeddings,
+  embedMemory,
+} from '../services/embedding-service.js';
 import { testRouting } from '../core/intelligence/hierarchyRouter.js';
 import { testLookup } from '../core/intelligence/externalLookupEngine.js';
 
@@ -33,14 +37,14 @@ export default async function handler(req, res) {
   if (requiredToken && testToken !== requiredToken) {
     return res.status(403).json({
       error: 'Forbidden: Invalid or missing X-Internal-Test-Token header',
-      hint: 'Set INTERNAL_TEST_TOKEN environment variable and include X-Internal-Test-Token header'
+      hint: 'Set INTERNAL_TEST_TOKEN environment variable and include X-Internal-Test-Token header',
     });
   }
 
   const { Pool } = await import('pg');
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
   });
 
   const { action = 'retrieve', userId, query, mode = 'truth-general', limit = 10 } = req.query;
@@ -48,7 +52,7 @@ export default async function handler(req, res) {
   let normalizedQuery = query;
   if (Array.isArray(normalizedQuery)) {
     // Take the first string element, or fall back to the first element coerced to string
-    const first = normalizedQuery.find(v => typeof v === 'string') ?? normalizedQuery[0];
+    const first = normalizedQuery.find((v) => typeof v === 'string') ?? normalizedQuery[0];
     normalizedQuery = typeof first === 'string' ? first : String(first);
   } else if (normalizedQuery != null && typeof normalizedQuery !== 'string') {
     normalizedQuery = String(normalizedQuery);
@@ -63,19 +67,19 @@ export default async function handler(req, res) {
         if (!userId || !query) {
           return res.status(400).json({
             error: 'Missing required parameters',
-            usage: '/api/test-semantic?userId=xxx&query=your+query&mode=truth-general'
+            usage: '/api/test-semantic?userId=xxx&query=your+query&mode=truth-general',
           });
         }
 
         const result = await retrieveSemanticMemories(pool, normalizedQuery, {
           userId,
           mode,
-          topK: parseInt(limit)
+          topK: parseInt(limit),
         });
 
         return res.status(200).json({
           action: 'retrieve',
-          ...result
+          ...result,
         });
       }
 
@@ -86,14 +90,14 @@ export default async function handler(req, res) {
         if (!userId) {
           return res.status(400).json({
             error: 'Missing userId',
-            usage: '/api/test-semantic?action=stats&userId=xxx'
+            usage: '/api/test-semantic?action=stats&userId=xxx',
           });
         }
 
         const stats = await getRetrievalStats(pool, userId);
         return res.status(200).json({
           action: 'stats',
-          ...stats
+          ...stats,
         });
       }
 
@@ -113,9 +117,9 @@ export default async function handler(req, res) {
           timeMs: result.timeMs,
           error: result.error,
           // Show first/last few values as sample
-          embeddingSample: result.embedding 
+          embeddingSample: result.embedding
             ? [...result.embedding.slice(0, 5), '...', ...result.embedding.slice(-5)]
-            : null
+            : null,
         });
       }
 
@@ -126,12 +130,12 @@ export default async function handler(req, res) {
         const backfillLimit = parseInt(limit) || 10;
         const result = await backfillEmbeddings(pool, {
           batchSize: Math.min(backfillLimit, 20),
-          maxBatches: Math.ceil(backfillLimit / 20)
+          maxBatches: Math.ceil(backfillLimit / 20),
         });
 
         return res.status(200).json({
           action: 'backfill',
-          ...result
+          ...result,
         });
       }
 
@@ -166,7 +170,8 @@ export default async function handler(req, res) {
           }
 
           // Find memories needing embeddings (pending or failed status)
-          const { rows: batch } = await pool.query(`
+          const { rows: batch } = await pool.query(
+            `
             SELECT id, content
             FROM persistent_memories
             WHERE embedding_status IN ('pending', 'failed')
@@ -174,7 +179,9 @@ export default async function handler(req, res) {
               AND content IS NOT NULL
             ORDER BY created_at DESC
             LIMIT $1
-          `, [batchSize]);
+          `,
+            [batchSize],
+          );
 
           if (batch.length === 0) {
             console.log('[BACKFILL-EMBEDDINGS] ✅ No more memories to process');
@@ -185,15 +192,18 @@ export default async function handler(req, res) {
           // Process batch
           for (const memory of batch) {
             // Set to 'processing' status
-            await pool.query(`
+            await pool.query(
+              `
               UPDATE persistent_memories
               SET embedding_status = 'processing'
               WHERE id = $1
-            `, [memory.id]);
+            `,
+              [memory.id],
+            );
 
             // Generate embedding
             const embedResult = await embedMemory(pool, memory.id, memory.content, {
-              timeout: 10000 // Longer timeout for backfill
+              timeout: 10000, // Longer timeout for backfill
             });
 
             if (embedResult.success) {
@@ -202,7 +212,8 @@ export default async function handler(req, res) {
               console.log(`[BACKFILL-EMBEDDINGS] ❌ ID ${memory.id}: ${embedResult.error}`);
 
               // On failure: update status to 'failed' and store error in metadata
-              await pool.query(`
+              await pool.query(
+                `
                 UPDATE persistent_memories
                 SET embedding_status = 'failed',
                     metadata = jsonb_set(
@@ -211,7 +222,9 @@ export default async function handler(req, res) {
                       to_jsonb($2::text)
                     )
                 WHERE id = $1
-              `, [memory.id, embedResult.error || 'Unknown error']);
+              `,
+                [memory.id, embedResult.error || 'Unknown error'],
+              );
 
               totalFailed++;
             }
@@ -223,12 +236,14 @@ export default async function handler(req, res) {
             if ((Date.now() - startTime) / 1000 >= maxSeconds) break;
 
             // Small delay to avoid rate limiting
-            await new Promise(r => setTimeout(r, 100));
+            await new Promise((r) => setTimeout(r, 100));
           }
         }
 
         // Count remaining
-        const { rows: [{ count }] } = await pool.query(`
+        const {
+          rows: [{ count }],
+        } = await pool.query(`
           SELECT COUNT(*) as count
           FROM persistent_memories
           WHERE embedding_status IN ('pending', 'failed')
@@ -239,13 +254,15 @@ export default async function handler(req, res) {
         const remaining = parseInt(count);
         const secondsElapsed = ((Date.now() - startTime) / 1000).toFixed(2);
 
-        console.log(`[BACKFILL-EMBEDDINGS] Complete: ${totalProcessed - totalFailed}/${totalProcessed} succeeded, ${remaining} remaining (${secondsElapsed}s)`);
+        console.log(
+          `[BACKFILL-EMBEDDINGS] Complete: ${totalProcessed - totalFailed}/${totalProcessed} succeeded, ${remaining} remaining (${secondsElapsed}s)`,
+        );
 
         return res.status(200).json({
           processed: totalProcessed,
           failed: totalFailed,
           remaining: remaining,
-          seconds_elapsed: parseFloat(secondsElapsed)
+          seconds_elapsed: parseFloat(secondsElapsed),
         });
       }
 
@@ -255,10 +272,10 @@ export default async function handler(req, res) {
       case 'health': {
         // Check database connectivity
         const dbCheck = await pool.query('SELECT 1 as check');
-        
+
         // Check embedding service
         const embedCheck = await generateEmbedding('health check', { timeout: 3000 });
-        
+
         // Check table schema
         const schemaCheck = await pool.query(`
           SELECT column_name 
@@ -271,16 +288,17 @@ export default async function handler(req, res) {
 
         return res.status(200).json({
           action: 'health',
-          status: (dbCheck.rows.length > 0 && embedCheck.success && hasAllColumns) ? 'healthy' : 'degraded',
+          status:
+            dbCheck.rows.length > 0 && embedCheck.success && hasAllColumns ? 'healthy' : 'degraded',
           checks: {
             database: dbCheck.rows.length > 0 ? '✅ Connected' : '❌ Failed',
             embedding_api: embedCheck.success ? '✅ Working' : `⚠️ ${embedCheck.error}`,
-            schema: hasAllColumns 
-              ? '✅ All semantic columns present' 
+            schema: hasAllColumns
+              ? '✅ All semantic columns present'
               : `⚠️ Missing columns (found ${schemaCheck.rows.length}/5)`,
-            columns_found: schemaCheck.rows.map(r => r.column_name)
+            columns_found: schemaCheck.rows.map((r) => r.column_name),
           },
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
       }
 
@@ -309,11 +327,20 @@ export default async function handler(req, res) {
           action: 'schema',
           columns: rows,
           indexes: indexes,
-          semanticColumns: rows.filter(r => 
-            ['embedding', 'embedding_status', 'embedding_updated_at', 'embedding_model',
-             'fact_fingerprint', 'fingerprint_confidence', 'is_current', 'superseded_by',
-             'superseded_at', 'mode'].includes(r.column_name)
-          )
+          semanticColumns: rows.filter((r) =>
+            [
+              'embedding',
+              'embedding_status',
+              'embedding_updated_at',
+              'embedding_model',
+              'fact_fingerprint',
+              'fingerprint_confidence',
+              'is_current',
+              'superseded_by',
+              'superseded_at',
+              'mode',
+            ].includes(r.column_name),
+          ),
         });
       }
 
@@ -333,12 +360,15 @@ export default async function handler(req, res) {
           console.log('[TEST-PARAPHRASE] Cleanup complete');
 
           // Store memory with specific content
-          const insertResult = await pool.query(`
+          const insertResult = await pool.query(
+            `
             INSERT INTO persistent_memories (
               user_id, content, is_current, mode, embedding_status, category_name, token_count, created_at
             ) VALUES ($1, $2, true, $3, 'pending', $4, $5, NOW())
             RETURNING id, content
-          `, [testUserId, 'My name is Chris', 'truth-general', 'personal_info', 5]);
+          `,
+            [testUserId, 'My name is Chris', 'truth-general', 'personal_info', 5],
+          );
 
           const memoryId = insertResult.rows[0].id;
           const memoryContent = insertResult.rows[0].content;
@@ -350,7 +380,7 @@ export default async function handler(req, res) {
           // Verify embedding exists before retrieval
           const checkEmbed = await pool.query(
             'SELECT embedding_status, embedding FROM persistent_memories WHERE id = $1',
-            [memoryId]
+            [memoryId],
           );
           console.log('[TEST] Embedding status:', checkEmbed.rows[0]?.embedding_status);
           console.log('[TEST] Has embedding:', checkEmbed.rows[0]?.embedding ? 'YES' : 'NO');
@@ -358,16 +388,18 @@ export default async function handler(req, res) {
           // If embedding not ready, wait a bit longer
           if (checkEmbed.rows[0]?.embedding_status !== 'ready' || !checkEmbed.rows[0]?.embedding) {
             console.log('[TEST] Waiting for embedding to complete...');
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await new Promise((resolve) => setTimeout(resolve, 500));
           }
 
           // Retrieve with paraphrase
           const result = await retrieveSemanticMemories(pool, "What's the user called?", {
             userId: testUserId,
-            mode: 'truth-general'
+            mode: 'truth-general',
           });
 
-          const found = result.memories && result.memories.some(m => m.content && m.content.includes('Chris'));
+          const found =
+            result.memories &&
+            result.memories.some((m) => m.content && m.content.includes('Chris'));
 
           // Cleanup
           await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
@@ -379,11 +411,13 @@ export default async function handler(req, res) {
             expected: 'Should find "My name is Chris"',
             found: found ? 'YES - Memory found via semantic similarity' : 'NO - Failed to find',
             telemetry: result.telemetry,
-            memories_found: result.memories?.length || 0
+            memories_found: result.memories?.length || 0,
           });
         } catch (error) {
           // Cleanup on error
-          await pool.query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['test-paraphrase-%']).catch(() => {});
+          await pool
+            .query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['test-paraphrase-%'])
+            .catch(() => {});
           throw error;
         }
       }
@@ -415,7 +449,7 @@ export default async function handler(req, res) {
             fingerprintConfidence: 0.9,
             mode: 'truth-general',
             categoryName: 'personal_info',
-            tokenCount: 8
+            tokenCount: 8,
           });
 
           const firstId = firstResult.memoryId;
@@ -430,7 +464,7 @@ export default async function handler(req, res) {
             fingerprintConfidence: 0.9,
             mode: 'truth-general',
             categoryName: 'personal_info',
-            tokenCount: 8
+            tokenCount: 8,
           });
 
           const secondId = secondResult.memoryId;
@@ -438,23 +472,25 @@ export default async function handler(req, res) {
           console.log(`[TEST-SUPERSESSION] Superseded count: ${secondResult.supersededCount}`);
 
           // Check database state
-          const currentFacts = await pool.query(`
+          const currentFacts = await pool.query(
+            `
             SELECT id, content, is_current, superseded_by, superseded_at
             FROM persistent_memories
             WHERE user_id = $1 AND fact_fingerprint = 'user_phone_number'
             ORDER BY created_at
-          `, [testUserId]);
+          `,
+            [testUserId],
+          );
 
           const oldFact = currentFacts.rows[0];
           const newFact = currentFacts.rows[1];
 
-          const passed = (
+          const passed =
             oldFact.is_current === false &&
             oldFact.superseded_at !== null &&
             oldFact.superseded_by === secondId &&
             newFact.is_current === true &&
-            secondResult.supersededCount === 1
-          );
+            secondResult.supersededCount === 1;
 
           // Cleanup
           await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
@@ -462,29 +498,32 @@ export default async function handler(req, res) {
           return res.json({
             test: 'supersession-determinism',
             passed,
-            expected: 'Old fact is_current=false with superseded_at and superseded_by set, new fact is_current=true',
+            expected:
+              'Old fact is_current=false with superseded_at and superseded_by set, new fact is_current=true',
             actual: {
               old_fact: {
                 id: oldFact?.id,
                 content: oldFact?.content,
                 is_current: oldFact?.is_current,
                 superseded_at: oldFact?.superseded_at,
-                superseded_by: oldFact?.superseded_by
+                superseded_by: oldFact?.superseded_by,
               },
               new_fact: {
                 id: newFact?.id,
                 content: newFact?.content,
-                is_current: newFact?.is_current
+                is_current: newFact?.is_current,
               },
               supersession_result: {
                 supersededCount: secondResult.supersededCount,
-                superseded: secondResult.superseded
-              }
-            }
+                superseded: secondResult.superseded,
+              },
+            },
           });
         } catch (error) {
           // Cleanup on error
-          await pool.query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['test-supersession-%']).catch(() => {});
+          await pool
+            .query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['test-supersession-%'])
+            .catch(() => {});
           throw error;
         }
       }
@@ -505,12 +544,15 @@ export default async function handler(req, res) {
           console.log('[TEST-MODE-ISOLATION] Cleanup complete');
 
           // Store in truth-general mode
-          const insertResult = await pool.query(`
+          const insertResult = await pool.query(
+            `
             INSERT INTO persistent_memories (
               user_id, content, is_current, mode, embedding_status, category_name, token_count, created_at
             ) VALUES ($1, $2, true, $3, 'pending', $4, $5, NOW())
             RETURNING id, content
-          `, [testUserId, 'Secret truth-general memory about cats', 'truth-general', 'general', 10]);
+          `,
+            [testUserId, 'Secret truth-general memory about cats', 'truth-general', 'general', 10],
+          );
 
           const memoryId = insertResult.rows[0].id;
           const memoryContent = insertResult.rows[0].content;
@@ -519,30 +561,33 @@ export default async function handler(req, res) {
           await embedMemory(pool, memoryId, memoryContent);
 
           // Small delay to ensure embedding is ready
-          await new Promise(resolve => setTimeout(resolve, 100));
+          await new Promise((resolve) => setTimeout(resolve, 100));
 
           // Retrieve in business-validation mode (different mode!)
           const result = await retrieveSemanticMemories(pool, 'cats', {
             userId: testUserId,
-            mode: 'business-validation'
+            mode: 'business-validation',
           });
 
-          const leaked = result.memories && result.memories.some(m => m.content && m.content.includes('cats'));
+          const leaked =
+            result.memories && result.memories.some((m) => m.content && m.content.includes('cats'));
 
           // Cleanup
           await pool.query('DELETE FROM persistent_memories WHERE user_id = $1', [testUserId]);
 
           return res.json({
             test: 'mode-isolation',
-            passed: !leaked,  // Pass if NOT found (no leak)
+            passed: !leaked, // Pass if NOT found (no leak)
             expected: 'truth-general memory should NOT appear in business-validation retrieval',
             found_leak: leaked,
             telemetry: result.telemetry,
-            memories_found: result.memories?.length || 0
+            memories_found: result.memories?.length || 0,
           });
         } catch (error) {
           // Cleanup on error
-          await pool.query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['test-mode-%']).catch(() => {});
+          await pool
+            .query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['test-mode-%'])
+            .catch(() => {});
           throw error;
         }
       }
@@ -563,15 +608,17 @@ export default async function handler(req, res) {
             ORDER BY column_name
           `);
 
-          const idType = schemaCheck.rows.find(r => r.column_name === 'id')?.data_type;
-          const supersededByType = schemaCheck.rows.find(r => r.column_name === 'superseded_by')?.data_type;
+          const idType = schemaCheck.rows.find((r) => r.column_name === 'id')?.data_type;
+          const supersededByType = schemaCheck.rows.find(
+            (r) => r.column_name === 'superseded_by',
+          )?.data_type;
 
           if (!supersededByType) {
             return res.json({
               action: 'fix-superseded-by-type',
               success: true,
               message: 'superseded_by column does not exist',
-              currentSchema: schemaCheck.rows
+              currentSchema: schemaCheck.rows,
             });
           }
 
@@ -580,7 +627,7 @@ export default async function handler(req, res) {
               action: 'fix-superseded-by-type',
               success: true,
               message: 'superseded_by is already INTEGER',
-              currentSchema: schemaCheck.rows
+              currentSchema: schemaCheck.rows,
             });
           }
 
@@ -613,7 +660,7 @@ export default async function handler(req, res) {
                 success: false,
                 error: `Cannot safely cast ${total - castable} UUID values to INTEGER`,
                 existingValues: existingCount,
-                recommendation: 'Clear superseded_by values or manually review data'
+                recommendation: 'Clear superseded_by values or manually review data',
               });
             }
           }
@@ -629,7 +676,9 @@ export default async function handler(req, res) {
                 SET superseded_by = NULL
                 WHERE superseded_by IS NOT NULL
               `);
-              console.log(`[FIX-TYPE] Cleared ${existingCount} existing superseded_by values (they were UUID, cannot cast)`);
+              console.log(
+                `[FIX-TYPE] Cleared ${existingCount} existing superseded_by values (they were UUID, cannot cast)`,
+              );
             }
 
             // Alter the column type
@@ -666,20 +715,18 @@ export default async function handler(req, res) {
               success: true,
               message: 'Type migration completed successfully',
               clearedValues: existingCount,
-              constraintAdded: constraintCheck.rows.length === 0
+              constraintAdded: constraintCheck.rows.length === 0,
             });
-
           } catch (alterError) {
             await pool.query('ROLLBACK');
             throw alterError;
           }
-
         } catch (error) {
           console.error('[FIX-TYPE] Migration failed:', error.message);
           return res.status(500).json({
             action: 'fix-superseded-by-type',
             success: false,
-            error: error.message
+            error: error.message,
           });
         }
       }
@@ -688,7 +735,8 @@ export default async function handler(req, res) {
       // CREATE SUPERSESSION CONSTRAINT
       // ============================================
       case 'create-constraint': {
-        const { createSupersessionConstraint, cleanupDuplicateCurrentFacts } = await import('../services/supersession.js');
+        const { createSupersessionConstraint, cleanupDuplicateCurrentFacts } =
+          await import('../services/supersession.js');
 
         try {
           // First cleanup any duplicates
@@ -701,13 +749,13 @@ export default async function handler(req, res) {
             action: 'create-constraint',
             cleanup: cleanupResult,
             constraint: constraintResult,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
           });
         } catch (error) {
           return res.status(500).json({
             action: 'create-constraint',
             error: error.message,
-            stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+            stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined,
           });
         }
       }
@@ -721,7 +769,7 @@ export default async function handler(req, res) {
         if (!debugUserId) {
           return res.status(400).json({
             error: 'Missing userId parameter',
-            usage: '/api/test-semantic?action=debug-facts&userId=xxx&fingerprint=user_phone_number'
+            usage: '/api/test-semantic?action=debug-facts&userId=xxx&fingerprint=user_phone_number',
           });
         }
 
@@ -770,7 +818,7 @@ export default async function handler(req, res) {
               superseded_at: row.superseded_at,
               created_at: row.created_at,
               mode: row.mode,
-              category: row.category_name
+              category: row.category_name,
             });
           }
 
@@ -780,7 +828,7 @@ export default async function handler(req, res) {
             fingerprint_filter: fingerprint || 'all',
             total_facts: rows.length,
             facts_by_fingerprint: grouped,
-            raw_facts: rows.map(r => ({
+            raw_facts: rows.map((r) => ({
               id: r.id,
               content: r.content,
               fact_fingerprint: r.fact_fingerprint,
@@ -790,15 +838,14 @@ export default async function handler(req, res) {
               superseded_at: r.superseded_at,
               created_at: r.created_at,
               mode: r.mode,
-              category_name: r.category_name
-            }))
+              category_name: r.category_name,
+            })),
           });
-
         } catch (error) {
           console.error('[DEBUG-FACTS] Error:', error.message);
           return res.status(500).json({
             action: 'debug-facts',
-            error: error.message
+            error: error.message,
           });
         }
       }
@@ -809,7 +856,7 @@ export default async function handler(req, res) {
       case 'live-proof': {
         const testUserId = 'live-proof-' + Date.now();
         const testFact = `The user's favorite color is ultraviolet-${Date.now()}`;
-        const testQuery = "What color does the user prefer?";
+        const testQuery = 'What color does the user prefer?';
 
         console.log('[LIVE-PROOF] Starting end-to-end test...');
 
@@ -825,17 +872,20 @@ export default async function handler(req, res) {
           // Step 1: Store via production /api/chat endpoint
           console.log('[LIVE-PROOF] Step 1: Storing test memory via /api/chat');
           const fetch = globalThis.fetch;
-          const storeResponse = await fetch(`http://localhost:${process.env.PORT || 3000}/api/chat`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json'
+          const storeResponse = await fetch(
+            `http://localhost:${process.env.PORT || 3000}/api/chat`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                message: testFact,
+                user_id: testUserId,
+                mode: 'truth_general',
+              }),
             },
-            body: JSON.stringify({
-              message: testFact,
-              user_id: testUserId,
-              mode: 'truth_general'
-            })
-          });
+          );
 
           if (!storeResponse.ok) {
             throw new Error(`Chat endpoint returned ${storeResponse.status}`);
@@ -852,15 +902,18 @@ export default async function handler(req, res) {
           let retries = 0;
 
           while (retries < maxRetries && !embeddingReady) {
-            await new Promise(r => setTimeout(r, 1000)); // Wait 1 second
+            await new Promise((r) => setTimeout(r, 1000)); // Wait 1 second
 
-            const { rows } = await pool.query(`
+            const { rows } = await pool.query(
+              `
               SELECT id, embedding_status, embedding
               FROM persistent_memories
               WHERE user_id = $1
               ORDER BY created_at DESC
               LIMIT 1
-            `, [testUserId]);
+            `,
+              [testUserId],
+            );
 
             if (rows.length > 0) {
               memoryId = rows[0].id;
@@ -868,21 +921,27 @@ export default async function handler(req, res) {
               const hasEmbedding = rows[0].embedding !== null;
               embeddingReady = currentStatus === 'ready' && hasEmbedding;
 
-              console.log(`[LIVE-PROOF] Polling memory ${memoryId}, status: ${currentStatus}, has_embedding: ${hasEmbedding}`);
+              console.log(
+                `[LIVE-PROOF] Polling memory ${memoryId}, status: ${currentStatus}, has_embedding: ${hasEmbedding}`,
+              );
 
               if (embeddingReady) {
                 console.log('[LIVE-PROOF] ✅ Embedding ready');
                 break;
               }
             } else {
-              console.log(`[LIVE-PROOF] Retry ${retries + 1}: No memory found yet for user ${testUserId}`);
+              console.log(
+                `[LIVE-PROOF] Retry ${retries + 1}: No memory found yet for user ${testUserId}`,
+              );
             }
 
             retries++;
           }
 
           if (!embeddingReady) {
-            throw new Error(`Embedding not ready after ${maxRetries} seconds. Status polling timed out.`);
+            throw new Error(
+              `Embedding not ready after ${maxRetries} seconds. Status polling timed out.`,
+            );
           }
 
           // Step 3: Query via semantic retrieval with paraphrase
@@ -890,27 +949,31 @@ export default async function handler(req, res) {
           const retrievalResult = await retrieveSemanticMemories(pool, testQuery, {
             userId: testUserId,
             mode: 'truth-general',
-            topK: 5
+            topK: 5,
           });
 
           console.log('[LIVE-PROOF] Retrieval result:', {
             method: retrievalResult.method,
             memoriesFound: retrievalResult.memories?.length || 0,
-            telemetry: retrievalResult.telemetry
+            telemetry: retrievalResult.telemetry,
           });
 
           // Step 4: Assert ALL conditions
           const assertions = {
-            method_is_semantic_or_hybrid: ['semantic', 'hybrid'].includes(retrievalResult.telemetry?.method),
+            method_is_semantic_or_hybrid: ['semantic', 'hybrid'].includes(
+              retrievalResult.telemetry?.method,
+            ),
             results_injected_gt_zero: (retrievalResult.telemetry?.results_injected || 0) > 0,
-            injected_memory_ids_nonempty: Array.isArray(retrievalResult.telemetry?.injected_memory_ids) &&
-                                          retrievalResult.telemetry.injected_memory_ids.length > 0,
-            response_contains_fact: retrievalResult.memories?.some(m =>
-              m.content && m.content.toLowerCase().includes('ultraviolet')
-            ) || false
+            injected_memory_ids_nonempty:
+              Array.isArray(retrievalResult.telemetry?.injected_memory_ids) &&
+              retrievalResult.telemetry.injected_memory_ids.length > 0,
+            response_contains_fact:
+              retrievalResult.memories?.some(
+                (m) => m.content && m.content.toLowerCase().includes('ultraviolet'),
+              ) || false,
           };
 
-          const allPassed = Object.values(assertions).every(v => v === true);
+          const allPassed = Object.values(assertions).every((v) => v === true);
 
           console.log('[LIVE-PROOF] Assertions:', assertions);
           console.log(`[LIVE-PROOF] ${allPassed ? '✅ PASSED' : '❌ FAILED'}`);
@@ -927,14 +990,15 @@ export default async function handler(req, res) {
               embedding_ready_after_seconds: retries,
               retrieval_method: retrievalResult.method,
               memories_found: retrievalResult.memories?.length || 0,
-              assertions: assertions
+              assertions: assertions,
             },
-            telemetry: retrievalResult.telemetry
+            telemetry: retrievalResult.telemetry,
           });
-
         } catch (error) {
           // Cleanup on error
-          await pool.query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['live-proof-%']).catch(() => {});
+          await pool
+            .query('DELETE FROM persistent_memories WHERE user_id LIKE $1', ['live-proof-%'])
+            .catch(() => {});
 
           console.error('[LIVE-PROOF] ❌ Test failed:', error.message);
 
@@ -943,8 +1007,8 @@ export default async function handler(req, res) {
             error: error.message,
             details: {
               test_user_id: testUserId,
-              test_fact: testFact
-            }
+              test_fact: testFact,
+            },
           });
         }
       }
@@ -964,12 +1028,12 @@ export default async function handler(req, res) {
         const result = await generateTestData(pool, testUserId, count, {
           runId,
           mode,
-          skipEmbedding
+          skipEmbedding,
         });
 
         return res.status(200).json({
           action: 'scale-generate',
-          ...result
+          ...result,
         });
       }
 
@@ -984,7 +1048,7 @@ export default async function handler(req, res) {
         if (!testUserId) {
           return res.status(400).json({
             error: 'Missing userId parameter',
-            usage: '/api/test-semantic?action=scale-benchmark&userId=test-scale-xxx&queryCount=20'
+            usage: '/api/test-semantic?action=scale-benchmark&userId=test-scale-xxx&queryCount=20',
           });
         }
 
@@ -1003,7 +1067,7 @@ export default async function handler(req, res) {
           action: 'scale-benchmark',
           benchmark: benchmarkResult,
           invariants: invariantResult,
-          behavioral
+          behavioral,
         });
       }
 
@@ -1011,7 +1075,13 @@ export default async function handler(req, res) {
       // SCALE: FULL STRESS TEST
       // ============================================
       case 'scale-full': {
-        const { generateTestData, generateSupersessionChains, runBenchmark, validateInvariants, cleanup } = await import('../services/scale-harness.js');
+        const {
+          generateTestData,
+          generateSupersessionChains,
+          runBenchmark,
+          validateInvariants,
+          cleanup,
+        } = await import('../services/scale-harness.js');
         const { measureBehavioral } = await import('../services/behavioral-detection.js');
 
         const level = req.query.level || 'smoke';
@@ -1023,20 +1093,20 @@ export default async function handler(req, res) {
           light: { memories: 500, queries: 50 },
           medium: { memories: 2000, queries: 100 },
           heavy: { memories: 5000, queries: 150 },
-          extreme: { memories: 25000, queries: 500 }
+          extreme: { memories: 25000, queries: 500 },
         };
 
         if (!levels[level]) {
           return res.status(400).json({
             error: `Invalid level: ${level}`,
-            availableLevels: Object.keys(levels)
+            availableLevels: Object.keys(levels),
           });
         }
 
         if (level === 'extreme' && !allowExtreme) {
           return res.status(403).json({
             error: 'Extreme level requires allowExtreme=true parameter',
-            warning: 'This will generate 25,000 memories and cost significant API credits'
+            warning: 'This will generate 25,000 memories and cost significant API credits',
           });
         }
 
@@ -1053,7 +1123,7 @@ export default async function handler(req, res) {
           testUserId,
           runId,
           steps: {},
-          completedPhases: []
+          completedPhases: [],
         };
 
         // Helper to check timeout
@@ -1068,7 +1138,7 @@ export default async function handler(req, res) {
           const generateResult = await generateTestData(pool, testUserId, config.memories, {
             runId,
             mode,
-            skipEmbedding: false
+            skipEmbedding: false,
           });
           results.steps.generate = generateResult;
           results.completedPhases.push('generate');
@@ -1078,14 +1148,20 @@ export default async function handler(req, res) {
             results.status = 'partial';
             results.nextAction = `scale-embed&userId=${testUserId}`;
             results.elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(2);
-            results.message = 'Timeout after generation phase. Use scale-embed to continue embedding, then resume with scale-benchmark.';
+            results.message =
+              'Timeout after generation phase. Use scale-embed to continue embedding, then resume with scale-benchmark.';
             console.log(`[SCALE-FULL] Timeout after generate phase (${results.elapsedSeconds}s)`);
             return res.status(200).json(results);
           }
 
           // Step 2: Generate supersession chains
           console.log(`[SCALE-FULL] Step 2: Generating supersession chains...`);
-          const supersessionResult = await generateSupersessionChains(pool, testUserId, runId, mode);
+          const supersessionResult = await generateSupersessionChains(
+            pool,
+            testUserId,
+            runId,
+            mode,
+          );
           results.steps.supersession = supersessionResult;
           results.completedPhases.push('supersession');
 
@@ -1095,7 +1171,9 @@ export default async function handler(req, res) {
             results.nextAction = `scale-benchmark&userId=${testUserId}&queries=${config.queries}`;
             results.elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(2);
             results.message = 'Timeout after supersession phase. Resume with scale-benchmark.';
-            console.log(`[SCALE-FULL] Timeout after supersession phase (${results.elapsedSeconds}s)`);
+            console.log(
+              `[SCALE-FULL] Timeout after supersession phase (${results.elapsedSeconds}s)`,
+            );
             return res.status(200).json(results);
           }
 
@@ -1137,10 +1215,11 @@ export default async function handler(req, res) {
           results.elapsedSeconds = ((Date.now() - startTime) / 1000).toFixed(2);
           results.passed = invariantResult.allPassed;
 
-          console.log(`[SCALE-FULL] Complete: ${results.passed ? 'PASSED' : 'FAILED'} in ${results.elapsedSeconds}s`);
+          console.log(
+            `[SCALE-FULL] Complete: ${results.passed ? 'PASSED' : 'FAILED'} in ${results.elapsedSeconds}s`,
+          );
 
           return res.status(200).json(results);
-
         } catch (error) {
           console.error('[SCALE-FULL] Error:', error.message);
 
@@ -1152,7 +1231,7 @@ export default async function handler(req, res) {
             error: error.message,
             level,
             testUserId,
-            results
+            results,
           });
         }
       }
@@ -1167,7 +1246,8 @@ export default async function handler(req, res) {
         if (!testUserId) {
           return res.status(400).json({
             error: 'Missing userId parameter',
-            usage: '/api/test-semantic?action=scale-cleanup&userId=test-scale-xxx&force=true&minAgeMinutes=10'
+            usage:
+              '/api/test-semantic?action=scale-cleanup&userId=test-scale-xxx&force=true&minAgeMinutes=10',
           });
         }
 
@@ -1179,7 +1259,7 @@ export default async function handler(req, res) {
 
         return res.status(200).json({
           action: 'scale-cleanup',
-          ...result
+          ...result,
         });
       }
 
@@ -1191,13 +1271,14 @@ export default async function handler(req, res) {
         if (!testUserId) {
           return res.status(400).json({
             error: 'Missing userId parameter',
-            usage: '/api/test-semantic?action=scale-status&userId=test-scale-xxx'
+            usage: '/api/test-semantic?action=scale-status&userId=test-scale-xxx',
           });
         }
 
         try {
           // Get actual DB counts
-          const countResult = await pool.query(`
+          const countResult = await pool.query(
+            `
             SELECT
               COUNT(*) as total,
               COUNT(CASE WHEN embedding_status = 'ready' THEN 1 END) as embedded,
@@ -1206,10 +1287,13 @@ export default async function handler(req, res) {
               COUNT(CASE WHEN embedding_status = 'skipped' THEN 1 END) as skipped
             FROM persistent_memories
             WHERE user_id = $1
-          `, [testUserId]);
+          `,
+            [testUserId],
+          );
 
           // Get run information from metadata
-          const runsResult = await pool.query(`
+          const runsResult = await pool.query(
+            `
             SELECT
               metadata->>'run_id' as run_id,
               COUNT(*) as count,
@@ -1219,14 +1303,19 @@ export default async function handler(req, res) {
             WHERE user_id = $1 AND metadata->>'run_id' IS NOT NULL
             GROUP BY metadata->>'run_id'
             ORDER BY MAX(created_at) DESC
-          `, [testUserId]);
+          `,
+            [testUserId],
+          );
 
           // Get tripwire count
-          const tripwireResult = await pool.query(`
+          const tripwireResult = await pool.query(
+            `
             SELECT COUNT(*) as count
             FROM persistent_memories
             WHERE user_id = $1 AND fact_fingerprint LIKE 'tripwire_%'
-          `, [testUserId]);
+          `,
+            [testUserId],
+          );
 
           const counts = countResult.rows[0];
 
@@ -1239,15 +1328,15 @@ export default async function handler(req, res) {
               ready: parseInt(counts.embedded),
               pending: parseInt(counts.pending),
               failed: parseInt(counts.failed),
-              skipped: parseInt(counts.skipped || 0)
+              skipped: parseInt(counts.skipped || 0),
             },
             tripwires: parseInt(tripwireResult.rows[0].count),
-            runs: runsResult.rows.map(r => ({
+            runs: runsResult.rows.map((r) => ({
               runId: r.run_id,
               count: parseInt(r.count),
               startedAt: r.started_at,
-              lastActivity: r.last_activity
-            }))
+              lastActivity: r.last_activity,
+            })),
           });
         } catch (error) {
           console.error('[SCALE-STATUS] Error:', error.message);
@@ -1255,7 +1344,7 @@ export default async function handler(req, res) {
             action: 'scale-status',
             success: false,
             error: error.message,
-            userId: testUserId
+            userId: testUserId,
           });
         }
       }
@@ -1270,7 +1359,7 @@ export default async function handler(req, res) {
         if (!testUserId) {
           return res.status(400).json({
             error: 'Missing userId parameter',
-            usage: '/api/test-semantic?action=scale-embed&userId=test-scale-xxx&batchSize=10'
+            usage: '/api/test-semantic?action=scale-embed&userId=test-scale-xxx&batchSize=10',
           });
         }
 
@@ -1282,7 +1371,8 @@ export default async function handler(req, res) {
 
         try {
           // Find memories needing embeddings
-          const { rows } = await pool.query(`
+          const { rows } = await pool.query(
+            `
             SELECT id, content
             FROM persistent_memories
             WHERE user_id = $1
@@ -1291,7 +1381,9 @@ export default async function handler(req, res) {
               AND content IS NOT NULL
             ORDER BY created_at DESC
             LIMIT $2
-          `, [testUserId, batchSize]);
+          `,
+            [testUserId, batchSize],
+          );
 
           for (const memory of rows) {
             const result = await embedMemory(pool, memory.id, memory.content);
@@ -1311,9 +1403,8 @@ export default async function handler(req, res) {
             processed,
             succeeded,
             failed,
-            elapsedMs
+            elapsedMs,
           });
-
         } catch (error) {
           console.error('[SCALE-EMBED] Error:', error.message);
           return res.status(500).json({
@@ -1322,7 +1413,7 @@ export default async function handler(req, res) {
             userId: testUserId,
             processed,
             succeeded,
-            failed
+            failed,
           });
         }
       }
@@ -1341,36 +1432,38 @@ export default async function handler(req, res) {
             response: "I'm not sure about that.",
             context: {},
             shouldFail: true,
-            expectedIssue: 'missing explanation and framework'
+            expectedIssue: 'missing explanation and framework',
           },
           {
             name: 'Test 2: Advice Without Blind Spots',
-            response: "You should definitely invest in index funds.",
+            response: 'You should definitely invest in index funds.',
             context: {},
             shouldFail: true,
-            expectedIssue: 'missing caveats'
+            expectedIssue: 'missing caveats',
           },
           {
             name: 'Test 3: Engagement Bait in Closure',
-            response: "Here's how to reset your password: Click Settings, then Security, then Reset Password. Let me know if you need anything else!",
+            response:
+              "Here's how to reset your password: Click Settings, then Security, then Reset Password. Let me know if you need anything else!",
             context: {},
             shouldFail: true,
-            expectedIssue: 'engagement bait in closure'
+            expectedIssue: 'engagement bait in closure',
           },
           {
             name: 'Test 4: Generic Examples',
-            response: "You could use frameworks like X or Y, etc.",
+            response: 'You could use frameworks like X or Y, etc.',
             context: {},
             shouldFail: true,
-            expectedIssue: 'generic examples'
+            expectedIssue: 'generic examples',
           },
           {
             name: 'Test 5: Perfect Truth-First Response',
-            response: "I'm not certain about the exact implementation details because this depends on your specific setup. However, based on common configurations, you could try using React (with 200K+ npm packages and strong TypeScript support) or Vue.js (gentler learning curve, 10K+ packages). That said, keep in mind that framework choice depends on your team's expertise and project requirements. Consider also that switching frameworks mid-project can be costly.",
+            response:
+              "I'm not certain about the exact implementation details because this depends on your specific setup. However, based on common configurations, you could try using React (with 200K+ npm packages and strong TypeScript support) or Vue.js (gentler learning curve, 10K+ packages). That said, keep in mind that framework choice depends on your team's expertise and project requirements. Consider also that switching frameworks mid-project can be costly.",
             context: {},
             shouldFail: false,
-            expectedIssue: 'none'
-          }
+            expectedIssue: 'none',
+          },
         ];
 
         const results = [];
@@ -1401,28 +1494,30 @@ export default async function handler(req, res) {
               uncertainty: gateResult.uncertainty,
               blindSpots: gateResult.blindSpots,
               antiEngagement: gateResult.antiEngagement,
-              exampleQuality: gateResult.exampleQuality
+              exampleQuality: gateResult.exampleQuality,
             },
             feedback: gateResult.feedback,
-            enhancement: enhancementResult ? {
-              improved: enhancementResult.improved,
-              newScore: enhancementResult.newResults.compositeScore,
-              enhancements: enhancementResult.enhancements
-            } : null
+            enhancement: enhancementResult
+              ? {
+                  improved: enhancementResult.improved,
+                  newScore: enhancementResult.newResults.compositeScore,
+                  enhancements: enhancementResult.enhancements,
+                }
+              : null,
           });
         }
 
-        const allPassed = results.every(r => r.passed);
+        const allPassed = results.every((r) => r.passed);
 
         return res.status(200).json({
           action: 'test-doctrine-gates',
           passed: allPassed,
           totalTests: results.length,
-          passedTests: results.filter(r => r.passed).length,
+          passedTests: results.filter((r) => r.passed).length,
           results: results,
           summary: allPassed
             ? '✅ All doctrine gate tests passed'
-            : `❌ ${results.filter(r => !r.passed).length} test(s) failed`
+            : `❌ ${results.filter((r) => !r.passed).length} test(s) failed`,
         });
       }
 
@@ -1436,7 +1531,7 @@ export default async function handler(req, res) {
           chunkText,
           storeDocument,
           embedDocumentChunks,
-          searchDocuments
+          searchDocuments,
         } = await import('../services/document-service.js');
         const { generateEmbedding } = await import('../services/embedding-service.js');
 
@@ -1445,7 +1540,7 @@ export default async function handler(req, res) {
         const results = {
           tests: [],
           passed: 0,
-          failed: 0
+          failed: 0,
         };
 
         try {
@@ -1456,14 +1551,15 @@ export default async function handler(req, res) {
           // TEST 1: Text Extraction (using inline test data)
           const testContent = Buffer.from(
             'This is a comprehensive test document about artificial intelligence and machine learning. ' +
-            'AI systems can learn from data and improve their performance over time. ' +
-            'Machine learning algorithms identify patterns in large datasets. ' +
-            'Deep learning uses neural networks with many layers. ' +
-            'Natural language processing enables computers to understand human language.'
+              'AI systems can learn from data and improve their performance over time. ' +
+              'Machine learning algorithms identify patterns in large datasets. ' +
+              'Deep learning uses neural networks with many layers. ' +
+              'Natural language processing enables computers to understand human language.',
           );
 
           const extractResult = await extractText(testContent, 'text/plain', 'test-ai.txt');
-          const testText = 'This is a comprehensive test document about artificial intelligence and machine learning. ' +
+          const testText =
+            'This is a comprehensive test document about artificial intelligence and machine learning. ' +
             'AI systems can learn from data and improve their performance over time. ' +
             'Machine learning algorithms identify patterns in large datasets. ' +
             'Deep learning uses neural networks with many layers. ' +
@@ -1471,18 +1567,20 @@ export default async function handler(req, res) {
           results.tests.push({
             name: 'Text Extraction',
             passed: extractResult.success && extractResult.text === testText,
-            details: extractResult
+            details: extractResult,
           });
-          if (extractResult.success) results.passed++; else results.failed++;
+          if (extractResult.success) results.passed++;
+          else results.failed++;
 
           // TEST 2: Text Chunking
           const chunks = chunkText(testText);
           results.tests.push({
             name: 'Text Chunking',
             passed: chunks.length > 0 && chunks[0].content && chunks[0].tokenCount > 0,
-            details: { chunkCount: chunks.length, sample: chunks[0] }
+            details: { chunkCount: chunks.length, sample: chunks[0] },
           });
-          if (chunks.length > 0) results.passed++; else results.failed++;
+          if (chunks.length > 0) results.passed++;
+          else results.failed++;
 
           // TEST 3: Document Storage
           const storeResult = await storeDocument(
@@ -1491,14 +1589,15 @@ export default async function handler(req, res) {
             'test-ai.txt',
             testContent,
             'text/plain',
-            { pool }
+            { pool },
           );
           results.tests.push({
             name: 'Document Storage',
             passed: storeResult.success && storeResult.documentId > 0,
-            details: storeResult
+            details: storeResult,
           });
-          if (storeResult.success) results.passed++; else results.failed++;
+          if (storeResult.success) results.passed++;
+          else results.failed++;
 
           if (!storeResult.success) {
             throw new Error('Storage failed, cannot continue tests');
@@ -1511,12 +1610,13 @@ export default async function handler(req, res) {
           results.tests.push({
             name: 'Embedding Generation',
             passed: embedResult.success && embedResult.embedded > 0,
-            details: embedResult
+            details: embedResult,
           });
-          if (embedResult.success && embedResult.embedded > 0) results.passed++; else results.failed++;
+          if (embedResult.success && embedResult.embedded > 0) results.passed++;
+          else results.failed++;
 
           // Wait a moment for embeddings to settle
-          await new Promise(r => setTimeout(r, 500));
+          await new Promise((r) => setTimeout(r, 500));
 
           // TEST 5: Semantic Search
           const queryText = 'important information';
@@ -1527,7 +1627,7 @@ export default async function handler(req, res) {
               testUserId,
               testMode,
               queryEmbedResult.embedding,
-              { pool, topK: 5, tokenBudget: 3000 }
+              { pool, topK: 5, tokenBudget: 3000 },
             );
             results.tests.push({
               name: 'Semantic Search',
@@ -1535,15 +1635,16 @@ export default async function handler(req, res) {
               details: {
                 chunksFound: searchResult.chunks?.length || 0,
                 totalTokens: searchResult.totalTokens,
-                topResult: searchResult.chunks?.[0]
-              }
+                topResult: searchResult.chunks?.[0],
+              },
             });
-            if (searchResult.chunks && searchResult.chunks.length > 0) results.passed++; else results.failed++;
+            if (searchResult.chunks && searchResult.chunks.length > 0) results.passed++;
+            else results.failed++;
           } else {
             results.tests.push({
               name: 'Semantic Search',
               passed: false,
-              details: { error: 'Query embedding failed' }
+              details: { error: 'Query embedding failed' },
             });
             results.failed++;
           }
@@ -1553,7 +1654,7 @@ export default async function handler(req, res) {
             testUserId,
             'business-validation', // Different mode
             queryEmbedResult.embedding,
-            { pool, topK: 5 }
+            { pool, topK: 5 },
           );
           results.tests.push({
             name: 'Mode Isolation',
@@ -1561,10 +1662,11 @@ export default async function handler(req, res) {
             details: {
               chunksFound: searchOtherMode.chunks?.length || 0,
               expected: 0,
-              message: 'Documents should not leak across modes'
-            }
+              message: 'Documents should not leak across modes',
+            },
           });
-          if (searchOtherMode.chunks && searchOtherMode.chunks.length === 0) results.passed++; else results.failed++;
+          if (searchOtherMode.chunks && searchOtherMode.chunks.length === 0) results.passed++;
+          else results.failed++;
 
           // Cleanup
           await pool.query('DELETE FROM documents WHERE user_id = $1', [testUserId]);
@@ -1574,19 +1676,20 @@ export default async function handler(req, res) {
             action: 'test-document-ingestion',
             passed: results.failed === 0,
             summary: `${results.passed}/${results.tests.length} tests passed`,
-            results: results.tests
+            results: results.tests,
           });
-
         } catch (error) {
           // Cleanup on error
-          await pool.query('DELETE FROM documents WHERE user_id LIKE $1', ['test-doc-%']).catch(() => {});
+          await pool
+            .query('DELETE FROM documents WHERE user_id LIKE $1', ['test-doc-%'])
+            .catch(() => {});
 
           console.error('[TEST-DOC] Error:', error.message);
           return res.status(500).json({
             action: 'test-document-ingestion',
             passed: false,
             error: error.message,
-            results: results.tests
+            results: results.tests,
           });
         }
       }
@@ -1595,7 +1698,8 @@ export default async function handler(req, res) {
       // BACKFILL DOCUMENT EMBEDDINGS
       // ============================================
       case 'backfill-doc-embeddings': {
-        const { backfillDocumentEmbeddings, ensureTablesExist } = await import('../services/document-service.js');
+        const { backfillDocumentEmbeddings, ensureTablesExist } =
+          await import('../services/document-service.js');
 
         try {
           await ensureTablesExist(pool);
@@ -1606,21 +1710,20 @@ export default async function handler(req, res) {
           const stats = await backfillDocumentEmbeddings({
             pool,
             batchSize,
-            maxBatches
+            maxBatches,
           });
 
           return res.json({
             action: 'backfill-doc-embeddings',
             success: true,
-            ...stats
+            ...stats,
           });
-
         } catch (error) {
           console.error('[BACKFILL-DOC] Error:', error.message);
           return res.status(500).json({
             action: 'backfill-doc-embeddings',
             success: false,
-            error: error.message
+            error: error.message,
           });
         }
       }
@@ -1629,7 +1732,8 @@ export default async function handler(req, res) {
       // DOCUMENT STATUS
       // ============================================
       case 'doc-status': {
-        const { getDocumentStatus, getUserDocuments, ensureTablesExist } = await import('../services/document-service.js');
+        const { getDocumentStatus, getUserDocuments, ensureTablesExist } =
+          await import('../services/document-service.js');
 
         try {
           await ensureTablesExist(pool);
@@ -1641,7 +1745,7 @@ export default async function handler(req, res) {
             const status = await getDocumentStatus(parseInt(documentId), { pool });
             return res.json({
               action: 'doc-status',
-              ...status
+              ...status,
             });
           } else if (docUserId) {
             // Get all documents for user
@@ -1649,7 +1753,10 @@ export default async function handler(req, res) {
             const documents = await getUserDocuments(docUserId, mode, { pool });
 
             // Get aggregate stats
-            const { rows: [aggStats] } = await pool.query(`
+            const {
+              rows: [aggStats],
+            } = await pool.query(
+              `
               SELECT
                 COUNT(DISTINCT d.id) as total_documents,
                 SUM(d.chunk_count) as total_chunks,
@@ -1660,7 +1767,9 @@ export default async function handler(req, res) {
               FROM documents d
               LEFT JOIN document_chunks dc ON d.id = dc.document_id
               WHERE d.user_id = $1 AND d.mode = $2
-            `, [docUserId, mode]);
+            `,
+              [docUserId, mode],
+            );
 
             return res.json({
               action: 'doc-status',
@@ -1673,21 +1782,20 @@ export default async function handler(req, res) {
                 totalTokens: parseInt(aggStats.total_tokens) || 0,
                 embeddedChunks: parseInt(aggStats.embedded_chunks) || 0,
                 pendingChunks: parseInt(aggStats.pending_chunks) || 0,
-                failedChunks: parseInt(aggStats.failed_chunks) || 0
-              }
+                failedChunks: parseInt(aggStats.failed_chunks) || 0,
+              },
             });
           } else {
             return res.status(400).json({
               error: 'Missing userId or documentId parameter',
-              usage: '/api/test-semantic?action=doc-status&userId=xxx OR documentId=123'
+              usage: '/api/test-semantic?action=doc-status&userId=xxx OR documentId=123',
             });
           }
-
         } catch (error) {
           console.error('[DOC-STATUS] Error:', error.message);
           return res.status(500).json({
             action: 'doc-status',
-            error: error.message
+            error: error.message,
           });
         }
       }
@@ -1707,8 +1815,8 @@ export default async function handler(req, res) {
             examples: [
               '/api/test-semantic?action=truth-type&q=What%20is%20the%20current%20price%20of%20Bitcoin',
               '/api/test-semantic?action=truth-type&q=Who%20is%20the%20CEO%20of%20Apple',
-              '/api/test-semantic?action=truth-type&q=What%20is%20the%20Pythagorean%20theorem'
-            ]
+              '/api/test-semantic?action=truth-type&q=What%20is%20the%20Pythagorean%20theorem',
+            ],
           });
         }
 
@@ -1741,8 +1849,8 @@ export default async function handler(req, res) {
               '/api/test-semantic?action=cache&cacheAction=stats',
               '/api/test-semantic?action=cache&cacheAction=set&q=Bitcoin%20price&data=50000&truthType=VOLATILE',
               '/api/test-semantic?action=cache&cacheAction=get&q=Bitcoin%20price',
-              '/api/test-semantic?action=cache&cacheAction=fingerprint&q=current%20BTC%20price'
-            ]
+              '/api/test-semantic?action=cache&cacheAction=fingerprint&q=current%20BTC%20price',
+            ],
           });
         }
 
@@ -1752,7 +1860,7 @@ export default async function handler(req, res) {
             data: data,
             truthType: truthType,
             sources: sources ? JSON.parse(sources) : undefined,
-            confidence: confidence ? parseFloat(confidence) : undefined
+            confidence: confidence ? parseFloat(confidence) : undefined,
           };
 
           const result = testCache(cacheAction, params);
@@ -1796,7 +1904,7 @@ export default async function handler(req, res) {
         try {
           const options = {
             internalConfidence: internalConfidence ? parseFloat(internalConfidence) : undefined,
-            forceRefresh: forceRefresh === 'true'
+            forceRefresh: forceRefresh === 'true',
           };
 
           const result = await testLookup(query, options);
@@ -1815,7 +1923,8 @@ export default async function handler(req, res) {
           const { detectTruthType } = await import('../core/intelligence/truthTypeDetector.js');
           const { route } = await import('../core/intelligence/hierarchyRouter.js');
           const { lookup } = await import('../core/intelligence/externalLookupEngine.js');
-          const { getStats: getCacheStats } = await import('../core/intelligence/ttlCacheManager.js');
+          const { getStats: getCacheStats } =
+            await import('../core/intelligence/ttlCacheManager.js');
 
           // Try to import doctrine enforcer (may not exist yet)
           let doctrineModule = null;
@@ -1836,12 +1945,12 @@ export default async function handler(req, res) {
               test_query: 'What is the current price of Bitcoin?',
               detected_type: testResult.type,
               confidence: testResult.confidence,
-              ttl_ms: testResult.ttl_ms
+              ttl_ms: testResult.ttl_ms,
             };
           } catch (error) {
             healthChecks.truthTypeDetector = {
               status: 'error',
-              error: error.message
+              error: error.message,
             };
           }
 
@@ -1853,12 +1962,12 @@ export default async function handler(req, res) {
               test_query: 'What is our minimum pricing?',
               claim_type: routeResult.claim_type,
               hierarchy: routeResult.hierarchy_name,
-              external_lookup_required: routeResult.external_lookup_required
+              external_lookup_required: routeResult.external_lookup_required,
             };
           } catch (error) {
             healthChecks.hierarchyRouter = {
               status: 'error',
-              error: error.message
+              error: error.message,
             };
           }
 
@@ -1871,12 +1980,12 @@ export default async function handler(req, res) {
               hit_rate: cacheStats.hit_rate,
               hits: cacheStats.hits,
               misses: cacheStats.misses,
-              by_truth_type: cacheStats.by_truth_type
+              by_truth_type: cacheStats.by_truth_type,
             };
           } catch (error) {
             healthChecks.ttlCacheManager = {
               status: 'error',
-              error: error.message
+              error: error.message,
             };
           }
 
@@ -1884,18 +1993,18 @@ export default async function handler(req, res) {
           try {
             const lookupResult = await lookup('Test health check query', {
               internalConfidence: 0.3,
-              forceRefresh: false
+              forceRefresh: false,
             });
             healthChecks.externalLookupEngine = {
               status: lookupResult.success !== false ? 'operational' : 'degraded',
               lookup_performed: lookupResult.lookup_performed,
               infrastructure: 'real HTTP fetches enabled',
-              test_query: 'Test health check query'
+              test_query: 'Test health check query',
             };
           } catch (error) {
             healthChecks.externalLookupEngine = {
               status: 'error',
-              error: error.message
+              error: error.message,
             };
           }
 
@@ -1904,57 +2013,64 @@ export default async function handler(req, res) {
             try {
               const testResponse = { response: 'Test response', confidence: 0.8 };
               const testPhase4 = { truth_type: 'PERMANENT', confidence: 0.8 };
-              const enforcementResult = doctrineModule.enforceAll(testResponse, testPhase4, 'truth');
+              const enforcementResult = doctrineModule.enforceAll(
+                testResponse,
+                testPhase4,
+                'truth',
+              );
 
               healthChecks.doctrineEnforcer = {
                 status: 'operational',
                 gates_available: Object.keys(enforcementResult.gate_results),
                 enforcement_passed: enforcementResult.enforcement_passed,
-                gates_count: Object.keys(enforcementResult.gate_results).length
+                gates_count: Object.keys(enforcementResult.gate_results).length,
               };
             } catch (error) {
               healthChecks.doctrineEnforcer = {
                 status: 'error',
-                error: error.message
+                error: error.message,
               };
             }
           } else {
             healthChecks.doctrineEnforcer = {
               status: 'not_deployed',
-              message: 'Doctrine enforcer module not found - needs deployment'
+              message: 'Doctrine enforcer module not found - needs deployment',
             };
           }
 
           // Gate Configuration
-          const gateConfiguration = doctrineModule ? {
-            truth_gate: {
-              enabled: true,
-              threshold: 0.5,
-              description: 'Block response if confidence < 0.5 AND no external verification attempted'
-            },
-            provenance_gate: {
-              enabled: true,
-              required_tags: ['source_class', 'verified_at', 'confidence', 'sources_used'],
-              description: 'Ensure all external claims have proper source attribution'
-            },
-            volatility_gate: {
-              enabled: true,
-              ttl_enforcement: true,
-              description: 'Block caching of VOLATILE data beyond TTL'
-            },
-            business_policy_gate: {
-              enabled: true,
-              modes: ['site_monkeys'],
-              description: 'Block external override of vault content in Site Monkeys mode'
-            },
-            disclosure_gate: {
-              enabled: true,
-              confidence_threshold: 0.6,
-              description: 'Force disclosure when lookup fails or confidence is low'
-            }
-          } : {
-            message: 'Doctrine enforcer not deployed - gate configuration unavailable'
-          };
+          const gateConfiguration = doctrineModule
+            ? {
+                truth_gate: {
+                  enabled: true,
+                  threshold: 0.5,
+                  description:
+                    'Block response if confidence < 0.5 AND no external verification attempted',
+                },
+                provenance_gate: {
+                  enabled: true,
+                  required_tags: ['source_class', 'verified_at', 'confidence', 'sources_used'],
+                  description: 'Ensure all external claims have proper source attribution',
+                },
+                volatility_gate: {
+                  enabled: true,
+                  ttl_enforcement: true,
+                  description: 'Block caching of VOLATILE data beyond TTL',
+                },
+                business_policy_gate: {
+                  enabled: true,
+                  modes: ['site_monkeys'],
+                  description: 'Block external override of vault content in Site Monkeys mode',
+                },
+                disclosure_gate: {
+                  enabled: true,
+                  confidence_threshold: 0.6,
+                  description: 'Force disclosure when lookup fails or confidence is low',
+                },
+              }
+            : {
+                message: 'Doctrine enforcer not deployed - gate configuration unavailable',
+              };
 
           // Recent Enforcement Stats (would come from actual enforcement logs)
           const recentEnforcementStats = {
@@ -1962,7 +2078,7 @@ export default async function handler(req, res) {
             estimated_enforcement_rate: '100% (all responses pass through gates)',
             critical_failures_blocked: 0,
             warnings_issued: 0,
-            corrections_applied: 0
+            corrections_applied: 0,
           };
 
           // Cache Statistics
@@ -1970,7 +2086,7 @@ export default async function handler(req, res) {
 
           // Overall Status
           const allOperational = Object.values(healthChecks).every(
-            check => check.status === 'operational' || check.status === 'not_deployed'
+            (check) => check.status === 'operational' || check.status === 'not_deployed',
           );
 
           return res.json({
@@ -1987,21 +2103,21 @@ export default async function handler(req, res) {
               phase_5_ready: doctrineModule !== null,
               chat_flow_integration: 'active',
               external_http_enabled: true,
-              cache_operational: true
+              cache_operational: true,
             },
             next_steps: [
               'Deploy doctrineEnforcer.js file',
               'Integrate Phase 4 pipeline into processWithEliAndRoxy',
               'Add Phase 5 enforcement gates after AI generation',
-              'Test end-to-end with real queries'
-            ]
+              'Test end-to-end with real queries',
+            ],
           });
         } catch (error) {
           console.error('[phase4-status] Error:', error);
           return res.status(500).json({
             success: false,
             error: error.message,
-            stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+            stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined,
           });
         }
       }
@@ -2009,7 +2125,37 @@ export default async function handler(req, res) {
       default:
         return res.status(400).json({
           error: `Unknown action: ${action}`,
-          availableActions: ['retrieve', 'stats', 'embed', 'backfill', 'backfill-embeddings', 'health', 'schema', 'test-paraphrase', 'test-supersession', 'test-mode-isolation', 'fix-superseded-by-type', 'create-constraint', 'debug-facts', 'live-proof', 'scale-generate', 'scale-benchmark', 'scale-full', 'scale-cleanup', 'scale-status', 'scale-embed', 'test-doctrine-gates', 'test-document-ingestion', 'backfill-doc-embeddings', 'doc-status', 'truth-type', 'cache', 'hierarchy', 'external-lookup', 'phase4-status'],
+          availableActions: [
+            'retrieve',
+            'stats',
+            'embed',
+            'backfill',
+            'backfill-embeddings',
+            'health',
+            'schema',
+            'test-paraphrase',
+            'test-supersession',
+            'test-mode-isolation',
+            'fix-superseded-by-type',
+            'create-constraint',
+            'debug-facts',
+            'live-proof',
+            'scale-generate',
+            'scale-benchmark',
+            'scale-full',
+            'scale-cleanup',
+            'scale-status',
+            'scale-embed',
+            'test-doctrine-gates',
+            'test-document-ingestion',
+            'backfill-doc-embeddings',
+            'doc-status',
+            'truth-type',
+            'cache',
+            'hierarchy',
+            'external-lookup',
+            'phase4-status',
+          ],
           examples: [
             '/api/test-semantic?action=health',
             '/api/test-semantic?action=schema',
@@ -2045,15 +2191,15 @@ export default async function handler(req, res) {
             '/api/test-semantic?action=external-lookup&q=What%20is%20the%20current%20price%20of%20Bitcoin',
             '/api/test-semantic?action=external-lookup&q=What%20are%20the%20side%20effects%20of%20aspirin',
             '/api/test-semantic?action=external-lookup&q=What%20is%20the%20Pythagorean%20theorem',
-            '/api/test-semantic?action=phase4-status'
-          ]
+            '/api/test-semantic?action=phase4-status',
+          ],
         });
     }
   } catch (error) {
     console.error('[TEST-SEMANTIC] Error:', error);
     return res.status(500).json({
       error: error.message,
-      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined
+      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined,
     });
   } finally {
     await pool.end();

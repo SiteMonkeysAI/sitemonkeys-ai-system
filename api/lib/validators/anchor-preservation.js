@@ -3,9 +3,9 @@
 /**
  * Anchor Preservation Validator - Deterministic post-response validator
  * Ensures critical data points (prices, dates, numbers) are preserved exactly
- * 
+ *
  * NO AI CALLS - Pure deterministic extraction and validation
- * 
+ *
  * FIXES: EDG3 (numerical data preservation)
  */
 
@@ -20,35 +20,41 @@ class AnchorPreservationValidator {
    */
   async validate({ response, memoryContext = [], query = '', context = {} }) {
     // EXECUTION PROOF - Verify anchor preservation validator is active (EDG3)
-    console.log('[PROOF] validator:anchor-preservation v=2026-01-29a file=api/lib/validators/anchor-preservation.js fn=validate');
+    console.log(
+      '[PROOF] validator:anchor-preservation v=2026-01-29a file=api/lib/validators/anchor-preservation.js fn=validate',
+    );
 
     // DIAGNOSTIC LOGGING (Issue #656) - Debug validator input
-    console.log(`[ANCHOR-VALIDATOR] Input: memoryContext_type=${typeof memoryContext} is_array=${Array.isArray(memoryContext)} length=${memoryContext?.length || memoryContext?.memories?.length || 0}`);
+    console.log(
+      `[ANCHOR-VALIDATOR] Input: memoryContext_type=${typeof memoryContext} is_array=${Array.isArray(memoryContext)} length=${memoryContext?.length || memoryContext?.memories?.length || 0}`,
+    );
     if (memoryContext && typeof memoryContext === 'object') {
-      console.log(`[ANCHOR-VALIDATOR] Input structure: keys=[${Object.keys(memoryContext).join(',')}]`);
+      console.log(
+        `[ANCHOR-VALIDATOR] Input structure: keys=[${Object.keys(memoryContext).join(',')}]`,
+      );
     }
 
     try {
       // Extract anchors from memory context
       const anchors = this.#extractAnchors(memoryContext);
-      
+
       if (anchors.length === 0) {
         return {
           correctionApplied: false,
-          response: response
+          response: response,
         };
       }
-      
+
       // Filter to only relevant anchors based on query
       const relevantAnchors = this.#filterRelevantAnchors(anchors, query);
-      
+
       if (relevantAnchors.length === 0) {
         return {
           correctionApplied: false,
-          response: response
+          response: response,
         };
       }
-      
+
       // Check which anchors are missing from response
       const missingAnchors = [];
       for (const anchor of relevantAnchors) {
@@ -56,37 +62,38 @@ class AnchorPreservationValidator {
           missingAnchors.push(anchor);
         }
       }
-      
+
       if (missingAnchors.length === 0) {
         return {
           correctionApplied: false,
-          response: response
+          response: response,
         };
       }
-      
+
       // Inject missing anchors
       const adjustedResponse = this.#injectMissingAnchors(response, missingAnchors);
-      
-      console.log(`[ANCHOR-VALIDATOR] Injected ${missingAnchors.length} missing anchors:`, 
-        missingAnchors.map(a => a.value).join(', '));
-      
+
+      console.log(
+        `[ANCHOR-VALIDATOR] Injected ${missingAnchors.length} missing anchors:`,
+        missingAnchors.map((a) => a.value).join(', '),
+      );
+
       this.#recordCorrection(missingAnchors, context);
-      
+
       return {
         correctionApplied: true,
         response: adjustedResponse,
         adjustedResponse,
-        missingAnchors: missingAnchors.map(a => ({ type: a.type, value: a.value })),
-        anchorsChecked: relevantAnchors.length
+        missingAnchors: missingAnchors.map((a) => ({ type: a.type, value: a.value })),
+        anchorsChecked: relevantAnchors.length,
       };
-      
     } catch (error) {
       console.error('[ANCHOR-VALIDATOR] Validation error:', error);
-      
+
       return {
         correctionApplied: false,
         response: response,
-        error: error.message
+        error: error.message,
       };
     }
   }
@@ -102,13 +109,11 @@ class AnchorPreservationValidator {
       memories_checked: 0,
       memories_with_anchors: 0,
       anchor_types_found: new Set(),
-      garbage_rejected: 0
+      garbage_rejected: 0,
     };
 
     // Handle both array and object formats
-    const memories = Array.isArray(memoryContext)
-      ? memoryContext
-      : (memoryContext.memories || []);
+    const memories = Array.isArray(memoryContext) ? memoryContext : memoryContext.memories || [];
 
     telemetry.memories_checked = memories.length;
 
@@ -119,20 +124,28 @@ class AnchorPreservationValidator {
       // FIX #639: Normalize metadata - handle string vs object
       let metadata = memory.metadata || {};
       if (typeof metadata === 'string') {
-        try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+        try {
+          metadata = JSON.parse(metadata);
+        } catch {
+          metadata = {};
+        }
       }
 
       // ENHANCEMENT: Extract anchors from metadata if available (more reliable)
       if (metadata.anchors) {
         telemetry.memories_with_anchors++;
         const anchorKeys = Object.keys(metadata.anchors);
-        anchorKeys.forEach(k => telemetry.anchor_types_found.add(k));
+        anchorKeys.forEach((k) => telemetry.anchor_types_found.add(k));
 
-        console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: anchors_keys=[${anchorKeys.join(', ')}]`);
+        console.log(
+          `[ANCHOR-VALIDATOR] Memory ${memoryId}: anchors_keys=[${anchorKeys.join(', ')}]`,
+        );
 
         // Pricing anchors from metadata
         if (metadata.anchors.pricing && Array.isArray(metadata.anchors.pricing)) {
-          console.log(`[ANCHOR-VALIDATOR] Memory ${memoryId}: prices_found=[${metadata.anchors.pricing.join(', ')}]`);
+          console.log(
+            `[ANCHOR-VALIDATOR] Memory ${memoryId}: prices_found=[${metadata.anchors.pricing.join(', ')}]`,
+          );
           for (const price of metadata.anchors.pricing) {
             // FIX #670: Validate price anchors
             if (this.#validateAnchorType('pricing', price)) {
@@ -140,7 +153,7 @@ class AnchorPreservationValidator {
                 type: 'price',
                 value: price,
                 source: content,
-                fromMetadata: true
+                fromMetadata: true,
               });
             } else {
               telemetry.garbage_rejected++;
@@ -158,7 +171,7 @@ class AnchorPreservationValidator {
                 type: 'identifier',
                 value: identifier,
                 source: content,
-                fromMetadata: true
+                fromMetadata: true,
               });
             } else {
               telemetry.garbage_rejected++;
@@ -175,11 +188,13 @@ class AnchorPreservationValidator {
                 type: 'ordinal',
                 value: ordinal,
                 source: content,
-                fromMetadata: true
+                fromMetadata: true,
               });
             } else {
               telemetry.garbage_rejected++;
-              console.log(`[ANCHOR-VALIDATOR] ⚠️ Rejected invalid ordinal anchor: ${JSON.stringify(ordinal)}`);
+              console.log(
+                `[ANCHOR-VALIDATOR] ⚠️ Rejected invalid ordinal anchor: ${JSON.stringify(ordinal)}`,
+              );
             }
           }
         }
@@ -192,11 +207,13 @@ class AnchorPreservationValidator {
                 type: 'explicit_token',
                 value: token,
                 source: content,
-                fromMetadata: true
+                fromMetadata: true,
               });
             } else {
               telemetry.garbage_rejected++;
-              console.log(`[ANCHOR-VALIDATOR] ⚠️ Rejected invalid explicit_token anchor: ${JSON.stringify(token)}`);
+              console.log(
+                `[ANCHOR-VALIDATOR] ⚠️ Rejected invalid explicit_token anchor: ${JSON.stringify(token)}`,
+              );
             }
           }
         }
@@ -210,7 +227,7 @@ class AnchorPreservationValidator {
                 type: 'temporal',
                 value: value,
                 source: content,
-                fromMetadata: true
+                fromMetadata: true,
               });
             } else {
               telemetry.garbage_rejected++;
@@ -229,19 +246,24 @@ class AnchorPreservationValidator {
         const prices = content.match(pricePattern) || [];
         for (const price of prices) {
           // Avoid duplicates and validate
-          if (!anchors.some(a => a.value === price.trim()) && this.#validateAnchorType('pricing', price.trim())) {
+          if (
+            !anchors.some((a) => a.value === price.trim()) &&
+            this.#validateAnchorType('pricing', price.trim())
+          ) {
             anchors.push({
               type: 'price',
               value: price.trim(),
               source: content,
-              fallback: true
+              fallback: true,
             });
           }
         }
       }
     }
 
-    console.log(`[ANCHOR-VALIDATOR] Extraction telemetry: memories_checked=${telemetry.memories_checked}, memories_with_anchors=${telemetry.memories_with_anchors}, anchor_types=[${Array.from(telemetry.anchor_types_found).join(', ')}], total_anchors=${anchors.length}, garbage_rejected=${telemetry.garbage_rejected}`);
+    console.log(
+      `[ANCHOR-VALIDATOR] Extraction telemetry: memories_checked=${telemetry.memories_checked}, memories_with_anchors=${telemetry.memories_with_anchors}, anchor_types=[${Array.from(telemetry.anchor_types_found).join(', ')}], total_anchors=${anchors.length}, garbage_rejected=${telemetry.garbage_rejected}`,
+    );
 
     return anchors;
   }
@@ -256,15 +278,15 @@ class AnchorPreservationValidator {
       /^Work\s+Experience$/i,
       /^Team\s+Leadership$/i,
       /^Project\s+Value$/i,
-      /^\d{10,}$/,  // Timestamps (10+ digits)
-      /^\d{1,2}%?$/,  // Random small numbers without context
-      /^[A-Z][a-z]+\s+[A-Z][a-z]+$/,  // Generic two-word phrases without unicode
+      /^\d{10,}$/, // Timestamps (10+ digits)
+      /^\d{1,2}%?$/, // Random small numbers without context
+      /^[A-Z][a-z]+\s+[A-Z][a-z]+$/, // Generic two-word phrases without unicode
     ];
 
     const stringValue = typeof value === 'object' ? JSON.stringify(value) : String(value);
 
     // Check blacklist first
-    if (ANCHOR_BLACKLIST.some(pattern => pattern.test(stringValue))) {
+    if (ANCHOR_BLACKLIST.some((pattern) => pattern.test(stringValue))) {
       return false;
     }
 
@@ -275,16 +297,22 @@ class AnchorPreservationValidator {
 
       case 'pricing':
         // Must contain currency symbol or explicit currency word
-        return typeof value === 'string' && /[$€£¥₹₽]|\b(dollars?|USD|EUR|GBP|JPY|cents?)\b/i.test(value);
+        return (
+          typeof value === 'string' && /[$€£¥₹₽]|\b(dollars?|USD|EUR|GBP|JPY|cents?)\b/i.test(value)
+        );
 
       case 'temporal':
         // Must be recognizable date/time, NOT random numbers
-        return typeof value === 'number' || (typeof value === 'string' && (
-          /\b(19|20)\d{2}\b/.test(value) ||  // Year
-          /\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(value) ||
-          /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/.test(value) ||  // Date format
-          /\b\d{1,2}:\d{2}\s*(AM|PM)?\b/i.test(value)  // Time format
-        ));
+        return (
+          typeof value === 'number' ||
+          (typeof value === 'string' &&
+            (/\b(19|20)\d{2}\b/.test(value) || // Year
+              /\b(January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(
+                value,
+              ) ||
+              /\b\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}\b/.test(value) || // Date format
+              /\b\d{1,2}:\d{2}\s*(AM|PM)?\b/i.test(value))) // Time format
+        );
 
       case 'ordinal':
         // Must be an object with position and item
@@ -292,7 +320,12 @@ class AnchorPreservationValidator {
 
       case 'explicit_token':
         // Must be an object with type and value
-        return typeof value === 'object' && value !== null && value.type === 'explicit_token' && value.value;
+        return (
+          typeof value === 'object' &&
+          value !== null &&
+          value.type === 'explicit_token' &&
+          value.value
+        );
 
       default:
         return false;
@@ -304,24 +337,24 @@ class AnchorPreservationValidator {
    */
   #filterRelevantAnchors(anchors, query) {
     const queryLower = query.toLowerCase();
-    
+
     // Keywords that indicate which anchor types are relevant
     const priceKeywords = ['price', 'cost', 'pricing', 'plan', 'tier', 'fee', 'charge', 'rate'];
     const dateKeywords = ['date', 'when', 'time', 'year', 'month', 'day'];
     const numberKeywords = ['how many', 'how much', 'quantity', 'amount', 'number', 'count'];
-    
+
     // If query mentions specific anchor types, filter to those
-    const wantsPrices = priceKeywords.some(kw => queryLower.includes(kw));
-    const wantsDates = dateKeywords.some(kw => queryLower.includes(kw));
-    const wantsNumbers = numberKeywords.some(kw => queryLower.includes(kw));
-    
+    const wantsPrices = priceKeywords.some((kw) => queryLower.includes(kw));
+    const wantsDates = dateKeywords.some((kw) => queryLower.includes(kw));
+    const wantsNumbers = numberKeywords.some((kw) => queryLower.includes(kw));
+
     // If no specific type mentioned, include all (general query)
     if (!wantsPrices && !wantsDates && !wantsNumbers) {
       return anchors;
     }
-    
+
     // Filter to relevant types
-    return anchors.filter(anchor => {
+    return anchors.filter((anchor) => {
       if (wantsPrices && anchor.type === 'price') return true;
       if (wantsDates && anchor.type === 'date') return true;
       if (wantsNumbers && (anchor.type === 'number' || anchor.type === 'percentage')) return true;
@@ -334,12 +367,12 @@ class AnchorPreservationValidator {
    */
   #anchorExists(response, anchor) {
     const value = anchor.value;
-    
+
     // Direct match
     if (response.includes(value)) {
       return true;
     }
-    
+
     // For prices, check variations ($99, 99, $99.00)
     if (anchor.type === 'price') {
       const numericValue = value.replace(/[^\d.]/g, '');
@@ -348,16 +381,16 @@ class AnchorPreservationValidator {
         numericValue, // 99
         `$${numericValue}`, // $99
         `$${parseFloat(numericValue).toFixed(2)}`, // $99.00
-        `${numericValue} dollars` // 99 dollars
+        `${numericValue} dollars`, // 99 dollars
       ];
-      
+
       for (const variation of variations) {
         if (response.includes(variation)) {
           return true;
         }
       }
     }
-    
+
     return false;
   }
 
@@ -371,30 +404,30 @@ class AnchorPreservationValidator {
       acc[anchor.type].push(anchor.value);
       return acc;
     }, {});
-    
+
     // Build injection text
     const injections = [];
-    
+
     if (byType.price) {
       injections.push(`Pricing: ${byType.price.join(', ')}`);
     }
-    
+
     if (byType.date) {
       injections.push(`Dates: ${byType.date.join(', ')}`);
     }
-    
+
     if (byType.percentage) {
       injections.push(`Percentages: ${byType.percentage.join(', ')}`);
     }
-    
+
     if (byType.number) {
       injections.push(`Numbers: ${byType.number.join(', ')}`);
     }
-    
+
     if (injections.length === 0) {
       return response;
     }
-    
+
     // Append to response with proper formatting
     return `${response}\n\n(Key details: ${injections.join('; ')})`;
   }
@@ -405,13 +438,13 @@ class AnchorPreservationValidator {
   #recordCorrection(missingAnchors, context) {
     const record = {
       timestamp: new Date().toISOString(),
-      missingAnchors: missingAnchors.map(a => ({ type: a.type, value: a.value })),
+      missingAnchors: missingAnchors.map((a) => ({ type: a.type, value: a.value })),
       mode: context.mode,
-      sessionId: context.sessionId
+      sessionId: context.sessionId,
     };
-    
+
     this.history.push(record);
-    
+
     // Keep only last 100 corrections
     if (this.history.length > 100) {
       this.history.shift();
@@ -425,7 +458,7 @@ class AnchorPreservationValidator {
     return {
       totalCorrections: this.history.length,
       recent: this.history.slice(-10),
-      anchorsByType: this.#countAnchorsByType()
+      anchorsByType: this.#countAnchorsByType(),
     };
   }
 
@@ -434,13 +467,13 @@ class AnchorPreservationValidator {
    */
   #countAnchorsByType() {
     const counts = {};
-    
+
     for (const record of this.history) {
       for (const anchor of record.missingAnchors) {
         counts[anchor.type] = (counts[anchor.type] || 0) + 1;
       }
     }
-    
+
     return counts;
   }
 }

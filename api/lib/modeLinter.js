@@ -11,7 +11,7 @@ export class ModeLinter {
    */
   static validateModeCompliance(response, expectedMode, modeFingerprint, semanticAnalysis = null) {
     const validation = {
-      mode_compliance: "UNKNOWN",
+      mode_compliance: 'UNKNOWN',
       fingerprint_valid: false,
       required_elements_present: {},
       missing_elements: [],
@@ -21,15 +21,9 @@ export class ModeLinter {
       compliance_score: 0,
     };
 
-    validation.fingerprint_valid = this.validateFingerprint(
-      response,
-      modeFingerprint,
-    );
+    validation.fingerprint_valid = this.validateFingerprint(response, modeFingerprint);
 
-    const structureValidation = this.validateModeStructure(
-      response,
-      expectedMode,
-    );
+    const structureValidation = this.validateModeStructure(response, expectedMode);
     validation.required_elements_present = structureValidation.elements_present;
     validation.missing_elements = structureValidation.missing_elements;
     validation.compliance_score = structureValidation.compliance_score;
@@ -39,7 +33,7 @@ export class ModeLinter {
 
     validation.mode_compliance = this.determineCompliance(validation);
 
-    if (validation.mode_compliance === "NON_COMPLIANT") {
+    if (validation.mode_compliance === 'NON_COMPLIANT') {
       validation.correction_needed = true;
       validation.fallback_correction = this.generateFallbackCorrection(
         response,
@@ -53,23 +47,23 @@ export class ModeLinter {
 
   static validateFingerprint(response, expectedFingerprint) {
     const fingerprintPattern = new RegExp(
-      `\\[${expectedFingerprint.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\]`,
+      `\\[${expectedFingerprint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`,
     );
     return fingerprintPattern.test(response);
   }
 
   static validateModeStructure(response, mode) {
     switch (mode) {
-      case "business_validation":
+      case 'business_validation':
         return this.validateBusinessMode(response);
-      case "truth_general":
+      case 'truth_general':
         return this.validateTruthMode(response);
-      case "site_monkeys":
+      case 'site_monkeys':
         return this.validateVaultMode(response);
       default:
         return {
           elements_present: {},
-          missing_elements: ["UNKNOWN_MODE"],
+          missing_elements: ['UNKNOWN_MODE'],
           compliance_score: 0,
         };
     }
@@ -168,9 +162,7 @@ export class ModeLinter {
 
     Object.keys(requiredElements).forEach((elementKey) => {
       const element = requiredElements[elementKey];
-      const isPresent = element.patterns.some((pattern) =>
-        pattern.test(response),
-      );
+      const isPresent = element.patterns.some((pattern) => pattern.test(response));
 
       elementsPresent[elementKey] = isPresent;
 
@@ -197,7 +189,7 @@ export class ModeLinter {
     if (semanticAnalysis) {
       const domain = semanticAnalysis.domain;
       const intent = semanticAnalysis.intent;
-      
+
       // Map modes to expected semantic patterns
       const modeExpectations = {
         business_validation: {
@@ -213,22 +205,24 @@ export class ModeLinter {
           expectedIntents: ['command', 'decision_making'],
         },
       };
-      
+
       const expectations = modeExpectations[expectedMode];
       if (expectations) {
         const domainMismatch = domain && !expectations.expectedDomains.includes(domain);
         const intentMismatch = intent && !expectations.expectedIntents.includes(intent);
-        
+
         // Drift detected if both domain and intent don't match expectations
         if (domainMismatch && intentMismatch) {
-          console.log(`[MODE-LINTER] Semantic drift detected: domain=${domain}, intent=${intent}, expected mode=${expectedMode}`);
+          console.log(
+            `[MODE-LINTER] Semantic drift detected: domain=${domain}, intent=${intent}, expected mode=${expectedMode}`,
+          );
           return true;
         }
       }
-      
+
       return false;
     }
-    
+
     // FALLBACK: Legacy keyword-based detection (when semantic analysis unavailable)
     // This is kept for backward compatibility but should rarely be used
     const modeSignatures = {
@@ -237,19 +231,17 @@ export class ModeLinter {
       site_monkeys: [/site monkeys/i, /vault/i, /operational/i, /protocol/i],
     };
 
-    const otherModes = Object.keys(modeSignatures).filter(
-      (mode) => mode !== expectedMode,
-    );
+    const otherModes = Object.keys(modeSignatures).filter((mode) => mode !== expectedMode);
 
     for (const otherMode of otherModes) {
       const signatures = modeSignatures[otherMode];
-      const matchCount = signatures.filter((pattern) =>
-        pattern.test(response),
-      ).length;
+      const matchCount = signatures.filter((pattern) => pattern.test(response)).length;
 
       // Increased threshold to reduce false positives
       if (matchCount > 3) {
-        console.log(`[MODE-LINTER] Legacy keyword drift detected: matched ${matchCount} signatures for ${otherMode}`);
+        console.log(
+          `[MODE-LINTER] Legacy keyword drift detected: matched ${matchCount} signatures for ${otherMode}`,
+        );
         return true;
       }
     }
@@ -259,29 +251,26 @@ export class ModeLinter {
 
   static determineCompliance(validation) {
     if (!validation.fingerprint_valid) {
-      return "NON_COMPLIANT";
+      return 'NON_COMPLIANT';
     }
 
     if (validation.compliance_score >= 80) {
-      return "COMPLIANT";
+      return 'COMPLIANT';
     } else if (validation.compliance_score >= 60) {
-      return "PARTIAL";
+      return 'PARTIAL';
     } else {
-      return "NON_COMPLIANT";
+      return 'NON_COMPLIANT';
     }
   }
 
   static generateFallbackCorrection(response, mode, validation) {
     const corrections = {
-      business_validation: this.generateBusinessCorrection(
-        response,
-        validation,
-      ),
+      business_validation: this.generateBusinessCorrection(response, validation),
       truth_general: this.generateTruthCorrection(response, validation),
       site_monkeys: this.generateVaultCorrection(response, validation),
     };
 
-    return corrections[mode] || "Mode correction not available";
+    return corrections[mode] || 'Mode correction not available';
   }
 
   static generateBusinessCorrection(response, validation) {
@@ -289,14 +278,13 @@ export class ModeLinter {
 
     const missingTemplates = {
       SURVIVAL_IMPACT:
-        "SURVIVAL IMPACT: [NONE/LOW/MEDIUM/HIGH/CRITICAL] - [Specific threat analysis]",
+        'SURVIVAL IMPACT: [NONE/LOW/MEDIUM/HIGH/CRITICAL] - [Specific threat analysis]',
       CASH_FLOW_ANALYSIS:
-        "CASH FLOW ANALYSIS: [POSITIVE/NEUTRAL/NEGATIVE] $[Amount] over [Timeline]",
-      MARKET_REALITY:
-        "MARKET REALITY CHECK: [Competitive threats and adoption challenges]",
+        'CASH FLOW ANALYSIS: [POSITIVE/NEUTRAL/NEGATIVE] $[Amount] over [Timeline]',
+      MARKET_REALITY: 'MARKET REALITY CHECK: [Competitive threats and adoption challenges]',
       TOP_3_RISKS:
-        "TOP 3 RISKS:\n1. [Risk] → [Mitigation]\n2. [Risk] → [Mitigation]\n3. [Risk] → [Mitigation]",
-      RECOMMENDATION: "RECOMMENDATION: [Clear go/no-go with decision criteria]",
+        'TOP 3 RISKS:\n1. [Risk] → [Mitigation]\n2. [Risk] → [Mitigation]\n3. [Risk] → [Mitigation]',
+      RECOMMENDATION: 'RECOMMENDATION: [Clear go/no-go with decision criteria]',
     };
 
     validation.missing_elements.forEach((element) => {
@@ -314,14 +302,10 @@ export class ModeLinter {
     let correction = `TRUTH MODE COMPLIANCE FAILURE\n\nThe response lacks required truth enforcement elements:\n\n`;
 
     const missingTemplates = {
-      DIRECT_ANSWER:
-        "START WITH DIRECT ANSWER: [Clear, specific response to the question]",
-      CONFIDENCE_PERCENTAGE:
-        "CONFIDENCE: [High/Medium/Low/Unknown] based on [specific reasoning]",
-      UNKNOWN_ACKNOWLEDGMENT:
-        'ACKNOWLEDGE UNCERTAINTY: Use "I don\'t know" when appropriate',
-      ASSUMPTION_CHALLENGE:
-        "CHALLENGE ASSUMPTIONS: Question underlying premises in the question",
+      DIRECT_ANSWER: 'START WITH DIRECT ANSWER: [Clear, specific response to the question]',
+      CONFIDENCE_PERCENTAGE: 'CONFIDENCE: [High/Medium/Low/Unknown] based on [specific reasoning]',
+      UNKNOWN_ACKNOWLEDGMENT: 'ACKNOWLEDGE UNCERTAINTY: Use "I don\'t know" when appropriate',
+      ASSUMPTION_CHALLENGE: 'CHALLENGE ASSUMPTIONS: Question underlying premises in the question',
     };
 
     validation.missing_elements.forEach((element) => {
@@ -339,13 +323,10 @@ export class ModeLinter {
     let correction = `VAULT MODE COMPLIANCE FAILURE\n\nThe response lacks required Site Monkeys vault elements:\n\n`;
 
     const missingTemplates = {
-      OPERATIONAL_DECISION:
-        "OPERATIONAL DECISION: [Site Monkeys specific context]",
-      COMPLIANCE_STATUS:
-        "COMPLIANCE STATUS: [How this aligns with vault constraints]",
-      QUALITY_IMPACT: "QUALITY IMPACT: [Effect on service standards]",
-      ENFORCED_PROTOCOL:
-        "ENFORCED PROTOCOL: [Specific procedures or requirements]",
+      OPERATIONAL_DECISION: 'OPERATIONAL DECISION: [Site Monkeys specific context]',
+      COMPLIANCE_STATUS: 'COMPLIANCE STATUS: [How this aligns with vault constraints]',
+      QUALITY_IMPACT: 'QUALITY IMPACT: [Effect on service standards]',
+      ENFORCED_PROTOCOL: 'ENFORCED PROTOCOL: [Specific procedures or requirements]',
     };
 
     validation.missing_elements.forEach((element) => {
@@ -369,9 +350,7 @@ export class ModeLinter {
       missing_critical_elements: validation.missing_elements,
       drift_detected: validation.drift_detected,
       correction_required: validation.correction_needed,
-      enforcement_actions: validation.correction_needed
-        ? ["APPLY_FALLBACK_CORRECTION"]
-        : [],
+      enforcement_actions: validation.correction_needed ? ['APPLY_FALLBACK_CORRECTION'] : [],
       timestamp: new Date().toISOString(),
     };
   }
@@ -394,7 +373,7 @@ export function enforceModeCompliance(response, validation) {
     return {
       original_blocked: true,
       enforcement_response: validation.fallback_correction,
-      compliance_status: "ENFORCED_CORRECTION_APPLIED",
+      compliance_status: 'ENFORCED_CORRECTION_APPLIED',
     };
   }
 

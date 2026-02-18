@@ -11,19 +11,11 @@ export class MemoryIntelligenceBridge {
   constructor() {
     this.initialized = false;
     this.logger = {
-      log: (msg) =>
-        console.log(
-          `[MEMORY-INTELLIGENCE-BRIDGE] ${new Date().toISOString()} ${msg}`,
-        ),
+      log: (msg) => console.log(`[MEMORY-INTELLIGENCE-BRIDGE] ${new Date().toISOString()} ${msg}`),
       error: (msg, err) =>
-        console.error(
-          `[MEMORY-INTELLIGENCE-BRIDGE ERROR] ${new Date().toISOString()} ${msg}`,
-          err,
-        ),
+        console.error(`[MEMORY-INTELLIGENCE-BRIDGE ERROR] ${new Date().toISOString()} ${msg}`, err),
       warn: (msg) =>
-        console.warn(
-          `[MEMORY-INTELLIGENCE-BRIDGE WARN] ${new Date().toISOString()} ${msg}`,
-        ),
+        console.warn(`[MEMORY-INTELLIGENCE-BRIDGE WARN] ${new Date().toISOString()} ${msg}`),
     };
   }
 
@@ -36,13 +28,13 @@ export class MemoryIntelligenceBridge {
       if (!memoryContext || !memoryContext.contextFound) {
         return {
           hasMemory: false,
-          formattedMemory: "",
+          formattedMemory: '',
           personalityPrompt: this.getNoMemoryPrompt(personality),
         };
       }
 
       // FIXED: Single, consistent memory format for all personalities
-      const memories = memoryContext.memories || "";
+      const memories = memoryContext.memories || '';
       const cleanedMemories = memories.trim();
 
       // FIXED: Direct personality prompt injection (no competing formats)
@@ -62,10 +54,10 @@ Use this context to provide continuity. Reference prior discussions with phrases
         personalityPrompt: personalityPrompt,
       };
     } catch (error) {
-      this.logger.error("Memory formatting error:", error);
+      this.logger.error('Memory formatting error:', error);
       return {
         hasMemory: false,
-        formattedMemory: "",
+        formattedMemory: '',
         personalityPrompt: this.getErrorPrompt(personality),
       };
     }
@@ -80,10 +72,7 @@ Use this context to provide continuity. Reference prior discussions with phrases
     }
 
     // Add reasoning support if available
-    if (
-      memoryContext.reasoningSupport &&
-      memoryContext.reasoningSupport.length > 0
-    ) {
+    if (memoryContext.reasoningSupport && memoryContext.reasoningSupport.length > 0) {
       formatted += `=== REASONING CONTEXT ===\n`;
       memoryContext.reasoningSupport.forEach((item) => {
         formatted += `• ${item.content} (${item.reasoning_type})\n`;
@@ -92,13 +81,10 @@ Use this context to provide continuity. Reference prior discussions with phrases
     }
 
     // Add cross-domain connections
-    if (
-      memoryContext.crossDomainConnections &&
-      memoryContext.crossDomainConnections.length > 0
-    ) {
+    if (memoryContext.crossDomainConnections && memoryContext.crossDomainConnections.length > 0) {
       formatted += `=== RELATED INSIGHTS ===\n`;
       memoryContext.crossDomainConnections.forEach((item) => {
-        formatted += `• ${item.content} (domains: ${item.shared_domains.join(", ")})\n`;
+        formatted += `• ${item.content} (domains: ${item.shared_domains.join(', ')})\n`;
       });
       formatted += `\n`;
     }
@@ -107,7 +93,7 @@ Use this context to provide continuity. Reference prior discussions with phrases
   }
 
   formatStandardMemory(memories, _personality) {
-    if (!memories || memories.trim() === "") return "";
+    if (!memories || memories.trim() === '') return '';
 
     return `=== CONTEXT FROM YOUR MEMORY ===\n${memories}\n\n`;
   }
@@ -125,13 +111,13 @@ ${formattedMemory}
 `;
 
     switch (personality) {
-      case "roxy":
+      case 'roxy':
         return (
           basePrompt +
           `As Roxy, acknowledge when you're referencing previous conversations with phrases like "Earlier you mentioned..." or "Based on what you told me before...". Show that you remember and care about ongoing concerns.`
         );
 
-      case "eli":
+      case 'eli':
         return (
           basePrompt +
           `As Eli, reference previous context for strategic continuity. Use phrases like "Given our previous discussion about..." or "Building on the context you provided earlier...". Maintain analytical thread across conversations.`
@@ -147,10 +133,10 @@ ${formattedMemory}
 
   getNoMemoryPrompt(personality) {
     switch (personality) {
-      case "roxy":
+      case 'roxy':
         return `You don't have access to previous conversation context in this interaction. If the user references something they told you before, acknowledge this limitation and ask them to remind you of the key details.`;
 
-      case "eli":
+      case 'eli':
         return `No previous conversation context is available. If strategic continuity is needed, request the user to provide relevant background information.`;
 
       default:
@@ -179,115 +165,81 @@ ${formattedMemory}
 
   detectReasoningNeeds(message) {
     const reasoningIndicators = [
-      "why",
-      "how",
-      "because",
-      "explain",
-      "reason",
-      "cause",
-      "logic",
-      "analysis",
-      "evaluate",
-      "assess",
-      "compare",
-      "pros and cons",
+      'why',
+      'how',
+      'because',
+      'explain',
+      'reason',
+      'cause',
+      'logic',
+      'analysis',
+      'evaluate',
+      'assess',
+      'compare',
+      'pros and cons',
     ];
-    return reasoningIndicators.some((indicator) =>
-      message.toLowerCase().includes(indicator),
-    );
+    return reasoningIndicators.some((indicator) => message.toLowerCase().includes(indicator));
   }
 
   detectCrossDomainNeeds(message, mode) {
     const crossDomainIndicators = [
-      "impact",
-      "affect",
-      "influence",
-      "relate",
-      "connection",
-      "implication",
+      'impact',
+      'affect',
+      'influence',
+      'relate',
+      'connection',
+      'implication',
     ];
     return (
-      mode === "business_validation" ||
-      mode === "site_monkeys" ||
-      crossDomainIndicators.some((indicator) =>
-        message.toLowerCase().includes(indicator),
-      )
+      mode === 'business_validation' ||
+      mode === 'site_monkeys' ||
+      crossDomainIndicators.some((indicator) => message.toLowerCase().includes(indicator))
     );
   }
 
   detectScenarioNeeds(message, mode) {
-    const scenarioIndicators = [
-      "what if",
-      "scenario",
-      "outcome",
-      "result",
-      "consequence",
-      "plan",
-    ];
+    const scenarioIndicators = ['what if', 'scenario', 'outcome', 'result', 'consequence', 'plan'];
     return (
-      mode === "business_validation" ||
-      mode === "site_monkeys" ||
-      scenarioIndicators.some((indicator) =>
-        message.toLowerCase().includes(indicator),
-      )
+      mode === 'business_validation' ||
+      mode === 'site_monkeys' ||
+      scenarioIndicators.some((indicator) => message.toLowerCase().includes(indicator))
     );
   }
 
   detectQuantitativeNeeds(message) {
-    return (
-      /\d/.test(message) ||
-      /cost|price|revenue|profit|budget|roi/i.test(message)
-    );
+    return /\d/.test(message) || /cost|price|revenue|profit|budget|roi/i.test(message);
   }
 
   // ================================================================
   // CRITICAL FIX 4: SYSTEM INTEGRATION METHODS
   // ================================================================
 
-  async integrateMemoryAndIntelligence(
-    message,
-    userId,
-    personality,
-    mode,
-    expertDomain,
-  ) {
+  async integrateMemoryAndIntelligence(message, userId, personality, mode, expertDomain) {
     try {
-      this.logger.log(
-        `Integrating memory and intelligence for ${personality} in ${mode} mode`,
-      );
+      this.logger.log(`Integrating memory and intelligence for ${personality} in ${mode} mode`);
 
       // Step 1: Build intelligence context
-      const intelligenceContext = this.buildIntelligenceContext(
-        message,
-        mode,
-        expertDomain,
-      );
+      const intelligenceContext = this.buildIntelligenceContext(message, mode, expertDomain);
 
       // Step 2: Get memory with intelligence enhancement
       let memoryContext = null;
 
       if (global.memorySystem) {
         if (global.memorySystem.extractIntelligentMemory) {
-          this.logger.log("Using intelligent memory extraction");
+          this.logger.log('Using intelligent memory extraction');
           memoryContext = await global.memorySystem.extractIntelligentMemory(
             message,
             userId,
             intelligenceContext,
           );
         } else if (global.memorySystem.retrieveMemory) {
-          this.logger.log("Using standard memory retrieval");
-          memoryContext = await global.memorySystem.retrieveMemory(
-            userId,
-            message,
-          );
+          this.logger.log('Using standard memory retrieval');
+          memoryContext = await global.memorySystem.retrieveMemory(userId, message);
         }
       }
 
       // Step 3: Format for personality consumption
-      const formattedMemory = this.formatMemoryForPersonalities(
-        memoryContext,
-        personality,
-      );
+      const formattedMemory = this.formatMemoryForPersonalities(memoryContext, personality);
 
       // Step 4: Return integrated context
       return {
@@ -297,11 +249,11 @@ ${formattedMemory}
         integrationSuccess: true,
       };
     } catch (error) {
-      this.logger.error("Memory-Intelligence integration failed:", error);
+      this.logger.error('Memory-Intelligence integration failed:', error);
       return {
         memoryContext: {
           hasMemory: false,
-          formattedMemory: "",
+          formattedMemory: '',
           personalityPrompt: this.getErrorPrompt(personality),
         },
         intelligenceContext: null,
@@ -321,18 +273,17 @@ ${formattedMemory}
       bridge_initialized: this.initialized,
       memory_system_available: !!global.memorySystem,
       memory_system_ready: global.memorySystem?.isReady() || false,
-      intelligent_memory_available:
-        !!global.memorySystem?.extractIntelligentMemory,
+      intelligent_memory_available: !!global.memorySystem?.extractIntelligentMemory,
       standard_memory_available: !!global.memorySystem?.retrieveMemory,
       timestamp: new Date().toISOString(),
     };
 
-    this.logger.log("Health check results:", JSON.stringify(health, null, 2));
+    this.logger.log('Health check results:', JSON.stringify(health, null, 2));
     return health;
   }
 
   initialize() {
-    this.logger.log("Initializing Memory-Intelligence Bridge...");
+    this.logger.log('Initializing Memory-Intelligence Bridge...');
     this.initialized = true;
     return this.performHealthCheck();
   }

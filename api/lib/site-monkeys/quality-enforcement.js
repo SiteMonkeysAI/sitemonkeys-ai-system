@@ -1,11 +1,7 @@
 // SITE MONKEYS QUALITY ENFORCEMENT
 // AI Output Quality Gates and Validation Pipeline
 
-import {
-  callClaudeAPI,
-  callGPT4API,
-  callMistralAPI,
-} from "./ai-architecture.js";
+import { callClaudeAPI, callGPT4API, callMistralAPI } from './ai-architecture.js';
 
 const QUALITY_ENFORCEMENT = {
   // TIER-BASED QUALITY THRESHOLDS
@@ -17,10 +13,10 @@ const QUALITY_ENFORCEMENT = {
 
   // AI ARCHITECTURE FAILOVER CHAIN
   ai_architecture: {
-    primary: "claude-3-sonnet",
-    secondary: "gpt-4",
-    tertiary: "mistral",
-    emergency: "template_library",
+    primary: 'claude-3-sonnet',
+    secondary: 'gpt-4',
+    tertiary: 'mistral',
+    emergency: 'template_library',
   },
 
   // QUALITY VALIDATION WEIGHTS
@@ -34,24 +30,22 @@ const QUALITY_ENFORCEMENT = {
 
   // TEMPLATE FALLBACK CATEGORIES
   template_categories: {
-    seo_audit: "Pre-approved SEO audit templates by industry",
-    blog_content: "Industry-specific blog templates",
-    ppc_campaigns: "Campaign templates by vertical",
-    review_responses: "Professional review response templates",
-    social_content: "Brand-aligned social media templates",
+    seo_audit: 'Pre-approved SEO audit templates by industry',
+    blog_content: 'Industry-specific blog templates',
+    ppc_campaigns: 'Campaign templates by vertical',
+    review_responses: 'Professional review response templates',
+    social_content: 'Brand-aligned social media templates',
   },
 
   // *** CRITICAL: MISSING OBJECTS THAT CHAT.JS REQUIRES ***
   response_standards: {
     vault_based:
-      "QUALITY ENFORCEMENT: Response generated using Site Monkeys business intelligence vault.",
-    fallback_mode:
-      "EMERGENCY MODE: Response using hardcoded fallback protocols.",
+      'QUALITY ENFORCEMENT: Response generated using Site Monkeys business intelligence vault.',
+    fallback_mode: 'EMERGENCY MODE: Response using hardcoded fallback protocols.',
   },
 
   minimum_standards: {
-    response_depth:
-      "QUALITY ENFORCEMENT: Response enhanced for minimum depth requirements.",
+    response_depth: 'QUALITY ENFORCEMENT: Response enhanced for minimum depth requirements.',
   },
 };
 
@@ -92,43 +86,31 @@ async function processWithFailover(prompt, customerTier, maxAttempts = 3) {
       // Primary: Claude 3.5
       if (attempts === 0) {
         const claudeResult = await callClaudeAPI(prompt);
-        const quality = await validateAIOutput(
-          claudeResult,
-          customerTier,
-          "general",
-        );
+        const quality = await validateAIOutput(claudeResult, customerTier, 'general');
 
         if (quality.passes) {
-          return { result: claudeResult, source: "claude", quality: quality };
+          return { result: claudeResult, source: 'claude', quality: quality };
         }
       }
 
       // Secondary: GPT-4 fallback
       if (attempts === 1) {
         const gpt4Result = await callGPT4API(prompt);
-        const quality = await validateAIOutput(
-          gpt4Result,
-          customerTier,
-          "general",
-        );
+        const quality = await validateAIOutput(gpt4Result, customerTier, 'general');
 
         if (quality.passes) {
-          return { result: gpt4Result, source: "gpt4", quality: quality };
+          return { result: gpt4Result, source: 'gpt4', quality: quality };
         }
       }
 
       // Tertiary: Mistral emergency backup
       if (attempts === 2) {
         const mistralResult = await callMistralAPI(prompt);
-        const quality = await validateAIOutput(
-          mistralResult,
-          customerTier,
-          "general",
-        );
+        const quality = await validateAIOutput(mistralResult, customerTier, 'general');
 
         if (quality.score >= 0.8) {
           // Lower threshold for emergency
-          return { result: mistralResult, source: "mistral", quality: quality };
+          return { result: mistralResult, source: 'mistral', quality: quality };
         }
       }
 
@@ -140,12 +122,12 @@ async function processWithFailover(prompt, customerTier, maxAttempts = 3) {
   }
 
   // Final fallback: Template library
-  console.warn("🚨 All AI models failed - using template fallback");
+  console.warn('🚨 All AI models failed - using template fallback');
   const templateResult = await getEmergencyTemplate(prompt.type, customerTier);
 
   return {
     result: templateResult,
-    source: "template",
+    source: 'template',
     quality: { score: 0.85, passes: true, fallback: true },
   };
 }
@@ -162,7 +144,7 @@ function assessCoherence(output) {
   let score = 0.8; // Base score
 
   // Penalize obvious errors
-  if (output.includes("undefined") || output.includes("null")) score -= 0.3;
+  if (output.includes('undefined') || output.includes('null')) score -= 0.3;
   if (output.match(/\b(um|uh|like)\b/gi)) score -= 0.1;
 
   return Math.max(0, Math.min(1, score));
@@ -171,10 +153,10 @@ function assessCoherence(output) {
 function assessRelevance(output, contentType) {
   // Check if output matches expected content type
   const contentKeywords = {
-    seo_audit: ["keywords", "optimization", "ranking", "SEO", "search"],
-    blog_content: ["article", "content", "blog", "information"],
-    ppc_campaigns: ["ads", "campaign", "PPC", "advertising", "clicks"],
-    review_response: ["thank", "response", "feedback", "review"],
+    seo_audit: ['keywords', 'optimization', 'ranking', 'SEO', 'search'],
+    blog_content: ['article', 'content', 'blog', 'information'],
+    ppc_campaigns: ['ads', 'campaign', 'PPC', 'advertising', 'clicks'],
+    review_response: ['thank', 'response', 'feedback', 'review'],
   };
 
   const keywords = contentKeywords[contentType] || [];
@@ -189,14 +171,8 @@ function assessRelevance(output, contentType) {
 
 function assessBrandAlignment(output) {
   // Check for Site Monkeys brand consistency
-  const brandPositive = [
-    "professional",
-    "quality",
-    "results",
-    "success",
-    "expert",
-  ];
-  const brandNegative = ["cheap", "basic", "simple", "easy"];
+  const brandPositive = ['professional', 'quality', 'results', 'success', 'expert'];
+  const brandNegative = ['cheap', 'basic', 'simple', 'easy'];
 
   const outputLower = output.toLowerCase();
 
@@ -216,10 +192,10 @@ function assessBrandAlignment(output) {
 function assessAccuracy(output) {
   // Basic accuracy checks - avoid obviously false claims
   const problematicPhrases = [
-    "guaranteed #1 ranking",
-    "instant results",
-    "100% success rate",
-    "no work required",
+    'guaranteed #1 ranking',
+    'instant results',
+    '100% success rate',
+    'no work required',
   ];
 
   let score = 0.9; // High base score
@@ -265,19 +241,14 @@ async function getEmergencyTemplate(contentType, customerTier) {
   const baseTemplate = templates[contentType] || templates.blog_content;
 
   // Add tier-specific enhancements
-  if (customerTier === "lead") {
+  if (customerTier === 'lead') {
     return (
       baseTemplate +
-      " Our premium analysis includes advanced recommendations tailored specifically for your business goals."
+      ' Our premium analysis includes advanced recommendations tailored specifically for your business goals.'
     );
   }
 
   return baseTemplate;
 }
 
-export {
-  QUALITY_ENFORCEMENT,
-  validateAIOutput,
-  processWithFailover,
-  getEmergencyTemplate,
-};
+export { QUALITY_ENFORCEMENT, validateAIOutput, processWithFailover, getEmergencyTemplate };

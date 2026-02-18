@@ -14,7 +14,7 @@ export class PersonalitySelector {
 
   selectPersonality(analysis, mode, _context) {
     try {
-      this.logger.log("Selecting personality based on analysis...");
+      this.logger.log('Selecting personality based on analysis...');
 
       let score = {
         eli: 0,
@@ -22,20 +22,14 @@ export class PersonalitySelector {
       };
 
       // Domain-based selection
-      if (analysis.domain === "business" || analysis.domain === "technical") {
+      if (analysis.domain === 'business' || analysis.domain === 'technical') {
         score.eli += 3;
-      } else if (
-        analysis.domain === "personal" ||
-        analysis.domain === "creative"
-      ) {
+      } else if (analysis.domain === 'personal' || analysis.domain === 'creative') {
         score.roxy += 3;
       }
 
       // Intent-based selection
-      if (
-        analysis.intent === "problem_solving" ||
-        analysis.intent === "decision_making"
-      ) {
+      if (analysis.intent === 'problem_solving' || analysis.intent === 'decision_making') {
         if (analysis.complexity > 0.7) {
           score.eli += 2;
         } else {
@@ -49,7 +43,7 @@ export class PersonalitySelector {
       }
 
       // Mode preference
-      if (mode === "business_validation" || mode === "site_monkeys") {
+      if (mode === 'business_validation' || mode === 'site_monkeys') {
         score.eli += 2;
       }
 
@@ -70,25 +64,21 @@ export class PersonalitySelector {
         );
 
         return {
-          personality: "eli",
+          personality: 'eli',
           confidence: selectionConfidence,
           fallback: true,
-          reason:
-            "Selection confidence below threshold, defaulted to Eli for analytical safety",
+          reason: 'Selection confidence below threshold, defaulted to Eli for analytical safety',
         };
       }
 
       // ========== CONTRACT VALIDATION (NEW) ==========
-      if (mode === "site_monkeys") {
+      if (mode === 'site_monkeys') {
         const isBusinessTechnical =
-          analysis.domain === "business" || analysis.domain === "technical";
+          analysis.domain === 'business' || analysis.domain === 'technical';
 
-        if (
-          isBusinessTechnical &&
-          Math.abs(eliConfidence - roxyConfidence) < 0.15
-        ) {
+        if (isBusinessTechnical && Math.abs(eliConfidence - roxyConfidence) < 0.15) {
           return {
-            personality: "eli",
+            personality: 'eli',
             confidence: eliConfidence,
             override: true,
             reason:
@@ -98,13 +88,10 @@ export class PersonalitySelector {
       }
 
       // ========== NORMAL SELECTION ==========
-      const selectedPersonality =
-        eliConfidence > roxyConfidence ? "eli" : "roxy";
+      const selectedPersonality = eliConfidence > roxyConfidence ? 'eli' : 'roxy';
       const selectedConfidence = Math.max(eliConfidence, roxyConfidence);
 
-      this.logger.log(
-        `Selected ${selectedPersonality} (Eli: ${score.eli}, Roxy: ${score.roxy})`,
-      );
+      this.logger.log(`Selected ${selectedPersonality} (Eli: ${score.eli}, Roxy: ${score.roxy})`);
 
       return {
         personality: selectedPersonality,
@@ -113,10 +100,10 @@ export class PersonalitySelector {
         reasoning: `Domain: ${analysis.domain}, Intent: ${analysis.intent}, Mode: ${mode}`,
       };
     } catch (error) {
-      this.logger.error("Personality selection failed", error);
+      this.logger.error('Personality selection failed', error);
 
       return {
-        personality: "eli",
+        personality: 'eli',
         confidence: 0.5,
         fallback: true,
         error: error.message,
@@ -127,26 +114,26 @@ export class PersonalitySelector {
   #explainSelection(selected, analysis, mode, _score) {
     const reasons = [];
 
-    if (analysis.domain === "business" && selected === "eli") {
-      reasons.push("Business domain benefits from analytical framework");
+    if (analysis.domain === 'business' && selected === 'eli') {
+      reasons.push('Business domain benefits from analytical framework');
     }
 
-    if (analysis.emotionalWeight > 0.6 && selected === "roxy") {
-      reasons.push("Emotional context requires empathetic approach");
+    if (analysis.emotionalWeight > 0.6 && selected === 'roxy') {
+      reasons.push('Emotional context requires empathetic approach');
     }
 
-    if (mode === "business_validation" && selected === "eli") {
-      reasons.push("Business validation mode prioritizes risk analysis");
+    if (mode === 'business_validation' && selected === 'eli') {
+      reasons.push('Business validation mode prioritizes risk analysis');
     }
 
-    if (analysis.complexity > 0.8 && selected === "eli") {
-      reasons.push("High complexity requires protective intelligence");
+    if (analysis.complexity > 0.8 && selected === 'eli') {
+      reasons.push('High complexity requires protective intelligence');
     }
 
-    if (analysis.domain === "personal" && selected === "roxy") {
-      reasons.push("Personal domain benefits from supportive approach");
+    if (analysis.domain === 'personal' && selected === 'roxy') {
+      reasons.push('Personal domain benefits from supportive approach');
     }
 
-    return reasons.length > 0 ? reasons.join("; ") : "Score-based selection";
+    return reasons.length > 0 ? reasons.join('; ') : 'Score-based selection';
   }
 }

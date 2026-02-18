@@ -3,39 +3,37 @@
 
 // ==================== SELF-CONTAINED IMPORTS ====================
 // Only import from files that definitely exist
-import _OpenAI from "openai";
-import crypto from "crypto";
-import { EnhancedIntelligence } from "./enhanced-intelligence.js";
+import _OpenAI from 'openai';
+import crypto from 'crypto';
+import { EnhancedIntelligence } from './enhanced-intelligence.js';
 
 // PHASE 4/5 IMPORTS - Truth validation and external lookup
-import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
-import { route } from "../core/intelligence/hierarchyRouter.js";
-import { lookup } from "../core/intelligence/externalLookupEngine.js";
-import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
-import { classifyQueryComplexity } from "../core/intelligence/queryComplexityClassifier.js";
+import { detectTruthType } from '../core/intelligence/truthTypeDetector.js';
+import { route } from '../core/intelligence/hierarchyRouter.js';
+import { lookup } from '../core/intelligence/externalLookupEngine.js';
+import { enforceAll } from '../core/intelligence/doctrineEnforcer.js';
+import { classifyQueryComplexity } from '../core/intelligence/queryComplexityClassifier.js';
 
 // MEMORY USAGE ENFORCER - Issue #582: Prevents AI from claiming ignorance when memory was provided
-import { memoryUsageEnforcer } from "../lib/validators/memory-usage-enforcer.js";
+import { memoryUsageEnforcer } from '../lib/validators/memory-usage-enforcer.js';
 
 // STEP 5: Response quality consolidation
 import {
   removeEngagementBait,
   addBlindSpots,
   addUncertaintyStructure,
-} from "../services/response-enhancer.js";
+} from '../services/response-enhancer.js';
 
 // Helper function to generate secure IDs with timestamp
-function generateId(prefix = "") {
+function generateId(prefix = '') {
   let randomPart;
-  if (typeof crypto.randomUUID === "function") {
+  if (typeof crypto.randomUUID === 'function') {
     randomPart = crypto.randomUUID();
   } else {
-    randomPart = crypto.randomBytes(16).toString("hex");
+    randomPart = crypto.randomBytes(16).toString('hex');
   }
   const timestamp = Date.now();
-  return prefix
-    ? `${prefix}-${timestamp}-${randomPart}`
-    : `${timestamp}-${randomPart}`;
+  return prefix ? `${prefix}-${timestamp}-${randomPart}` : `${timestamp}-${randomPart}`;
 }
 
 // ==================== INTERNAL STATE MANAGEMENT ====================
@@ -51,7 +49,7 @@ let tokenTracker = {
     total_session: 0,
   },
   calls: { eli_calls: 0, roxy_calls: 0, claude_calls: 0 },
-  last_call: { cost: 0, tokens: 0, ai: "none" },
+  last_call: { cost: 0, tokens: 0, ai: 'none' },
 };
 
 // OVERRIDE PATTERN DETECTION
@@ -81,15 +79,18 @@ const enhancedIntelligence = new EnhancedIntelligence();
 const sessionRefusals = new Map();
 
 // Cleanup interval for refusal tracking (every 10 minutes)
-setInterval(() => {
-  const now = Date.now();
-  const TTL = 30 * 60 * 1000; // 30 minutes
-  for (const [sessionId, refusal] of sessionRefusals.entries()) {
-    if (now - refusal.timestamp > TTL) {
-      sessionRefusals.delete(sessionId);
+setInterval(
+  () => {
+    const now = Date.now();
+    const TTL = 30 * 60 * 1000; // 30 minutes
+    for (const [sessionId, refusal] of sessionRefusals.entries()) {
+      if (now - refusal.timestamp > TTL) {
+        sessionRefusals.delete(sessionId);
+      }
     }
-  }
-}, 10 * 60 * 1000);
+  },
+  10 * 60 * 1000,
+);
 
 // ==================== MAIN PROCESSING FUNCTION ====================
 
@@ -108,70 +109,49 @@ export async function processWithEliAndRoxy({
   documentContext = null, // FIX #766: Uploaded file content from orchestrator
 }) {
   try {
-    console.log("🧠 COGNITIVE FIREWALL: Full enforcement processing initiated");
+    console.log('🧠 COGNITIVE FIREWALL: Full enforcement processing initiated');
 
     // TIER 1: CORE FUNCTIONAL FRAMEWORK
 
     // Personality routing with mode-specific reasoning logic
-    const routingDecision = determineAIRouting(
-      message,
-      mode,
-      claudeRequested,
-      userPreference,
-    );
-    console.log("🎯 AI Routing Decision:", routingDecision);
+    const routingDecision = determineAIRouting(message, mode, claudeRequested, userPreference);
+    console.log('🎯 AI Routing Decision:', routingDecision);
 
     // Vault context and trigger detection
-    const triggeredFrameworks = vaultVerification.allowed
-      ? checkVaultTriggers(message)
-      : [];
-    const vaultContext = vaultVerification.allowed
-      ? generateVaultContext(triggeredFrameworks)
-      : "";
+    const triggeredFrameworks = vaultVerification.allowed ? checkVaultTriggers(message) : [];
+    const vaultContext = vaultVerification.allowed ? generateVaultContext(triggeredFrameworks) : '';
 
     if (triggeredFrameworks.length > 0) {
       console.log(
-        "🍌 Vault frameworks triggered:",
+        '🍌 Vault frameworks triggered:',
         triggeredFrameworks.map((tf) => tf.name),
       );
-      trackTokenUsage("vault", 500); // Vault context tokens
+      trackTokenUsage('vault', 500); // Vault context tokens
     }
 
     // Mode-specific reasoning enhancement
-    const modeContext = generateModeSpecificContext(
-      mode,
-      message,
-      vaultContext,
-    );
+    const modeContext = generateModeSpecificContext(mode, message, vaultContext);
 
     // TIER 2: COGNITIVE FIREWALL ENFORCEMENT (PRE-GENERATION)
 
     // Pre-generation assumption detection
     const preAssumptionCheck = detectPreGenerationAssumptions(message, mode);
     if (preAssumptionCheck.violations.length > 0) {
-      console.log(
-        "⚠️ Pre-generation assumptions detected:",
-        preAssumptionCheck.violations,
-      );
+      console.log('⚠️ Pre-generation assumptions detected:', preAssumptionCheck.violations);
       trackOverride(
-        "PRE_ASSUMPTION_DETECTION",
+        'PRE_ASSUMPTION_DETECTION',
         preAssumptionCheck.violations,
         userPreference,
-        "pre_generation_check",
+        'pre_generation_check',
       );
     }
 
     // Enhanced prompt injection based on mode
-    const enhancedPrompt = injectModeEnforcement(
-      message,
-      mode,
-      modeContext,
-      preAssumptionCheck,
-    );
+    const enhancedPrompt = injectModeEnforcement(message, mode, modeContext, preAssumptionCheck);
 
     // SESSION-LEVEL REFUSAL CONTEXT (Issue #744 - TRU1)
     // Build refusal context string if a prior refusal exists in this session
-    let refusalContext = "";
+    let refusalContext = '';
     if (sessionId && sessionRefusals.has(sessionId)) {
       const priorRefusal = sessionRefusals.get(sessionId);
       const turnsSince = conversationHistory.length - priorRefusal.turnNumber;
@@ -182,15 +162,17 @@ export async function processWithEliAndRoxy({
 Your reasoning was: ${priorRefusal.reason}. If the user asks again or pushes back, maintain your
 position and explain your reasoning again. Do not reverse a principled refusal.`;
 
-        console.log(`[REFUSAL-CONTEXT] Injecting prior refusal for topic: ${priorRefusal.topic}, turn gap: ${turnsSince}`);
+        console.log(
+          `[REFUSAL-CONTEXT] Injecting prior refusal for topic: ${priorRefusal.topic}, turn gap: ${turnsSince}`,
+        );
       }
     }
 
     // PHASE 4: TRUTH TYPE DETECTION AND EXTERNAL LOOKUP (PRE-GENERATION)
-    console.log("🔍 PHASE 4: Truth type detection and external lookup");
+    console.log('🔍 PHASE 4: Truth type detection and external lookup');
     let phase4Metadata = {
       truth_type: null,
-      source_class: "internal",
+      source_class: 'internal',
       verified_at: null,
       cache_valid_until: null,
       external_lookup: false,
@@ -198,7 +180,7 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     };
 
     // External context to inject into AI prompts
-    let externalContext = "";
+    let externalContext = '';
 
     try {
       // Step 1: Detect truth type
@@ -223,11 +205,8 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
       );
 
       // Step 3: External lookup if needed
-      if (
-        routeResult.external_lookup_required ||
-        truthTypeResult.type === "VOLATILE"
-      ) {
-        console.log("🌐 External lookup required, performing lookup...");
+      if (routeResult.external_lookup_required || truthTypeResult.type === 'VOLATILE') {
+        console.log('🌐 External lookup required, performing lookup...');
         const lookupResult = await lookup(message, {
           internalConfidence: phase4Metadata.confidence,
           mode,
@@ -245,7 +224,7 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
 
           phase4Metadata.external_lookup = true;
           phase4Metadata.lookup_attempted = true;
-          phase4Metadata.source_class = "external";
+          phase4Metadata.source_class = 'external';
           phase4Metadata.verified_at = new Date().toISOString();
           phase4Metadata.sources_used = lookupResult.sources_used?.length || 0;
           phase4Metadata.external_data = externalDataString;
@@ -258,17 +237,20 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
             phase4Metadata.cache_valid_until = lookupResult.cache_valid_until;
           }
 
+          console.log(`✅ External lookup successful: ${phase4Metadata.sources_used} sources`);
           console.log(
-            `✅ External lookup successful: ${phase4Metadata.sources_used} sources`,
+            `✅ External data will be injected into AI context (${externalDataString.length} chars)`,
           );
-          console.log(`✅ External data will be injected into AI context (${externalDataString.length} chars)`);
         } else {
           phase4Metadata.external_lookup = false;
           phase4Metadata.lookup_attempted = true;
 
           // PROBLEM 1 FIX: Graceful degradation with verification paths
           // When lookup fails, inject BOTH disclosure AND verification_path into AI context
-          if (lookupResult.degraded && (lookupResult.disclosure || lookupResult.verification_path)) {
+          if (
+            lookupResult.degraded &&
+            (lookupResult.disclosure || lookupResult.verification_path)
+          ) {
             let degradationContext = '\n\n⚠️ EXTERNAL LOOKUP UNAVAILABLE:\n';
 
             // Add disclosure message
@@ -279,11 +261,11 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
             // Add specific verification paths (CRITICAL: These must be in the AI response)
             if (lookupResult.verification_path && lookupResult.verification_path.sources) {
               degradationContext += `\n${lookupResult.verification_path.message || 'CHECK CURRENT INFORMATION AT:'}\n`;
-              lookupResult.verification_path.sources.forEach(source => {
+              lookupResult.verification_path.sources.forEach((source) => {
                 degradationContext += `- ${source.name}: ${source.url}\n`;
               });
               degradationContext += `\n⚠️ CRITICAL INSTRUCTION: You MUST tell the user to check these EXACT URLs for current information:\n`;
-              lookupResult.verification_path.sources.forEach(source => {
+              lookupResult.verification_path.sources.forEach((source) => {
                 degradationContext += `   "${source.name}: ${source.url}"\n`;
               });
               degradationContext += `Do NOT say "I don't have access to real-time data" without providing these URLs. Do NOT give generic advice. Provide these SPECIFIC sources.`;
@@ -295,14 +277,16 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
             externalContext = `\n\n⚠️ EXTERNAL LOOKUP DISCLOSURE:\n${lookupResult.disclosure}\n`;
           }
 
-          console.log("⚠️ External lookup attempted but failed or returned no data");
+          console.log('⚠️ External lookup attempted but failed or returned no data');
           if (lookupResult.verification_path) {
-            console.log(`✅ Verification path injected with ${lookupResult.verification_path.sources?.length || 0} sources`);
+            console.log(
+              `✅ Verification path injected with ${lookupResult.verification_path.sources?.length || 0} sources`,
+            );
           }
         }
       }
     } catch (phase4Error) {
-      console.error("⚠️ Phase 4 pipeline error:", phase4Error);
+      console.error('⚠️ Phase 4 pipeline error:', phase4Error);
       // Continue with internal processing even if Phase 4 fails
       phase4Metadata.phase4_error = phase4Error.message;
     }
@@ -313,9 +297,15 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     try {
       console.log('🎯 [QUERY_CLASSIFICATION] Analyzing query complexity...');
       queryClassification = await classifyQueryComplexity(message, phase4Metadata);
-      console.log(`🎯 [QUERY_CLASSIFICATION] Result: ${queryClassification.classification} (confidence: ${queryClassification.confidence.toFixed(2)})`);
-      console.log(`🎯 [QUERY_CLASSIFICATION] Scaffolding required: ${queryClassification.requiresScaffolding}`);
-      console.log(`🎯 [QUERY_CLASSIFICATION] Response approach: ${queryClassification.responseApproach?.type || 'default'}`);
+      console.log(
+        `🎯 [QUERY_CLASSIFICATION] Result: ${queryClassification.classification} (confidence: ${queryClassification.confidence.toFixed(2)})`,
+      );
+      console.log(
+        `🎯 [QUERY_CLASSIFICATION] Scaffolding required: ${queryClassification.requiresScaffolding}`,
+      );
+      console.log(
+        `🎯 [QUERY_CLASSIFICATION] Response approach: ${queryClassification.responseApproach?.type || 'default'}`,
+      );
     } catch (classificationError) {
       console.error('⚠️ Query classification error:', classificationError);
       // Continue without classification - personalities will apply default logic
@@ -323,14 +313,14 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
 
     // Create context object for personality frameworks (matches orchestrator.js pattern)
     // FIX #766: Include documentContext if available
-    let documentContextString = "";
-    
+    let documentContextString = '';
+
     // Check 4: Handle different documentContext types (string, object, array)
     if (Array.isArray(documentContext)) {
       // Multiple files - concatenate with separators
       documentContextString = documentContext
         .map((doc, idx) => {
-          const content = typeof doc === 'string' ? doc : (doc?.content || '');
+          const content = typeof doc === 'string' ? doc : doc?.content || '';
           return `=== File ${idx + 1} ===\n${content}`;
         })
         .join('\n\n');
@@ -341,13 +331,18 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     } else if (documentContext && typeof documentContext === 'object' && documentContext.content) {
       documentContextString = documentContext.content;
     }
-    
+
     // Check 1: Token budget limit - truncate large files to prevent token limit issues
     const MAX_DOCUMENT_CHARS = 8000; // ~2000 tokens for GPT-4
     if (documentContextString.length > MAX_DOCUMENT_CHARS) {
-      console.log(`[FILE-CONTENT] Truncating document context from ${documentContextString.length} to ${MAX_DOCUMENT_CHARS} chars`);
-      documentContextString = documentContextString.substring(0, MAX_DOCUMENT_CHARS) + 
-        '\n\n[... Content truncated due to length. Total length: ' + documentContextString.length + ' characters]';
+      console.log(
+        `[FILE-CONTENT] Truncating document context from ${documentContextString.length} to ${MAX_DOCUMENT_CHARS} chars`,
+      );
+      documentContextString =
+        documentContextString.substring(0, MAX_DOCUMENT_CHARS) +
+        '\n\n[... Content truncated due to length. Total length: ' +
+        documentContextString.length +
+        ' characters]';
     }
 
     const context = {
@@ -365,7 +360,7 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     let aiUsed;
 
     if (routingDecision.usesClaude) {
-      console.log("🤖 Routing to Claude for complex analysis");
+      console.log('🤖 Routing to Claude for complex analysis');
       response = await generateClaudeResponse(
         enhancedPrompt,
         mode,
@@ -376,10 +371,10 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
         refusalContext, // Issue #744: Session refusal context
         documentContextString, // FIX #766: Uploaded file content
       );
-      trackTokenUsage("claude", response.tokens_used || 800);
-      aiUsed = "Claude";
+      trackTokenUsage('claude', response.tokens_used || 800);
+      aiUsed = 'Claude';
     } else if (routingDecision.usesEli) {
-      console.log("🍌 Routing to Eli for business validation");
+      console.log('🍌 Routing to Eli for business validation');
       response = await generateEliResponse(
         enhancedPrompt,
         mode,
@@ -391,10 +386,10 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
         refusalContext, // Issue #744: Session refusal context
         documentContextString, // FIX #766: Uploaded file content
       );
-      trackTokenUsage("eli", response.tokens_used || 600);
-      aiUsed = "Eli";
+      trackTokenUsage('eli', response.tokens_used || 600);
+      aiUsed = 'Eli';
     } else {
-      console.log("🍌 Routing to Roxy for truth-first analysis");
+      console.log('🍌 Routing to Roxy for truth-first analysis');
       response = await generateRoxyResponse(
         enhancedPrompt,
         mode,
@@ -406,14 +401,14 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
         refusalContext, // Issue #744: Session refusal context
         documentContextString, // FIX #766: Uploaded file content
       );
-      trackTokenUsage("roxy", response.tokens_used || 600);
-      aiUsed = "Roxy";
+      trackTokenUsage('roxy', response.tokens_used || 600);
+      aiUsed = 'Roxy';
     }
 
-    console.log("✅ Base response generated by:", aiUsed);
+    console.log('✅ Base response generated by:', aiUsed);
 
     // PHASE 5: DOCTRINE ENFORCEMENT GATES (POST-GENERATION)
-    console.log("🛡️ PHASE 5: Applying doctrine enforcement gates");
+    console.log('🛡️ PHASE 5: Applying doctrine enforcement gates');
     let phase5Enforcement = {
       enforcement_passed: true,
       gate_results: {},
@@ -425,41 +420,39 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
       phase5Enforcement = enforceAll(
         response,
         phase4Metadata,
-        mode === "site_monkeys" ? "site_monkeys" : mode === "business_validation" ? "business_validation" : "truth",
+        mode === 'site_monkeys'
+          ? 'site_monkeys'
+          : mode === 'business_validation'
+            ? 'business_validation'
+            : 'truth',
       );
 
       if (!phase5Enforcement.enforcement_passed) {
         console.log(
-          `⚠️ Phase 5 enforcement violations: ${phase5Enforcement.violations.map(v => v.gate).join(", ")}`,
+          `⚠️ Phase 5 enforcement violations: ${phase5Enforcement.violations.map((v) => v.gate).join(', ')}`,
         );
 
         // Apply corrected response if enforcement modified it
         if (phase5Enforcement.corrected_response) {
           response.response = phase5Enforcement.corrected_response;
-          console.log("✏️ Applied enforcement corrections to response");
+          console.log('✏️ Applied enforcement corrections to response');
         }
       } else {
-        console.log("✅ Phase 5 enforcement: All gates passed");
+        console.log('✅ Phase 5 enforcement: All gates passed');
       }
     } catch (phase5Error) {
-      console.error("⚠️ Phase 5 enforcement error:", phase5Error);
+      console.error('⚠️ Phase 5 enforcement error:', phase5Error);
       phase5Enforcement.phase5_error = phase5Error.message;
     }
 
     // *** ENHANCED INTELLIGENCE LAYER - NEW ***
-    console.log("🧠 ABOUT TO CALL ENHANCED INTELLIGENCE - Testing integration");
-    console.log("🧠 Applying enhanced intelligence processing...");
+    console.log('🧠 ABOUT TO CALL ENHANCED INTELLIGENCE - Testing integration');
+    console.log('🧠 Applying enhanced intelligence processing...');
 
     let intelligenceEnhancement;
     try {
-      console.log(
-        "🔍 DEBUG: enhancedIntelligence exists:",
-        !!enhancedIntelligence,
-      );
-      console.log(
-        "🔍 DEBUG: enhanceResponse exists:",
-        !!enhancedIntelligence.enhanceResponse,
-      );
+      console.log('🔍 DEBUG: enhancedIntelligence exists:', !!enhancedIntelligence);
+      console.log('🔍 DEBUG: enhanceResponse exists:', !!enhancedIntelligence.enhanceResponse);
 
       intelligenceEnhancement = await enhancedIntelligence.enhanceResponse(
         response.response,
@@ -470,12 +463,9 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
         confidence || 0.8,
       );
 
-      console.log(
-        "🔍 DEBUG: Intelligence enhancement completed:",
-        intelligenceEnhancement,
-      );
+      console.log('🔍 DEBUG: Intelligence enhancement completed:', intelligenceEnhancement);
     } catch (error) {
-      console.error("🚨 Enhanced Intelligence ERROR:", error);
+      console.error('🚨 Enhanced Intelligence ERROR:', error);
       intelligenceEnhancement = {
         enhancedResponse: response.response,
         intelligenceApplied: [],
@@ -486,8 +476,8 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     // Update response with intelligence enhancements
     if (intelligenceEnhancement.enhancedResponse !== response.response) {
       console.log(
-        "🎯 Intelligence enhancements applied:",
-        intelligenceEnhancement.intelligenceApplied.join(", "),
+        '🎯 Intelligence enhancements applied:',
+        intelligenceEnhancement.intelligenceApplied.join(', '),
       );
       response.response = intelligenceEnhancement.enhancedResponse;
 
@@ -496,7 +486,7 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
 
       // Track intelligence usage for cost/token monitoring
       if (intelligenceEnhancement.intelligenceApplied.length > 0) {
-        trackTokenUsage("intelligence", 200); // Estimate 200 tokens for intelligence processing
+        trackTokenUsage('intelligence', 200); // Estimate 200 tokens for intelligence processing
         overridePatterns.intelligence_enhancements =
           (overridePatterns.intelligence_enhancements || 0) + 1;
       }
@@ -507,14 +497,14 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     // 1. Political Guardrails Application
     const politicalCheck = applyPoliticalGuardrails(response.response, message);
     if (politicalCheck.modified) {
-      console.log("🛡️ Political guardrails applied");
+      console.log('🛡️ Political guardrails applied');
       response.response = politicalCheck.sanitized_response;
       overridePatterns.political_neutralizations++;
       trackOverride(
-        "POLITICAL_GUARDRAILS",
+        'POLITICAL_GUARDRAILS',
         politicalCheck.violations,
         politicalCheck.modifications,
-        "political_content_neutralization",
+        'political_content_neutralization',
       );
     }
 
@@ -522,7 +512,7 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     const productValidation = validateProductRecommendations(response.response);
     if (productValidation.violations.length > 0) {
       console.log(
-        "🔍 Product recommendations validated, violations found:",
+        '🔍 Product recommendations validated, violations found:',
         productValidation.violations,
       );
       // STEP 5: Use enhanced response if available (with blind spots added)
@@ -535,10 +525,10 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
         );
       }
       trackOverride(
-        "PRODUCT_RECOMMENDATION_VALIDATION",
+        'PRODUCT_RECOMMENDATION_VALIDATION',
         productValidation.violations,
         productValidation.modifications,
-        "unsupported_recommendation_flagged",
+        'unsupported_recommendation_flagged',
       );
     }
 
@@ -549,10 +539,7 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
       vaultVerification.allowed,
     );
     if (!modeCompliance.compliant) {
-      console.log(
-        "⚙️ Mode compliance issues detected:",
-        modeCompliance.violations,
-      );
+      console.log('⚙️ Mode compliance issues detected:', modeCompliance.violations);
       response.response = injectModeComplianceScaffold(
         response.response,
         mode,
@@ -560,25 +547,19 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
       );
       overridePatterns.mode_compliance_fixes++;
       trackOverride(
-        "MODE_COMPLIANCE_ENFORCEMENT",
+        'MODE_COMPLIANCE_ENFORCEMENT',
         modeCompliance.violations,
         modeCompliance.scaffolds_added,
-        "mode_compliance_scaffold_injected",
+        'mode_compliance_scaffold_injected',
       );
     }
 
     // 4. Assumption Detection and Flagging
     let assumptionDetection = { assumptions: [], enhanced: null };
     try {
-      assumptionDetection = detectAndFlagAssumptions(
-        response.response,
-        mode,
-      );
+      assumptionDetection = detectAndFlagAssumptions(response.response, mode);
       if (assumptionDetection.assumptions.length > 0) {
-        console.log(
-          "🔍 Assumptions detected and flagged:",
-          assumptionDetection.assumptions,
-        );
+        console.log('🔍 Assumptions detected and flagged:', assumptionDetection.assumptions);
         // STEP 5: Use enhanced response if available (with uncertainty structure added)
         if (assumptionDetection.enhanced) {
           response.response = assumptionDetection.enhanced;
@@ -590,69 +571,58 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
         }
         overridePatterns.assumption_challenges++;
         trackOverride(
-          "ASSUMPTION_DETECTION",
+          'ASSUMPTION_DETECTION',
           assumptionDetection.assumptions,
           assumptionDetection.challenges_added,
-          "assumption_challenges_added",
+          'assumption_challenges_added',
         );
       }
     } catch (assumptionDetectionError) {
-      console.error("⚠️ Assumption detection failed:", assumptionDetectionError);
+      console.error('⚠️ Assumption detection failed:', assumptionDetectionError);
       // Continue without assumption detection - don't crash the system
     }
 
     // 5. Pressure Detection and Resistance
     let pressureResistance = { pressure_detected: false };
     try {
-      pressureResistance = applyPressureResistance(
-        response.response,
-        message,
-        conversationHistory,
-      );
+      pressureResistance = applyPressureResistance(response.response, message, conversationHistory);
       if (pressureResistance.pressure_detected) {
-        console.log(
-          "🛡️ Pressure resistance applied:",
-          pressureResistance.pressure_type,
-        );
+        console.log('🛡️ Pressure resistance applied:', pressureResistance.pressure_type);
         response.response = pressureResistance.modified_response;
         overridePatterns.authority_resistances++;
         trackOverride(
-          "PRESSURE_RESISTANCE",
+          'PRESSURE_RESISTANCE',
           pressureResistance.pressure_type,
           pressureResistance.modifications,
-          "authority_pressure_blocked",
+          'authority_pressure_blocked',
         );
       }
     } catch (pressureResistanceError) {
-      console.error("⚠️ Pressure resistance check failed:", pressureResistanceError);
+      console.error('⚠️ Pressure resistance check failed:', pressureResistanceError);
       // Continue without pressure resistance - don't crash the system
     }
 
     // 6. Vault Rule Enforcement (Site Monkeys Mode Only)
     let vaultEnforcement = { violations: [], modified: false };
-    if (mode === "site_monkeys" && vaultVerification.allowed) {
+    if (mode === 'site_monkeys' && vaultVerification.allowed) {
       try {
-        vaultEnforcement = enforceVaultRules(
-          response.response,
-          message,
-          triggeredFrameworks,
-        );
+        vaultEnforcement = enforceVaultRules(response.response, message, triggeredFrameworks);
         if (vaultEnforcement.violations.length > 0) {
           console.log(
-            "🔐 Vault rule violations detected and enforced:",
+            '🔐 Vault rule violations detected and enforced:',
             vaultEnforcement.violations,
           );
           response.response = vaultEnforcement.modified_response;
           overridePatterns.vault_violations++;
           trackOverride(
-            "VAULT_RULE_ENFORCEMENT",
+            'VAULT_RULE_ENFORCEMENT',
             vaultEnforcement.violations,
             vaultEnforcement.modifications,
-            "vault_rule_violation_blocked",
+            'vault_rule_violation_blocked',
           );
         }
       } catch (vaultEnforcementError) {
-        console.error("⚠️ Vault rule enforcement failed:", vaultEnforcementError);
+        console.error('⚠️ Vault rule enforcement failed:', vaultEnforcementError);
         // Continue without vault enforcement - don't crash the system
       }
     }
@@ -668,65 +638,66 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
             sources: { hasMemory: true },
             tokenBreakdown: { memory: memoryTokens },
             mode: mode,
-            userId: "session", // We don't have userId here, use session identifier
+            userId: 'session', // We don't have userId here, use session identifier
           },
         });
 
         if (memoryEnforcement.modified) {
           console.log(
-            "🧠 Memory usage enforcer triggered:",
+            '🧠 Memory usage enforcer triggered:',
             memoryEnforcement.reason,
-            "| Matched phrase:",
+            '| Matched phrase:',
             memoryEnforcement.matchedPhrase,
           );
           response.response = memoryEnforcement.response;
           overridePatterns.memory_usage_violations =
             (overridePatterns.memory_usage_violations || 0) + 1;
           trackOverride(
-            "MEMORY_USAGE_ENFORCEMENT",
+            'MEMORY_USAGE_ENFORCEMENT',
             [memoryEnforcement.matchedPhrase],
             memoryEnforcement.memoryTokens,
-            "ignorance_claim_corrected",
+            'ignorance_claim_corrected',
           );
         }
       } catch (memoryEnforcerError) {
-        console.error("⚠️ Memory usage enforcer failed:", memoryEnforcerError);
+        console.error('⚠️ Memory usage enforcer failed:', memoryEnforcerError);
         // Continue without enforcement - don't crash the system
       }
     }
 
     // STEP 6: FINAL QUALITY PASS - Remove engagement bait
-    console.log("🎯 Applying final quality pass - removing engagement bait");
+    console.log('🎯 Applying final quality pass - removing engagement bait');
     try {
       const cleanedResponse = removeEngagementBait(response.response);
       if (cleanedResponse !== response.response) {
-        console.log("✅ Engagement bait removed from response");
+        console.log('✅ Engagement bait removed from response');
         response.response = cleanedResponse;
-        overridePatterns.engagement_bait_removed = (overridePatterns.engagement_bait_removed || 0) + 1;
+        overridePatterns.engagement_bait_removed =
+          (overridePatterns.engagement_bait_removed || 0) + 1;
       }
     } catch (engagementBaitError) {
-      console.error("⚠️ Engagement bait removal failed:", engagementBaitError);
+      console.error('⚠️ Engagement bait removal failed:', engagementBaitError);
       // Continue without engagement bait removal - don't crash the system
     }
 
     // LAYER 2 FALLBACK PRIMITIVES (Issue #746)
     // Position 7: Temporal Arithmetic Fallback
-    console.log("🔧 [LAYER-2] Applying temporal arithmetic fallback primitive...");
+    console.log('🔧 [LAYER-2] Applying temporal arithmetic fallback primitive...');
     const temporalResult = applyTemporalArithmeticFallback(
       response.response,
       memoryContext,
       message,
-      aiUsed
+      aiUsed,
     );
     response.response = temporalResult.response;
     console.log(`[PRIMITIVE-TEMPORAL] ${JSON.stringify(temporalResult.primitiveLog)}`);
 
     // Position 8: List Completeness Fallback
-    console.log("🔧 [LAYER-2] Applying list completeness fallback primitive...");
+    console.log('🔧 [LAYER-2] Applying list completeness fallback primitive...');
     const completenessResult = applyListCompletenessFallback(
       response.response,
       memoryContext,
-      message
+      message,
     );
     response.response = completenessResult.response;
     console.log(`[PRIMITIVE-COMPLETENESS] ${JSON.stringify(completenessResult.primitiveLog)}`);
@@ -740,14 +711,14 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
         /(?:can't|cannot)\s+help\s+with\s+that/i,
       ];
 
-      const containsRefusal = refusalPatterns.some(pattern => pattern.test(response.response));
+      const containsRefusal = refusalPatterns.some((pattern) => pattern.test(response.response));
 
       if (containsRefusal) {
         // Extract topic from original message (first 50 chars as summary)
-        const topic = message.substring(0, 50).trim() + (message.length > 50 ? "..." : "");
+        const topic = message.substring(0, 50).trim() + (message.length > 50 ? '...' : '');
 
         // Extract reason from response (look for explanation patterns)
-        let reason = "uncertainty or ethical limitations";
+        let reason = 'uncertainty or ethical limitations';
         const reasonMatch = response.response.match(/(?:because|since|as)\s+([^.!?]{10,100})/i);
         if (reasonMatch) {
           reason = reasonMatch[1].trim();
@@ -774,10 +745,7 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
       vaultLoaded: vaultVerification.allowed,
     });
 
-    console.log(
-      "🚀 Response optimization applied:",
-      optimization.optimization_tags,
-    );
+    console.log('🚀 Response optimization applied:', optimization.optimization_tags);
 
     // TIER 3: RESPONSE INTEGRITY + TRANSPARENCY TRACKING
 
@@ -827,15 +795,12 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
     );
 
     // Pattern detection for override logging
-    const patternAnalysis = analyzeOverridePatterns(
-      overridePatterns,
-      driftTracker,
-    );
+    const patternAnalysis = analyzeOverridePatterns(overridePatterns, driftTracker);
 
     console.log(
-      "📊 Final processing complete. Confidence:",
+      '📊 Final processing complete. Confidence:',
       confidence,
-      "| Overrides:",
+      '| Overrides:',
       Object.values(overridePatterns).reduce((a, b) => a + b, 0),
     );
 
@@ -910,49 +875,43 @@ position and explain your reasoning again. Do not reverse a principled refusal.`
       // Override and Pattern Analysis
       override_patterns: overridePatterns,
       pattern_analysis: patternAnalysis,
-      intelligence_enhancements:
-        intelligenceEnhancement?.intelligenceApplied || [],
+      intelligence_enhancements: intelligenceEnhancement?.intelligenceApplied || [],
       enforcement_metadata: {
-        total_enforcements: Object.values(overridePatterns).reduce(
-          (a, b) => a + b,
-          0,
-        ),
-        enforcement_types: Object.keys(overridePatterns).filter(
-          (key) => overridePatterns[key] > 0,
-        ),
+        total_enforcements: Object.values(overridePatterns).reduce((a, b) => a + b, 0),
+        enforcement_types: Object.keys(overridePatterns).filter((key) => overridePatterns[key] > 0),
         integrity_score: confidence,
       },
 
       // System Status
       processing_time: Date.now(),
       security_pass: true,
-      system_status: "FULL_ENFORCEMENT_ACTIVE",
-      cognitive_firewall_version: "PROD-1.0",
+      system_status: 'FULL_ENFORCEMENT_ACTIVE',
+      cognitive_firewall_version: 'PROD-1.0',
     };
   } catch (error) {
-    console.error("❌ CRITICAL: Cognitive firewall processing failed:", error);
+    console.error('❌ CRITICAL: Cognitive firewall processing failed:', error);
 
     // NEVER let the system crash - return safe fallback with full metadata
     trackOverride(
-      "SYSTEM_FAILURE",
+      'SYSTEM_FAILURE',
       error.message,
-      "cognitive_firewall_crash",
-      "critical_system_failure",
+      'cognitive_firewall_crash',
+      'critical_system_failure',
     );
 
     return {
       response:
-        "🍌 **Site Monkeys System:** Critical processing error detected. Cognitive firewall engaged safe mode. Please retry your request.",
+        '🍌 **Site Monkeys System:** Critical processing error detected. Cognitive firewall engaged safe mode. Please retry your request.',
       mode_active: mode,
       vault_loaded: false,
       error: true,
       fallback_used: true,
-      ai_used: "System",
+      ai_used: 'System',
       confidence: 0,
       security_pass: false,
-      system_status: "SAFE_MODE_RECOVERY",
+      system_status: 'SAFE_MODE_RECOVERY',
       error_details: error.message,
-      cognitive_firewall_version: "PROD-1.0",
+      cognitive_firewall_version: 'PROD-1.0',
       enforcement_metadata: {
         critical_failure: true,
         fallback_triggered: true,
@@ -970,9 +929,9 @@ async function generateEliResponse(
   history,
   openai,
   memoryContext = null,
-  externalContext = "", // INJECT EXTERNAL DATA
-  refusalContext = "", // Issue #744: Session refusal context
-  documentContext = "", // FIX #766: Uploaded file content
+  externalContext = '', // INJECT EXTERNAL DATA
+  refusalContext = '', // Issue #744: Session refusal context
+  documentContext = '', // FIX #766: Uploaded file content
 ) {
   const systemPrompt = `You are Eli, a business validation specialist with extensive startup experience.
 
@@ -995,7 +954,9 @@ ${vaultContext}
 
 ${refusalContext}
 
-${memoryContext ? `
+${
+  memoryContext
+    ? `
 ═══════════════════════════════════════════════════════════════
 🧠 PERSISTENT MEMORY CONTEXT - READ ALL ITEMS BEFORE RESPONDING
 ═══════════════════════════════════════════════════════════════
@@ -1043,11 +1004,15 @@ Think like a caring family member who remembers what you've been told:
 - Read through all memory items systematically before responding
 
 If the answer is in memory above, use it. Don't claim ignorance of information you have.
-` : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'}
+`
+    : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'
+}
 
 ${externalContext}
 
-${documentContext ? `
+${
+  documentContext
+    ? `
 ═══════════════════════════════════════════════════════════════
 📎 UPLOADED FILE CONTENT - READ BEFORE RESPONDING
 ═══════════════════════════════════════════════════════════════
@@ -1061,14 +1026,18 @@ ${documentContext}
 ═══════════════════════════════════════════════════════════════
 END OF FILE CONTENT
 ═══════════════════════════════════════════════════════════════
-` : ''}
+`
+    : ''
+}
 
 Respond with practical business analysis, always considering survival implications. REASON from available information rather than claiming you lack it.`;
 
   // Log system prompt assembly (Issue #744)
   const hasReasoningPrinciples = systemPrompt.includes('MEMORY REASONING PRINCIPLES');
   const systemPromptLength = systemPrompt.length;
-  console.log(`[SYSTEM-PROMPT] Eli - Length: ${systemPromptLength} chars, Contains reasoning principles: ${hasReasoningPrinciples}`);
+  console.log(
+    `[SYSTEM-PROMPT] Eli - Length: ${systemPromptLength} chars, Contains reasoning principles: ${hasReasoningPrinciples}`,
+  );
   if (memoryContext) {
     console.log(`[MEMORY-FORMAT] Memory context injected: ${memoryContext.length} chars`);
   }
@@ -1084,11 +1053,11 @@ Respond with practical business analysis, always considering survival implicatio
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: 'gpt-3.5-turbo',
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: 'system', content: systemPrompt },
         ...history.slice(-5),
-        { role: "user", content: prompt },
+        { role: 'user', content: prompt },
       ],
       max_tokens: 800,
       temperature: 0.3,
@@ -1100,10 +1069,10 @@ Respond with practical business analysis, always considering survival implicatio
       has_sources: false,
     };
   } catch (error) {
-    console.error("Eli generation failed:", error);
+    console.error('Eli generation failed:', error);
     return {
       response:
-        "🍌 **Business Analysis:** Unable to process request. Please rephrase your business question.",
+        '🍌 **Business Analysis:** Unable to process request. Please rephrase your business question.',
       tokens_used: 100,
       has_sources: false,
     };
@@ -1117,9 +1086,9 @@ async function generateRoxyResponse(
   history,
   openai,
   memoryContext = null,
-  externalContext = "", // INJECT EXTERNAL DATA
-  refusalContext = "", // Issue #744: Session refusal context
-  documentContext = "", // FIX #766: Uploaded file content
+  externalContext = '', // INJECT EXTERNAL DATA
+  refusalContext = '', // Issue #744: Session refusal context
+  documentContext = '', // FIX #766: Uploaded file content
 ) {
   const systemPrompt = `You are Roxy, a truth-first analysis specialist committed to accuracy.
 
@@ -1142,7 +1111,9 @@ ${vaultContext}
 
 ${refusalContext}
 
-${memoryContext ? `
+${
+  memoryContext
+    ? `
 ═══════════════════════════════════════════════════════════════
 🧠 PERSISTENT MEMORY CONTEXT - READ ALL ITEMS BEFORE RESPONDING
 ═══════════════════════════════════════════════════════════════
@@ -1190,11 +1161,15 @@ Think like a caring family member who remembers what you've been told:
 - Read through all memory items systematically before responding
 
 If the answer is in memory above, use it. Don't claim ignorance of information you have.
-` : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'}
+`
+    : '\n\nIMPORTANT: You have NO previous conversation history with this user. Do NOT use phrases like "Building on our previous discussion" or "As we discussed before" - this is a standalone interaction.'
+}
 
 ${externalContext}
 
-${documentContext ? `
+${
+  documentContext
+    ? `
 ═══════════════════════════════════════════════════════════════
 📎 UPLOADED FILE CONTENT - READ BEFORE RESPONDING
 ═══════════════════════════════════════════════════════════════
@@ -1208,14 +1183,18 @@ ${documentContext}
 ═══════════════════════════════════════════════════════════════
 END OF FILE CONTENT
 ═══════════════════════════════════════════════════════════════
-` : ''}
+`
+    : ''
+}
 
 Provide honest, accurate analysis with clear confidence indicators. REASON from available information rather than claiming you lack it.`;
 
   // Log system prompt assembly (Issue #744)
   const hasReasoningPrinciples = systemPrompt.includes('MEMORY REASONING PRINCIPLES');
   const systemPromptLength = systemPrompt.length;
-  console.log(`[SYSTEM-PROMPT] Roxy - Length: ${systemPromptLength} chars, Contains reasoning principles: ${hasReasoningPrinciples}`);
+  console.log(
+    `[SYSTEM-PROMPT] Roxy - Length: ${systemPromptLength} chars, Contains reasoning principles: ${hasReasoningPrinciples}`,
+  );
   if (memoryContext) {
     console.log(`[MEMORY-FORMAT] Memory context injected: ${memoryContext.length} chars`);
   }
@@ -1231,11 +1210,11 @@ Provide honest, accurate analysis with clear confidence indicators. REASON from 
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: 'gpt-3.5-turbo',
       messages: [
-        { role: "system", content: systemPrompt },
+        { role: 'system', content: systemPrompt },
         ...history.slice(-5),
-        { role: "user", content: prompt },
+        { role: 'user', content: prompt },
       ],
       max_tokens: 800,
       temperature: 0.2,
@@ -1247,17 +1226,26 @@ Provide honest, accurate analysis with clear confidence indicators. REASON from 
       has_sources: false,
     };
   } catch (error) {
-    console.error("Roxy generation failed:", error);
+    console.error('Roxy generation failed:', error);
     return {
       response:
-        "🔍 **Truth Analysis:** Unable to verify information. I cannot provide analysis without proper data validation.",
+        '🔍 **Truth Analysis:** Unable to verify information. I cannot provide analysis without proper data validation.',
       tokens_used: 100,
       has_sources: false,
     };
   }
 }
 
-async function generateClaudeResponse(prompt, mode, vaultContext, _history, memoryContext = null, externalContext = "", refusalContext = "", documentContext = "") {
+async function generateClaudeResponse(
+  prompt,
+  mode,
+  vaultContext,
+  _history,
+  memoryContext = null,
+  externalContext = '',
+  refusalContext = '',
+  documentContext = '',
+) {
   // For Claude responses, we need to use a different approach since we're Claude
   // This would typically call the Anthropic API, but for now return structured response
 
@@ -1301,7 +1289,7 @@ ${memoryContext}
   return {
     response: `🤖 **Complex Analysis:** This query requires advanced reasoning capabilities. The analysis suggests multiple factors need consideration with high confidence requirements.
 
-${vaultContext ? "🍌 **Vault Context Applied:** Site Monkeys operational frameworks active." : ""}
+${vaultContext ? '🍌 **Vault Context Applied:** Site Monkeys operational frameworks active.' : ''}
 
 ${reasoningContext}
 
@@ -1327,11 +1315,11 @@ ${documentContext ? `\n\n📎 **File Content Available:** Uploaded document has 
  */
 export function applyTemporalArithmeticFallback(response, memoryContext, userQuery, personalityId) {
   const primitiveLog = {
-    primitive: "TEMPORAL_ARITHMETIC",
+    primitive: 'TEMPORAL_ARITHMETIC',
     fired: false,
-    reason: "layer_one_produced_correct_response",
+    reason: 'layer_one_produced_correct_response',
     layer_one_correct: true,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 
   // Gate 1: Check if memory context exists
@@ -1340,14 +1328,16 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
   }
 
   // Gate 2: Check if user query is temporal in nature
-  const temporalQuestionIndicators = /\b(when|what year|how long ago|start date|when did|timeline|began|started)\b/i;
+  const temporalQuestionIndicators =
+    /\b(when|what year|how long ago|start date|when did|timeline|began|started)\b/i;
   if (!temporalQuestionIndicators.test(userQuery)) {
     return { response, primitiveLog };
   }
 
   // Gate 3: Extract duration and anchor year from memory context
-  const durationMatch = memoryContext.match(/(\d+)\s*(?:year|yr)s?(?:\s+at|\s+in|\s+with|\s+for)?/i) ||
-                        memoryContext.match(/(?:worked|spent|been)\s+(?:for\s+)?(\d+)/i);
+  const durationMatch =
+    memoryContext.match(/(\d+)\s*(?:year|yr)s?(?:\s+at|\s+in|\s+with|\s+for)?/i) ||
+    memoryContext.match(/(?:worked|spent|been)\s+(?:for\s+)?(\d+)/i);
 
   if (!durationMatch) {
     return { response, primitiveLog };
@@ -1376,7 +1366,9 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
   }
 
   // Look for start year: "started in YYYY", "joined in YYYY", "began in YYYY"
-  const startedMatch = memoryContext.match(/\b(started|joined|began)\b.*?\bin\s+(19\d{2}|20[0-3]\d)/i);
+  const startedMatch = memoryContext.match(
+    /\b(started|joined|began)\b.*?\bin\s+(19\d{2}|20[0-3]\d)/i,
+  );
   if (startedMatch) {
     startYear = parseInt(startedMatch[2]);
   }
@@ -1392,18 +1384,18 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
   // The primitive fires when the response DOES NOT contain the correct computed year
   // When we have endYear, compute: endYear - duration = startYear
   // When we only have startYear, compute: startYear + duration = endYear (but this is less common)
-  const computedYear = endYear ? (endYear - duration) : (startYear + duration);
-  
+  const computedYear = endYear ? endYear - duration : startYear + duration;
+
   // Check if the response contains the computed year
   const yearPattern = /\b(19\d{2}|20[0-3]\d)\b/g;
   const yearsInResponse = response.match(yearPattern) || [];
-  const hasComputedYear = yearsInResponse.some(y => parseInt(y) === computedYear);
+  const hasComputedYear = yearsInResponse.some((y) => parseInt(y) === computedYear);
 
   if (hasComputedYear) {
     // Layer 1 handled it correctly - the computed year is in the response
     return { response, primitiveLog };
   }
-  
+
   // Response is missing the computed year - check if it's hedging or just wrong
   const hedgingPhrases = [
     /haven't mentioned/i,
@@ -1417,28 +1409,28 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
     /don't know when/i,
     /haven't told me when/i,
     /need more information/i,
-    /would need to/i
+    /would need to/i,
   ];
 
-  const hasHedging = hedgingPhrases.some(pattern => pattern.test(response));
+  const hasHedging = hedgingPhrases.some((pattern) => pattern.test(response));
 
   // All gates passed - primitive fires
   // Generate replacement based on personality and whether we're computing start or end year
-  let computedStatement = "";
+  let computedStatement = '';
   if (endYear) {
     // We have endYear, computing startYear
-    if (personalityId === "Eli") {
+    if (personalityId === 'Eli') {
       computedStatement = `Based on working ${duration} years and leaving in ${endYear}, you likely started around ${computedYear}.`;
-    } else if (personalityId === "Roxy") {
+    } else if (personalityId === 'Roxy') {
       computedStatement = `From what you've shared — ${duration} years and leaving in ${endYear} — that means you started around ${computedYear}.`;
     } else {
       computedStatement = `Given the ${duration}-year duration and the ${endYear} end date, the calculated start year would be approximately ${computedYear}.`;
     }
   } else {
     // We only have startYear, computing endYear
-    if (personalityId === "Eli") {
+    if (personalityId === 'Eli') {
       computedStatement = `Based on working ${duration} years and starting in ${startYear}, you likely left around ${computedYear}.`;
-    } else if (personalityId === "Roxy") {
+    } else if (personalityId === 'Roxy') {
       computedStatement = `From what you've shared — ${duration} years and starting in ${startYear} — that means you left around ${computedYear}.`;
     } else {
       computedStatement = `Given the ${duration}-year duration and the ${startYear} start date, the calculated end year would be approximately ${computedYear}.`;
@@ -1453,7 +1445,7 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
       if (pattern.test(response)) {
         // Replace the hedging phrase with computed statement
         const sentences = response.split(/\.\s+/);
-        const hedgingSentenceIndex = sentences.findIndex(s => pattern.test(s));
+        const hedgingSentenceIndex = sentences.findIndex((s) => pattern.test(s));
 
         if (hedgingSentenceIndex !== -1) {
           sentences[hedgingSentenceIndex] = computedStatement;
@@ -1471,17 +1463,19 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
   }
 
   primitiveLog.fired = true;
-  primitiveLog.reason = "response_missing_computable_temporal_fact";
+  primitiveLog.reason = 'response_missing_computable_temporal_fact';
   primitiveLog.duration_found = `${duration} years`;
   primitiveLog.anchor_year_found = anchorYear;
-  primitiveLog.anchor_type = endYear ? "endYear" : "startYear";
+  primitiveLog.anchor_type = endYear ? 'endYear' : 'startYear';
   primitiveLog.end_year = endYear || null;
   primitiveLog.start_year = startYear || null;
   primitiveLog.computed_year = computedYear;
   primitiveLog.hedging_detected = hasHedging;
   primitiveLog.layer_one_correct = false;
 
-  console.log(`[TEMPORAL-ARITHMETIC] FIRED: Using ${endYear ? 'endYear' : 'startYear'} as anchor: ${anchorYear} ${endYear ? '-' : '+'} ${duration} = ${computedYear}`);
+  console.log(
+    `[TEMPORAL-ARITHMETIC] FIRED: Using ${endYear ? 'endYear' : 'startYear'} as anchor: ${anchorYear} ${endYear ? '-' : '+'} ${duration} = ${computedYear}`,
+  );
 
   return { response: modifiedResponse, primitiveLog };
 }
@@ -1496,11 +1490,11 @@ export function applyTemporalArithmeticFallback(response, memoryContext, userQue
  */
 export function applyListCompletenessFallback(response, memoryContext, userQuery) {
   const primitiveLog = {
-    primitive: "LIST_COMPLETENESS",
+    primitive: 'LIST_COMPLETENESS',
     fired: false,
-    reason: "layer_one_produced_complete_list",
+    reason: 'layer_one_produced_complete_list',
     layer_one_correct: true,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 
   // Gate 1: Check if memory context exists
@@ -1509,7 +1503,8 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
   }
 
   // Gate 2: Check if user query requests a list
-  const listRequestIndicators = /\b(who are my|list my|what are my|show me my|tell me my|all my|every|everyone I)\b/i;
+  const listRequestIndicators =
+    /\b(who are my|list my|what are my|show me my|tell me my|all my|every|everyone I)\b/i;
   if (!listRequestIndicators.test(userQuery)) {
     return { response, primitiveLog };
   }
@@ -1519,7 +1514,8 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
   const names = [];
 
   // Pattern 1: Name (descriptor) format
-  const namedPattern = /([A-ZÀ-ÿ][a-zà-ÿ]+(?:[-\s][A-ZÀ-ÿ][a-zà-ÿ]+)*(?:[-'][A-ZÀ-ÿ][a-zà-ÿ]+)*)\s*\(/g;
+  const namedPattern =
+    /([A-ZÀ-ÿ][a-zà-ÿ]+(?:[-\s][A-ZÀ-ÿ][a-zà-ÿ]+)*(?:[-'][A-ZÀ-ÿ][a-zà-ÿ]+)*)\s*\(/g;
   let match;
   while ((match = namedPattern.exec(memoryContext)) !== null) {
     names.push(match[1].trim());
@@ -1529,11 +1525,11 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
   if (names.length === 0) {
     // Split by common separators and extract proper nouns
     // This handles: "Name1, Name2, Name3" or "Name1, Name2 and Name3"
-    const parts = memoryContext.split(/[,;]|(?:\s+and\s+)/).map(s => s.trim());
-    
+    const parts = memoryContext.split(/[,;]|(?:\s+and\s+)/).map((s) => s.trim());
+
     // Pattern for proper names with support for:
     // - Multi-part names (e.g., "Zhang Wei")
-    // - Hyphenated names (e.g., "Zhang-Müller") 
+    // - Hyphenated names (e.g., "Zhang-Müller")
     // - Names with apostrophes (e.g., "O'Brien", "O'Shaughnessy")
     // - International characters (e.g., "José", "Björn")
     // Pattern breakdown:
@@ -1543,7 +1539,7 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
     // Note: Uses combined character class [a-zA-ZÀ-ÿ'] instead of alternation to prevent ReDoS
     const PROPER_NAME_WITH_INTL_CHARS = /^([A-ZÀ-ÿ][a-zA-ZÀ-ÿ']*(?:[-\s][A-ZÀ-ÿ][a-zA-ZÀ-ÿ']*)*)$/;
     const properNamePattern = PROPER_NAME_WITH_INTL_CHARS;
-    
+
     for (const part of parts) {
       const trimmed = part.trim();
       const nameMatch = trimmed.match(properNamePattern);
@@ -1561,11 +1557,14 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
   // Gate 4: Check if AI response is missing items
   // Use normalized comparison (case-insensitive, diacritic-aware)
   const normalizeForComparison = (str) => {
-    return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    return str
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
   };
 
   const normalizedResponse = normalizeForComparison(response);
-  const missingItems = names.filter(name => {
+  const missingItems = names.filter((name) => {
     const normalized = normalizeForComparison(name);
     // Check if name appears in response (allowing for diacritic variations)
     return !normalizedResponse.includes(normalized);
@@ -1589,12 +1588,14 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
   }
 
   primitiveLog.fired = true;
-  primitiveLog.reason = "response_missing_items_from_injected_memory";
+  primitiveLog.reason = 'response_missing_items_from_injected_memory';
   primitiveLog.items_in_memory = names;
   primitiveLog.items_missing = missingItems;
   primitiveLog.layer_one_correct = false;
 
-  console.log(`[LIST-COMPLETENESS] FIRED: Added ${missingItems.length} missing items: ${missingItems.join(', ')}`);
+  console.log(
+    `[LIST-COMPLETENESS] FIRED: Added ${missingItems.length} missing items: ${missingItems.join(', ')}`,
+  );
 
   return { response: modifiedResponse, primitiveLog };
 }
@@ -1606,16 +1607,18 @@ function determineAIRouting(message, mode, claudeRequested, userPreference) {
     return {
       usesClaude: true,
       usesEli: false,
-      reason: "Claude explicitly requested",
+      reason: 'Claude explicitly requested',
       confidence: 1.0,
-      aiUsed: "Claude",
+      aiUsed: 'Claude',
     };
   }
 
-  if (mode === "truth_general") {
+  if (mode === 'truth_general') {
     // STEP 3: Route based on content type - emotional/wellness → Roxy, analytical/technical → Eli
-    const emotionalIndicators = /\b(feel|feeling|emotion|stress|anxiety|depression|mental health|wellness|relationship|personal|support|cope|coping|struggle|worried|scared|sad|happy|angry|overwhelmed|burnt out|exhausted emotionally)\b/i;
-    const analyticalIndicators = /\b(analyze|data|logic|reason|calculate|evidence|proof|research|study|statistics|science|technical|system|process|algorithm|database|index|session token|API|code|programming)\b/i;
+    const emotionalIndicators =
+      /\b(feel|feeling|emotion|stress|anxiety|depression|mental health|wellness|relationship|personal|support|cope|coping|struggle|worried|scared|sad|happy|angry|overwhelmed|burnt out|exhausted emotionally)\b/i;
+    const analyticalIndicators =
+      /\b(analyze|data|logic|reason|calculate|evidence|proof|research|study|statistics|science|technical|system|process|algorithm|database|index|session token|API|code|programming)\b/i;
 
     const isEmotional = emotionalIndicators.test(message);
     const isAnalytical = analyticalIndicators.test(message);
@@ -1628,17 +1631,18 @@ function determineAIRouting(message, mode, claudeRequested, userPreference) {
         usesEli: false,
         reason: "Emotional/wellness content routed to Roxy's empathetic approach",
         confidence: 0.9,
-        aiUsed: "Roxy",
+        aiUsed: 'Roxy',
       };
     } else if (isAnalytical || complexityScore > 0.7) {
       return {
         usesClaude: complexityScore > 0.8,
         usesEli: complexityScore <= 0.8,
-        reason: complexityScore > 0.8
-          ? "High complexity analytical requires Claude"
-          : "Analytical content routed to Eli",
+        reason:
+          complexityScore > 0.8
+            ? 'High complexity analytical requires Claude'
+            : 'Analytical content routed to Eli',
         confidence: 0.9,
-        aiUsed: complexityScore > 0.8 ? "Claude" : "Eli",
+        aiUsed: complexityScore > 0.8 ? 'Claude' : 'Eli',
       };
     }
 
@@ -1646,27 +1650,27 @@ function determineAIRouting(message, mode, claudeRequested, userPreference) {
     return {
       usesClaude: false,
       usesEli: false,
-      reason: "General truth-seeking via Roxy",
+      reason: 'General truth-seeking via Roxy',
       confidence: 0.8,
-      aiUsed: "Roxy",
+      aiUsed: 'Roxy',
     };
   }
 
-  if (mode === "business_validation") {
+  if (mode === 'business_validation') {
     const financialComplexity = analyzeFinancialComplexity(message);
     return {
       usesClaude: financialComplexity > 0.9,
       usesEli: financialComplexity <= 0.9,
       reason:
         financialComplexity > 0.9
-          ? "Complex financial analysis requires Claude"
-          : "Business validation via Eli",
+          ? 'Complex financial analysis requires Claude'
+          : 'Business validation via Eli',
       confidence: 0.9,
-      aiUsed: financialComplexity > 0.9 ? "Claude" : "Eli",
+      aiUsed: financialComplexity > 0.9 ? 'Claude' : 'Eli',
     };
   }
 
-  if (mode === "site_monkeys") {
+  if (mode === 'site_monkeys') {
     const strategicComplexity = analyzeStrategicComplexity(message);
     const businessFocus = analyzeBusinessFocus(message);
 
@@ -1674,127 +1678,123 @@ function determineAIRouting(message, mode, claudeRequested, userPreference) {
       return {
         usesClaude: true,
         usesEli: false,
-        reason: "Strategic complexity requires Claude with vault context",
+        reason: 'Strategic complexity requires Claude with vault context',
         confidence: 0.9,
-        aiUsed: "Claude",
+        aiUsed: 'Claude',
       };
     } else if (businessFocus > 0.7) {
       return {
         usesClaude: false,
         usesEli: true,
-        reason: "Business-focused query via Eli with vault enforcement",
+        reason: 'Business-focused query via Eli with vault enforcement',
         confidence: 0.8,
-        aiUsed: "Eli",
+        aiUsed: 'Eli',
       };
     } else {
       return {
         usesClaude: false,
         usesEli: false,
-        reason: "General Site Monkeys query via Roxy with vault context",
+        reason: 'General Site Monkeys query via Roxy with vault context',
         confidence: 0.7,
-        aiUsed: "Roxy",
+        aiUsed: 'Roxy',
       };
     }
   }
 
   return {
     usesClaude: false,
-    usesEli: userPreference === "eli",
-    reason: "Fallback routing based on user preference",
+    usesEli: userPreference === 'eli',
+    reason: 'Fallback routing based on user preference',
     confidence: 0.6,
-    aiUsed: userPreference === "eli" ? "Eli" : "Roxy",
+    aiUsed: userPreference === 'eli' ? 'Eli' : 'Roxy',
   };
 }
 
 function analyzeComplexity(message) {
   const complexityIndicators = [
-    "analyze",
-    "compare",
-    "evaluate",
-    "assess",
-    "research",
-    "investigate",
-    "multiple",
-    "various",
-    "different",
-    "conflicting",
-    "contradictory",
+    'analyze',
+    'compare',
+    'evaluate',
+    'assess',
+    'research',
+    'investigate',
+    'multiple',
+    'various',
+    'different',
+    'conflicting',
+    'contradictory',
   ];
 
   const score =
-    complexityIndicators.filter((indicator) =>
-      message.toLowerCase().includes(indicator),
-    ).length / complexityIndicators.length;
+    complexityIndicators.filter((indicator) => message.toLowerCase().includes(indicator)).length /
+    complexityIndicators.length;
 
   return Math.min(score * 2, 1.0);
 }
 
 function analyzeFinancialComplexity(message) {
   const financialIndicators = [
-    "model",
-    "forecast",
-    "projection",
-    "valuation",
-    "roi",
-    "irr",
-    "npv",
-    "cash flow",
-    "revenue model",
-    "pricing strategy",
-    "financial model",
+    'model',
+    'forecast',
+    'projection',
+    'valuation',
+    'roi',
+    'irr',
+    'npv',
+    'cash flow',
+    'revenue model',
+    'pricing strategy',
+    'financial model',
   ];
 
   const score =
-    financialIndicators.filter((indicator) =>
-      message.toLowerCase().includes(indicator),
-    ).length / financialIndicators.length;
+    financialIndicators.filter((indicator) => message.toLowerCase().includes(indicator)).length /
+    financialIndicators.length;
 
   return Math.min(score * 3, 1.0);
 }
 
 function analyzeStrategicComplexity(message) {
   const strategicIndicators = [
-    "strategy",
-    "strategic",
-    "competitive",
-    "market analysis",
-    "positioning",
-    "long-term",
-    "roadmap",
-    "vision",
-    "mission",
-    "goals",
-    "objectives",
+    'strategy',
+    'strategic',
+    'competitive',
+    'market analysis',
+    'positioning',
+    'long-term',
+    'roadmap',
+    'vision',
+    'mission',
+    'goals',
+    'objectives',
   ];
 
   const score =
-    strategicIndicators.filter((indicator) =>
-      message.toLowerCase().includes(indicator),
-    ).length / strategicIndicators.length;
+    strategicIndicators.filter((indicator) => message.toLowerCase().includes(indicator)).length /
+    strategicIndicators.length;
 
   return Math.min(score * 2.5, 1.0);
 }
 
 function analyzeBusinessFocus(message) {
   const businessIndicators = [
-    "revenue",
-    "profit",
-    "cost",
-    "price",
-    "budget",
-    "spend",
-    "invest",
-    "customers",
-    "sales",
-    "marketing",
-    "growth",
-    "scale",
+    'revenue',
+    'profit',
+    'cost',
+    'price',
+    'budget',
+    'spend',
+    'invest',
+    'customers',
+    'sales',
+    'marketing',
+    'growth',
+    'scale',
   ];
 
   const score =
-    businessIndicators.filter((indicator) =>
-      message.toLowerCase().includes(indicator),
-    ).length / businessIndicators.length;
+    businessIndicators.filter((indicator) => message.toLowerCase().includes(indicator)).length /
+    businessIndicators.length;
 
   return Math.min(score * 2, 1.0);
 }
@@ -1804,40 +1804,40 @@ function checkVaultTriggers(message) {
 
   // Pricing triggers
   if (/price|pricing|cost|fee|rate/i.test(message)) {
-    triggers.push({ name: "pricing_framework", weight: 0.8 });
+    triggers.push({ name: 'pricing_framework', weight: 0.8 });
   }
 
   // Quality triggers
   if (/quality|standard|premium|excellence/i.test(message)) {
-    triggers.push({ name: "quality_framework", weight: 0.7 });
+    triggers.push({ name: 'quality_framework', weight: 0.7 });
   }
 
   // Business strategy triggers
   if (/strategy|growth|scale|market/i.test(message)) {
-    triggers.push({ name: "strategy_framework", weight: 0.6 });
+    triggers.push({ name: 'strategy_framework', weight: 0.6 });
   }
 
   return triggers;
 }
 
 function generateVaultContext(triggeredFrameworks) {
-  if (triggeredFrameworks.length === 0) return "";
+  if (triggeredFrameworks.length === 0) return '';
 
-  let context = "\n🍌 **SITE MONKEYS VAULT ENFORCEMENT ACTIVE:**\n";
+  let context = '\n🍌 **SITE MONKEYS VAULT ENFORCEMENT ACTIVE:**\n';
 
   triggeredFrameworks.forEach((framework) => {
     switch (framework.name) {
-      case "pricing_framework":
-        context += "- Minimum pricing: $697 (premium positioning required)\n";
-        context += "- No budget/cheap language allowed\n";
+      case 'pricing_framework':
+        context += '- Minimum pricing: $697 (premium positioning required)\n';
+        context += '- No budget/cheap language allowed\n';
         break;
-      case "quality_framework":
-        context += "- Zero-failure delivery standards\n";
-        context += "- Premium quality positioning mandatory\n";
+      case 'quality_framework':
+        context += '- Zero-failure delivery standards\n';
+        context += '- Premium quality positioning mandatory\n';
         break;
-      case "strategy_framework":
-        context += "- Founder protection protocols active\n";
-        context += "- Conservative growth assumptions required\n";
+      case 'strategy_framework':
+        context += '- Founder protection protocols active\n';
+        context += '- Conservative growth assumptions required\n';
         break;
     }
   });
@@ -1847,7 +1847,7 @@ function generateVaultContext(triggeredFrameworks) {
 
 function generateModeSpecificContext(mode, message, vaultContext) {
   switch (mode) {
-    case "truth_general":
+    case 'truth_general':
       return `
 TRUTH-FIRST ENFORCEMENT ACTIVE:
 - Zero hallucination tolerance
@@ -1856,7 +1856,7 @@ TRUTH-FIRST ENFORCEMENT ACTIVE:
 - Admit uncertainties directly
 ${vaultContext}`;
 
-    case "business_validation":
+    case 'business_validation':
       return `
 BUSINESS SURVIVAL ENFORCEMENT ACTIVE:
 - Model worst-case scenarios first
@@ -1865,7 +1865,7 @@ BUSINESS SURVIVAL ENFORCEMENT ACTIVE:
 - Conservative market assumptions
 ${vaultContext}`;
 
-    case "site_monkeys":
+    case 'site_monkeys':
       return `
 SITE MONKEYS VAULT ENFORCEMENT ACTIVE:
 - Premium positioning required ($697+ pricing)
@@ -1881,19 +1881,19 @@ ${vaultContext}`;
 
 function detectPreGenerationAssumptions(message, _mode) {
   const assumptionTriggers = [
-    "everyone knows",
-    "obviously",
-    "clearly",
-    "without question",
-    "it goes without saying",
-    "needless to say",
-    "of course",
+    'everyone knows',
+    'obviously',
+    'clearly',
+    'without question',
+    'it goes without saying',
+    'needless to say',
+    'of course',
   ];
 
   const violations = [];
   assumptionTriggers.forEach((trigger) => {
     if (message.toLowerCase().includes(trigger)) {
-      violations.push(`assumption_trigger_${trigger.replace(/\s+/g, "_")}`);
+      violations.push(`assumption_trigger_${trigger.replace(/\s+/g, '_')}`);
     }
   });
 
@@ -1905,7 +1905,7 @@ function injectModeEnforcement(message, mode, modeContext, preAssumptionCheck) {
 
   if (preAssumptionCheck.violations.length > 0) {
     enhanced +=
-      "\n\nSYSTEM NOTE: Challenge any assumptions and provide explicit confidence levels.";
+      '\n\nSYSTEM NOTE: Challenge any assumptions and provide explicit confidence levels.';
   }
 
   return enhanced;
@@ -1926,14 +1926,14 @@ function applyPoliticalGuardrails(response, _originalMessage) {
   politicalReferences.forEach((pattern) => {
     if (pattern.test(response)) {
       violations.push(pattern.toString());
-      sanitized = sanitized.replace(pattern, "[POLITICAL_CONTENT_NEUTRALIZED]");
+      sanitized = sanitized.replace(pattern, '[POLITICAL_CONTENT_NEUTRALIZED]');
       modified = true;
     }
   });
 
   if (modified) {
     sanitized +=
-      "\n\n🛡️ **Political Neutrality:** I aim to provide balanced analysis without political bias.";
+      '\n\n🛡️ **Political Neutrality:** I aim to provide balanced analysis without political bias.';
   }
 
   return {
@@ -1954,23 +1954,24 @@ function validateProductRecommendations(response) {
     /consider using/i,
   ];
 
-  const hasRecommendation = recommendationPatterns.some(pattern => pattern.test(response));
+  const hasRecommendation = recommendationPatterns.some((pattern) => pattern.test(response));
 
   if (hasRecommendation) {
     // Check if recommendation has proper support
-    const hasSupport = response.includes("because") ||
-                       response.includes("evidence") ||
-                       response.includes("data") ||
-                       response.includes("based on");
+    const hasSupport =
+      response.includes('because') ||
+      response.includes('evidence') ||
+      response.includes('data') ||
+      response.includes('based on');
 
     if (!hasSupport) {
-      violations.push("unsupported_recommendation");
+      violations.push('unsupported_recommendation');
     }
 
     // Use response-enhancer to add blind spots and caveats
     const enhanced = addBlindSpots(response, { hasRecommendation: true });
     if (enhanced !== response) {
-      violations.push("recommendation_needed_caveats");
+      violations.push('recommendation_needed_caveats');
     }
 
     return { violations, modifications: violations.length, enhanced };
@@ -1982,77 +1983,86 @@ function validateProductRecommendations(response) {
 function validateModeCompliance(response, mode, vaultLoaded) {
   const violations = [];
 
-  if (mode === "truth_general") {
+  if (mode === 'truth_general') {
     // STEP 4: REQUIRED STRUCTURE - Confidence assessment + Uncertainty handling
 
     // Check for confidence indicators
     if (
-      !response.includes("confidence") &&
+      !response.includes('confidence') &&
       !response.includes("I don't know") &&
-      !response.includes("uncertain") &&
+      !response.includes('uncertain') &&
       !response.includes("I'm not sure")
     ) {
-      violations.push("missing_confidence_indicators");
+      violations.push('missing_confidence_indicators');
     }
 
     // Check for uncertainty with explanation
-    const hasUncertainty = /uncertain|unclear|I don't know|I'm not sure|cannot determine/i.test(response);
+    const hasUncertainty = /uncertain|unclear|I don't know|I'm not sure|cannot determine/i.test(
+      response,
+    );
     const hasExplanation = /because|since|the reason|due to|given that/i.test(response);
     if (hasUncertainty && !hasExplanation) {
-      violations.push("uncertainty_without_explanation");
+      violations.push('uncertainty_without_explanation');
     }
 
     // Avoid speculative language
-    if (response.includes("probably") || response.includes("likely")) {
-      violations.push("speculative_language_detected");
+    if (response.includes('probably') || response.includes('likely')) {
+      violations.push('speculative_language_detected');
     }
   }
 
-  if (mode === "business_validation") {
+  if (mode === 'business_validation') {
     // STEP 4: REQUIRED STRUCTURE - [SURVIVAL IMPACT] | [CASH FLOW] | [TOP 3 RISKS]
 
     // Check for survival/runway analysis
-    const hasSurvival = /survival|runway|cash flow|burn rate|staying alive|business continuity/i.test(response);
+    const hasSurvival =
+      /survival|runway|cash flow|burn rate|staying alive|business continuity/i.test(response);
     if (!hasSurvival) {
-      violations.push("missing_survival_impact_analysis");
+      violations.push('missing_survival_impact_analysis');
     }
 
     // Check for risk assessment
-    const hasRiskAssessment = /risk|downside|worst case|threat|danger|vulnerability/i.test(response);
+    const hasRiskAssessment = /risk|downside|worst case|threat|danger|vulnerability/i.test(
+      response,
+    );
     if (!hasRiskAssessment) {
-      violations.push("missing_risk_assessment");
+      violations.push('missing_risk_assessment');
     }
 
     // Check for cash flow impact
-    const hasCashFlowAnalysis = /cash|revenue|cost|expense|profit|money|financial impact/i.test(response);
+    const hasCashFlowAnalysis = /cash|revenue|cost|expense|profit|money|financial impact/i.test(
+      response,
+    );
     if (!hasCashFlowAnalysis) {
-      violations.push("missing_cash_flow_analysis");
+      violations.push('missing_cash_flow_analysis');
     }
   }
 
-  if (mode === "site_monkeys" && vaultLoaded) {
+  if (mode === 'site_monkeys' && vaultLoaded) {
     // STEP 4: REQUIRED STRUCTURE - Vault compliance + Business validation + Protocol references
 
     // Site Monkeys branding
-    if (!response.includes("🍌")) {
-      violations.push("missing_site_monkeys_branding");
+    if (!response.includes('🍌')) {
+      violations.push('missing_site_monkeys_branding');
     }
 
     // Vault rule references
-    const hasVaultReference = /vault|protocol|policy|framework|Site Monkeys|operational/i.test(response);
+    const hasVaultReference = /vault|protocol|policy|framework|Site Monkeys|operational/i.test(
+      response,
+    );
     if (!hasVaultReference) {
-      violations.push("missing_vault_context_tie_in");
+      violations.push('missing_vault_context_tie_in');
     }
 
     // Inherit business_validation checks (survival + cash flow + risk)
     const hasSurvival = /survival|runway|cash flow|burn rate/i.test(response);
     if (!hasSurvival) {
-      violations.push("missing_business_survival_analysis");
+      violations.push('missing_business_survival_analysis');
     }
 
     const hasRiskAssessment = /risk|downside|worst case/i.test(response);
     if (!hasRiskAssessment) {
-      violations.push("missing_risk_assessment_in_site_monkeys");
+      violations.push('missing_risk_assessment_in_site_monkeys');
     }
   }
 
@@ -2074,7 +2084,7 @@ function detectAndFlagAssumptions(response, _mode) {
     /certainly/i,
   ];
 
-  const assumptions = assumptionPatterns.filter(pattern => pattern.test(response));
+  const assumptions = assumptionPatterns.filter((pattern) => pattern.test(response));
 
   // If assumptions detected, add uncertainty structure
   let enhanced = response;
@@ -2083,7 +2093,7 @@ function detectAndFlagAssumptions(response, _mode) {
   }
 
   return {
-    assumptions: assumptions.map(p => p.toString()),
+    assumptions: assumptions.map((p) => p.toString()),
     challenges_added: assumptions.length,
     enhanced,
   };
@@ -2104,22 +2114,16 @@ function applyPressureResistance(response, message, _conversationHistory) {
     /pretend (you're|to be)/i,
   ];
 
-  const authorityDetected = authorityPatterns.some((pattern) =>
-    pattern.test(message),
-  );
-  const criticalDetected = criticalPatterns.some((pattern) =>
-    pattern.test(message),
-  );
+  const authorityDetected = authorityPatterns.some((pattern) => pattern.test(message));
+  const criticalDetected = criticalPatterns.some((pattern) => pattern.test(message));
 
   if (criticalDetected || authorityDetected) {
     return {
       pressure_detected: true,
-      pressure_type: criticalDetected
-        ? "override_attempt"
-        : "authority_pressure",
+      pressure_type: criticalDetected ? 'override_attempt' : 'authority_pressure',
       modified_response:
         response +
-        "\n\n🛡️ **System Integrity:** I maintain objective analysis standards regardless of authority assertions.",
+        '\n\n🛡️ **System Integrity:** I maintain objective analysis standards regardless of authority assertions.',
       modifications: 1,
     };
   }
@@ -2140,7 +2144,7 @@ function enforceVaultRules(response, _message, _triggeredFrameworks) {
   const priceMatches = response.match(/\$[\d,]+/g);
   if (priceMatches) {
     priceMatches.forEach((priceStr) => {
-      const price = parseInt(priceStr.replace(/[$,]/g, ""));
+      const price = parseInt(priceStr.replace(/[$,]/g, ''));
       if (price < 697) {
         violations.push(`pricing_violation_${priceStr}_below_minimum`);
         modified_response += `\n\n🔐 **VAULT RULE VIOLATION:** Pricing below $697 minimum (${priceStr}) violates Site Monkeys premium positioning standards.`;
@@ -2149,13 +2153,10 @@ function enforceVaultRules(response, _message, _triggeredFrameworks) {
   }
 
   // Quality compromise detection
-  if (
-    response.toLowerCase().includes("cheap") ||
-    response.toLowerCase().includes("budget")
-  ) {
-    violations.push("quality_compromise_language");
+  if (response.toLowerCase().includes('cheap') || response.toLowerCase().includes('budget')) {
+    violations.push('quality_compromise_language');
     modified_response +=
-      "\n\n🔐 **VAULT RULE VIOLATION:** Language inconsistent with premium positioning standards.";
+      '\n\n🔐 **VAULT RULE VIOLATION:** Language inconsistent with premium positioning standards.';
   }
 
   return {
@@ -2170,9 +2171,9 @@ function injectProductValidationWarnings(response, violations) {
   let enhanced = response;
 
   violations.forEach((violation) => {
-    if (violation === "unsupported_recommendation") {
+    if (violation === 'unsupported_recommendation') {
       enhanced +=
-        "\n\n⚠️ **Product Validation:** Some recommendations require additional evidence before implementation.";
+        '\n\n⚠️ **Product Validation:** Some recommendations require additional evidence before implementation.';
     }
   });
 
@@ -2182,20 +2183,14 @@ function injectProductValidationWarnings(response, violations) {
 function injectModeComplianceScaffold(response, mode, violations) {
   let enhanced = response;
 
-  if (
-    mode === "truth_general" &&
-    violations.includes("missing_confidence_indicators")
-  ) {
+  if (mode === 'truth_general' && violations.includes('missing_confidence_indicators')) {
     enhanced +=
-      "\n\n📊 **Confidence Assessment:** This response requires validation. Key uncertainties need verification.";
+      '\n\n📊 **Confidence Assessment:** This response requires validation. Key uncertainties need verification.';
   }
 
-  if (
-    mode === "business_validation" &&
-    violations.includes("missing_business_survival_analysis")
-  ) {
+  if (mode === 'business_validation' && violations.includes('missing_business_survival_analysis')) {
     enhanced +=
-      "\n\n💰 **Business Survival Check:** Consider cash flow impact and business continuity implications.";
+      '\n\n💰 **Business Survival Check:** Consider cash flow impact and business continuity implications.';
   }
 
   return enhanced;
@@ -2206,7 +2201,7 @@ function injectAssumptionChallenges(response, assumptions) {
 
   if (assumptions.length > 0) {
     enhanced +=
-      "\n\n🔍 **Assumption Check:** This response contains assumptions that warrant verification.";
+      '\n\n🔍 **Assumption Check:** This response contains assumptions that warrant verification.';
   }
 
   return enhanced;
@@ -2217,8 +2212,8 @@ function runOptimizationEnhancer(params) {
   return {
     enhancedResponse: params.baseResponse,
     optimization_applied: true,
-    optimization_tags: ["basic_enhancement"],
-    optimizations: ["response_structure_maintained"],
+    optimization_tags: ['basic_enhancement'],
+    optimizations: ['response_structure_maintained'],
   };
 }
 
@@ -2242,10 +2237,10 @@ function shouldSuggestClaude(response, confidence, mode, conflicts) {
     suggested: confidence < 60 || conflicts.length > 2,
     reason:
       confidence < 60
-        ? "Low confidence requires complex analysis"
+        ? 'Low confidence requires complex analysis'
         : conflicts.length > 2
-          ? "Multiple conflicts need resolution"
-          : "Standard analysis sufficient",
+          ? 'Multiple conflicts need resolution'
+          : 'Standard analysis sufficient',
   };
 }
 
@@ -2270,14 +2265,9 @@ function checkAssumptionHealth(response) {
 
   return {
     assumptions_detected: assumptions.length,
-    overall_health:
-      assumptions.length > 0
-        ? Math.max(40, 100 - assumptions.length * 15)
-        : 100,
+    overall_health: assumptions.length > 0 ? Math.max(40, 100 - assumptions.length * 15) : 100,
     recommendations:
-      assumptions.length > 3
-        ? ["Review assumption validity"]
-        : ["Assumption health acceptable"],
+      assumptions.length > 3 ? ['Review assumption validity'] : ['Assumption health acceptable'],
   };
 }
 
@@ -2285,11 +2275,11 @@ function detectAssumptionConflicts(response, _vaultContext) {
   const conflicts = [];
 
   // Simple conflict detection - check for contradictory statements
-  if (response.includes("always") && response.includes("never")) {
+  if (response.includes('always') && response.includes('never')) {
     conflicts.push({
-      type: "absolute_contradiction",
-      severity: "high",
-      description: "Response contains contradictory absolute statements",
+      type: 'absolute_contradiction',
+      severity: 'high',
+      description: 'Response contains contradictory absolute statements',
     });
   }
 
@@ -2300,16 +2290,16 @@ function detectVaultConflicts(response, frameworks) {
   const conflicts = [];
 
   frameworks.forEach((framework) => {
-    if (framework.name === "pricing_framework") {
+    if (framework.name === 'pricing_framework') {
       // Check if response suggests pricing below vault minimum
       const priceMatches = response.match(/\$[\d,]+/g);
       if (priceMatches) {
         priceMatches.forEach((priceStr) => {
-          const price = parseInt(priceStr.replace(/[$,]/g, ""));
+          const price = parseInt(priceStr.replace(/[$,]/g, ''));
           if (price < 697) {
             conflicts.push({
-              type: "pricing_conflict",
-              severity: "critical",
+              type: 'pricing_conflict',
+              severity: 'critical',
               description: `Suggested price ${priceStr} conflicts with vault minimum $697`,
             });
           }
@@ -2341,18 +2331,14 @@ function calculateCostTracking(tokens, aiUsed, vaultLoaded) {
 }
 
 function analyzeOverridePatterns(overridePatterns, driftTracker) {
-  const totalOverrides = Object.values(overridePatterns).reduce(
-    (a, b) => a + b,
-    0,
-  );
+  const totalOverrides = Object.values(overridePatterns).reduce((a, b) => a + b, 0);
   const criticalPatterns =
     overridePatterns.vault_violations + overridePatterns.authority_resistances;
 
   return {
     total_overrides: totalOverrides,
     critical_patterns: criticalPatterns,
-    integrity_risk:
-      criticalPatterns > 3 ? "HIGH" : criticalPatterns > 1 ? "MODERATE" : "LOW",
+    integrity_risk: criticalPatterns > 3 ? 'HIGH' : criticalPatterns > 1 ? 'MODERATE' : 'LOW',
     pattern_distribution: overridePatterns,
     drift_correlation: driftTracker ? driftTracker.session_score : 100,
   };
@@ -2383,7 +2369,7 @@ function trackOverride(overrideType, originalValue, newValue, reason) {
     original: originalValue,
     new: newValue,
     reason: reason,
-    session_id: generateId("override"),
+    session_id: generateId('override'),
   };
 
   systemOverrideLog.push(override);
@@ -2405,10 +2391,7 @@ function trackOverride(overrideType, originalValue, newValue, reason) {
 
 export function getSessionStats() {
   return {
-    total_tokens: Object.values(tokenTracker.session).reduce(
-      (a, b) => a + b,
-      0,
-    ),
+    total_tokens: Object.values(tokenTracker.session).reduce((a, b) => a + b, 0),
     total_cost: tokenTracker.costs.total_session,
     total_calls: Object.values(tokenTracker.calls).reduce((a, b) => a + b, 0),
     breakdown: tokenTracker,

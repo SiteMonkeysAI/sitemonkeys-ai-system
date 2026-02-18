@@ -2,9 +2,9 @@
 // COMPLETE FILE UPLOAD ENDPOINT - All file types supported
 // SELF-CONTAINED - No dependencies on existing files
 
-import multer from "multer";
-import path from "path";
-import _fs from "fs";
+import multer from 'multer';
+import path from 'path';
+import _fs from 'fs';
 
 // Configure multer for file uploads (in-memory storage)
 const storage = multer.memoryStorage();
@@ -25,70 +25,55 @@ function detectFileType(filename, mimetype) {
   const _ext = path.extname(filename).toLowerCase();
 
   // Images
-  if (
-    /\.(jpg|jpeg|png|gif|bmp|svg|tiff|webp)$/i.test(filename) ||
-    mimetype.startsWith("image/")
-  ) {
-    return "image";
+  if (/\.(jpg|jpeg|png|gif|bmp|svg|tiff|webp)$/i.test(filename) || mimetype.startsWith('image/')) {
+    return 'image';
   }
 
   // Documents
   if (
     /\.(pdf|doc|docx|txt|md|rtf|odt)$/i.test(filename) ||
-    mimetype.includes("document") ||
-    mimetype.includes("pdf") ||
-    mimetype.includes("text")
+    mimetype.includes('document') ||
+    mimetype.includes('pdf') ||
+    mimetype.includes('text')
   ) {
-    return "document";
+    return 'document';
   }
 
   // Spreadsheets
-  if (
-    /\.(xls|xlsx|csv|ods)$/i.test(filename) ||
-    mimetype.includes("spreadsheet")
-  ) {
-    return "spreadsheet";
+  if (/\.(xls|xlsx|csv|ods)$/i.test(filename) || mimetype.includes('spreadsheet')) {
+    return 'spreadsheet';
   }
 
   // Presentations
-  if (
-    /\.(ppt|pptx|odp)$/i.test(filename) ||
-    mimetype.includes("presentation")
-  ) {
-    return "presentation";
+  if (/\.(ppt|pptx|odp)$/i.test(filename) || mimetype.includes('presentation')) {
+    return 'presentation';
   }
 
   // Audio
-  if (
-    /\.(mp3|wav|m4a|ogg|aac|flac)$/i.test(filename) ||
-    mimetype.startsWith("audio/")
-  ) {
-    return "audio";
+  if (/\.(mp3|wav|m4a|ogg|aac|flac)$/i.test(filename) || mimetype.startsWith('audio/')) {
+    return 'audio';
   }
 
   // Video
-  if (
-    /\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i.test(filename) ||
-    mimetype.startsWith("video/")
-  ) {
-    return "video";
+  if (/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i.test(filename) || mimetype.startsWith('video/')) {
+    return 'video';
   }
 
   // Archives
   if (
     /\.(zip|rar|7z|tar|gz)$/i.test(filename) ||
-    mimetype.includes("archive") ||
-    mimetype.includes("compressed")
+    mimetype.includes('archive') ||
+    mimetype.includes('compressed')
   ) {
-    return "archive";
+    return 'archive';
   }
 
   // Code files
   if (/\.(js|html|css|json|xml|py|java|cpp|c|php|rb|go|rs)$/i.test(filename)) {
-    return "code";
+    return 'code';
   }
 
-  return "other";
+  return 'other';
 }
 
 // Process file content for different types
@@ -104,32 +89,32 @@ async function processFile(file) {
 
   try {
     switch (fileType) {
-      case "image":
+      case 'image':
         processingResult.message = `Image uploaded: ${file.originalname} (${Math.round(file.size / 1024)}KB)`;
         processingResult.preview = `Image analysis available - contains visual data for AI processing`;
         break;
 
-      case "document":
+      case 'document':
         processingResult.message = `Document uploaded: ${file.originalname}`;
         processingResult.preview = `Text content extracted and ready for analysis`;
         break;
 
-      case "audio":
+      case 'audio':
         processingResult.message = `Audio file uploaded: ${file.originalname}`;
         processingResult.preview = `Audio ready for transcription and analysis`;
         break;
 
-      case "video":
+      case 'video':
         processingResult.message = `Video uploaded: ${file.originalname}`;
         processingResult.preview = `Video content ready for analysis`;
         break;
 
-      case "spreadsheet":
+      case 'spreadsheet':
         processingResult.message = `Spreadsheet uploaded: ${file.originalname}`;
         processingResult.preview = `Data tables ready for analysis`;
         break;
 
-      case "code":
+      case 'code':
         processingResult.message = `Code file uploaded: ${file.originalname}`;
         processingResult.preview = `Source code ready for review and analysis`;
         break;
@@ -157,14 +142,14 @@ async function processFile(file) {
 
 // Main upload handler
 async function handleFileUpload(req, res) {
-  console.log("📤 File upload request received");
+  console.log('📤 File upload request received');
 
   try {
     // Check if files were uploaded
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({
-        status: "error",
-        message: "No files uploaded",
+        status: 'error',
+        message: 'No files uploaded',
         successful_uploads: 0,
         failed_uploads: 0,
         files: [],
@@ -192,7 +177,7 @@ async function handleFileUpload(req, res) {
             message: result.message,
             type: result.type,
             size: result.size,
-            folder: "vault", // Default folder
+            folder: 'vault', // Default folder
             preview: result.preview,
             metadata: result.metadata,
           });
@@ -203,7 +188,7 @@ async function handleFileUpload(req, res) {
             success: false,
             filename: file.originalname,
             message: result.message,
-            error: "Processing failed",
+            error: 'Processing failed',
           });
           console.log(`❌ Failed to process: ${file.originalname}`);
         }
@@ -221,22 +206,20 @@ async function handleFileUpload(req, res) {
 
     // Return results
     const response = {
-      status: successCount > 0 ? "success" : "error",
+      status: successCount > 0 ? 'success' : 'error',
       message: `Upload complete: ${successCount} successful, ${failureCount} failed`,
       successful_uploads: successCount,
       failed_uploads: failureCount,
       files: results,
     };
 
-    console.log(
-      `📊 Upload complete: ${successCount}/${req.files.length} successful`,
-    );
+    console.log(`📊 Upload complete: ${successCount}/${req.files.length} successful`);
     res.json(response);
   } catch (error) {
-    console.error("❌ Upload endpoint error:", error);
+    console.error('❌ Upload endpoint error:', error);
     res.status(500).json({
-      status: "error",
-      message: "Server error during file upload",
+      status: 'error',
+      message: 'Server error during file upload',
       error: error.message,
       successful_uploads: 0,
       failed_uploads: req.files ? req.files.length : 0,
@@ -246,5 +229,5 @@ async function handleFileUpload(req, res) {
 }
 
 // Export the configured upload middleware and handler (ES6 syntax)
-export const uploadMiddleware = upload.array("files", 10);
+export const uploadMiddleware = upload.array('files', 10);
 export { handleFileUpload };

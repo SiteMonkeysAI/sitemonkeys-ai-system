@@ -13,7 +13,8 @@ import { applyPrincipleBasedReasoning } from '../core/intelligence/principleBase
 import { hasNewsIntent, hasProperNouns } from '../core/intelligence/externalLookupEngine.js';
 
 // Technical ZIP context patterns (file compression, not voting)
-const TECHNICAL_ZIP_PATTERNS = /\b(zip file|zip archive|\.zip|unzip|zipfile|compress|decompress|archive format|extract.*zip|zip.*extract|file compression|compressed file|archive file)\b/i;
+const TECHNICAL_ZIP_PATTERNS =
+  /\b(zip file|zip archive|\.zip|unzip|zipfile|compress|decompress|archive format|extract.*zip|zip.*extract|file compression|compressed file|archive file)\b/i;
 
 export class PoliticalGuardrails {
   /**
@@ -48,7 +49,7 @@ export class PoliticalGuardrails {
         analysis: context.analysis,
         phase4Metadata: context.phase4Metadata,
         memoryContext: context.memoryContext,
-        conversationHistory: context.conversationHistory
+        conversationHistory: context.conversationHistory,
       });
       reasoning = reasoningResult?.metadata || null;
     }
@@ -59,7 +60,7 @@ export class PoliticalGuardrails {
 
     // ADVICE REQUEST patterns - user wants recommendations/guidance
     const advicePatterns = [
-      /\bshould (I|we) vote for\s+[A-Z]\w+/i,  // "should I vote for Candidate"
+      /\bshould (I|we) vote for\s+[A-Z]\w+/i, // "should I vote for Candidate"
       /\bwho should (I|we) vote\s+(for)?/i,
       /\b(recommend|suggest)\s+(a|the)?\s*candidate\s+(to|for)/i,
       /\bwhich (candidate|party|politician)\s+(is\s+)?(better|best)/i,
@@ -69,7 +70,7 @@ export class PoliticalGuardrails {
       /\b(advice|guidance)\s+(on|for|about)\s+voting/i,
       /\bwho\s+(is|would be)\s+the\s+best\s+(candidate|choice)/i,
       /\bwhich (side|position)\s+should\s+(I|we)\s+support/i,
-      /\bshould (I|we) support\s+[A-Z]\w+/i  // "should I support Candidate"
+      /\bshould (I|we) support\s+[A-Z]\w+/i, // "should I support Candidate"
     ];
 
     // INFORMATION REQUEST patterns - user wants facts/news
@@ -84,48 +85,53 @@ export class PoliticalGuardrails {
       /\bcurrent events?/i,
       /\bbreaking/i,
       /\btoday'?s/i,
-      /\blatest (news|update)/i
+      /\blatest (news|update)/i,
     ];
 
     // Check for explicit advice request
-    const isAdviceRequest = advicePatterns.some(pattern => pattern.test(message));
+    const isAdviceRequest = advicePatterns.some((pattern) => pattern.test(message));
     if (isAdviceRequest) {
       return {
         intent: 'ADVICE_REQUEST',
-        reason: 'User explicitly asking for voting/political advice (who to vote for, what to support)',
-        confidence: 0.95
+        reason:
+          'User explicitly asking for voting/political advice (who to vote for, what to support)',
+        confidence: 0.95,
       };
     }
 
     // Check if reasoning detected a decision request
     if (reasoning?.detections?.hasDecision) {
       // Decision + political context = likely advice request
-      const hasPoliticalContext = /\b(vote|voting|candidate|election|ballot|politician|party|political)\b/i.test(message);
+      const hasPoliticalContext =
+        /\b(vote|voting|candidate|election|ballot|politician|party|political)\b/i.test(message);
       if (hasPoliticalContext) {
         return {
           intent: 'ADVICE_REQUEST',
           reason: 'Decision request detected in political context',
-          confidence: 0.85
+          confidence: 0.85,
         };
       }
     }
 
     // Check for explicit information request
-    const isInformationRequest = informationPatterns.some(pattern => pattern.test(message));
+    const isInformationRequest = informationPatterns.some((pattern) => pattern.test(message));
     if (isInformationRequest) {
       return {
         intent: 'INFORMATION_REQUEST',
         reason: 'User asking for factual information/news (what is, what happened, latest news)',
-        confidence: 0.90
+        confidence: 0.9,
       };
     }
 
     // News query with named entities = information request (e.g., "What's the situation with Starmer?")
-    if (isNewsQuery || (hasNamedEntities && /\b(news|situation|latest|update|today|happening)\b/i.test(message))) {
+    if (
+      isNewsQuery ||
+      (hasNamedEntities && /\b(news|situation|latest|update|today|happening)\b/i.test(message))
+    ) {
       return {
         intent: 'INFORMATION_REQUEST',
         reason: 'News query detected: structure + named entities indicate information seeking',
-        confidence: 0.85
+        confidence: 0.85,
       };
     }
 
@@ -134,7 +140,7 @@ export class PoliticalGuardrails {
       return {
         intent: 'INFORMATION_REQUEST',
         reason: 'Policy inquiry - asking what policies are, not what to support',
-        confidence: 0.80
+        confidence: 0.8,
       };
     }
 
@@ -142,8 +148,9 @@ export class PoliticalGuardrails {
     // Caring family member provides information unless clearly asked for advice
     return {
       intent: 'INFORMATION_REQUEST',
-      reason: 'Default to information request per caring family member principle (empower, not control)',
-      confidence: 0.60
+      reason:
+        'Default to information request per caring family member principle (empower, not control)',
+      confidence: 0.6,
     };
   }
 
@@ -156,7 +163,7 @@ export class PoliticalGuardrails {
         guarded_response: response,
         political_intervention: false,
         bypass_reason: bypassCheck.reason,
-        analysis: { political_risk_level: "NONE", detected_categories: [] },
+        analysis: { political_risk_level: 'NONE', detected_categories: [] },
       };
     }
 
@@ -165,20 +172,22 @@ export class PoliticalGuardrails {
     const intentAnalysis = await this.detectQueryIntent(originalMessage, context);
 
     if (intentAnalysis.intent === 'INFORMATION_REQUEST') {
-      console.log('[POLITICAL-GUARDRAILS] Intent: information request - delivering truth per caring family member principle');
+      console.log(
+        '[POLITICAL-GUARDRAILS] Intent: information request - delivering truth per caring family member principle',
+      );
       console.log(`[POLITICAL-GUARDRAILS] Reason: ${intentAnalysis.reason}`);
       return {
         guarded_response: response,
         political_intervention: false,
         bypass_reason: 'information_request',
         intent_analysis: intentAnalysis,
-        analysis: { political_risk_level: "NONE", detected_categories: [] },
+        analysis: { political_risk_level: 'NONE', detected_categories: [] },
       };
     }
 
     const analysis = this.analyzePoliticalContent(response, originalMessage);
 
-    if (analysis.political_risk_level === "NONE") {
+    if (analysis.political_risk_level === 'NONE') {
       return {
         guarded_response: response,
         political_intervention: false,
@@ -194,13 +203,14 @@ export class PoliticalGuardrails {
       political_intervention: true,
       analysis,
       intent_analysis: intentAnalysis,
-      original_response_blocked: analysis.political_risk_level === "HIGH" && intentAnalysis.intent === 'ADVICE_REQUEST',
+      original_response_blocked:
+        analysis.political_risk_level === 'HIGH' && intentAnalysis.intent === 'ADVICE_REQUEST',
     };
   }
 
   static analyzePoliticalContent(response, originalMessage) {
     const analysis = {
-      political_risk_level: "NONE",
+      political_risk_level: 'NONE',
       detected_categories: [],
       intervention_type: null,
       confidence: 0,
@@ -214,13 +224,15 @@ export class PoliticalGuardrails {
         /\bwho should (I|we) vote for/i,
         /\bwhich (candidate|party) (should (I|we)|do you (recommend|suggest))/i,
         /\btell me (who|how|which) to vote (for)?/i,
-        /\b(recommend|suggest)\s+(a|the)?\s*(candidate|party|politician)\s+to\s+(vote for|support|elect)/i
+        /\b(recommend|suggest)\s+(a|the)?\s*(candidate|party|politician)\s+to\s+(vote for|support|elect)/i,
       ];
 
-      const isDirectAsk = directPoliticalAsk.some(p => p.test(originalMessage.slice(0, 500)));
+      const isDirectAsk = directPoliticalAsk.some((p) => p.test(originalMessage.slice(0, 500)));
 
       if (!isDirectAsk) {
-        console.log('[POLITICAL-GUARDRAILS] Document contains political topic discussion, not a political ask');
+        console.log(
+          '[POLITICAL-GUARDRAILS] Document contains political topic discussion, not a political ask',
+        );
         return analysis; // Return NONE
       }
     }
@@ -228,7 +240,7 @@ export class PoliticalGuardrails {
     const votingPatterns = [
       /\b(you should|I recommend|we recommend|I suggest)\s+(vote for|voting for|elect|electing|choose|choosing)\s+\w+/i,
       /\bdon't vote for\s+\w+/i,
-      /\bvote for\s+[A-Z]\w+/i,  // "vote for Candidate" (proper noun)
+      /\bvote for\s+[A-Z]\w+/i, // "vote for Candidate" (proper noun)
       /\b(the\s+)?best candidate\s+(is|would be)/i,
       /\bwho should (I|you|we) vote\s+(for)?/i,
       /\bvoting recommendation/i,
@@ -239,27 +251,32 @@ export class PoliticalGuardrails {
 
     // Issue #380 Fix 3: Disambiguation patterns that REDUCE political score
     const disambiguationPatterns = [
-      /when (a |the )?user asks/i,      // System rules about user questions
+      /when (a |the )?user asks/i, // System rules about user questions
       /the system (should|must|will)/i, // System behavior description
-      /neutral(ity)?/i,                 // Discussing neutrality policy
-      /how (to |we )handle/i,           // Process description
-      /our (policy|approach) (on|to)/i  // Policy description
+      /neutral(ity)?/i, // Discussing neutrality policy
+      /how (to |we )handle/i, // Process description
+      /our (policy|approach) (on|to)/i, // Policy description
     ];
 
-    const hasTrigger = this.matchesPatterns(response, votingPatterns) ||
-                       this.matchesPatterns(originalMessage, votingPatterns);
-    const hasDisambiguation = disambiguationPatterns.some(p => p.test(originalMessage) || p.test(response));
+    const hasTrigger =
+      this.matchesPatterns(response, votingPatterns) ||
+      this.matchesPatterns(originalMessage, votingPatterns);
+    const hasDisambiguation = disambiguationPatterns.some(
+      (p) => p.test(originalMessage) || p.test(response),
+    );
 
     // If discussing HOW to handle political topics, don't trigger
     if (hasTrigger && hasDisambiguation) {
-      console.log('[POLITICAL-GUARDRAILS] Political topic mentioned in policy/process context, not user request');
+      console.log(
+        '[POLITICAL-GUARDRAILS] Political topic mentioned in policy/process context, not user request',
+      );
       return analysis; // Return NONE
     }
 
     if (hasTrigger && !hasDisambiguation) {
-      analysis.detected_categories.push("VOTING");
-      analysis.political_risk_level = "HIGH";
-      analysis.intervention_type = "VOTING_TEMPLATE";
+      analysis.detected_categories.push('VOTING');
+      analysis.political_risk_level = 'HIGH';
+      analysis.intervention_type = 'VOTING_TEMPLATE';
       analysis.confidence += 30;
     }
 
@@ -274,14 +291,12 @@ export class PoliticalGuardrails {
     ];
 
     if (this.matchesPatterns(response, policyPatterns)) {
-      analysis.detected_categories.push("POLICY_ENDORSEMENT");
+      analysis.detected_categories.push('POLICY_ENDORSEMENT');
       analysis.political_risk_level = Math.max(
-        analysis.political_risk_level === "NONE"
-          ? "MEDIUM"
-          : analysis.political_risk_level,
-        "MEDIUM",
+        analysis.political_risk_level === 'NONE' ? 'MEDIUM' : analysis.political_risk_level,
+        'MEDIUM',
       );
-      analysis.intervention_type = "POLICY_TEMPLATE";
+      analysis.intervention_type = 'POLICY_TEMPLATE';
       analysis.confidence += 25;
     }
 
@@ -294,9 +309,9 @@ export class PoliticalGuardrails {
     ];
 
     if (this.matchesPatterns(response, ideologicalPatterns)) {
-      analysis.detected_categories.push("IDEOLOGICAL_NUDGING");
-      analysis.political_risk_level = "MEDIUM";
-      analysis.intervention_type = "NEUTRAL_REDIRECT";
+      analysis.detected_categories.push('IDEOLOGICAL_NUDGING');
+      analysis.political_risk_level = 'MEDIUM';
+      analysis.intervention_type = 'NEUTRAL_REDIRECT';
       analysis.confidence += 20;
     }
 
@@ -309,9 +324,9 @@ export class PoliticalGuardrails {
     ];
 
     if (this.matchesPatterns(response, disputedPatterns)) {
-      analysis.detected_categories.push("DISPUTED_CLAIMS");
-      analysis.political_risk_level = "MEDIUM";
-      analysis.intervention_type = "MULTIPLE_PERSPECTIVES";
+      analysis.detected_categories.push('DISPUTED_CLAIMS');
+      analysis.political_risk_level = 'MEDIUM';
+      analysis.intervention_type = 'MULTIPLE_PERSPECTIVES';
       analysis.confidence += 20;
     }
 
@@ -328,13 +343,13 @@ export class PoliticalGuardrails {
       /\b(you should|I recommend|we recommend|we should|everyone should|people should)\s+(vote for|voting for|support|supporting|elect|electing|choose|choosing)\s+[A-Z]\w+/i,
 
       // Comparative judgments (proper nouns)
-      /\b[A-Z]\w+\s+is\s+(better|worse|superior|inferior)\s+than\s+[A-Z]\w+\s+(as|for)\s+(president|senator|leader|candidate)/i
+      /\b[A-Z]\w+\s+is\s+(better|worse|superior|inferior)\s+than\s+[A-Z]\w+\s+(as|for)\s+(president|senator|leader|candidate)/i,
     ];
 
     if (this.matchesPatterns(response, politicalFigureJudgmentPatterns)) {
-      analysis.detected_categories.push("POLITICAL_FIGURES");
-      analysis.political_risk_level = "HIGH";
-      analysis.intervention_type = "NEUTRAL_REDIRECT";
+      analysis.detected_categories.push('POLITICAL_FIGURES');
+      analysis.political_risk_level = 'HIGH';
+      analysis.intervention_type = 'NEUTRAL_REDIRECT';
       analysis.confidence += 25;
     }
 
@@ -350,28 +365,31 @@ export class PoliticalGuardrails {
     // Only replace if user explicitly asks for voting advice AND response would mislead
 
     // If this is HIGH risk voting advice, use template (but consider augmenting in future)
-    if (analysis.intervention_type === "VOTING_TEMPLATE" && intentAnalysis.intent === 'ADVICE_REQUEST') {
+    if (
+      analysis.intervention_type === 'VOTING_TEMPLATE' &&
+      intentAnalysis.intent === 'ADVICE_REQUEST'
+    ) {
       // User explicitly asked for voting advice - provide guidance template
       return this.getVotingTemplate();
     }
 
     // For all other cases, AUGMENT the response with context, don't replace
     switch (analysis.intervention_type) {
-      case "VOTING_TEMPLATE":
+      case 'VOTING_TEMPLATE':
         // If not an advice request, just augment with disclaimer
-        return response + "\n\n" + this.getVotingDisclaimer();
+        return response + '\n\n' + this.getVotingDisclaimer();
 
-      case "POLICY_TEMPLATE":
+      case 'POLICY_TEMPLATE':
         // Augment with multiple perspectives note
-        return response + "\n\n" + this.getPolicyDisclaimer();
+        return response + '\n\n' + this.getPolicyDisclaimer();
 
-      case "MULTIPLE_PERSPECTIVES":
+      case 'MULTIPLE_PERSPECTIVES':
         // Augment with perspectives note
-        return response + "\n\n" + this.getMultiplePerspectivesDisclaimer();
+        return response + '\n\n' + this.getMultiplePerspectivesDisclaimer();
 
-      case "NEUTRAL_REDIRECT":
+      case 'NEUTRAL_REDIRECT':
         // Augment with neutrality note
-        return response + "\n\n" + this.getNeutralityDisclaimer();
+        return response + '\n\n' + this.getNeutralityDisclaimer();
 
       default:
         return response;
@@ -415,7 +433,7 @@ The choice of who to vote for is yours alone to make based on your values and pr
   static getPolicyTemplate(response) {
     const policyTopic = this.extractPolicyTopic(response);
 
-    return `I don't take political positions on policy matters. Here's what I can provide about ${policyTopic || "this topic"}:
+    return `I don't take political positions on policy matters. Here's what I can provide about ${policyTopic || 'this topic'}:
 
 📋 FACTUAL INFORMATION:
 • Current legal status and provisions
@@ -487,12 +505,12 @@ Would you like me to provide factual information about this topic from a neutral
     }
 
     // If no specific topic found, use generic term
-    return "this policy area";
+    return 'this policy area';
   }
 
   static generatePoliticalReport(analysis) {
     return {
-      political_content_detected: analysis.political_risk_level !== "NONE",
+      political_content_detected: analysis.political_risk_level !== 'NONE',
       risk_level: analysis.political_risk_level,
       categories: analysis.detected_categories,
       intervention_applied: analysis.intervention_type,
@@ -504,30 +522,24 @@ Would you like me to provide factual information about this topic from a neutral
   static generateRecommendations(analysis) {
     const recommendations = [];
 
-    if (analysis.detected_categories.includes("VOTING")) {
-      recommendations.push("Redirect to non-partisan voting resources");
+    if (analysis.detected_categories.includes('VOTING')) {
+      recommendations.push('Redirect to non-partisan voting resources');
     }
 
-    if (analysis.detected_categories.includes("POLICY_ENDORSEMENT")) {
-      recommendations.push(
-        "Provide factual policy analysis without endorsement",
-      );
+    if (analysis.detected_categories.includes('POLICY_ENDORSEMENT')) {
+      recommendations.push('Provide factual policy analysis without endorsement');
     }
 
-    if (analysis.detected_categories.includes("DISPUTED_CLAIMS")) {
-      recommendations.push(
-        "Present multiple perspectives with source attribution",
-      );
+    if (analysis.detected_categories.includes('DISPUTED_CLAIMS')) {
+      recommendations.push('Present multiple perspectives with source attribution');
     }
 
-    if (analysis.detected_categories.includes("IDEOLOGICAL_NUDGING")) {
-      recommendations.push("Maintain strict ideological neutrality");
+    if (analysis.detected_categories.includes('IDEOLOGICAL_NUDGING')) {
+      recommendations.push('Maintain strict ideological neutrality');
     }
 
-    if (analysis.detected_categories.includes("POLITICAL_FIGURES")) {
-      recommendations.push(
-        "Focus on actions and policies rather than personal judgments",
-      );
+    if (analysis.detected_categories.includes('POLITICAL_FIGURES')) {
+      recommendations.push('Focus on actions and policies rather than personal judgments');
     }
 
     return recommendations;
@@ -538,8 +550,8 @@ Would you like me to provide factual information about this topic from a neutral
       // Pass full context to guardPoliticalContent for intent detection
       const guardedResult = await this.guardPoliticalContent(
         response,
-        context.message || "",
-        context
+        context.message || '',
+        context,
       );
 
       // Check if intervention was applied
@@ -552,7 +564,9 @@ Would you like me to provide factual information about this topic from a neutral
 
       // If bypassed due to intent detection, return original response
       if (guardedResult.bypass_reason === 'information_request') {
-        console.log('[POLITICAL-GUARDRAILS] Delivering truth - user asked for information, not advice');
+        console.log(
+          '[POLITICAL-GUARDRAILS] Delivering truth - user asked for information, not advice',
+        );
         return {
           politicalContentDetected: false,
           neutralizedResponse: response,
@@ -574,13 +588,13 @@ Would you like me to provide factual information about this topic from a neutral
       return {
         politicalContentDetected: true,
         neutralizedResponse: guardedResult.guarded_response,
-        reason: `Political content detected: ${guardedResult.analysis.detected_categories.join(", ")}`,
+        reason: `Political content detected: ${guardedResult.analysis.detected_categories.join(', ')}`,
         riskLevel: guardedResult.analysis.political_risk_level,
         originalBlocked: guardedResult.original_response_blocked,
         intent_analysis: guardedResult.intent_analysis,
       };
     } catch (error) {
-      console.error("[POLITICAL-GUARDRAILS] Check error:", error);
+      console.error('[POLITICAL-GUARDRAILS] Check error:', error);
 
       return {
         politicalContentDetected: false,

@@ -8,6 +8,7 @@
     "connect-pg-simple": "^10.0.0",
     "cors": "^2.8.5",
     "express": "^4.22.1",
+    "express-rate-limit": "^8.2.1",
     "express-session": "^1.17.3",
     "googleapis": "^126.0.1",
     "jszip": "^3.10.1",
@@ -18,8 +19,7 @@
     "pdf-parse": "^1.1.1",
     "pg": "^8.11.3",
     "tiktoken": "^1.0.22",
-    "xml2js": "^0.6.2",
-    "express-rate-limit": "^8.2.1"
+    "xml2js": "^0.6.2"
   },
   "imports": {
     "#config/*": "./config/*",
@@ -41,6 +41,16 @@
   },
   "devDependencies": {
     "eslint": "^9.38.0",
-    "prettier": "^3.6.2"
-  }
+    "prettier": "^3.8.1"
+  },
+  "description": "Site Monkeys memory and enforcement shell with comprehensive 66-feature system validation.",
+  "main": "VERIFICATION_TEST.js",
+  "directories": {
+    "doc": "docs",
+    "lib": "lib",
+    "test": "tests"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
 }
