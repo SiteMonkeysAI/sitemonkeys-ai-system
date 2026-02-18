@@ -329,7 +329,7 @@ export class Orchestrator {
       }
 
       // ========== STEP 7: VAULT COMPLIANCE (Site Monkeys only) ==========
-      if (mode === "site_monkeys" && context.sources?.hasVault) {
+      if (mode === "site_monkeys" && context.vault) {
         try {
           // NOTE: validateVaultCompliance function not implemented yet
           // Using basic vault enforcement instead
@@ -1075,10 +1075,10 @@ export class Orchestrator {
       console.log('[HANDOFF:CONTEXT-ASSEMBLY→AI] ═══════════════════════════════════');
       console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Total tokens: ${context.totalTokens}`);
       console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Token breakdown:`);
-      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Memory: ${context.tokenBreakdown?.memory || 0}t (${context.sources?.hasMemory ? '✅' : '❌'})`);
-      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Documents: ${context.tokenBreakdown?.documents || 0}t (${context.sources?.hasDocuments ? '✅' : '❌'})`);
-      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Vault: ${context.tokenBreakdown?.vault || 0}t (${context.sources?.hasVault ? '✅' : '❌'})`);
-      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Sources present: memory=${context.sources?.hasMemory}, docs=${context.sources?.hasDocuments}, vault=${context.sources?.hasVault}`);
+      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Memory: ${context.tokenBreakdown?.memory || 0}t (${!!context.memory ? '✅' : '❌'})`);
+      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Documents: ${context.tokenBreakdown?.documents || 0}t (${!!context.documents ? '✅' : '❌'})`);
+      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Vault: ${context.tokenBreakdown?.vault || 0}t (${!!context.vault ? '✅' : '❌'})`);
+      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Sources present: memory=${!!context.memory}, docs=${!!context.documents}, vault=${!!context.vault}`);
       console.log('[HANDOFF:CONTEXT-ASSEMBLY→AI] ═══════════════════════════════════');
 
       // STEP 5: Perform semantic analysis
@@ -1312,8 +1312,6 @@ export class Orchestrator {
         this.log(`[PHASE4] 5. Injecting external context: ${phase4Metadata.external_data.total_text_length} chars from ${phase4Metadata.sources_used} sources`);
         // Add external data to context for AI injection
         context.external = phase4Metadata.external_data;
-        context.sources = context.sources || {};
-        context.sources.hasExternal = true;
       }
 
       // STEP 6.8: PRINCIPLE-BASED REASONING LAYER
@@ -1950,13 +1948,13 @@ export class Orchestrator {
         response: personalityResponse.response,
         // ISSUE #781 FIX: Add explicit context status for transparency
         sources: {
-          memoryLoaded: context.sources?.hasMemory || false,
+          memoryLoaded: !!context.memory,
           memoryCount: memoryContext.count || 0,
-          documentLoaded: context.sources?.hasDocuments || false,
+          documentLoaded: !!context.documents,
           documentName: documentData?.filename || null,
           documentTokens: documentData?.tokens || 0,
-          vaultLoaded: context.sources?.hasVault || false,
-          externalDataUsed: context.sources?.hasExternal || false,
+          vaultLoaded: !!context.vault,
+          externalDataUsed: !!context.external,
         },
         metadata: {
           // Context tracking
@@ -2167,10 +2165,10 @@ export class Orchestrator {
         // ISSUE #776 FIX 1: Source tracking for memory tagging
         // This information tells server.js whether to tag stored memories with source types
         sources: {
-          hasDocuments: context.sources?.hasDocuments || false,
-          hasExternal: context.sources?.hasExternal || false,
-          hasVault: context.sources?.hasVault || false,
-          hasMemory: context.sources?.hasMemory || false,
+          hasDocuments: !!context.documents,
+          hasExternal: !!context.external,
+          hasVault: !!context.vault,
+          hasMemory: !!context.memory,
         },
       };
     } catch (error) {
@@ -2454,8 +2452,12 @@ export class Orchestrator {
         // ISSUE #776 FIX 1: Filter out stale source-tagged memories when fresh data is available
         // When a NEW document is uploaded, exclude old document analysis memories
         // When fresh external data is fetched, exclude stale external data memories
-        const hasNewDocument = options.sources?.hasDocuments;
-        const hasFreshExternalData = options.sources?.hasExternal;
+        // NOTE: This filtering is currently disabled because options doesn't include document/external flags
+        // TODO: Pass hasDocuments and hasExternal flags in options to enable this filtering
+        // const hasNewDocument = options.hasDocuments;
+        // const hasFreshExternalData = options.hasExternal;
+        const hasNewDocument = false; // DISABLED - options doesn't have this data
+        const hasFreshExternalData = false; // DISABLED - options doesn't have this data
 
         if (hasNewDocument || hasFreshExternalData) {
           const originalCount = memoriesToFormat.length;
@@ -3476,11 +3478,6 @@ export class Orchestrator {
         vault: vaultTokens,
       },
       budgetCompliance: enforcement.compliant,
-      sources: {
-        hasMemory: memory?.hasMemory || false,
-        hasDocuments: !!documents,
-        hasVault: !!vault,
-      },
       // Pass through extraction metadata for truth-first disclosure
       extractionMetadata: documents?.extractionMetadata || null,
     };
@@ -3502,9 +3499,9 @@ export class Orchestrator {
         {
           userId: context.userId || "unknown",
           conversationHistory: conversationHistory,
-          availableMemory: context.sources?.hasMemory || false,
-          documentContext: context.sources?.hasDocuments || false,
-          vaultContext: context.sources?.hasVault || false,
+          availableMemory: !!context.memory,
+          documentContext: !!context.documents,
+          vaultContext: !!context.vault,
           mode: context.mode,
           sessionId: context.sessionId,
         },
@@ -3551,9 +3548,9 @@ export class Orchestrator {
   #calculateContextDependency(context, semanticResult) {
     let dependency = 0.3;
 
-    if (context.sources?.hasMemory) dependency += 0.2;
-    if (context.sources?.hasDocuments) dependency += 0.2;
-    if (context.sources?.hasVault) dependency += 0.3;
+    if (context.memory) dependency += 0.2;
+    if (context.documents) dependency += 0.2;
+    if (context.vault) dependency += 0.3;
     if (semanticResult.requiresMemory) dependency += 0.1;
     if (semanticResult.personalContext) dependency += 0.1;
 
@@ -3660,9 +3657,9 @@ export class Orchestrator {
         confidence += 0.05;
       }
 
-      if (context.sources?.hasMemory) confidence += 0.05;
-      if (context.sources?.hasDocuments) confidence += 0.03;
-      if (context.sources?.hasVault) confidence += 0.07;
+      if (context.memory) confidence += 0.05;
+      if (context.documents) confidence += 0.03;
+      if (context.vault) confidence += 0.07;
 
       if (analysis.domain === "business" || analysis.domain === "technical") {
         confidence -= 0.1;
@@ -3700,6 +3697,11 @@ export class Orchestrator {
     conversationHistory,
     phase4Metadata = null,
   ) {
+    // FIX: Declare useClaude before try block so it's accessible in catch block (line ~4097)
+    let useClaude = false;
+    let routingReason = [];
+    let isSafetyCritical = false;
+
     try {
       // ========== CRITICAL FIX: Check vault/tokens BEFORE confidence ==========
       // Priority order: Vault presence → Token budget → Then confidence
@@ -3712,10 +3714,6 @@ export class Orchestrator {
       const gpt4MaxInput = MODEL_LIMITS['gpt-4'].maxContext - MODEL_LIMITS['gpt-4'].reservedOutput;
       const claudeMaxInput = MODEL_LIMITS['claude-sonnet-4-20250514'].maxContext - MODEL_LIMITS['claude-sonnet-4-20250514'].reservedOutput;
 
-      let useClaude = false;
-      let routingReason = [];
-      let isSafetyCritical = false;
-
       // PRIORITY 0: High-stakes domain detection (BIBLE REQUIREMENT - Section D)
       // Medical, legal, financial, safety queries MUST escalate to Claude
       if (phase4Metadata?.high_stakes?.isHighStakes) {
@@ -3727,7 +3725,7 @@ export class Orchestrator {
       }
 
       // PRIORITY 1: Vault presence (Site Monkeys mode always uses Claude)
-      if (context.sources?.hasVault && mode === "site_monkeys") {
+      if (context.vault && mode === "site_monkeys") {
         useClaude = true;
         routingReason.push("vault_access");
       }
@@ -3773,7 +3771,7 @@ export class Orchestrator {
         routingReason = ['user_declined_claude'];
       }
       // If escalating to Claude for non-safety-critical reasons, notify user ONCE
-      else if (useClaude && !isSafetyCritical && !context.sources?.hasVault) {
+      else if (useClaude && !isSafetyCritical && !context.vault) {
         // Return a special response asking for confirmation ONLY if not yet confirmed
         const confirmationNeeded = context.claudeConfirmed !== true;
 
@@ -3840,14 +3838,14 @@ export class Orchestrator {
       const contextString = this.#buildContextString(context, mode);
 
       // Log if external context is being used
-      if (context.sources?.hasExternal && phase4Metadata) {
+      if (context.external && phase4Metadata) {
         this.log(`[PHASE4] 6. AI generation starting with external context (${context.external?.total_text_length || 0} chars)`);
       }
 
       // Build system prompt with reasoning guidance if available
       // ISSUE #443: Add query classification to system prompt for response intelligence
       // ISSUE #566/#570: Pass memory context flag to enable semantic intelligence requirements
-      const hasMemoryContext = context.sources?.hasMemory && context.memory;
+      const hasMemoryContext = context.memory;
       const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, context.earlyClassification, hasMemoryContext);
 
       // PHASE 4: Inject external content if fetched
@@ -3940,7 +3938,7 @@ export class Orchestrator {
 
       // VAULT-ONLY MODE: Pure vault queries bypass contamination
       const isVaultQuery =
-        context.sources?.hasVault &&
+        context.vault &&
         (message.toLowerCase().includes("vault") ||
           message.toLowerCase().includes("founder") ||
           message.toLowerCase().includes("directive") ||
@@ -3986,9 +3984,9 @@ export class Orchestrator {
         console.log('[HANDOFF:CONTEXT→AI-CLAUDE] ═══════════════════════════════════');
         console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Sending ${messages.length} messages to Claude`);
         console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Total message content: ${messages.reduce((sum, m) => sum + m.content.length, 0)} chars`);
-        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Memory in context: ${context.sources?.hasMemory ? 'YES' : 'NO'}`);
-        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Documents in context: ${context.sources?.hasDocuments ? 'YES' : 'NO'}`);
-        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Vault in context: ${context.sources?.hasVault ? 'YES' : 'NO'}`);
+        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Memory in context: ${!!context.memory ? 'YES' : 'NO'}`);
+        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Documents in context: ${!!context.documents ? 'YES' : 'NO'}`);
+        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Vault in context: ${!!context.vault ? 'YES' : 'NO'}`);
         console.log('[HANDOFF:CONTEXT→AI-CLAUDE] ═══════════════════════════════════');
 
         const claudeResponse = await this.anthropic.messages.create({
@@ -4042,9 +4040,9 @@ export class Orchestrator {
         console.log('[HANDOFF:CONTEXT→AI-GPT4] ═══════════════════════════════════');
         console.log(`[HANDOFF:CONTEXT→AI-GPT4] Sending ${messages.length} messages to GPT-4`);
         console.log(`[HANDOFF:CONTEXT→AI-GPT4] Total message content: ${messages.reduce((sum, m) => sum + m.content.length, 0)} chars`);
-        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Memory in context: ${context.sources?.hasMemory ? 'YES' : 'NO'}`);
-        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Documents in context: ${context.sources?.hasDocuments ? 'YES' : 'NO'}`);
-        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Vault in context: ${context.sources?.hasVault ? 'YES' : 'NO'}`);
+        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Memory in context: ${!!context.memory ? 'YES' : 'NO'}`);
+        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Documents in context: ${!!context.documents ? 'YES' : 'NO'}`);
+        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Vault in context: ${!!context.vault ? 'YES' : 'NO'}`);
         console.log('[HANDOFF:CONTEXT→AI-GPT4] ═══════════════════════════════════');
 
         const gptResponse = await this.openai.chat.completions.create({
@@ -4079,7 +4077,7 @@ export class Orchestrator {
         personality,
         inputTokens,
         outputTokens,
-        context.sources?.hasVault ? (context.vault?.length || 0) / 4 : 0
+        context.vault ? (context.vault?.length || 0) / 4 : 0
       );
 
       return {
@@ -4432,7 +4430,7 @@ export class Orchestrator {
     let contextStr = "";
 
     // ========== PHASE 4: INJECT EXTERNAL DATA FIRST (IF AVAILABLE) ==========
-    if (context.sources?.hasExternal && context.external) {
+    if (context.external) {
       const externalData = context.external;
 
       // CRITICAL FIX (Issue #776, Fix 4): Truncate external data to fit token budget
@@ -4508,7 +4506,7 @@ END OF EXTERNAL DATA
     }
 
     // ========== VAULT TAKES ABSOLUTE PRIORITY IN SITE MONKEYS MODE ==========
-    if (context.sources?.hasVault && context.vault) {
+    if (context.vault) {
       contextStr += `
   ═══════════════════════════════════════════════════════════════
   🍌 SITE MONKEYS VAULT - COMPLETE BUSINESS KNOWLEDGE BASE
@@ -4551,7 +4549,7 @@ END OF EXTERNAL DATA
       // FIX #4: Enhanced memory acknowledgment in vault mode
       // ISSUE #570: Strengthen memory context injection with explicit reasoning requirements
       // FIX #577 - EDG3: Extract and highlight numerical data for preservation
-      if (context.sources?.hasMemory && context.memory) {
+      if (context.memory) {
         const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
 
         // Extract numerical data from memory
@@ -4589,7 +4587,7 @@ When using this memory context, a caring family member would naturally apply tem
       // ISSUE #776 FIX 5: Allow document injection alongside vault in Site Monkeys mode
       // Only skip document injection if there's no document uploaded
       // This allows users to analyze documents while in Site Monkeys mode
-      if (!context.sources?.hasDocuments) {
+      if (!context.documents) {
         return contextStr;
       }
       // Otherwise, fall through to add document content alongside vault
@@ -4603,7 +4601,7 @@ When using this memory context, a caring family member would naturally apply tem
     // FIX #4: Enhanced memory acknowledgment in standard mode
     // ISSUE #570: Strengthen memory context injection with explicit reasoning requirements
     // FIX #577 - EDG3: Extract and highlight numerical data for preservation
-    if (context.sources?.hasMemory && context.memory) {
+    if (context.memory) {
       const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
 
       // Extract numerical data from memory
@@ -4670,7 +4668,7 @@ If you're asking about something you've told me before, I should be able to find
     }
 
     // ========== DOCUMENT CONTEXT (Issue #407 Fix + Enhancement) ==========
-    if (context.sources?.hasDocuments && context.documents) {
+    if (context.documents) {
       // CRITICAL FIX (Issue #771): Truncate document content BEFORE injection to prevent context_length_exceeded
       // Token budget: 8192 total - 2500 (system) - 1500 (memory) - 200 (external) - 100 (user) = ~3800 remaining
       // Safe limit: 6000 chars (~1500 tokens) with safety margin
