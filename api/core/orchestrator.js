@@ -2454,8 +2454,8 @@ export class Orchestrator {
         // ISSUE #776 FIX 1: Filter out stale source-tagged memories when fresh data is available
         // When a NEW document is uploaded, exclude old document analysis memories
         // When fresh external data is fetched, exclude stale external data memories
-        const hasNewDocument = context.sources?.hasDocuments;
-        const hasFreshExternalData = context.sources?.hasExternal;
+        const hasNewDocument = options.sources?.hasDocuments;
+        const hasFreshExternalData = options.sources?.hasExternal;
 
         if (hasNewDocument || hasFreshExternalData) {
           const originalCount = memoriesToFormat.length;
@@ -2578,6 +2578,7 @@ export class Orchestrator {
       this.log(
         `[MEMORY] Semantic retrieval: ${finalMemoryCount} memories injected, ${tokenCount} tokens (method: ${telemetry.method})`
       );
+      console.log(`[SEMANTIC-RETRIEVAL] ✅ Completed: ${finalMemoryCount} memories, ${tokenCount} tokens (no fallback needed)`);
       
       // EXECUTION PROOF - Show which memories were actually injected
       console.log(`[PROOF] orchestrator:memory-injected v=2026-01-29a count=${finalMemoryCount} ids=[${memoryIds.join(',')}]`);
