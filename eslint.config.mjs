@@ -1,10 +1,7 @@
-// ESLint configuration
-export default {
-  // ... other config options
-
+export default {  // other configurations
   ignores: [
-    'api/lib/verifier/**',
-    'test-six-semantic-fixes.js',
-    'verify-semantic-fixes.js',
+    "api/lib/verifier/**",
+    "test-six-semantic-fixes.js",
+    "verify-semantic-fixes.js",
   ],
 };
