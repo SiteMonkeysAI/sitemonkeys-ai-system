@@ -312,9 +312,47 @@ async function processFile(file) {
         processingResult.success = false;
       }
     } else {
+      // Handle PDF files - extract text using pdf-parse
+      const isPdf = file.mimetype === 'application/pdf' ||
+        path.extname(file.originalname).toLowerCase() === '.pdf';
+
+      if (isPdf && file.buffer) {
+        console.log(`[UPLOAD] Processing PDF file: ${file.originalname}`);
+        try {
+          const pdfParse = (await import('pdf-parse')).default;
+          const pdfData = await pdfParse(file.buffer);
+          if (pdfData.text && pdfData.text.trim().length > 0) {
+            processingResult.contentExtracted = true;
+            const pdfText = pdfData.text;
+            const wordCount = pdfText.split(/\s+/).filter(w => w.length > 0).length;
+            const keyPhrases = extractKeyPhrases(pdfText.substring(0, 500));
+            processingResult.docxAnalysis = {
+              wordCount: wordCount,
+              characterCount: pdfText.length,
+              contentType: 'pdf',
+              readingTime: `${Math.ceil(wordCount / 200)} min read`,
+              keyPhrases: keyPhrases,
+              preview: pdfText.substring(0, 200) + (pdfText.length > 200 ? '...' : ''),
+              fullText: pdfText,
+            };
+            processingResult.message = `PDF analyzed: ${file.originalname} (${wordCount} words, ${pdfData.numpages} pages)`;
+            processingResult.preview = `📄 PDF extracted: ${wordCount} words, ${pdfData.numpages} pages`;
+            console.log(`[UPLOAD] PDF extracted: ${pdfText.length} chars, ${pdfData.numpages} pages`);
+          } else {
+            console.log(`[UPLOAD] PDF parsed but no text extracted (scanned/image PDF?)`);
+            processingResult.message = `PDF uploaded but no text extracted (may be scanned): ${file.originalname}`;
+            processingResult.preview = `⚠️ PDF appears to be a scanned document (no extractable text)`;
+          }
+        } catch (pdfErr) {
+          console.error(`[UPLOAD] PDF extraction failed:`, pdfErr.message);
+          processingResult.message = `PDF upload failed: ${pdfErr.message}`;
+          processingResult.preview = `❌ Could not extract content from PDF`;
+        }
+      }
+
       // Handle plain text files - extract content directly from buffer
-      const isPlainText = file.mimetype.startsWith('text/') ||
-        /\.(txt|md|csv|json|xml|html|htm|log|yaml|yml)$/i.test(file.originalname);
+      const isPlainText = !isPdf && (file.mimetype.startsWith('text/') ||
+        /\.(txt|md|csv|json|xml|html|htm|log|yaml|yml)$/i.test(file.originalname));
 
       if (isPlainText && file.buffer) {
         console.log(`📝 Processing plain text file: ${file.originalname}`);

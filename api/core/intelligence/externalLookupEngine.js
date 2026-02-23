@@ -630,12 +630,28 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return API_SOURCES.CURRENCY;
   }
 
-  // Stock prices - use financial API (currently disabled pending proper API)
+  // Stock prices - no dedicated API configured; use Google News RSS as fallback
+  // ISSUE #804 FIX (Area 2): Instead of returning empty and triggering a blank "technical issue"
+  // response (which also causes identity leak to "as an AI model developed by OpenAI"),
+  // fall through to Google News RSS for recent stock price context from news headlines.
   if (lowerQuery.match(/stock|share|market/) &&
       lowerQuery.match(/price|value|trading|current/i)) {
-    // Return empty for graceful degradation until proper API configured
-    console.log('[externalLookupEngine] Stock price query detected - no API configured');
-    return [];
+    console.log('[externalLookupEngine] Stock price query detected - no dedicated API, using news fallback');
+    return [{
+      name: 'Google News RSS (stock price fallback)',
+      buildUrl: (query) => `https://news.google.com/rss/search?q=${encodeURIComponent(query + ' stock price today')}&hl=en-US&gl=US&ceid=US:en`,
+      parser: 'rss',
+      type: 'news_fallback',
+      extract: (text) => {
+        const items = [];
+        const itemRegex = /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
+        let match;
+        while ((match = itemRegex.exec(text)) !== null && items.length < 5) {
+          items.push({ title: match[1], source: match[2], date: match[3] });
+        }
+        return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
+      }
+    }];
   }
 
   // Commodity prices - use metals/commodity API with news fallback

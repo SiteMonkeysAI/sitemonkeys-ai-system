@@ -185,6 +185,32 @@ function isDocumentReviewRequest(query) {
   // Length threshold - documents are long
   const isLongInput = query.length > 10000; // 10K+ chars
 
+  // ISSUE #804 FIX (Area 6): Short queries that REFERENCE a document/file already loaded in the session.
+  // These should NOT trigger external lookup — the document is already in context.
+  // Example: "Can you summarize what's in that document I just loaded"
+  const shortDocumentReferencePatterns = [
+    /summarize (what'?s? in |the |that |this )?(document|file|pdf|upload|attachment)/i,
+    /what'?s? in (that|the|this) (document|file|pdf|upload|attachment)/i,
+    /what (does|did) (the|that|this) (document|file|pdf) (say|contain|include)/i,
+    /tell me (about|what'?s? in) (the|that|this) (document|file|pdf|upload)/i,
+    /analyze (the|that|this) (document|file|pdf|upload|attachment)/i,
+    /explain (the|that|this) (document|file|pdf|upload)/i,
+    /(that |the |this )?document i (just |recently )?(loaded|uploaded|shared|sent)/i,
+    /file i (just |recently )?(loaded|uploaded|shared|sent)/i,
+    /(in |from ) the (document|file|pdf|upload) (i |we )?(uploaded|loaded|shared|provided)/i
+  ];
+
+  const isShortDocumentReference = query.length <= 10000 &&
+    shortDocumentReferencePatterns.some(p => p.test(query));
+
+  if (isShortDocumentReference) {
+    return {
+      isDocument: true,
+      confidence: 0.9,
+      reason: 'Short query references a loaded document — use document context, no external lookup'
+    };
+  }
+
   // Document review patterns
   const reviewPatterns = [
     /your thoughts/i,

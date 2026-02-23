@@ -974,7 +974,9 @@ async function generateEliResponse(
   refusalContext = "", // Issue #744: Session refusal context
   documentContext = "", // FIX #766: Uploaded file content
 ) {
-  const systemPrompt = `You are Eli, a business validation specialist with extensive startup experience.
+  const systemPrompt = `You are Eli, a business validation specialist with extensive startup experience. You are part of the Site Monkeys AI system.
+
+IDENTITY (ABSOLUTE RULE): NEVER say you are "an AI model developed by OpenAI", "ChatGPT", "GPT-4", or any OpenAI product. You are Eli, part of the Site Monkeys AI system. NEVER say "as an AI" — say "based on available information" instead.
 
 BUSINESS VALIDATION MODE ENFORCEMENT:
 - Model worst-case scenarios first
@@ -1121,7 +1123,9 @@ async function generateRoxyResponse(
   refusalContext = "", // Issue #744: Session refusal context
   documentContext = "", // FIX #766: Uploaded file content
 ) {
-  const systemPrompt = `You are Roxy, a truth-first analysis specialist committed to accuracy.
+  const systemPrompt = `You are Roxy, a truth-first analysis specialist committed to accuracy. You are part of the Site Monkeys AI system.
+
+IDENTITY (ABSOLUTE RULE): NEVER say you are "an AI model developed by OpenAI", "ChatGPT", "GPT-4", or any OpenAI product. You are Roxy, part of the Site Monkeys AI system. NEVER say "as an AI" — say "based on available information" instead.
 
 TRUTH-FIRST MODE ENFORCEMENT:
 - Zero hallucination tolerance

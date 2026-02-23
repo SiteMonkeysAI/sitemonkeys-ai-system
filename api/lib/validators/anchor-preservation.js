@@ -363,38 +363,48 @@ class AnchorPreservationValidator {
 
   /**
    * Inject missing anchors into response
+   * ISSUE #804 FIX: Anchor injection was causing unrelated pricing metadata from memory
+   * (e.g. SiteMonkeys service tiers: $200, $5,100, $68,479) to appear in stock price and
+   * general query responses. This leaked debug-level data into user-visible output.
+   * Gate behind DEBUG_ANCHORS env var — in production, return response unchanged.
    */
   #injectMissingAnchors(response, missingAnchors) {
+    // PRODUCTION GUARD: Only inject anchor metadata when explicitly enabled for debugging
+    if (process.env.DEBUG_ANCHORS !== 'true') {
+      console.log(`[ANCHOR-VALIDATOR] Skipping anchor injection in production (set DEBUG_ANCHORS=true to enable)`);
+      return response;
+    }
+
     // Group anchors by type for better formatting
     const byType = missingAnchors.reduce((acc, anchor) => {
       acc[anchor.type] = acc[anchor.type] || [];
       acc[anchor.type].push(anchor.value);
       return acc;
     }, {});
-    
+
     // Build injection text
     const injections = [];
-    
+
     if (byType.price) {
       injections.push(`Pricing: ${byType.price.join(', ')}`);
     }
-    
+
     if (byType.date) {
       injections.push(`Dates: ${byType.date.join(', ')}`);
     }
-    
+
     if (byType.percentage) {
       injections.push(`Percentages: ${byType.percentage.join(', ')}`);
     }
-    
+
     if (byType.number) {
       injections.push(`Numbers: ${byType.number.join(', ')}`);
     }
-    
+
     if (injections.length === 0) {
       return response;
     }
-    
+
     // Append to response with proper formatting
     return `${response}\n\n(Key details: ${injections.join('; ')})`;
   }
