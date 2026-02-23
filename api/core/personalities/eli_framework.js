@@ -325,9 +325,13 @@ export class EliFramework {
       }
 
       // STEP 7: Add confidence scoring (if not present)
-      // Skip confidence assessment for simple PERMANENT factual queries
+      // Skip confidence assessment for simple PERMANENT factual queries, external-verified data, and
+      // queries that don't require decision support (e.g. price lookups, news, document summaries).
+      // ISSUE #804 FIX: Confidence Assessment was appearing on stock price, news, and document queries
+      // where it is not helpful and clutters the response.
       const isSimpleFact = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
-      if (!response.toLowerCase().includes("confidence") && !isSimpleFact) {
+      const skipConfidence = isSimpleFact || externalLookupSucceeded || !needsDecisionSupport;
+      if (!response.toLowerCase().includes("confidence") && !skipConfidence) {
         const confidenceAssessment = this.#enhanceWithConfidenceScoring(
           enhancedResponse,
           analysis,
@@ -336,8 +340,8 @@ export class EliFramework {
         enhancedResponse = confidenceAssessment.enhanced;
         modificationsCount++;
         this.logger.log("Added confidence assessment");
-      } else if (isSimpleFact) {
-        this.logger.log('Skipping confidence assessment for simple PERMANENT fact');
+      } else if (skipConfidence) {
+        this.logger.log(`Skipping confidence assessment: ${isSimpleFact ? 'simple fact' : externalLookupSucceeded ? 'external data verified' : 'no decision support needed'}`);
       }
 
       // STEP 8: Apply Eli's protective intelligence signature
@@ -894,18 +898,24 @@ export class EliFramework {
   }
 
   #enhanceWithSurvivalMetrics(response, metrics) {
-    if (!metrics.runwayImpact && metrics.criticalDependencies.length === 0) {
+    // ISSUE #804 FIX: Only add runway impact if actual calculated data is available.
+    // When burn rate/runway data is missing, runwayImpact has { dataNeeded, message } but no runwayConsumed.
+    // Appending "Runway Impact: undefined" is worse than not adding it at all.
+    const hasCalculatedRunway = metrics.runwayImpact && metrics.runwayImpact.runwayConsumed;
+    const hasCriticalDeps = metrics.criticalDependencies && metrics.criticalDependencies.length > 0;
+
+    if (!hasCalculatedRunway && !hasCriticalDeps) {
       return response;
     }
 
     let enhancement = "\n\n💰 **Business Survival Analysis:**\n";
 
-    if (metrics.runwayImpact) {
-      enhancement += `- **Runway Impact:** ${metrics.runwayImpact.runwayConsumed} (${metrics.runwayImpact.percentageOfAssumedRunway} of typical 6-month buffer)\n`;
+    if (hasCalculatedRunway) {
+      enhancement += `- **Runway Impact:** ${metrics.runwayImpact.runwayConsumed} (${metrics.runwayImpact.percentageOfAssumedRunway || metrics.runwayImpact.percentageOfRunway} of typical 6-month buffer)\n`;
       enhancement += `- **Survival Risk:** ${metrics.survivalRisk.toUpperCase()}\n`;
     }
 
-    if (metrics.criticalDependencies.length > 0) {
+    if (hasCriticalDeps) {
       enhancement += `- **Critical Dependencies:** ${metrics.criticalDependencies.length} identified - if any fail, plan fails\n`;
     }
 

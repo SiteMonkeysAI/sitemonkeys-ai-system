@@ -473,7 +473,13 @@ export class RoxyFramework {
         });
       }
 
-      if (analysis.requiresCalculation && !responseLower.includes("manual")) {
+      // ISSUE #804 FIX: "Start manual before automating" was appearing on stock price queries
+      // because requiresCalculation was true (stock prices involve numbers).
+      // This advice only makes sense when the user is actually building/automating something.
+      // Require technical or business domain + problem-solving/decision intent to avoid false positives.
+      if (analysis.requiresCalculation && !responseLower.includes("manual") &&
+          (analysis.domain === "technical" || analysis.domain === "business") &&
+          (analysis.intent === "problem_solving" || analysis.intent === "decision_making")) {
         simplifications.push({
           type: "manual_first",
           simplification: "Start manual before automating",

@@ -543,41 +543,46 @@ app.post("/api/chat", async (req, res) => {
 
           // ISSUE #776 FIX 1: Tag response with source type before storage
           let taggedResponse = result.response;
-          
+
           // If this response was about an uploaded document, tag it
           if (result.sources?.hasDocuments) {
             taggedResponse = `[SOURCE:document] ${taggedResponse}`;
             console.log('[STORE] Tagged memory with [SOURCE:document]');
           }
 
-          // If this response used external real-time data, tag it with timestamp
+          // ISSUE #804 FIX (Area 7): Do NOT store external real-time data (prices, news) as persistent
+          // memories. External data is volatile and always stale as soon as it's stored.
+          // Storing it creates a growing collection of conflicting stale price memories that pollute
+          // future retrievals (e.g. three different cached ETH prices in memory).
           if (result.sources?.hasExternal) {
-            const timestamp = new Date().toISOString();
-            taggedResponse = `[SOURCE:external_data:${timestamp}] ${taggedResponse}`;
-            console.log(`[STORE] Tagged memory with [SOURCE:external_data:${timestamp}]`);
+            console.log('[STORE] ⏭️ Skipping intelligent storage for volatile external data response');
+            console.log('[STORE] Reason: External real-time data (prices/news) should not be stored as persistent memory');
+            // Skip to cleanup without storing
+            intelligentStorage.cleanup();
+            console.log('[CHAT] 💾 Storage skipped for external data response');
+          } else {
+            const storageResult = await intelligentStorage.storeWithIntelligence(
+              userId,
+              message,
+              taggedResponse,
+              category,
+            );
+
+            intelligentStorage.cleanup();
+            console.log(
+              `[CHAT] 💾 Intelligent storage complete: ${storageResult.action} (ID: ${storageResult.memoryId})`,
+            );
+
+            // TRACE LOGGING - Step 9 (Intelligent path)
+            console.log(
+              "[TRACE] 9. Intelligent storage complete, result:",
+              JSON.stringify({
+                action: storageResult.action,
+                memoryId: storageResult.memoryId,
+                success: storageResult.success,
+              }),
+            );
           }
-
-          const storageResult = await intelligentStorage.storeWithIntelligence(
-            userId,
-            message,
-            taggedResponse,
-            category,
-          );
-
-          intelligentStorage.cleanup();
-          console.log(
-            `[CHAT] 💾 Intelligent storage complete: ${storageResult.action} (ID: ${storageResult.memoryId})`,
-          );
-
-          // TRACE LOGGING - Step 9 (Intelligent path)
-          console.log(
-            "[TRACE] 9. Intelligent storage complete, result:",
-            JSON.stringify({
-              action: storageResult.action,
-              memoryId: storageResult.memoryId,
-              success: storageResult.success,
-            }),
-          );
         } else {
           // Supersession-aware storage path
           console.log("[CHAT] [STORAGE] Using supersession-aware storage...");
@@ -592,12 +597,13 @@ app.post("/api/chat", async (req, res) => {
             console.log('[STORE] Tagged memory with [SOURCE:document]');
           }
 
-          // If this response used external real-time data, tag it with timestamp
+          // ISSUE #804 FIX (Area 7): Do NOT store external real-time data as persistent memory.
+          // External data (prices, news) is volatile and immediately stale — storing it pollutes
+          // future retrievals with conflicting stale values.
           if (result.sources?.hasExternal) {
-            const timestamp = new Date().toISOString();
-            content = `[SOURCE:external_data:${timestamp}] ${content}`;
-            console.log(`[STORE] Tagged memory with [SOURCE:external_data:${timestamp}]`);
-          }
+            console.log('[STORE] ⏭️ Skipping supersession-aware storage for volatile external data response');
+            // Skip storage entirely for external data responses
+          } else {
 
           // Generate fingerprint (deterministic-first, model-fallback with timeout)
           // FIX #710: Now includes value signature validation and update intent detection
@@ -629,23 +635,20 @@ app.post("/api/chat", async (req, res) => {
           const pool = global.memorySystem?.pool;
           if (!pool) {
             console.error("[CHAT] [STORAGE] No database pool available, falling back to legacy storage");
-            
+
             // ISSUE #776 FIX 1: Tag response with source type before legacy storage
             let taggedResponse = result.response;
-            
+
             // If this response was about an uploaded document, tag it
             if (result.sources?.hasDocuments) {
               taggedResponse = `[SOURCE:document] ${taggedResponse}`;
               console.log('[STORE] Tagged memory with [SOURCE:document]');
             }
 
-            // If this response used external real-time data, tag it with timestamp
+            // ISSUE #804 FIX (Area 7): Skip legacy storage for volatile external data too
             if (result.sources?.hasExternal) {
-              const timestamp = new Date().toISOString();
-              taggedResponse = `[SOURCE:external_data:${timestamp}] ${taggedResponse}`;
-              console.log(`[STORE] Tagged memory with [SOURCE:external_data:${timestamp}]`);
-            }
-            
+              console.log('[STORE] ⏭️ Skipping legacy storage for volatile external data response');
+            } else {
             const storageResult = await global.memorySystem.storeMemory(
               userId,
               message,
@@ -658,6 +661,7 @@ app.post("/api/chat", async (req, res) => {
               },
             );
             console.log("[CHAT] 💾 Legacy fallback storage complete");
+            } // close else (not external data)
           } else {
             // Store with supersession (transaction-safe)
             // FIX #710: Now passes valueSignature, isOptional, and updateIntent for safety gate validation
@@ -694,6 +698,7 @@ app.post("/api/chat", async (req, res) => {
               }),
             );
           }
+          } // close else (not external data)
         }
       } catch (_storageError) {
         // Sanitize error message - don't expose database details

@@ -225,21 +225,15 @@ function enforceReasoningEscalation(response, phase6Metadata, context = {}) {
   // Determine if passed
   result.passed = result.violations.length === 0;
 
-  // ISSUE #406 FIX: Apply structured reasoning guidance when steps are missing
-  // PRINCIPLE: "Uncertainty is a reason to work harder, not permission to stop"
+  // ISSUE #804 FIX: Do NOT append reasoning scaffold with unfilled placeholder text to user-visible responses.
+  // The scaffold (e.g. "_[Based on established patterns...]_") is internal reasoning guidance only.
+  // Appending it directly to responses causes raw template text to leak to users (Area 3 regression).
+  // Instead, just flag the missing steps for telemetry without modifying the response.
   if (!result.passed && escalationCheck.missing.length > 0) {
-    // Build a structured reasoning scaffold that guides completion
-    const reasoningScaffold = buildReasoningScaffold(escalationCheck.missing, response);
-
-    if (reasoningScaffold) {
-      result.correction_applied = true;
-      result.corrected_response = response + reasoningScaffold;
-      result.correction_type = 'reasoning_scaffold';
-    } else {
-      // Fallback: Flag for manual review
-      result.correction_needed = true;
-      result.missing_steps = escalationCheck.missing;
-    }
+    result.correction_needed = true;
+    result.missing_steps = escalationCheck.missing;
+    // Note: correction_applied remains false — response is NOT modified with scaffold placeholders
+    console.log(`[REASONING-ESCALATION] Missing steps flagged (not injected into response): ${escalationCheck.missing.map(s => s.name).join(', ')}`);
   }
   
   console.log('[REASONING-ESCALATION]', {
