@@ -1102,7 +1102,11 @@ export async function performLookup(query, sources, truthType = null) {
     return {
       success: false,
       from_cache: false,
+      lookup_attempted: true,
+      lookup_completed: false,
       error: error.message,
+      sources_consulted: sourcesUsed || [],
+      verified_at: new Date().toISOString(),
       lookup_time_ms: Date.now() - startTime
     };
   }

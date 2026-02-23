@@ -312,31 +312,66 @@ async function processFile(file) {
         processingResult.success = false;
       }
     } else {
-      // Handle all other file types (your existing logic)
-      switch (fileType) {
-        case "image":
-          processingResult.message = `Image uploaded for analysis: ${file.originalname}`;
-          processingResult.preview = `Image ready for analysis and processing`;
-          break;
+      // Handle plain text files - extract content directly from buffer
+      const isPlainText = file.mimetype.startsWith('text/') ||
+        /\.(txt|md|csv|json|xml|html|htm|log|yaml|yml)$/i.test(file.originalname);
 
-        case "document":
-          processingResult.message = `Document uploaded for analysis: ${file.originalname}`;
-          processingResult.preview = `Document ready for text analysis and processing`;
-          break;
+      if (isPlainText && file.buffer) {
+        console.log(`📝 Processing plain text file: ${file.originalname}`);
+        try {
+          const textContent = file.buffer.toString('utf8');
+          if (textContent && textContent.trim().length > 0) {
+            processingResult.contentExtracted = true;
+            const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length;
+            const keyPhrases = extractKeyPhrases(textContent.substring(0, 500));
+            processingResult.docxAnalysis = {
+              wordCount: wordCount,
+              characterCount: textContent.length,
+              contentType: 'text',
+              readingTime: `${Math.ceil(wordCount / 200)} min read`,
+              keyPhrases: keyPhrases,
+              preview: textContent.substring(0, 200) + (textContent.length > 200 ? '...' : ''),
+              fullText: textContent,
+            };
+            processingResult.message = `Text file analyzed: ${file.originalname} (${wordCount} words)`;
+            processingResult.preview = `📝 Text extracted: ${wordCount} words`;
+            console.log(`✅ Plain text extracted from ${file.originalname}: ${wordCount} words, ${textContent.length} chars`);
+          } else {
+            processingResult.message = `Text file appears empty: ${file.originalname}`;
+            processingResult.preview = `⚠️ File appears to be empty`;
+          }
+        } catch (textErr) {
+          console.error(`❌ Failed to extract text from ${file.originalname}:`, textErr.message);
+        }
+      }
 
-        case "spreadsheet":
-          processingResult.message = `Spreadsheet uploaded for analysis: ${file.originalname}`;
-          processingResult.preview = `Data tables ready for analysis`;
-          break;
+      // Handle all other file types (fallback for non-text files)
+      if (!processingResult.contentExtracted) {
+        switch (fileType) {
+          case "image":
+            processingResult.message = `Image uploaded for analysis: ${file.originalname}`;
+            processingResult.preview = `Image ready for analysis and processing`;
+            break;
 
-        case "code":
-          processingResult.message = `Code file uploaded for analysis: ${file.originalname}`;
-          processingResult.preview = `Source code ready for review and analysis`;
-          break;
+          case "document":
+            processingResult.message = `Document uploaded for analysis: ${file.originalname}`;
+            processingResult.preview = `Document ready for text analysis and processing`;
+            break;
 
-        default:
-          processingResult.message = `File uploaded for analysis: ${file.originalname}`;
-          processingResult.preview = `File stored and ready for processing`;
+          case "spreadsheet":
+            processingResult.message = `Spreadsheet uploaded for analysis: ${file.originalname}`;
+            processingResult.preview = `Data tables ready for analysis`;
+            break;
+
+          case "code":
+            processingResult.message = `Code file uploaded for analysis: ${file.originalname}`;
+            processingResult.preview = `Source code ready for review and analysis`;
+            break;
+
+          default:
+            processingResult.message = `File uploaded for analysis: ${file.originalname}`;
+            processingResult.preview = `File stored and ready for processing`;
+        }
       }
     }
 
@@ -547,10 +582,18 @@ async function handleAnalysisUpload(req, res) {
         });
 
         console.log(
+          `[UPLOAD] Stored document for key: ${documentKey}, content length: ${file.docxAnalysis.fullText.length} chars (${file.docxAnalysis.wordCount} words)`,
+        );
+        console.log(
           `[${timestamp}] [STORAGE] Stored document with key "${documentKey}" for chat: ${file.filename} (${file.docxAnalysis.wordCount} words, ${file.docxAnalysis.fullText.length} chars)`,
+        );
+      } else {
+        console.log(
+          `[UPLOAD] File ${file.filename} skipped storage: contentExtracted=${file.contentExtracted}, type=${file.type}`,
         );
       }
     });
+    console.log(`[UPLOAD] extractedDocuments Map size after upload: ${extractedDocuments.size}`);
 
     // Clean old documents
     cleanOldDocuments();

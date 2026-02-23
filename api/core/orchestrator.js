@@ -2792,6 +2792,7 @@ export class Orchestrator {
         // Find the most recent document by iterating through the Map
         let latestDoc = null;
         let latestTimestamp = 0;
+        console.log(`[DOC-LOAD] Looking up document. Map size: ${extractedDocuments.size}, Map keys: [${[...extractedDocuments.keys()].join(', ')}]`);
         for (const [key, doc] of extractedDocuments.entries()) {
           if (doc.timestamp > latestTimestamp) {
             latestTimestamp = doc.timestamp;
@@ -4376,6 +4377,13 @@ export class Orchestrator {
    * @returns {{highlighted: string, numbers: Array}} Memory with highlighted numbers and extracted list
    */
   #extractNumericalData(memoryText) {
+    // Handle array input (memory context is an array of objects, not a string)
+    if (Array.isArray(memoryText)) {
+      memoryText = memoryText.map(m => typeof m === 'string' ? m : JSON.stringify(m)).join('\n');
+    }
+    if (typeof memoryText !== 'string') {
+      memoryText = String(memoryText || '');
+    }
     if (!memoryText) {
       return { highlighted: '', numbers: [] };
     }
@@ -4545,7 +4553,10 @@ END OF EXTERNAL DATA
       // ISSUE #570: Strengthen memory context injection with explicit reasoning requirements
       // FIX #577 - EDG3: Extract and highlight numerical data for preservation
       if (context.memory) {
-        const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
+        // memoryCount: if memory is an array of objects, use its length directly; otherwise estimate from string length
+        const memoryCount = Array.isArray(context.memory)
+          ? context.memory.length
+          : Math.ceil(context.memory.length / 200);
 
         // Extract numerical data from memory
         const { highlighted: memoryText, numbers: numericalData } = this.#extractNumericalData(context.memory);
@@ -4597,7 +4608,10 @@ When using this memory context, a caring family member would naturally apply tem
     // ISSUE #570: Strengthen memory context injection with explicit reasoning requirements
     // FIX #577 - EDG3: Extract and highlight numerical data for preservation
     if (context.memory) {
-      const memoryCount = Math.ceil(context.memory.length / 200); // Estimate conversation count
+      // memoryCount: if memory is an array of objects, use its length directly; otherwise estimate from string length
+      const memoryCount = Array.isArray(context.memory)
+        ? context.memory.length
+        : Math.ceil(context.memory.length / 200);
 
       // Extract numerical data from memory
       const { highlighted: memoryText, numbers: numericalData } = this.#extractNumericalData(context.memory);
