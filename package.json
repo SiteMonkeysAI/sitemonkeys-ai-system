@@ -34,7 +34,8 @@
     "test-token-budgets-unit": "node test-token-budgets-unit.js",
     "validate-deployment": "node deploy-intelligence-upgrade.js",
     "test:memory": "node scripts/memory-regression-test.js",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "echo \"No tests specified\" && exit 0"
   },
   "engines": {
     "node": ">=14.0.0"
