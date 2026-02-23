@@ -656,7 +656,8 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
 
   // Commodity prices - use metals/commodity API with news fallback
   // ISSUE #776 FIX 3: Add Google News RSS as fallback when commodity APIs fail
-  if (lowerQuery.match(/gold|silver|platinum|palladium|copper|oil|commodity|commodities/) &&
+  // ISSUE #804 REVIEW FIX: Added 'gas' to cover "natural gas" queries
+  if (lowerQuery.match(/gold|silver|platinum|palladium|copper|oil|gas|commodity|commodities/) &&
       lowerQuery.match(/price|cost|value|ounce|barrel/i)) {
     console.log('[externalLookupEngine] Commodity price query detected - using COMMODITIES sources with news fallback');
 
@@ -698,12 +699,8 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return commoditySources;
   }
 
-  // Oil/gas commodities - still no API source, use graceful degradation
-  if (lowerQuery.match(/oil|crude|natural gas/) &&
-      lowerQuery.match(/price|cost|value|barrel/i)) {
-    console.log('[externalLookupEngine] Oil/gas commodity query detected - no API configured');
-    return [];
-  }
+  // Note: Oil/gas/crude are handled by the commodity block above (line 659 includes 'oil')
+  // which falls back to Google News RSS when no API keys are configured.
 
   // Government/political positions - use Wikipedia API
   if (lowerQuery.match(/prime minister|president|chancellor|leader|government/) &&
