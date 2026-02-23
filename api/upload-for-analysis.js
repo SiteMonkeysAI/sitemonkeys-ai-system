@@ -341,7 +341,7 @@ async function processFile(file) {
             processingResult.preview = `⚠️ File appears to be empty`;
           }
         } catch (textErr) {
-          console.error(`❌ Failed to extract text from ${file.originalname}:`, textErr.message);
+          console.error("❌ Failed to extract text from %s: %s", file.originalname, textErr.message);
         }
       }
 
