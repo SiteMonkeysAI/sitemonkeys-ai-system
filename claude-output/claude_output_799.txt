@@ -1,0 +1,32 @@
+All changes are complete and verified.
+
+---SUMMARY---
+**File modified:** `api/core/orchestrator.js` only
+
+### Changes made:
+
+**1. Fixed `useClaude` scope in `#routeToAI`**
+- Moved `let useClaude = false;`, `let routingReason = [];`, and `let isSafetyCritical = false;` from inside the `try` block to function scope (before the `try`), making them accessible in the `catch` block. This fixes Claude fallback crashes when GPT-4 returns 429 errors.
+
+**2. Removed `context.sources = context.sources || {}` and `context.sources.hasExternal = true`**
+- In the Phase 4 external data injection block (~line 1313), removed the two lines that were setting `context.sources` — leaving only the already-present `context.external = phase4Metadata.external_data;` assignment.
+
+**3. Removed the redundant `sources` object from `#assembleContext` return value**
+- Removed the `sources: { hasMemory, hasDocuments, hasVault }` block from the return value since direct `context.memory`, `context.documents`, `context.vault` checks are now used everywhere.
+
+**4. Disabled broken `options.sources?.hasDocuments` / `options.sources?.hasExternal` filtering in `#retrieveMemoryContext`**
+- Replaced `const hasNewDocument = options.sources?.hasDocuments;` and `const hasFreshExternalData = options.sources?.hasExternal;` with `false` + TODO comments, since `options` doesn't carry source flags.
+
+**5. Replaced all 40 `context.sources?.has*` references with direct data checks**
+Across the entire file, replaced:
+- `context.sources?.hasDocuments && context.documents` → `context.documents`
+- `context.sources?.hasVault && context.vault` → `context.vault`
+- `context.sources?.hasMemory && context.memory` → `context.memory`
+- `context.sources?.hasExternal && context.external` → `context.external`
+- `context.sources?.hasDocuments` → `!!context.documents` (in conditionals/logging)
+- `context.sources?.hasVault` → `!!context.vault` (in conditionals/logging)
+- `context.sources?.hasMemory` → `!!context.memory` (in conditionals/logging)
+- `context.sources?.hasExternal` → `!!context.external` (in conditionals/logging)
+
+**Verification:** `grep -c "context\.sources\?\.has" api/core/orchestrator.js` = **0**
+---END SUMMARY---
