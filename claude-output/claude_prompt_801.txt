@@ -1,0 +1,160 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #801: [claude-fix] [P0] Fix crash + document pipeline + stock queries — all current production bugs
+
+Issue Description:
+# [P0] Fix crash + document pipeline + stock queries — all current production bugs
+
+## Summary
+
+After the context.sources fix (PR #800), the system has these remaining production issues that should all be fixed together in one PR. They are all in `api/core/orchestrator.js` except where noted.
+
+---
+
+## Bug 1: `memoryText.match is not a function` — CRASH (P0)
+
+**Error:**
+```
+TypeError: memoryText.match is not a function
+    at #extractNumericalData (orchestrator.js:4387:40)
+    at #buildContextString (orchestrator.js:4603:93)
+    at #routeToAI (orchestrator.js:3833:53)
+```
+
+**Root cause:** The `#extractNumericalData` method calls `memoryText.match()` expecting a string, but `context.memory` is an **array** of memory objects, not a string. Before the context.sources fix, this code path was never reached because `context.sources?.hasMemory` was always undefined and the memory injection block was skipped. Now that `context.memory` correctly evaluates as truthy, the code enters the memory block and crashes.
+
+**Fix:** At the top of `#extractNumericalData(memoryText)`, add type handling:
+```javascript
+#extractNumericalData(memoryText) {
+    // Handle array input (memory context is an array of objects)
+    if (Array.isArray(memoryText)) {
+        memoryText = memoryText.map(m => typeof m === 'string' ? m : JSON.stringify(m)).join('\n');
+    }
+    if (typeof memoryText !== 'string') {
+        memoryText = String(memoryText || '');
+    }
+    // ... rest of existing method
+```
+
+Also check `#buildContextString` around line 4603 — wherever it calls `#extractNumericalData`, ensure the argument being passed is converted to a string first. There may also be other places in `#buildContextString` that do `.match()`, `.includes()`, or `.length` on `context.memory` assuming it's a string when it's actually an array. Search for ALL uses of `context.memory` inside `#buildContextString` and ensure they handle arrays.
+
+---
+
+## Bug 2: Documents never reach orchestrator — `extractedDocuments Map size: 0`
+
+**Evidence (every single request):**
+```
+[HANDOFF:DOCUMENT-LOAD→CONTEXT] ❌ No document found
+[HANDOFF:DOCUMENT-LOAD→CONTEXT] extractedDocuments Map size: 0
+[ORCHESTRATOR] [DOCUMENTS] No document found in storage
+[ORCHESTRATOR] [DOCUMENTS] No document available
+```
+
+**Root cause:** The frontend shows "Uploading 1 file(s) for analysis..." but the `extractedDocuments` Map in the orchestrator is always empty. The upload endpoint (`api/upload-file.js` or `api/upload-for-analysis.js`) either:
+1. Fails to extract text from the uploaded file, OR
+2. Extracts text but stores it somewhere the orchestrator doesn't look, OR
+3. The Map key doesn't match what the orchestrator queries
+
+**Fix approach:** 
+1. Search for where `extractedDocuments` is populated (likely in the upload route or a middleware)
+2. Search for where `extractedDocuments` is read (in `#loadDocumentContext` in orchestrator.js)
+3. Verify the Map key used for storage matches the key used for retrieval (usually `chatId` or `userId`)
+4. Add logging at the upload endpoint: `console.log('[UPLOAD] Stored document for key:', key, 'content length:', content.length)`
+5. Add logging at retrieval: `console.log('[DOC-LOAD] Looking up key:', key, 'Map size:', extractedDocuments.size, 'Map keys:', [...extractedDocuments.keys()])`
+
+The files to check are:
+- `api/upload-file.js`
+- `api/upload-for-analysis.js`  
+- `server.js` (where the Map may be defined and passed)
+- `api/core/orchestrator.js` `#loadDocumentContext` method
+
+---
+
+## Bug 3: Stock/commodity price queries fail — "technical issue" error
+
+**Affected queries:** Apple stock, Amazon stock, platinum price, silver price
+**Working queries:** Ethereum price (CoinGecko), weather (RSS), news (RSS)
+
+**Evidence:**
+```
+Roxy: I encountered a technical issue processing your request. I want to be honest: rather than provide 
+potentially incorrect information, I need to acknowledge this limitation.
+```
+
+**Root cause:** The `externalLookupEngine.js` has CoinGecko for crypto prices and Google News RSS for news, but **no stock price or commodity API**. When the system can't find data, it throws an error instead of gracefully saying "I don't have access to stock prices."
+
+**Fix:** In `api/core/intelligence/externalLookupEngine.js`, when a stock/commodity query is detected but no API is available:
+1. Don't throw an error or return an error object
+2. Instead return an empty result with a flag like `{ available: false, reason: 'no_stock_api' }`
+3. The orchestrator should then let GPT-4 respond naturally (it knows it can say "I don't have real-time stock data")
+
+Alternatively, this may be related to Bug 1 — the `memoryText.match` crash happens BEFORE the AI can respond, so what looks like "no stock API" might actually be the crash preventing any response at all. Fix Bug 1 first and re-test stock queries.
+
+---
+
+## Bug 4: Some queries crash at `#buildContextString` line 4603
+
+**Evidence (multiple requests):**
+```
+[err]     at #buildContextString (file:///app/api/core/orchestrator.js:4603:93)
+[err] [AI-ERROR] Total context tokens: unknown
+[err] [AI-ERROR] Context breakdown: { memory: 0, documents: 0, vault: 0, total: 0 }
+[err] [FALLBACK-ERROR] Request context: {
+```
+
+This happens on queries where memory is 0 tokens AND an external lookup was attempted. This is likely the same root cause as Bug 1 — the `#extractNumericalData` or another method in `#buildContextString` crashes when context.memory is an empty array `[]` rather than null/undefined.
+
+**Fix:** Same as Bug 1 — ensure `#buildContextString` handles `context.memory` being an array (empty or populated) rather than a string.
+
+---
+
+## Fix Priority Order
+
+1. **Bug 1 first** — the memoryText.match crash. This is breaking requests that WERE working before the context.sources fix. It's a regression we introduced.
+2. **Bug 4** — same root cause as Bug 1, will be fixed together.
+3. **Bug 2** — document pipeline. This requires tracing the upload→storage→retrieval path.
+4. **Bug 3** — stock queries. May resolve itself once Bug 1 is fixed. If not, graceful fallback needed.
+
+## What NOT to change
+
+- Do NOT modify `tests/baselines.json`
+- Do NOT modify `tests/tier1/code-guards.test.js`
+- Do NOT modify `.github/workflows/tier1-code-guards.yml`
+- Do NOT modify `package.json`
+- Do NOT modify `eslint.config.mjs`
+- Do NOT revert the context.sources fixes from PR #800 — those are correct
+
+## Files to investigate and modify
+
+- `api/core/orchestrator.js` — Bug 1, Bug 4 (primary)
+- `api/upload-file.js` — Bug 2 (document upload)
+- `api/upload-for-analysis.js` — Bug 2 (document upload)
+- `server.js` — Bug 2 (where extractedDocuments Map may be defined)
+- `api/core/intelligence/externalLookupEngine.js` — Bug 3 (only if still broken after Bug 1 fix)
+
+## Verification
+
+After fixing:
+1. `grep -c "memoryText.match" api/core/orchestrator.js` — should still exist but with type guard above it
+2. Ask any question — should NOT get "technical issue" error  
+3. Upload a document and ask about it — should reference document content
+4. Ask "what is the price of Ethereum" — should return CoinGecko data (already works)
+5. Ask "what is Apple stock price" — should either return data or gracefully say it can't, NOT crash
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
