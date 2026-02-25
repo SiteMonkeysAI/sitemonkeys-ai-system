@@ -1,0 +1,31 @@
+All three changes are correct. Here's a summary:
+
+---SUMMARY---
+
+## Changes Made for Issue #807
+
+### Failure 1: PDF Upload Extraction (`api/upload-for-analysis.js`)
+
+**Root cause analysis:** The code had a PDF handler but two problems:
+1. No diagnostic log before the `isPdf && file.buffer` guard — making it impossible to know whether the handler was even reached in production logs
+2. Scanned/image PDFs (where `pdf-parse` returns no text) fell through without setting `contentExtracted = true`, causing them to be silently skipped from storage with the generic "skipped storage: contentExtracted=false" message
+
+**Changes:**
+- Added `[UPLOAD-DIAG]` log immediately after computing `isPdf` (fires regardless of buffer state) — this will diagnose whether the handler is reached or whether the condition is false
+- Changed the second log from "Processing PDF file:" to `[UPLOAD] PDF handler reached:` to match the diagnostic pattern from the issue
+- Fixed the scanned PDF branch: now sets `contentExtracted = true` with a proper `docxAnalysis` stub containing a user-readable explanation, so the AI can tell the user "this PDF is image-based, please paste text directly" instead of silently ignoring the document
+- Added stack trace (`pdfErr.stack`) to the catch block for better error diagnosis
+
+### Failure 2: Google News RSS Headlines vs Prices (`api/core/orchestrator.js`)
+
+**Root cause:** When external lookup fetches Google News RSS, the raw headline text is injected into the AI prompt without any instruction about its nature. GPT-4 correctly observes "no price in the data" and says so, which is technically accurate but useless.
+
+**Change (lines 1227-1241):** Modified the `.map(s => ...)` that builds `phase4Metadata.fetched_content` to detect news/RSS sources by name and append a deterministic instruction block. The note tells the AI: never say "price not given," summarize direction from headlines, and always direct the user to Google Finance/Yahoo Finance for exact pricing. This is the same deterministic clamp pattern used for identity enforcement.
+
+### Failure 3: Greenland/Current-Events Freshness (`api/core/intelligence/truthTypeDetector.js`)
+
+**Root cause:** The query "What's the most up to date and recent information related to Greenland" matched no VOLATILE or SEMI_STABLE patterns (the words "most up to date" and "recent information" weren't in the pattern list), so it returned AMBIGUOUS — which then went to Stage 2 and defaulted to SEMI_STABLE. But based on the issue's log evidence, it may have been classified as PERMANENT instead (possibly matching a PERMANENT pattern), causing the orchestrator to skip external lookup.
+
+**Change (lines 300-325 in `detectByPattern`):** Added `FRESHNESS_OVERRIDE_PATTERNS` check after the stable-procedural detection and before the main pattern loop. Patterns like `/most up[- ]to[- ]date/i`, `/recent (information|news|...)/i`, `/current (situation|status|...)/i` and similar explicit freshness signals now force SEMI_STABLE classification with confidence 0.95, log `[TRUTH-TYPE] Freshness marker detected`, and return before any PERMANENT patterns can override. This ensures queries explicitly asking for current/recent information always trigger external lookup.
+
+---END SUMMARY---

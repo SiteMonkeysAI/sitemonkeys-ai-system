@@ -297,6 +297,33 @@ export function detectByPattern(query) {
     };
   }
 
+  // FRESHNESS MARKER OVERRIDE (Issue #807 Fix 3)
+  // Explicit freshness/recency requests are deterministic SEMI_STABLE triggers.
+  // These patterns mean the user explicitly wants CURRENT information — external lookup required.
+  // This check runs BEFORE topic-based classification so freshness always wins.
+  const FRESHNESS_OVERRIDE_PATTERNS = [
+    /most up[- ]to[- ]date/i,
+    /recent (information|news|updates|developments|events)/i,
+    /latest (information|news|updates|developments|events)/i,
+    /current (situation|status|state|events|developments)/i,
+    /most recent (news|information|updates|events|developments)/i,
+    /what'?s happening (with|in|about)/i,
+    /what'?s (going on|new) (with|in|about)/i,
+    /up[- ]to[- ]date (information|news|updates|events) (on|about|regarding|related to)/i,
+  ];
+  const hasFreshnessMarker = FRESHNESS_OVERRIDE_PATTERNS.some(p => p.test(query));
+  if (hasFreshnessMarker) {
+    console.log(`[TRUTH-TYPE] Freshness marker detected — forcing SEMI_STABLE classification`);
+    return {
+      type: TRUTH_TYPES.SEMI_STABLE,
+      confidence: 0.95,
+      stage: 1,
+      patterns_matched: [{ type: TRUTH_TYPES.SEMI_STABLE, pattern: 'explicit_freshness_marker' }],
+      conflict_detected: false,
+      reason: 'Explicit freshness/recency marker — requires current information lookup'
+    };
+  }
+
   // Check PERMANENT patterns first (stable facts should win over volatility)
   for (const pattern of PERMANENT_PATTERNS) {
     if (pattern.test(normalizedQuery)) {

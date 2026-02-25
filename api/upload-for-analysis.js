@@ -316,8 +316,11 @@ async function processFile(file) {
       const isPdf = file.mimetype === 'application/pdf' ||
         path.extname(file.originalname).toLowerCase() === '.pdf';
 
+      // Diagnostic log: fired regardless of buffer state to detect if handler is reached
+      console.log(`[UPLOAD-DIAG] PDF handler entry: mimetype=${file.mimetype}, ext=${path.extname(file.originalname).toLowerCase()}, isPdf=${isPdf}, hasBuffer=${!!file.buffer}, originalname=${file.originalname}`);
+
       if (isPdf && file.buffer) {
-        console.log(`[UPLOAD] Processing PDF file: ${file.originalname}`);
+        console.log(`[UPLOAD] PDF handler reached: ${file.originalname}, mimetype=${file.mimetype}`);
         try {
           const pdfParse = (await import('pdf-parse')).default;
           const pdfData = await pdfParse(file.buffer);
@@ -339,13 +342,27 @@ async function processFile(file) {
             processingResult.preview = `📄 PDF extracted: ${wordCount} words, ${pdfData.numpages} pages`;
             console.log(`[UPLOAD] PDF extracted: ${pdfText.length} chars, ${pdfData.numpages} pages`);
           } else {
-            console.log(`[UPLOAD] PDF parsed but no text extracted (scanned/image PDF?)`);
-            processingResult.message = `PDF uploaded but no text extracted (may be scanned): ${file.originalname}`;
-            processingResult.preview = `⚠️ PDF appears to be a scanned document (no extractable text)`;
+            // Scanned/image PDF — no extractable text. Set contentExtracted=true with a stub
+            // so the AI can explain why it can't read the document rather than silently failing.
+            console.log(`[UPLOAD] PDF parsed but no text extracted (scanned/image PDF): ${file.originalname}`);
+            const stubText = '[This PDF appears to be image-based or scanned. Text extraction returned no content. OCR is not currently configured. Please paste the document text directly into the chat for analysis.]';
+            processingResult.contentExtracted = true;
+            processingResult.docxAnalysis = {
+              wordCount: 0,
+              characterCount: stubText.length,
+              contentType: 'pdf_scanned',
+              readingTime: '0 min read',
+              keyPhrases: [],
+              preview: stubText,
+              fullText: stubText,
+            };
+            processingResult.message = `PDF uploaded but no extractable text found (scanned/image PDF): ${file.originalname}`;
+            processingResult.preview = `⚠️ PDF appears to be scanned — no extractable text. OCR not configured.`;
           }
         } catch (pdfErr) {
-          console.error(`[UPLOAD] PDF extraction failed:`, pdfErr.message);
-          processingResult.message = `PDF upload failed: ${pdfErr.message}`;
+          console.error("[UPLOAD] PDF extraction failed for %s:", file.originalname, pdfErr.message);
+          console.error(`[UPLOAD] PDF error stack:`, pdfErr.stack);
+          processingResult.message = `PDF processing failed: ${pdfErr.message}`;
           processingResult.preview = `❌ Could not extract content from PDF`;
         }
       }
