@@ -215,12 +215,27 @@ export class EliFramework {
       // Gate analytical blocks for PERMANENT low-stakes facts
       const shouldAddAnalyticalBlocks = truthType !== 'PERMANENT' || isHighStakes;
 
+      // ISSUE #810 FIX A: Non-business query types must NEVER receive business boilerplate.
+      // Market queries (stock/commodity prices) and news/current events should get clean responses
+      // even when the active mode is site_monkeys or business_validation.
+      const isNonBusinessQueryType = (
+        truthType === 'DOCUMENT_REVIEW' ||
+        analysis.intent === 'market_query' ||
+        context?.queryClassification?.classification === 'market_query' ||
+        context?.queryClassification?.classification === 'current_events' ||
+        context?.queryClassification?.classification === 'news'
+      );
+      if (isNonBusinessQueryType) {
+        this.logger.log(`[ISSUE #810] Non-business query type detected (truthType=${truthType}, intent=${analysis.intent}, classification=${context?.queryClassification?.classification}) — skipping all business sections`);
+      }
+
       // Gate decision-support sections (risks, blind spots) for queries that need them
       const needsDecisionSupport = requiresDecisionSupport(query, analysis, context);
 
       // STEP 1: Identify risks not mentioned in response
       // ONLY add risk analysis if query involves decision-making or high-stakes domains
-      if (shouldAddAnalyticalBlocks && needsDecisionSupport) {
+      // ISSUE #810 FIX A: Also skip for non-business query types (market prices, news, document reviews)
+      if (shouldAddAnalyticalBlocks && !isNonBusinessQueryType && needsDecisionSupport) {
         const risks = this.#identifyRisks(response, analysis, context);
         if (risks.length > 0) {
           analysisApplied.risksIdentified = risks;
@@ -231,6 +246,8 @@ export class EliFramework {
           modificationsCount++;
           this.logger.log(`Identified ${risks.length} unmentioned risks`);
         }
+      } else if (isNonBusinessQueryType) {
+        this.logger.log('Skipping risk analysis - non-business query type (market/news/document)');
       } else if (!needsDecisionSupport) {
         this.logger.log('Skipping risk analysis - query does not require decision support');
       } else {
@@ -239,7 +256,8 @@ export class EliFramework {
 
       // STEP 2: Extract and challenge assumptions
       // ONLY for decision-support queries
-      if (shouldAddAnalyticalBlocks && needsDecisionSupport) {
+      // ISSUE #810 FIX A: Also skip for non-business query types
+      if (shouldAddAnalyticalBlocks && !isNonBusinessQueryType && needsDecisionSupport) {
         const assumptions = this.#extractAssumptions(response, analysis);
         if (assumptions.length > 0) {
           analysisApplied.assumptionsChallenged = assumptions;
@@ -253,8 +271,10 @@ export class EliFramework {
       }
 
       // STEP 3: Model downside scenarios (especially for business/decision queries)
+      // ISSUE #810 FIX A: Skip for non-business query types (market prices, news, document reviews)
       if (
         shouldAddAnalyticalBlocks &&
+        !isNonBusinessQueryType &&
         (analysis.intent === "decision_making" ||
         analysis.domain === "business" ||
         mode === "business_validation")
@@ -276,7 +296,8 @@ export class EliFramework {
       }
 
       // STEP 4: Calculate survival metrics (business validation mode)
-      if (shouldAddAnalyticalBlocks && (mode === "business_validation" || mode === "site_monkeys")) {
+      // ISSUE #810 FIX A: Skip for non-business query types (market prices, news, document reviews)
+      if (shouldAddAnalyticalBlocks && !isNonBusinessQueryType && (mode === "business_validation" || mode === "site_monkeys")) {
         const survivalCheck = this.#validateBusinessSurvival(response, mode);
         if (!survivalCheck.compliant) {
           const metrics = this.#calculateSurvivalMetrics(
@@ -296,7 +317,8 @@ export class EliFramework {
 
       // STEP 5: Identify blind spots (what user hasn't considered)
       // ONLY for decision-support queries
-      if (shouldAddAnalyticalBlocks && needsDecisionSupport) {
+      // ISSUE #810 FIX A: Also skip for non-business query types
+      if (shouldAddAnalyticalBlocks && !isNonBusinessQueryType && needsDecisionSupport) {
         const blindSpots = this.#findBlindSpots(response, analysis, context);
         if (blindSpots.length > 0) {
           analysisApplied.blindSpotsFound = blindSpots;

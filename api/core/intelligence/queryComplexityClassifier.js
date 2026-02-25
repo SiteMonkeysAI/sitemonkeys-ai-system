@@ -18,16 +18,27 @@ const embeddingCache = new Map();
  * @returns {Promise<number[]>} - Embedding vector
  */
 async function getCachedEmbedding(text) {
-  const cacheKey = text.toLowerCase().trim();
-  
+  // ISSUE #810 FIX G: Truncate input to prevent exceeding the embedding model's 8192-token limit.
+  // text-embedding-3-small uses ~4 chars per token; 8000 tokens × 4 = 32000 chars max safe limit.
+  // For classification we only need the intent/question, not the full document, so 25000 chars is sufficient.
+  const MAX_EMBEDDING_CHARS = 25000;
+  const truncatedText = text.length > MAX_EMBEDDING_CHARS
+    ? text.substring(0, MAX_EMBEDDING_CHARS)
+    : text;
+  if (truncatedText.length < text.length) {
+    console.log(`[QUERY_CLASSIFIER] Truncated input from ${text.length} to ${truncatedText.length} chars to stay within embedding token limit`);
+  }
+
+  const cacheKey = truncatedText.toLowerCase().trim();
+
   if (embeddingCache.has(cacheKey)) {
     return embeddingCache.get(cacheKey);
   }
-  
+
   try {
     const response = await openai.embeddings.create({
       model: "text-embedding-3-small",
-      input: text,
+      input: truncatedText,
     });
     
     const embedding = response.data[0].embedding;
@@ -149,12 +160,24 @@ async function initializeConceptAnchors() {
 export async function classifyQueryComplexity(query, phase4Metadata = {}) {
   try {
     console.log('[QUERY_CLASSIFIER] Classifying query:', query.substring(0, 50) + '...');
-    
+
+    // ISSUE #810 FIX G: For classification, use only the user's question intent (first 500 chars).
+    // When a user pastes a large document into the message field, the full text can exceed the
+    // 8192-token embedding model limit. Classification should be based on what the user asked,
+    // not the full document content. getCachedEmbedding also has a hard truncation guard.
+    const MAX_CLASSIFICATION_CHARS = 500;
+    const classificationText = query.length > MAX_CLASSIFICATION_CHARS
+      ? query.substring(0, MAX_CLASSIFICATION_CHARS)
+      : query;
+    if (classificationText.length < query.length) {
+      console.log(`[QUERY_CLASSIFIER] Using first ${classificationText.length} chars for classification (full query: ${query.length} chars)`);
+    }
+
     // Initialize concept anchors if not already done
     const anchors = await initializeConceptAnchors();
-    
-    // Get embedding for the user's query
-    const queryEmbedding = await getCachedEmbedding(query);
+
+    // Get embedding for the user's query (using the truncated classification text)
+    const queryEmbedding = await getCachedEmbedding(classificationText);
     
     // Calculate semantic similarity to each concept anchor
     const similarities = {

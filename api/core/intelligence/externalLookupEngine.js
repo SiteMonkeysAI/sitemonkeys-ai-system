@@ -639,7 +639,20 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     console.log('[externalLookupEngine] Stock price query detected - no dedicated API, using news fallback');
     return [{
       name: 'Google News RSS (stock price fallback)',
-      buildUrl: (query) => `https://news.google.com/rss/search?q=${encodeURIComponent(query + ' stock price today')}&hl=en-US&gl=US&ceid=US:en`,
+      // ISSUE #810 FIX D: Extract entity name from conversational query instead of passing raw query.
+      // "What is the current stock price of Walmart" → "Walmart stock price" (not the full sentence)
+      buildUrl: (query) => {
+        // Strip question/price words to extract just the company/ticker name
+        const entityQuery = query
+          .replace(/\b(what|is|the|are|current|stock|share|price|of|today|now|currently|how|much|does|cost|worth|trading|value|market|tell|me|about|please|can|you|could|would)\b/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 40)
+          .trim();
+        const searchTerm = entityQuery.length >= 2 ? entityQuery : query.substring(0, 40).trim();
+        console.log(`[externalLookupEngine] Stock RSS query extracted: "${searchTerm}" (from: "${query.substring(0, 60)}")`);
+        return `https://news.google.com/rss/search?q=${encodeURIComponent(searchTerm + ' stock price')}&hl=en-US&gl=US&ceid=US:en`;
+      },
       parser: 'rss',
       type: 'news_fallback',
       extract: (text) => {
@@ -682,7 +695,17 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     // Commodity prices are newsworthy and often appear in news articles
     commoditySources.push({
       name: 'Google News RSS (commodity fallback)',
-      buildUrl: (query) => `https://news.google.com/rss/search?q=${encodeURIComponent(query + ' price today')}&hl=en-US&gl=US&ceid=US:en`,
+      // ISSUE #810 FIX D: Extract commodity name from conversational query
+      buildUrl: (query) => {
+        const entityQuery = query
+          .replace(/\b(what|is|the|are|current|price|of|today|now|currently|how|much|does|cost|worth|tell|me|about|please|can|you|could|would|ounce|barrel|pound)\b/gi, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 40)
+          .trim();
+        const searchTerm = entityQuery.length >= 2 ? entityQuery : query.substring(0, 40).trim();
+        return `https://news.google.com/rss/search?q=${encodeURIComponent(searchTerm + ' price')}&hl=en-US&gl=US&ceid=US:en`;
+      },
       parser: 'rss',
       type: 'news_fallback',
       extract: (text) => {
@@ -721,7 +744,8 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
 
   // ISSUE #406 FIX: Weather queries - no API source available
   // Return empty for graceful degradation OR return news for context
-  if (lowerQuery.match(/weather|temperature|forecast|rain|snow|storm/i)) {
+  // ISSUE #810 FIX E: Use word boundaries to prevent false positives (e.g. "Ukraine" contains "rain")
+  if (lowerQuery.match(/\b(weather|temperature|forecast|rain|snow|storm)\b/i)) {
     // OPTION A: Return empty to trigger graceful degradation with disclosure
     // console.log('[externalLookupEngine] Weather query detected - no weather API configured');
     // return [];
