@@ -360,7 +360,7 @@ async function processFile(file) {
             processingResult.preview = `⚠️ PDF appears to be scanned — no extractable text. OCR not configured.`;
           }
         } catch (pdfErr) {
-          console.error(`[UPLOAD] PDF extraction failed for ${file.originalname}:`, pdfErr.message);
+          console.error("[UPLOAD] PDF extraction failed for %s:", file.originalname, pdfErr.message);
           console.error(`[UPLOAD] PDF error stack:`, pdfErr.stack);
           processingResult.message = `PDF processing failed: ${pdfErr.message}`;
           processingResult.preview = `❌ Could not extract content from PDF`;
