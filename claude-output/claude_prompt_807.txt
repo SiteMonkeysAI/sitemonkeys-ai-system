@@ -1,0 +1,290 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #807: [claude-fix] [P0] Post-PR #805 — Three Remaining Production Failures
+
+Issue Description:
+# [claude-fix] [P0] Post-PR #805 — Three Remaining Production Failures
+
+## Context
+
+PR #805 (comprehensive 9-area audit fix) has been merged and deployed. **7 of 9 audit areas are now confirmed WORKING in production.** This issue addresses the 3 remaining failures identified through production testing with real user queries and Railway log analysis on 2026-02-25.
+
+### What PR #805 FIXED (confirmed via production logs):
+- ✅ **Area 3** — No template scaffolding in responses
+- ✅ **Area 4** — No "Business Survival Analysis" / "Runway Impact: undefined" boilerplate
+- ✅ **Area 5** — No GPT-4 identity leak ("developed by OpenAI") in any response
+- ✅ **Area 7** — `[STORE] ⏭️ Skipping intelligent storage for volatile external data response` on every price query — no new stale memories
+- ✅ **Area 8** — No anchor metadata "(Key details: Pricing: ...)" in any response
+- ✅ **Area 9** — No "Start manual before automating" advice on non-business queries
+- ✅ **Area 2 (partial)** — Stock fallback to Google News RSS is firing correctly; CoinGecko crypto prices work perfectly (Bitcoin $69,169, Ethereum $2,072.78 returned accurately)
+- ✅ **Area 6 (partial)** — Document queries correctly return "Lookup not required: no triggers matched" instead of searching Google News
+
+### What's STILL BROKEN:
+1. **PDF upload extraction** — `contentExtracted=false` on every PDF upload
+2. **Google News RSS provides headlines, not prices** — stock/commodity/gold queries fetch news but GPT-4 can't extract actual price numbers from headline text
+3. **Greenland current-events query got no external data** — Roxy claimed "I don't have access to real-time news" when external lookup should have fired
+
+## CRITICAL RULES
+- Do NOT modify: `tests/`, `.github/`, `eslint.config.mjs`, `package.json`
+- Do NOT revert PR #800, #802, or #805 changes — those are correct
+- Do NOT remove `REVIEW_FINDINGS.md` or `PR_REVIEW_SUMMARY.md` (cleanup later)
+- Every fix must include diagnostic logging so we can verify in production
+- Test every change mentally by tracing the full code path
+
+---
+
+## FAILURE 1: PDF Upload Extraction Not Working [P0]
+
+### Symptom
+Two PDFs uploaded, both failed:
+```
+[UPLOAD] File Prenup Chris and Myndy.pdf skipped storage: contentExtracted=false, type=document
+[UPLOAD] File Deed.05.10.2022.PDF skipped storage: contentExtracted=false, type=document
+```
+
+User asks "Can you explain to me that document" → Roxy responds with generic prenuptial agreement explanation from memory, NOT from the uploaded document content. The document content was never extracted.
+
+### What PR #805 Was Supposed to Fix
+PR #805 added a PDF handler in `api/upload-for-analysis.js` using `pdf-parse` (which is in `package.json` dependencies). The handler should:
+1. Detect PDF by mimetype or file extension
+2. Use `pdf-parse` to extract text
+3. Store in `docxAnalysis.fullText`
+4. Set `contentExtracted = true`
+5. Log `[UPLOAD] PDF extracted: XXXX chars, X pages`
+
+### Required Investigation
+1. Open `api/upload-for-analysis.js` and find the PDF handler block added by PR #805
+2. **Is the code actually there?** Verify it exists in the deployed file
+3. **Is it being reached?** The logs show NO `[UPLOAD] PDF extracted` or `[UPLOAD] PDF extraction failed` lines — suggesting the code block is either:
+   - Not present (didn't deploy?)
+   - Being skipped by a condition check above it (wrong order in the if/else chain?)
+   - Throwing an uncaught error before the log lines
+4. **Check the import:** `pdf-parse` uses `import()` dynamic import in an ESM module. Verify the import path is correct
+5. **Check file detection:** Is the mimetype check matching? PDFs can come as `application/pdf` but some systems send different mimetypes. The `.PDF` extension (uppercase) should also be caught
+6. **Check the if/else ordering:** The PDF handler MUST come BEFORE the text file handler and AFTER the DOCX/mammoth handler. If the text handler catches PDFs first (via some broad condition), the PDF handler is never reached
+
+### Required Fix — Phase 1: Diagnose FIRST
+
+Before writing any fix, determine which of these four failure modes is occurring:
+
+1. **Code not present** — PR #805's PDF handler didn't make it into the deployed file
+2. **Code not reached** — The if/else ordering in `processFile()` causes an earlier branch to catch PDFs (e.g., a broad mimetype check or fallback) before the PDF handler runs
+3. **Code reached but returning empty** — `pdf-parse` executes but returns no text (e.g., scanned/image PDFs, or wrong property access)
+4. **Code throwing but not logged** — An uncaught error in the import or parse kills the handler before log lines execute
+
+**How to diagnose:** Add a temporary log at the VERY TOP of the PDF handler block:
+```javascript
+console.log(`[UPLOAD-DIAG] PDF handler entry: mimetype=${file.mimetype}, ext=${ext}, originalname=${file.originalname}`);
+```
+If this line never appears in logs → the handler is not being reached (failure mode 1 or 2).
+If it appears but no subsequent logs → the handler is throwing (failure mode 4).
+
+Post findings as a comment BEFORE implementing the fix.
+
+### Required Fix — Phase 2: Implement Based on Findings
+
+**Candidate fix** (adjust based on Phase 1 findings):
+
+```javascript
+// PDF files — MUST come before text handler, AFTER DOCX handler
+const ext = path.extname(file.originalname).toLowerCase();
+if (file.mimetype === 'application/pdf' || ext === '.pdf') {
+    console.log(`[UPLOAD] PDF handler reached: ${file.originalname}, mimetype=${file.mimetype}`);
+    try {
+        const pdfParse = (await import('pdf-parse')).default;
+        const pdfData = await pdfParse(file.buffer);
+        if (pdfData.text && pdfData.text.trim().length > 0) {
+            docxAnalysis = { fullText: pdfData.text, value: pdfData.text };
+            contentExtracted = true;
+            console.log(`[UPLOAD] PDF extracted: ${pdfData.text.length} chars, ${pdfData.numpages} pages`);
+        } else {
+            // Scanned/image PDF — no extractable text
+            docxAnalysis = { fullText: '[This PDF appears to be image-based or scanned. Text extraction returned no content. OCR is not currently configured.]', value: '' };
+            contentExtracted = true; // Store the stub so the system can explain why
+            console.log(`[UPLOAD] PDF parsed but no text extracted (scanned/image PDF): ${file.originalname}`);
+        }
+    } catch (pdfErr) {
+        console.error(`[UPLOAD] PDF extraction failed for ${file.originalname}:`, pdfErr.message);
+        console.error(`[UPLOAD] PDF error stack:`, pdfErr.stack);
+    }
+}
+```
+
+**Key requirements:**
+- The `docxAnalysis` object must contain BOTH `fullText` (used by orchestrator's `#loadDocumentContext`) and `value` (used by some code paths). Check which property the orchestrator actually reads and ensure it's populated.
+- **Scanned PDF behavior:** If `pdf-parse` yields no text, store a stub message so the AI can tell the user "This PDF appears image-based; OCR isn't configured" rather than "I don't see any document."
+- Handler MUST come before the text file handler in the if/else chain.
+
+### Verification
+After fix, uploading a PDF should produce these log lines:
+```
+[UPLOAD] PDF extracted: XXXX chars, X pages
+[UPLOAD] Stored document for key: X, content length: XXXX
+[UPLOAD] extractedDocuments Map size after upload: 1
+```
+And asking about the document should produce:
+```
+[DOC-LOAD] Looking up document. Map size: 1, Map keys: [X]
+[HANDOFF:DOCUMENT-LOAD→CONTEXT] ✅ Document found
+[HANDOFF:CONTEXT-ASSEMBLY→AI] Sources present: memory=true, docs=true, vault=false
+```
+
+---
+
+## FAILURE 2: Google News RSS Returns Headlines, Not Prices [P1]
+
+### Symptom
+Stock and commodity queries correctly fetch Google News RSS data, but GPT-4 responds with "the exact current price is not given" because the fetched data contains only article headlines, not actual price numbers.
+
+**Example — Apple stock:**
+- External lookup: ✅ `Stock price query detected - no dedicated API, using news fallback`
+- Google News: ✅ `689 chars extracted` from RSS
+- Roxy's response: ❌ "the exact current price of Apple's stock (AAPL) is not given"
+
+**Example — Silver:**
+- External lookup: ✅ `Commodity price query detected - using COMMODITIES sources with news fallback`
+- Google News: ✅ `597 chars extracted`
+- Eli's response: ❌ "the current price of silver is not explicitly stated"
+
+**Example — Gold:**
+- External lookup: ✅ `697 chars extracted`
+- Roxy's response: ❌ "the exact number wasn't provided in the data I received"
+
+**Compare to crypto (which WORKS):**
+- CoinGecko: ✅ Returns `{"bitcoin":{"usd":69169},"ethereum":{"usd":2072.78}}` — structured JSON
+- AI response: ✅ "the current price of one Bitcoin is $69,169"
+
+### Root Cause
+Google News RSS returns headlines, not structured price data. However, the system's response to this situation is a **deterministic engineering problem, not model variance.** The AI says "price not given" because the prompt path does not instruct it how to handle news-only data for price queries. This is fixable with prompt gating — the same pattern that already works for identity enforcement and boilerplate suppression.
+
+### Required Fix
+
+This is a **product behavior fix**, not a "broken feature." The system has data; it just presents it badly.
+
+Find where external data is injected into the AI prompt (orchestrator.js Phase 4 / prompt builder). When external data comes from Google News RSS (not a structured API like CoinGecko), add deterministic response rules:
+
+```
+WHEN EXTERNAL DATA IS NEWS HEADLINES (not structured price data):
+1. NEVER say "the price is not given" or "the exact number wasn't provided" — this makes the system appear broken
+2. MUST disclose: "No live quote source is configured for [stock/commodity] prices"
+3. MUST summarize direction and drivers from the headlines (e.g., "Recent news indicates silver prices have risen approximately 2% amid a broader market rally")
+4. MUST suggest where to check live pricing: "For exact real-time pricing, check Google Finance, Yahoo Finance, or your brokerage"
+5. OPTIONALLY: "To enable exact pricing inside this system, configure [API key name]"
+```
+
+**How to detect news-only vs structured data:** The external lookup result already knows its source. CoinGecko returns structured JSON. Google News RSS returns headline text. Tag the source type when injecting into the prompt:
+```javascript
+// In the prompt injection, add source context:
+if (source.name.includes('News') || source.name.includes('news')) {
+    externalContext += '\n[NOTE: This data is from news headlines, not a live price feed. Summarize directionally, do not claim exact prices.]';
+}
+```
+
+This is the same deterministic clamp pattern used for identity enforcement — not GPT-4 variance, but prompt engineering.
+
+### Verification
+After Part A fix, a stock query should produce a response like:
+"Based on recent news, Apple stock has been reacting to [context from headlines]. For the exact current price, I recommend checking Google Finance or your brokerage. Here's what the latest headlines indicate: [useful summary]."
+
+NOT: "the exact current price of Apple's stock is not given."
+
+---
+
+## FAILURE 3: Current Events Query (Greenland) Gets No External Data [P0/P1]
+
+### Symptom
+User asked: "What's the most up to date and recent information related to Greenland"
+Roxy responded: "I'm afraid I don't have access to real-time news updates or external data capabilities"
+
+This is a **classifier/routing contract bug.** The system HAS external lookup capabilities — it correctly uses them for price queries. But a query with "most up to date" and "recent information" — two of the strongest possible freshness signals — failed to trigger external lookup. That's a deterministic routing failure, not model variance.
+
+### Log Evidence
+The logs show this query DID trigger memory retrieval (found Greenland-related memories about Denmark, self-determination, etc.) but the external lookup behavior is unclear. Looking at the Phase 4 logs, the truth type was not explicitly logged for this query, suggesting it may have been classified as PERMANENT (no lookup needed) instead of SEMI_STABLE or VOLATILE.
+
+The key log line that should exist but doesn't:
+```
+[ORCHESTRATOR] 🌐 External lookup required (type: VOLATILE/SEMI_STABLE...)
+```
+
+For comparison, "What is the current price of gold" correctly triggered:
+```
+[ORCHESTRATOR] 🌐 External lookup required (type: VOLATILE, high_stakes: false)
+```
+
+### Required Investigation
+1. Open `api/core/intelligence/truthTypeDetector.js`
+2. Find what truth type "What's the most up to date and recent information related to Greenland" gets classified as
+3. Check: Does the query contain freshness markers ("most up to date", "recent") that should trigger VOLATILE/SEMI_STABLE classification?
+4. Check: Is there a geo/political topic detector that should flag Greenland as requiring current information?
+5. The phrase "most up to date" and "recent" are extremely strong freshness signals — if these don't trigger external lookup, the classifier has a blind spot
+
+### Required Fix
+
+The truthTypeDetector MUST recognize explicit freshness/recency markers as a deterministic override — these are not ambiguous signals, they are the user explicitly requesting current data. This is the same engineering pattern as identity enforcement: when the signal is clear, clamp the behavior.
+
+Add a freshness marker check **early** in the classification pipeline, BEFORE topic-based classification:
+```javascript
+// Freshness markers are deterministic overrides — not suggestions
+const freshnessPatterns = [
+    /most up[- ]to[- ]date/i,
+    /recent (information|news|updates|developments)/i,
+    /latest (information|news|updates|developments)/i,
+    /current (situation|status|state|events)/i,
+    /what'?s happening (with|in|about)/i,
+    /what'?s (going on|new) (with|in|about)/i,
+];
+
+const hasFreshnessMarker = freshnessPatterns.some(p => p.test(query));
+if (hasFreshnessMarker) {
+    console.log(`[TRUTH-TYPE] Freshness marker detected — forcing SEMI_STABLE classification`);
+    return { type: 'SEMI_STABLE', reason: 'explicit_freshness_marker', confidence: 0.95 };
+}
+```
+
+This is a **candidate fix** — investigate the actual `truthTypeDetector.js` structure first and adapt to fit the existing classification flow. The key requirement is: queries containing explicit freshness markers MUST trigger external lookup, period.
+
+### Verification
+After fix, "What's the most up to date information about Greenland" should:
+1. Trigger external lookup (Google News RSS)
+2. Return recent Greenland news headlines
+3. AI should synthesize the news with existing memory context about Greenland
+
+---
+
+## FILES TO INVESTIGATE
+- `api/upload-for-analysis.js` — PDF handler (Failure 1)
+- `api/core/orchestrator.js` — System prompt for news-only external data (Failure 2)
+- `api/core/intelligence/truthTypeDetector.js` — Freshness marker classification (Failure 3)
+- `api/core/intelligence/externalLookupEngine.js` — Google News RSS URL construction (Failure 2)
+
+## PRIORITY ORDER
+1. **Failure 1** (PDF upload) — Core feature, completely broken, users already frustrated
+2. **Failure 2** (News-only price responses) — System looks broken when it says "price not given"
+3. **Failure 3** (Greenland/current events) — Classification gap, straightforward fix
+
+## WHAT NOT TO CHANGE
+- `tests/baselines.json`
+- `tests/tier1/code-guards.test.js`
+- `.github/workflows/tier1-code-guards.yml`
+- `eslint.config.mjs`
+- `package.json`
+- Do NOT revert PR #800, #802, or #805 fixes
+- Do NOT restructure the architecture — surgical fixes only
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

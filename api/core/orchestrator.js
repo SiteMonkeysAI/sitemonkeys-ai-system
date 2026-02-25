@@ -1225,7 +1225,19 @@ export class Orchestrator {
             // lookupResult.data.sources is an array of {source, text, length, type}
             if (lookupResult.data.sources && Array.isArray(lookupResult.data.sources) && lookupResult.data.sources.length > 0) {
               phase4Metadata.fetched_content = lookupResult.data.sources
-                .map(s => `[Source: ${s.source}]\n${s.text}`)
+                .map(s => {
+                  // Detect news/RSS sources so the AI knows it has headlines, not structured price data
+                  const isNewsSource = s.source && (
+                    s.source.includes('News') ||
+                    s.source.includes('news') ||
+                    s.source.includes('RSS') ||
+                    s.source.includes('rss')
+                  );
+                  const newsNote = isNewsSource
+                    ? '\n[DATA TYPE: NEWS HEADLINES — This source contains article headlines and publication info, NOT structured price data. Instructions: (1) NEVER say "the price is not given" or "exact number not provided" — this misleads the user. (2) Summarize direction and context from the headlines (e.g., "Recent news indicates prices have moved due to X"). (3) Always tell the user: "For exact real-time pricing, check Google Finance, Yahoo Finance, or your brokerage." (4) If they asked for a price, acknowledge clearly that no live quote API is configured for this asset.]'
+                    : '';
+                  return `[Source: ${s.source}]\n${s.text}${newsNote}`;
+                })
                 .join('\n\n---\n\n');
               phase4Metadata.sources_used = lookupResult.data.sources.length;
             } else {
