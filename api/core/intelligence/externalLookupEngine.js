@@ -1098,6 +1098,17 @@ export async function performLookup(query, sources, truthType = null) {
         return /\$\d+\.?\d*|\d+\.?\d*\s*(USD|usd|dollars?|ounce|oz)/i.test(r.text);
       });
 
+      // ISSUE #810 CHANGE 1: Add structured metadata flags for RSS clamp (replaces string-matching)
+      // Determine source type based on what sources were actually used
+      let sourceType = 'unknown';
+      if (onlyRssSources) {
+        sourceType = 'headlines';
+      } else if (results.some(r => r.type === 'api')) {
+        sourceType = 'structured_api';
+      } else {
+        sourceType = 'mixed';
+      }
+
       if (isPriceQuery && onlyRssSources && !hasNumericQuote) {
         console.log('[MARKET-DATA] source=rss has_numeric_quote=false fallback=headlines_summary');
         phase4Metadata.disclosure = (phase4Metadata.disclosure ? phase4Metadata.disclosure + ' ' : '') +
@@ -1118,6 +1129,8 @@ export async function performLookup(query, sources, truthType = null) {
         total_text_fetched: totalTextFetched,
         verified_at: new Date().toISOString(),
         lookup_time_ms: Date.now() - startTime,
+        sourceType: sourceType,           // ISSUE #810 CHANGE 1: Structured metadata flag
+        hasNumericQuote: hasNumericQuote, // ISSUE #810 CHANGE 1: Structured metadata flag
         ...phase4Metadata
       };
     }

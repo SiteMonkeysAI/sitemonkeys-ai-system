@@ -215,9 +215,12 @@ export class EliFramework {
       // Gate analytical blocks for PERMANENT low-stakes facts
       const shouldAddAnalyticalBlocks = truthType !== 'PERMANENT' || isHighStakes;
 
-      // ISSUE #810 FIX A: Non-business query types must NEVER receive business boilerplate.
+      // ISSUE #810 FIX A + CHANGE 2: Non-business query types must NEVER receive business boilerplate
+      // UNLESS there's a decision signal in BV/SM modes.
       // Market queries (stock/commodity prices) and news/current events should get clean responses
       // even when the active mode is site_monkeys or business_validation.
+      // HOWEVER: Queries like "What's Apple's stock price and should I buy 50 shares as part of my strategy?"
+      // ARE decision queries that need business analysis, even though they're classified as market_query.
       const isNonBusinessQueryType = (
         truthType === 'DOCUMENT_REVIEW' ||
         analysis.intent === 'market_query' ||
@@ -225,8 +228,15 @@ export class EliFramework {
         context?.queryClassification?.classification === 'current_events' ||
         context?.queryClassification?.classification === 'news'
       );
-      if (isNonBusinessQueryType) {
+      
+      // CHANGE 2: Detect decision signals that override the non-business classification in BV/SM modes
+      const hasDecisionSignal = /should\s+i|is\s+it\s+worth|strategy|invest|buy.*as\s+part|sell.*as\s+part|decision|advise|recommend/i.test(query);
+      const suppressBusiness = isNonBusinessQueryType && !(hasDecisionSignal && (mode === 'business_validation' || mode === 'site_monkeys'));
+      
+      if (suppressBusiness) {
         this.logger.log(`[ISSUE #810] Non-business query type detected (truthType=${truthType}, intent=${analysis.intent}, classification=${context?.queryClassification?.classification}) — skipping all business sections`);
+      } else if (isNonBusinessQueryType && hasDecisionSignal) {
+        this.logger.log(`[ISSUE #810 CHANGE 2] Market/news query with decision signal detected in ${mode} mode — business sections ALLOWED`);
       }
 
       // Gate decision-support sections (risks, blind spots) for queries that need them
@@ -234,8 +244,8 @@ export class EliFramework {
 
       // STEP 1: Identify risks not mentioned in response
       // ONLY add risk analysis if query involves decision-making or high-stakes domains
-      // ISSUE #810 FIX A: Also skip for non-business query types (market prices, news, document reviews)
-      if (shouldAddAnalyticalBlocks && !isNonBusinessQueryType && needsDecisionSupport) {
+      // ISSUE #810 FIX A + CHANGE 2: Skip for non-business query types (unless decision signal in BV/SM)
+      if (shouldAddAnalyticalBlocks && !suppressBusiness && needsDecisionSupport) {
         const risks = this.#identifyRisks(response, analysis, context);
         if (risks.length > 0) {
           analysisApplied.risksIdentified = risks;
@@ -246,7 +256,7 @@ export class EliFramework {
           modificationsCount++;
           this.logger.log(`Identified ${risks.length} unmentioned risks`);
         }
-      } else if (isNonBusinessQueryType) {
+      } else if (suppressBusiness) {
         this.logger.log('Skipping risk analysis - non-business query type (market/news/document)');
       } else if (!needsDecisionSupport) {
         this.logger.log('Skipping risk analysis - query does not require decision support');
@@ -256,8 +266,8 @@ export class EliFramework {
 
       // STEP 2: Extract and challenge assumptions
       // ONLY for decision-support queries
-      // ISSUE #810 FIX A: Also skip for non-business query types
-      if (shouldAddAnalyticalBlocks && !isNonBusinessQueryType && needsDecisionSupport) {
+      // ISSUE #810 FIX A + CHANGE 2: Skip for non-business query types (unless decision signal in BV/SM)
+      if (shouldAddAnalyticalBlocks && !suppressBusiness && needsDecisionSupport) {
         const assumptions = this.#extractAssumptions(response, analysis);
         if (assumptions.length > 0) {
           analysisApplied.assumptionsChallenged = assumptions;
@@ -271,10 +281,10 @@ export class EliFramework {
       }
 
       // STEP 3: Model downside scenarios (especially for business/decision queries)
-      // ISSUE #810 FIX A: Skip for non-business query types (market prices, news, document reviews)
+      // ISSUE #810 FIX A + CHANGE 2: Skip for non-business query types (unless decision signal in BV/SM)
       if (
         shouldAddAnalyticalBlocks &&
-        !isNonBusinessQueryType &&
+        !suppressBusiness &&
         (analysis.intent === "decision_making" ||
         analysis.domain === "business" ||
         mode === "business_validation")
@@ -296,8 +306,8 @@ export class EliFramework {
       }
 
       // STEP 4: Calculate survival metrics (business validation mode)
-      // ISSUE #810 FIX A: Skip for non-business query types (market prices, news, document reviews)
-      if (shouldAddAnalyticalBlocks && !isNonBusinessQueryType && (mode === "business_validation" || mode === "site_monkeys")) {
+      // ISSUE #810 FIX A + CHANGE 2: Skip for non-business query types (unless decision signal in BV/SM)
+      if (shouldAddAnalyticalBlocks && !suppressBusiness && (mode === "business_validation" || mode === "site_monkeys")) {
         const survivalCheck = this.#validateBusinessSurvival(response, mode);
         if (!survivalCheck.compliant) {
           const metrics = this.#calculateSurvivalMetrics(
@@ -317,8 +327,8 @@ export class EliFramework {
 
       // STEP 5: Identify blind spots (what user hasn't considered)
       // ONLY for decision-support queries
-      // ISSUE #810 FIX A: Also skip for non-business query types
-      if (shouldAddAnalyticalBlocks && !isNonBusinessQueryType && needsDecisionSupport) {
+      // ISSUE #810 FIX A + CHANGE 2: Skip for non-business query types (unless decision signal in BV/SM)
+      if (shouldAddAnalyticalBlocks && !suppressBusiness && needsDecisionSupport) {
         const blindSpots = this.#findBlindSpots(response, analysis, context);
         if (blindSpots.length > 0) {
           analysisApplied.blindSpotsFound = blindSpots;

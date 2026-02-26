@@ -1490,13 +1490,13 @@ export class Orchestrator {
       aiResponse.response = completenessResult.response;
       this.log(`[PRIMITIVE-COMPLETENESS] ${JSON.stringify(completenessResult.primitiveLog)}`);
 
-      // Position 3: Market Query RSS Clamp (ISSUE #810 FIX B)
+      // Position 3: Market Query RSS Clamp (ISSUE #810 FIX B + CHANGE 1)
       // When the only external data source is RSS/news (no live quote API), the AI sometimes
       // ignores the prompt-level instruction and says "price not provided/given/available".
       // This is a model-dependency problem — fix it deterministically in code after generation.
+      // CHANGE 1: Use structured metadata flags instead of string-matching on fetched_content
       const isRssOnlyMarketResponse = (
-        phase4Metadata.fetched_content &&
-        phase4Metadata.fetched_content.includes('[DATA TYPE: NEWS HEADLINES') &&
+        (phase4Metadata.sourceType === 'headlines' || phase4Metadata.hasNumericQuote === false) &&
         /\b(stock|share|price|commodity|gold|silver|bitcoin|ethereum|crypto)\b/i.test(message)
       );
       if (isRssOnlyMarketResponse) {
