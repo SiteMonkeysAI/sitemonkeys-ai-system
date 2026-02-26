@@ -1490,6 +1490,33 @@ export class Orchestrator {
       aiResponse.response = completenessResult.response;
       this.log(`[PRIMITIVE-COMPLETENESS] ${JSON.stringify(completenessResult.primitiveLog)}`);
 
+      // Position 3: Market Query RSS Clamp (ISSUE #810 FIX B + CHANGE 1)
+      // When the only external data source is RSS/news (no live quote API), the AI sometimes
+      // ignores the prompt-level instruction and says "price not provided/given/available".
+      // This is a model-dependency problem — fix it deterministically in code after generation.
+      // CHANGE 1: Use structured metadata flags instead of string-matching on fetched_content
+      const isRssOnlyMarketResponse = (
+        (phase4Metadata.sourceType === 'headlines' || phase4Metadata.hasNumericQuote === false) &&
+        /\b(stock|share|price|commodity|gold|silver|bitcoin|ethereum|crypto)\b/i.test(message)
+      );
+      if (isRssOnlyMarketResponse) {
+        const forbiddenPhrasePattern = /\b(price|cost|value|quote)[\w\s,]{0,30}(not\s+(provided|given|available|included|shown|listed|specified|stated)|unavailable|unknown|not\s+found)\b/gi;
+        const noLivePricePattern = /\b(no|not|without)\s+[\w\s]{0,15}(current|exact|real-?time|live|actual)[\w\s]{0,15}(price|quote|data)\b/gi;
+        if (forbiddenPhrasePattern.test(aiResponse.response) || noLivePricePattern.test(aiResponse.response)) {
+          this.log('[PRIMITIVE-RSS-CLAMP] Detected forbidden "price not provided" phrase in RSS-only market response — applying code-level correction');
+          // Extract any headline summary from the RSS content already in the response
+          // Replace the problematic phrase with the correct disclosure
+          aiResponse.response = aiResponse.response
+            .replace(forbiddenPhrasePattern, 'no live quote API is configured for this asset')
+            .replace(noLivePricePattern, 'no live quote API configured');
+          // Append the required disclosure if not already present
+          if (!/google finance|yahoo finance|finance\.yahoo|finance\.google/i.test(aiResponse.response)) {
+            aiResponse.response += '\n\n⚠️ **No live quote source configured** — headlines reflect recent news context but do not include spot prices. For real-time pricing, check: [Google Finance](https://finance.google.com) or [Yahoo Finance](https://finance.yahoo.com)';
+          }
+          this.log('[PRIMITIVE-RSS-CLAMP] Applied. Response corrected to disclose RSS-only source limitation.');
+        }
+      }
+
       // ========== RUN ENFORCEMENT CHAIN (BEFORE PERSONALITY) ==========
       // CRITICAL FIX: Enforcement must run BEFORE personality to ensure
       // business rules and security policies are applied to raw AI output
