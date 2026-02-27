@@ -214,9 +214,29 @@ export const API_SOURCES = {
   ],
   NEWS: [
     // 1. Google News RSS - primary discovery layer
+    // ISSUE #814 ITEM 3 (Post-Review): Apply entity extraction to ALL RSS queries, not just stock fallback.
+    // Extract the topic/entity from conversational messages before sending to Google News.
     {
       name: 'Google News RSS',
-      buildUrl: (query) => `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-US&gl=US&ceid=US:en`,
+      buildUrl: (query) => {
+        // Extract clean search query from conversational input (similar to stock path cleaning)
+        const cleanedQuery = query
+          .replace(/\b(what|what's|whats|is|the|are|there|anything|new|going|on|with|latest|newest|most|recent|up|to|date|information|from|news|about|tell|me|can|you|please|how|has|been)\b/gi, ' ')
+          .replace(/'s\b/g, ' ')  // strip possessive 's (e.g. "What's" → "What " then strip "What ")
+          .replace(/\b\w{1,2}\b/g, ' ')  // strip 1-2 char fragments left over
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 60);  // limit length for cleaner RSS query
+        
+        const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
+        
+        // Log cleaning if query was modified
+        if (searchQuery !== query) {
+          console.log(`[externalLookupEngine] News RSS query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`);
+        }
+        
+        return `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}&hl=en-US&gl=US&ceid=US:en`;
+      },
       parser: 'rss',
       type: 'api',
       extract: (text) => {

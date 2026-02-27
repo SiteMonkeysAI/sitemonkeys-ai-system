@@ -258,7 +258,19 @@ function isDocxFile(file) {
 
 // Process uploaded file - EXACT COPY
 async function processFile(file) {
+  // ISSUE #814 ITEM 1: Add diagnostic logging at EVERY decision point for visibility
+  console.log(`[UPLOAD] File received: name="${file.originalname}", mimetype="${file.mimetype}", size=${file.size}, bufferExists=${!!file.buffer}`);
+  
   const fileType = detectFileType(file.originalname, file.mimetype);
+  
+  // Check if file types - case-insensitive for extension check
+  const isPdf = file.mimetype === 'application/pdf' || 
+    file.originalname.toLowerCase().endsWith('.pdf');
+  const isDocx = isDocxFile(file);
+  const isText = file.mimetype.startsWith('text/') || 
+    /\.(txt|md|csv|json|xml|html|htm|log|yaml|yml)$/i.test(file.originalname);
+  
+  console.log(`[UPLOAD] Type detection: isPdf=${isPdf}, isDocx=${isDocx}, isText=${isText}, fileType="${fileType}"`);
 
   let processingResult = {
     success: true,
@@ -272,7 +284,7 @@ async function processFile(file) {
 
   try {
     // SPECIAL HANDLING FOR DOCX FILES
-    if (fileType === "document" && isDocxFile(file)) {
+    if (fileType === "document" && isDocx) {
       console.log(`📄 Processing .docx file: ${file.originalname}`);
 
       // Extract content (memory-efficient)
@@ -322,8 +334,10 @@ async function processFile(file) {
       if (isPdf && file.buffer) {
         console.log(`[UPLOAD] PDF handler reached: ${file.originalname}, mimetype=${file.mimetype}`);
         try {
+          console.log(`[UPLOAD] PDF handler entered for: ${file.originalname} (about to call pdf-parse)`);
           const pdfParse = (await import('pdf-parse')).default;
           const pdfData = await pdfParse(file.buffer);
+          console.log(`[UPLOAD] PDF extracted: ${pdfData.text?.length || 0} chars, ${pdfData.numpages || '?'} pages from ${file.originalname}`);
           if (pdfData.text && pdfData.text.trim().length > 0) {
             processingResult.contentExtracted = true;
             const pdfText = pdfData.text;
@@ -340,7 +354,6 @@ async function processFile(file) {
             };
             processingResult.message = `PDF analyzed: ${file.originalname} (${wordCount} words, ${pdfData.numpages} pages)`;
             processingResult.preview = `📄 PDF extracted: ${wordCount} words, ${pdfData.numpages} pages`;
-            console.log(`[UPLOAD] PDF extracted: ${pdfText.length} chars, ${pdfData.numpages} pages`);
           } else {
             // Scanned/image PDF — no extractable text. Set contentExtracted=true with a stub
             // so the AI can explain why it can't read the document rather than silently failing.
