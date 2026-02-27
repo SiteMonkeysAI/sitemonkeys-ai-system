@@ -258,7 +258,19 @@ function isDocxFile(file) {
 
 // Process uploaded file - EXACT COPY
 async function processFile(file) {
+  // ISSUE #814 ITEM 1: Add diagnostic logging at EVERY decision point for visibility
+  console.log(`[UPLOAD] File received: name="${file.originalname}", mimetype="${file.mimetype}", size=${file.size}, bufferExists=${!!file.buffer}`);
+  
   const fileType = detectFileType(file.originalname, file.mimetype);
+  
+  // Check if file types - case-insensitive for extension check
+  const isPdf = file.mimetype === 'application/pdf' || 
+    file.originalname.toLowerCase().endsWith('.pdf');
+  const isDocx = isDocxFile(file);
+  const isText = file.mimetype.startsWith('text/') || 
+    /\.(txt|md|csv|json|xml|html|htm|log|yaml|yml)$/i.test(file.originalname);
+  
+  console.log(`[UPLOAD] Type detection: isPdf=${isPdf}, isDocx=${isDocx}, isText=${isText}, fileType="${fileType}"`);
 
   let processingResult = {
     success: true,
@@ -272,7 +284,7 @@ async function processFile(file) {
 
   try {
     // SPECIAL HANDLING FOR DOCX FILES
-    if (fileType === "document" && isDocxFile(file)) {
+    if (fileType === "document" && isDocx) {
       console.log(`📄 Processing .docx file: ${file.originalname}`);
 
       // Extract content (memory-efficient)
@@ -322,8 +334,10 @@ async function processFile(file) {
       if (isPdf && file.buffer) {
         console.log(`[UPLOAD] PDF handler reached: ${file.originalname}, mimetype=${file.mimetype}`);
         try {
+          console.log(`[UPLOAD] PDF handler entered for: ${file.originalname} (about to call pdf-parse)`);
           const pdfParse = (await import('pdf-parse')).default;
           const pdfData = await pdfParse(file.buffer);
+          console.log(`[UPLOAD] PDF extracted: ${pdfData.text?.length || 0} chars, ${pdfData.numpages || '?'} pages from ${file.originalname}`);
           if (pdfData.text && pdfData.text.trim().length > 0) {
             processingResult.contentExtracted = true;
             const pdfText = pdfData.text;
@@ -340,7 +354,6 @@ async function processFile(file) {
             };
             processingResult.message = `PDF analyzed: ${file.originalname} (${wordCount} words, ${pdfData.numpages} pages)`;
             processingResult.preview = `📄 PDF extracted: ${wordCount} words, ${pdfData.numpages} pages`;
-            console.log(`[UPLOAD] PDF extracted: ${pdfText.length} chars, ${pdfData.numpages} pages`);
           } else {
             // Scanned/image PDF — no extractable text. Set contentExtracted=true with a stub
             // so the AI can explain why it can't read the document rather than silently failing.
@@ -362,9 +375,17 @@ async function processFile(file) {
         } catch (pdfErr) {
           console.error("[UPLOAD] PDF extraction failed for %s:", file.originalname, pdfErr.message);
           console.error(`[UPLOAD] PDF error stack:`, pdfErr.stack);
-          processingResult.message = `PDF processing failed: ${pdfErr.message}`;
-          processingResult.preview = `❌ Could not extract content from PDF`;
+          // ISSUE #814 FIX: Set success=false so user gets proper error feedback instead of
+          // silently falling through to the generic "Document ready for analysis" message.
+          processingResult.success = false;
+          processingResult.message = `PDF processing failed: ${pdfErr.message}. Please try converting to .txt or .docx.`;
+          processingResult.preview = `❌ Could not extract content from this PDF. If it is a scanned/image PDF, please paste the text directly into chat.`;
         }
+      } else if (isPdf && !file.buffer) {
+        console.error(`[UPLOAD] PDF detected but no buffer available: ${file.originalname}`);
+        processingResult.success = false;
+        processingResult.message = `PDF upload error: file buffer not available for ${file.originalname}`;
+        processingResult.preview = `❌ PDF upload failed — file data was not received.`;
       }
 
       // Handle plain text files - extract content directly from buffer
@@ -401,7 +422,9 @@ async function processFile(file) {
       }
 
       // Handle all other file types (fallback for non-text files)
-      if (!processingResult.contentExtracted) {
+      // ISSUE #814 FIX: Only show generic fallback if there was no extraction failure.
+      // PDF/text errors already set success=false and a descriptive message above.
+      if (!processingResult.contentExtracted && processingResult.success) {
         switch (fileType) {
           case "image":
             processingResult.message = `Image uploaded for analysis: ${file.originalname}`;

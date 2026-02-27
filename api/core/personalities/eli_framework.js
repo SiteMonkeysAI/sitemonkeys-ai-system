@@ -221,8 +221,13 @@ export class EliFramework {
       // even when the active mode is site_monkeys or business_validation.
       // HOWEVER: Queries like "What's Apple's stock price and should I buy 50 shares as part of my strategy?"
       // ARE decision queries that need business analysis, even though they're classified as market_query.
+      // ISSUE #814 FIX: Added VOLATILE truth type as a non-business indicator.
+      // Stock/commodity/crypto price queries are VOLATILE and should NEVER receive business boilerplate.
+      // This catches cases where the query classifier doesn't return market_query but the truth type
+      // detector correctly identifies the query as about real-time price data.
       const isNonBusinessQueryType = (
         truthType === 'DOCUMENT_REVIEW' ||
+        truthType === 'VOLATILE' ||
         analysis.intent === 'market_query' ||
         context?.queryClassification?.classification === 'market_query' ||
         context?.queryClassification?.classification === 'current_events' ||
