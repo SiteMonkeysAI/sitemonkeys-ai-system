@@ -206,12 +206,13 @@ export function getSourceHierarchy(claimType, mode = 'truth') {
     return HIERARCHIES.EXTERNAL_FIRST;
   }
 
-  // Ambiguous: Default based on mode
-  if (mode === 'site_monkeys') {
-    return HIERARCHIES.VAULT_FIRST;
-  }
-
-  return HIERARCHIES.EXTERNAL_FIRST;
+  // Ambiguous: Default to VAULT_FIRST (memory-first) for ALL modes.
+  // ISSUE #818 FIX: Previously defaulted to EXTERNAL_FIRST for non-site_monkeys modes,
+  // which caused greetings, personal facts, and emotional queries to trigger external
+  // lookup (Google News RSS) because they matched no business/factual patterns.
+  // AMBIGUOUS means "unknown intent" — not "needs external data." We should look in
+  // memory/vault first, not hit external APIs for queries we can't classify.
+  return HIERARCHIES.VAULT_FIRST;
 }
 
 /**

@@ -302,6 +302,39 @@ export function detectByPattern(query) {
     };
   }
 
+  // ISSUE #818 FIX: CONVERSATIONAL/PERSONAL Detection (before VOLATILE patterns)
+  // Greetings, personal statements, memory commands, and emotional support queries
+  // should NEVER trigger external lookup. They contain no "current events" intent.
+  // Must run BEFORE VOLATILE patterns so "I need support today" is not caught by "today".
+  const CONVERSATIONAL_PATTERNS = [
+    // Pure greetings
+    /^(hello|hi|hey|greetings|howdy|yo|sup|hiya|hola)\s*[!.,?]?\s*$/i,
+    /^(how are you|how'?s? it going|what'?s? up|nice to meet you|good (morning|afternoon|evening|night))\s*[!.,?]?\s*$/i,
+    /^(thanks|thank you|thank u|thx|ty|cheers|ok|okay|alright|sure|great|perfect|awesome|got it|understood)\s*[!.,?]?\s*$/i,
+    // Memory storage commands ("Remember that my..." / "Please remember...")
+    /\b(remember (that )?my|please remember|don'?t forget (that )?my|note that my|keep in mind that my)\b/i,
+    // Personal facts the user is sharing about themselves
+    /\bmy (name|email|phone|address|birthday|age|job|company|favorite|favourite|colour|color|pet|dog|cat|child|kid|son|daughter|wife|husband|partner|allergy|medication|condition|hobby|car|home|house|boss|manager) (is|are|was|=)\b/i,
+    /\bi have (a |an )?(dog|cat|kid|child|daughter|son|wife|husband|partner|allergy|pet|house|car)\b/i,
+    /\bi (live|work|reside|grew up|was born|studied) (in|at|near|by|for)\b/i,
+    // Emotional support requests (not asking for news)
+    /\bi (need|want|am looking for|'?m looking for) .{0,50}(emotional |mental )?(support|help|someone to talk|a friend|comfort|encouragement)\b/i,
+    /\bi'?m (feeling|struggling|upset|sad|depressed|anxious|stressed|worried|tired|overwhelmed|lonely|happy|excited|scared|frustrated|confused)\b/i,
+  ];
+  const isConversationalOrPersonal = CONVERSATIONAL_PATTERNS.some(p => p.test(query));
+  if (isConversationalOrPersonal) {
+    console.log('[truthTypeDetector] Conversational/personal pattern detected — classifying as PERMANENT, no external lookup');
+    return {
+      type: TRUTH_TYPES.PERMANENT,
+      confidence: 0.95,
+      stage: 1,
+      patterns_matched: [{ type: TRUTH_TYPES.PERMANENT, pattern: 'conversational_personal_statement' }],
+      conflict_detected: false,
+      reason: 'Conversational or personal statement — memory-first, no external lookup needed',
+      skipExternalLookup: true
+    };
+  }
+
   // FRESHNESS MARKER OVERRIDE (Issue #807 Fix 3)
   // Explicit freshness/recency requests are deterministic SEMI_STABLE triggers.
   // These patterns mean the user explicitly wants CURRENT information — external lookup required.
