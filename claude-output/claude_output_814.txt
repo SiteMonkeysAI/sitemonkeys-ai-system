@@ -1,0 +1,44 @@
+All fixes from Issue #814 are in place. Here's the complete summary of what was implemented:
+
+---
+
+## Issue #814 — Implementation Complete
+
+### 7 Files Modified (124 insertions, 26 deletions)
+
+| File | Fixes Applied |
+|------|---------------|
+| `api/core/intelligence/externalLookupEngine.js` | FAILURE 1, FAILURE 6, FAILURE 8 |
+| `api/core/intelligence/truthTypeDetector.js` | FAILURE 9 |
+| `api/core/orchestrator.js` | FAILURE 3, FAILURE 5 |
+| `api/core/personalities/eli_framework.js` | FAILURE 4 |
+| `api/memory/intelligent-storage.js` | ROOT CAUSE A, ROOT CAUSE C, ROOT CAUSE F |
+| `api/services/semantic-retrieval.js` | ROOT CAUSE B |
+| `api/upload-for-analysis.js` | FAILURE 2 |
+
+### What Each Fix Does
+
+- **FAILURE 1**: External lookup now fires for ALL VOLATILE/SEMI_STABLE queries, not just those containing `current|latest|today|what's`
+- **FAILURE 2**: PDF catch block now sets `success = false`, preventing silent fallthrough to incorrect handlers
+- **FAILURE 3**: Document context is gated by `isMarketQuery` — stock/price queries no longer inject the previous document's 807 tokens
+- **FAILURE 4**: Business boilerplate sections (Critical Risks, Assumptions, etc.) suppressed when `truthType === 'VOLATILE'`
+- **FAILURE 5**: `isMarketQuery` now catches `etherium|ether` misspellings and `going for|worth|how much` price patterns
+- **FAILURE 6**: RSS query cleaning strips `'s` possessives before entity extraction (prevents `'s Walmart` artifact)
+- **FAILURE 7**: No code fix possible — memory ID 8614 requires manual DB deletion (`DELETE FROM persistent_memories WHERE id = 8614`). ROOT CAUSE A prevents future recurrences.
+- **FAILURE 8**: Stock detection broadened to catch `"How about Apple stock what's it going for"`
+- **FAILURE 9**: `shortDocumentReferencePatterns` now catches `"contents of that document"` and similar phrasings → routes to DOCUMENT_REVIEW instead of external lookup
+- **ROOT CAUSE A**: `detectQuestion` now handles contractions (`What's`, `Who's`, `Is there`)
+- **ROOT CAUSE B**: `commonWords` stoplist in `detectProperNames` expanded from ~20 to ~80 words, eliminating false-positive entity boosts on `No`, `With`, `By`, `File`, `Content`, etc.
+- **ROOT CAUSE C**: `hasAssistantLanguage` filter now blocks `"no extractable facts"` strings from being stored as memories
+- **ROOT CAUSE F**: 400-token per-entry cap added in `storeCompressedMemory` — prevents single entries consuming 1,322+ tokens
+
+### One Remaining Manual Action
+
+```sql
+-- Delete the corrupted memory entry
+DELETE FROM persistent_memories WHERE id = 8614;
+-- Verify: "Contacts: What's Apple." should be gone
+SELECT id, category, facts FROM persistent_memories WHERE id = 8614;
+```
+
+This must be run directly against the Railway PostgreSQL database. All code-level fixes are complete and ready for review/merge.

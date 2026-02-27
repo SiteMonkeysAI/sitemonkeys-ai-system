@@ -362,9 +362,17 @@ async function processFile(file) {
         } catch (pdfErr) {
           console.error("[UPLOAD] PDF extraction failed for %s:", file.originalname, pdfErr.message);
           console.error(`[UPLOAD] PDF error stack:`, pdfErr.stack);
-          processingResult.message = `PDF processing failed: ${pdfErr.message}`;
-          processingResult.preview = `❌ Could not extract content from PDF`;
+          // ISSUE #814 FIX: Set success=false so user gets proper error feedback instead of
+          // silently falling through to the generic "Document ready for analysis" message.
+          processingResult.success = false;
+          processingResult.message = `PDF processing failed: ${pdfErr.message}. Please try converting to .txt or .docx.`;
+          processingResult.preview = `❌ Could not extract content from this PDF. If it is a scanned/image PDF, please paste the text directly into chat.`;
         }
+      } else if (isPdf && !file.buffer) {
+        console.error(`[UPLOAD] PDF detected but no buffer available: ${file.originalname}`);
+        processingResult.success = false;
+        processingResult.message = `PDF upload error: file buffer not available for ${file.originalname}`;
+        processingResult.preview = `❌ PDF upload failed — file data was not received.`;
       }
 
       // Handle plain text files - extract content directly from buffer
@@ -401,7 +409,9 @@ async function processFile(file) {
       }
 
       // Handle all other file types (fallback for non-text files)
-      if (!processingResult.contentExtracted) {
+      // ISSUE #814 FIX: Only show generic fallback if there was no extraction failure.
+      // PDF/text errors already set success=false and a descriptive message above.
+      if (!processingResult.contentExtracted && processingResult.success) {
         switch (fileType) {
           case "image":
             processingResult.message = `Image uploaded for analysis: ${file.originalname}`;

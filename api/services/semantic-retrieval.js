@@ -334,13 +334,39 @@ function detectProperNames(query) {
 
   // Pattern 1: Capitalized words (excluding common words at sentence start)
   // Matches words like "Alex", "Amazon", "Tesla" but not "The", "What", "How"
+  // ISSUE #814 FIX (ROOT CAUSE B): Expanded common-word stoplist to prevent false-positive entity
+  // detection on document content. Words like "No", "With", "By", "All", "File", "Content",
+  // "Control", "Access" were treated as named entities when they appeared capitalized in
+  // document section headers, causing 70+ false-positive entity boosts on a forensic document query.
   const commonWords = new Set([
-    'the', 'what', 'when', 'where', 'which', 'who', 'how', 'why', 'can', 'could',
-    'would', 'should', 'will', 'do', 'does', 'did', 'have', 'has', 'had',
-    'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    // Question words
+    'the', 'what', 'when', 'where', 'which', 'who', 'how', 'why',
+    // Auxiliary/modal verbs
+    'can', 'could', 'would', 'should', 'will', 'do', 'does', 'did',
+    'have', 'has', 'had', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    // Pronouns
     'my', 'your', 'their', 'our', 'his', 'her', 'its',
     'this', 'that', 'these', 'those',
-    'i', 'you', 'he', 'she', 'it', 'we', 'they'
+    'i', 'you', 'he', 'she', 'it', 'we', 'they',
+    'me', 'him', 'us', 'them',
+    // Prepositions and conjunctions (commonly capitalized in headers/titles)
+    'no', 'not', 'nor', 'and', 'but', 'or', 'so', 'yet', 'for',
+    'in', 'on', 'at', 'to', 'of', 'up', 'by', 'as', 'if',
+    'with', 'into', 'onto', 'from', 'than', 'then', 'both',
+    'each', 'all', 'any', 'few', 'more', 'most', 'other', 'some',
+    'such', 'own', 'same', 'too', 'very',
+    // Common document/technical terms that appear capitalized in section headers
+    'file', 'files', 'data', 'type', 'date', 'time', 'name', 'user', 'users',
+    'content', 'contents', 'control', 'access', 'hit', 'hits',
+    'section', 'note', 'notes', 'page', 'pages', 'item', 'items',
+    'true', 'false', 'yes', 'null', 'none', 'new', 'old',
+    'key', 'value', 'result', 'error', 'info', 'list', 'set',
+    // Common adjectives/adverbs that appear capitalized
+    'good', 'bad', 'high', 'low', 'large', 'small', 'full', 'empty',
+    'first', 'last', 'next', 'back', 'left', 'right', 'here', 'there',
+    'just', 'even', 'only', 'also', 'about', 'above', 'below',
+    // Time/date words
+    'today', 'now', 'after', 'before', 'since', 'until', 'while'
   ]);
 
   // Extract capitalized words that aren't at the start of sentence

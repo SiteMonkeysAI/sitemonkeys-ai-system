@@ -190,6 +190,11 @@ function isDocumentReviewRequest(query) {
   // Example: "Can you summarize what's in that document I just loaded"
   const shortDocumentReferencePatterns = [
     /summarize (what'?s? in |the |that |this )?(document|file|pdf|upload|attachment)/i,
+    // ISSUE #814 FIX (FAILURE 9): "Can you summarize the contents of that document" — the phrase
+    // "contents of" sits between "summarize" and "document", so the original pattern didn't match.
+    /summarize.{0,40}(document|file|pdf|upload|attachment)/i,
+    /summarize (the |these |those )?contents/i,
+    /contents of (the|that|this) (document|file|pdf|upload|attachment)/i,
     /what'?s? in (that|the|this) (document|file|pdf|upload|attachment)/i,
     /what (does|did) (the|that|this) (document|file|pdf) (say|contain|include)/i,
     /tell me (about|what'?s? in) (the|that|this) (document|file|pdf|upload)/i,

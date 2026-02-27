@@ -634,17 +634,22 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   // ISSUE #804 FIX (Area 2): Instead of returning empty and triggering a blank "technical issue"
   // response (which also causes identity leak to "as an AI model developed by OpenAI"),
   // fall through to Google News RSS for recent stock price context from news headlines.
-  if (lowerQuery.match(/stock|share|market/) &&
-      lowerQuery.match(/price|value|trading|current/i)) {
+  // ISSUE #814 FIX (FAILURE 8): Broadened matching — "going for", "what's it", "at" as price indicators.
+  // "How about Apple stock what's it going for" now matches because "going for" and "stock" both present.
+  if (lowerQuery.match(/\bstock\b/) &&
+      lowerQuery.match(/price|value|trading|current|going for|what'?s it|how much|at\b/i)) {
     console.log('[externalLookupEngine] Stock price query detected - no dedicated API, using news fallback');
     return [{
       name: 'Google News RSS (stock price fallback)',
       // ISSUE #810 FIX D: Extract entity name from conversational query instead of passing raw query.
       // "What is the current stock price of Walmart" → "Walmart stock price" (not the full sentence)
+      // ISSUE #814 FIX (FAILURE 6): Also strip apostrophe-s ('s / 's) to avoid "'s Walmart" artifacts.
       buildUrl: (query) => {
         // Strip question/price words to extract just the company/ticker name
         const entityQuery = query
-          .replace(/\b(what|is|the|are|current|stock|share|price|of|today|now|currently|how|much|does|cost|worth|trading|value|market|tell|me|about|please|can|you|could|would)\b/gi, ' ')
+          .replace(/\b(what|is|the|are|current|stock|share|price|of|today|now|currently|how|much|does|cost|worth|trading|value|market|tell|me|about|please|can|you|could|would|going|for|it|at|about|how)\b/gi, ' ')
+          .replace(/'s\b/g, ' ')   // strip possessive 's (e.g. "What's" → "What " then strip "What ")
+          .replace(/\b\w{1,2}\b/g, ' ')  // strip 1-2 char fragments left over (e.g. "s", "it")
           .replace(/\s+/g, ' ')
           .trim()
           .substring(0, 40)
@@ -781,13 +786,13 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return AUTHORITATIVE_SOURCES.GENERAL;
   }
 
-  // ISSUE #779 FIX: General fallback for VOLATILE/SEMI_STABLE queries
-  // If no specific category matched but query has freshness/current markers, try news
-  // This catches queries like "what's happening with X" that didn't match specific patterns
-  if ((truthType === TRUTH_TYPES.VOLATILE || truthType === TRUTH_TYPES.SEMI_STABLE) &&
-      (lowerQuery.match(/\b(current|latest|recent|now|today)\b/i) ||
-       lowerQuery.match(/\bwhat'?s\b/i))) {
-    console.log('[externalLookupEngine] Using news fallback for volatile/semi-stable query with freshness markers');
+  // ISSUE #814 FIX: Broadened fallback for VOLATILE/SEMI_STABLE queries
+  // Per specification: any VOLATILE/SEMI_STABLE query should attempt Google News RSS when no
+  // structured API exists, not only when specific freshness words appear.
+  // This covers "When is Apple's new event", "Is there anything new going on with Greenland",
+  // and similar queries that have current-events intent but don't use the exact freshness words.
+  if (truthType === TRUTH_TYPES.VOLATILE || truthType === TRUTH_TYPES.SEMI_STABLE) {
+    console.log('[externalLookupEngine] Using news fallback for volatile/semi-stable query');
     return API_SOURCES.NEWS;
   }
 

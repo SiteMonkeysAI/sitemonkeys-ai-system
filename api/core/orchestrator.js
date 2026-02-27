@@ -933,11 +933,14 @@ export class Orchestrator {
       // ISSUE #790 FIX: Detect external market queries (commodities/stocks/crypto prices)
       // These queries should NOT inject irrelevant memory context
       // NOTE: "value" removed - too broad (causes false positives for "value of my contract", "value of my home")
+      // ISSUE #814 FIX: Added "going for", "worth", "at" to price pattern; added "etherium" misspelling;
+      // added "current price of" as a standalone trigger for any asset query.
       const isMarketQuery = (
-        message.match(/\b(price|cost|quote|trading)\b/i) &&
+        (message.match(/\b(price|cost|quote|trading|going for|worth|how much)\b/i) ||
+         message.match(/\bcurrent price of\b/i)) &&
         (message.match(/\b(gold|silver|platinum|palladium|copper|oil|crude|commodity|commodities)\b/i) ||
          message.match(/\b(stock|share|market|nasdaq|dow|s&p|apple|google|microsoft|tesla)\b/i) ||
-         message.match(/\b(bitcoin|btc|ethereum|eth|crypto|cryptocurrency)\b/i))
+         message.match(/\b(bitcoin|btc|ethereum|etherium|eth|ether|crypto|cryptocurrency)\b/i))
       );
 
       const skipMemoryForSimpleQuery = earlyClassification && (
@@ -1056,10 +1059,30 @@ export class Orchestrator {
         this.log(`[VAULT] Loaded ${vaultData.tokens} tokens (no selection applied)`);
       }
 
+      // ISSUE #814 FIX: Gate document injection by query intent.
+      // Document context should only be injected when the query is about the document.
+      // Market queries, news queries, and general questions should NOT receive document injection —
+      // it wastes tokens and causes wrong storage tagging (SOURCE:document) on unrelated responses.
+      let effectiveDocumentData = documentData;
+      if (documentData && isMarketQuery) {
+        this.log('[DOCUMENTS] ⏭️ Skipping document injection — isMarketQuery=true (document not relevant to market/price query)');
+        effectiveDocumentData = null;
+      } else if (documentData && earlyClassification && (
+        earlyClassification.classification === 'greeting' ||
+        earlyClassification.classification === 'simple_factual'
+      )) {
+        // For greetings and simple factual questions, also skip unless query explicitly references the document
+        const refersToDocument = /\b(document|file|pdf|upload|summary|summarize|contents|attachment)\b/i.test(message);
+        if (!refersToDocument) {
+          this.log('[DOCUMENTS] ⏭️ Skipping document injection — simple/greeting query does not reference document');
+          effectiveDocumentData = null;
+        }
+      }
+
       // STEP 4: Assemble complete context
       const context = this.#assembleContext(
         memoryContext,
-        documentData,
+        effectiveDocumentData,
         vaultData,
       );
       context.userId = userId;

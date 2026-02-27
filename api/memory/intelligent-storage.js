@@ -324,14 +324,17 @@ export class IntelligentMemoryStorage {
       return true;
     }
 
-    // Question words at the start (what, where, when, why, who, how, which, can, do, does, is, are, was, were)
+    // Question words at the start — including contractions like "What's", "Who's", "Where's", "How's"
+    // ISSUE #814 FIX (ROOT CAUSE A): "What's the most up to date information on..." starts with "What's"
+    // which is "What" + "'s", not "What " + space. The original /^what\s/ missed this contraction.
+    // Adding contraction variants for the most common question starters.
     const questionStarters = [
-      /^what\s/i,
-      /^where\s/i,
+      /^what'?s?\s/i,   // what, what's, whats
+      /^where'?s?\s/i,  // where, where's
       /^when\s/i,
       /^why\s/i,
-      /^who\s/i,
-      /^how\s/i,
+      /^who'?s?\s/i,    // who, who's
+      /^how'?s?\s/i,    // how, how's
       /^which\s/i,
       /^can\s(i|you|we)/i,
       /^could\s(i|you|we)/i,
@@ -344,7 +347,9 @@ export class IntelligentMemoryStorage {
       /^were\s/i,
       /^should\s(i|we)/i,
       /^would\s(you|it)/i,
-      /^will\s(you|it)/i
+      /^will\s(you|it)/i,
+      /^is\s+there\s/i,   // "Is there anything new..."
+      /^is\s+it\s/i       // "Is it..."
     ];
 
     for (const pattern of questionStarters) {
@@ -1497,13 +1502,19 @@ Facts (preserve user terminology + add synonyms):`;
       // CRITICAL: Validate extracted facts don't contain assistant boilerplate
       // This prevents storing AI response content as user facts
       const factsLower = facts.toLowerCase();
+      // ISSUE #814 FIX (ROOT CAUSE C): "No extractable facts from." was being stored as a
+      // memory entry because it wasn't in the hasAssistantLanguage filter. When extraction
+      // yields nothing meaningful, the failure message itself must not be stored.
       const hasAssistantLanguage =
         factsLower.includes('no relevant facts') ||
         factsLower.includes('no essential facts') ||
         factsLower.includes('no key facts') ||
         factsLower.includes('nothing to extract') ||
         factsLower.includes('no facts to extract') ||
+        factsLower.includes('no extractable facts') ||   // ISSUE #814: extraction failure message
+        factsLower.includes('no extractable information') ||
         /^\(no facts/i.test(facts.trim()) ||
+        /^no extractable/i.test(facts.trim()) ||
         factsLower.includes('general query') ||
         factsLower.includes('general question') ||
         factsLower.includes('no user-specific') ||
@@ -2008,6 +2019,19 @@ Facts (preserve user terminology + add synonyms):`;
 
       const tokenCount = this.countTokens(facts);
       console.log('[TRACE-INTELLIGENT] I13. tokenCount:', tokenCount);
+
+      // ISSUE #814 FIX (ROOT CAUSE F): Per-entry token cap.
+      // A single memory entry was 1,322 tokens (an entire document summary), consuming nearly
+      // the entire memory budget and blocking all other memories from retrieval.
+      // Cap individual entries at 400 tokens so the memory budget can serve multiple entries.
+      const MAX_ENTRY_TOKENS = 400;
+      if (tokenCount > MAX_ENTRY_TOKENS) {
+        console.log(`[INTELLIGENT-STORAGE] ⚠️ Entry exceeds ${MAX_ENTRY_TOKENS} token cap (${tokenCount} tokens) — truncating`);
+        // Truncate to approximately MAX_ENTRY_TOKENS tokens (rough char estimate: 4 chars/token)
+        const maxChars = MAX_ENTRY_TOKENS * 4;
+        facts = facts.substring(0, maxChars).trim() + '\n[truncated — original exceeded memory token cap]';
+        console.log(`[INTELLIGENT-STORAGE] Truncated to ${facts.length} chars`);
+      }
 
       // CRITICAL FIX: Use PRE-CALCULATED fingerprint and importance from metadata
       // These were already calculated on the ORIGINAL user message before extraction
