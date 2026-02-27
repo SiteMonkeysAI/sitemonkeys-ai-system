@@ -1063,18 +1063,16 @@ export class Orchestrator {
       // Document context should only be injected when the query is about the document.
       // Market queries, news queries, and general questions should NOT receive document injection —
       // it wastes tokens and causes wrong storage tagging (SOURCE:document) on unrelated responses.
+      //
+      // ISSUE #814 ITEM 2 (Post-Review): Inverted logic - document context is opt-IN, not opt-OUT.
+      // Only inject when query explicitly references the document or is classified as DOCUMENT_REVIEW.
       let effectiveDocumentData = documentData;
-      if (documentData && isMarketQuery) {
-        this.log('[DOCUMENTS] ⏭️ Skipping document injection — isMarketQuery=true (document not relevant to market/price query)');
-        effectiveDocumentData = null;
-      } else if (documentData && earlyClassification && (
-        earlyClassification.classification === 'greeting' ||
-        earlyClassification.classification === 'simple_factual'
-      )) {
-        // For greetings and simple factual questions, also skip unless query explicitly references the document
-        const refersToDocument = /\b(document|file|pdf|upload|summary|summarize|contents|attachment)\b/i.test(message);
-        if (!refersToDocument) {
-          this.log('[DOCUMENTS] ⏭️ Skipping document injection — simple/greeting query does not reference document');
+      if (documentData) {
+        const refersToDocument = /\b(document|file|pdf|upload|summary|summarize|contents|attachment|that file|the file|this file|what I uploaded|I just loaded|I just uploaded)\b/i.test(message);
+        const isDocumentReview = context?.truthType === 'DOCUMENT_REVIEW' || earlyClassification?.classification === 'document_review';
+        
+        if (!refersToDocument && !isDocumentReview) {
+          this.log('[DOCUMENTS] ⏭️ Skipping document injection — query does not reference document');
           effectiveDocumentData = null;
         }
       }
