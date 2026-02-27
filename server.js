@@ -554,13 +554,32 @@ app.post("/api/chat", async (req, res) => {
           // memories. External data is volatile and always stale as soon as it's stored.
           // Storing it creates a growing collection of conflicting stale price memories that pollute
           // future retrievals (e.g. three different cached ETH prices in memory).
-          if (result.sources?.hasExternal) {
+          //
+          // ISSUE #818 FIX: Gate must check QUERY INTENT, not just whether external data was present.
+          // When external lookup fires incidentally on a personal/memory query (e.g., a greeting
+          // that wrongly triggered RSS, or a high-stakes safety check on an allergy disclosure),
+          // the user's personal facts should still be stored. Only skip storage when the user
+          // was ACTUALLY asking for volatile external data (news articles, prices, live scores).
+          const isPersonalOrMemoryQuery = (
+            // Memory storage commands
+            /\b(remember|please remember|note that|don'?t forget|keep in mind)\b/i.test(message) ||
+            // Personal fact disclosures
+            /\bmy (name|email|phone|address|birthday|age|job|company|favorite|favourite|colour|color|pet|dog|cat|child|kid|son|daughter|wife|husband|partner|allergy|medication|condition|hobby|car|home|house)\b/i.test(message) ||
+            // User self-disclosures ("I have...", "I am...", "I feel...")
+            /\bi (have|am|feel|live|work|own|love|hate|like|prefer|need support|need help)\b/i.test(message) ||
+            // Greetings and conversational (never volatile data)
+            /^(hello|hi|hey|greetings|howdy|good (morning|afternoon|evening))\b/i.test(message.trim())
+          );
+          if (result.sources?.hasExternal && !isPersonalOrMemoryQuery) {
             console.log('[STORE] ⏭️ Skipping intelligent storage for volatile external data response');
             console.log('[STORE] Reason: External real-time data (prices/news) should not be stored as persistent memory');
             // Skip to cleanup without storing
             intelligentStorage.cleanup();
             console.log('[CHAT] 💾 Storage skipped for external data response');
           } else {
+            if (result.sources?.hasExternal && isPersonalOrMemoryQuery) {
+              console.log('[STORE] ℹ️ External data present but query is personal/memory — storing user content');
+            }
             const storageResult = await intelligentStorage.storeWithIntelligence(
               userId,
               message,
@@ -600,7 +619,17 @@ app.post("/api/chat", async (req, res) => {
           // ISSUE #804 FIX (Area 7): Do NOT store external real-time data as persistent memory.
           // External data (prices, news) is volatile and immediately stale — storing it pollutes
           // future retrievals with conflicting stale values.
-          if (result.sources?.hasExternal) {
+          //
+          // ISSUE #818 FIX: Same fix as intelligent storage path — check QUERY INTENT.
+          // Only skip storage when the query was genuinely asking for volatile external data.
+          // Personal statements and memory commands must be stored even if hasExternal=true.
+          const isPersonalOrMemoryQuerySup = (
+            /\b(remember|please remember|note that|don'?t forget|keep in mind)\b/i.test(message) ||
+            /\bmy (name|email|phone|address|birthday|age|job|company|favorite|favourite|colour|color|pet|dog|cat|child|kid|son|daughter|wife|husband|partner|allergy|medication|condition|hobby|car|home|house)\b/i.test(message) ||
+            /\bi (have|am|feel|live|work|own|love|hate|like|prefer|need support|need help)\b/i.test(message) ||
+            /^(hello|hi|hey|greetings|howdy|good (morning|afternoon|evening))\b/i.test(message.trim())
+          );
+          if (result.sources?.hasExternal && !isPersonalOrMemoryQuerySup) {
             console.log('[STORE] ⏭️ Skipping supersession-aware storage for volatile external data response');
             // Skip storage entirely for external data responses
           } else {

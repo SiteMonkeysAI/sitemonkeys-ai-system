@@ -1167,10 +1167,20 @@ export class Orchestrator {
 
         const matchesNewsPattern = NEWS_TRIGGER_PATTERNS.test(message) || GEOPOLITICAL_PATTERNS.test(message);
 
+        // ISSUE #818 FIX: Removed standalone `matchesNewsPattern` condition (was condition 3).
+        // Previously, any message containing "today", "news", "yesterday", or geopolitical terms
+        // triggered external lookup REGARDLESS of truth type. This caused "I need emotional
+        // support today" and similar personal queries to hit Google News RSS (because "today"
+        // matched NEWS_TRIGGER_PATTERNS). Now external lookup only fires when:
+        // 1. Truth type is VOLATILE (explicit time-sensitivity markers like "current price", "now")
+        // 2. Truth type is SEMI_STABLE AND query matches news/geopolitical patterns (specific combo)
+        // 3. High-stakes domain (medical, legal, financial, safety)
+        // 4. Router explicitly requires external AND hierarchy is EXTERNAL_FIRST
+        // Condition 2 still covers all legitimate news queries since AMBIGUOUS queries go through
+        // Stage 2 and return SEMI_STABLE, which paired with news patterns triggers lookup correctly.
         const shouldLookup =
           truthTypeResult.type === 'VOLATILE' ||
           (truthTypeResult.type === 'SEMI_STABLE' && matchesNewsPattern) ||
-          matchesNewsPattern ||
           (truthTypeResult.high_stakes && truthTypeResult.high_stakes.isHighStakes) ||
           (routeResult.external_lookup_required && routeResult.hierarchy_name === "EXTERNAL_FIRST");
 
