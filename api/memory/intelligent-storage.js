@@ -1033,16 +1033,35 @@ export class IntelligentMemoryStorage {
         console.warn('[EXTRACTION-WARNING] Extracted:', facts);
       }
 
-      // GUARD: Never store empty or meaningless content - fallback to user message
+      // GUARD: Never store empty or meaningless content
+      // ISSUE #824 FIX: Also detect "no relevant facts" / "no extractable facts" strings
+      // that extractKeyFacts returns as '' (caught by hasAssistantLanguage), which then caused
+      // isMeaningless=true and the fallback to store the raw user question as a memory.
       const isMeaningless = !facts ||
                            facts.trim().length === 0 ||
                            facts.toLowerCase().includes('no essential facts') ||
                            facts.toLowerCase().includes('no key facts') ||
                            facts.toLowerCase().includes('nothing to extract') ||
                            facts.toLowerCase().includes('no facts to extract') ||
-                           /^\(no facts/i.test(facts.trim());
+                           facts.toLowerCase().includes('no relevant facts') ||
+                           facts.toLowerCase().includes('no extractable facts') ||
+                           facts.toLowerCase().includes('no extractable information') ||
+                           /^\(no facts/i.test(facts.trim()) ||
+                           /^no extractable/i.test(facts.trim());
 
       if (isMeaningless) {
+        // ISSUE #824 FIX: When extraction fails (meaningless facts), check whether the raw
+        // user message is itself a question or general info query. If so, SKIP storage entirely
+        // rather than storing the question as a memory. This fixes "What's the most up to date
+        // information from the news Greenland..." being stored as a memory entry.
+        const rawIsQuestion = this.detectQuestion(userMessage);
+        const rawIsNonUserQuery = this.detectNonUserQuery(userMessage);
+
+        if (rawIsQuestion || rawIsNonUserQuery.shouldSkip) {
+          console.log('[INTELLIGENT-STORAGE] ⏭️ Skipping storage — extraction failed and raw message is a question/general query (not a storable fact)');
+          return { action: 'skipped', reason: 'extraction_failed_and_message_is_question' };
+        }
+
         console.log('[INTELLIGENT-STORAGE] ⚠️ No meaningful facts extracted, using fallback to original message');
         // Fallback: Use original user message directly (already has fingerprint and importance calculated)
         facts = userMessage.substring(0, 200).trim();
@@ -1564,6 +1583,21 @@ Facts (preserve user terminology + add synonyms):`;
 
       // AGGRESSIVE POST-PROCESSING: Guarantee 10-20:1 compression
       const processedFacts = this.aggressivePostProcessing(facts);
+
+      // ISSUE #824 FIX: Quality gate — reject over-compressed fragments.
+      // "reputational.", "architecture:." are the result of aggressive compression
+      // discarding context and leaving meaningless single-word snippets.
+      // A fact under 5 tokens (≈20 chars) or consisting of a single word followed by
+      // a period/colon provides zero retrieval value and MUST be rejected.
+      const trimmedFacts = processedFacts.trim();
+      const approxTokens = Math.ceil(trimmedFacts.length / 4);
+      const isTooShort = approxTokens < 5;
+      const isFragment = /^[a-z][\w\s]+[.:]\s*$/i.test(trimmedFacts) && !trimmedFacts.includes('\n') && approxTokens < 15;
+
+      if (isTooShort || isFragment) {
+        console.log(`[INTELLIGENT-STORAGE] ⚠️ Quality gate: rejecting fragment "${trimmedFacts.substring(0, 50)}" (${approxTokens} tokens) — too short to be useful`);
+        return '';
+      }
 
       console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${processedFacts.split('\n').filter(l => l.trim()).length} facts`);
       console.log(`[EXTRACTION-DEBUG] Original: "${originalSnippet}"`);

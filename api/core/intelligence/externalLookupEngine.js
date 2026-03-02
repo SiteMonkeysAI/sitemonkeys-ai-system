@@ -574,6 +574,26 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
     };
   }
 
+  // HARD BLOCK: Never lookup for personal memory recall queries (Issue #824 Fix)
+  // "Do you recall names of my monkeys?" should use ONLY persistent memory, never external lookup.
+  // These queries contain memory-recall verbs + possessive pronouns indicating personal context.
+  // Previously "recall" matched the SAFETY domain and triggered Google News RSS — now blocked.
+  const isPersonalMemoryRecall = (
+    /\b(do you (recall|remember)|can you (recall|remember))\b.{0,60}\bmy\b/i.test(query) ||
+    /\b(what do you (know|have|remember) about my|tell me (what you know about |about )?my)\b/i.test(query) ||
+    /\b(what'?s? my|recall|remember).{0,40}\bmy\b/i.test(query) ||
+    /\b(from our (previous )?conversations?|i told you|we (discussed|talked) about)\b/i.test(query)
+  );
+  if (isPersonalMemoryRecall) {
+    console.log('[externalLookupEngine] Skipping lookup — personal memory recall query (use persistent memory only)');
+    return {
+      required: false,
+      reasons: ['Personal memory recall — use persistent memory retrieval, no external lookup'],
+      priority: 'none',
+      max_lookups: 0
+    };
+  }
+
   // HARD BLOCK: Never lookup for queries > 10K characters (Issue #380 Fix 2)
   if (query.length > 10000) {
     console.log('[externalLookupEngine] Skipping lookup for long input');

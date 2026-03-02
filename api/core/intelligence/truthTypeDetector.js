@@ -157,7 +157,11 @@ export const HIGH_STAKES_DOMAINS = {
     /\b(loan|mortgage|interest rate|credit score)\b/i
   ],
   SAFETY: [
-    /\b(recall|warning|hazard|danger|emergency)\b/i,
+    // ISSUE #824 FIX: "recall" removed from this pattern because "Do you recall..." is a personal
+    // memory query, not a product/safety recall. "product recall" and "safety recall" are still
+    // caught by the more specific pattern below.
+    /\b(warning|hazard|danger|emergency)\b/i,
+    /\b(product recall|safety recall|recall notice|recall alert)\b/i,
     /\b(toxic|poisonous|flammable|explosive)\b/i,
     /\b(safety|risk|accident|injury)\b/i
   ]
@@ -306,6 +310,12 @@ export function detectByPattern(query) {
   // Greetings, personal statements, memory commands, and emotional support queries
   // should NEVER trigger external lookup. They contain no "current events" intent.
   // Must run BEFORE VOLATILE patterns so "I need support today" is not caught by "today".
+  //
+  // ISSUE #824 FIX: Added PERSONAL_RECALL patterns.
+  // "Do you recall names of my monkeys?" was misclassified as SEMI_STABLE high_stakes
+  // because "recall" matched the SAFETY domain pattern (product recalls). Personal memory
+  // recall queries (do you recall, do you remember, what do you know about my...) should
+  // be classified as PERMANENT with skipExternalLookup — memory retrieval ONLY, no RSS.
   const CONVERSATIONAL_PATTERNS = [
     // Pure greetings
     /^(hello|hi|hey|greetings|howdy|yo|sup|hiya|hola)\s*[!.,?]?\s*$/i,
@@ -320,6 +330,16 @@ export function detectByPattern(query) {
     // Emotional support requests (not asking for news)
     /\bi (need|want|am looking for|'?m looking for) .{0,50}(emotional |mental )?(support|help|someone to talk|a friend|comfort|encouragement)\b/i,
     /\bi'?m (feeling|struggling|upset|sad|depressed|anxious|stressed|worried|tired|overwhelmed|lonely|happy|excited|scared|frustrated|confused)\b/i,
+    // PERSONAL RECALL (Issue #824): Asking the AI to recall stored personal information.
+    // These queries use memory retrieval ONLY — never external lookup.
+    // "Do you recall names of my monkeys?" / "Do you remember my children?"
+    /\b(do you (recall|remember)|can you (recall|remember)|you (recall|remember))\b.{0,40}\bmy\b/i,
+    // "What do you know about my X?" / "Tell me about my X" / "What's my X?"
+    /\b(what do you (know|have|remember) about my|tell me (what you know about |about )?my|what'?s? my)\b/i,
+    // "From our conversations" / "I told you" / "We discussed"
+    /\b(from our (previous )?conversations?|i told you|you told me|we (discussed|talked) about|you mentioned)\b/i,
+    // Explicit memory recall commands with possessive
+    /\b(recall|remember).{0,30}\bmy\b/i,
   ];
   const isConversationalOrPersonal = CONVERSATIONAL_PATTERNS.some(p => p.test(query));
   if (isConversationalOrPersonal) {

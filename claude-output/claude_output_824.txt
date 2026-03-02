@@ -1,0 +1,50 @@
+All four problems from Issue #824 are fixed. Here's the complete summary:
+
+---
+
+## Issue #824 — All 4 Problems Fixed
+
+### Problem 1 (P0): Document content never reaches AI prompt
+**Root causes found and fixed in `api/core/orchestrator.js`:**
+
+1. **Gating regex too narrow** — Natural follow-ups like "What does it say?" or "Can you analyze it?" didn't match the old `refersToDocument` pattern. Fixed by:
+   - Expanding `refersToDocument` to include `"read it"`, `"analyze it"`, `"review it"`, `"explain it"`, `"describe it"`
+   - Adding `hasPronounDocRef` pattern for pronoun-based references: `"what does it say"`, `"tell me about it"`, `"can you summarize it"`, etc.
+   - Expanding `hasDocVerb` to include `"read"`, `"describe"`, `"interpret"`, `"check"`
+
+2. **Session token runaway** — `#trackSessionDocument` was accumulating tokens on every request for the same document, hitting the 10,000-token session limit after ~27 requests with a 367-token doc. Fixed by adding filename-based deduplication: same document is only counted once per session.
+
+---
+
+### Problem 2 (P0): Zombie memory 2903 still being retrieved
+**Fixed in `cleanup_814_memories.sql`:**
+- The DELETE statement was already present but the script had wrong column names (`facts` → `content`, `category` → `category_name`)
+- Updated the script with correct column names and added urgency header emphasizing it **must** be run against Railway PostgreSQL
+
+**Manual step required:** Run `cleanup_814_memories.sql` against the Railway PostgreSQL database to physically delete memory 2903.
+
+---
+
+### Problem 3 (P1): Personal recall queries trigger external lookup
+**Fixed across two files:**
+
+- **`truthTypeDetector.js`**: Removed bare `\b(recall|...)\b` from `SAFETY` high-stakes domain. Added 4 PERSONAL_RECALL patterns to `CONVERSATIONAL_PATTERNS` (runs before VOLATILE/SEMI_STABLE checks) — these classify personal memory queries as `PERMANENT` with `skipExternalLookup: true`
+- **`externalLookupEngine.js`**: Added HARD BLOCK in `isLookupRequired()` — if query matches personal memory recall patterns, `required: false` is returned before any high-stakes check can fire
+
+---
+
+### Problem 4 (P1): Storage pipeline stores junk
+**Fixed in `api/memory/intelligent-storage.js`:**
+
+1. **`isMeaningless` expansion** — Added `"no relevant facts"`, `"no extractable facts"`, `"no extractable information"`, `/^no extractable/i` to the detection list
+
+2. **Question skip on extraction failure** — When `isMeaningless` is true, the code now checks if the raw user message is itself a question (`detectQuestion()` / `detectNonUserQuery()`). If yes, storage is skipped entirely instead of falling back to store the question as a "fact"
+
+3. **Quality gate after `aggressivePostProcessing`** — Rejects over-compressed fragments (< 5 tokens, or single-word-with-punctuation pattern like `"reputational."`) by returning `''`, which triggers the upstream question-detection guard
+
+---
+
+### File Format Support (verification)
+- `pdf-parse: ^1.1.1` is in `package.json` ✅
+- `mammoth: ^1.6.0` is in `package.json` ✅
+- `.md`, `.csv`, `.json` all handled via plain-text extraction path (`/\.(txt|md|csv|json|xml|...)$/i` at lines 270-271, 392-393 of `upload-for-analysis.js`) ✅
