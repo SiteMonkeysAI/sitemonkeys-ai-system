@@ -1069,7 +1069,10 @@ export class Orchestrator {
       let effectiveDocumentData = documentData;
       if (documentData) {
         const refersToDocument = /\b(document|file|pdf|upload|summary|summarize|contents|attachment|that file|the file|this file|what I uploaded|I just loaded|I just uploaded)\b/i.test(message);
-        const isDocumentReview = context?.truthType === 'DOCUMENT_REVIEW' || earlyClassification?.classification === 'document_review';
+        const cls = earlyClassification?.classification;
+        const isDocumentReviewByClassifier = cls === 'document_review' || cls === 'DOCUMENT_REVIEW';
+        const hasDocVerb = /\b(summarize|summary|review|analyze|explain)\b/i.test(message);
+        const isDocumentReview = isDocumentReviewByClassifier || (refersToDocument && hasDocVerb);
         
         if (!refersToDocument && !isDocumentReview) {
           this.log('[DOCUMENTS] ⏭️ Skipping document injection — query does not reference document');
