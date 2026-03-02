@@ -1071,10 +1071,13 @@ export class Orchestrator {
       // to the document without using explicit keywords (e.g., "What does it say?",
       // "Can you analyze it?", "Tell me about this"). Also expanded hasDocVerb to include
       // read, describe, interpret, check so document follow-ups aren't silently dropped.
+      // PR #824 REVIEW FIX: Removed verb phrases ("read it", "analyze it", etc.) from refersToDocument
+      // to prevent false positives on non-document queries like "Summarize the situation". These cases
+      // are handled by hasPronounDocRef when they genuinely refer to a document in context.
       let effectiveDocumentData = documentData;
       if (documentData) {
-        // Direct document keyword references (expanded to catch more natural phrasing)
-        const refersToDocument = /\b(document|file|pdf|upload|summary|summarize|contents|attachment|that file|the file|this file|what I uploaded|I just loaded|I just uploaded|read it|analyze it|review it|explain it|describe it)\b/i.test(message);
+        // Direct document keyword references - nouns and specific document phrases only
+        const refersToDocument = /\b(document|file|pdf|upload|summary|contents|attachment|that file|the file|this file|what I uploaded|I just loaded|I just uploaded)\b/i.test(message);
         const cls = earlyClassification?.classification;
         const isDocumentReviewByClassifier = cls === 'document_review' || cls === 'DOCUMENT_REVIEW';
         // Expanded doc verbs to include read, describe, interpret, check
