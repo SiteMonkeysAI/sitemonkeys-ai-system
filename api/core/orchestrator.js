@@ -1066,14 +1066,26 @@ export class Orchestrator {
       //
       // ISSUE #814 ITEM 2 (Post-Review): Inverted logic - document context is opt-IN, not opt-OUT.
       // Only inject when query explicitly references the document or is classified as DOCUMENT_REVIEW.
+      //
+      // ISSUE #824 FIX: Expanded refersToDocument to catch natural follow-up queries that refer
+      // to the document without using explicit keywords (e.g., "What does it say?",
+      // "Can you analyze it?", "Tell me about this"). Also expanded hasDocVerb to include
+      // read, describe, interpret, check so document follow-ups aren't silently dropped.
+      // PR #824 REVIEW FIX: Removed verb phrases ("read it", "analyze it", etc.) from refersToDocument
+      // to prevent false positives on non-document queries like "Summarize the situation". These cases
+      // are handled by hasPronounDocRef when they genuinely refer to a document in context.
       let effectiveDocumentData = documentData;
       if (documentData) {
-        const refersToDocument = /\b(document|file|pdf|upload|summary|summarize|contents|attachment|that file|the file|this file|what I uploaded|I just loaded|I just uploaded)\b/i.test(message);
+        // Direct document keyword references - nouns and specific document phrases only
+        const refersToDocument = /\b(document|file|pdf|upload|summary|contents|attachment|that file|the file|this file|what I uploaded|I just loaded|I just uploaded)\b/i.test(message);
         const cls = earlyClassification?.classification;
         const isDocumentReviewByClassifier = cls === 'document_review' || cls === 'DOCUMENT_REVIEW';
-        const hasDocVerb = /\b(summarize|summary|review|analyze|explain)\b/i.test(message);
-        const isDocumentReview = isDocumentReviewByClassifier || (refersToDocument && hasDocVerb);
-        
+        // Expanded doc verbs to include read, describe, interpret, check
+        const hasDocVerb = /\b(summarize|summary|review|analyze|explain|read|describe|interpret|check)\b/i.test(message);
+        // Pronoun-based references that naturally follow a document upload
+        const hasPronounDocRef = /\b(what does it (say|contain|mean|show|include)|what'?s in it|what is in it|tell me (about|more about) (it|this|that)|what is (in|about) (this|that)|can you (read|check|analyze|review|summarize|explain|describe) (it|this|that)|help me (understand|with) (it|this|that))\b/i.test(message);
+        const isDocumentReview = isDocumentReviewByClassifier || (refersToDocument && hasDocVerb) || hasPronounDocRef;
+
         if (!refersToDocument && !isDocumentReview) {
           this.log('[DOCUMENTS] ⏭️ Skipping document injection — query does not reference document');
           effectiveDocumentData = null;
@@ -5367,17 +5379,26 @@ Mode: ${modeConfig?.display_name || mode}
    */
   #trackSessionDocument(sessionId, tokens, filename) {
     if (!sessionId) return;
-    
+
     let session = this.sessionCache.get(sessionId);
     if (!session) {
       session = { documents: [] };
       this.sessionCache.set(sessionId, session);
     }
-    
+
     if (!session.documents) {
       session.documents = [];
     }
-    
+
+    // ISSUE #824 FIX: Deduplicate by filename — only count each unique document once
+    // per session. Previously, every access to the same document added tokens again,
+    // causing the session limit to be hit after ~27 requests with a 367-token document.
+    const alreadyTracked = session.documents.some(d => d.filename === filename);
+    if (alreadyTracked) {
+      this.debug(`[SESSION-TRACKING] Document already tracked: ${filename} — skipping duplicate token addition`);
+      return;
+    }
+
     session.documents.push({
       tokens: tokens,
       filename: filename,
