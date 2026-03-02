@@ -1589,10 +1589,13 @@ Facts (preserve user terminology + add synonyms):`;
       // discarding context and leaving meaningless single-word snippets.
       // A fact under 5 tokens (≈20 chars) or consisting of a single word followed by
       // a period/colon provides zero retrieval value and MUST be rejected.
+      // PR #824 REVIEW FIX: Changed [.:] to [.:]+ to match multiple punctuation marks (handles "architecture:."),
+      // and added word count check (<=3 words) to prevent false positives on complete sentences.
       const trimmedFacts = processedFacts.trim();
       const approxTokens = Math.ceil(trimmedFacts.length / 4);
+      const wordCount = trimmedFacts.split(/\s+/).length;
       const isTooShort = approxTokens < 5;
-      const isFragment = /^[a-z][\w\s]+[.:]\s*$/i.test(trimmedFacts) && !trimmedFacts.includes('\n') && approxTokens < 15;
+      const isFragment = /^[a-z][\w\s]+[.:]+\s*$/i.test(trimmedFacts) && wordCount <= 3 && !trimmedFacts.includes('\n') && approxTokens < 15;
 
       if (isTooShort || isFragment) {
         console.log(`[INTELLIGENT-STORAGE] ⚠️ Quality gate: rejecting fragment "${trimmedFacts.substring(0, 50)}" (${approxTokens} tokens) — too short to be useful`);
