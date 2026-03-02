@@ -163,14 +163,14 @@ describe('B. Known Crash Patterns (Regression Guards)', () => {
     if (referenceLines.length === 0) return; // Not used, fine
 
     // ALLOWLIST: Variables manually verified as correctly scoped despite failing heuristic
-    // useClaude in #routeToAI: Declaration at line ~3757, catch reference at line ~4161
-    // (Issue #818 added 10 comment lines to the shouldLookup block, shifting the catch reference)
+    // useClaude in #routeToAI: Declaration at line ~3782, catch reference at line ~4176
+    // (Various issues have added lines, shifting both declaration and catch reference)
     // The 400+ line function exceeds the 250-line proximity heuristic, but scope is correct:
     // - Declaration is at function scope (outside try block)
     // - Catch block is at same function level, has access to function-scoped variables
     // - Verified by manual code review and Node.js syntax validation
     const VERIFIED_CORRECT_SCOPE = [
-      { variable: 'useClaude', declLineApprox: 3757, refLineApprox: 4161, function: '#routeToAI' }
+      { variable: 'useClaude', declLineApprox: 3782, refLineApprox: 4176, function: '#routeToAI' }
     ];
 
     // For each reference, verify a declaration exists within ~200 lines above
