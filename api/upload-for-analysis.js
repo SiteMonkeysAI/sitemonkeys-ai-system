@@ -3,9 +3,7 @@
 
 import multer from "multer";
 import path from "path";
-import mammoth from "mammoth";
-// Use the internal lib path to avoid pdf-parse v1.1.1 self-test failure in production
-import pdfParse from "pdf-parse/lib/pdf-parse.js";
+import { extractDocumentText, STUB_METHODS } from "./lib/document-extractor.js";
 
 // Session storage for extracted documents with automatic cleanup
 export const extractedDocuments = new Map();
@@ -146,84 +144,6 @@ function detectFileType(filename, mimetype) {
   return "other";
 }
 
-// Function 1: Extract content from DOCX (memory-efficient)
-async function extractDocxContent(fileBuffer) {
-  try {
-    console.log("📄 Extracting content from .docx file...");
-    const result = await mammoth.extractRawText({ buffer: fileBuffer });
-    const extractedText = result.value;
-
-    // Immediately check if extraction worked
-    if (extractedText && extractedText.trim().length > 0) {
-      const wordCount = extractedText.split(/\s+/).length;
-      console.log(`✅ Successfully extracted ${wordCount} words from .docx`);
-
-      console.log(
-        "📄 Full text length:",
-        extractedText.length,
-        "Preview length:",
-        extractedText.substring(0, 200).length,
-      );
-
-      // Return BOTH preview and full text
-      return {
-        success: true,
-        wordCount: wordCount,
-        characterCount: extractedText.length,
-        preview:
-          extractedText.substring(0, 200) +
-          (extractedText.length > 200 ? "..." : ""),
-        fullText: extractedText,
-        hasContent: true,
-      };
-    } else {
-      console.log("⚠️ .docx file appears to be empty");
-      return {
-        success: false,
-        error: "Document appears to be empty or unreadable",
-      };
-    }
-  } catch (error) {
-    console.error("❌ Error extracting .docx content:", error);
-    return {
-      success: false,
-      error: `Failed to extract content: ${error.message}`,
-    };
-  }
-}
-
-// Function 2: Simple content analysis (no AI needed)
-function analyzeContent(wordCount, characterCount, preview) {
-  // Simple rule-based analysis - no external API calls
-  let contentType = "General Document";
-  const lowerPreview = preview.toLowerCase();
-
-  if (
-    lowerPreview.includes("business plan") ||
-    lowerPreview.includes("executive summary")
-  ) {
-    contentType = "Business Document";
-  } else if (
-    lowerPreview.includes("resume") ||
-    lowerPreview.includes("curriculum vitae")
-  ) {
-    contentType = "Resume/CV";
-  } else if (
-    lowerPreview.includes("contract") ||
-    lowerPreview.includes("agreement")
-  ) {
-    contentType = "Legal Document";
-  }
-
-  const readingTime = Math.ceil(wordCount / 200); // ~200 words per minute
-
-  return {
-    contentType: contentType,
-    readingTime: readingTime,
-    summary: `${contentType} with ${wordCount} words (${readingTime} minute read)`,
-  };
-}
-
 // Function 3: Extract key phrases (simple, memory-efficient)
 function extractKeyPhrases(preview) {
   // Find sentences with key indicator words
@@ -249,30 +169,12 @@ function extractKeyPhrases(preview) {
   return keyPhrases;
 }
 
-// Function 4: Check if file is DOCX
-function isDocxFile(file) {
-  return (
-    file.mimetype ===
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
-    file.originalname.toLowerCase().endsWith(".docx")
-  );
-}
-
 // Process uploaded file - EXACT COPY
 async function processFile(file) {
   // ISSUE #814 ITEM 1: Add diagnostic logging at EVERY decision point for visibility
   console.log(`[UPLOAD] File received: name="${file.originalname}", mimetype="${file.mimetype}", size=${file.size}, bufferExists=${!!file.buffer}`);
   
   const fileType = detectFileType(file.originalname, file.mimetype);
-  
-  // Check if file types - case-insensitive for extension check
-  const isPdf = file.mimetype === 'application/pdf' || 
-    file.originalname.toLowerCase().endsWith('.pdf');
-  const isDocx = isDocxFile(file);
-  const isText = file.mimetype.startsWith('text/') || 
-    /\.(txt|md|csv|json|xml|html|htm|log|yaml|yml)$/i.test(file.originalname);
-  
-  console.log(`[UPLOAD] Type detection: isPdf=${isPdf}, isDocx=${isDocx}, isText=${isText}, fileType="${fileType}"`);
 
   let processingResult = {
     success: true,
@@ -285,178 +187,52 @@ async function processFile(file) {
   };
 
   try {
-    // SPECIAL HANDLING FOR DOCX FILES
-    if (fileType === "document" && isDocx) {
-      console.log(`📄 Processing .docx file: ${file.originalname}`);
+    // Use unified extraction pipeline (handles DOCX, PDF with OCR fallback, images, text)
+    const extraction = await extractDocumentText(file);
+    const { text, method, pages, totalPages, confidence, partial, reason } = extraction;
 
-      // Extract content (memory-efficient)
-      const extractionResult = await extractDocxContent(file.buffer);
+    const isStub = STUB_METHODS.includes(method);
 
-      if (extractionResult.success) {
-        // Mark as extracted
-        processingResult.contentExtracted = true;
+    if (!isStub && text && text.trim().length >= 50) {
+      processingResult.contentExtracted = true;
+      const wordCount = text.split(/\s+/).filter((w) => w.length > 0).length;
+      const keyPhrases = extractKeyPhrases(text.substring(0, 500));
 
-        // Do simple analysis
-        const analysis = analyzeContent(
-          extractionResult.wordCount,
-          extractionResult.characterCount,
-          extractionResult.preview,
-        );
+      // Human-readable content type label
+      const CONTENT_TYPE_LABELS = {
+        docx: 'DOCX',
+        pdf_text: 'PDF',
+        pdf_ocr: 'PDF (OCR)',
+        image_ocr: 'Image (OCR)',
+        text: 'Text',
+      };
+      const contentTypeLabel = CONTENT_TYPE_LABELS[method] || method;
 
-        // Extract key phrases
-        const keyPhrases = extractKeyPhrases(extractionResult.preview);
+      processingResult.docxAnalysis = {
+        wordCount: wordCount,
+        characterCount: text.length,
+        contentType: contentTypeLabel,
+        extractionMethod: method,
+        readingTime: `${Math.ceil(wordCount / 200)} min read`,
+        keyPhrases: keyPhrases,
+        preview: text.substring(0, 200) + (text.length > 200 ? '...' : ''),
+        fullText: text,
+      };
 
-        // Store analysis results
-        processingResult.docxAnalysis = {
-          wordCount: extractionResult.wordCount,
-          characterCount: extractionResult.characterCount,
-          contentType: analysis.contentType,
-          readingTime: analysis.readingTime,
-          keyPhrases: keyPhrases,
-          preview: extractionResult.preview,
-          fullText: extractionResult.fullText,
-        };
-
-        processingResult.message = `DOCX analyzed: ${file.originalname} (${extractionResult.wordCount} words)`;
-        processingResult.preview = `📄 ${analysis.summary}`;
-      } else {
-        // Content extraction failed — log the specific error so intermittent failures are diagnosable
-        console.error(`[UPLOAD] DOCX extraction failed for ${file.originalname}: ${extractionResult.error}`);
-        processingResult.message = `DOCX processing failed: ${extractionResult.error}`;
-        processingResult.preview = `❌ Could not extract content from ${file.originalname}`;
-        processingResult.success = false;
-      }
+      const pageCount = partial ? `${pages}/${totalPages}` : `${pages}`;
+      const pageInfo = pages ? `, ${pageCount} pages` : '';
+      const confInfo = confidence != null ? `, confidence=${confidence.toFixed(2)}` : '';
+      processingResult.message = `${file.originalname} analyzed: ${wordCount} words${pageInfo} (method=${method})`;
+      processingResult.preview = `📄 Extracted: ${wordCount} words via ${contentTypeLabel}${confInfo}`;
     } else {
-      // Handle PDF files - extract text using pdf-parse
-      const isPdf = file.mimetype === 'application/pdf' ||
-        path.extname(file.originalname).toLowerCase() === '.pdf';
-
-      // Diagnostic log: fired regardless of buffer state to detect if handler is reached
-      console.log(`[UPLOAD-DIAG] PDF handler entry: mimetype=${file.mimetype}, ext=${path.extname(file.originalname).toLowerCase()}, isPdf=${isPdf}, hasBuffer=${!!file.buffer}, originalname=${file.originalname}`);
-
-      if (isPdf && file.buffer) {
-        console.log(`[UPLOAD] PDF handler reached: ${file.originalname}, mimetype=${file.mimetype}`);
-        try {
-          console.log(`[UPLOAD] PDF handler entered for: ${file.originalname} (about to call pdf-parse)`);
-          const pdfData = await pdfParse(file.buffer);
-          const numPages = pdfData.numpages || 0;
-          const extractedText = pdfData.text || '';
-          // ISSUE #826 FIX (Problem 2): Detect scanned/image PDFs by checking for
-          // insufficient text content. Multi-page PDFs with < 50 chars are almost
-          // certainly scanned — a single real text page has thousands of chars.
-          const MIN_VIABLE_CHARS = 50;
-          const isScanned = extractedText.trim().length < MIN_VIABLE_CHARS && numPages > 0;
-          console.log(`[UPLOAD] PDF extracted: ${extractedText.length} chars, ${numPages} pages from ${file.originalname} (isScanned=${isScanned})`);
-          if (!isScanned && extractedText.trim().length > 0) {
-            processingResult.contentExtracted = true;
-            const wordCount = extractedText.split(/\s+/).filter(w => w.length > 0).length;
-            const keyPhrases = extractKeyPhrases(extractedText.substring(0, 500));
-            processingResult.docxAnalysis = {
-              wordCount: wordCount,
-              characterCount: extractedText.length,
-              contentType: 'pdf',
-              readingTime: `${Math.ceil(wordCount / 200)} min read`,
-              keyPhrases: keyPhrases,
-              preview: extractedText.substring(0, 200) + (extractedText.length > 200 ? '...' : ''),
-              fullText: extractedText,
-            };
-            processingResult.message = `PDF analyzed: ${file.originalname} (${wordCount} words, ${numPages} pages)`;
-            processingResult.preview = `📄 PDF extracted: ${wordCount} words, ${numPages} pages`;
-          } else {
-            // Scanned/image PDF — no extractable text. Return failure so the user is not
-            // misled into thinking the document is ready for analysis.
-            // ISSUE #826 FIX (Problem 2): Do NOT store a stub as a document — the system
-            // would inject the error message as "document content" and the AI could only
-            // repeat the error back to the user. Return success:false instead.
-            console.log(`[UPLOAD] PDF parsed but no text extracted (scanned/image PDF): ${file.originalname}, ${numPages} pages`);
-            processingResult.success = false;
-            processingResult.contentExtracted = false;
-            processingResult.message = `This ${numPages > 0 ? numPages + '-page ' : ''}PDF appears to be scanned or image-based. Text extraction returned no usable content. Please paste the document text directly into the chat, or upload a text-based PDF.`;
-            processingResult.preview = `❌ Scanned/image-based PDF — text extraction not available. Please paste the text directly into chat or upload a text-based PDF.`;
-          }
-        } catch (pdfErr) {
-          console.error("[UPLOAD] PDF extraction failed for %s:", file.originalname, pdfErr.message);
-          console.error(`[UPLOAD] PDF error stack:`, pdfErr.stack);
-          // ISSUE #814 FIX: Set success=false so user gets proper error feedback instead of
-          // silently falling through to the generic "Document ready for analysis" message.
-          processingResult.success = false;
-          processingResult.message = `PDF processing failed: ${pdfErr.message}. Please try converting to .txt or .docx.`;
-          processingResult.preview = `❌ Could not extract content from this PDF. If it is a scanned/image PDF, please paste the text directly into chat.`;
-        }
-      } else if (isPdf && !file.buffer) {
-        console.error(`[UPLOAD] PDF detected but no buffer available: ${file.originalname}`);
-        processingResult.success = false;
-        processingResult.message = `PDF upload error: file buffer not available for ${file.originalname}`;
-        processingResult.preview = `❌ PDF upload failed — file data was not received.`;
-      }
-
-      // Handle plain text files - extract content directly from buffer
-      const isPlainText = !isPdf && (file.mimetype.startsWith('text/') ||
-        /\.(txt|md|csv|json|xml|html|htm|log|yaml|yml)$/i.test(file.originalname));
-
-      if (isPlainText && file.buffer) {
-        console.log(`📝 Processing plain text file: ${file.originalname}`);
-        try {
-          const textContent = file.buffer.toString('utf8');
-          if (textContent && textContent.trim().length > 0) {
-            processingResult.contentExtracted = true;
-            const wordCount = textContent.split(/\s+/).filter(w => w.length > 0).length;
-            const keyPhrases = extractKeyPhrases(textContent.substring(0, 500));
-            processingResult.docxAnalysis = {
-              wordCount: wordCount,
-              characterCount: textContent.length,
-              contentType: 'text',
-              readingTime: `${Math.ceil(wordCount / 200)} min read`,
-              keyPhrases: keyPhrases,
-              preview: textContent.substring(0, 200) + (textContent.length > 200 ? '...' : ''),
-              fullText: textContent,
-            };
-            processingResult.message = `Text file analyzed: ${file.originalname} (${wordCount} words)`;
-            processingResult.preview = `📝 Text extracted: ${wordCount} words`;
-            console.log(`✅ Plain text extracted from ${file.originalname}: ${wordCount} words, ${textContent.length} chars`);
-          } else {
-            processingResult.message = `Text file appears empty: ${file.originalname}`;
-            processingResult.preview = `⚠️ File appears to be empty`;
-          }
-        } catch (textErr) {
-          console.error("❌ Failed to extract text from %s: %s", file.originalname, textErr.message);
-        }
-      }
-
-      // Handle all other file types (fallback for non-text files)
-      // ISSUE #814 FIX: Only show generic fallback if there was no extraction failure.
-      // PDF/text errors already set success=false and a descriptive message above.
-      if (!processingResult.contentExtracted && processingResult.success) {
-        switch (fileType) {
-          case "image":
-            processingResult.success = false;
-            processingResult.message = `Image files aren't supported for document analysis: ${file.originalname}. Supported formats: TXT, PDF, DOCX, MD, CSV, JSON.`;
-            processingResult.preview = `❌ Image files can't be analyzed as documents. Please upload a TXT, PDF, DOCX, MD, CSV, or JSON file.`;
-            break;
-
-          case "document":
-            processingResult.message = `Document uploaded for analysis: ${file.originalname}`;
-            processingResult.preview = `Document ready for text analysis and processing`;
-            break;
-
-          case "spreadsheet":
-            processingResult.message = `Spreadsheet uploaded for analysis: ${file.originalname}`;
-            processingResult.preview = `Data tables ready for analysis`;
-            break;
-
-          case "code":
-            processingResult.message = `Code file uploaded for analysis: ${file.originalname}`;
-            processingResult.preview = `Source code ready for review and analysis`;
-            break;
-
-          default:
-            processingResult.message = `File uploaded for analysis: ${file.originalname}`;
-            processingResult.preview = `File stored and ready for processing`;
-        }
-      }
+      // Stub or below-threshold result — inform user, do not store as usable document
+      processingResult.success = false;
+      processingResult.message = text || `Could not extract content from ${file.originalname}`;
+      processingResult.preview = `❌ ${(text || 'Extraction failed').substring(0, 150)}`;
+      console.log(`[UPLOAD] stored_stub method=${method} reason="${reason || 'below threshold'}"`);
     }
 
-    // Store metadata (same as before, but with docx info)
+    // Store metadata
     processingResult.metadata = {
       filename: file.originalname,
       mimetype: file.mimetype,
@@ -464,6 +240,7 @@ async function processFile(file) {
       uploadTime: new Date().toISOString(),
       fileType: fileType,
       contentExtracted: processingResult.contentExtracted,
+      extractionMethod: method,
       hasDocxAnalysis: !!processingResult.docxAnalysis,
     };
   } catch (error) {
@@ -624,13 +401,14 @@ async function handleAnalysisUpload(req, res) {
         filename: file.filename,
         success: file.success,
         analysis: file.docxAnalysis
-          ? `DOCX Content: ${file.docxAnalysis.wordCount} words, Type: ${file.docxAnalysis.contentType}`
+          ? `Content extracted: ${file.docxAnalysis.wordCount} words, Type: ${file.docxAnalysis.contentType}`
           : file.success
             ? `File "${file.filename}" uploaded and ready for analysis.`
             : `Failed to process ${file.filename}`,
         type: file.type,
         wordCount: file.docxAnalysis?.wordCount,
         contentType: file.docxAnalysis?.contentType,
+        extractionMethod: file.docxAnalysis?.extractionMethod,
         contentExtracted: file.contentExtracted,
         docxAnalysis: file.docxAnalysis,
       })),
@@ -658,12 +436,13 @@ async function handleAnalysisUpload(req, res) {
           fullContent: file.docxAnalysis.fullText,
           wordCount: file.docxAnalysis.wordCount,
           contentType: file.docxAnalysis.contentType,
+          extractionMethod: file.docxAnalysis.extractionMethod,
           keyPhrases: file.docxAnalysis.keyPhrases,
           timestamp: Date.now(),
         });
 
         console.log(
-          `[UPLOAD] Stored document for key: ${documentKey}, content length: ${file.docxAnalysis.fullText.length} chars (${file.docxAnalysis.wordCount} words)`,
+          `[UPLOAD] stored_document key=${documentKey} chars=${file.docxAnalysis.fullText.length} method=${file.docxAnalysis.extractionMethod || 'unknown'}`,
         );
         console.log(
           `[${timestamp}] [STORAGE] Stored document with key "${documentKey}" for chat: ${file.filename} (${file.docxAnalysis.wordCount} words, ${file.docxAnalysis.fullText.length} chars)`,
