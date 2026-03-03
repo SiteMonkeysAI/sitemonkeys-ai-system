@@ -4,6 +4,8 @@
 import multer from "multer";
 import path from "path";
 import mammoth from "mammoth";
+// Use the internal lib path to avoid pdf-parse v1.1.1 self-test failure in production
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 
 // Session storage for extracted documents with automatic cleanup
 export const extractedDocuments = new Map();
@@ -318,7 +320,8 @@ async function processFile(file) {
         processingResult.message = `DOCX analyzed: ${file.originalname} (${extractionResult.wordCount} words)`;
         processingResult.preview = `📄 ${analysis.summary}`;
       } else {
-        // Content extraction failed
+        // Content extraction failed — log the specific error so intermittent failures are diagnosable
+        console.error(`[UPLOAD] DOCX extraction failed for ${file.originalname}: ${extractionResult.error}`);
         processingResult.message = `DOCX processing failed: ${extractionResult.error}`;
         processingResult.preview = `❌ Could not extract content from ${file.originalname}`;
         processingResult.success = false;
@@ -335,7 +338,6 @@ async function processFile(file) {
         console.log(`[UPLOAD] PDF handler reached: ${file.originalname}, mimetype=${file.mimetype}`);
         try {
           console.log(`[UPLOAD] PDF handler entered for: ${file.originalname} (about to call pdf-parse)`);
-          const pdfParse = (await import('pdf-parse')).default;
           const pdfData = await pdfParse(file.buffer);
           console.log(`[UPLOAD] PDF extracted: ${pdfData.text?.length || 0} chars, ${pdfData.numpages || '?'} pages from ${file.originalname}`);
           if (pdfData.text && pdfData.text.trim().length > 0) {
@@ -427,8 +429,9 @@ async function processFile(file) {
       if (!processingResult.contentExtracted && processingResult.success) {
         switch (fileType) {
           case "image":
-            processingResult.message = `Image uploaded for analysis: ${file.originalname}`;
-            processingResult.preview = `Image ready for analysis and processing`;
+            processingResult.success = false;
+            processingResult.message = `Image files aren't supported for document analysis: ${file.originalname}. Supported formats: TXT, PDF, DOCX, MD, CSV, JSON.`;
+            processingResult.preview = `❌ Image files can't be analyzed as documents. Please upload a TXT, PDF, DOCX, MD, CSV, or JSON file.`;
             break;
 
           case "document":

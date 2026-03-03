@@ -1082,11 +1082,26 @@ export class Orchestrator {
         const isDocumentReviewByClassifier = cls === 'document_review' || cls === 'DOCUMENT_REVIEW';
         // Expanded doc verbs to include read, describe, interpret, check
         const hasDocVerb = /\b(summarize|summary|review|analyze|explain|read|describe|interpret|check)\b/i.test(message);
-        // Pronoun-based references that naturally follow a document upload
-        const hasPronounDocRef = /\b(what does it (say|contain|mean|show|include)|what'?s in it|what is in it|tell me (about|more about) (it|this|that)|what is (in|about) (this|that)|can you (read|check|analyze|review|summarize|explain|describe) (it|this|that)|help me (understand|with) (it|this|that))\b/i.test(message);
+        // Pronoun-based references that naturally follow a document upload — expanded to catch
+        // short natural phrasings like "summarize this", "analyze it", "what does this say"
+        const hasPronounDocRef = /\b(what does (it|this|that) (say|contain|mean|show|include)|what'?s in (it|this|that)|what is in (it|this|that)|tell me (about|more about) (it|this|that)|what is (in|about) (this|that)|can you (read|check|analyze|review|summarize|explain|describe) (it|this|that)|help me (understand|with) (it|this|that)|(summarize|analyze|review|explain|describe|read|check|interpret) (it|this|that))\b/i.test(message);
         const isDocumentReview = isDocumentReviewByClassifier || (refersToDocument && hasDocVerb) || hasPronounDocRef;
 
-        if (!refersToDocument && !isDocumentReview) {
+        // ISSUE #825 FIX: Diagnostic logging to reveal which checks are evaluated
+        console.log(`[DOCUMENTS] Gating check — query: "${message.substring(0, 100)}"`);
+        console.log(`[DOCUMENTS] Gating check — refersToDocument: ${refersToDocument}, hasDocVerb: ${hasDocVerb}, hasPronounDocRef: ${hasPronounDocRef}, isDocumentReviewByClassifier: ${isDocumentReviewByClassifier}`);
+
+        // ISSUE #825 FIX: Also inject when query contains a document action verb alone —
+        // catches natural follow-ups like "summarize it", "what does this say?", "analyze this".
+        // FALLBACK: If the document was uploaded recently (within 90 seconds), inject for any
+        // query — intent after an upload is almost always about that document.
+        // uploadedAt is only set for 'uploaded_file' sources; pasted content uses 0 (epoch),
+        // so Date.now()-0 will far exceed 90000 making uploadedRecently=false for pasted docs.
+        const uploadedRecently = documentData.source === 'uploaded_file' &&
+          documentData.uploadedAt > 0 &&
+          (Date.now() - documentData.uploadedAt) < 90000;
+
+        if (!refersToDocument && !hasDocVerb && !isDocumentReview && !uploadedRecently) {
           this.log('[DOCUMENTS] ⏭️ Skipping document injection — query does not reference document');
           effectiveDocumentData = null;
         }
@@ -2864,6 +2879,7 @@ export class Orchestrator {
       let documentContent = null;
       let filename = "pasted_document.txt";
       let source = null;
+      let latestDoc = null; // hoisted so uploadedAt can reference it after the if/else block
 
       // Priority 1: Check if documentContext was passed (frontend sends pasted content here)
       if (documentContext && typeof documentContext === 'string' && documentContext.length > 1000) {
@@ -2875,7 +2891,6 @@ export class Orchestrator {
       // ISSUE #776 FIX 2: Get the most recently added document from the Map
       else {
         // Find the most recent document by iterating through the Map
-        let latestDoc = null;
         let latestTimestamp = 0;
         console.log(`[DOC-LOAD] Looking up document. Map size: ${extractedDocuments.size}, Map keys: [${[...extractedDocuments.keys()].join(', ')}]`);
         for (const [key, doc] of extractedDocuments.entries()) {
@@ -2899,6 +2914,8 @@ export class Orchestrator {
       }
 
       const tokens = Math.ceil(documentContent.length / 4);
+      // Capture upload timestamp for gating fallback (recently-uploaded docs bypass strict gating)
+      const uploadedAt = source === 'uploaded_file' && latestDoc ? latestDoc.timestamp : 0;
 
       // SESSION_LIMITS ENFORCEMENT - Per Bible Documents (Issue #407 Follow-up)
       // Check cumulative session document tokens BEFORE applying query budgets
@@ -2968,6 +2985,7 @@ export class Orchestrator {
           truncated: extractionResult.extracted,
           extracted: extractionResult.extracted,
           source: source,
+          uploadedAt: uploadedAt,
           extractionMetadata: {
             originalTokens: extractionResult.originalTokens,
             extractedTokens: extractionResult.extractedTokens,
@@ -2992,6 +3010,7 @@ export class Orchestrator {
         truncated: false,
         extracted: false,
         source: source,
+        uploadedAt: uploadedAt,
       };
     } catch (error) {
       this.error(
