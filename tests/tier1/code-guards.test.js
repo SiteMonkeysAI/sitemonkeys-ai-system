@@ -170,7 +170,7 @@ describe('B. Known Crash Patterns (Regression Guards)', () => {
     // - Catch block is at same function level, has access to function-scoped variables
     // - Verified by manual code review and Node.js syntax validation
     const VERIFIED_CORRECT_SCOPE = [
-      { variable: 'useClaude', declLineApprox: 3782, refLineApprox: 4176, function: '#routeToAI' }
+      { variable: 'useClaude', declLineApprox: 3798, refLineApprox: 4192, function: '#routeToAI' }
     ];
 
     // For each reference, verify a declaration exists within ~200 lines above

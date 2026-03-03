@@ -458,6 +458,73 @@ router.get('/memory-stats', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/debug/memory/delete-by-id
+ * Delete a specific memory row by its numeric ID and remove any orphaned
+ * embedding data so the record is fully purged from semantic retrieval.
+ * Accepts JSON body: { "memory_id": 2903 }
+ * SECURITY: Only available when DEPLOYMENT_TYPE=private or DEBUG_MODE=true
+ */
+router.post('/memory/delete-by-id', debugModeOnly, async (req, res) => {
+  const { memory_id } = req.body || {};
+  const memoryIdNum = Number(memory_id);
+
+  if (!memory_id || !Number.isInteger(memoryIdNum) || memoryIdNum <= 0) {
+    return res.status(400).json({
+      success: false,
+      error: 'memory_id must be a positive integer',
+      hint: 'POST JSON body: { "memory_id": 2903 }'
+    });
+  }
+
+  const pool = global.memorySystem?.coreSystem?.pool;
+  if (!pool) {
+    return res.status(500).json({ success: false, error: 'Database pool not available' });
+  }
+
+  try {
+    // Fetch the row before deleting so we can confirm what was removed
+    const preCheck = await pool.query(
+      'SELECT id, user_id, category_name, token_count, SUBSTRING(content, 1, 200) AS preview FROM persistent_memories WHERE id = $1',
+      [memoryIdNum]
+    );
+
+    if (preCheck.rowCount === 0) {
+      return res.json({
+        success: false,
+        message: `Memory ${memoryIdNum} not found in persistent_memories — already deleted or never existed.`,
+        rows_deleted: 0
+      });
+    }
+
+    const row = preCheck.rows[0];
+
+    // Delete the row (embedding column lives in the same row, so this is a complete purge)
+    const deleteResult = await pool.query(
+      'DELETE FROM persistent_memories WHERE id = $1 RETURNING id',
+      [memoryIdNum]
+    );
+
+    console.log(`[DEBUG] [MEMORY-DELETE] Deleted memory id=${memoryIdNum}, user=${row.user_id}, category=${row.category_name}, tokens=${row.token_count}`);
+
+    res.json({
+      success: true,
+      message: `Memory ${memoryIdNum} deleted from persistent_memories (embedding purged with row).`,
+      rows_deleted: deleteResult.rowCount,
+      deleted_record: {
+        id: row.id,
+        user_id: row.user_id,
+        category: row.category_name,
+        token_count: row.token_count,
+        content_preview: row.preview
+      }
+    });
+  } catch (error) {
+    console.error('[DEBUG] [MEMORY-DELETE] Error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 export default router;
 
 /**
