@@ -339,40 +339,40 @@ async function processFile(file) {
         try {
           console.log(`[UPLOAD] PDF handler entered for: ${file.originalname} (about to call pdf-parse)`);
           const pdfData = await pdfParse(file.buffer);
-          console.log(`[UPLOAD] PDF extracted: ${pdfData.text?.length || 0} chars, ${pdfData.numpages || '?'} pages from ${file.originalname}`);
-          if (pdfData.text && pdfData.text.trim().length > 0) {
+          const numPages = pdfData.numpages || 0;
+          const extractedText = pdfData.text || '';
+          // ISSUE #826 FIX (Problem 2): Detect scanned/image PDFs by checking for
+          // insufficient text content. Multi-page PDFs with < 50 chars are almost
+          // certainly scanned — a single real text page has thousands of chars.
+          const MIN_VIABLE_CHARS = 50;
+          const isScanned = extractedText.trim().length < MIN_VIABLE_CHARS && numPages > 0;
+          console.log(`[UPLOAD] PDF extracted: ${extractedText.length} chars, ${numPages} pages from ${file.originalname} (isScanned=${isScanned})`);
+          if (!isScanned && extractedText.trim().length > 0) {
             processingResult.contentExtracted = true;
-            const pdfText = pdfData.text;
-            const wordCount = pdfText.split(/\s+/).filter(w => w.length > 0).length;
-            const keyPhrases = extractKeyPhrases(pdfText.substring(0, 500));
+            const wordCount = extractedText.split(/\s+/).filter(w => w.length > 0).length;
+            const keyPhrases = extractKeyPhrases(extractedText.substring(0, 500));
             processingResult.docxAnalysis = {
               wordCount: wordCount,
-              characterCount: pdfText.length,
+              characterCount: extractedText.length,
               contentType: 'pdf',
               readingTime: `${Math.ceil(wordCount / 200)} min read`,
               keyPhrases: keyPhrases,
-              preview: pdfText.substring(0, 200) + (pdfText.length > 200 ? '...' : ''),
-              fullText: pdfText,
+              preview: extractedText.substring(0, 200) + (extractedText.length > 200 ? '...' : ''),
+              fullText: extractedText,
             };
-            processingResult.message = `PDF analyzed: ${file.originalname} (${wordCount} words, ${pdfData.numpages} pages)`;
-            processingResult.preview = `📄 PDF extracted: ${wordCount} words, ${pdfData.numpages} pages`;
+            processingResult.message = `PDF analyzed: ${file.originalname} (${wordCount} words, ${numPages} pages)`;
+            processingResult.preview = `📄 PDF extracted: ${wordCount} words, ${numPages} pages`;
           } else {
-            // Scanned/image PDF — no extractable text. Set contentExtracted=true with a stub
-            // so the AI can explain why it can't read the document rather than silently failing.
-            console.log(`[UPLOAD] PDF parsed but no text extracted (scanned/image PDF): ${file.originalname}`);
-            const stubText = '[This PDF appears to be image-based or scanned. Text extraction returned no content. OCR is not currently configured. Please paste the document text directly into the chat for analysis.]';
-            processingResult.contentExtracted = true;
-            processingResult.docxAnalysis = {
-              wordCount: 0,
-              characterCount: stubText.length,
-              contentType: 'pdf_scanned',
-              readingTime: '0 min read',
-              keyPhrases: [],
-              preview: stubText,
-              fullText: stubText,
-            };
-            processingResult.message = `PDF uploaded but no extractable text found (scanned/image PDF): ${file.originalname}`;
-            processingResult.preview = `⚠️ PDF appears to be scanned — no extractable text. OCR not configured.`;
+            // Scanned/image PDF — no extractable text. Return failure so the user is not
+            // misled into thinking the document is ready for analysis.
+            // ISSUE #826 FIX (Problem 2): Do NOT store a stub as a document — the system
+            // would inject the error message as "document content" and the AI could only
+            // repeat the error back to the user. Return success:false instead.
+            console.log(`[UPLOAD] PDF parsed but no text extracted (scanned/image PDF): ${file.originalname}, ${numPages} pages`);
+            processingResult.success = false;
+            processingResult.contentExtracted = false;
+            processingResult.message = `This ${numPages > 0 ? numPages + '-page ' : ''}PDF appears to be scanned or image-based. Text extraction returned no usable content. Please paste the document text directly into the chat, or upload a text-based PDF.`;
+            processingResult.preview = `❌ Scanned/image-based PDF — text extraction not available. Please paste the text directly into chat or upload a text-based PDF.`;
           }
         } catch (pdfErr) {
           console.error("[UPLOAD] PDF extraction failed for %s:", file.originalname, pdfErr.message);

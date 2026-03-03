@@ -1087,10 +1087,6 @@ export class Orchestrator {
         const hasPronounDocRef = /\b(what does (it|this|that) (say|contain|mean|show|include)|what'?s in (it|this|that)|what is in (it|this|that)|tell me (about|more about) (it|this|that)|what is (in|about) (this|that)|can you (read|check|analyze|review|summarize|explain|describe) (it|this|that)|help me (understand|with) (it|this|that)|(summarize|analyze|review|explain|describe|read|check|interpret) (it|this|that))\b/i.test(message);
         const isDocumentReview = isDocumentReviewByClassifier || (refersToDocument && hasDocVerb) || hasPronounDocRef;
 
-        // ISSUE #825 FIX: Diagnostic logging to reveal which checks are evaluated
-        console.log(`[DOCUMENTS] Gating check — query: "${message.substring(0, 100)}"`);
-        console.log(`[DOCUMENTS] Gating check — refersToDocument: ${refersToDocument}, hasDocVerb: ${hasDocVerb}, hasPronounDocRef: ${hasPronounDocRef}, isDocumentReviewByClassifier: ${isDocumentReviewByClassifier}`);
-
         // ISSUE #825 FIX: Also inject when query contains a document action verb alone —
         // catches natural follow-ups like "summarize it", "what does this say?", "analyze this".
         // FALLBACK: If the document was uploaded recently (within 90 seconds), inject for any
@@ -1100,6 +1096,12 @@ export class Orchestrator {
         const uploadedRecently = documentData.source === 'uploaded_file' &&
           documentData.uploadedAt > 0 &&
           (Date.now() - documentData.uploadedAt) < 90000;
+
+        // ISSUE #826 FIX (Problem 3): Diagnostic logging to reveal which checks are evaluated,
+        // including uploadedRecently which was previously computed after the log and therefore
+        // never visible in diagnostics.
+        console.log(`[DOCUMENTS] Gating check — query: "${message.substring(0, 100)}"`);
+        console.log(`[DOCUMENTS] Gating check — refersToDocument: ${refersToDocument}, hasDocVerb: ${hasDocVerb}, hasPronounDocRef: ${hasPronounDocRef}, isDocumentReviewByClassifier: ${isDocumentReviewByClassifier}, uploadedRecently: ${uploadedRecently}`);
 
         if (!refersToDocument && !hasDocVerb && !isDocumentReview && !uploadedRecently) {
           this.log('[DOCUMENTS] ⏭️ Skipping document injection — query does not reference document');
@@ -1229,6 +1231,21 @@ export class Orchestrator {
         });
 
         if (shouldLookup) {
+          // ISSUE #826 FIX (Problem 6): Skip external lookup when a document is loaded and
+          // the query references that document. Document queries classified as VOLATILE
+          // (e.g. "explain what that document is about") were triggering Wikipedia/news
+          // lookups with the document content block appended, producing garbage 404 results.
+          const documentLoaded = !!(effectiveDocumentData && effectiveDocumentData.tokens > 0);
+          const refersToDocumentForLookup = documentLoaded && (
+            /\b(document|file|pdf|upload|attachment|summary|contents)\b/i.test(message) ||
+            /\b(summarize|analyze|explain|review|describe|read|interpret|check)\b/i.test(message) ||
+            /\b(it|this|that)\b/i.test(message)
+          );
+          if (refersToDocumentForLookup) {
+            console.log('[ORCHESTRATOR] Skipping external lookup — query refers to loaded document (avoids injecting [DOCUMENT CONTEXT] into external API calls)');
+            phase4Metadata.external_lookup = false;
+            phase4Metadata.lookup_attempted = false;
+          } else {
           console.log('[ORCHESTRATOR] About to call lookup for:', message);
           this.log(`[PHASE4] 1. Lookup triggered for: ${message.substring(0, 50)}...`);
           this.log(`🌐 External lookup required (type: ${truthTypeResult.type}, high_stakes: ${truthTypeResult.high_stakes?.isHighStakes || false}), performing lookup...`);
@@ -1260,7 +1277,15 @@ export class Orchestrator {
             this.log('[CONTEXT] No conversation history available for enrichment');
           }
 
-          const lookupResult = await lookup(enrichedMessage, {
+          // ISSUE #826 FIX (Problem 6): Strip any [DOCUMENT CONTEXT] block that may have
+          // been appended to the enriched message before passing to external API.
+          // This prevents garbage Wikipedia/news queries containing document content.
+          const lookupQuery = enrichedMessage.replace(/\[DOCUMENT CONTEXT\][\s\S]*/i, '').trim();
+          if (lookupQuery !== enrichedMessage) {
+            console.log('[ORCHESTRATOR] Stripped [DOCUMENT CONTEXT] block from lookup query');
+          }
+
+          const lookupResult = await lookup(lookupQuery, {
             internalConfidence: phase4Metadata.confidence,
             truthType: truthTypeResult.type,
           });
@@ -1356,6 +1381,7 @@ export class Orchestrator {
             phase4Metadata.failure_reason = lookupResult.error || 'External lookup failed or returned no data';
             this.log("⚠️ External lookup failed or returned no data");
           }
+          } // end else (refersToDocumentForLookup)
         }
       } catch (phase4Error) {
         this.error("⚠️ Phase 4 pipeline error:", phase4Error);

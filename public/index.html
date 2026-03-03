@@ -1667,6 +1667,33 @@
                 box.appendChild(analysisBubble);
               }
             });
+          } else {
+            // ISSUE #826 FIX (Problem 1): Show error feedback when upload fails (e.g. image
+            // files, scanned PDFs). Previously the else branch was missing entirely so the
+            // user saw zero feedback when result.success === false.
+            const filesToReport = result.files || [];
+            if (filesToReport.length > 0) {
+              filesToReport.forEach((file) => {
+                if (!file.success) {
+                  const errorBubble = document.createElement("div");
+                  errorBubble.className = "bubble ai";
+                  // Use DOM construction to avoid XSS from server-returned filename/message
+                  errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ <span class="upload-err-text"></span></div>`;
+                  const errSpan = errorBubble.querySelector(".upload-err-text");
+                  const msg = file.message || "Unsupported file type. Supported formats: TXT, PDF, DOCX, MD, CSV, JSON.";
+                  errSpan.textContent = (file.filename ? '"' + file.filename + '": ' : '') + msg;
+                  box.appendChild(errorBubble);
+                }
+              });
+            } else {
+              const errorBubble = document.createElement("div");
+              errorBubble.className = "bubble ai";
+              errorBubble.innerHTML = `<img src="boy-mascot.png" class="avatar" alt="System"><div class="bubble-content"><strong>System:</strong> ❌ <span class="upload-err-text"></span></div>`;
+              const errSpan = errorBubble.querySelector(".upload-err-text");
+              errSpan.textContent = result.message || "Upload failed. Supported formats: TXT, PDF, DOCX, MD, CSV, JSON.";
+              box.appendChild(errorBubble);
+            }
+            box.scrollTop = box.scrollHeight;
           }
         } catch (error) {
           console.error("❌ Analysis upload failed:", error);
