@@ -556,6 +556,75 @@ describe('F. Salary Supersession Guards', () => {
       'will not fire supersession and the old salary entry will NOT be marked is_current=false.'
     );
   });
+
+  it('F-004: supersession.js user_job_title fingerprint patterns handle compound "job title" and promotions', () => {
+    // BUG: The user_job_title FINGERPRINT_PATTERNS in supersession.js only matched
+    // single-word field names ("my role is", "my title is") and hardcoded job titles via
+    // "I am a <title>". This left two common real-world inputs undetected deterministically:
+    //
+    //   1. "My job title is Engineer"   — "job title" is a two-word compound field name;
+    //      the single-word alternation matched "job" but then failed on "title is".
+    //   2. "I got promoted to Senior Engineer" — no pattern matched this promotion phrasing.
+    //
+    // Without a fingerprint match, both messages fell through to model-based detection.
+    // If the model timed out or returned null, no fact_fingerprint was stored, so the
+    // subsequent supersession lookup (`WHERE fact_fingerprint = 'user_job_title' AND
+    // is_current = true`) found nothing and the old job-title entry was never superseded.
+    //
+    // FIX: Added deterministic patterns for "My job title is X" and "I got promoted to X",
+    //      added update-intent patterns for explicit job-title declarations, and modified
+    //      storeWithoutSupersession to persist fact_fingerprint so future supersession works.
+    const supersession = readRepoFile('api/services/supersession.js');
+    assert.ok(supersession, 'Could not read api/services/supersession.js');
+
+    // 1. Must have a pattern that explicitly handles "job title" as a compound field name.
+    //    The only pattern that does this is the one with `job\s+title\s+`.
+    const hasJobTitleCompoundPattern = supersession.includes('job\\s+title\\s+');
+    assert.ok(
+      hasJobTitleCompoundPattern,
+      'REGRESSION: supersession.js is missing a pattern for the compound "job title" field name. ' +
+      '"My job title is Engineer" will fail deterministic fingerprint detection and fall through ' +
+      'to the model fallback (slow, unreliable), so no fact_fingerprint is stored and future ' +
+      'supersession lookups for job_title will find nothing.'
+    );
+
+    // 2. Must have a pattern that matches promotion phrasing "got promoted to" / "been promoted to".
+    //    Without this, "I got promoted to Senior Engineer" is not fingerprinted deterministically.
+    const hasPromotionPattern = (
+      supersession.includes('promoted\\s+to') ||
+      supersession.includes('promoted to')
+    );
+    assert.ok(
+      hasPromotionPattern,
+      'REGRESSION: supersession.js is missing a promotion pattern ("got/been promoted to"). ' +
+      '"I got promoted to Senior Engineer" will fail deterministic fingerprint detection, ' +
+      'so storeWithSupersession will not fire and the old job-title entry stays is_current=true.'
+    );
+
+    // 3. storeWithoutSupersession must store fact_fingerprint when provided.
+    //    When "My job title is Engineer" is the FIRST occurrence (no existing entry to supersede),
+    //    supersessionSafe=false fires storeWithoutSupersession. If that function discards the
+    //    fingerprint, the subsequent "I got promoted to X" supersession lookup finds nothing.
+    //
+    //    The fix adds `factFingerprint` and `fingerprintConfidence` to the INSERT column list
+    //    inside storeWithoutSupersession, which is more precise than checking for "DO NOTHING".
+    const storeWithoutSupersessionStoresFp = (
+      // The fixed version destructures factFingerprint and includes it in the INSERT statement.
+      // Check for the fingerprint columns in the INSERT inside storeWithoutSupersession.
+      // This is more specific than just checking 'DO NOTHING' which could appear elsewhere.
+      (supersession.includes('factFingerprint = null') &&
+       supersession.includes('fact_fingerprint, fingerprint_confidence'))
+    );
+    assert.ok(
+      storeWithoutSupersessionStoresFp,
+      'REGRESSION: storeWithoutSupersession does not persist fact_fingerprint. ' +
+      'When "My job title is Engineer" is stored (no update intent, so supersession is skipped), ' +
+      'the fingerprint must still be written to the DB column so the subsequent ' +
+      '"I got promoted to X" supersession lookup can find and supersede this row. ' +
+      'Expected to find both "factFingerprint = null" (destructuring) and ' +
+      '"fact_fingerprint, fingerprint_confidence" (INSERT column list) in storeWithoutSupersession.'
+    );
+  });
 });
 
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');
