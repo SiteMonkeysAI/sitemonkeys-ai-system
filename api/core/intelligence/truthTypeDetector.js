@@ -306,10 +306,48 @@ export function detectByPattern(query) {
     };
   }
 
+  // FRESHNESS MARKER OVERRIDE — MUST RUN BEFORE CONVERSATIONAL CHECK
+  // Explicit freshness/recency requests are deterministic SEMI_STABLE triggers.
+  // These patterns mean the user explicitly wants CURRENT information — external lookup required.
+  //
+  // CRITICAL ORDER: This check runs BEFORE the conversational/personal pattern check so that
+  // conversational phrasing ("Have we gotten any further with what's going on with Greenland")
+  // does NOT suppress an external lookup that the user clearly wants. The query subject
+  // (geopolitics, markets, current events) must take priority over sentence structure.
+  // Previously (Issue #807 Fix 3) this ran after CONVERSATIONAL; the ordering is now corrected.
+  const FRESHNESS_OVERRIDE_PATTERNS = [
+    /most up[- ]to[- ]date/i,
+    /recent (information|news|updates|developments|events)/i,
+    /latest (information|news|updates|developments|events)/i,
+    /current (situation|status|state|events|developments)/i,
+    /most recent (news|information|updates|events|developments)/i,
+    /what'?s happening (with|in|about)/i,
+    /what'?s (going on|new) (with|in|about)/i,
+    /up[- ]to[- ]date (information|news|updates|events) (on|about|regarding|related to)/i,
+    // Conversational freshness — "any further with", "any update on", "any news on/about"
+    /\bany (further|updates?|news|developments?|progress|changes?) (with|on|about|regarding)\b/i,
+    // "have we gotten/made any progress/further" — person asks about evolving situation
+    /\b(gotten|made|have) any (further|progress|update|news)\b/i,
+  ];
+  const hasFreshnessMarker = FRESHNESS_OVERRIDE_PATTERNS.some(p => p.test(query));
+  if (hasFreshnessMarker) {
+    console.log(`[TRUTH-TYPE] Freshness marker detected — forcing SEMI_STABLE classification (external lookup required)`);
+    return {
+      type: TRUTH_TYPES.SEMI_STABLE,
+      confidence: 0.95,
+      stage: 1,
+      patterns_matched: [{ type: TRUTH_TYPES.SEMI_STABLE, pattern: 'explicit_freshness_marker' }],
+      conflict_detected: false,
+      reason: 'Explicit freshness/recency marker — requires current information lookup'
+    };
+  }
+
   // ISSUE #818 FIX: CONVERSATIONAL/PERSONAL Detection (before VOLATILE patterns)
   // Greetings, personal statements, memory commands, and emotional support queries
   // should NEVER trigger external lookup. They contain no "current events" intent.
   // Must run BEFORE VOLATILE patterns so "I need support today" is not caught by "today".
+  // NOTE: This runs AFTER freshness markers so queries like "Have we gotten any further with
+  // what's going on with Greenland" route to external lookup despite conversational phrasing.
   //
   // ISSUE #824 FIX: Added PERSONAL_RECALL patterns.
   // "Do you recall names of my monkeys?" was misclassified as SEMI_STABLE high_stakes
@@ -352,33 +390,6 @@ export function detectByPattern(query) {
       conflict_detected: false,
       reason: 'Conversational or personal statement — memory-first, no external lookup needed',
       skipExternalLookup: true
-    };
-  }
-
-  // FRESHNESS MARKER OVERRIDE (Issue #807 Fix 3)
-  // Explicit freshness/recency requests are deterministic SEMI_STABLE triggers.
-  // These patterns mean the user explicitly wants CURRENT information — external lookup required.
-  // This check runs BEFORE topic-based classification so freshness always wins.
-  const FRESHNESS_OVERRIDE_PATTERNS = [
-    /most up[- ]to[- ]date/i,
-    /recent (information|news|updates|developments|events)/i,
-    /latest (information|news|updates|developments|events)/i,
-    /current (situation|status|state|events|developments)/i,
-    /most recent (news|information|updates|events|developments)/i,
-    /what'?s happening (with|in|about)/i,
-    /what'?s (going on|new) (with|in|about)/i,
-    /up[- ]to[- ]date (information|news|updates|events) (on|about|regarding|related to)/i,
-  ];
-  const hasFreshnessMarker = FRESHNESS_OVERRIDE_PATTERNS.some(p => p.test(query));
-  if (hasFreshnessMarker) {
-    console.log(`[TRUTH-TYPE] Freshness marker detected — forcing SEMI_STABLE classification`);
-    return {
-      type: TRUTH_TYPES.SEMI_STABLE,
-      confidence: 0.95,
-      stage: 1,
-      patterns_matched: [{ type: TRUTH_TYPES.SEMI_STABLE, pattern: 'explicit_freshness_marker' }],
-      conflict_detected: false,
-      reason: 'Explicit freshness/recency marker — requires current information lookup'
     };
   }
 
