@@ -466,4 +466,96 @@ describe('E. CMP2 — International Character Preservation', () => {
   });
 });
 
+// ============================================================
+// SECTION F: SALARY SUPERSESSION — ISSUE #829 REGRESSION GUARDS
+// Ensures that "my salary is now $95,000" type statements are:
+// 1. Not misclassified as VOLATILE by truthTypeDetector
+// 2. Not have storage skipped in server.js when external data is incidentally present
+// 3. Matched by supersession fingerprint patterns in supersession.js
+// ============================================================
+
+describe('F. Salary Supersession Guards', () => {
+
+  it('F-001: truthTypeDetector CONVERSATIONAL_PATTERNS includes salary/income/wage', () => {
+    // BUG: "Actually my salary is now $95,000" was not caught by CONVERSATIONAL_PATTERNS.
+    // The personal-fact pattern list was missing salary/income/wage/pay/earnings/compensation,
+    // so the query fell through to VOLATILE_PATTERNS where the word "now" triggered VOLATILE
+    // classification and caused an external RSS lookup instead of personal memory storage.
+    // FIX: Added salary/income/wage/pay/earnings/compensation to the personal fact pattern,
+    // plus explicit patterns for "my salary is now $X" and "I (now) make/earn $X".
+    const detector = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(detector, 'Could not read truthTypeDetector.js');
+
+    // The personal-fact CONVERSATIONAL_PATTERNS must include salary/income terms in the same
+    // alternation group. Check for the exact pattern string added by the fix.
+    const hasPersonalSalaryTerms = (
+      detector.includes('salary|income|wage|pay|earnings|compensation')
+    );
+    assert.ok(
+      hasPersonalSalaryTerms,
+      'REGRESSION: truthTypeDetector.js CONVERSATIONAL_PATTERNS does not include salary/income/wage terms. ' +
+      '"Actually my salary is now $95,000" will be classified as VOLATILE (due to "now"), ' +
+      'triggering external lookup instead of personal memory storage.'
+    );
+
+    // Must also have a dedicated pattern handling "now" adverb between "is" and the dollar amount.
+    // Check for the salary-specific "now" pattern added by the fix.
+    const hasSalaryNowPattern = (
+      detector.includes('salary|income|wage|pay|earnings|compensation') &&
+      // The dedicated "my salary is now $X" pattern contains this substring
+      detector.includes('salary|income|wage|pay|earnings|compensation)\\s+is\\s+(now\\s+)?')
+    );
+    assert.ok(
+      hasSalaryNowPattern,
+      'REGRESSION: truthTypeDetector.js is missing the dedicated "my salary is now $X" pattern. ' +
+      'Without it, the word "now" triggers VOLATILE classification for salary updates.'
+    );
+  });
+
+  it('F-002: server.js isPersonalOrMemoryQuery includes salary/income/wage terms', () => {
+    // BUG: When a salary update was misclassified as VOLATILE and external lookup fired,
+    // storage was skipped because isPersonalOrMemoryQuery did not include salary/income/wage.
+    // The skip gate in server.js (both intelligent and supersession-aware storage paths)
+    // must recognise salary/income statements as personal facts even when hasExternal=true.
+    const server = readRepoFile('server.js');
+    assert.ok(server, 'Could not read server.js');
+
+    // Count occurrences — there are two separate isPersonalOrMemoryQuery checks in server.js
+    const hasSalaryInPersonalCheck = (
+      server.includes('salary|income|wage|pay|earnings|compensation') &&
+      server.includes('isPersonalOrMemoryQuery')
+    );
+    assert.ok(
+      hasSalaryInPersonalCheck,
+      'REGRESSION: server.js isPersonalOrMemoryQuery does not include salary/income/wage terms. ' +
+      'When a salary update incidentally triggers an external lookup, storage will be skipped ' +
+      'and the $95K update will never be written to the database.'
+    );
+  });
+
+  it('F-003: supersession.js user_salary fingerprint patterns handle "now" adverb', () => {
+    // BUG: The salary fingerprint Pattern 1 in supersession.js required the dollar amount
+    // to appear immediately after "is" (with only optional whitespace in between).
+    // "my salary is now $95,000" has "now" between "is" and the amount, so the pattern
+    // failed to match and storeWithSupersession did not detect a salary fingerprint.
+    // As a result no supersession occurred and the old $80K entry was never marked is_current=false.
+    const supersession = readRepoFile('api/services/supersession.js');
+    assert.ok(supersession, 'Could not read api/services/supersession.js');
+
+    // The salary patterns must accommodate an optional "now" between "is" and the amount.
+    // Check that the updated Pattern 1 source contains the "now" optional group, which is
+    // only present in the user_salary section of FINGERPRINT_PATTERNS.
+    const hasSalaryNowHandling = (
+      // The fix uses (?:is\s+(?:now\s+)?|:)? in the salary pattern
+      supersession.includes('is\\s+(?:now\\s+)?')
+    );
+    assert.ok(
+      hasSalaryNowHandling,
+      'REGRESSION: supersession.js user_salary fingerprint Pattern 1 does not handle the "now" adverb. ' +
+      '"my salary is now $95,000" will fail deterministic detection, meaning storeWithSupersession ' +
+      'will not fire supersession and the old salary entry will NOT be marked is_current=false.'
+    );
+  });
+});
+
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');
