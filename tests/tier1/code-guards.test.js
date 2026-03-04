@@ -355,4 +355,114 @@ describe('D. Configuration Safety', () => {
   });
 });
 
+// ============================================================
+// SECTION E: CMP2 — INTERNATIONAL CHARACTER PRESERVATION
+// Prevents regression of the diacritic-stripping bug in the
+// fact-extraction + compression pipeline (Issue CMP2).
+// ============================================================
+
+describe('E. CMP2 — International Character Preservation', () => {
+
+  it('E-001: intelligent-storage uses diacritic-preserving comparison for international names', () => {
+    // BUG (fixed): normalizeForComparison() stripped diacritics from BOTH sides,
+    // making "José" and "Jose" appear identical.  The fix uses .toLowerCase() only.
+    // GUARD: Ensure normalizeForComparison is NOT used to check whether names
+    // survived extraction (it would silently pass "Jose" as "José").
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'Could not read intelligent-storage.js');
+
+    // The old broken pattern: normalize BOTH sides and compare
+    const hasBrokenNormalize = (
+      storage.includes('normalizedFacts.includes(normalized)') ||
+      storage.includes('normalizeForComparison(facts)')
+    );
+
+    assert.ok(
+      !hasBrokenNormalize,
+      'CMP2 REGRESSION: The diacritic-normalizing comparison (normalizedFacts.includes(normalized)) ' +
+      'was re-introduced in intelligent-storage.js. This makes "José"→"Jose" undetectable. ' +
+      'Fix: compare facts.toLowerCase() vs name.toLowerCase() (diacritics preserved).'
+    );
+  });
+
+  it('E-002: aggressivePostProcessing protects lines with international characters', () => {
+    // BUG (fixed): Lines containing non-ASCII letters (e.g. "Contacts: José García, Björn")
+    // fell into `regularLines` and were word-truncated to 5 words or cut by slice limits.
+    // GUARD: Ensure unicodeNameLines (or equivalent) exist and bypass word truncation.
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'Could not read intelligent-storage.js');
+
+    const hasUnicodeLineProtection = (
+      storage.includes('unicodeNameLines') ||
+      (storage.includes('[^\\u0000-\\u007F]') && storage.includes('aggressivePostProcessing'))
+    );
+
+    assert.ok(
+      hasUnicodeLineProtection,
+      'CMP2 REGRESSION: aggressivePostProcessing no longer protects lines containing ' +
+      'international characters (unicodeNameLines or equivalent is missing). ' +
+      'Names like "Contacts: José García, Björn Þórsson" will be word-truncated or dropped.'
+    );
+  });
+
+  it('E-003: post-compression re-verification of international names exists', () => {
+    // BUG (fixed): The international-name re-injection ran BEFORE aggressivePostProcessing,
+    // so aggressivePostProcessing could still discard the re-injected names.
+    // GUARD: Ensure there is a second check AFTER aggressivePostProcessing.
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'Could not read intelligent-storage.js');
+
+    // Look for the post-compression re-check pattern: the check must reference
+    // processedFacts (the output of aggressivePostProcessing), not just `facts`.
+    const hasPostCompressionCheck = (
+      storage.includes('missingAfterCompression') ||
+      (storage.includes('processedFacts') && storage.includes('finalFacts'))
+    );
+
+    assert.ok(
+      hasPostCompressionCheck,
+      'CMP2 REGRESSION: Post-compression international name re-verification is missing. ' +
+      'Names re-injected before aggressivePostProcessing can be silently discarded. ' +
+      'Fix: after aggressivePostProcessing, re-check that all unicode names survived.'
+    );
+  });
+
+  it('E-004: extraction prompt explicitly instructs preservation of international characters', () => {
+    // GUARD: Ensure the GPT-4o-mini extraction prompt still contains the instruction
+    // to preserve diacritics.  Removing this instruction increases the probability
+    // of the model stripping accents even when prompted otherwise.
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'Could not read intelligent-storage.js');
+
+    const hasInternationalInstruction = (
+      storage.includes('PRESERVE INTERNATIONAL NAMES') ||
+      storage.includes('diacritics') ||
+      (storage.includes('José') && storage.includes('Björn') && storage.includes('accents'))
+    );
+
+    assert.ok(
+      hasInternationalInstruction,
+      'CMP2 REGRESSION: The extraction prompt no longer explicitly instructs ' +
+      'GPT-4o-mini to preserve international characters (diacritics, accents). ' +
+      'Without this, the model may silently anglicize names like "José"→"Jose".'
+    );
+  });
+
+  it('E-005: CMP2 is not listed in smd_deep known_failures in baselines.json', () => {
+    // Once the fix is in place, CMP2 should pass and no longer be a known failure.
+    const baselines = readRepoFile('tests/baselines.json');
+    assert.ok(baselines, 'Could not read tests/baselines.json');
+    const parsed = JSON.parse(baselines);
+
+    const smdKnownFailures = parsed?.suites?.smd_deep?.known_failures ?? [];
+    const cmp2StillFailing = smdKnownFailures.some(f => f.id === 'CMP2');
+
+    assert.ok(
+      !cmp2StillFailing,
+      'CMP2 is still listed as a known failure in tests/baselines.json (smd_deep suite). ' +
+      'Remove it once the international-character preservation fix has been deployed and verified.'
+    );
+  });
+});
+
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');

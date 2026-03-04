@@ -1457,15 +1457,14 @@ Facts (preserve user terminology + add synonyms):`;
       if (inputNames.length > 0) {
         console.log(`[EXTRACTION-FIX #759] Verifying ${inputNames.length} international names survived extraction:`, inputNames);
 
-        // Normalize for comparison (diacritic-aware)
-        const normalizeForComparison = (str) => {
-          return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-        };
-
-        const normalizedFacts = normalizeForComparison(facts);
+        // CMP2 FIX: Use case-insensitive but diacritic-PRESERVING comparison.
+        // The previous approach normalized (stripped diacritics from) BOTH sides,
+        // making it impossible to detect when GPT-4o-mini converted "José"→"Jose"
+        // or "Björn"→"Bjorn" — both sides normalized to "jose"/"bjorn" and the
+        // missing accent was never detected.  Now we compare lowercase-only so
+        // "José".toLowerCase() = "josé" ≠ "jose" in facts → correctly flagged missing.
         const missingNames = inputNames.filter(name => {
-          const normalized = normalizeForComparison(name);
-          return !normalizedFacts.includes(normalized);
+          return !facts.toLowerCase().includes(name.toLowerCase());
         });
 
         if (missingNames.length > 0) {
@@ -1602,11 +1601,25 @@ Facts (preserve user terminology + add synonyms):`;
         return '';
       }
 
-      console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${processedFacts.split('\n').filter(l => l.trim()).length} facts`);
-      console.log(`[EXTRACTION-DEBUG] Original: "${originalSnippet}"`);
-      console.log(`[EXTRACTION-DEBUG] Extracted: "${processedFacts.substring(0, 150)}"`);
+      // CMP2 FIX (post-compression): Re-verify international names survived
+      // aggressivePostProcessing (which truncates lines to 5 words and limits
+      // total fact count).  inputNames was computed above before compression.
+      let finalFacts = processedFacts;
+      if (inputNames && inputNames.length > 0) {
+        const missingAfterCompression = inputNames.filter(name =>
+          !finalFacts.toLowerCase().includes(name.toLowerCase())
+        );
+        if (missingAfterCompression.length > 0) {
+          console.warn(`[EXTRACTION-FIX #CMP2] ${missingAfterCompression.length} international name(s) lost during aggressivePostProcessing, re-injecting:`, missingAfterCompression);
+          finalFacts += '\nContacts: ' + missingAfterCompression.join(', ');
+        }
+      }
 
-      return processedFacts;
+      console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${finalFacts.split('\n').filter(l => l.trim()).length} facts`);
+      console.log(`[EXTRACTION-DEBUG] Original: "${originalSnippet}"`);
+      console.log(`[EXTRACTION-DEBUG] Extracted: "${finalFacts.substring(0, 150)}"`);
+
+      return finalFacts;
     } catch (error) {
       console.error('[INTELLIGENT-STORAGE] ❌ Fact extraction failed:', error.message);
       // Fallback: ultra-compressed version WITH identifier protection
@@ -1707,10 +1720,22 @@ Facts (preserve user terminology + add synonyms):`;
       return false;
     };
 
-    // Separate lines by type: identifiers, synonyms, regular
+    // Separate lines by type: identifiers, synonyms, unicode names, regular
     const identifierLines = lines.filter(line => HIGH_ENTROPY_PATTERN.test(line));
     const synonymLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && hasSynonyms(line));
-    const regularLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && !hasSynonyms(line));
+    // CMP2 FIX: Protect lines containing non-ASCII (international) characters from
+    // word-count truncation and slot-count limits.  These lines hold names like
+    // "José García" or "Björn Þórsson" that must survive compression intact.
+    const unicodeNameLines = lines.filter(line =>
+      !HIGH_ENTROPY_PATTERN.test(line) &&
+      !hasSynonyms(line) &&
+      /[^\u0000-\u007F]/.test(line)
+    );
+    const regularLines = lines.filter(line =>
+      !HIGH_ENTROPY_PATTERN.test(line) &&
+      !hasSynonyms(line) &&
+      !/[^\u0000-\u007F]/.test(line)
+    );
 
     // ADAPTIVE LIMIT: Allow more facts if they contain identifiers or synonyms
     const maxFacts = (identifierLines.length + synonymLines.length) > 0 ? 5 : 3;
@@ -1748,8 +1773,12 @@ Facts (preserve user terminology + add synonyms):`;
     // Don't apply word limits to lines with synonyms - they need the full synonym list
     const processedSynonymLines = synonymLines.slice(0, 5);  // Just limit the count, not the content
 
-    // Combine: Identifier lines first (most important), then synonym lines, then regular lines
-    lines = [...processedIdentifierLines, ...processedSynonymLines, ...processedRegularLines];
+    // CMP2 FIX: Unicode name lines — preserve entire line, no word-count truncation.
+    // These hold international names that must stay intact (e.g. "Contacts: José García, Björn Þórsson").
+    const processedUnicodeNameLines = unicodeNameLines; // no truncation, no count limit
+
+    // Combine: Identifier lines first (most important), then synonym lines, then unicode names, then regular lines
+    lines = [...processedIdentifierLines, ...processedSynonymLines, ...processedUnicodeNameLines, ...processedRegularLines];
 
     // Remove duplicates (case-insensitive)
     const seen = new Set();
@@ -1762,7 +1791,7 @@ Facts (preserve user terminology + add synonyms):`;
       return true;
     });
 
-    // Remove very short facts (< 3 words), UNLESS they contain identifiers or synonyms
+    // Remove very short facts (< 3 words), UNLESS they contain identifiers, synonyms, or unicode names
     lines = lines.filter(line => {
       if (HIGH_ENTROPY_PATTERN.test(line)) {
         return true; // Always keep lines with identifiers
@@ -1770,10 +1799,13 @@ Facts (preserve user terminology + add synonyms):`;
       if (hasSynonyms(line)) {
         return true; // Always keep lines with synonyms
       }
+      if (/[^\u0000-\u007F]/.test(line)) {
+        return true; // CMP2 FIX: Always keep lines with international characters
+      }
       return line.split(/\s+/).length >= 3;
     });
 
-    // Ultra-aggressive compression: remove ALL filler words (but not from identifier or synonym lines)
+    // Ultra-aggressive compression: remove ALL filler words (but not from identifier, synonym, or unicode name lines)
     const fillerWords = ['the', 'a', 'an', 'this', 'that', 'these', 'those', 'is', 'are', 'was', 'were', 'has', 'have', 'had'];
     lines = lines.map(line => {
       // Don't remove filler words from identifier lines - preserve full context
@@ -1783,6 +1815,11 @@ Facts (preserve user terminology + add synonyms):`;
 
       // CRITICAL FIX #504: Don't remove filler words from synonym lines - preserve full content
       if (hasSynonyms(line)) {
+        return line;
+      }
+
+      // CMP2 FIX: Don't remove filler words from lines containing international characters
+      if (/[^\u0000-\u007F]/.test(line)) {
         return line;
       }
 
