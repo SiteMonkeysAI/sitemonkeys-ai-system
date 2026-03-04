@@ -1545,20 +1545,52 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
 
   // Gate 3: Extract enumerable items from memory context
   // Look for patterns like "Name (descriptor), Name (descriptor)" or "Name, Name, and Name"
+  //
+  // SCOPE RESTRICTION: Only extract names from contact-relevant memory segments.
+  // Memory context is a concatenated string of entries separated by double newlines.
+  // Scanning all entries risks extracting children's names, animal species, and other
+  // non-contact proper nouns (e.g. "Emerald Next" from a family entry, "Black Cap Capuchin"
+  // from a pet entry).
   const names = [];
 
-  // Pattern 1: Name (descriptor) format
+  // Split into individual memory entries (joined with \n\n by the retrieval layer)
+  const memoryEntries = memoryContext.split(/\n\n+/);
+
+  // Only scan entries that explicitly describe contacts/people relationships
+  const CONTACT_ENTRY_INDICATORS = /\b(contacts?|key\s+people|key\s+contacts|co-?workers?|colleague|friend|associate|advisor|email|phone|cell)\b/i;
+
+  // Exclude entries clearly about family members, pets, or animals even if a contact term
+  // happens to co-occur (e.g. "my friend's daughter").
+  // Family terms: daughter, son, child/children, kid, baby, infant, toddler
+  // Animal/species terms: monkey, capuchin, gorilla, chimpanzee, species, animal, pet, dog, cat, bird
+  const NON_CONTACT_ENTRY_INDICATORS = /\b(daughter|son|child(?:ren)?|kid|baby|infant|toddler|monkey|capuchin|gorilla|chimpanzee|species|animal|pet|dog|cat|bird)\b/i;
+
+  const contactOnlyContext = memoryEntries
+    .filter(entry => CONTACT_ENTRY_INDICATORS.test(entry) && !NON_CONTACT_ENTRY_INDICATORS.test(entry))
+    .join('\n\n');
+
+  // If no contact-specific entries are present, there is nothing to supplement
+  if (!contactOnlyContext.trim()) {
+    return { response, primitiveLog };
+  }
+
+  // Pattern 1: Name (descriptor) format — only from contact-scoped context
+  // Require at least two words (First Last) to prevent single-word fragments like "García"
   const namedPattern = /([A-ZÀ-ÿ][a-zà-ÿ]+(?:[-\s][A-ZÀ-ÿ][a-zà-ÿ]+)*(?:[-'][A-ZÀ-ÿ][a-zà-ÿ]+)*)\s*\(/g;
   let match;
-  while ((match = namedPattern.exec(memoryContext)) !== null) {
-    names.push(match[1].trim());
+  while ((match = namedPattern.exec(contactOnlyContext)) !== null) {
+    const candidateName = match[1].trim();
+    // Require at least two words (First Last minimum) — no single-word fragments
+    if (/\S+\s+\S+/.test(candidateName)) {
+      names.push(candidateName);
+    }
   }
 
   // Pattern 2: Comma-separated list (if no parenthetical descriptors found)
   if (names.length === 0) {
     // Split by common separators and extract proper nouns
     // This handles: "Name1, Name2, Name3" or "Name1, Name2 and Name3"
-    const parts = memoryContext.split(/[,;]|(?:\s+and\s+)/).map(s => s.trim());
+    const parts = contactOnlyContext.split(/[,;]|(?:\s+and\s+)/).map(s => s.trim());
     
     // Pattern for proper names with support for:
     // - Multi-part names (e.g., "Zhang Wei")
@@ -1577,7 +1609,10 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
       const trimmed = part.trim();
       const nameMatch = trimmed.match(properNamePattern);
       if (nameMatch && !names.includes(nameMatch[1])) {
-        names.push(nameMatch[1]);
+        // Require at least two words (First Last minimum) — no single-word fragments
+        if (/\S+\s+\S+/.test(nameMatch[1])) {
+          names.push(nameMatch[1]);
+        }
       }
     }
   }

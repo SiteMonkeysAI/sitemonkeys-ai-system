@@ -6649,9 +6649,11 @@ Mode: ${modeConfig?.display_name || mode}
               }
 
               // Fallback: extract from content if no anchors exist
+              // Require First + Last (two words minimum) to avoid single-word fragments
+              // like "García" being extracted independently of the full "José García".
               if (!anchors || !anchors.unicode || anchors.unicode.length === 0) {
                 const rowContent = (row.content || '').substring(0, 500);
-                const nameMatches = rowContent.matchAll(/\b([A-ZÀ-ÿ][a-zà-ÿ]+(?:\s+[A-ZÀ-ÿ][a-zà-ÿ]+)?)\b/g);
+                const nameMatches = rowContent.matchAll(/\b([A-ZÀ-ÿ][a-zà-ÿ]+\s+[A-ZÀ-ÿ][a-zà-ÿ]+)\b/g);
                 
                 for (const match of nameMatches) {
                   const name = match[1];

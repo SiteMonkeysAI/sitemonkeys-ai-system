@@ -627,4 +627,101 @@ describe('F. Salary Supersession Guards', () => {
   });
 });
 
+// ============================================================
+// SECTION G: Contact Extraction Scoping Guards
+// Prevent monkey species, children's names, and partial name
+// fragments from polluting "Your contacts include:" footers.
+// ============================================================
+describe('G. Contact Extraction Scoping Guards', () => {
+  it('G-001: applyListCompletenessFallback filters memory context to contact-relevant segments', () => {
+    const aiProcessors = readRepoFile('api/lib/ai-processors.js');
+    assert.ok(aiProcessors, 'api/lib/ai-processors.js must exist');
+
+    // The function must split memoryContext into individual entries and only scan
+    // entries that contain explicit contact indicators before extracting names.
+    const hasSplitByEntries = /memoryContext\.split\(\/\\n\\n/.test(aiProcessors);
+    assert.ok(
+      hasSplitByEntries,
+      'REGRESSION: applyListCompletenessFallback must split memoryContext by double-newline ' +
+      'to isolate individual memory entries before name extraction. Without this, names from ' +
+      'family/pet entries (e.g. "Black Cap Capuchin", "Emerald Next") are incorrectly extracted.'
+    );
+  });
+
+  it('G-002: applyListCompletenessFallback uses CONTACT_ENTRY_INDICATORS to scope name extraction', () => {
+    const aiProcessors = readRepoFile('api/lib/ai-processors.js');
+    assert.ok(aiProcessors, 'api/lib/ai-processors.js must exist');
+
+    const hasContactIndicators = aiProcessors.includes('CONTACT_ENTRY_INDICATORS');
+    assert.ok(
+      hasContactIndicators,
+      'REGRESSION: applyListCompletenessFallback must define CONTACT_ENTRY_INDICATORS to ' +
+      'restrict name extraction to entries explicitly about contacts/colleagues/friends. ' +
+      'Without this guard, any proper noun in any memory entry can become a "contact".'
+    );
+  });
+
+  it('G-003: applyListCompletenessFallback excludes non-contact entry types (family, pets)', () => {
+    const aiProcessors = readRepoFile('api/lib/ai-processors.js');
+    assert.ok(aiProcessors, 'api/lib/ai-processors.js must exist');
+
+    const hasNonContactExclusion = aiProcessors.includes('NON_CONTACT_ENTRY_INDICATORS');
+    assert.ok(
+      hasNonContactExclusion,
+      'REGRESSION: applyListCompletenessFallback must define NON_CONTACT_ENTRY_INDICATORS to ' +
+      'exclude memory entries about children (daughter/son/child), animals (monkey/capuchin), ' +
+      'and pets from name extraction. These entries must not contribute to the contacts list.'
+    );
+  });
+
+  it('G-004: applyListCompletenessFallback requires full names (min 2 words) — Pattern 1', () => {
+    const aiProcessors = readRepoFile('api/lib/ai-processors.js');
+    assert.ok(aiProcessors, 'api/lib/ai-processors.js must exist');
+
+    // The Pattern 1 branch (Name (descriptor) format) must require at least two words
+    // before accepting a match — single-word fragments like "García" must be rejected.
+    // We check for the two-word guard regex applied to any variable in Pattern 1's block,
+    // which appears between namedPattern.exec and names.push.
+    const hasFullNameGuardP1 = /\/\\S\+\\s\+\\S\+\/\.test\(/.test(aiProcessors);
+    assert.ok(
+      hasFullNameGuardP1,
+      'REGRESSION: Pattern 1 in applyListCompletenessFallback must reject single-word name ' +
+      'fragments. A /\\S+\\s+\\S+/.test(...) guard is required to ensure only "First Last" ' +
+      'style full names are accepted (not bare "García" extracted from "José García").'
+    );
+  });
+
+  it('G-005: applyListCompletenessFallback requires full names (min 2 words) — Pattern 2', () => {
+    const aiProcessors = readRepoFile('api/lib/ai-processors.js');
+    assert.ok(aiProcessors, 'api/lib/ai-processors.js must exist');
+
+    // Pattern 2 (comma-separated list) must also require at least two words per extracted name.
+    // Count occurrences: there must be at least two — one for Pattern 1 and one for Pattern 2.
+    const twoWordGuardCount = (aiProcessors.match(/\/\\S\+\\s\+\\S\+\/\.test\(/g) || []).length;
+    assert.ok(
+      twoWordGuardCount >= 2,
+      'REGRESSION: Both Pattern 1 and Pattern 2 in applyListCompletenessFallback must reject ' +
+      'single-word name fragments. Expected at least 2 occurrences of /\\S+\\s+\\S+/.test(...) ' +
+      `but found ${twoWordGuardCount}. Pattern 2 (comma-separated) must also require First+Last.`
+    );
+  });
+
+  it('G-006: enforceUnicodeNames fallback regex requires minimum two-word names', () => {
+    const orchestrator = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orchestrator, 'api/core/orchestrator.js must exist');
+
+    // The fallback content extraction inside #enforceUnicodeNames must use a regex
+    // that requires First + Last (two words) to prevent single-word surname fragments
+    // from being injected into the "Your contacts include:" footer.
+    // Pattern: /\b([A-ZÀ-ÿ][a-zà-ÿ]+\s+[A-ZÀ-ÿ][a-zà-ÿ]+)\b/g  (no ? after second word group)
+    const hasTwoWordFallback = orchestrator.includes('[A-ZÀ-ÿ][a-zà-ÿ]+\\s+[A-ZÀ-ÿ][a-zà-ÿ]+');
+    assert.ok(
+      hasTwoWordFallback,
+      'REGRESSION: The fallback name extraction in #enforceUnicodeNames must require ' +
+      'two words (First Last) — the old optional second-word pattern (?:\\s+...)? allowed ' +
+      'single surnames like "García" to pass through independently.'
+    );
+  });
+});
+
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');
