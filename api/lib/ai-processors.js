@@ -1534,6 +1534,15 @@ export function applyListCompletenessFallback(response, memoryContext, userQuery
     return { response, primitiveLog };
   }
 
+  // Gate 2b: Require that the query is specifically about contacts / people to prevent
+  // monkey names, children's names, and other non-contact proper nouns from being
+  // appended to the response with the label "Your contacts are:".
+  // This primitive targets human contact lists only.
+  const isContactSpecificQuery = /\b(contacts?|key people|colleagues?|associates?|connections?|co-workers?|clients?)\b/i.test(userQuery);
+  if (!isContactSpecificQuery) {
+    return { response, primitiveLog };
+  }
+
   // Gate 3: Extract enumerable items from memory context
   // Look for patterns like "Name (descriptor), Name (descriptor)" or "Name, Name, and Name"
   const names = [];

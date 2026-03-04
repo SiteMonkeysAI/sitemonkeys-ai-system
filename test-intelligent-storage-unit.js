@@ -228,6 +228,74 @@ async function runUnitTests() {
     }
   });
 
+  console.log('\n🛡️ Pollution Prevention Tests (Issue: Zombie Memory Entries)\n');
+
+  // Test: detectNonUserQuery catches memory-retrieval requests
+  test('detectNonUserQuery skips "what do you recall about" queries', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('What do you recall about my children?');
+    if (!result.shouldSkip) throw new Error('Memory-retrieval request should be skipped');
+    if (result.reason !== 'memory_retrieval_request_not_a_fact') throw new Error(`Wrong reason: ${result.reason}`);
+  });
+
+  test('detectNonUserQuery skips "can you remind me" queries', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('Can you remind me of the information I told you?');
+    if (!result.shouldSkip) throw new Error('Memory-retrieval request should be skipped');
+  });
+
+  test('detectNonUserQuery skips "what have I told you" queries', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('What have I told you about my job?');
+    if (!result.shouldSkip) throw new Error('Memory-retrieval request should be skipped');
+  });
+
+  test('detectNonUserQuery skips meta-system queries ("why didn\'t you")', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery("Why didn't you look up information?");
+    if (!result.shouldSkip) throw new Error('Meta-system query should be skipped');
+    if (result.reason !== 'meta_system_query_not_a_user_fact') throw new Error(`Wrong reason: ${result.reason}`);
+  });
+
+  test('detectNonUserQuery skips "if you could redesign this system" queries', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('If you could redesign this entire intelligent system, what would you change?');
+    if (!result.shouldSkip) throw new Error('Meta-system query should be skipped');
+  });
+
+  test('detectNonUserQuery does NOT skip real user facts', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('My daughter Emma started kindergarten this year');
+    if (result.shouldSkip) throw new Error('Real user fact should NOT be skipped');
+  });
+
+  // Test: validateExtractedFacts rejects system component names
+  test('validateExtractedFacts rejects facts containing truthTypeDetector', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.validateExtractedFacts('Components: truthTypeDetector, externalLookupEngine, ttlCacheManager');
+    if (result.valid) throw new Error('System component metadata should be rejected');
+    if (result.reason !== 'system_component_metadata') throw new Error(`Wrong reason: ${result.reason}`);
+  });
+
+  test('validateExtractedFacts rejects facts containing externalLookupEngine', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.validateExtractedFacts('AI system: externalLookupEngine handles external verification');
+    if (result.valid) throw new Error('System component metadata should be rejected');
+  });
+
+  test('validateExtractedFacts accepts normal user facts', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.validateExtractedFacts('Income: $95,000 salary. Location: Austin, Texas.');
+    if (!result.valid) throw new Error('Normal user facts should be accepted');
+  });
+
+  test('validateExtractedFacts accepts monkey names (not system components)', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.validateExtractedFacts('Pets: capuchin monkeys named Roxy, Lullaby, Ly');
+    if (!result.valid) throw new Error('Monkey names should be accepted as valid user facts');
+  });
+
+
   console.log('\n═══════════════════════════════════════════════');
   console.log('📊 TEST SUMMARY');
   console.log('═══════════════════════════════════════════════');

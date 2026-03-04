@@ -6519,12 +6519,13 @@ Mode: ${modeConfig?.display_name || mode}
       // GATING CONDITION: User intent is contacts/names query
       // ISSUE #713 REFINEMENT: More precise trigger - only for contact queries
       // FIX #718 CMP2: Use bounded includes for better contact query detection
+      // FIX zombie-entries: Remove bare "names" match — too broad, fires for
+      //   "names of my monkeys" and injects contact data into unrelated responses.
       // ═══════════════════════════════════════════════════════════════
       const q = String(query || "").slice(0, 4000).toLowerCase();
       const isContactQuery =
         q.includes("contact") ||
         q.includes("contacts") ||
-        q.includes("names") ||
         q.includes("who are my") ||
         q.includes("list my");
 
