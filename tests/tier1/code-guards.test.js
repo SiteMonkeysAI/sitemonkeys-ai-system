@@ -434,10 +434,11 @@ describe('E. CMP2 — International Character Preservation', () => {
     const storage = readRepoFile('api/memory/intelligent-storage.js');
     assert.ok(storage, 'Could not read intelligent-storage.js');
 
+    // Check for the keyword that marks the critical preservation instruction.
+    // The exact examples (José, Björn) may change but the concept must stay.
     const hasInternationalInstruction = (
       storage.includes('PRESERVE INTERNATIONAL NAMES') ||
-      storage.includes('diacritics') ||
-      (storage.includes('José') && storage.includes('Björn') && storage.includes('accents'))
+      storage.includes('diacritics')
     );
 
     assert.ok(

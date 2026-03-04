@@ -1454,18 +1454,25 @@ Facts (preserve user terminology + add synonyms):`;
       // FIX #759-CMP2: Protect international names with special characters
       // Extract names from input and verify they survived compression
       const inputNames = this.extractUnicodeNames(userMsg);
+
+      // CMP2 FIX: Unicode-aware, diacritic-PRESERVING presence check.
+      // The previous approach normalized (stripped diacritics from) BOTH sides,
+      // making it impossible to detect when GPT-4o-mini converted "José"→"Jose"
+      // or "Björn"→"Bjorn" — both sides normalized to "jose"/"bjorn" and the
+      // missing accent was never detected.
+      // Word-boundary-aware regex prevents false positives where a name like "Zhang"
+      // would be incorrectly matched inside a longer token.
+      const nameIsPresent = (text, name) => {
+        // Escape regex special characters in the name (handles parens, dots, etc.)
+        const escaped = name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Unicode-aware word boundaries: ensure name is not part of a longer word
+        return new RegExp(`(?:^|[^\\p{L}\\p{N}_])${escaped}(?:[^\\p{L}\\p{N}_]|$)`, 'iu').test(text.toLowerCase());
+      };
+
       if (inputNames.length > 0) {
         console.log(`[EXTRACTION-FIX #759] Verifying ${inputNames.length} international names survived extraction:`, inputNames);
 
-        // CMP2 FIX: Use case-insensitive but diacritic-PRESERVING comparison.
-        // The previous approach normalized (stripped diacritics from) BOTH sides,
-        // making it impossible to detect when GPT-4o-mini converted "José"→"Jose"
-        // or "Björn"→"Bjorn" — both sides normalized to "jose"/"bjorn" and the
-        // missing accent was never detected.  Now we compare lowercase-only so
-        // "José".toLowerCase() = "josé" ≠ "jose" in facts → correctly flagged missing.
-        const missingNames = inputNames.filter(name => {
-          return !facts.toLowerCase().includes(name.toLowerCase());
-        });
+        const missingNames = inputNames.filter(name => !nameIsPresent(facts, name));
 
         if (missingNames.length > 0) {
           console.warn(`[EXTRACTION-FIX #759-CMP2] Re-injecting ${missingNames.length} lost international names:`, missingNames);
@@ -1603,11 +1610,11 @@ Facts (preserve user terminology + add synonyms):`;
 
       // CMP2 FIX (post-compression): Re-verify international names survived
       // aggressivePostProcessing (which truncates lines to 5 words and limits
-      // total fact count).  inputNames was computed above before compression.
+      // total fact count).  inputNames and nameIsPresent are both in scope above.
       let finalFacts = processedFacts;
       if (inputNames && inputNames.length > 0) {
         const missingAfterCompression = inputNames.filter(name =>
-          !finalFacts.toLowerCase().includes(name.toLowerCase())
+          !nameIsPresent(finalFacts, name)
         );
         if (missingAfterCompression.length > 0) {
           console.warn(`[EXTRACTION-FIX #CMP2] ${missingAfterCompression.length} international name(s) lost during aggressivePostProcessing, re-injecting:`, missingAfterCompression);
@@ -1775,7 +1782,8 @@ Facts (preserve user terminology + add synonyms):`;
 
     // CMP2 FIX: Unicode name lines — preserve entire line, no word-count truncation.
     // These hold international names that must stay intact (e.g. "Contacts: José García, Björn Þórsson").
-    const processedUnicodeNameLines = unicodeNameLines; // no truncation, no count limit
+    // Capped at 10 to prevent unbounded output for extreme edge cases.
+    const processedUnicodeNameLines = unicodeNameLines.slice(0, 10);
 
     // Combine: Identifier lines first (most important), then synonym lines, then unicode names, then regular lines
     lines = [...processedIdentifierLines, ...processedSynonymLines, ...processedUnicodeNameLines, ...processedRegularLines];
