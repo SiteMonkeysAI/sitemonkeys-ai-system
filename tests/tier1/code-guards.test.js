@@ -203,6 +203,21 @@ describe('B. Known Crash Patterns (Regression Guards)', () => {
     }
   });
 
+  it('B-005b: document-extractor must not call client.annotateFile (method does not exist)', () => {
+    // BUG: client.annotateFile() does not exist on ImageAnnotatorClient in @google-cloud/vision v5.x
+    // CRASH: "client.annotateFile is not a function" at runtime on any PDF OCR attempt
+    // FIX: Replaced with client.batchAnnotateFiles({ requests: [...] }) which is the correct API
+    const extractor = readRepoFile('api/lib/document-extractor.js');
+    assert.ok(extractor, 'Could not read api/lib/document-extractor.js');
+
+    assert.ok(
+      !extractor.includes('client.annotateFile('),
+      'REGRESSION: client.annotateFile() found in document-extractor.js — ' +
+      'this method does not exist on ImageAnnotatorClient and will throw at runtime. ' +
+      'Use client.batchAnnotateFiles({ requests: [...] }) instead.'
+    );
+  });
+
   it('B-005: "logExtractionError" must not be called on coreSystem', () => {
     // BUG: intelligence.js called this.coreSystem.logExtractionError() but method doesn't exist
     // CRASH: "logExtractionError is not a function"
