@@ -284,6 +284,38 @@ export class IntelligentMemoryStorage {
       return { shouldSkip: true, reason: 'general_weather_query_not_about_user' };
     }
 
+    // Memory-retrieval requests — user asking the AI to recall stored information
+    // These are queries, not facts, so they must not be stored as memories
+    const memoryRetrievalPatterns = [
+      /\bwhat do you (know|recall|remember) about\b/i,
+      /\btell me (what|everything) you (know|remember|recall)\b/i,
+      /\bwhat (have i|did i) (tell|told) you\b/i,
+      /\bwhat information (do you have|have you stored|did i give you)\b/i,
+      /\bcan you remind me (of|about|what)\b/i,
+      /\bdo you (still )?recall\b/i,
+      /\brecall (what|the|my|everything)\b/i,
+      /\bremind me (?:of|about|what)\b/i,
+    ];
+
+    for (const pattern of memoryRetrievalPatterns) {
+      if (pattern.test(content)) {
+        return { shouldSkip: true, reason: 'memory_retrieval_request_not_a_fact' };
+      }
+    }
+
+    // Meta-system queries — user asking about the AI system itself, not providing personal facts
+    const metaSystemPatterns = [
+      /\bif you could (?:redesign|rebuild|rewrite|change|improve)\b/i,
+      /\bwhy (?:didn'?t|can'?t|won'?t|don'?t) you\b/i,
+      /\bhow (?:does|do|would|should) (?:the )?(?:system|ai|you|this) (?:work|function|handle|process|know|store)\b/i,
+    ];
+
+    for (const pattern of metaSystemPatterns) {
+      if (pattern.test(content)) {
+        return { shouldSkip: true, reason: 'meta_system_query_not_a_user_fact' };
+      }
+    }
+
     // General information queries without personal context
     const generalInfoPatterns = [
       /^(?:what|who|when|where|why|how) (?:is|are|was|were|did|does|do)/i,  // "What is Bitcoin?"
@@ -359,6 +391,28 @@ export class IntelligentMemoryStorage {
     }
 
     return false;
+  }
+
+  /**
+   * Validate extracted facts don't contain system component metadata
+   * Post-extraction guard: prevents AI system internals from being stored as user memories
+   * @param {string} facts - Extracted facts string from GPT-4o-mini
+   * @returns {{ valid: boolean, reason: string|null }}
+   */
+  validateExtractedFacts(facts) {
+    if (!facts || typeof facts !== 'string') {
+      return { valid: false, reason: 'empty_facts' };
+    }
+
+    // Reject facts that contain internal AI system component names.
+    // These appear when the user discusses the system architecture and extraction
+    // incorrectly captures technical metadata instead of personal user facts.
+    const SYSTEM_COMPONENT_PATTERN = /\b(truthTypeDetector|externalLookupEngine|ttlCacheManager|hierarchyRouter|semanticAnalyzer|IntelligentMemoryStorage|persistent_memories|Railway deployment|85% margin validation)\b/i;
+    if (SYSTEM_COMPONENT_PATTERN.test(facts)) {
+      return { valid: false, reason: 'system_component_metadata' };
+    }
+
+    return { valid: true, reason: null };
   }
 
   /**
@@ -1019,6 +1073,16 @@ export class IntelligentMemoryStorage {
       // STORAGE CONTRACT DIAGNOSTIC LOGGING (Issue #648)
       console.log(`[STORAGE-CONTRACT] extracted_facts_length=${facts?.length || 0} first_100_chars="${facts?.substring(0, 100) || ''}"`);
 
+      // Post-extraction validation: reject facts containing system component metadata
+      // Prevents AI architecture terms (truthTypeDetector, externalLookupEngine, etc.)
+      // from being stored as personal user memories when the user discusses the system
+      if (facts && facts.trim().length > 0) {
+        const factsValidation = this.validateExtractedFacts(facts);
+        if (!factsValidation.valid && factsValidation.reason !== 'empty_facts') {
+          console.log(`[INTELLIGENT-STORAGE] ⏭️ Skipping storage — extracted facts contain non-user metadata (${factsValidation.reason})`);
+          return { action: 'skipped', reason: factsValidation.reason };
+        }
+      }
 
       // Validation: Check if numeric values from input survived extraction
       // Using bounded patterns to prevent ReDoS vulnerability
