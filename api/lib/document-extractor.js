@@ -5,7 +5,7 @@
 import path from 'path';
 import mammoth from 'mammoth';
 import pdfParse from 'pdf-parse/lib/pdf-parse.js';
-import axios from 'axios';
+import vision from '@google-cloud/vision';
 
 // --- Configuration (from environment) ---
 // OCR_ENABLED is read at call time so the kill switch works without restart
@@ -55,30 +55,56 @@ async function tryPdfParse(buffer) {
   }
 }
 
-// --- Google Cloud Vision: OCR for a single image buffer ---
+// --- Google Cloud Vision: lazy singleton client ---
+// Reads service account credentials from GOOGLE_CREDENTIALS_JSON at call time so
+// the env var doesn't need to be set during module load (e.g. in test environments).
+// Note: ImageAnnotatorClient constructor is synchronous, so Node.js's single-threaded
+// event loop guarantees this lazy initializer is race-condition-free.
 
-async function ocrImageWithGoogleVision(imageBuffer, mimeType) {
-  const apiKey = process.env.GOOGLE_VISION_API_KEY;
-  if (!apiKey) {
-    throw new Error('GOOGLE_VISION_API_KEY environment variable is required for OCR functionality');
+let _visionClient = null;
+
+function getVisionClient() {
+  if (_visionClient) return _visionClient;
+
+  const credentialsJson = process.env.GOOGLE_CREDENTIALS_JSON;
+  if (!credentialsJson) {
+    throw new Error(
+      'GOOGLE_CREDENTIALS_JSON environment variable is not set. ' +
+      'Set it to the JSON content of your Google Cloud service account credentials file.'
+    );
   }
 
+  let credentials;
+  try {
+    credentials = JSON.parse(credentialsJson);
+  } catch (err) {
+    throw new Error(`GOOGLE_CREDENTIALS_JSON is not valid JSON: ${err.message}`);
+  }
+
+  const projectId = process.env.GOOGLE_PROJECT_ID;
+  if (!projectId) {
+    console.log('[UPLOAD] Warning: GOOGLE_PROJECT_ID is not set — using project from service account credentials');
+  }
+
+  _visionClient = new vision.ImageAnnotatorClient({
+    credentials,
+    ...(projectId ? { projectId } : {}),
+  });
+
+  return _visionClient;
+}
+
+// --- Google Cloud Vision: OCR for a single image buffer ---
+
+async function ocrImageWithGoogleVision(imageBuffer) {
+  const client = getVisionClient();
   const base64Image = imageBuffer.toString('base64');
 
-  const response = await axios.post(
-    `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`,
-    {
-      requests: [
-        {
-          image: { content: base64Image },
-          features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
-        },
-      ],
-    },
-    { timeout: 30000 },
-  );
+  const [result] = await client.documentTextDetection({
+    image: { content: base64Image },
+  });
 
-  const annotation = response.data.responses?.[0]?.fullTextAnnotation;
+  const annotation = result.fullTextAnnotation;
   if (!annotation) return { text: '', confidence: 0 };
 
   const text = annotation.text || '';
@@ -100,14 +126,11 @@ async function ocrImageWithGoogleVision(imageBuffer, mimeType) {
 }
 
 // --- Google Cloud Vision: OCR for a PDF buffer ---
-// Uses the files:annotate endpoint which accepts inline PDFs (up to 5 pages per request).
-// Batches requests when numPages > 5.
+// Uses the annotateFile (files:annotate) method which accepts inline PDFs
+// (up to 5 pages per request). Batches requests when numPages > 5.
 
 async function ocrPdfWithGoogleVision(pdfBuffer, numPages) {
-  const apiKey = process.env.GOOGLE_VISION_API_KEY;
-  if (!apiKey) {
-    throw new Error('GOOGLE_VISION_API_KEY environment variable is required for OCR functionality');
-  }
+  const client = getVisionClient();
 
   const pagesToProcess = Math.min(numPages, OCR_MAX_PAGES);
   const partial = numPages > OCR_MAX_PAGES;
@@ -124,24 +147,16 @@ async function ocrPdfWithGoogleVision(pdfBuffer, numPages) {
     const pageList = [];
     for (let p = startPage; p <= endPage; p++) pageList.push(p);
 
-    const response = await axios.post(
-      `https://vision.googleapis.com/v1/files:annotate?key=${apiKey}`,
-      {
-        requests: [
-          {
-            inputConfig: {
-              content: base64Pdf,
-              mimeType: 'application/pdf',
-            },
-            features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
-            pages: pageList,
-          },
-        ],
+    const [response] = await client.annotateFile({
+      inputConfig: {
+        content: base64Pdf,
+        mimeType: 'application/pdf',
       },
-      { timeout: 60000 },
-    );
+      features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
+      pages: pageList,
+    });
 
-    const pageResponses = response.data.responses?.[0]?.responses || [];
+    const pageResponses = response.responses || [];
     for (const pageResp of pageResponses) {
       const annotation = pageResp.fullTextAnnotation;
       if (annotation) {
@@ -170,9 +185,9 @@ async function ocrPdfWithGoogleVision(pdfBuffer, numPages) {
 
 // --- OCR dispatcher ---
 
-async function ocrImage(imageBuffer, mimeType) {
+async function ocrImage(imageBuffer) {
   if (OCR_PROVIDER === 'google_vision') {
-    return ocrImageWithGoogleVision(imageBuffer, mimeType);
+    return ocrImageWithGoogleVision(imageBuffer);
   }
   throw new Error(`Unsupported OCR_PROVIDER: "${OCR_PROVIDER}". Supported: google_vision`);
 }
@@ -300,7 +315,7 @@ export async function extractDocumentText(file) {
     console.log(`[UPLOAD] image_ocr_attempt engine=${OCR_PROVIDER}`);
 
     try {
-      const ocrResult = await ocrImage(file.buffer, mime);
+      const ocrResult = await ocrImage(file.buffer);
       const ocrText = ocrResult.text;
       const confStr = ocrResult.confidence.toFixed(2);
       console.log(
