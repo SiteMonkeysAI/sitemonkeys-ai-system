@@ -60,8 +60,7 @@ WHERE content ILIKE '%truthTypeDetector%'
    OR content ILIKE '%externalLookupEngine%'
    OR content ILIKE '%ttlCacheManager%'
    OR content ILIKE '%hierarchyRouter%'
-   OR content ILIKE '%Railway deployment%'
-   OR content ILIKE '%85% margin validation%';
+   OR content ILIKE '%Railway deployment%';
 -- Review row count before committing; expect small number (< 20)
 
 

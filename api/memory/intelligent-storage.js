@@ -29,6 +29,22 @@ const BOILERPLATE_PATTERNS = [
 ];
 
 /**
+ * Internal AI system component names that must never be stored as personal user memories.
+ * When a user discusses the system's own architecture, extraction can incorrectly capture
+ * these technical terms as "facts". This list is used by validateExtractedFacts().
+ */
+const SYSTEM_COMPONENT_NAMES = [
+  'truthTypeDetector',
+  'externalLookupEngine',
+  'ttlCacheManager',
+  'hierarchyRouter',
+  'semanticAnalyzer',
+  'IntelligentMemoryStorage',
+  'persistent_memories',
+  'Railway deployment',
+];
+
+/**
  * Intelligent Memory Storage System
  * Compresses verbose conversations and prevents duplicate storage
  */
@@ -407,8 +423,10 @@ export class IntelligentMemoryStorage {
     // Reject facts that contain internal AI system component names.
     // These appear when the user discusses the system architecture and extraction
     // incorrectly captures technical metadata instead of personal user facts.
-    const SYSTEM_COMPONENT_PATTERN = /\b(truthTypeDetector|externalLookupEngine|ttlCacheManager|hierarchyRouter|semanticAnalyzer|IntelligentMemoryStorage|persistent_memories|Railway deployment|85% margin validation)\b/i;
-    if (SYSTEM_COMPONENT_PATTERN.test(facts)) {
+    // Component names are defined in the module-level SYSTEM_COMPONENT_NAMES constant.
+    const escapedNames = SYSTEM_COMPONENT_NAMES.map(n => n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const systemComponentPattern = new RegExp(`\\b(${escapedNames.join('|')})\\b`, 'i');
+    if (systemComponentPattern.test(facts)) {
       return { valid: false, reason: 'system_component_metadata' };
     }
 
