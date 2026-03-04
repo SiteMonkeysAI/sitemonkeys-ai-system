@@ -237,6 +237,42 @@ class PersistentMemoryOrchestrator {
         const match = text.match(/(?:name\s+is|call\s+me|i\s+am)\s+([A-Z][a-zA-Z]+)/i);
         return match ? match[1] : null;
       }
+    },
+    salary: {
+      // Covers "my salary is", "my income is", "I make/earn/get paid", "my wage is",
+      // "my annual/monthly/hourly pay is", "I now make", "updated salary", "new salary"
+      patterns: [
+        /\b(my\s+)?(salary|income|wage|pay|earnings|compensation)\b/i,
+        /\b(make|earn|get\s+paid)\s+\$?[\d,]+/i,
+        /\b(annual|monthly|hourly)\s+(pay|salary|income|wage)\b/i,
+        /\bnew\s+(salary|income|wage|pay)\b/i,
+        /\braised?\s+to\b/i,
+      ],
+      extractValue: (text) => {
+        // Match dollar amount immediately followed by optional K/k suffix
+        const match = text.match(/\$?([\d,]+(?:\.\d{1,2})?)\s*([Kk])\b/) ||
+                      text.match(/\$?([\d,]+(?:\.\d{1,2})?)/);
+        if (!match) return null;
+        const raw = match[1].replace(/,/g, '');
+        // Only multiply by 1000 when the K suffix is directly attached to this number
+        const hasKSuffix = match[2] !== undefined;
+        return String(parseFloat(raw) * (hasKSuffix ? 1000 : 1));
+      }
+    },
+    job_title: {
+      // Covers "my title is", "my position is", "my role is", "I am a/an ...", "I got promoted to",
+      // but NOT employer changes (handled by the separate 'employer' domain).
+      patterns: [
+        /\bmy\s+(title|position|role|job\s+title)\s+(is|was|became)\b/i,
+        /\b(promoted\s+to|now\s+a|now\s+an|became\s+a|became\s+an)\b/i,
+        /\bi\s+am\s+(a|an)\s+\w/i,
+      ],
+      extractValue: (text) => {
+        const match = text.match(/(?:title|position|role|job\s+title)\s+(?:is|was|became)\s+([A-Za-z]+(?:\s+[A-Za-z]+)*)/i)
+          || text.match(/(?:promoted\s+to|now\s+a|now\s+an|became\s+a|became\s+an)\s+([A-Za-z]+(?:\s+[A-Za-z]+)*)/i)
+          || text.match(/i\s+am\s+(?:a|an)\s+([A-Za-z]+(?:\s+[A-Za-z]+)*)/i);
+        return match ? match[1].trim() : null;
+      }
     }
   };
 
