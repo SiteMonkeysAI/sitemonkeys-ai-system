@@ -126,8 +126,8 @@ async function ocrImageWithGoogleVision(imageBuffer) {
 }
 
 // --- Google Cloud Vision: OCR for a PDF buffer ---
-// Uses the annotateFile (files:annotate) method which accepts inline PDFs
-// (up to 5 pages per request). Batches requests when numPages > 5.
+// Uses batchAnnotateFiles() which accepts inline PDFs with a pages filter.
+// Each call processes up to 5 pages; batches when numPages > 5.
 
 async function ocrPdfWithGoogleVision(pdfBuffer, numPages) {
   const client = getVisionClient();
@@ -147,16 +147,21 @@ async function ocrPdfWithGoogleVision(pdfBuffer, numPages) {
     const pageList = [];
     for (let p = startPage; p <= endPage; p++) pageList.push(p);
 
-    const [response] = await client.annotateFile({
-      inputConfig: {
-        content: base64Pdf,
-        mimeType: 'application/pdf',
-      },
-      features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
-      pages: pageList,
+    const [batchResponse] = await client.batchAnnotateFiles({
+      requests: [
+        {
+          inputConfig: {
+            content: base64Pdf,
+            mimeType: 'application/pdf',
+          },
+          features: [{ type: 'DOCUMENT_TEXT_DETECTION' }],
+          pages: pageList,
+        },
+      ],
     });
 
-    const pageResponses = response.responses || [];
+    const fileResponse = (batchResponse.responses || [])[0] || {};
+    const pageResponses = fileResponse.responses || [];
     for (const pageResp of pageResponses) {
       const annotation = pageResp.fullTextAnnotation;
       if (annotation) {
