@@ -223,9 +223,11 @@ const FINGERPRINT_PATTERNS = [
   {
     fingerprint: 'user_salary',
     patterns: [
-      /\b(?:my|our)\s+(?:salary|income|pay|compensation|wage|earnings?)\s+(?:is|:)?\s*\$?\d+[,\d]*(?:k|K|\d{3})?/i,
-      /\bi\s+(?:make|earn|get paid)\s+\$?\d+[,\d]*(?:k|K|\d{3})?/i,
-      /\b(?:salary|income|pay|compensation)(?:\s+is|\s+of)?\s*\$?\d+[,\d]*(?:k|K|\d{3})?/i,
+      // Handles "my salary is $X", "my salary is now $X", "my income is now $95,000"
+      // The (?:now\s+)? group allows for the "now" adverb between "is" and the amount
+      /\b(?:my|our)\s+(?:salary|income|pay|compensation|wage|earnings?)\s+(?:is\s+(?:now\s+)?|:)?\$?\d+[,\d]*(?:k|K|\d{3})?/i,
+      /\bi\s+(?:now\s+)?(?:make|earn|get paid)\s+\$?\d+[,\d]*(?:k|K|\d{3})?/i,
+      /\b(?:salary|income|pay|compensation)(?:\s+is(?:\s+now)?|\s+of)?\s*\$?\d+[,\d]*(?:k|K|\d{3})?/i,
       /\$\d+[,\d]*(?:\.\d{2})?\s*(?:per year|annually|\/year|a year)/i
     ],
     confidence: 0.95

@@ -362,7 +362,12 @@ export function detectByPattern(query) {
     // Memory storage commands ("Remember that my..." / "Please remember...")
     /\b(remember (that )?my|please remember|don'?t forget (that )?my|note that my|keep in mind that my)\b/i,
     // Personal facts the user is sharing about themselves
-    /\bmy (name|email|phone|address|birthday|age|job|company|favorite|favourite|colour|color|pet|dog|cat|child|kid|son|daughter|wife|husband|partner|allergy|medication|condition|hobby|car|home|house|boss|manager) (is|are|was|=)\b/i,
+    /\bmy (name|email|phone|address|birthday|age|job|company|favorite|favourite|colour|color|pet|dog|cat|child|kid|son|daughter|wife|husband|partner|allergy|medication|condition|hobby|car|home|house|boss|manager|salary|income|wage|pay|earnings|compensation) (is|are|was|=)\b/i,
+    // Salary/compensation updates — "my salary is now $X", "actually my salary is now $X"
+    // "now" between "is" and the amount causes VOLATILE misclassification without this guard
+    /\bmy\s+(salary|income|wage|pay|earnings|compensation)\s+is\s+(now\s+)?\$?[\d,]+/i,
+    // First-person earnings statements — "I make $X", "I earn $X", "I now make $X"
+    /\bi\s+(now\s+)?(make|earn|get paid)\s+\$?[\d,]+/i,
     /\bi have (a |an )?(dog|cat|kid|child|daughter|son|wife|husband|partner|allergy|pet|house|car)\b/i,
     /\bi (live|work|reside|grew up|was born|studied) (in|at|near|by|for)\b/i,
     // Emotional support requests (not asking for news)

@@ -563,8 +563,12 @@ app.post("/api/chat", async (req, res) => {
           const isPersonalOrMemoryQuery = (
             // Memory storage commands
             /\b(remember|please remember|note that|don'?t forget|keep in mind)\b/i.test(message) ||
-            // Personal fact disclosures
-            /\bmy (name|email|phone|address|birthday|age|job|company|favorite|favourite|colour|color|pet|dog|cat|child|kid|son|daughter|wife|husband|partner|allergy|medication|condition|hobby|car|home|house)\b/i.test(message) ||
+            // Personal fact disclosures (includes salary/income/wage/pay/earnings/compensation)
+            /\bmy (name|email|phone|address|birthday|age|job|company|favorite|favourite|colour|color|pet|dog|cat|child|kid|son|daughter|wife|husband|partner|allergy|medication|condition|hobby|car|home|house|salary|income|wage|pay|earnings|compensation)\b/i.test(message) ||
+            // Salary/compensation updates with "now" adverb — "my salary is now $X"
+            /\bmy\s+(salary|income|wage|pay|earnings|compensation)\s+is\s+(now\s+)?\$?[\d,]+/i.test(message) ||
+            // First-person earnings statements — "I make $X", "I earn $X", "I now make $X"
+            /\bi\s+(now\s+)?(make|earn|get paid)\s+\$?[\d,]+/i.test(message) ||
             // User self-disclosures ("I have...", "I am...", "I feel...")
             /\bi (have|am|feel|live|work|own|love|hate|like|prefer|need support|need help)\b/i.test(message) ||
             // Greetings and conversational (never volatile data)
@@ -625,7 +629,12 @@ app.post("/api/chat", async (req, res) => {
           // Personal statements and memory commands must be stored even if hasExternal=true.
           const isPersonalOrMemoryQuerySup = (
             /\b(remember|please remember|note that|don'?t forget|keep in mind)\b/i.test(message) ||
-            /\bmy (name|email|phone|address|birthday|age|job|company|favorite|favourite|colour|color|pet|dog|cat|child|kid|son|daughter|wife|husband|partner|allergy|medication|condition|hobby|car|home|house)\b/i.test(message) ||
+            // Personal fact disclosures (includes salary/income/wage/pay/earnings/compensation)
+            /\bmy (name|email|phone|address|birthday|age|job|company|favorite|favourite|colour|color|pet|dog|cat|child|kid|son|daughter|wife|husband|partner|allergy|medication|condition|hobby|car|home|house|salary|income|wage|pay|earnings|compensation)\b/i.test(message) ||
+            // Salary/compensation updates with "now" adverb — "my salary is now $X"
+            /\bmy\s+(salary|income|wage|pay|earnings|compensation)\s+is\s+(now\s+)?\$?[\d,]+/i.test(message) ||
+            // First-person earnings statements — "I make $X", "I earn $X", "I now make $X"
+            /\bi\s+(now\s+)?(make|earn|get paid)\s+\$?[\d,]+/i.test(message) ||
             /\bi (have|am|feel|live|work|own|love|hate|like|prefer|need support|need help)\b/i.test(message) ||
             /^(hello|hi|hey|greetings|howdy|good (morning|afternoon|evening))\b/i.test(message.trim())
           );
