@@ -105,7 +105,12 @@ function detectUpdateIntent(content, fingerprint) {
     user_job_title: [
       /\b(?:promoted|hired|new (?:job|position|role|title))\b/i,
       /\b(?:i'm now|i am now)\s+(?:a|an|the)?\s*(?:developer|engineer|manager|designer|director|ceo|founder)/i,
-      /\b(?:became|got promoted to|switched to)\s+(?:a|an|the)?\s*/i
+      /\b(?:became|got promoted to|switched to)\s+(?:a|an|the)?\s*/i,
+      // Explicit job-title declarations — "My (job) title/role/position is X" asserts the
+      // user's current state and should supersede any previously stored job title.
+      /\b(?:my|our)\s+(?:job\s+)?(?:title|position|role)\s+(?:is|was|became)\b/i,
+      // Promotion-specific patterns — "I got promoted to X", "I've been promoted to X"
+      /\b(?:got|been)\s+promoted\s+to\b/i,
     ],
     user_employer: [
       /\b(?:joined|started at|working at|work at|employed at|new job at|left|quit)\b/i,
@@ -193,8 +198,17 @@ const FINGERPRINT_PATTERNS = [
     fingerprint: 'user_job_title',
     patterns: [
       /\bi\s+(?:work|am employed)\s+(?:as|at)\s+(?:a\s+)?(.+)/i,
+      // Single-word field name: "My role is X", "My title is X", "My position is X"
       /\b(?:my|our)\s+(?:job|occupation|profession|role|title|position)\s+(?:is|:)\s+(.+)/i,
-      /\bi(?:'m| am)\s+a\s+(developer|engineer|manager|designer|analyst|consultant|director|ceo|cto|founder|doctor|lawyer|teacher|nurse|accountant)/i
+      // Compound "job title" phrase — "My job title is X"
+      // The single-word pattern above matches "job" but then fails when followed by "title is"
+      // instead of "is". This explicit pattern handles the two-word compound field name.
+      /\b(?:my|our)\s+job\s+title\s+(?:is|:)\s+(?:a\s+|an\s+)?(.+)/i,
+      /\bi(?:'m| am)\s+a\s+(developer|engineer|manager|designer|analyst|consultant|director|ceo|cto|founder|doctor|lawyer|teacher|nurse|accountant)/i,
+      // Promotion / new role — "I got promoted to Senior Engineer", "I've been promoted to X"
+      /\b(?:got|been)\s+promoted\s+to\s+(?:a\s+|an\s+)?(.+)/i,
+      // "I am now a X" — explicit current-state assertion with "now" adverb
+      /\bi(?:'m| am)\s+now\s+(?:a\s+|an\s+)?(.+)/i,
     ],
     confidence: 0.85
   },
@@ -837,13 +851,27 @@ export async function storeWithSupersession(pool, memoryData) {
 }
 
 /**
- * Store memory without supersession check (for non-fingerprinted content)
- * FIX #710: Enhanced to accept metadata parameter for consistency
+ * Store memory without supersession check (for non-fingerprinted content, or optional
+ * fields where update intent was not detected).
+ *
+ * FIX #710: Enhanced to accept metadata parameter for consistency.
+ * FIX (Issue salary-supersession-trigger): When a fingerprint IS present in memoryData
+ * (e.g. user_job_title detected for "My job title is Engineer") but supersession was
+ * intentionally skipped (optional field, no explicit update signal), we still persist the
+ * fact_fingerprint column so that a FUTURE supersession lookup (e.g. "I got promoted to X")
+ * can find this row via `WHERE fact_fingerprint = $2 AND is_current = true`.
+ *
+ * Conflict handling: if an is_current=true row with the same fingerprint already exists
+ * (rare in practice — the user just re-stated the same fact), we fall back to storing
+ * without the fingerprint to preserve content without violating the unique partial index
+ * idx_one_current_fact_comprehensive.
  */
 async function storeWithoutSupersession(pool, memoryData) {
   const {
     userId,
     content,
+    factFingerprint = null,        // Accept fingerprint so future lookups can find this row
+    fingerprintConfidence = 0,
     mode = 'truth-general',
     categoryName = 'general',
     tokenCount = 0,
@@ -851,7 +879,71 @@ async function storeWithoutSupersession(pool, memoryData) {
   } = memoryData;
 
   try {
-    const result = await pool.query(`
+    let result;
+
+    // When a fingerprint was detected (even for an optional field), attempt to store it so
+    // that a future update (e.g. "I got promoted to X") can supersede this row.
+    // Use DO NOTHING on the partial unique index conflict to avoid errors when the user
+    // simply re-states the same fact without any update intent.
+    if (factFingerprint) {
+      try {
+        result = await pool.query(`
+          INSERT INTO persistent_memories (
+            user_id, content, category_name, token_count,
+            fact_fingerprint, fingerprint_confidence,
+            is_current, mode, embedding_status, created_at, metadata
+          ) VALUES ($1, $2, $3, $4, $5, $6, true, $7, 'pending', NOW(), $8)
+          ON CONFLICT (user_id, fact_fingerprint) WHERE is_current = true AND fact_fingerprint IS NOT NULL
+          DO NOTHING
+          RETURNING id
+        `, [
+          userId,
+          content,
+          categoryName,
+          tokenCount || Math.ceil(content.length / 4),
+          factFingerprint,
+          fingerprintConfidence,
+          mode,
+          JSON.stringify(metadata)
+        ]);
+      } catch (fpInsertError) {
+        // 42P10: no unique/exclusion constraint matching the ON CONFLICT spec.
+        //        This happens when idx_one_current_fact_comprehensive hasn't been created yet
+        //        (e.g. first deploy before createSupersessionConstraint has run). The next
+        //        server start will create the index; until then, fall back to no-fingerprint.
+        // 23505: unique_violation (should not happen with DO NOTHING, but guard anyway)
+        if (fpInsertError.code === '42P10' || fpInsertError.code === '23505') {
+          console.log(`[SUPERSESSION] ON CONFLICT fingerprint insert failed (${fpInsertError.code}) — falling back to no-fingerprint insert`);
+          result = null;
+        } else {
+          throw fpInsertError;
+        }
+      }
+
+      if (result && result.rows.length > 0) {
+        console.log(`[SUPERSESSION] Stored non-superseding memory ID ${result.rows[0].id} (fingerprint: ${factFingerprint})`);
+        return {
+          success: true,
+          memoryId: result.rows[0].id,
+          superseded: [],
+          supersededCount: 0,
+          fingerprint: factFingerprint
+        };
+      }
+
+      // Distinguish the two fall-through reasons for clearer log diagnostics:
+      // - result is null → the ON CONFLICT clause itself failed (index missing / error code above)
+      // - result.rows is empty → DO NOTHING fired: an is_current=true row with this fingerprint
+      //   already exists (user simply re-stated the same fact, no supersession needed)
+      if (!result) {
+        console.log(`[SUPERSESSION] Fingerprint index unavailable for ${factFingerprint} — storing content without fingerprint`);
+      } else {
+        console.log(`[SUPERSESSION] Duplicate current fingerprint ${factFingerprint} — storing content without fingerprint`);
+      }
+    }
+
+    // No fingerprint, or fingerprint insert conflicted — store without fingerprint
+    result = await pool.query(`
       INSERT INTO persistent_memories (
         user_id, content, category_name, token_count,
         is_current, mode, embedding_status, created_at, metadata
