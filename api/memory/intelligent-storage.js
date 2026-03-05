@@ -1479,7 +1479,7 @@ Facts (preserve user terminology + add synonyms):`;
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 150  // Increased to allow room for identifiers and synonyms
+        max_tokens: 300  // STR1 FIX: Increased from 150 to allow extraction of 10+ facts (10 facts × ~15 tokens each ≈ 150, leaving no room)
       });
 
       let facts = response.choices[0].message.content.trim();
@@ -1489,11 +1489,13 @@ Facts (preserve user terminology + add synonyms):`;
 
       // CRITICAL FIX #504 + #566: Verify ALL numeric values survived extraction
       // Enhanced to protect ALL numbers: prices, years, durations, quantities
-      const amountPattern = /\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\$\d+|\d{1,6}k/i;
+      // EDG3 FIX: Use global flag (/gi) so ALL dollar amounts are detected, not just the first.
+      // Without /g, "$99 and $299" only finds "$99" — $299 is silently lost.
+      const amountPattern = /\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?|\$\d+|\d{1,6}k/gi;
       const yearPattern = /\b(19|20)\d{2}\b/g;  // Years like 2010, 2015
       const durationPattern = /\b\d+\s*(year|years|month|months|week|weeks|day|days|hour|hours)\b/gi;  // 5 years, 3 months
       const generalNumberPattern = /\b\d+(?:\.\d+)?(?:,\d{3})*\b/g;  // Any number including decimals
-      
+
       // FIX #566-STR1: Protect brand names and proper nouns (capitalized multi-word phrases)
       // Matches: Tesla Model 3, iPhone 15, Google Pixel, MacBook Pro, etc.
       // Pattern: Captures multi-word brand names with capitals or numbers, but avoids common words
@@ -1831,7 +1833,7 @@ Facts (preserve user terminology + add synonyms):`;
       return false;
     };
 
-    // Separate lines by type: identifiers, synonyms, unicode names, regular
+    // Separate lines by type: identifiers, synonyms, unicode names, pricing, regular
     const identifierLines = lines.filter(line => HIGH_ENTROPY_PATTERN.test(line));
     const synonymLines = lines.filter(line => !HIGH_ENTROPY_PATTERN.test(line) && hasSynonyms(line));
     // CMP2 FIX: Protect lines containing non-ASCII (international) characters from
@@ -1842,17 +1844,30 @@ Facts (preserve user terminology + add synonyms):`;
       !hasSynonyms(line) &&
       /[^\u0000-\u007F]/.test(line)
     );
+    // EDG3 FIX: Protect lines containing pricing/financial data from word-count truncation.
+    // Lines with dollar amounts or pricing keywords are high-priority facts that must
+    // survive intact. "Plans: $99/month, $299/month" must not be truncated to 5 words.
+    const pricingLines = lines.filter(line =>
+      !HIGH_ENTROPY_PATTERN.test(line) &&
+      !hasSynonyms(line) &&
+      !/[^\u0000-\u007F]/.test(line) &&
+      /\$[\d,.]|(?:price|pricing|costs?\b|fee|rate|plan|tier|subscription)\s*[:$\d]/i.test(line)
+    );
     const regularLines = lines.filter(line =>
       !HIGH_ENTROPY_PATTERN.test(line) &&
       !hasSynonyms(line) &&
-      !/[^\u0000-\u007F]/.test(line)
+      !/[^\u0000-\u007F]/.test(line) &&
+      !/\$[\d,.]|(?:price|pricing|costs?\b|fee|rate|plan|tier|subscription)\s*[:$\d]/i.test(line)
     );
 
-    // ADAPTIVE LIMIT: Allow more facts if they contain identifiers or synonyms
-    const maxFacts = (identifierLines.length + synonymLines.length) > 0 ? 5 : 3;
+    // STR1 FIX: Scale maxFacts with input line count so dense messages preserve all facts.
+    // A message with 10 distinct facts must not be capped at 3 or 5.
+    // Cap at 15 to prevent unbounded output while handling real-world dense inputs.
+    const baseMaxFacts = (identifierLines.length + synonymLines.length) > 0 ? 5 : 3;
+    const maxFacts = Math.max(baseMaxFacts, Math.min(regularLines.length, 15));
 
-    // Process regular lines with strict limits
-    let processedRegularLines = regularLines.slice(0, maxFacts - identifierLines.length - synonymLines.length);
+    // Process regular lines with adaptive limit (no longer a hard cap of 3–5)
+    let processedRegularLines = regularLines.slice(0, Math.max(0, maxFacts - identifierLines.length - synonymLines.length - pricingLines.length));
 
     // ADAPTIVE WORD LIMIT: Don't truncate lines with identifiers or synonyms
     processedRegularLines = processedRegularLines.map(line => {
@@ -1889,8 +1904,14 @@ Facts (preserve user terminology + add synonyms):`;
     // Capped at 10 to prevent unbounded output for extreme edge cases.
     const processedUnicodeNameLines = unicodeNameLines.slice(0, 10);
 
-    // Combine: Identifier lines first (most important), then synonym lines, then unicode names, then regular lines
-    lines = [...processedIdentifierLines, ...processedSynonymLines, ...processedUnicodeNameLines, ...processedRegularLines];
+    // EDG3 FIX: Pricing lines — preserve entire line, no word-count truncation.
+    // "Plans: $99/month, $299/month" or "Soap bars: $12.99, gift sets: $45.99" must not lose prices.
+    // Capped at 10 to prevent unbounded output.
+    const processedPricingLines = pricingLines.slice(0, 10);
+
+    // Combine: Identifier lines first (most important), then synonym lines, then unicode names,
+    // then pricing lines, then regular lines
+    lines = [...processedIdentifierLines, ...processedSynonymLines, ...processedUnicodeNameLines, ...processedPricingLines, ...processedRegularLines];
 
     // Remove duplicates (case-insensitive)
     const seen = new Set();
@@ -1914,6 +1935,9 @@ Facts (preserve user terminology + add synonyms):`;
       if (/[^\u0000-\u007F]/.test(line)) {
         return true; // CMP2 FIX: Always keep lines with international characters
       }
+      if (/\$[\d,.]|(?:price|pricing|costs?\b|fee|rate|plan|tier|subscription)\s*[:$\d]/i.test(line)) {
+        return true; // EDG3 FIX: Always keep lines with pricing/financial data
+      }
       return line.split(/\s+/).length >= 3;
     });
 
@@ -1932,6 +1956,11 @@ Facts (preserve user terminology + add synonyms):`;
 
       // CMP2 FIX: Don't remove filler words from lines containing international characters
       if (/[^\u0000-\u007F]/.test(line)) {
+        return line;
+      }
+
+      // EDG3 FIX: Don't remove filler words from lines containing pricing/financial data
+      if (/\$[\d,.]|(?:price|pricing|costs?\b|fee|rate|plan|tier|subscription)\s*[:$\d]/i.test(line)) {
         return line;
       }
 

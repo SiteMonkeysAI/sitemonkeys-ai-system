@@ -23,7 +23,7 @@ async function chat(message, userId = TEST_USER_ID) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       message,
-      sessionId: userId,
+      user_id: userId,
       mode: 'truth_general'
     })
   });
