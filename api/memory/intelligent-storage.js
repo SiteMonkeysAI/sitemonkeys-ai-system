@@ -1696,11 +1696,27 @@ Facts (preserve user terminology + add synonyms):`;
       // AGGRESSIVE POST-PROCESSING: Guarantee 10-20:1 compression
       const processedFacts = this.aggressivePostProcessing(facts);
 
+      // ISSUE #824 FIX: Quality gate — reject over-compressed fragments.
+      // "reputational.", "architecture:." are the result of aggressive compression
+      // discarding context and leaving meaningless single-word snippets.
+      // A fact under 5 tokens (≈20 chars) or consisting of a single word followed by
+      // a period/colon provides zero retrieval value and MUST be rejected.
+      // PR #824 REVIEW FIX: Changed [.:] to [.:]+ to match multiple punctuation marks (handles "architecture:."),
+      // and added word count check (<=3 words) to prevent false positives on complete sentences.
+      const trimmedFacts = processedFacts.trim();
+      const approxTokens = Math.ceil(trimmedFacts.length / 4);
+      const wordCount = trimmedFacts.split(/\s+/).length;
+      const isTooShort = approxTokens < 5;
+      const isFragment = /^[a-z][\w\s]+[.:]+\s*$/i.test(trimmedFacts) && wordCount <= 3 && !trimmedFacts.includes('\n') && approxTokens < 15;
+
+      if (isTooShort || isFragment) {
+        console.log(`[INTELLIGENT-STORAGE] ⚠️ Quality gate: rejecting fragment "${trimmedFacts.substring(0, 50)}" (${approxTokens} tokens) — too short to be useful`);
+        return '';
+      }
+
       // CMP2 FIX (post-compression): Re-verify international names survived
       // aggressivePostProcessing (which truncates lines to 5 words and limits
       // total fact count).  inputNames and nameIsPresent are both in scope above.
-      // CRITICAL: Runs BEFORE quality gate so re-injected data prevents the gate
-      // from rejecting an otherwise-empty result (e.g. multiline short-name output).
       let finalFacts = processedFacts;
       if (inputNames && inputNames.length > 0) {
         const missingAfterCompression = inputNames.filter(name =>
@@ -1710,32 +1726,6 @@ Facts (preserve user terminology + add synonyms):`;
           console.warn(`[EXTRACTION-FIX #CMP2] ${missingAfterCompression.length} international name(s) lost during aggressivePostProcessing, re-injecting:`, missingAfterCompression);
           finalFacts += '\nContacts: ' + missingAfterCompression.join(', ');
         }
-      }
-
-      // EDG3 FIX (post-compression): Re-verify dollar amounts survived.
-      // When GPT omits $ signs, pricing lines may not be protected and 5-word
-      // truncation drops trailing amounts.
-      if (inputAmounts.length > 0) {
-        const missingAmounts = inputAmounts.filter(amt =>
-          !finalFacts.includes(amt)
-        );
-        if (missingAmounts.length > 0) {
-          console.warn(`[EXTRACTION-FIX #EDG3] ${missingAmounts.length} amount(s) lost during aggressivePostProcessing, re-injecting:`, missingAmounts);
-          finalFacts += '\nPricing: ' + missingAmounts.join(', ');
-        }
-      }
-
-      // ISSUE #824 FIX: Quality gate — reject over-compressed fragments.
-      // Runs AFTER CMP2/EDG3 re-injection so re-injected data is included.
-      const trimmedFacts = finalFacts.trim();
-      const approxTokens = Math.ceil(trimmedFacts.length / 4);
-      const wordCount = trimmedFacts.split(/\s+/).length;
-      const isTooShort = approxTokens < 5;
-      const isFragment = /^[a-z][\w\s]+[.:]+\s*$/i.test(trimmedFacts) && wordCount <= 3 && !trimmedFacts.includes('\n') && approxTokens < 15;
-
-      if (isTooShort || isFragment) {
-        console.log(`[INTELLIGENT-STORAGE] ⚠️ Quality gate: rejecting fragment "${trimmedFacts.substring(0, 50)}" (${approxTokens} tokens) — too short to be useful`);
-        return '';
       }
 
       console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${finalFacts.split('\n').filter(l => l.trim()).length} facts`);
@@ -1857,19 +1847,17 @@ Facts (preserve user terminology + add synonyms):`;
     // EDG3 FIX: Protect lines containing pricing/financial data from word-count truncation.
     // Lines with dollar amounts or pricing keywords are high-priority facts that must
     // survive intact. "Plans: $99/month, $299/month" must not be truncated to 5 words.
-    // Also catches bare decimal prices (e.g. "12.99") when GPT strips the $ sign.
-    const PRICING_PATTERN = /\$[\d,.]|\d+\.\d{2}|(?:price|pricing|costs?\b|fee|rate|plan|tier|subscription|discount)\s*[:$\d]/i;
     const pricingLines = lines.filter(line =>
       !HIGH_ENTROPY_PATTERN.test(line) &&
       !hasSynonyms(line) &&
       !/[^\u0000-\u007F]/.test(line) &&
-      PRICING_PATTERN.test(line)
+      /\$[\d,.]|(?:price|pricing|costs?\b|fee|rate|plan|tier|subscription)\s*[:$\d]/i.test(line)
     );
     const regularLines = lines.filter(line =>
       !HIGH_ENTROPY_PATTERN.test(line) &&
       !hasSynonyms(line) &&
       !/[^\u0000-\u007F]/.test(line) &&
-      !PRICING_PATTERN.test(line)
+      !/\$[\d,.]|(?:price|pricing|costs?\b|fee|rate|plan|tier|subscription)\s*[:$\d]/i.test(line)
     );
 
     // STR1 FIX: Scale maxFacts with input line count so dense messages preserve all facts.
@@ -1879,12 +1867,7 @@ Facts (preserve user terminology + add synonyms):`;
     const maxFacts = Math.max(baseMaxFacts, Math.min(regularLines.length, 15));
 
     // Process regular lines with adaptive limit (no longer a hard cap of 3–5)
-    // EDG3 FIX: When pricing/special lines consume all maxFacts slots, guarantee at
-    // least 2 regular line slots so non-pricing facts (e.g. competitive advantage)
-    // are not entirely lost.  This does NOT change maxFacts itself (STR1 protected).
-    const regularSlots = Math.max(0, maxFacts - identifierLines.length - synonymLines.length - pricingLines.length);
-    const minRegularSlots = (pricingLines.length > 0 && regularLines.length > 0) ? Math.min(3, regularLines.length) : 0;
-    let processedRegularLines = regularLines.slice(0, Math.max(regularSlots, minRegularSlots));
+    let processedRegularLines = regularLines.slice(0, Math.max(0, maxFacts - identifierLines.length - synonymLines.length - pricingLines.length));
 
     // ADAPTIVE WORD LIMIT: Don't truncate lines with identifiers or synonyms
     processedRegularLines = processedRegularLines.map(line => {
@@ -1952,7 +1935,7 @@ Facts (preserve user terminology + add synonyms):`;
       if (/[^\u0000-\u007F]/.test(line)) {
         return true; // CMP2 FIX: Always keep lines with international characters
       }
-      if (PRICING_PATTERN.test(line)) {
+      if (/\$[\d,.]|(?:price|pricing|costs?\b|fee|rate|plan|tier|subscription)\s*[:$\d]/i.test(line)) {
         return true; // EDG3 FIX: Always keep lines with pricing/financial data
       }
       return line.split(/\s+/).length >= 3;
@@ -1977,7 +1960,7 @@ Facts (preserve user terminology + add synonyms):`;
       }
 
       // EDG3 FIX: Don't remove filler words from lines containing pricing/financial data
-      if (PRICING_PATTERN.test(line)) {
+      if (/\$[\d,.]|(?:price|pricing|costs?\b|fee|rate|plan|tier|subscription)\s*[:$\d]/i.test(line)) {
         return line;
       }
 
