@@ -162,8 +162,10 @@ export const API_SOURCES = {
       }
     }
   ],
-  // STOCKS: Yahoo Finance unofficial quote API (no key needed)
-  // Uses browser-like User-Agent header; falls through to news RSS if ticker cannot be extracted
+  // STOCKS: Yahoo Finance v8 chart API (no key, no auth cookies required)
+  // Uses query2.finance.yahoo.com/v8/finance/chart which is more accessible than the v7
+  // quote endpoint (which requires session cookies). Falls through to news RSS if ticker
+  // cannot be extracted or the API returns no price data.
   STOCKS: [
     {
       name: 'Yahoo Finance Quote',
@@ -174,7 +176,7 @@ export const API_SOURCES = {
           return null;
         }
         console.log(`[externalLookupEngine] Yahoo Finance: resolved ticker "${ticker}" from query`);
-        return `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,longName,shortName,currency,marketCap`;
+        return `https://query2.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`;
       },
       parser: 'json',
       type: 'api',
@@ -183,15 +185,16 @@ export const API_SOURCES = {
         'Accept': 'application/json'
       },
       extract: (json) => {
-        const result = json?.quoteResponse?.result?.[0];
+        const result = json?.chart?.result?.[0];
         if (!result) return null;
-        const price = result.regularMarketPrice;
-        if (!price) return null;
-        const symbol = result.symbol || '';
-        const name = result.longName || result.shortName || symbol;
-        const change = result.regularMarketChange != null ? result.regularMarketChange.toFixed(2) : null;
-        const changePct = result.regularMarketChangePercent != null ? result.regularMarketChangePercent.toFixed(2) : null;
-        const currency = result.currency || 'USD';
+        const meta = result.meta;
+        if (!meta || meta.regularMarketPrice == null) return null;
+        const price = meta.regularMarketPrice;
+        const symbol = meta.symbol || '';
+        const name = meta.longName || meta.shortName || symbol;
+        const change = meta.regularMarketChange != null ? meta.regularMarketChange.toFixed(2) : null;
+        const changePct = meta.regularMarketChangePercent != null ? meta.regularMarketChangePercent.toFixed(2) : null;
+        const currency = meta.currency || 'USD';
         const sign = change != null && parseFloat(change) >= 0 ? '+' : '';
         const changePart = change != null ? ` (${sign}${change}, ${sign}${changePct}%)` : '';
         return `${name} (${symbol}): ${currency} $${price.toFixed(2)}${changePart}`;
@@ -276,12 +279,18 @@ export const API_SOURCES = {
           return 'https://en.wikipedia.org/api/rest_v1/page/summary/President_of_France';
         }
 
-        // Generic current leader lookup
-        const leaderMatch = query.match(/(?:current|who is the)\s+(?:prime minister|president|chancellor|leader)\s+of\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i);
+        // Generic country lookup: build position-of-country Wikipedia URL
+        // Handles "who is the president of Venezuela" → President_of_Venezuela
+        // Handles "prime minister of Canada" → Prime_Minister_of_Canada
+        const leaderMatch = query.match(/\b(prime\s+minister|president|chancellor|leader)\s+of\s+([a-zA-Z][a-zA-Z\s]+?)(?:\?|$|,|\s{2})/i);
         if (leaderMatch) {
-          const country = leaderMatch[1];
-          // Try to construct Wikipedia URL for that country's leader
-          return `https://en.wikipedia.org/api/rest_v1/page/summary/List_of_current_heads_of_state_and_government`;
+          const rawPosition = leaderMatch[1].trim();
+          const rawCountry = leaderMatch[2].trim();
+          // Title-case each word in position (handles "prime minister" → "Prime_Minister")
+          const posTitle = rawPosition.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('_');
+          const country = rawCountry.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('_');
+          console.log(`[externalLookupEngine] GOVERNMENT: looking up ${posTitle}_of_${country}`);
+          return `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(`${posTitle}_of_${country}`)}`;
         }
 
         return null;
@@ -740,6 +749,24 @@ export function hasProperNouns(query) {
 }
 
 /**
+ * Check if query is a factual entity query requiring external lookup
+ * Detects "who is/was X", "what is/does [ProperNoun]" patterns.
+ * Used by both isLookupRequired() and the orchestrator's shouldLookup check
+ * to avoid duplicating this logic in two places.
+ * "who are" requires a proper noun to avoid triggering for "who are you".
+ * @param {string} query - The user's query
+ * @returns {boolean} True if query is a factual entity question about a named entity
+ */
+export function isFactualEntityQuery(query) {
+  if (!query || typeof query !== 'string') return false;
+  return (
+    /\b(who is|who was)\b/i.test(query) ||
+    (/\b(who are)\b/i.test(query) && hasProperNouns(query)) ||
+    (/\b(what is|what are|what does|what did)\b/i.test(query) && hasProperNouns(query))
+  );
+}
+
+/**
  * Check if query has news intent (general news query)
  * PRINCIPLE-BASED: Detects news intent through STRUCTURE + PROPER NOUNS, not hardcoded name lists
  * @param {string} query - The user's query
@@ -923,6 +950,16 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
     reasons.push('low_internal_confidence: ' + internalConfidence);
   }
 
+  // ISSUE #859 FIX: Factual entity queries about named entities (people, companies, political figures)
+  // "Who is the president of Venezuela", "What is Amazon Logistics", "What does Tesla do"
+  // These may lack explicit freshness markers but still require external verification because
+  // the information can change (leaders change, companies evolve). SEMI_STABLE + entity intent
+  // is sufficient to warrant an external lookup.
+  // NOTE: personal memory recall queries already return early above so this won't double-trigger.
+  if (isFactualEntityQuery(query)) {
+    reasons.push('factual_entity_query');
+  }
+
   return {
     required: reasons.length > 0,
     reasons: reasons,
@@ -951,8 +988,9 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   // Stock prices - prefer Yahoo Finance; fall through to Google News RSS if ticker can't be resolved
   // ISSUE #804 FIX (Area 2): Use Yahoo Finance structured API first to get actual quote numbers.
   // ISSUE #814 FIX (FAILURE 8): Broadened matching — "going for", "what's it", "at" as price indicators.
+  // ISSUE #859 FIX: Added "now|today|right|worth" so "stock right now" and "stock today" trigger this path.
   if (lowerQuery.match(/\bstock\b/) &&
-      lowerQuery.match(/price|value|trading|current|going for|what'?s it|how much|at\b/i)) {
+      lowerQuery.match(/price|value|trading|current|going for|what'?s it|how much|at\b|now\b|today\b|right\b|worth\b/i)) {
     console.log('[externalLookupEngine] Stock price query detected - using Yahoo Finance with news fallback');
     // Yahoo Finance is tried first; if buildUrl returns null (no ticker found) it is skipped
     // and the news RSS fallback handles the query.
