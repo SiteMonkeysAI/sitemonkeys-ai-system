@@ -346,16 +346,39 @@ export const API_SOURCES = {
       name: 'Open-Meteo',
       type: 'api',
       fetchData: async (query, abortSignal) => {
-        // Extract city/location from query using multiple patterns
+        // Extract city/location from query using multiple patterns.
+        // Patterns are tried in order; first match wins.
         const cityPatterns = [
+          // Pattern 1: "weather in/at/for [city]" — direct preposition (most precise)
           /(?:weather|temperature|forecast|rain|snow|storm)\s+(?:in|at|for)\s+([A-Za-z][A-Za-z\s,]+?)(?:\?|$|today|now|right|currently|\d)/i,
+          // Pattern 2: "[city] weather/temperature/forecast" — city then weather word
           /(?:in|at|for)\s+([A-Za-z][A-Za-z\s,]+?)\s+(?:weather|temperature|forecast)/i,
-          /^([A-Za-z][A-Za-z\s,]+?)\s+weather/i
+          // Pattern 3: city at start "Miami weather"
+          /^([A-Za-z][A-Za-z\s,]+?)\s+weather/i,
+          // Pattern 4: "weather [1–3 modifier words] in/at/for [city]"
+          // Handles "weather currently in Miami", "weather right now in Paris", "weather here in London"
+          /(?:weather|temperature|forecast|rain|snow|storm)\s+(?:\S+\s+){1,3}(?:in|at|for)\s+([A-Za-z][A-Za-z\s,]+?)(?:\?|$|today|now|right|currently|\d)/i,
+          // Pattern 5: loose "in/at/for [City]" anywhere — two distinct termination forms to avoid ambiguity
+          // 5a: city terminated by punctuation or end of string
+          /\b(?:in|at|for)\s+([A-Z][a-zA-Z\s,]{2,30}?)(?:\?|$|,)/,
+          // 5b: city terminated by a weather/freshness word (so the city doesn't consume those words)
+          /\b(?:in|at|for)\s+([A-Z][a-zA-Z\s,]{2,30}?)\s+(?:weather|temperature|right now|now|today|currently)/i,
         ];
         let cityQuery = null;
         for (const pattern of cityPatterns) {
           const m = query.match(pattern);
           if (m) { cityQuery = m[1].trim().replace(/,$/, ''); break; }
+        }
+        // Pattern 6 (last resort): trailing proper-noun — the city is often the last
+        // capitalised word in cleaned queries like "weather currently Miami"
+        if (!cityQuery) {
+          const trailing = query.match(/\b([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)\s*(?:\?|$)/);
+          if (trailing) {
+            const COMMON_NON_CITIES = /^(What|How|Is|Are|Was|Were|Will|Would|Could|Should|The|This|That|Currently|Today|Right|Now|Here)$/i;
+            if (!COMMON_NON_CITIES.test(trailing[1].trim())) {
+              cityQuery = trailing[1].trim();
+            }
+          }
         }
         if (!cityQuery) {
           console.log('[externalLookupEngine] Open-Meteo: could not extract city from query');
@@ -1078,8 +1101,8 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   if (lowerQuery.match(/\b(who is|who was|who are|what is|what are|what does|what did)\b/i) ||
       lowerQuery.match(/\bdoes\s+\w+(\s+\w+)?\s+(do|offer|provide|make|sell|produce|have)\b/i) ||
       lowerQuery.match(/\bis\s+\w+(\s+\w+)?\s+(a|an)\s+\w+/i)) {
-    console.log('[externalLookupEngine] Factual entity query detected - using Wikipedia REST + DuckDuckGo');
-    return [...API_SOURCES.FACTUAL_ENTITY, ...API_SOURCES.GENERAL_FALLBACK];
+    console.log('[externalLookupEngine] Factual entity query detected - using Wikipedia REST + DuckDuckGo + news fallback');
+    return [...API_SOURCES.FACTUAL_ENTITY, ...API_SOURCES.GENERAL_FALLBACK, ...API_SOURCES.NEWS];
   }
 
   // Wikipedia ONLY for PERMANENT definition/history queries, NOT high-stakes

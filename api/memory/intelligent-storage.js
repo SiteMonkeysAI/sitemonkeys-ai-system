@@ -336,7 +336,11 @@ export class IntelligentMemoryStorage {
     const generalInfoPatterns = [
       /^(?:what|who|when|where|why|how) (?:is|are|was|were|did|does|do)/i,  // "What is Bitcoin?"
       /^define /i,
-      /^explain /i
+      /^explain /i,
+      // Yes/no external questions: "Is Amazon doing X", "Are there elections", "Have they voted yet"
+      // Negative lookahead guards against "is it my..." personal forms; hasPersonalIndicators
+      // below provides the primary personal-context guard.
+      /^(?:is|are|was|were|has|have|had|do|does|did|can|will|should)\s+(?!(?:i|my|me|our|we)\b)/i,
     ];
 
     // Only skip if NO personal indicators
@@ -346,6 +350,24 @@ export class IntelligentMemoryStorage {
       for (const pattern of generalInfoPatterns) {
         if (pattern.test(content)) {
           return { shouldSkip: true, reason: 'general_info_query_no_personal_context' };
+        }
+      }
+
+      // Broader embedded-interrogative detection — catches compound/mid-sentence question phrases
+      // that don't start with a question word but still ask for external world information.
+      // NOTE: generalInfoPatterns above uses `^` anchors (start-of-string) and therefore does
+      // not match these patterns when the interrogative appears mid-sentence.
+      // Examples: "With what took place in Venezuela who is now the acting president"
+      //           "In what country is Mount Everest located"
+      const embeddedInterrogativePatterns = [
+        /\b(who is|who was|who are|who were)\b/i,
+        /\b(what is|what are|what was|what were|what took|what happened)\b/i,
+        /\b(have they|has it|has he|has she|are they|is it|is there|is he|is she)\b/i,
+        /\b(do they|does it|does he|does she|did they|did it)\b/i,
+      ];
+      for (const pattern of embeddedInterrogativePatterns) {
+        if (pattern.test(content)) {
+          return { shouldSkip: true, reason: 'external_interrogative_query_no_personal_context' };
         }
       }
     }
