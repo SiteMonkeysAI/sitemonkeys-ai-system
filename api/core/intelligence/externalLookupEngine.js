@@ -424,18 +424,41 @@ export const API_SOURCES = {
     {
       name: 'Wikipedia Article Summary',
       buildUrl: (query) => {
-        // Strip question framing to extract the core entity/topic
+        // Strip question framing and conversational wrappers to extract the core entity/topic
         let topic = query
           .replace(/^(who is|who was|who are|what is|what are|what does|what did|tell me about|is|does|do|how does|explain)\s+/i, '')
           .replace(/\b(the|a|an|some|any|currently|right now|today|please|can you|could you)\b/gi, ' ')
           .replace(/\?+$/, '')
+          // Strip indirect reference framing ("that we took into custody", "that is/was [verb]ed")
+          .replace(/\b(that (we|i|they|he|she|you)\s+\w+(\s+\w+){0,3})\b/gi, ' ')
+          .replace(/\b(we (took|put|had|have|placed|brought|captured|arrested|detained))\b/gi, ' ')
+          .replace(/\b(in(to)? custody|under arrest|who (was|is) (arrested|detained|captured))\b/gi, ' ')
+          // Strip conversational framing ("what is the most up to date info going on with him")
+          .replace(/\b(most up[- ]to[- ]date information|going on with|what is happening|bring me up to speed)\b/gi, ' ')
+          .replace(/\b(with him|with her|with them|about him|about her|about them)\b/gi, ' ')
           // Remove trailing action verbs from "what does X do" → "X"
           .replace(/\s+(do|does|offer|provide|make|sell|produce|have)\s*$/i, '')
           .replace(/\s+/g, ' ')
           .trim();
-        // Limit to first 5 words to avoid over-specific lookups
+
+        // Extract proper nouns from the original query as a smarter fallback
+        // for indirect references like "the former leader of Venezuela"
+        const excludedProperNouns = /^(The|A|An|Who|What|Where|When|Why|How|Is|Are|Was|Were|We|I|They|He|She|It|This|That|These|Those|Former|Current|Previous|Last|Most|Some|Any|All|No|Not|New|Old|Big|Small|Great|Good|Bad)$/;
+        const properNouns = query.split(/\s+/)
+          .filter(w => /^[A-Z][a-z]{2,}/.test(w) && !excludedProperNouns.test(w));
+
+        // Limit to first 5 words; if still too long and we have proper nouns, prefer them
         const words = topic.split(' ').filter(Boolean);
-        if (words.length > 5) topic = words.slice(0, 5).join(' ');
+        if (words.length > 5) {
+          if (properNouns.length > 0) {
+            // Use the proper nouns (named entities) for a more precise Wikipedia lookup
+            topic = properNouns.slice(0, 3).join(' ');
+            console.log(`[externalLookupEngine] FACTUAL_ENTITY: indirect reference — using proper nouns: "${topic}"`);
+          } else {
+            topic = words.slice(0, 5).join(' ');
+          }
+        }
+
         if (!topic || topic.length < 2) return null;
         return `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`;
       },
@@ -483,14 +506,9 @@ export const API_SOURCES = {
     {
       name: 'GDELT News',
       buildUrl: (query) => {
-        const cleanedQuery = query
-          .replace(/\b(what|what's|whats|is|the|are|there|anything|new|going|on|with|latest|newest|most|recent|up|to|date|information|from|news|about|tell|me|can|you|please|how|has|been)\b/gi, ' ')
-          .replace(/'s\b/g, ' ')
-          .replace(/\b\w{1,2}\b/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .substring(0, 60);
+        const cleanedQuery = cleanNewsQuery(query);
         const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
+        console.log(`[externalLookupEngine] GDELT query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`);
         return `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(searchQuery)}&mode=artlist&maxrecords=5&format=json`;
       },
       parser: 'json',
@@ -508,22 +526,10 @@ export const API_SOURCES = {
     {
       name: 'Google News RSS',
       buildUrl: (query) => {
-        // Extract clean search query from conversational input (similar to stock path cleaning)
-        const cleanedQuery = query
-          .replace(/\b(what|what's|whats|is|the|are|there|anything|new|going|on|with|latest|newest|most|recent|up|to|date|information|from|news|about|tell|me|can|you|please|how|has|been)\b/gi, ' ')
-          .replace(/'s\b/g, ' ')  // strip possessive 's (e.g. "What's" → "What " then strip "What ")
-          .replace(/\b\w{1,2}\b/g, ' ')  // strip 1-2 char fragments left over
-          .replace(/\s+/g, ' ')
-          .trim()
-          .substring(0, 60);  // limit length for cleaner RSS query
-        
+        // Extract clean search query from conversational input using shared cleanNewsQuery helper
+        const cleanedQuery = cleanNewsQuery(query);
         const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
-        
-        // Log cleaning if query was modified
-        if (searchQuery !== query) {
-          console.log(`[externalLookupEngine] News RSS query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`);
-        }
-        
+        console.log(`[externalLookupEngine] News RSS query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`);
         return `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}&hl=en-US&gl=US&ceid=US:en`;
       },
       parser: 'rss',
@@ -593,13 +599,63 @@ export const AUTHORITATIVE_SOURCES = {
   ]
 };
 
+/**
+ * Clean a conversational query into a concise news search string.
+ * Strips first-person pronouns, contractions, framing phrases, and filler words.
+ * Returns at most 6 topic keywords with no stray punctuation.
+ * Used by both GDELT and Google News RSS buildUrl functions.
+ * @param {string} query - Raw user query
+ * @returns {string} Cleaned search query (3-60 chars)
+ */
+function cleanNewsQuery(query) {
+  let cleaned = query;
+
+  // Step 1: Strip first/second person pronouns and contractions FIRST to avoid stray apostrophe
+  // artifacts (e.g. "I'm" → "'" when only "I" is removed by stop-word pass)
+  cleaned = cleaned.replace(/\b(I'm|I've|I'd|I'll|we're|we've|we'd|we'll|you're|you've|you'd|you'll)\b/gi, ' ');
+  cleaned = cleaned.replace(/\b(I|we|you|me|my|our|your|us)\b/gi, ' ');
+
+  // Step 2: Strip conversational framing phrases before stop-word removal
+  cleaned = cleaned.replace(/\b(specifically wondering|bring (me |us )?up[- ]to[- ](date|speed)|catch (me |us )?up (on|with|about|to)?|fill (me |us )?in (on|about)?|what'?s going on with|what is going on with|can you tell me|could you tell me|let me know about|clue (me |us )?in on|give me an update on|keep me informed about|going on with|in relationship to|in relation to)\b/gi, ' ');
+
+  // Step 3: Strip stop words and filler words (expanded list)
+  cleaned = cleaned.replace(/\b(what|what's|whats|is|the|are|there|anything|going|on|with|latest|newest|most|recent|up|to|date|information|from|news|about|tell|can|please|how|has|been|no|yes|specifically|basically|really|actually|right|now|currently|in|relationship|relation|of|and|but|or|so|if|that|this|these|those|a|an|any|some|all|not|do|did|was|were|will|would|could|should|have|had|get|got|just|very|quite|rather|pretty|much|more|most|lot|lots|many|few|little|big|great|good|bad|well|make|made|let|see|know|think|want|need|getting|having|doing|being|am|be|they|he|she|it|new|bring|speed|catch|fill|serious|very|really|lot|particularly|especially|highly)\b/gi, ' ');
+
+  // Step 4: Clean stray punctuation (apostrophes, commas, quotes left over from contractions)
+  cleaned = cleaned.replace(/['"`,;:!?()\[\]{}]/g, ' ');
+
+  // Step 5: Strip 1-2 char fragments
+  cleaned = cleaned.replace(/\b\w{1,2}\b/g, ' ');
+
+  // Step 6: Normalize whitespace
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  // Step 7: Limit to 6 keywords maximum (improves search quality)
+  const words = cleaned.split(' ').filter(w => w.length > 2);
+  if (words.length > 6) {
+    cleaned = words.slice(0, 6).join(' ');
+  } else {
+    cleaned = words.join(' ');
+  }
+
+  return cleaned;
+}
+
 // Freshness markers that trigger automatic lookup
 const FRESHNESS_MARKERS = [
   /\b(current|latest|today|now|live|real-?time)\b/i,
   /\b(price|stock|rate|value|cost)\b/i,
   /\b(weather|forecast|temperature)\b/i,
-  /\b(news|update|announcement|breaking|situation|happening)\b/i,
-  /\b(available|in stock|open|closed)\b/i
+  /\b(news|update|announcements?|breaking|situation|happening)\b/i,
+  /\b(available|in stock|open|closed)\b/i,
+  // Issue #861 Fix: Conversational freshness phrases
+  /\bbring (me |us )?(up[- ]to[- ]date|up to speed)\b/i,
+  /\bcatch (me |us )?up (on|with|about|to)?\b/i,
+  /\bfill (me |us )?in (on|about)?\b/i,
+  /\bwhat'?s (new|the latest) (with|in|on|about)\b/i,
+  /\bany recent\b/i,
+  /\b(made|making) (a lot of )?(announcements?|news|headlines)\b/i,
+  /\brecently\b/i,
 ];
 
 // High-stakes news markers that require corroboration
@@ -644,7 +700,14 @@ const NEWS_STRUCTURE_PATTERNS = [
   /\bweather\s+(in|at|for)\b/i,
 
   // ISSUE #406 FIX: Celebrity/entertainment news
-  /\b(latest|recent)\s+(celebrity|entertainment)\s+(news|gossip|stories)\b/i
+  /\b(latest|recent)\s+(celebrity|entertainment)\s+(news|gossip|stories)\b/i,
+
+  // Issue #861 Fix: Conversational freshness phrases with proper nouns indicate news intent
+  /\bbring (me |us )?(up[- ]to[- ]date|up to speed)\b/i,
+  /\bcatch (me |us )?up (on|with|about|to)?\b/i,
+  /\bfill (me |us )?in (on|about)?\b/i,
+  /\bwhat'?s (new|the latest) (with|in|on|about)\b/i,
+  /\b(made|making) (a lot of )?(announcements?|news|headlines)\b/i,
 ];
 
 // Geopolitical context markers (not entity names, but CONTEXT indicators)
