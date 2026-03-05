@@ -24,6 +24,94 @@ export const LOOKUP_CONFIG = {
   CONFIDENCE_THRESHOLD: 0.70
 };
 
+// Company name → stock ticker map for Yahoo Finance lookups
+const COMPANY_TICKER_MAP = {
+  'walmart': 'WMT', 'wal-mart': 'WMT',
+  'apple': 'AAPL',
+  'google': 'GOOGL', 'alphabet': 'GOOGL',
+  'microsoft': 'MSFT',
+  'amazon': 'AMZN',
+  'tesla': 'TSLA',
+  'meta': 'META', 'facebook': 'META',
+  'netflix': 'NFLX',
+  'nvidia': 'NVDA',
+  'amd': 'AMD',
+  'intel': 'INTC',
+  'disney': 'DIS',
+  'nike': 'NKE',
+  'coca-cola': 'KO', 'coke': 'KO',
+  'pepsi': 'PEP', 'pepsico': 'PEP',
+  'exxon': 'XOM', 'exxonmobil': 'XOM',
+  'jpmorgan': 'JPM', 'jp morgan': 'JPM',
+  'bank of america': 'BAC',
+  'wells fargo': 'WFC',
+  'visa': 'V',
+  'mastercard': 'MA',
+  'paypal': 'PYPL',
+  'uber': 'UBER',
+  'lyft': 'LYFT',
+  'airbnb': 'ABNB',
+  'spotify': 'SPOT',
+  'snap': 'SNAP', 'snapchat': 'SNAP',
+  'palantir': 'PLTR',
+  'salesforce': 'CRM',
+  'oracle': 'ORCL',
+  'ibm': 'IBM',
+  'qualcomm': 'QCOM',
+  'broadcom': 'AVGO',
+  'boeing': 'BA',
+  'ford': 'F',
+  'general motors': 'GM',
+  'caterpillar': 'CAT',
+  'home depot': 'HD',
+  'target': 'TGT',
+  'costco': 'COST',
+  'starbucks': 'SBUX',
+  "mcdonald's": 'MCD', 'mcdonalds': 'MCD',
+  'chevron': 'CVX',
+  'pfizer': 'PFE',
+  'moderna': 'MRNA',
+  'merck': 'MRK',
+  'unitedhealth': 'UNH',
+  'ups': 'UPS',
+  'fedex': 'FDX'
+};
+
+/**
+ * Extract stock ticker symbol from a user query.
+ * Maps common company names to tickers; also looks for explicit uppercase tickers
+ * adjacent to financial keywords. Avoids false positives from abbreviations like USA, CEO.
+ * @param {string} query
+ * @returns {string|null} Ticker symbol (e.g. 'AAPL') or null if not found
+ */
+function extractTicker(query) {
+  const lower = query.toLowerCase();
+  // Multi-word company names must be checked before single-word names to avoid partial matches
+  const sortedEntries = Object.entries(COMPANY_TICKER_MAP).sort((a, b) => b[0].length - a[0].length);
+  for (const [name, ticker] of sortedEntries) {
+    if (lower.includes(name)) return ticker;
+  }
+  // Look for explicit uppercase ticker (2-5 chars) adjacent to stock-related financial keywords
+  const tickerNearStock = query.match(/\b([A-Z]{2,5})\b[\s\w]{0,30}\b(?:stock|share|price|equity)\b/);
+  if (tickerNearStock) return tickerNearStock[1];
+  // Reverse: stock keyword before ticker (e.g. "stock price AAPL")
+  const stockNearTicker = query.match(/\b(?:stock|share|price|equity)\b[\s\w]{0,30}\b([A-Z]{2,5})\b/);
+  if (stockNearTicker) return stockNearTicker[1];
+  return null;
+}
+
+// WMO weather interpretation codes for Open-Meteo responses
+const WMO_WEATHER_CODES = {
+  0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
+  45: 'Fog', 48: 'Depositing rime fog',
+  51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle',
+  61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
+  71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow', 77: 'Snow grains',
+  80: 'Slight showers', 81: 'Moderate showers', 82: 'Violent showers',
+  85: 'Slight snow showers', 86: 'Heavy snow showers',
+  95: 'Thunderstorm', 96: 'Thunderstorm with hail', 99: 'Thunderstorm with heavy hail'
+};
+
 // API-based sources with proper parsing (returns structured data)
 export const API_SOURCES = {
   CRYPTO: [
@@ -74,9 +162,42 @@ export const API_SOURCES = {
       }
     }
   ],
-  // STOCKS: Removed - no free API available without authentication
-  // Graceful degradation will direct users to finance.yahoo.com or similar
-  STOCKS: [],
+  // STOCKS: Yahoo Finance unofficial quote API (no key needed)
+  // Uses browser-like User-Agent header; falls through to news RSS if ticker cannot be extracted
+  STOCKS: [
+    {
+      name: 'Yahoo Finance Quote',
+      buildUrl: (query) => {
+        const ticker = extractTicker(query);
+        if (!ticker) {
+          console.log('[externalLookupEngine] Yahoo Finance: could not extract ticker from query');
+          return null;
+        }
+        console.log(`[externalLookupEngine] Yahoo Finance: resolved ticker "${ticker}" from query`);
+        return `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}&fields=regularMarketPrice,regularMarketChange,regularMarketChangePercent,longName,shortName,currency,marketCap`;
+      },
+      parser: 'json',
+      type: 'api',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        'Accept': 'application/json'
+      },
+      extract: (json) => {
+        const result = json?.quoteResponse?.result?.[0];
+        if (!result) return null;
+        const price = result.regularMarketPrice;
+        if (!price) return null;
+        const symbol = result.symbol || '';
+        const name = result.longName || result.shortName || symbol;
+        const change = result.regularMarketChange != null ? result.regularMarketChange.toFixed(2) : null;
+        const changePct = result.regularMarketChangePercent != null ? result.regularMarketChangePercent.toFixed(2) : null;
+        const currency = result.currency || 'USD';
+        const sign = change != null && parseFloat(change) >= 0 ? '+' : '';
+        const changePart = change != null ? ` (${sign}${change}, ${sign}${changePct}%)` : '';
+        return `${name} (${symbol}): ${currency} $${price.toFixed(2)}${changePart}`;
+      }
+    }
+  ],
   // COMMODITIES: Using Metals-Live API (free tier, no auth required)
   // Note: These APIs use free/demo keys with rate limits. For production use:
   // - Set METALS_API_KEY environment variable for metals-api.com
@@ -116,16 +237,22 @@ export const API_SOURCES = {
         if (lowerQuery.includes('silver')) symbol = 'XAG';
         if (lowerQuery.includes('platinum')) symbol = 'XPT';
         if (lowerQuery.includes('palladium')) symbol = 'XPD';
-        return `https://www.goldapi.io/api/${symbol}/${apiKey}`;
+        // Correct endpoint: /api/{symbol}/USD — API key goes in x-access-token header
+        return `https://www.goldapi.io/api/${symbol}/USD`;
       },
       parser: 'json',
       type: 'api',
+      getHeaders: () => ({
+        'x-access-token': process.env.GOLDAPI_KEY || '',
+        'Content-Type': 'application/json'
+      }),
       extract: (json) => {
         if (!json || !json.price) return null;
-        const metal = json.metal || 'Metal';
+        const METAL_NAMES = { XAU: 'Gold', XAG: 'Silver', XPT: 'Platinum', XPD: 'Palladium' };
+        const metalName = METAL_NAMES[json.metal] || json.metal || 'Metal';
         const price = json.price;
-        const unit = json.price_gram ? '/gram' : '/oz';
-        return `${metal}: $${price}${unit}`;
+        const priceGram = json.price_gram_24k ? ` ($${json.price_gram_24k.toFixed(2)}/gram)` : '';
+        return `${metalName}: $${price.toFixed(2)}/oz${priceGram}`;
       }
     }
   ],
@@ -212,8 +339,138 @@ export const API_SOURCES = {
       }
     }
   ],
+  // WEATHER: Open-Meteo (free, no key needed) — uses geocoding step to resolve city to lat/lon
+  // fetchData handles both geocoding and weather fetch internally (async multi-step source)
+  WEATHER: [
+    {
+      name: 'Open-Meteo',
+      type: 'api',
+      fetchData: async (query, abortSignal) => {
+        // Extract city/location from query using multiple patterns
+        const cityPatterns = [
+          /(?:weather|temperature|forecast|rain|snow|storm)\s+(?:in|at|for)\s+([A-Za-z][A-Za-z\s,]+?)(?:\?|$|today|now|right|currently|\d)/i,
+          /(?:in|at|for)\s+([A-Za-z][A-Za-z\s,]+?)\s+(?:weather|temperature|forecast)/i,
+          /^([A-Za-z][A-Za-z\s,]+?)\s+weather/i
+        ];
+        let cityQuery = null;
+        for (const pattern of cityPatterns) {
+          const m = query.match(pattern);
+          if (m) { cityQuery = m[1].trim().replace(/,$/, ''); break; }
+        }
+        if (!cityQuery) {
+          console.log('[externalLookupEngine] Open-Meteo: could not extract city from query');
+          return null;
+        }
+        try {
+          // Step 1: Geocode city name to lat/lon
+          const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityQuery)}&count=1&language=en&format=json`;
+          const geoResp = await fetch(geoUrl, { signal: abortSignal, headers: { 'User-Agent': 'SiteMonkeys-AI-System/1.0' } });
+          if (!geoResp.ok) { console.log(`[externalLookupEngine] Open-Meteo geocoding failed: ${geoResp.status}`); return null; }
+          const geoData = await geoResp.json();
+          const loc = geoData.results?.[0];
+          if (!loc) { console.log(`[externalLookupEngine] Open-Meteo: no geocoding result for "${cityQuery}"`); return null; }
+          // Step 2: Fetch current weather using lat/lon
+          const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current_weather=true&temperature_unit=fahrenheit`;
+          const weatherResp = await fetch(weatherUrl, { signal: abortSignal, headers: { 'User-Agent': 'SiteMonkeys-AI-System/1.0' } });
+          if (!weatherResp.ok) { console.log(`[externalLookupEngine] Open-Meteo weather fetch failed: ${weatherResp.status}`); return null; }
+          const weatherData = await weatherResp.json();
+          const current = weatherData.current_weather;
+          if (!current) return null;
+          const condition = WMO_WEATHER_CODES[current.weathercode] || `Code ${current.weathercode}`;
+          const locationName = [loc.name, loc.admin1, loc.country_code].filter(Boolean).join(', ');
+          return `Weather in ${locationName}: ${current.temperature}°F, ${condition}, Wind: ${current.windspeed} km/h`;
+        } catch (err) {
+          if (err.name !== 'AbortError') console.log(`[externalLookupEngine] Open-Meteo error: ${err.message}`);
+          return null;
+        }
+      }
+    }
+  ],
+  // FACTUAL_ENTITY: Wikipedia REST article summary — for "who is", "what is", entity questions
+  // Replaces the near-always-null Portal:Current_events endpoint for factual queries
+  FACTUAL_ENTITY: [
+    {
+      name: 'Wikipedia Article Summary',
+      buildUrl: (query) => {
+        // Strip question framing to extract the core entity/topic
+        let topic = query
+          .replace(/^(who is|who was|who are|what is|what are|what does|what did|tell me about|is|does|do|how does|explain)\s+/i, '')
+          .replace(/\b(the|a|an|some|any|currently|right now|today|please|can you|could you)\b/gi, ' ')
+          .replace(/\?+$/, '')
+          // Remove trailing action verbs from "what does X do" → "X"
+          .replace(/\s+(do|does|offer|provide|make|sell|produce|have)\s*$/i, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        // Limit to first 5 words to avoid over-specific lookups
+        const words = topic.split(' ').filter(Boolean);
+        if (words.length > 5) topic = words.slice(0, 5).join(' ');
+        if (!topic || topic.length < 2) return null;
+        return `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(topic)}`;
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        if (!json || !json.extract) return null;
+        const title = json.title || '';
+        const desc = json.description ? ` (${json.description})` : '';
+        const extract = json.extract.substring(0, 1000);
+        return `${title}${desc}: ${extract}`;
+      }
+    }
+  ],
+  // GENERAL_FALLBACK: DuckDuckGo Instant Answer — broad factual fallback, no key needed
+  // Coverage is inconsistent but returns structured data when it matches
+  GENERAL_FALLBACK: [
+    {
+      name: 'DuckDuckGo Instant Answer',
+      buildUrl: (query) => {
+        const cleanQuery = query.replace(/\s+/g, ' ').trim().substring(0, 100);
+        return `https://api.duckduckgo.com/?q=${encodeURIComponent(cleanQuery)}&format=json&no_html=1&skip_disambig=1`;
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        if (!json) return null;
+        const parts = [];
+        if (json.Answer && json.Answer.length > 0) parts.push(`Answer: ${json.Answer}`);
+        if (json.Abstract && json.Abstract.length > 0) parts.push(json.Abstract.substring(0, 500));
+        if (json.RelatedTopics?.length > 0) {
+          const related = json.RelatedTopics.filter(t => t.Text).slice(0, 3).map(t => t.Text);
+          if (related.length > 0) parts.push(`Related: ${related.join('; ')}`);
+        }
+        return parts.length > 0 ? parts.join('\n\n') : null;
+      }
+    }
+  ],
   NEWS: [
-    // 1. Google News RSS - primary discovery layer
+    // 1. GDELT — global news with structured metadata (primary news source)
+    // GDELT is free to use with attribution; see https://www.gdeltproject.org/about.html
+    // Rate limits: no official rate limit published but respectful usage is expected.
+    // GDELT can return HTML error pages; JSON parse failure is caught gracefully in performLookup
+    // and falls through to Google News RSS automatically.
+    {
+      name: 'GDELT News',
+      buildUrl: (query) => {
+        const cleanedQuery = query
+          .replace(/\b(what|what's|whats|is|the|are|there|anything|new|going|on|with|latest|newest|most|recent|up|to|date|information|from|news|about|tell|me|can|you|please|how|has|been)\b/gi, ' ')
+          .replace(/'s\b/g, ' ')
+          .replace(/\b\w{1,2}\b/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .substring(0, 60);
+        const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
+        return `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(searchQuery)}&mode=artlist&maxrecords=5&format=json`;
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        if (!json || !json.articles || !Array.isArray(json.articles)) return null;
+        const articles = json.articles.filter(a => a.title).slice(0, 5);
+        if (articles.length === 0) return null;
+        return articles.map(a => `[${a.domain || '[unknown source]'}] ${a.title} (${a.seendate || '[date unknown]'})`).join('\n\n');
+      }
+    },
+    // 2. Google News RSS - primary discovery layer (fallback behind GDELT)
     // ISSUE #814 ITEM 3 (Post-Review): Apply entity extraction to ALL RSS queries, not just stock fallback.
     // Extract the topic/entity from conversational messages before sending to Google News.
     {
@@ -249,7 +506,7 @@ export const API_SOURCES = {
         return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
       }
     },
-    // 2. Wikipedia Current Events - fallback context only
+    // 3. Wikipedia Current Events - fallback context only
     {
       name: 'Wikipedia Current Events',
       url: 'https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events',
@@ -257,8 +514,6 @@ export const API_SOURCES = {
       type: 'api',
       extract: (json) => json.extract?.substring(0, 2000) || null
     }
-    // NOTE: GDELT API removed due to consistent failures (returns HTML error pages instead of JSON)
-    // If re-enabled, need proper error handling for non-JSON responses
   ]
 };
 
@@ -670,46 +925,47 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return API_SOURCES.CURRENCY;
   }
 
-  // Stock prices - no dedicated API configured; use Google News RSS as fallback
-  // ISSUE #804 FIX (Area 2): Instead of returning empty and triggering a blank "technical issue"
-  // response (which also causes identity leak to "as an AI model developed by OpenAI"),
-  // fall through to Google News RSS for recent stock price context from news headlines.
+  // Stock prices - prefer Yahoo Finance; fall through to Google News RSS if ticker can't be resolved
+  // ISSUE #804 FIX (Area 2): Use Yahoo Finance structured API first to get actual quote numbers.
   // ISSUE #814 FIX (FAILURE 8): Broadened matching — "going for", "what's it", "at" as price indicators.
-  // "How about Apple stock what's it going for" now matches because "going for" and "stock" both present.
   if (lowerQuery.match(/\bstock\b/) &&
       lowerQuery.match(/price|value|trading|current|going for|what'?s it|how much|at\b/i)) {
-    console.log('[externalLookupEngine] Stock price query detected - no dedicated API, using news fallback');
-    return [{
-      name: 'Google News RSS (stock price fallback)',
-      // ISSUE #810 FIX D: Extract entity name from conversational query instead of passing raw query.
-      // "What is the current stock price of Walmart" → "Walmart stock price" (not the full sentence)
-      // ISSUE #814 FIX (FAILURE 6): Also strip apostrophe-s ('s / 's) to avoid "'s Walmart" artifacts.
-      buildUrl: (query) => {
-        // Strip question/price words to extract just the company/ticker name
-        const entityQuery = query
-          .replace(/\b(what|is|the|are|current|stock|share|price|of|today|now|currently|how|much|does|cost|worth|trading|value|market|tell|me|about|please|can|you|could|would|going|for|it|at|about|how)\b/gi, ' ')
-          .replace(/'s\b/g, ' ')   // strip possessive 's (e.g. "What's" → "What " then strip "What ")
-          .replace(/\b\w{1,2}\b/g, ' ')  // strip 1-2 char fragments left over (e.g. "s", "it")
-          .replace(/\s+/g, ' ')
-          .trim()
-          .substring(0, 40)
-          .trim();
-        const searchTerm = entityQuery.length >= 2 ? entityQuery : query.substring(0, 40).trim();
-        console.log(`[externalLookupEngine] Stock RSS query extracted: "${searchTerm}" (from: "${query.substring(0, 60)}")`);
-        return `https://news.google.com/rss/search?q=${encodeURIComponent(searchTerm + ' stock price')}&hl=en-US&gl=US&ceid=US:en`;
-      },
-      parser: 'rss',
-      type: 'news_fallback',
-      extract: (text) => {
-        const items = [];
-        const itemRegex = /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
-        let match;
-        while ((match = itemRegex.exec(text)) !== null && items.length < 5) {
-          items.push({ title: match[1], source: match[2], date: match[3] });
+    console.log('[externalLookupEngine] Stock price query detected - using Yahoo Finance with news fallback');
+    // Yahoo Finance is tried first; if buildUrl returns null (no ticker found) it is skipped
+    // and the news RSS fallback handles the query.
+    return [
+      ...API_SOURCES.STOCKS,
+      {
+        name: 'Google News RSS (stock price fallback)',
+        // ISSUE #810 FIX D: Extract entity name from conversational query instead of passing raw query.
+        // ISSUE #814 FIX (FAILURE 6): Also strip apostrophe-s ('s / 's) to avoid "'s Walmart" artifacts.
+        buildUrl: (query) => {
+          // Strip question/price words to extract just the company/ticker name
+          const entityQuery = query
+            .replace(/\b(what|is|the|are|current|stock|share|price|of|today|now|currently|how|much|does|cost|worth|trading|value|market|tell|me|about|please|can|you|could|would|going|for|it|at|about|how)\b/gi, ' ')
+            .replace(/'s\b/g, ' ')   // strip possessive 's (e.g. "What's" → "What " then strip "What ")
+            .replace(/\b\w{1,2}\b/g, ' ')  // strip 1-2 char fragments left over (e.g. "s", "it")
+            .replace(/\s+/g, ' ')
+            .trim()
+            .substring(0, 40)
+            .trim();
+          const searchTerm = entityQuery.length >= 2 ? entityQuery : query.substring(0, 40).trim();
+          console.log(`[externalLookupEngine] Stock RSS query extracted: "${searchTerm}" (from: "${query.substring(0, 60)}")`);
+          return `https://news.google.com/rss/search?q=${encodeURIComponent(searchTerm + ' stock price')}&hl=en-US&gl=US&ceid=US:en`;
+        },
+        parser: 'rss',
+        type: 'news_fallback',
+        extract: (text) => {
+          const items = [];
+          const itemRegex = /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
+          let match;
+          while ((match = itemRegex.exec(text)) !== null && items.length < 5) {
+            items.push({ title: match[1], source: match[2], date: match[3] });
+          }
+          return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
         }
-        return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
       }
-    }];
+    ];
   }
 
   // Commodity prices - use metals/commodity API with news fallback
@@ -787,17 +1043,12 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return API_SOURCES.MEDICAL;
   }
 
-  // ISSUE #406 FIX: Weather queries - no API source available
-  // Return empty for graceful degradation OR return news for context
+  // Weather queries - use Open-Meteo (free, no key) with news as fallback
+  // ISSUE #406 FIX: Now has a real weather API instead of falling back to news RSS
   // ISSUE #810 FIX E: Use word boundaries to prevent false positives (e.g. "Ukraine" contains "rain")
   if (lowerQuery.match(/\b(weather|temperature|forecast|rain|snow|storm)\b/i)) {
-    // OPTION A: Return empty to trigger graceful degradation with disclosure
-    // console.log('[externalLookupEngine] Weather query detected - no weather API configured');
-    // return [];
-    
-    // OPTION B: Return news sources for general weather context
-    console.log('[externalLookupEngine] Weather query detected - using news sources for context');
-    return API_SOURCES.NEWS;
+    console.log('[externalLookupEngine] Weather query detected - using Open-Meteo with news fallback');
+    return [...API_SOURCES.WEATHER, ...API_SOURCES.NEWS];
   }
 
   // News/current events queries - PRINCIPLE-BASED DETECTION
@@ -806,7 +1057,7 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   const isGenericNewsQuery = lowerQuery.match(/\b(top|latest|recent|breaking)\s+(news|stories|headlines|updates)\b/i);
   const isEntertainmentQuery = lowerQuery.match(/\b(celebrity|entertainment|gossip)\b/i);
   
-  // Note: Weather queries are already handled above (line 507)
+  // Note: Weather queries are already handled above
   if (hasNewsIntent(query) || isGenericNewsQuery || isEntertainmentQuery) {
     return API_SOURCES.NEWS;
   }
@@ -821,19 +1072,29 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return API_SOURCES.NEWS;
   }
 
+  // Factual entity queries - Wikipedia REST article summary + DuckDuckGo fallback
+  // Applies to "who is X", "what is X", "does X do Y", entity description queries
+  // This comes after news routing so news-flavoured queries (latest, breaking) go to GDELT/RSS
+  if (lowerQuery.match(/\b(who is|who was|who are|what is|what are|what does|what did)\b/i) ||
+      lowerQuery.match(/\bdoes\s+\w+(\s+\w+)?\s+(do|offer|provide|make|sell|produce|have)\b/i) ||
+      lowerQuery.match(/\bis\s+\w+(\s+\w+)?\s+(a|an)\s+\w+/i)) {
+    console.log('[externalLookupEngine] Factual entity query detected - using Wikipedia REST + DuckDuckGo');
+    return [...API_SOURCES.FACTUAL_ENTITY, ...API_SOURCES.GENERAL_FALLBACK];
+  }
+
   // Wikipedia ONLY for PERMANENT definition/history queries, NOT high-stakes
   if (truthType === TRUTH_TYPES.PERMANENT && !highStakesResult?.isHighStakes) {
-    return AUTHORITATIVE_SOURCES.GENERAL;
+    return [...AUTHORITATIVE_SOURCES.GENERAL, ...API_SOURCES.GENERAL_FALLBACK];
   }
 
   // ISSUE #814 FIX: Broadened fallback for VOLATILE/SEMI_STABLE queries
-  // Per specification: any VOLATILE/SEMI_STABLE query should attempt Google News RSS when no
+  // Per specification: any VOLATILE/SEMI_STABLE query should attempt structured sources then news when no
   // structured API exists, not only when specific freshness words appear.
   // This covers "When is Apple's new event", "Is there anything new going on with Greenland",
   // and similar queries that have current-events intent but don't use the exact freshness words.
   if (truthType === TRUTH_TYPES.VOLATILE || truthType === TRUTH_TYPES.SEMI_STABLE) {
-    console.log('[externalLookupEngine] Using news fallback for volatile/semi-stable query');
-    return API_SOURCES.NEWS;
+    console.log('[externalLookupEngine] Using DuckDuckGo + news fallback for volatile/semi-stable query');
+    return [...API_SOURCES.GENERAL_FALLBACK, ...API_SOURCES.NEWS];
   }
 
   // No reliable source available - return empty, trigger graceful degradation
@@ -916,6 +1177,30 @@ export async function performLookup(query, sources, truthType = null) {
       }
 
       try {
+        // Handle sources with async multi-step fetch (e.g., Open-Meteo requires geocoding first)
+        if (source.fetchData) {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), LOOKUP_CONFIG.TIMEOUT_MS);
+          let fetchedData;
+          try {
+            fetchedData = await source.fetchData(searchQuery, controller.signal);
+          } finally {
+            clearTimeout(timeoutId);
+          }
+          if (!fetchedData) {
+            console.log(`[externalLookupEngine] ${source.name} fetchData returned null`);
+            sourcesUsed.push({ name: source.name, type: source.type || 'api', status: 'no_data', success: false });
+            continue;
+          }
+          const remaining = LOOKUP_CONFIG.MAX_FETCHED_TEXT - totalTextFetched;
+          const bounded = fetchedData.length > remaining ? fetchedData.substring(0, remaining) : fetchedData;
+          totalTextFetched += bounded.length;
+          results.push({ source: source.name, text: bounded, length: bounded.length, type: source.type || 'api' });
+          sourcesUsed.push({ name: source.name, type: source.type || 'api', status: 'success', text_length: bounded.length, success: true });
+          console.log(`[externalLookupEngine] ✓ ${source.name}: ${bounded.length} chars extracted`);
+          continue;
+        }
+
         // Build URL if function provided - use cleaned search query
         // Handle url as function (for dynamic API keys) or buildUrl function
         let fetchUrl;
@@ -939,12 +1224,15 @@ export async function performLookup(query, sources, truthType = null) {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), LOOKUP_CONFIG.TIMEOUT_MS);
 
-        // Perform fetch with timeout
+        // Perform fetch with timeout; merge source-specific headers (e.g. GoldAPI x-access-token)
+        // getHeaders() is called at request time (supports env vars set after module load)
+        const sourceHeaders = typeof source.getHeaders === 'function' ? source.getHeaders() : (source.headers || {});
         const response = await fetch(fetchUrl, {
           signal: controller.signal,
           headers: {
             'User-Agent': 'SiteMonkeys-AI-System/1.0',
-            'Accept': 'application/json,text/html,text/plain'
+            'Accept': 'application/json,text/html,text/plain',
+            ...sourceHeaders
           }
         });
 
