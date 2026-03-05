@@ -724,4 +724,129 @@ describe('G. Contact Extraction Scoping Guards', () => {
   });
 });
 
+// ============================================================
+// SECTION H: STR1 — Volume Stress Guards (Issue #863)
+// Ensures that dense messages with 10+ personal facts are
+// fully preserved through extraction and compression.
+// ============================================================
+describe('H. STR1 — Volume Stress Guards', () => {
+  it('H-001: aggressivePostProcessing maxFacts scales with input line count', () => {
+    // BUG (fixed): maxFacts was a hard cap of 3 (or 5 with identifiers/synonyms).
+    // With 10 plain-text facts and no identifiers, cap = 3 — 7 facts lost silently.
+    // FIX: maxFacts must scale with regularLines.length so all distinct facts survive.
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'Could not read intelligent-storage.js');
+
+    // The fixed version uses Math.max(base, Math.min(regularLines.length, 15))
+    // or equivalent — regularLines.length must participate in the maxFacts calculation.
+    const hasScalingMaxFacts = (
+      storage.includes('regularLines.length') &&
+      storage.includes('maxFacts')
+    );
+
+    assert.ok(
+      hasScalingMaxFacts,
+      'STR1 REGRESSION: aggressivePostProcessing maxFacts is a fixed cap (3 or 5) that ' +
+      'does not scale with the number of distinct input lines. When a user provides 10 facts ' +
+      'in a single message, only 3–5 are preserved. Fix: use Math.max(base, regularLines.length).'
+    );
+  });
+
+  it('H-002: extraction max_tokens is at least 300 for dense inputs', () => {
+    // BUG (fixed): max_tokens was 150, barely enough for ~10 facts × ~15 tokens each.
+    // At the limit, GPT-4o-mini truncates output, dropping the last 3–5 facts.
+    // FIX: Increase to 300 to give extraction room for 10+ fact messages.
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'Could not read intelligent-storage.js');
+
+    const tokenMatch = storage.match(/max_tokens:\s*(\d+)/);
+    const tokenValue = tokenMatch ? parseInt(tokenMatch[1]) : 0;
+
+    assert.ok(
+      tokenValue >= 300,
+      `STR1 REGRESSION: max_tokens for GPT-4o-mini extraction is ${tokenValue} — must be ≥ 300. ` +
+      'With only 150 tokens, extracting 10+ facts from a dense message causes output truncation ' +
+      'and silent fact loss. Increase to at least 300.'
+    );
+  });
+
+  it('H-003: STR1 is not listed in smd_deep known_failures in baselines.json', () => {
+    const baselines = readRepoFile('tests/baselines.json');
+    assert.ok(baselines, 'Could not read tests/baselines.json');
+    const parsed = JSON.parse(baselines);
+
+    const smdKnownFailures = parsed?.suites?.smd_deep?.known_failures ?? [];
+    const str1StillFailing = smdKnownFailures.some(f => f.id === 'STR1');
+
+    assert.ok(
+      !str1StillFailing,
+      'STR1 is still listed as a known failure in tests/baselines.json (smd_deep suite). ' +
+      'Remove it once the volume stress fix (maxFacts scaling + max_tokens increase) has been deployed.'
+    );
+  });
+});
+
+// ============================================================
+// SECTION I: EDG3 — Pricing Preservation Guards (Issue #863)
+// Ensures that pricing lines survive aggressivePostProcessing
+// without being word-truncated or fact-dropped.
+// ============================================================
+describe('I. EDG3 — Pricing Preservation Guards', () => {
+  it('I-001: aggressivePostProcessing defines pricingLines exempt from word truncation', () => {
+    // BUG (fixed): Lines containing pricing data (e.g. "Plans: $99/month, $299/month")
+    // fell into regularLines and were word-truncated to 5 words, losing the second price.
+    // FIX: Introduce pricingLines category (lines with $ or pricing keywords) that bypasses
+    // word truncation, similar to unicodeNameLines.
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'Could not read intelligent-storage.js');
+
+    const hasPricingLineProtection = (
+      storage.includes('pricingLines') ||
+      (storage.includes('\\$[\\d,.]') && storage.includes('aggressivePostProcessing'))
+    );
+
+    assert.ok(
+      hasPricingLineProtection,
+      'EDG3 REGRESSION: aggressivePostProcessing no longer protects lines containing pricing data. ' +
+      'Lines with dollar amounts ($X.XX) or pricing keywords will be word-truncated to 5 words, ' +
+      'potentially dropping the second or third price in a multi-tier pricing statement. ' +
+      'Fix: add a pricingLines category exempt from word-count truncation.'
+    );
+  });
+
+  it('I-002: amountPattern uses global flag to detect ALL prices in input', () => {
+    // BUG (fixed): amountPattern used /i (no /g), so .match() found only the FIRST price.
+    // "The basic plan costs $99 and premium costs $299" → inputAmounts = ['$99'] (one item).
+    // factsAmounts also = ['$99'] if it survived → length check passes → $299 never re-injected.
+    // FIX: Use /gi flag so .match() returns ALL dollar amounts.
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'Could not read intelligent-storage.js');
+
+    // The fixed pattern should contain /gi (global + case-insensitive) for amountPattern
+    const hasGlobalAmountPattern = /amountPattern\s*=\s*\/[^/]+\/gi/.test(storage);
+
+    assert.ok(
+      hasGlobalAmountPattern,
+      'EDG3 REGRESSION: amountPattern does not use the global (/g) flag. Without /g, ' +
+      '.match() finds only the first dollar amount — a message with "$99 and $299" will ' +
+      'verify "$99" survived but never detect that "$299" was lost. Fix: use /gi flag.'
+    );
+  });
+
+  it('I-003: EDG3 is not listed in smd_deep known_failures in baselines.json', () => {
+    const baselines = readRepoFile('tests/baselines.json');
+    assert.ok(baselines, 'Could not read tests/baselines.json');
+    const parsed = JSON.parse(baselines);
+
+    const smdKnownFailures = parsed?.suites?.smd_deep?.known_failures ?? [];
+    const edg3StillFailing = smdKnownFailures.some(f => f.id === 'EDG3');
+
+    assert.ok(
+      !edg3StillFailing,
+      'EDG3 is still listed as a known failure in tests/baselines.json (smd_deep suite). ' +
+      'Remove it once the pricing preservation fix (pricingLines + global amountPattern) has been deployed.'
+    );
+  });
+});
+
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');
