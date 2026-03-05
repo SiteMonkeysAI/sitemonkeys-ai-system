@@ -24,7 +24,7 @@ const ZOMBIE_PATTERNS = [
   '%Railway deployment%',
 ];
 
-const KNOWN_ZOMBIE_IDS = [2864, 2865, 2902];
+const KNOWN_ZOMBIE_IDS = [2864, 2865, 2902, 8828];
 
 export async function handleZombieCleanupRequest(req, res) {
   // ── Auth ──────────────────────────────────────────────────────────────────

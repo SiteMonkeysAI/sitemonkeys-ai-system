@@ -46,7 +46,7 @@ import { sanitizePII } from "../memory/pii-sanitizer.js";
 // ========== PHASE 4/5/6/7 INTEGRATION ==========
 import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
 import { route } from "../core/intelligence/hierarchyRouter.js";
-import { lookup } from "../core/intelligence/externalLookupEngine.js";
+import { lookup, isFactualEntityQuery } from "../core/intelligence/externalLookupEngine.js";
 import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
 import { enforceBoundedReasoning } from "../core/intelligence/boundedReasoningGate.js";
 import { enforceResponseContract } from "../core/intelligence/responseContractGate.js";
@@ -1208,13 +1208,22 @@ export class Orchestrator {
         // 2. Truth type is SEMI_STABLE AND query matches news/geopolitical patterns (specific combo)
         // 3. High-stakes domain (medical, legal, financial, safety)
         // 4. Router explicitly requires external AND hierarchy is EXTERNAL_FIRST
-        // Condition 2 still covers all legitimate news queries since AMBIGUOUS queries go through
-        // Stage 2 and return SEMI_STABLE, which paired with news patterns triggers lookup correctly.
+        // 5. ISSUE #859 FIX: Factual entity queries ("who is X", "what is [company]") need external lookup
+        //    so Wikipedia/DuckDuckGo can supply current entity information not in memory.
+        //    Condition 2 still covers all legitimate news queries since AMBIGUOUS queries go through
+        //    Stage 2 and return SEMI_STABLE, which paired with news patterns triggers lookup correctly.
+
+        // ISSUE #859 FIX: Detect factual entity queries about named people, companies, or political figures
+        // "Who is the president of Venezuela", "What is Amazon Logistics", "What does Tesla do"
+        // Uses the shared isFactualEntityQuery helper from externalLookupEngine to avoid duplication.
+        const isFactualEntityLookupQuery = isFactualEntityQuery(message);
+
         const shouldLookup =
           truthTypeResult.type === 'VOLATILE' ||
           (truthTypeResult.type === 'SEMI_STABLE' && matchesNewsPattern) ||
           (truthTypeResult.high_stakes && truthTypeResult.high_stakes.isHighStakes) ||
-          (routeResult.external_lookup_required && routeResult.hierarchy_name === "EXTERNAL_FIRST");
+          (routeResult.external_lookup_required && routeResult.hierarchy_name === "EXTERNAL_FIRST") ||
+          isFactualEntityLookupQuery;
 
         // Debug logging for lookup decision
         console.log('[ORCHESTRATOR] Lookup decision:', {
@@ -1227,6 +1236,7 @@ export class Orchestrator {
           routerRequiresLookup: routeResult.external_lookup_required,
           hierarchyName: routeResult.hierarchy_name,
           confidence: phase4Metadata.confidence,
+          isFactualEntityLookupQuery: isFactualEntityLookupQuery,
           willAttemptLookup: shouldLookup
         });
 
