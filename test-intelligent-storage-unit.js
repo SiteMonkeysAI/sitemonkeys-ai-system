@@ -269,6 +269,49 @@ async function runUnitTests() {
     if (result.shouldSkip) throw new Error('Real user fact should NOT be skipped');
   });
 
+  // Issue fix: broader interrogative detection for external information queries
+  test('detectNonUserQuery skips "Who is the president of Venezuela" (external question, no personal indicators)', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('Who is the president of Venezuela');
+    if (!result.shouldSkip) throw new Error('External factual question should be skipped');
+  });
+
+  test('detectNonUserQuery skips "What is going on in Iran right now" (external question)', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('What is going on in Iran right now');
+    if (!result.shouldSkip) throw new Error('External current-events question should be skipped');
+  });
+
+  test('detectNonUserQuery skips "Is Amazon doing non-Amazon deliveries" (yes/no external question)', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('Is Amazon doing non-Amazon deliveries');
+    if (!result.shouldSkip) throw new Error('Yes/no external question should be skipped');
+  });
+
+  test('detectNonUserQuery skips compound Venezuela question (embedded interrogative, no personal indicators)', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('With what took place in Venezuela who is now the acting president Or have they had elections yet');
+    if (!result.shouldSkip) throw new Error('Embedded interrogative external question should be skipped');
+  });
+
+  test('detectNonUserQuery skips "Have they had elections yet" (yes/no with no personal indicators)', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('Have they had elections yet');
+    if (!result.shouldSkip) throw new Error('Yes/no external question should be skipped');
+  });
+
+  test('detectNonUserQuery does NOT skip "My salary is $95,000" (personal fact)', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('My salary is $95,000');
+    if (result.shouldSkip) throw new Error('Personal fact should NOT be skipped');
+  });
+
+  test('detectNonUserQuery does NOT skip "Should I quit my job" (personal decision, has personal indicators)', () => {
+    const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
+    const result = storage.detectNonUserQuery('Should I quit my job');
+    if (result.shouldSkip) throw new Error('Personal decision query should NOT be skipped (has personal indicators)');
+  });
+
   // Test: validateExtractedFacts rejects system component names
   test('validateExtractedFacts rejects facts containing truthTypeDetector', () => {
     const storage = new IntelligentMemoryStorage({ query: async () => ({ rows: [] }) }, 'k');
