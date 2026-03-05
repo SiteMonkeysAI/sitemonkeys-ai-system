@@ -1,0 +1,47 @@
+All changes are in place. Let me verify the test cases from the issue would now be handled correctly:
+
+**Test 1: "No I'm specifically wondering what's going on with France in relationship to the Iran situation"**
+- `cleanNewsQuery` strips: "I'm", "specifically wondering", "in relationship to", "No", "going on with", "the" → `"France Iran situation"` ✓
+
+**Test 2: "The former leader of Venezuela that we took into custody"**
+- FACTUAL_ENTITY strips "that we took into custody", "The" → topic is too long → falls back to proper nouns → "Venezuela" ✓
+
+**Test 3: "Apple's made a lot of announcements recently, bring me up to speed"**
+- `truthTypeDetector`: `"made a lot of announcements"` matches `/\b(made|making) (a lot of )?(announcements?|news|headlines)\b/i` → SEMI_STABLE, external lookup required ✓
+- `FRESHNESS_MARKERS`: same pattern matches → `freshness_markers_detected` in reasons ✓
+- `hasNewsIntent`: "Apple" is proper noun, "bring me up to speed" matches NEWS_STRUCTURE_PATTERNS → `news_intent_detected` ✓
+
+**Test 4: "Can you catch me up on what's happening with Greenland"**
+- `truthTypeDetector`: "catch me up" matches `/\bcatch (me |us )?up (on|with|about|to)?\b/i` → SEMI_STABLE ✓
+- `FRESHNESS_MARKERS`: same pattern matches ✓
+
+---SUMMARY---
+## Changes Made
+
+### `api/core/intelligence/externalLookupEngine.js`
+
+**Problem 1 Fix — News Query Cleaner:**
+- Added a new `cleanNewsQuery(query)` helper function (before the `FRESHNESS_MARKERS` section) that:
+  1. Strips first/second person pronouns and contractions first (preventing "I'm" → stray "'" artifacts)
+  2. Strips conversational framing phrases ("specifically wondering", "bring me up to speed", "in relationship to", etc.)
+  3. Strips an expanded stop-word list including filler words
+  4. Cleans stray punctuation (apostrophes, commas, quotes left by contractions)
+  5. Strips 1-2 character fragments
+  6. Limits output to 6 keywords maximum for better search quality
+- Replaced the inline query-cleaning logic in both **GDELT** `buildUrl` and **Google News RSS** `buildUrl` with calls to `cleanNewsQuery()`, with logging
+
+**Problem 2 Fix — Wikipedia Topic Extraction:**
+- Improved the `FACTUAL_ENTITY` `buildUrl` to:
+  1. Strip additional indirect reference framing ("that we took into custody", "about him/her", "in custody")
+  2. Strip additional conversational framing ("going on with", "most up-to-date information")
+  3. When the cleaned topic is still >5 words, extract proper nouns (capitalized words) from the original query as a smarter fallback — e.g., "the former leader of Venezuela that we took into custody" → extracts "Venezuela"
+
+**Problem 3 Fix — Freshness Markers:**
+- Added to `FRESHNESS_MARKERS`: "bring me up to speed", "catch me up on", "fill me in on", "what's the latest with", "any recent", "made announcements", "recently"
+- Added the same patterns to `NEWS_STRUCTURE_PATTERNS` so `hasNewsIntent()` catches queries like "bring me up to speed on Apple" as news queries
+
+### `api/core/intelligence/truthTypeDetector.js`
+
+**Problem 3 Fix — Freshness Override Patterns:**
+- Added to `FRESHNESS_OVERRIDE_PATTERNS`: "bring me up to speed", "catch me up on", "fill me in on", "what's the latest/new with", "any recent", "made announcements/news/headlines" — these now force SEMI_STABLE classification (external lookup required) even when no explicit time words like "latest" or "current" appear in the query
+---END SUMMARY---

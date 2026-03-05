@@ -1,0 +1,156 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #861: Claude Fix-External Lookup Fails on Conversational Queries, Indirect References, and Some Current Events
+
+Issue Description:
+# External Lookup Fails on Conversational Queries, Indirect References, and Some Current Events
+
+## Summary
+
+The external source routing now works correctly for direct queries ("What's Walmart stock right now" → Yahoo Finance, "Who is the president of Venezuela" → Wikipedia REST). However, three categories of queries still fail: conversational phrasing poisons news search queries, indirect entity references produce invalid Wikipedia URLs, and some current events queries don't trigger external lookup at all.
+
+## Problem 1: News Query Cleaner Produces Poisoned Search Strings
+
+### Evidence
+
+**Query:** "No I'm specifically wondering what's going on with France in relationship to the Iran situation"
+
+**Cleaned query sent to GDELT/Google News RSS:**
+```
+' specifically wondering France relationship Iran situation
+```
+
+The leading apostrophe (from "I'm" being partially cleaned) and the conversational framing ("specifically wondering") are poisoning the search. Both GDELT and Google News RSS returned null.
+
+**Query:** "We have a lot going on in Iran right now the conflicts very serious Can you bring me up to speed"
+
+**Cleaned query sent to GDELT:**
+```
+have lot Iran right now conflicts very serious bring speed i
+```
+
+Too many filler words survived cleaning. GDELT returned 429 (rate limited, possibly because the query was too long/broad).
+
+### Root Cause
+
+The `News RSS query cleaned` step strips some words but doesn't adequately handle:
+- Conversational framing ("I'm wondering", "can you tell me", "bring me up to speed")
+- First-person fragments that leave stray punctuation ("I'm" → "'")
+- Query length — sending 10+ words to news APIs reduces result quality
+
+### Expected Behavior
+
+The cleaner should extract ONLY the topic keywords:
+- "No I'm specifically wondering what's going on with France in relationship to the Iran situation" → `"France Iran conflict"` or `"France Iran"`
+- "We have a lot going on in Iran right now the conflicts very serious" → `"Iran conflict"` or `"Iran war"`
+- "Apple's made a lot of announcements recently can you bring me up to speed" → `"Apple announcements recent"`
+
+### Fix Guidance
+
+The query cleaner needs to:
+1. Strip all first/second person pronouns and contractions before any other processing (I, I'm, me, my, we, you, you're)
+2. Strip conversational framing phrases ("wondering about", "bring me up to speed", "can you tell me", "what's going on with")
+3. Strip filler words more aggressively (specifically, basically, really, actually, right now, currently)
+4. Limit the cleaned output to 4-6 keywords maximum
+5. Ensure no stray punctuation (apostrophes, quotes) survives in the final query string
+
+## Problem 2: Wikipedia Topic Extraction Fails on Indirect References
+
+### Evidence
+
+**Query:** "The former leader of Venezuela that we took into custody what is the most up to date information going on with him"
+
+**Wikipedia URL constructed:**
+```
+https://en.wikipedia.org/api/rest_v1/page/summary/former%20leader%20of%20Venezuela%20that
+```
+
+This returned 404. The system passed the conversational phrase as a Wikipedia article title instead of extracting the actual entity.
+
+### Root Cause
+
+The Wikipedia topic extraction for non-government queries (the government path correctly builds `President_of_Venezuela`) doesn't strip conversational framing. It needs to extract the actual entity or topic from the query, not pass the raw query through.
+
+### Expected Behavior
+
+- "The former leader of Venezuela that we took into custody" → should search for `"Nicolás_Maduro"` (if memory context contains the name) or `"Venezuela"` as fallback
+- "Apple's made a lot of announcements recently" → should search for `"Apple_Inc."` 
+- "What is Amazon Logistics" → should search for `"Amazon_(company)"` or `"Amazon_Logistics"`
+
+### Fix Guidance
+
+The Wikipedia topic extraction should:
+1. Strip conversational framing the same way the news query cleaner does
+2. Look for proper nouns / named entities in the query
+3. For indirect references ("the former leader of X"), try to resolve the entity from memory context if available, or construct a reasonable Wikipedia search from the key nouns
+4. As fallback, extract the most prominent proper noun and search for that
+5. Consider using Wikipedia's search API (`/w/api.php?action=opensearch&search={topic}`) to find the correct article title before hitting the summary endpoint — this handles fuzzy matching
+
+## Problem 3: Some Current Events Queries Don't Trigger External Lookup
+
+### Evidence
+
+**Query:** "Apple's made a lot of announcements recently can you bring me up to speed on any of them"
+
+**Response:** Eli said "I'm unable to access real-time data" and gave only memory context about Apple's stock, regulatory issues, and past scandals. No external lookup fired.
+
+**Query:** "What's going on with France in relationship to this conflict" (referring to Iran)
+
+**Response:** Eli answered entirely from memory, said "there's no specific mention of France in relation to the ongoing political situation" and recommended checking news sources. The freshness marker check may not have triggered because the query didn't contain explicit freshness words.
+
+### Root Cause
+
+These queries don't contain the explicit freshness markers that force SEMI_STABLE classification ("latest", "current", "most up to date", "what's happening with"). The phrasing "can you bring me up to speed" and "what's going on with X in relationship to Y" are semantically requesting current information but don't match the existing patterns.
+
+Also, "in relationship to this conflict" uses a pronoun reference ("this conflict") that the system can't resolve without conversation history — it doesn't know "this" refers to Iran.
+
+### Expected Behavior
+
+- "Can you bring me up to speed on Apple's recent announcements" → should trigger external lookup (freshness intent is clear)
+- "What's going on with France in relationship to [Iran]" → should trigger external lookup for "France Iran" news
+
+### Fix Guidance
+
+Add freshness marker patterns for:
+- "bring me up to speed" / "bring me up-to-date"
+- "fill me in on"
+- "catch me up on"
+- "what's the latest with"
+- "what's new with"
+- "any recent [noun] about/from/with"
+
+For pronoun references ("this conflict", "that situation"), this is a harder problem that likely requires conversation history enrichment. If conversation history is available, resolve "this conflict" to the most recent conflict topic. If not, at minimum the query should still trigger external lookup even if the topic resolution is imperfect.
+
+## Test Verification
+
+After fixes:
+
+1. "What's going on with France and the Iran conflict" → external lookup fires, returns relevant news about France's involvement
+2. "The former leader of Venezuela that we took into custody" → Wikipedia or news lookup fires, returns information about Maduro
+3. "Apple's made a lot of announcements recently, bring me up to speed" → external lookup fires, returns recent Apple news
+4. "Can you catch me up on what's happening with Greenland" → freshness marker triggers, external lookup fires
+5. All existing working queries (Walmart stock, weather, Ethereum, Iran direct) → no regression
+
+## Affected Components
+
+- `api/core/intelligence/externalLookupEngine.js` — news query cleaner, Wikipedia topic extraction
+- `api/core/intelligence/truthTypeDetector.js` — additional freshness marker patterns
+- Potentially: conversation history enrichment for pronoun resolution
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

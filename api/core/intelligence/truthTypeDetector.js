@@ -328,6 +328,13 @@ export function detectByPattern(query) {
     /\bany (further|updates?|news|developments?|progress|changes?) (with|on|about|regarding)\b/i,
     // "have we gotten/made any progress/further" — person asks about evolving situation
     /\b(gotten|made|have) any (further|progress|update|news)\b/i,
+    // Issue #861 Fix: Conversational freshness phrases that indicate the user wants current info
+    /\bbring (me |us )?(up[- ]to[- ]date|up to speed)\b/i,
+    /\bcatch (me |us )?up (on|with|about|to)?\b/i,
+    /\bfill (me |us )?in (on|about)?\b/i,
+    /\bwhat'?s (new|the latest) (with|in|on|about)\b/i,
+    /\bany recent\b/i,
+    /\b(made|making) (a lot of )?(announcements?|news|headlines)\b/i,
   ];
   const hasFreshnessMarker = FRESHNESS_OVERRIDE_PATTERNS.some(p => p.test(query));
   if (hasFreshnessMarker) {
