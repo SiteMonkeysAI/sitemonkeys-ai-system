@@ -362,12 +362,16 @@ export class EliFramework {
       }
 
       // STEP 7: Add confidence scoring (if not present)
-      // Skip confidence assessment for simple PERMANENT factual queries, external-verified data, and
-      // queries that don't require decision support (e.g. price lookups, news, document summaries).
-      // ISSUE #804 FIX: Confidence Assessment was appearing on stock price, news, and document queries
-      // where it is not helpful and clutters the response.
+      // Skip confidence assessment for simple PERMANENT factual queries, external-verified data,
+      // document reviews, and news queries. Allow confidence for general advisory, decision-making,
+      // complex analysis, and any query where the user benefits from knowing reliability.
+      // ISSUE #804 FIX: Originally used !needsDecisionSupport which was too aggressive — it
+      // suppressed confidence on ALL queries lacking explicit decision markers ("should I", "which").
+      // FIX: Replace with targeted conditions for the specific types #804 identified as problematic.
       const isSimpleFact = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
-      const skipConfidence = isSimpleFact || externalLookupSucceeded || !needsDecisionSupport;
+      const isDocumentReview = truthType === 'DOCUMENT_REVIEW';
+      const isNewsQuery = context?.queryClassification?.classification === 'news_current_events';
+      const skipConfidence = isSimpleFact || externalLookupSucceeded || isDocumentReview || isNewsQuery;
       if (!response.toLowerCase().includes("confidence") && !skipConfidence) {
         const confidenceAssessment = this.#enhanceWithConfidenceScoring(
           enhancedResponse,
@@ -378,7 +382,7 @@ export class EliFramework {
         modificationsCount++;
         this.logger.log("Added confidence assessment");
       } else if (skipConfidence) {
-        this.logger.log(`Skipping confidence assessment: ${isSimpleFact ? 'simple fact' : externalLookupSucceeded ? 'external data verified' : 'no decision support needed'}`);
+        this.logger.log(`Skipping confidence assessment: ${isSimpleFact ? 'simple fact' : externalLookupSucceeded ? 'external data verified' : isDocumentReview ? 'document review' : 'news query'}`);
       }
 
       // STEP 8: Apply Eli's protective intelligence signature

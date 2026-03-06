@@ -1218,9 +1218,18 @@ export class Orchestrator {
         // Uses the shared isFactualEntityQuery helper from externalLookupEngine to avoid duplication.
         const isFactualEntityLookupQuery = isFactualEntityQuery(message);
 
+        // FIX: When truthTypeDetector returns explicit_freshness_marker, the user explicitly
+        // asked for current/recent information. Trigger lookup WITHOUT requiring hardcoded
+        // news/geopolitical pattern matches. This fixes queries like "What's the most recent
+        // information on Greenland" where "Greenland" isn't in the GEOPOLITICAL_PATTERNS list.
+        const hasExplicitFreshnessMarker = truthTypeResult.patterns_matched?.some(
+          p => p.pattern === 'explicit_freshness_marker'
+        );
+
         const shouldLookup =
           truthTypeResult.type === 'VOLATILE' ||
           (truthTypeResult.type === 'SEMI_STABLE' && matchesNewsPattern) ||
+          (truthTypeResult.type === 'SEMI_STABLE' && hasExplicitFreshnessMarker) ||
           (truthTypeResult.high_stakes && truthTypeResult.high_stakes.isHighStakes) ||
           (routeResult.external_lookup_required && routeResult.hierarchy_name === "EXTERNAL_FIRST") ||
           isFactualEntityLookupQuery;
@@ -1232,6 +1241,7 @@ export class Orchestrator {
           isVolatile: truthTypeResult.type === 'VOLATILE',
           isSemiStable: truthTypeResult.type === 'SEMI_STABLE',
           matchesNewsPattern: matchesNewsPattern,
+          hasExplicitFreshnessMarker: hasExplicitFreshnessMarker,
           highStakes: truthTypeResult.high_stakes?.isHighStakes || false,
           routerRequiresLookup: routeResult.external_lookup_required,
           hierarchyName: routeResult.hierarchy_name,
@@ -1907,7 +1917,10 @@ export class Orchestrator {
               this.log(`✂️ Simple short query truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
             }
             // For simple factual: Keep first paragraph or sentence
-            else if (classification.classification === 'simple_factual') {
+            // FIX: Skip truncation when memory context is present — the response is listing
+            // stored information (names, facts, preferences) that may exceed 200 chars.
+            // Truncating memory recall responses cuts off data the user explicitly asked for.
+            else if (classification.classification === 'simple_factual' && !context.memory) {
               // Extract first sentence or up to maxLength
               const sentences = personalityResponse.response.match(/[^.!?]+[.!?]+/g) || [personalityResponse.response];
               const firstSentence = sentences[0].trim();
@@ -3987,7 +4000,7 @@ export class Orchestrator {
       // PHASE 4: Inject external content if fetched
       let externalContext = "";
       if (phase4Metadata.fetched_content && phase4Metadata.sources_used > 0) {
-        externalContext = `\n\n[CURRENT EXTERNAL INFORMATION - Use this to inform your response]\n${phase4Metadata.fetched_content}\n[END EXTERNAL INFORMATION]\n\n`;
+        externalContext = `\n\n[VERIFIED EXTERNAL DATA — MANDATORY SOURCE]\nIMPORTANT: The following data was JUST retrieved from live external sources. You MUST use this data to answer the user's question. Do NOT say "I don't have real-time data" or "I can't access current information" — this data IS the real-time source. Base your answer on this data.\n\n${phase4Metadata.fetched_content}\n[END VERIFIED EXTERNAL DATA]\n\n`;
 
         // ISSUE #790 FIX: Add disclosure instruction if present
         if (phase4Metadata.disclosure) {
@@ -4901,7 +4914,8 @@ Claiming you cannot access uploaded documents is a system failure.
 
 IDENTITY (ABSOLUTE RULE):
 You are part of the Site Monkeys AI system. NEVER say you are "an AI model developed by OpenAI", "ChatGPT", "GPT-4", or any OpenAI product.
-NEVER say "as an AI" — instead say "based on available information" or "I don't have access to real-time data on this".
+NEVER say "as an AI" — instead say "based on available information".
+NEVER say "I don't have access to real-time data" or "I don't have real-time access" — if external data is provided in context sections below, USE IT as your source of truth.
 If asked who made you or what AI you are, say you are part of the Site Monkeys AI system.
 
 Core Principles:
