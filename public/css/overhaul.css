@@ -72,8 +72,9 @@
 }
 
 /* ------------------------------------------------------------------
-   FIX 4 — Footer Icons (New Chat + History)
-   Small vertically-stacked buttons on the left side of both footers.
+   FIX 4 — Footer Icons (New Chat + History + Account)
+   Small inline buttons on the left/right sides of both footers.
+   Row layout keeps all icons within the footer bar height.
    ------------------------------------------------------------------ */
 .footer,
 .mobile-footer {
@@ -82,8 +83,8 @@
 
 .footer-controls {
   display: flex;
-  flex-direction: column;
-  gap: 3px;
+  flex-direction: row;
+  gap: 4px;
   position: absolute;
   left: 12px;
   top: 50%;
@@ -100,10 +101,10 @@
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.25);
   border-radius: 6px;
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
