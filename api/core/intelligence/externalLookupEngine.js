@@ -1,11 +1,11 @@
 /**
  * externalLookupEngine.js
  * Phase 4: Dual Hierarchy Truth Validation
- * 
+ *
  * Purpose: Fetch and validate information from external sources
  * Automatic triggers: freshness markers, high-stakes domains, low confidence
  * Graceful degradation: disclose failure, provide internal answer, give verification path
- * 
+ *
  * Location: /api/core/intelligence/externalLookupEngine.js
  */
 
@@ -21,60 +21,69 @@ export const LOOKUP_CONFIG = {
   MAX_LOOKUPS_PER_REQUEST: 1,
   HIGH_STAKES_MAX_LOOKUPS: 2,
   TIMEOUT_MS: 5000,
-  CONFIDENCE_THRESHOLD: 0.70
+  CONFIDENCE_THRESHOLD: 0.7,
 };
 
 // Company name → stock ticker map for Yahoo Finance lookups
 const COMPANY_TICKER_MAP = {
-  'walmart': 'WMT', 'wal-mart': 'WMT',
-  'apple': 'AAPL',
-  'google': 'GOOGL', 'alphabet': 'GOOGL',
-  'microsoft': 'MSFT',
-  'amazon': 'AMZN',
-  'tesla': 'TSLA',
-  'meta': 'META', 'facebook': 'META',
-  'netflix': 'NFLX',
-  'nvidia': 'NVDA',
-  'amd': 'AMD',
-  'intel': 'INTC',
-  'disney': 'DIS',
-  'nike': 'NKE',
-  'coca-cola': 'KO', 'coke': 'KO',
-  'pepsi': 'PEP', 'pepsico': 'PEP',
-  'exxon': 'XOM', 'exxonmobil': 'XOM',
-  'jpmorgan': 'JPM', 'jp morgan': 'JPM',
+  walmart: 'WMT',
+  'wal-mart': 'WMT',
+  apple: 'AAPL',
+  google: 'GOOGL',
+  alphabet: 'GOOGL',
+  microsoft: 'MSFT',
+  amazon: 'AMZN',
+  tesla: 'TSLA',
+  meta: 'META',
+  facebook: 'META',
+  netflix: 'NFLX',
+  nvidia: 'NVDA',
+  amd: 'AMD',
+  intel: 'INTC',
+  disney: 'DIS',
+  nike: 'NKE',
+  'coca-cola': 'KO',
+  coke: 'KO',
+  pepsi: 'PEP',
+  pepsico: 'PEP',
+  exxon: 'XOM',
+  exxonmobil: 'XOM',
+  jpmorgan: 'JPM',
+  'jp morgan': 'JPM',
   'bank of america': 'BAC',
   'wells fargo': 'WFC',
-  'visa': 'V',
-  'mastercard': 'MA',
-  'paypal': 'PYPL',
-  'uber': 'UBER',
-  'lyft': 'LYFT',
-  'airbnb': 'ABNB',
-  'spotify': 'SPOT',
-  'snap': 'SNAP', 'snapchat': 'SNAP',
-  'palantir': 'PLTR',
-  'salesforce': 'CRM',
-  'oracle': 'ORCL',
-  'ibm': 'IBM',
-  'qualcomm': 'QCOM',
-  'broadcom': 'AVGO',
-  'boeing': 'BA',
-  'ford': 'F',
+  visa: 'V',
+  mastercard: 'MA',
+  paypal: 'PYPL',
+  uber: 'UBER',
+  lyft: 'LYFT',
+  airbnb: 'ABNB',
+  spotify: 'SPOT',
+  snap: 'SNAP',
+  snapchat: 'SNAP',
+  palantir: 'PLTR',
+  salesforce: 'CRM',
+  oracle: 'ORCL',
+  ibm: 'IBM',
+  qualcomm: 'QCOM',
+  broadcom: 'AVGO',
+  boeing: 'BA',
+  ford: 'F',
   'general motors': 'GM',
-  'caterpillar': 'CAT',
+  caterpillar: 'CAT',
   'home depot': 'HD',
-  'target': 'TGT',
-  'costco': 'COST',
-  'starbucks': 'SBUX',
-  "mcdonald's": 'MCD', 'mcdonalds': 'MCD',
-  'chevron': 'CVX',
-  'pfizer': 'PFE',
-  'moderna': 'MRNA',
-  'merck': 'MRK',
-  'unitedhealth': 'UNH',
-  'ups': 'UPS',
-  'fedex': 'FDX'
+  target: 'TGT',
+  costco: 'COST',
+  starbucks: 'SBUX',
+  "mcdonald's": 'MCD',
+  mcdonalds: 'MCD',
+  chevron: 'CVX',
+  pfizer: 'PFE',
+  moderna: 'MRNA',
+  merck: 'MRK',
+  unitedhealth: 'UNH',
+  ups: 'UPS',
+  fedex: 'FDX',
 };
 
 /**
@@ -87,29 +96,51 @@ const COMPANY_TICKER_MAP = {
 function extractTicker(query) {
   const lower = query.toLowerCase();
   // Multi-word company names must be checked before single-word names to avoid partial matches
-  const sortedEntries = Object.entries(COMPANY_TICKER_MAP).sort((a, b) => b[0].length - a[0].length);
+  const sortedEntries = Object.entries(COMPANY_TICKER_MAP).sort(
+    (a, b) => b[0].length - a[0].length,
+  );
   for (const [name, ticker] of sortedEntries) {
     if (lower.includes(name)) return ticker;
   }
   // Look for explicit uppercase ticker (2-5 chars) adjacent to stock-related financial keywords
-  const tickerNearStock = query.match(/\b([A-Z]{2,5})\b[\s\w]{0,30}\b(?:stock|share|price|equity)\b/);
+  const tickerNearStock = query.match(
+    /\b([A-Z]{2,5})\b[\s\w]{0,30}\b(?:stock|share|price|equity)\b/,
+  );
   if (tickerNearStock) return tickerNearStock[1];
   // Reverse: stock keyword before ticker (e.g. "stock price AAPL")
-  const stockNearTicker = query.match(/\b(?:stock|share|price|equity)\b[\s\w]{0,30}\b([A-Z]{2,5})\b/);
+  const stockNearTicker = query.match(
+    /\b(?:stock|share|price|equity)\b[\s\w]{0,30}\b([A-Z]{2,5})\b/,
+  );
   if (stockNearTicker) return stockNearTicker[1];
   return null;
 }
 
 // WMO weather interpretation codes for Open-Meteo responses
 const WMO_WEATHER_CODES = {
-  0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
-  45: 'Fog', 48: 'Depositing rime fog',
-  51: 'Light drizzle', 53: 'Moderate drizzle', 55: 'Dense drizzle',
-  61: 'Slight rain', 63: 'Moderate rain', 65: 'Heavy rain',
-  71: 'Slight snow', 73: 'Moderate snow', 75: 'Heavy snow', 77: 'Snow grains',
-  80: 'Slight showers', 81: 'Moderate showers', 82: 'Violent showers',
-  85: 'Slight snow showers', 86: 'Heavy snow showers',
-  95: 'Thunderstorm', 96: 'Thunderstorm with hail', 99: 'Thunderstorm with heavy hail'
+  0: 'Clear sky',
+  1: 'Mainly clear',
+  2: 'Partly cloudy',
+  3: 'Overcast',
+  45: 'Fog',
+  48: 'Depositing rime fog',
+  51: 'Light drizzle',
+  53: 'Moderate drizzle',
+  55: 'Dense drizzle',
+  61: 'Slight rain',
+  63: 'Moderate rain',
+  65: 'Heavy rain',
+  71: 'Slight snow',
+  73: 'Moderate snow',
+  75: 'Heavy snow',
+  77: 'Snow grains',
+  80: 'Slight showers',
+  81: 'Moderate showers',
+  82: 'Violent showers',
+  85: 'Slight snow showers',
+  86: 'Heavy snow showers',
+  95: 'Thunderstorm',
+  96: 'Thunderstorm with hail',
+  99: 'Thunderstorm with heavy hail',
 };
 
 // API-based sources with proper parsing (returns structured data)
@@ -126,8 +157,8 @@ export const API_SOURCES = {
         const eth = json.ethereum?.usd;
         if (!btc && !eth) return null;
         return `Bitcoin: $${btc || 'N/A'}, Ethereum: $${eth || 'N/A'}`;
-      }
-    }
+      },
+    },
   ],
   CURRENCY: [
     {
@@ -159,8 +190,8 @@ export const API_SOURCES = {
         if (!rate) return null;
 
         return `${fromCurrency}/${toCurrency} exchange rate: ${rate.toFixed(4)} (as of ${json.time_last_update_utc || 'now'})`;
-      }
-    }
+      },
+    },
   ],
   // STOCKS: Yahoo Finance v8 chart API (no key, no auth cookies required)
   // Uses query2.finance.yahoo.com/v8/finance/chart which is more accessible than the v7
@@ -181,8 +212,9 @@ export const API_SOURCES = {
       parser: 'json',
       type: 'api',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
-        'Accept': 'application/json'
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        Accept: 'application/json',
       },
       extract: (json) => {
         const result = json?.chart?.result?.[0];
@@ -192,14 +224,18 @@ export const API_SOURCES = {
         const price = meta.regularMarketPrice;
         const symbol = meta.symbol || '';
         const name = meta.longName || meta.shortName || symbol;
-        const change = meta.regularMarketChange != null ? meta.regularMarketChange.toFixed(2) : null;
-        const changePct = meta.regularMarketChangePercent != null ? meta.regularMarketChangePercent.toFixed(2) : null;
+        const change =
+          meta.regularMarketChange != null ? meta.regularMarketChange.toFixed(2) : null;
+        const changePct =
+          meta.regularMarketChangePercent != null
+            ? meta.regularMarketChangePercent.toFixed(2)
+            : null;
         const currency = meta.currency || 'USD';
         const sign = change != null && parseFloat(change) >= 0 ? '+' : '';
         const changePart = change != null ? ` (${sign}${change}, ${sign}${changePct}%)` : '';
         return `${name} (${symbol}): ${currency} $${price.toFixed(2)}${changePart}`;
-      }
-    }
+      },
+    },
   ],
   // COMMODITIES: Using Metals-Live API (free tier, no auth required)
   // Note: These APIs use free/demo keys with rate limits. For production use:
@@ -212,7 +248,9 @@ export const API_SOURCES = {
         const apiKey = process.env.METALS_API_KEY;
         // ISSUE #776 FIX 3: Don't use fake 'FREE' key - let selectSourcesForQuery skip if not set
         if (!apiKey) {
-          console.log('[externalLookupEngine] METALS_API_KEY not set, this source should be skipped');
+          console.log(
+            '[externalLookupEngine] METALS_API_KEY not set, this source should be skipped',
+          );
           return null;
         }
         return `https://www.metals-api.com/api/latest?access_key=${apiKey}&base=USD&symbols=XAU,XAG`;
@@ -222,9 +260,11 @@ export const API_SOURCES = {
       extract: (json) => {
         if (!json || !json.rates) return null;
         const goldPrice = json.rates.XAU ? `Gold: $${(1 / json.rates.XAU).toFixed(2)}/oz` : null;
-        const silverPrice = json.rates.XAG ? `Silver: $${(1 / json.rates.XAG).toFixed(2)}/oz` : null;
+        const silverPrice = json.rates.XAG
+          ? `Silver: $${(1 / json.rates.XAG).toFixed(2)}/oz`
+          : null;
         return [goldPrice, silverPrice].filter(Boolean).join(', ');
-      }
+      },
     },
     {
       name: 'Goldapi.io Free Tier',
@@ -247,7 +287,7 @@ export const API_SOURCES = {
       type: 'api',
       getHeaders: () => ({
         'x-access-token': process.env.GOLDAPI_KEY || '',
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
       }),
       extract: (json) => {
         if (!json || !json.price) return null;
@@ -256,15 +296,17 @@ export const API_SOURCES = {
         const price = json.price;
         const priceGram = json.price_gram_24k ? ` ($${json.price_gram_24k.toFixed(2)}/gram)` : '';
         return `${metalName}: $${price.toFixed(2)}/oz${priceGram}`;
-      }
-    }
+      },
+    },
   ],
   GOVERNMENT: [
     {
       name: 'Wikipedia Political Leaders',
       buildUrl: (query) => {
         // Extract country and position from query
-        const ukMatch = query.match(/\b(UK|United Kingdom|Britain|British)\b.*?(prime minister|PM)/i);
+        const ukMatch = query.match(
+          /\b(UK|United Kingdom|Britain|British)\b.*?(prime minister|PM)/i,
+        );
         const usMatch = query.match(/\b(US|USA|United States|America|American)\b.*?(president)/i);
         const germanyMatch = query.match(/\b(Germany|German)\b.*?(chancellor)/i);
         const franceMatch = query.match(/\b(France|French)\b.*?(president)/i);
@@ -282,13 +324,21 @@ export const API_SOURCES = {
         // Generic country lookup: build position-of-country Wikipedia URL
         // Handles "who is the president of Venezuela" → President_of_Venezuela
         // Handles "prime minister of Canada" → Prime_Minister_of_Canada
-        const leaderMatch = query.match(/\b(prime\s+minister|president|chancellor|leader)\s+of\s+([a-zA-Z][a-zA-Z\s]+?)(?:\?|$|,|\s{2})/i);
+        const leaderMatch = query.match(
+          /\b(prime\s+minister|president|chancellor|leader)\s+of\s+([a-zA-Z][a-zA-Z\s]+?)(?:\?|$|,|\s{2})/i,
+        );
         if (leaderMatch) {
           const rawPosition = leaderMatch[1].trim();
           const rawCountry = leaderMatch[2].trim();
           // Title-case each word in position (handles "prime minister" → "Prime_Minister")
-          const posTitle = rawPosition.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join('_');
-          const country = rawCountry.split(/\s+/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('_');
+          const posTitle = rawPosition
+            .split(/\s+/)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .join('_');
+          const country = rawCountry
+            .split(/\s+/)
+            .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+            .join('_');
           console.log(`[externalLookupEngine] GOVERNMENT: looking up ${posTitle}_of_${country}`);
           return `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(`${posTitle}_of_${country}`)}`;
         }
@@ -303,8 +353,8 @@ export const API_SOURCES = {
         // Extract current leader name from Wikipedia summary
         // This will get the first few sentences which usually mention the current holder
         return json.extract.substring(0, 500);
-      }
-    }
+      },
+    },
   ],
   MEDICAL: [
     {
@@ -312,27 +362,33 @@ export const API_SOURCES = {
       buildUrl: (query) => {
         // PRINCIPLE (Issue #402 Finding #11): Extract drug name from query dynamically
         // Use pattern matching, not hardcoded drug lists (CEO approach)
-        
+
         // Pattern 1: "What is X used for?" or "Side effects of X"
-        let drugMatch = query.match(/(?:what is|about|regarding|side effects of|information on)\s+([a-z]{3,20})\b/i);
-        
+        let drugMatch = query.match(
+          /(?:what is|about|regarding|side effects of|information on)\s+([a-z]{3,20})\b/i,
+        );
+
         // Pattern 2: Drug name followed by medical terms
         if (!drugMatch) {
-          drugMatch = query.match(/\b([a-z]{3,20})\s+(?:drug|medication|medicine|pill|tablet|capsule|dosage|prescription)\b/i);
+          drugMatch = query.match(
+            /\b([a-z]{3,20})\s+(?:drug|medication|medicine|pill|tablet|capsule|dosage|prescription)\b/i,
+          );
         }
-        
-        // Pattern 3: Medical context followed by drug name  
+
+        // Pattern 3: Medical context followed by drug name
         if (!drugMatch) {
-          drugMatch = query.match(/(?:drug|medication|medicine)\s+(?:called|named)\s+([a-z]{3,20})\b/i);
+          drugMatch = query.match(
+            /(?:drug|medication|medicine)\s+(?:called|named)\s+([a-z]{3,20})\b/i,
+          );
         }
-        
+
         const drugName = drugMatch ? drugMatch[1].toLowerCase() : null;
-        
+
         if (!drugName) {
           // If we can't extract a drug name, return null to skip this source
           return null;
         }
-        
+
         return `https://api.fda.gov/drug/label.json?search=openfda.generic_name:${encodeURIComponent(drugName)}&limit=1`;
       },
       parser: 'json',
@@ -343,10 +399,12 @@ export const API_SOURCES = {
         return [
           result.warnings?.[0]?.substring(0, 1000),
           result.adverse_reactions?.[0]?.substring(0, 1000),
-          result.indications_and_usage?.[0]?.substring(0, 500)
-        ].filter(Boolean).join('\n\n');
-      }
-    }
+          result.indications_and_usage?.[0]?.substring(0, 500),
+        ]
+          .filter(Boolean)
+          .join('\n\n');
+      },
+    },
   ],
   // WEATHER: Open-Meteo (free, no key needed) — uses geocoding step to resolve city to lat/lon
   // fetchData handles both geocoding and weather fetch internally (async multi-step source)
@@ -376,14 +434,18 @@ export const API_SOURCES = {
         let cityQuery = null;
         for (const pattern of cityPatterns) {
           const m = query.match(pattern);
-          if (m) { cityQuery = m[1].trim().replace(/,$/, ''); break; }
+          if (m) {
+            cityQuery = m[1].trim().replace(/,$/, '');
+            break;
+          }
         }
         // Pattern 6 (last resort): trailing proper-noun — the city is often the last
         // capitalised word in cleaned queries like "weather currently Miami"
         if (!cityQuery) {
           const trailing = query.match(/\b([A-Z][a-z]{2,}(?:\s+[A-Z][a-z]{2,})?)\s*(?:\?|$)/);
           if (trailing) {
-            const COMMON_NON_CITIES = /^(What|How|Is|Are|Was|Were|Will|Would|Could|Should|The|This|That|Currently|Today|Right|Now|Here)$/i;
+            const COMMON_NON_CITIES =
+              /^(What|How|Is|Are|Was|Were|Will|Would|Could|Should|The|This|That|Currently|Today|Right|Now|Here)$/i;
             if (!COMMON_NON_CITIES.test(trailing[1].trim())) {
               cityQuery = trailing[1].trim();
             }
@@ -396,15 +458,34 @@ export const API_SOURCES = {
         try {
           // Step 1: Geocode city name to lat/lon
           const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityQuery)}&count=1&language=en&format=json`;
-          const geoResp = await fetch(geoUrl, { signal: abortSignal, headers: { 'User-Agent': 'SiteMonkeys-AI-System/1.0' } });
-          if (!geoResp.ok) { console.log(`[externalLookupEngine] Open-Meteo geocoding failed: ${geoResp.status}`); return null; }
+          const geoResp = await fetch(geoUrl, {
+            signal: abortSignal,
+            headers: { 'User-Agent': 'SiteMonkeys-AI-System/1.0' },
+          });
+          if (!geoResp.ok) {
+            console.log(`[externalLookupEngine] Open-Meteo geocoding failed: ${geoResp.status}`);
+            return null;
+          }
           const geoData = await geoResp.json();
           const loc = geoData.results?.[0];
-          if (!loc) { console.log(`[externalLookupEngine] Open-Meteo: no geocoding result for "${cityQuery}"`); return null; }
+          if (!loc) {
+            console.log(
+              `[externalLookupEngine] Open-Meteo: no geocoding result for "${cityQuery}"`,
+            );
+            return null;
+          }
           // Step 2: Fetch current weather using lat/lon
           const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${loc.latitude}&longitude=${loc.longitude}&current_weather=true&temperature_unit=fahrenheit`;
-          const weatherResp = await fetch(weatherUrl, { signal: abortSignal, headers: { 'User-Agent': 'SiteMonkeys-AI-System/1.0' } });
-          if (!weatherResp.ok) { console.log(`[externalLookupEngine] Open-Meteo weather fetch failed: ${weatherResp.status}`); return null; }
+          const weatherResp = await fetch(weatherUrl, {
+            signal: abortSignal,
+            headers: { 'User-Agent': 'SiteMonkeys-AI-System/1.0' },
+          });
+          if (!weatherResp.ok) {
+            console.log(
+              `[externalLookupEngine] Open-Meteo weather fetch failed: ${weatherResp.status}`,
+            );
+            return null;
+          }
           const weatherData = await weatherResp.json();
           const current = weatherData.current_weather;
           if (!current) return null;
@@ -412,11 +493,12 @@ export const API_SOURCES = {
           const locationName = [loc.name, loc.admin1, loc.country_code].filter(Boolean).join(', ');
           return `Weather in ${locationName}: ${current.temperature}°F, ${condition}, Wind: ${current.windspeed} km/h`;
         } catch (err) {
-          if (err.name !== 'AbortError') console.log(`[externalLookupEngine] Open-Meteo error: ${err.message}`);
+          if (err.name !== 'AbortError')
+            console.log(`[externalLookupEngine] Open-Meteo error: ${err.message}`);
           return null;
         }
-      }
-    }
+      },
+    },
   ],
   // FACTUAL_ENTITY: Wikipedia REST article summary — for "who is", "what is", entity questions
   // Replaces the near-always-null Portal:Current_events endpoint for factual queries
@@ -426,15 +508,27 @@ export const API_SOURCES = {
       buildUrl: (query) => {
         // Strip question framing and conversational wrappers to extract the core entity/topic
         let topic = query
-          .replace(/^(who is|who was|who are|what is|what are|what does|what did|tell me about|is|does|do|how does|explain)\s+/i, '')
-          .replace(/\b(the|a|an|some|any|currently|right now|today|please|can you|could you)\b/gi, ' ')
+          .replace(
+            /^(who is|who was|who are|what is|what are|what does|what did|tell me about|is|does|do|how does|explain)\s+/i,
+            '',
+          )
+          .replace(
+            /\b(the|a|an|some|any|currently|right now|today|please|can you|could you)\b/gi,
+            ' ',
+          )
           .replace(/\?+$/, '')
           // Strip indirect reference framing ("that we took into custody", "that is/was [verb]ed")
           .replace(/\b(that (we|i|they|he|she|you)\s+\w+(\s+\w+){0,3})\b/gi, ' ')
           .replace(/\b(we (took|put|had|have|placed|brought|captured|arrested|detained))\b/gi, ' ')
-          .replace(/\b(in(to)? custody|under arrest|who (was|is) (arrested|detained|captured))\b/gi, ' ')
+          .replace(
+            /\b(in(to)? custody|under arrest|who (was|is) (arrested|detained|captured))\b/gi,
+            ' ',
+          )
           // Strip conversational framing ("what is the most up to date info going on with him")
-          .replace(/\b(most up[- ]to[- ]date information|going on with|what is happening|bring me up to speed)\b/gi, ' ')
+          .replace(
+            /\b(most up[- ]to[- ]date information|going on with|what is happening|bring me up to speed)\b/gi,
+            ' ',
+          )
           .replace(/\b(with him|with her|with them|about him|about her|about them)\b/gi, ' ')
           // Remove trailing action verbs from "what does X do" → "X"
           .replace(/\s+(do|does|offer|provide|make|sell|produce|have)\s*$/i, '')
@@ -443,9 +537,11 @@ export const API_SOURCES = {
 
         // Extract proper nouns from the original query as a smarter fallback
         // for indirect references like "the former leader of Venezuela"
-        const excludedProperNouns = /^(The|A|An|Who|What|Where|When|Why|How|Is|Are|Was|Were|We|I|They|He|She|It|This|That|These|Those|Former|Current|Previous|Last|Most|Some|Any|All|No|Not|New|Old|Big|Small|Great|Good|Bad)$/;
-        const properNouns = query.split(/\s+/)
-          .filter(w => /^[A-Z][a-z]{2,}/.test(w) && !excludedProperNouns.test(w));
+        const excludedProperNouns =
+          /^(The|A|An|Who|What|Where|When|Why|How|Is|Are|Was|Were|We|I|They|He|She|It|This|That|These|Those|Former|Current|Previous|Last|Most|Some|Any|All|No|Not|New|Old|Big|Small|Great|Good|Bad)$/;
+        const properNouns = query
+          .split(/\s+/)
+          .filter((w) => /^[A-Z][a-z]{2,}/.test(w) && !excludedProperNouns.test(w));
 
         // Limit to first 5 words; if still too long and we have proper nouns, prefer them
         const words = topic.split(' ').filter(Boolean);
@@ -453,7 +549,9 @@ export const API_SOURCES = {
           if (properNouns.length > 0) {
             // Use the proper nouns (named entities) for a more precise Wikipedia lookup
             topic = properNouns.slice(0, 3).join(' ');
-            console.log(`[externalLookupEngine] FACTUAL_ENTITY: indirect reference — using proper nouns: "${topic}"`);
+            console.log(
+              `[externalLookupEngine] FACTUAL_ENTITY: indirect reference — using proper nouns: "${topic}"`,
+            );
           } else {
             topic = words.slice(0, 5).join(' ');
           }
@@ -470,8 +568,8 @@ export const API_SOURCES = {
         const desc = json.description ? ` (${json.description})` : '';
         const extract = json.extract.substring(0, 1000);
         return `${title}${desc}: ${extract}`;
-      }
-    }
+      },
+    },
   ],
   // GENERAL_FALLBACK: DuckDuckGo Instant Answer — broad factual fallback, no key needed
   // Coverage is inconsistent but returns structured data when it matches
@@ -490,12 +588,14 @@ export const API_SOURCES = {
         if (json.Answer && json.Answer.length > 0) parts.push(`Answer: ${json.Answer}`);
         if (json.Abstract && json.Abstract.length > 0) parts.push(json.Abstract.substring(0, 500));
         if (json.RelatedTopics?.length > 0) {
-          const related = json.RelatedTopics.filter(t => t.Text).slice(0, 3).map(t => t.Text);
+          const related = json.RelatedTopics.filter((t) => t.Text)
+            .slice(0, 3)
+            .map((t) => t.Text);
           if (related.length > 0) parts.push(`Related: ${related.join('; ')}`);
         }
         return parts.length > 0 ? parts.join('\n\n') : null;
-      }
-    }
+      },
+    },
   ],
   NEWS: [
     // 1. GDELT — global news with structured metadata (primary news source)
@@ -508,17 +608,24 @@ export const API_SOURCES = {
       buildUrl: (query) => {
         const cleanedQuery = cleanNewsQuery(query);
         const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
-        console.log(`[externalLookupEngine] GDELT query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`);
+        console.log(
+          `[externalLookupEngine] GDELT query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`,
+        );
         return `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(searchQuery)}&mode=artlist&maxrecords=5&format=json`;
       },
       parser: 'json',
       type: 'api',
       extract: (json) => {
         if (!json || !json.articles || !Array.isArray(json.articles)) return null;
-        const articles = json.articles.filter(a => a.title).slice(0, 5);
+        const articles = json.articles.filter((a) => a.title).slice(0, 5);
         if (articles.length === 0) return null;
-        return articles.map(a => `[${a.domain || '[unknown source]'}] ${a.title} (${a.seendate || '[date unknown]'})`).join('\n\n');
-      }
+        return articles
+          .map(
+            (a) =>
+              `[${a.domain || '[unknown source]'}] ${a.title} (${a.seendate || '[date unknown]'})`,
+          )
+          .join('\n\n');
+      },
     },
     // 2. Google News RSS - primary discovery layer (fallback behind GDELT)
     // ISSUE #814 ITEM 3 (Post-Review): Apply entity extraction to ALL RSS queries, not just stock fallback.
@@ -529,20 +636,25 @@ export const API_SOURCES = {
         // Extract clean search query from conversational input using shared cleanNewsQuery helper
         const cleanedQuery = cleanNewsQuery(query);
         const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
-        console.log(`[externalLookupEngine] News RSS query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`);
+        console.log(
+          `[externalLookupEngine] News RSS query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`,
+        );
         return `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}&hl=en-US&gl=US&ceid=US:en`;
       },
       parser: 'rss',
       type: 'api',
       extract: (text) => {
         const items = [];
-        const itemRegex = /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
+        const itemRegex =
+          /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
         let match;
         while ((match = itemRegex.exec(text)) !== null && items.length < 5) {
           items.push({ title: match[1], source: match[2], date: match[3] });
         }
-        return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
-      }
+        return items.length > 0
+          ? items.map((i) => `[${i.source}] ${i.title} (${i.date})`).join('\n\n')
+          : null;
+      },
     },
     // 3. Wikipedia Current Events - fallback context only
     {
@@ -550,9 +662,9 @@ export const API_SOURCES = {
       url: 'https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events',
       parser: 'json',
       type: 'api',
-      extract: (json) => json.extract?.substring(0, 2000) || null
-    }
-  ]
+      extract: (json) => json.extract?.substring(0, 2000) || null,
+    },
+  ],
 };
 
 // Domain-specific authoritative sources (non-API fallbacks)
@@ -562,41 +674,63 @@ export const AUTHORITATIVE_SOURCES = {
     { name: 'NIH', url: 'https://www.nih.gov', type: 'government', parseable: false },
     { name: 'CDC', url: 'https://www.cdc.gov', type: 'government', parseable: false },
     { name: 'Mayo Clinic', url: 'https://www.mayoclinic.org', type: 'medical', parseable: false },
-    { name: 'PubMed', url: 'https://pubmed.ncbi.nlm.nih.gov', type: 'research', parseable: false }
+    { name: 'PubMed', url: 'https://pubmed.ncbi.nlm.nih.gov', type: 'research', parseable: false },
   ],
   LEGAL: [
     { name: 'Congress.gov', url: 'https://www.congress.gov', type: 'government', parseable: false },
-    { name: 'Supreme Court', url: 'https://www.supremecourt.gov', type: 'government', parseable: false },
-    { name: 'Federal Register', url: 'https://www.federalregister.gov', type: 'government', parseable: false },
-    { name: 'Cornell Law', url: 'https://www.law.cornell.edu', type: 'legal', parseable: false }
+    {
+      name: 'Supreme Court',
+      url: 'https://www.supremecourt.gov',
+      type: 'government',
+      parseable: false,
+    },
+    {
+      name: 'Federal Register',
+      url: 'https://www.federalregister.gov',
+      type: 'government',
+      parseable: false,
+    },
+    { name: 'Cornell Law', url: 'https://www.law.cornell.edu', type: 'legal', parseable: false },
   ],
   FINANCIAL: [
     { name: 'SEC', url: 'https://www.sec.gov', type: 'government', parseable: false },
     { name: 'IRS', url: 'https://www.irs.gov', type: 'government', parseable: false },
-    { name: 'Federal Reserve', url: 'https://www.federalreserve.gov', type: 'government', parseable: false },
-    { name: 'Treasury', url: 'https://home.treasury.gov', type: 'government', parseable: false }
+    {
+      name: 'Federal Reserve',
+      url: 'https://www.federalreserve.gov',
+      type: 'government',
+      parseable: false,
+    },
+    { name: 'Treasury', url: 'https://home.treasury.gov', type: 'government', parseable: false },
   ],
   SAFETY: [
     { name: 'CPSC', url: 'https://www.cpsc.gov', type: 'government', parseable: false },
     { name: 'NHTSA', url: 'https://www.nhtsa.gov', type: 'government', parseable: false },
     { name: 'OSHA', url: 'https://www.osha.gov', type: 'government', parseable: false },
-    { name: 'FDA Recalls', url: 'https://www.fda.gov/safety/recalls', type: 'government', parseable: false }
+    {
+      name: 'FDA Recalls',
+      url: 'https://www.fda.gov/safety/recalls',
+      type: 'government',
+      parseable: false,
+    },
   ],
   GENERAL: [
     {
       name: 'Wikipedia',
       buildUrl: (query) => {
         // Extract key term from query for Wikipedia lookup
-        const cleanQuery = query.replace(/\b(what is|define|definition of|meaning of|explain)\b/gi, '').trim();
+        const cleanQuery = query
+          .replace(/\b(what is|define|definition of|meaning of|explain)\b/gi, '')
+          .trim();
         const keyTerm = cleanQuery.split(' ').slice(0, 3).join(' ');
         return `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(keyTerm)}`;
       },
       parser: 'json',
       type: 'api',
       parseable: true,
-      extract: (json) => json.extract?.substring(0, 2000) || null
-    }
-  ]
+      extract: (json) => json.extract?.substring(0, 2000) || null,
+    },
+  ],
 };
 
 /**
@@ -612,14 +746,23 @@ function cleanNewsQuery(query) {
 
   // Step 1: Strip first/second person pronouns and contractions FIRST to avoid stray apostrophe
   // artifacts (e.g. "I'm" → "'" when only "I" is removed by stop-word pass)
-  cleaned = cleaned.replace(/\b(I'm|I've|I'd|I'll|we're|we've|we'd|we'll|you're|you've|you'd|you'll)\b/gi, ' ');
+  cleaned = cleaned.replace(
+    /\b(I'm|I've|I'd|I'll|we're|we've|we'd|we'll|you're|you've|you'd|you'll)\b/gi,
+    ' ',
+  );
   cleaned = cleaned.replace(/\b(I|we|you|me|my|our|your|us)\b/gi, ' ');
 
   // Step 2: Strip conversational framing phrases before stop-word removal
-  cleaned = cleaned.replace(/\b(specifically wondering|bring (me |us )?up[- ]to[- ](date|speed)|catch (me |us )?up (on|with|about|to)?|fill (me |us )?in (on|about)?|what'?s going on with|what is going on with|can you tell me|could you tell me|let me know about|clue (me |us )?in on|give me an update on|keep me informed about|going on with|in relationship to|in relation to)\b/gi, ' ');
+  cleaned = cleaned.replace(
+    /\b(specifically wondering|bring (me |us )?up[- ]to[- ](date|speed)|catch (me |us )?up (on|with|about|to)?|fill (me |us )?in (on|about)?|what'?s going on with|what is going on with|can you tell me|could you tell me|let me know about|clue (me |us )?in on|give me an update on|keep me informed about|going on with|in relationship to|in relation to)\b/gi,
+    ' ',
+  );
 
   // Step 3: Strip stop words and filler words (expanded list)
-  cleaned = cleaned.replace(/\b(what|what's|whats|is|the|are|there|anything|going|on|with|latest|newest|most|recent|up|to|date|information|from|news|about|tell|can|please|how|has|been|no|yes|specifically|basically|really|actually|right|now|currently|in|relationship|relation|of|and|but|or|so|if|that|this|these|those|a|an|any|some|all|not|do|did|was|were|will|would|could|should|have|had|get|got|just|very|quite|rather|pretty|much|more|most|lot|lots|many|few|little|big|great|good|bad|well|make|made|let|see|know|think|want|need|getting|having|doing|being|am|be|they|he|she|it|new|bring|speed|catch|fill|serious|very|really|lot|particularly|especially|highly)\b/gi, ' ');
+  cleaned = cleaned.replace(
+    /\b(what|what's|whats|is|the|are|there|anything|going|on|with|latest|newest|most|recent|up|to|date|information|from|news|about|tell|can|please|how|has|been|no|yes|specifically|basically|really|actually|right|now|currently|in|relationship|relation|of|and|but|or|so|if|that|this|these|those|a|an|any|some|all|not|do|did|was|were|will|would|could|should|have|had|get|got|just|very|quite|rather|pretty|much|more|most|lot|lots|many|few|little|big|great|good|bad|well|make|made|let|see|know|think|want|need|getting|having|doing|being|am|be|they|he|she|it|new|bring|speed|catch|fill|serious|very|really|lot|particularly|especially|highly)\b/gi,
+    ' ',
+  );
 
   // Step 4: Clean stray punctuation (apostrophes, commas, quotes left over from contractions)
   cleaned = cleaned.replace(/['"`,;:!?()\[\]{}]/g, ' ');
@@ -631,7 +774,7 @@ function cleanNewsQuery(query) {
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
   // Step 7: Limit to 6 keywords maximum (improves search quality)
-  const words = cleaned.split(' ').filter(w => w.length > 2);
+  const words = cleaned.split(' ').filter((w) => w.length > 2);
   if (words.length > 6) {
     cleaned = words.slice(0, 6).join(' ');
   } else {
@@ -659,7 +802,8 @@ const FRESHNESS_MARKERS = [
 ];
 
 // High-stakes news markers that require corroboration
-const HIGH_STAKES_NEWS_MARKERS = /attack|bombing|invasion|coup|killed|missile|war|strike|assassination|military action|troops|casualties/i;
+const HIGH_STAKES_NEWS_MARKERS =
+  /attack|bombing|invasion|coup|killed|missile|war|strike|assassination|military action|troops|casualties/i;
 
 // News intent structural patterns - detect news queries by STRUCTURE, not specific names
 // PRINCIPLE: News intent = question structure + proper nouns, NOT hardcoded name lists
@@ -715,11 +859,12 @@ const NEWS_STRUCTURE_PATTERNS = [
 const GEOPOLITICAL_CONTEXT_MARKERS = [
   /\b(election|diplomatic|military|conflict|treaty|summit|sanctions|trade\s+war)\b/i,
   /\b(president|prime\s+minister|chancellor|leader|government|parliament|congress|senate)\b/i,
-  /\b(country|nation|state|territory|border|international)\b/i
+  /\b(country|nation|state|territory|border|international)\b/i,
 ];
 
 // Reputable news sources for corroboration
-const REPUTABLE_SOURCES = /reuters|associated press|ap news|bbc|afp|npr|guardian|new york times|nytimes|washington post|wall street journal|wsj|cnn|abc news|cbs news|nbc news/i;
+const REPUTABLE_SOURCES =
+  /reuters|associated press|ap news|bbc|afp|npr|guardian|new york times|nytimes|washington post|wall street journal|wsj|cnn|abc news|cbs news|nbc news/i;
 
 /**
  * Extract clean search query from conversational input
@@ -739,7 +884,10 @@ export function extractSearchQuery(query) {
   cleaned = cleaned.replace(/^(what's even|what is even|that's|that is)\s+/i, '');
 
   // Remove phrases like "someone told me that", "I heard that", etc.
-  cleaned = cleaned.replace(/\b(someone told me that|I heard( that)?|I saw( that)?|they say|apparently|supposedly)\s+/gi, '');
+  cleaned = cleaned.replace(
+    /\b(someone told me that|I heard( that)?|I saw( that)?|they say|apparently|supposedly)\s+/gi,
+    '',
+  );
 
   // For very long queries (>200 chars), try to extract the core topic
   if (cleaned.length > 200) {
@@ -750,7 +898,9 @@ export function extractSearchQuery(query) {
     }
 
     // Look for company/product names + key action words
-    const entityMatch = cleaned.match(/\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(released|announced|launched|unveiled|introduced|created|built|developed|acquired|bought|sold|hired|fired|quit)\s+([^.?,]+)/);
+    const entityMatch = cleaned.match(
+      /\b([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)\s+(released|announced|launched|unveiled|introduced|created|built|developed|acquired|bought|sold|hired|fired|quit)\s+([^.?,]+)/,
+    );
     if (entityMatch) {
       return `${entityMatch[1]} ${entityMatch[2]} ${entityMatch[3]}`.trim();
     }
@@ -781,7 +931,8 @@ export function hasProperNouns(query) {
   // Look for capitalized words that aren't at sentence start
   // Pattern: word boundary, capital letter, lowercase letters
   // Exclude common sentence starters and question words
-  const excludeWords = /^(What|Where|When|Who|Why|How|Is|Are|Does|Do|Can|Could|Would|Should|Tell|Please|The|A|An|I|You|We|They|He|She|It)$/;
+  const excludeWords =
+    /^(What|Where|When|Who|Why|How|Is|Are|Does|Do|Can|Could|Would|Should|Tell|Please|The|A|An|I|You|We|They|He|She|It)$/;
 
   const words = query.split(/\s+/);
 
@@ -843,16 +994,21 @@ export function hasNewsIntent(query) {
   const normalizedQuery = query.toLowerCase().trim();
 
   // Check for news structural patterns
-  const hasNewsStructure = NEWS_STRUCTURE_PATTERNS.some(pattern => pattern.test(normalizedQuery));
+  const hasNewsStructure = NEWS_STRUCTURE_PATTERNS.some((pattern) => pattern.test(normalizedQuery));
 
   // Check for proper nouns (named entities)
   const hasNamedEntity = hasProperNouns(query);
 
   // Check for geopolitical context markers
-  const hasGeopoliticalContext = GEOPOLITICAL_CONTEXT_MARKERS.some(pattern => pattern.test(normalizedQuery));
+  const hasGeopoliticalContext = GEOPOLITICAL_CONTEXT_MARKERS.some((pattern) =>
+    pattern.test(normalizedQuery),
+  );
 
   // Check for time markers indicating current events
-  const hasTimeMarker = /\b(today|this morning|yesterday|right now|currently|latest|recent|just now)\b/i.test(normalizedQuery);
+  const hasTimeMarker =
+    /\b(today|this morning|yesterday|right now|currently|latest|recent|just now)\b/i.test(
+      normalizedQuery,
+    );
 
   // NEWS INTENT LOGIC (Principle-Based):
   // 1. News structure + proper noun = news query (e.g., "What's the situation with Starmer")
@@ -889,7 +1045,7 @@ export function checkFreshnessMarkers(query) {
 
   return {
     hasFreshnessMarkers: matchedMarkers.length > 0,
-    markers: matchedMarkers
+    markers: matchedMarkers,
   };
 }
 
@@ -922,12 +1078,14 @@ export function hasReputableSource(fetchedContent) {
 export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.5) {
   // Ensure query is a string to avoid type confusion (arrays, objects, etc.)
   if (typeof query !== 'string') {
-    console.warn('[externalLookupEngine] isLookupRequired called with non-string query, skipping lookup check');
+    console.warn(
+      '[externalLookupEngine] isLookupRequired called with non-string query, skipping lookup check',
+    );
     return {
       required: false,
       reasons: ['Invalid query type for lookup; expected string'],
       priority: 'none',
-      max_lookups: 0
+      max_lookups: 0,
     };
   }
 
@@ -938,7 +1096,7 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
       required: false,
       reasons: ['Document review requests do not require external lookup'],
       priority: 'none',
-      max_lookups: 0
+      max_lookups: 0,
     };
   }
 
@@ -946,19 +1104,22 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
   // "Do you recall names of my monkeys?" should use ONLY persistent memory, never external lookup.
   // These queries contain memory-recall verbs + possessive pronouns indicating personal context.
   // Previously "recall" matched the SAFETY domain and triggered Google News RSS — now blocked.
-  const isPersonalMemoryRecall = (
+  const isPersonalMemoryRecall =
     /\b(do you (recall|remember)|can you (recall|remember))\b.{0,60}\bmy\b/i.test(query) ||
-    /\b(what do you (know|have|remember) about my|tell me (what you know about |about )?my)\b/i.test(query) ||
+    /\b(what do you (know|have|remember) about my|tell me (what you know about |about )?my)\b/i.test(
+      query,
+    ) ||
     /\b(what'?s? my|recall|remember).{0,40}\bmy\b/i.test(query) ||
-    /\b(from our (previous )?conversations?|i told you|we (discussed|talked) about)\b/i.test(query)
-  );
+    /\b(from our (previous )?conversations?|i told you|we (discussed|talked) about)\b/i.test(query);
   if (isPersonalMemoryRecall) {
-    console.log('[externalLookupEngine] Skipping lookup — personal memory recall query (use persistent memory only)');
+    console.log(
+      '[externalLookupEngine] Skipping lookup — personal memory recall query (use persistent memory only)',
+    );
     return {
       required: false,
       reasons: ['Personal memory recall — use persistent memory retrieval, no external lookup'],
       priority: 'none',
-      max_lookups: 0
+      max_lookups: 0,
     };
   }
 
@@ -969,7 +1130,7 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
       required: false,
       reasons: ['Long-form inputs are not lookup candidates'],
       priority: 'none',
-      max_lookups: 0
+      max_lookups: 0,
     };
   }
 
@@ -1027,7 +1188,7 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
     required: reasons.length > 0,
     reasons: reasons,
     priority: priority,
-    max_lookups: priority === 'high' ? LOOKUP_CONFIG.HIGH_STAKES_MAX_LOOKUPS : maxSources
+    max_lookups: priority === 'high' ? LOOKUP_CONFIG.HIGH_STAKES_MAX_LOOKUPS : maxSources,
   };
 }
 
@@ -1043,8 +1204,10 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   const lowerQuery = query.toLowerCase();
 
   // Currency exchange rates - use Exchange Rates API
-  if (lowerQuery.match(/exchange rate|currency|EUR|USD|GBP|JPY|CHF|CAD|AUD/) &&
-      lowerQuery.match(/current|rate|price|convert|exchange/i)) {
+  if (
+    lowerQuery.match(/exchange rate|currency|EUR|USD|GBP|JPY|CHF|CAD|AUD/) &&
+    lowerQuery.match(/current|rate|price|convert|exchange/i)
+  ) {
     return API_SOURCES.CURRENCY;
   }
 
@@ -1052,9 +1215,15 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   // ISSUE #804 FIX (Area 2): Use Yahoo Finance structured API first to get actual quote numbers.
   // ISSUE #814 FIX (FAILURE 8): Broadened matching — "going for", "what's it", "at" as price indicators.
   // ISSUE #859 FIX: Added "now|today|right|worth" so "stock right now" and "stock today" trigger this path.
-  if (lowerQuery.match(/\bstock\b/) &&
-      lowerQuery.match(/price|value|trading|current|going for|what'?s it|how much|at\b|now\b|today\b|right\b|worth\b/i)) {
-    console.log('[externalLookupEngine] Stock price query detected - using Yahoo Finance with news fallback');
+  if (
+    lowerQuery.match(/\bstock\b/) &&
+    lowerQuery.match(
+      /price|value|trading|current|going for|what'?s it|how much|at\b|now\b|today\b|right\b|worth\b/i,
+    )
+  ) {
+    console.log(
+      '[externalLookupEngine] Stock price query detected - using Yahoo Finance with news fallback',
+    );
     // Yahoo Finance is tried first; if buildUrl returns null (no ticker found) it is skipped
     // and the news RSS fallback handles the query.
     return [
@@ -1066,38 +1235,50 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
         buildUrl: (query) => {
           // Strip question/price words to extract just the company/ticker name
           const entityQuery = query
-            .replace(/\b(what|is|the|are|current|stock|share|price|of|today|now|currently|how|much|does|cost|worth|trading|value|market|tell|me|about|please|can|you|could|would|going|for|it|at|about|how)\b/gi, ' ')
-            .replace(/'s\b/g, ' ')   // strip possessive 's (e.g. "What's" → "What " then strip "What ")
-            .replace(/\b\w{1,2}\b/g, ' ')  // strip 1-2 char fragments left over (e.g. "s", "it")
+            .replace(
+              /\b(what|is|the|are|current|stock|share|price|of|today|now|currently|how|much|does|cost|worth|trading|value|market|tell|me|about|please|can|you|could|would|going|for|it|at|about|how)\b/gi,
+              ' ',
+            )
+            .replace(/'s\b/g, ' ') // strip possessive 's (e.g. "What's" → "What " then strip "What ")
+            .replace(/\b\w{1,2}\b/g, ' ') // strip 1-2 char fragments left over (e.g. "s", "it")
             .replace(/\s+/g, ' ')
             .trim()
             .substring(0, 40)
             .trim();
           const searchTerm = entityQuery.length >= 2 ? entityQuery : query.substring(0, 40).trim();
-          console.log(`[externalLookupEngine] Stock RSS query extracted: "${searchTerm}" (from: "${query.substring(0, 60)}")`);
+          console.log(
+            `[externalLookupEngine] Stock RSS query extracted: "${searchTerm}" (from: "${query.substring(0, 60)}")`,
+          );
           return `https://news.google.com/rss/search?q=${encodeURIComponent(searchTerm + ' stock price')}&hl=en-US&gl=US&ceid=US:en`;
         },
         parser: 'rss',
         type: 'news_fallback',
         extract: (text) => {
           const items = [];
-          const itemRegex = /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
+          const itemRegex =
+            /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
           let match;
           while ((match = itemRegex.exec(text)) !== null && items.length < 5) {
             items.push({ title: match[1], source: match[2], date: match[3] });
           }
-          return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
-        }
-      }
+          return items.length > 0
+            ? items.map((i) => `[${i.source}] ${i.title} (${i.date})`).join('\n\n')
+            : null;
+        },
+      },
     ];
   }
 
   // Commodity prices - use metals/commodity API with news fallback
   // ISSUE #776 FIX 3: Add Google News RSS as fallback when commodity APIs fail
   // ISSUE #804 REVIEW FIX: Added 'gas' to cover "natural gas" queries
-  if (lowerQuery.match(/gold|silver|platinum|palladium|copper|oil|gas|commodity|commodities/) &&
-      lowerQuery.match(/price|cost|value|ounce|barrel/i)) {
-    console.log('[externalLookupEngine] Commodity price query detected - using COMMODITIES sources with news fallback');
+  if (
+    lowerQuery.match(/gold|silver|platinum|palladium|copper|oil|gas|commodity|commodities/) &&
+    lowerQuery.match(/price|cost|value|ounce|barrel/i)
+  ) {
+    console.log(
+      '[externalLookupEngine] Commodity price query detected - using COMMODITIES sources with news fallback',
+    );
 
     // Build sources array: commodity APIs first, news RSS as fallback
     const commoditySources = [];
@@ -1123,7 +1304,10 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
       // ISSUE #810 FIX D: Extract commodity name from conversational query
       buildUrl: (query) => {
         const entityQuery = query
-          .replace(/\b(what|is|the|are|current|price|of|today|now|currently|how|much|does|cost|worth|tell|me|about|please|can|you|could|would|ounce|barrel|pound)\b/gi, ' ')
+          .replace(
+            /\b(what|is|the|are|current|price|of|today|now|currently|how|much|does|cost|worth|tell|me|about|please|can|you|could|would|ounce|barrel|pound)\b/gi,
+            ' ',
+          )
           .replace(/\s+/g, ' ')
           .trim()
           .substring(0, 40)
@@ -1135,13 +1319,16 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
       type: 'news_fallback',
       extract: (text) => {
         const items = [];
-        const itemRegex = /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
+        const itemRegex =
+          /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
         let match;
         while ((match = itemRegex.exec(text)) !== null && items.length < 5) {
           items.push({ title: match[1], source: match[2], date: match[3] });
         }
-        return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
-      }
+        return items.length > 0
+          ? items.map((i) => `[${i.source}] ${i.title} (${i.date})`).join('\n\n')
+          : null;
+      },
     });
 
     return commoditySources;
@@ -1151,8 +1338,10 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   // which falls back to Google News RSS when no API keys are configured.
 
   // Government/political positions - use Wikipedia API
-  if (lowerQuery.match(/prime minister|president|chancellor|leader|government/) &&
-      lowerQuery.match(/current|who is|UK|United Kingdom|USA|United States|Germany|France/i)) {
+  if (
+    lowerQuery.match(/prime minister|president|chancellor|leader|government/) &&
+    lowerQuery.match(/current|who is|UK|United Kingdom|USA|United States|Germany|France/i)
+  ) {
     return API_SOURCES.GOVERNMENT;
   }
 
@@ -1162,8 +1351,10 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   }
 
   // Medical drug queries - use FDA API with specific field extraction
-  if (lowerQuery.match(/side effects?|dosage|drug interactions?/) &&
-      lowerQuery.match(/aspirin|ibuprofen|acetaminophen|tylenol|advil/)) {
+  if (
+    lowerQuery.match(/side effects?|dosage|drug interactions?/) &&
+    lowerQuery.match(/aspirin|ibuprofen|acetaminophen|tylenol|advil/)
+  ) {
     return API_SOURCES.MEDICAL;
   }
 
@@ -1171,16 +1362,20 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   // ISSUE #406 FIX: Now has a real weather API instead of falling back to news RSS
   // ISSUE #810 FIX E: Use word boundaries to prevent false positives (e.g. "Ukraine" contains "rain")
   if (lowerQuery.match(/\b(weather|temperature|forecast|rain|snow|storm)\b/i)) {
-    console.log('[externalLookupEngine] Weather query detected - using Open-Meteo with news fallback');
+    console.log(
+      '[externalLookupEngine] Weather query detected - using Open-Meteo with news fallback',
+    );
     return [...API_SOURCES.WEATHER, ...API_SOURCES.NEWS];
   }
 
   // News/current events queries - PRINCIPLE-BASED DETECTION
   // Use hasNewsIntent() which detects structure + proper nouns, not hardcoded names
   // ISSUE #406 FIX: Also check for generic news queries without proper nouns
-  const isGenericNewsQuery = lowerQuery.match(/\b(top|latest|recent|breaking)\s+(news|stories|headlines|updates)\b/i);
+  const isGenericNewsQuery = lowerQuery.match(
+    /\b(top|latest|recent|breaking)\s+(news|stories|headlines|updates)\b/i,
+  );
   const isEntertainmentQuery = lowerQuery.match(/\b(celebrity|entertainment|gossip)\b/i);
-  
+
   // Note: Weather queries are already handled above
   if (hasNewsIntent(query) || isGenericNewsQuery || isEntertainmentQuery) {
     return API_SOURCES.NEWS;
@@ -1192,17 +1387,24 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   }
 
   // ISSUE #406 FIX: Celebrity/entertainment news
-  if (lowerQuery.match(/celebrity|entertainment|gossip|hollywood/i) && lowerQuery.match(/news|latest|recent|stories/i)) {
+  if (
+    lowerQuery.match(/celebrity|entertainment|gossip|hollywood/i) &&
+    lowerQuery.match(/news|latest|recent|stories/i)
+  ) {
     return API_SOURCES.NEWS;
   }
 
   // Factual entity queries - Wikipedia REST article summary + DuckDuckGo fallback
   // Applies to "who is X", "what is X", "does X do Y", entity description queries
   // This comes after news routing so news-flavoured queries (latest, breaking) go to GDELT/RSS
-  if (lowerQuery.match(/\b(who is|who was|who are|what is|what are|what does|what did)\b/i) ||
-      lowerQuery.match(/\bdoes\s+\w+(\s+\w+)?\s+(do|offer|provide|make|sell|produce|have)\b/i) ||
-      lowerQuery.match(/\bis\s+\w+(\s+\w+)?\s+(a|an)\s+\w+/i)) {
-    console.log('[externalLookupEngine] Factual entity query detected - using Wikipedia REST + DuckDuckGo + news fallback');
+  if (
+    lowerQuery.match(/\b(who is|who was|who are|what is|what are|what does|what did)\b/i) ||
+    lowerQuery.match(/\bdoes\s+\w+(\s+\w+)?\s+(do|offer|provide|make|sell|produce|have)\b/i) ||
+    lowerQuery.match(/\bis\s+\w+(\s+\w+)?\s+(a|an)\s+\w+/i)
+  ) {
+    console.log(
+      '[externalLookupEngine] Factual entity query detected - using Wikipedia REST + DuckDuckGo + news fallback',
+    );
     return [...API_SOURCES.FACTUAL_ENTITY, ...API_SOURCES.GENERAL_FALLBACK, ...API_SOURCES.NEWS];
   }
 
@@ -1217,7 +1419,9 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   // This covers "When is Apple's new event", "Is there anything new going on with Greenland",
   // and similar queries that have current-events intent but don't use the exact freshness words.
   if (truthType === TRUTH_TYPES.VOLATILE || truthType === TRUTH_TYPES.SEMI_STABLE) {
-    console.log('[externalLookupEngine] Using DuckDuckGo + news fallback for volatile/semi-stable query');
+    console.log(
+      '[externalLookupEngine] Using DuckDuckGo + news fallback for volatile/semi-stable query',
+    );
     return [...API_SOURCES.GENERAL_FALLBACK, ...API_SOURCES.NEWS];
   }
 
@@ -1266,11 +1470,15 @@ export async function performLookup(query, sources, truthType = null) {
   const queryWasCleaned = searchQuery !== query;
 
   if (queryWasCleaned) {
-    console.log(`[externalLookupEngine] Cleaned query: "${query.substring(0, 80)}..." → "${searchQuery}"`);
+    console.log(
+      `[externalLookupEngine] Cleaned query: "${query.substring(0, 80)}..." → "${searchQuery}"`,
+    );
   } else {
-    console.log(`[externalLookupEngine] Performing lookup for: "${searchQuery.substring(0, 50)}..."`);
+    console.log(
+      `[externalLookupEngine] Performing lookup for: "${searchQuery.substring(0, 50)}..."`,
+    );
   }
-  console.log(`[externalLookupEngine] Sources: ${sources.map(s => s.name).join(', ')}`);
+  console.log(`[externalLookupEngine] Sources: ${sources.map((s) => s.name).join(', ')}`);
 
   // Check cache using original query as key (not cleaned query)
   const cached = cacheGet(query);
@@ -1283,7 +1491,7 @@ export async function performLookup(query, sources, truthType = null) {
       sources_used: cached.sources_used,
       verified_at: cached.verified_at,
       cache_valid_until: cached.cache_valid_until,
-      lookup_time_ms: Date.now() - startTime
+      lookup_time_ms: Date.now() - startTime,
     };
   }
 
@@ -1313,14 +1521,31 @@ export async function performLookup(query, sources, truthType = null) {
           }
           if (!fetchedData) {
             console.log(`[externalLookupEngine] ${source.name} fetchData returned null`);
-            sourcesUsed.push({ name: source.name, type: source.type || 'api', status: 'no_data', success: false });
+            sourcesUsed.push({
+              name: source.name,
+              type: source.type || 'api',
+              status: 'no_data',
+              success: false,
+            });
             continue;
           }
           const remaining = LOOKUP_CONFIG.MAX_FETCHED_TEXT - totalTextFetched;
-          const bounded = fetchedData.length > remaining ? fetchedData.substring(0, remaining) : fetchedData;
+          const bounded =
+            fetchedData.length > remaining ? fetchedData.substring(0, remaining) : fetchedData;
           totalTextFetched += bounded.length;
-          results.push({ source: source.name, text: bounded, length: bounded.length, type: source.type || 'api' });
-          sourcesUsed.push({ name: source.name, type: source.type || 'api', status: 'success', text_length: bounded.length, success: true });
+          results.push({
+            source: source.name,
+            text: bounded,
+            length: bounded.length,
+            type: source.type || 'api',
+          });
+          sourcesUsed.push({
+            name: source.name,
+            type: source.type || 'api',
+            status: 'success',
+            text_length: bounded.length,
+            success: true,
+          });
           console.log(`[externalLookupEngine] ✓ ${source.name}: ${bounded.length} chars extracted`);
           continue;
         }
@@ -1335,13 +1560,15 @@ export async function performLookup(query, sources, truthType = null) {
         } else {
           fetchUrl = source.url;
         }
-        
+
         // Skip this source if buildUrl/url returned null (couldn't extract required info)
         if (!fetchUrl) {
-          console.log(`[externalLookupEngine] ${source.name} buildUrl returned null - skipping source`);
+          console.log(
+            `[externalLookupEngine] ${source.name} buildUrl returned null - skipping source`,
+          );
           continue;
         }
-        
+
         console.log(`[externalLookupEngine] Fetching from ${source.name} (${fetchUrl})`);
 
         // Create abort controller for timeout
@@ -1350,14 +1577,15 @@ export async function performLookup(query, sources, truthType = null) {
 
         // Perform fetch with timeout; merge source-specific headers (e.g. GoldAPI x-access-token)
         // getHeaders() is called at request time (supports env vars set after module load)
-        const sourceHeaders = typeof source.getHeaders === 'function' ? source.getHeaders() : (source.headers || {});
+        const sourceHeaders =
+          typeof source.getHeaders === 'function' ? source.getHeaders() : source.headers || {};
         const response = await fetch(fetchUrl, {
           signal: controller.signal,
           headers: {
             'User-Agent': 'SiteMonkeys-AI-System/1.0',
-            'Accept': 'application/json,text/html,text/plain',
-            ...sourceHeaders
-          }
+            Accept: 'application/json,text/html,text/plain',
+            ...sourceHeaders,
+          },
         });
 
         clearTimeout(timeoutId);
@@ -1368,7 +1596,7 @@ export async function performLookup(query, sources, truthType = null) {
             name: source.name,
             type: source.type || 'unknown',
             status: `error_${response.status}`,
-            success: false
+            success: false,
           });
           continue;
         }
@@ -1393,7 +1621,7 @@ export async function performLookup(query, sources, truthType = null) {
               name: source.name,
               type: source.type || 'api',
               status: 'extraction_failed',
-              success: false
+              success: false,
             });
             continue;
           }
@@ -1418,7 +1646,7 @@ export async function performLookup(query, sources, truthType = null) {
               name: source.name,
               type: source.type || 'api',
               status: 'extraction_failed',
-              success: false
+              success: false,
             });
             continue;
           }
@@ -1432,7 +1660,7 @@ export async function performLookup(query, sources, truthType = null) {
               name: source.name,
               type: source.type || 'unknown',
               status: 'non_parseable',
-              success: false
+              success: false,
             });
             continue;
           }
@@ -1444,12 +1672,14 @@ export async function performLookup(query, sources, truthType = null) {
             try {
               parsedData = source.extract({ text });
             } catch (extractError) {
-              console.log(`[externalLookupEngine] ${source.name} extractor failed: ${extractError.message}`);
+              console.log(
+                `[externalLookupEngine] ${source.name} extractor failed: ${extractError.message}`,
+              );
               sourcesUsed.push({
                 name: source.name,
                 type: source.type || 'unknown',
                 status: 'extractor_error',
-                success: false
+                success: false,
               });
               continue;
             }
@@ -1465,7 +1695,7 @@ export async function performLookup(query, sources, truthType = null) {
             name: source.name,
             type: source.type || 'unknown',
             status: 'no_data',
-            success: false
+            success: false,
           });
           continue;
         }
@@ -1484,7 +1714,7 @@ export async function performLookup(query, sources, truthType = null) {
           source: source.name,
           text: parsedData,
           length: parsedData.length,
-          type: source.type || 'api'
+          type: source.type || 'api',
         });
 
         sourcesUsed.push({
@@ -1492,11 +1722,12 @@ export async function performLookup(query, sources, truthType = null) {
           type: source.type || 'api',
           status: 'success',
           text_length: parsedData.length,
-          success: true
+          success: true,
         });
 
-        console.log(`[externalLookupEngine] ✓ ${source.name}: ${parsedData.length} chars extracted`);
-
+        console.log(
+          `[externalLookupEngine] ✓ ${source.name}: ${parsedData.length} chars extracted`,
+        );
       } catch (fetchError) {
         if (fetchError.name === 'AbortError') {
           console.log(`[externalLookupEngine] ${source.name} timed out`);
@@ -1504,7 +1735,7 @@ export async function performLookup(query, sources, truthType = null) {
             name: source.name,
             type: source.type || 'unknown',
             status: 'timeout',
-            success: false
+            success: false,
           });
         } else {
           console.log(`[externalLookupEngine] ${source.name} fetch error: ${fetchError.message}`);
@@ -1513,7 +1744,7 @@ export async function performLookup(query, sources, truthType = null) {
             type: source.type || 'unknown',
             status: 'error',
             error: fetchError.message,
-            success: false
+            success: false,
           });
         }
       }
@@ -1525,32 +1756,36 @@ export async function performLookup(query, sources, truthType = null) {
         query: query,
         sources: results,
         total_text_length: totalTextFetched,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       // Check for news corroboration if required
       const phase4Metadata = {};
       if (truthType && requiresCorroboration(query, truthType)) {
         // Combine all fetched content for reputable source check
-        const fetchedContent = results.map(r => r.text).join(' ');
+        const fetchedContent = results.map((r) => r.text).join(' ');
         phase4Metadata.news_corroborated = hasReputableSource(fetchedContent);
-        phase4Metadata.news_sources_checked = sourcesUsed.map(s => s.name);
+        phase4Metadata.news_sources_checked = sourcesUsed.map((s) => s.name);
 
         // Add disclosure if corroboration failed
         if (!phase4Metadata.news_corroborated) {
-          phase4Metadata.disclosure = "Multiple outlets are reporting this, but I cannot confirm from reputable sources like Reuters or AP. Please verify independently.";
+          phase4Metadata.disclosure =
+            'Multiple outlets are reporting this, but I cannot confirm from reputable sources like Reuters or AP. Please verify independently.';
         }
       }
 
       // ISSUE #790 FIX: Detect if this is a price query using only RSS sources
       // RSS headlines don't contain live spot prices, so we must disclose this
       // NOTE: "value" removed - too broad (causes false positives for "value of my contract", "value of my home")
-      const isPriceQuery = query.match(/\b(price|cost|quote|trading|today)\b/i) &&
-                          (query.match(/\b(gold|silver|platinum|palladium|copper|oil|crude|commodity)\b/i) ||
-                           query.match(/\b(stock|share|apple|google|microsoft|tesla)\b/i));
+      const isPriceQuery =
+        query.match(/\b(price|cost|quote|trading|today)\b/i) &&
+        (query.match(/\b(gold|silver|platinum|palladium|copper|oil|crude|commodity)\b/i) ||
+          query.match(/\b(stock|share|apple|google|microsoft|tesla)\b/i));
 
-      const onlyRssSources = results.every(r => r.type === 'news_fallback' || r.source.includes('RSS'));
-      const hasNumericQuote = results.some(r => {
+      const onlyRssSources = results.every(
+        (r) => r.type === 'news_fallback' || r.source.includes('RSS'),
+      );
+      const hasNumericQuote = results.some((r) => {
         // Check if the text contains price patterns like "$123.45" or "123.45 USD"
         return /\$\d+\.?\d*|\d+\.?\d*\s*(USD|usd|dollars?|ounce|oz)/i.test(r.text);
       });
@@ -1560,7 +1795,7 @@ export async function performLookup(query, sources, truthType = null) {
       let sourceType = 'unknown';
       if (onlyRssSources) {
         sourceType = 'headlines';
-      } else if (results.some(r => r.type === 'api')) {
+      } else if (results.some((r) => r.type === 'api')) {
         sourceType = 'structured_api';
       } else {
         sourceType = 'mixed';
@@ -1568,9 +1803,10 @@ export async function performLookup(query, sources, truthType = null) {
 
       if (isPriceQuery && onlyRssSources && !hasNumericQuote) {
         console.log('[MARKET-DATA] source=rss has_numeric_quote=false fallback=headlines_summary');
-        phase4Metadata.disclosure = (phase4Metadata.disclosure ? phase4Metadata.disclosure + ' ' : '') +
+        phase4Metadata.disclosure =
+          (phase4Metadata.disclosure ? phase4Metadata.disclosure + ' ' : '') +
           "No live quote source configured; headlines don't include spot price. The response is based on market direction and drivers from recent news.";
-      } else if (isPriceQuery && results.some(r => r.type === 'api')) {
+      } else if (isPriceQuery && results.some((r) => r.type === 'api')) {
         // Log when we have actual price data from API
         console.log('[MARKET-DATA] source=api has_numeric_quote=true');
       }
@@ -1586,9 +1822,9 @@ export async function performLookup(query, sources, truthType = null) {
         total_text_fetched: totalTextFetched,
         verified_at: new Date().toISOString(),
         lookup_time_ms: Date.now() - startTime,
-        sourceType: sourceType,           // ISSUE #810 CHANGE 1: Structured metadata flag
+        sourceType: sourceType, // ISSUE #810 CHANGE 1: Structured metadata flag
         hasNumericQuote: hasNumericQuote, // ISSUE #810 CHANGE 1: Structured metadata flag
-        ...phase4Metadata
+        ...phase4Metadata,
       };
     }
 
@@ -1601,9 +1837,8 @@ export async function performLookup(query, sources, truthType = null) {
       error: 'All sources failed or returned no data',
       sources_consulted: sourcesUsed,
       verified_at: new Date().toISOString(),
-      lookup_time_ms: Date.now() - startTime
+      lookup_time_ms: Date.now() - startTime,
     };
-
   } catch (error) {
     console.error(`[externalLookupEngine] Lookup failed:`, error);
     return {
@@ -1614,7 +1849,7 @@ export async function performLookup(query, sources, truthType = null) {
       error: error.message,
       sources_consulted: sourcesUsed || [],
       verified_at: new Date().toISOString(),
-      lookup_time_ms: Date.now() - startTime
+      lookup_time_ms: Date.now() - startTime,
     };
   }
 }
@@ -1631,25 +1866,31 @@ function getVerificationSources(query) {
   if (lowerQuery.match(/exchange rate|currency|EUR|USD|GBP/i)) {
     return [
       { name: 'XE.com', url: 'https://www.xe.com' },
-      { name: 'Google Finance', url: 'https://www.google.com/finance' }
+      { name: 'Google Finance', url: 'https://www.google.com/finance' },
     ];
   }
 
   // Stock prices
-  if (lowerQuery.includes('stock') || lowerQuery.includes('share') || 
-      (lowerQuery.includes('market') && lowerQuery.includes('price'))) {
+  if (
+    lowerQuery.includes('stock') ||
+    lowerQuery.includes('share') ||
+    (lowerQuery.includes('market') && lowerQuery.includes('price'))
+  ) {
     return [
       { name: 'Yahoo Finance', url: 'https://finance.yahoo.com' },
-      { name: 'Google Finance', url: 'https://www.google.com/finance' }
+      { name: 'Google Finance', url: 'https://www.google.com/finance' },
     ];
   }
 
   // Commodity prices
-  if (lowerQuery.includes('gold') || lowerQuery.includes('silver') || 
-      (lowerQuery.includes('oil') && lowerQuery.includes('price'))) {
+  if (
+    lowerQuery.includes('gold') ||
+    lowerQuery.includes('silver') ||
+    (lowerQuery.includes('oil') && lowerQuery.includes('price'))
+  ) {
     return [
       { name: 'Kitco', url: 'https://www.kitco.com' },
-      { name: 'Bloomberg', url: 'https://www.bloomberg.com/markets/commodities' }
+      { name: 'Bloomberg', url: 'https://www.bloomberg.com/markets/commodities' },
     ];
   }
 
@@ -1657,7 +1898,7 @@ function getVerificationSources(query) {
   if (lowerQuery.match(/prime minister|president|chancellor/i)) {
     return [
       { name: 'Wikipedia', url: 'https://en.wikipedia.org' },
-      { name: 'Official government website', url: 'Search for official gov site' }
+      { name: 'Official government website', url: 'Search for official gov site' },
     ];
   }
 
@@ -1665,14 +1906,14 @@ function getVerificationSources(query) {
   if (hasNewsIntent(query)) {
     return [
       { name: 'Reuters', url: 'https://www.reuters.com' },
-      { name: 'Associated Press', url: 'https://apnews.com' }
+      { name: 'Associated Press', url: 'https://apnews.com' },
     ];
   }
 
   // Default general sources
   return [
     { name: 'Google Search', url: 'https://www.google.com' },
-    { name: 'Wikipedia', url: 'https://en.wikipedia.org' }
+    { name: 'Wikipedia', url: 'https://en.wikipedia.org' },
   ];
 }
 
@@ -1698,17 +1939,19 @@ export function gracefulDegradation(query, lookupResult, internalAnswer = null) 
     minimal_response_required: true, // Signal to response generator: keep it SHORT
     max_response_words: 30, // Maximum words for the response
     internal_answer: internalAnswer,
-    internal_answer_labeled: internalAnswer ? {
-      data: internalAnswer,
-      label: 'Based on training data (as of early 2024) - may be outdated',
-      confidence: 'unverified'
-    } : null,
+    internal_answer_labeled: internalAnswer
+      ? {
+          data: internalAnswer,
+          label: 'Based on training data (as of early 2024) - may be outdated',
+          confidence: 'unverified',
+        }
+      : null,
     verification_path: {
       message: 'Check current information at:',
-      sources: sources.slice(0, 2) // Max 2 sources for brevity
+      sources: sources.slice(0, 2), // Max 2 sources for brevity
     },
     lookup_error: lookupResult.error || 'No reliable source available',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -1720,11 +1963,7 @@ export function gracefulDegradation(query, lookupResult, internalAnswer = null) 
  */
 export async function lookup(query, options = {}) {
   const startTime = Date.now();
-  const {
-    internalConfidence = 0.5,
-    internalAnswer = null,
-    forceRefresh = false
-  } = options;
+  const { internalConfidence = 0.5, internalAnswer = null, forceRefresh = false } = options;
 
   // Input sanitization - Prevent ReDoS and injection
   if (typeof query !== 'string') {
@@ -1740,7 +1979,7 @@ export async function lookup(query, options = {}) {
       reason: 'Invalid or empty query after sanitization',
       truth_type: null,
       internal_confidence: internalConfidence,
-      total_time_ms: Date.now() - startTime
+      total_time_ms: Date.now() - startTime,
     };
   }
 
@@ -1753,14 +1992,16 @@ export async function lookup(query, options = {}) {
   const lookupCheck = isLookupRequired(query, truthTypeResult, internalConfidence);
 
   if (!lookupCheck.required && !forceRefresh) {
-    console.log(`[externalLookupEngine] Lookup not required: ${lookupCheck.reasons.length === 0 ? 'no triggers matched' : 'skipped'}`);
+    console.log(
+      `[externalLookupEngine] Lookup not required: ${lookupCheck.reasons.length === 0 ? 'no triggers matched' : 'skipped'}`,
+    );
     return {
       success: true,
       lookup_performed: false,
       reason: 'Lookup not required - no triggers matched',
       truth_type: truthTypeResult.type,
       internal_confidence: internalConfidence,
-      total_time_ms: Date.now() - startTime
+      total_time_ms: Date.now() - startTime,
     };
   }
 
@@ -1769,8 +2010,14 @@ export async function lookup(query, options = {}) {
 
   // Handle no reliable source available
   if (sources.length === 0) {
-    console.log(`[externalLookupEngine] No reliable parseable source available for this query type`);
-    const degraded = gracefulDegradation(query, { error: 'No reliable parseable source available for this query type' }, internalAnswer);
+    console.log(
+      `[externalLookupEngine] No reliable parseable source available for this query type`,
+    );
+    const degraded = gracefulDegradation(
+      query,
+      { error: 'No reliable parseable source available for this query type' },
+      internalAnswer,
+    );
     return {
       ...degraded,
       success: true,
@@ -1779,7 +2026,7 @@ export async function lookup(query, options = {}) {
       failure_reason: 'No reliable parseable source available for this query type',
       truth_type: truthTypeResult.type,
       lookup_reasons: lookupCheck.reasons,
-      total_time_ms: Date.now() - startTime
+      total_time_ms: Date.now() - startTime,
     };
   }
 
@@ -1794,7 +2041,7 @@ export async function lookup(query, options = {}) {
       ...degraded,
       truth_type: truthTypeResult.type,
       lookup_reasons: lookupCheck.reasons,
-      total_time_ms: Date.now() - startTime
+      total_time_ms: Date.now() - startTime,
     };
   }
 
@@ -1806,7 +2053,7 @@ export async function lookup(query, options = {}) {
       lookupResult.data,
       truthTypeResult.type,
       lookupResult.sources_consulted || sources,
-      0.8 // Default confidence for external data
+      0.8, // Default confidence for external data
     );
   }
 
@@ -1836,7 +2083,7 @@ export async function lookup(query, options = {}) {
     lookup_priority: lookupCheck.priority,
     lookup_time_ms: lookupResult.lookup_time_ms,
     total_time_ms: Date.now() - startTime,
-    ...corroborationMetadata
+    ...corroborationMetadata,
   };
 }
 
@@ -1857,9 +2104,9 @@ export async function testLookup(query, options = {}) {
       examples: [
         '?action=external-lookup&q=What%20is%20the%20current%20price%20of%20Bitcoin',
         '?action=external-lookup&q=What%20are%20the%20side%20effects%20of%20aspirin',
-        '?action=external-lookup&q=What%20is%20the%20Pythagorean%20theorem'
+        '?action=external-lookup&q=What%20is%20the%20Pythagorean%20theorem',
       ],
-      config: LOOKUP_CONFIG
+      config: LOOKUP_CONFIG,
     };
   }
 
@@ -1868,7 +2115,7 @@ export async function testLookup(query, options = {}) {
     return {
       success: false,
       message: 'Invalid query type; expected string parameter "q"',
-      received_type: typeof query
+      received_type: typeof query,
     };
   }
 
@@ -1883,8 +2130,8 @@ export async function testLookup(query, options = {}) {
       truth_type: result.truth_type,
       lookup_reasons: result.lookup_reasons || [],
       degraded: result.degraded || false,
-      total_time_ms: result.total_time_ms
-    }
+      total_time_ms: result.total_time_ms,
+    },
   };
 }
 
@@ -1905,5 +2152,5 @@ export default {
   performLookup,
   gracefulDegradation,
   lookup,
-  testLookup
+  testLookup,
 };
