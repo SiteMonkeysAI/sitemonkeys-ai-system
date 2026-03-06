@@ -91,6 +91,11 @@
   z-index: 101;
 }
 
+.footer-controls-right {
+  left: auto;
+  right: 12px;
+}
+
 .footer-icon-btn {
   background: transparent;
   border: 1px solid rgba(255, 255, 255, 0.25);
@@ -347,47 +352,7 @@
    FIX 6 — Account Panel Content
    ------------------------------------------------------------------ */
 .account-trigger {
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.3);
   border-radius: 50%;
-  width: 34px;
-  height: 34px;
-  font-size: 16px;
-  cursor: pointer;
-  z-index: 10;
-  color: #ccc;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.2s, border-color 0.2s;
-}
-
-.account-trigger:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.5);
-}
-
-/* Responsive account trigger positioning */
-@media (max-width: 768px) and (orientation: portrait) {
-  .account-trigger {
-    width: 28px;
-    height: 28px;
-    font-size: 13px;
-    right: 10px;
-  }
-}
-
-@media (max-width: 950px) and (orientation: landscape) {
-  .account-trigger {
-    width: 28px;
-    height: 28px;
-    font-size: 13px;
-    right: 10px;
-  }
 }
 
 .auth-form {

@@ -310,6 +310,11 @@
     accountBtn.addEventListener('click', openAccountPanel);
   }
 
+  var accountBtnMobile = document.getElementById('account-btn-mobile');
+  if (accountBtnMobile) {
+    accountBtnMobile.addEventListener('click', openAccountPanel);
+  }
+
   // Close account panel on backdrop click
   var accountBackdrop = document.getElementById('account-backdrop');
   if (accountBackdrop) {
