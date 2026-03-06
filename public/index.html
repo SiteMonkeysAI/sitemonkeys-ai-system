@@ -10,6 +10,7 @@
       href="https://fonts.googleapis.com/css?family=Carlito:400,700&display=swap"
       rel="stylesheet"
     />
+    <link rel="stylesheet" href="css/overhaul.css" />
     <style>
       * {
         box-sizing: border-box;
@@ -1227,6 +1228,7 @@
         </div>
         <img src="AI Robot.png" alt="AI Robot" class="ai-robot" />
         <img src="rocket.png" alt="Rocket" class="rocket-top" />
+        <button class="account-trigger" id="account-btn" title="My Account">&#128100;</button>
       </div>
     </header>
 
@@ -1351,12 +1353,20 @@
       </div>
 
       <div class="footer">
+        <div class="footer-controls">
+          <button class="footer-icon-btn new-chat-trigger" title="New Chat">&#10133;</button>
+          <button class="footer-icon-btn history-trigger" title="Chat History">&#128451;</button>
+        </div>
         <img src="boy-mascot.png" alt="Eli" class="footer-mascot" />
         <div class="footer-text">AI YOU CAN TRUST!</div>
         <img src="girl-mascot.png" alt="Roxy" class="footer-mascot" />
       </div>
 
       <div class="mobile-footer">
+        <div class="footer-controls">
+          <button class="footer-icon-btn new-chat-trigger" title="New Chat">&#10133;</button>
+          <button class="footer-icon-btn history-trigger" title="Chat History">&#128451;</button>
+        </div>
         <img src="boy-mascot.png" alt="Eli" class="footer-mascot" />
         <div class="mobile-footer-text">AI YOU CAN TRUST!</div>
         <img src="girl-mascot.png" alt="Roxy" class="footer-mascot" />
@@ -1986,7 +1996,8 @@
           responseBubble.className = "bubble ai";
           responseBubble.innerHTML = `<img src="${avatar}" class="avatar" alt="${who}"><div class="bubble-content"><strong>${who}:</strong> ${cleanReply}</div>`;
           box.appendChild(responseBubble);
-          box.scrollTop = box.scrollHeight;
+          // Fix 1: Scroll to TOP of new response so user reads from the beginning
+          responseBubble.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
           // Update conversation history
           conversationHistory.push({ role: "user", content: userMessage });
@@ -2182,7 +2193,8 @@
           responseBubble.className = "bubble ai";
           responseBubble.innerHTML = `<img src="${avatar}" class="avatar" alt="${who}"><div class="bubble-content"><strong>${who}:</strong> ${cleanReply}</div>`;
           box.appendChild(responseBubble);
-          box.scrollTop = box.scrollHeight;
+          // Fix 1: Scroll to TOP of new response so user reads from the beginning
+          responseBubble.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
           // Update conversation history
           conversationHistory.push({ role: "user", content: text });
@@ -2364,5 +2376,40 @@
         return null;
       }
     </script>
+
+    <!-- Fix 5: History Panel (slides from left) -->
+    <div class="panel-backdrop" id="history-backdrop"></div>
+    <div class="slide-panel slide-panel-left" id="history-panel">
+      <button class="panel-close" id="history-panel-close">&times;</button>
+      <div class="panel-header">Recent Conversations</div>
+      <div class="panel-content" id="history-list">
+        <!-- Populated dynamically by overhaul.js -->
+      </div>
+    </div>
+
+    <!-- Fix 6: Account Panel (slides from right) -->
+    <div class="panel-backdrop" id="account-backdrop"></div>
+    <div class="slide-panel slide-panel-right" id="account-panel">
+      <button class="panel-close" id="account-panel-close">&times;</button>
+      <div class="panel-header">My Account</div>
+      <div class="panel-content">
+        <div class="auth-form">
+          <label>Email</label>
+          <input type="email" class="auth-input" placeholder="you@example.com" />
+          <label>Password</label>
+          <input type="password" class="auth-input" placeholder="&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;&#8226;" />
+          <label>Account Number</label>
+          <input type="text" class="auth-input" placeholder="SM-XXXXXXXX" />
+          <button class="auth-submit" id="sign-in-btn">Sign In</button>
+          <div class="auth-placeholder-msg" id="auth-placeholder-msg">Authentication coming soon</div>
+          <div class="auth-divider"></div>
+          <a href="#" class="auth-link" id="create-account-link">Create Account</a>
+        </div>
+        <div class="panel-brand">Site Monkeys AI</div>
+      </div>
+    </div>
+
+    <!-- Overhaul JS: Fixes 4, 5, 6 (loaded after embedded script) -->
+    <script src="js/overhaul.js"></script>
   </body>
 </html>
