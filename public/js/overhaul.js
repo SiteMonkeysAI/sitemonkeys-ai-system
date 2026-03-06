@@ -121,15 +121,29 @@
     }
   }
 
-  // Bind all New Chat buttons (desktop + mobile)
-  document.querySelectorAll('.new-chat-trigger').forEach(function (btn) {
-    btn.addEventListener('click', handleNewChat);
-  });
+  // Bind New Chat button (desktop)
+  var newChatBtn = document.getElementById('new-chat-btn');
+  if (newChatBtn) {
+    newChatBtn.addEventListener('click', handleNewChat);
+  }
 
-  // Bind all History buttons (desktop + mobile)
-  document.querySelectorAll('.history-trigger').forEach(function (btn) {
-    btn.addEventListener('click', openHistoryPanel);
-  });
+  // Bind New Chat button (mobile)
+  var newChatBtnMobile = document.getElementById('new-chat-btn-mobile');
+  if (newChatBtnMobile) {
+    newChatBtnMobile.addEventListener('click', handleNewChat);
+  }
+
+  // Bind History button (desktop)
+  var historyBtn = document.getElementById('history-btn');
+  if (historyBtn) {
+    historyBtn.addEventListener('click', openHistoryPanel);
+  }
+
+  // Bind History button (mobile)
+  var historyBtnMobile = document.getElementById('history-btn-mobile');
+  if (historyBtnMobile) {
+    historyBtnMobile.addEventListener('click', openHistoryPanel);
+  }
 
   // ----------------------------------------------------------------
   // FIX 5 — Left Panel: Chat History
