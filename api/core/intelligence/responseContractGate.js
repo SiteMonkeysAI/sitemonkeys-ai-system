@@ -58,6 +58,12 @@ const FALSE_CONTINUITY_PATTERNS = [
   /\bbased on our prior conversations?\b/gi,
   /\btopics (we'?ve?|I'?ve?) covered include\b/gi,
   /\bin our conversations? (we'?ve?|I'?ve?) discussed\b/gi,
+  // ISSUE #879: Cross-topic memory contamination — AI presenting off-topic memories as prior discussion
+  /\bour past discussions? have mostly revolved around\b/gi,
+  /\bour discussions? have revolved around\b/gi,
+  /\bour conversations? have mostly been about\b/gi,
+  /\bwe'?ve? mostly talked about\b/gi,
+  /\bmost of our discussion has been about\b/gi,
 ];
 
 // ENGAGEMENT BAIT ENDINGS (Issue #435 - strip for simple/factual queries)

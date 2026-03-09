@@ -1815,6 +1815,53 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ═══════════════════════════════════════════════════════════════
 
     // ═══════════════════════════════════════════════════════════════
+    // ISSUE #879 FIX: Cross-entity contamination filter
+    // When query targets a specific named entity (Tesla), memories that are tagged to a
+    // DIFFERENT named entity (Apple) must not be injected as if they are relevant context.
+    // Entity boosting correctly surfaces Tesla memories for Tesla queries; this filter
+    // prevents Apple memories from slipping through on semantic similarity alone.
+    // ═══════════════════════════════════════════════════════════════
+    if (detectedEntities.length > 0) {
+      const crossEntityPattern = /\b(Amazon|Google|Microsoft|Apple|Facebook|Tesla|Netflix|Twitter|LinkedIn|GitHub)\b/g;
+      const detectedLower = detectedEntities.map(e => e.toLowerCase());
+
+      entityBoosted = entityBoosted.map(memory => {
+        // Already entity-boosted by the current query entities → pass through
+        if (memory.entity_boosted) return memory;
+
+        const memoryContent = memory.content || '';
+
+        // Collect named entities found in the memory that are NOT in the query entities
+        const otherEntities = [...memoryContent.matchAll(crossEntityPattern)]
+          .map(m => m[0])
+          .filter(e => !detectedLower.includes(e.toLowerCase()));
+
+        if (otherEntities.length === 0) return memory; // No conflicting entities found
+
+        // Check whether the memory also contains at least one query entity.
+        // If it does, the memory covers both topics so we keep it as-is.
+        const hasQueryEntity = detectedEntities.some(entity => {
+          const entityRegex = new RegExp(`\\b${escapeRegex(entity)}\\b`, 'i');
+          return entityRegex.test(memoryContent);
+        });
+        if (hasQueryEntity) return memory;
+
+        // Memory belongs to a different entity than the one queried — penalize heavily
+        const uniqueOther = [...new Set(otherEntities)];
+        const originalSim = memory.similarity || 0;
+        const penalizedSim = originalSim * 0.3;
+        console.log(`[CROSS-ENTITY-FILTER] Memory ${memory.id}: contains [${uniqueOther.join(', ')}] but query targets [${detectedEntities.join(', ')}] — penalizing similarity ${originalSim.toFixed(3)} → ${penalizedSim.toFixed(3)}`);
+        return {
+          ...memory,
+          similarity: penalizedSim,
+          entity_cross_contaminated: true,
+          conflicting_entities: uniqueOther
+        };
+      });
+    }
+    // ═══════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════
     // FIX #670 - FIX D: Anchor-aware re-ranking based on intent
     // When query intent suggests specific anchor types, boost memories with matching anchors
     // ═══════════════════════════════════════════════════════════════
