@@ -4040,6 +4040,12 @@ export class Orchestrator {
         }
 
         console.log(`[PHASE4] Injected external content: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content.length} chars`);
+      } else if (phase4Metadata.lookup_attempted && !phase4Metadata.external_lookup) {
+        // ISSUE #885 FIX: When external lookup was attempted but no sources returned usable data,
+        // inject a disclosure so GPT-4 does not silently answer from training data without telling
+        // the user. Silent fallthrough to confident training-data responses is not acceptable.
+        externalContext = `\n\n[EXTERNAL LOOKUP ATTEMPTED — NO DATA RETRIEVED]\nAn attempt was made to retrieve current information for this query, but no external sources returned usable data.\nYou MUST disclose this in your response. Tell the user that you tried to pull current information but could not retrieve it right now, then provide what you know from training data and explicitly label it as potentially outdated.\nExample phrasing: "I tried to pull current information on [topic] but couldn't retrieve anything right now — here's what I know from my training data, which may not reflect the latest developments: ..."\n[END DISCLOSURE]\n\n`;
+        console.log('[PHASE4] External lookup attempted but all sources failed — injecting failure disclosure');
       }
 
       // ========== ISSUE #575: DIAGNOSTIC LOGGING - PROMPT DEBUG ==========
