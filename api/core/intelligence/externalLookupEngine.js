@@ -498,29 +498,125 @@ export const API_SOURCES = {
     }
   ],
   NEWS: [
-    // 1. GDELT — global news with structured metadata (primary news source)
-    // GDELT is free to use with attribution; see https://www.gdeltproject.org/about.html
-    // Rate limits: no official rate limit published but respectful usage is expected.
-    // GDELT can return HTML error pages; JSON parse failure is caught gracefully in performLookup
-    // and falls through to Google News RSS automatically.
+    // ISSUE #877: Reprioritized news sources based on production reliability.
+    // Priority: NewsAPI → Serper → TheNewsAPI → Google News RSS → GDELT (last resort)
+    // Each source has a 200-char minimum content threshold enforced in performLookup.
+
+    // 1. NewsAPI — highest priority: returns full article summaries with dates and sources
+    // Requires NEWS_API_KEY environment variable (set in Railway)
     {
-      name: 'GDELT News',
+      name: 'NewsAPI',
       buildUrl: (query) => {
+        const apiKey = process.env.NEWS_API_KEY;
+        if (!apiKey) {
+          console.log('[externalLookupEngine] NEWS_API_KEY not set, skipping NewsAPI source');
+          return null;
+        }
         const cleanedQuery = cleanNewsQuery(query);
         const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
-        console.log(`[externalLookupEngine] GDELT query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`);
-        return `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(searchQuery)}&mode=artlist&maxrecords=5&format=json`;
+        console.log(`[externalLookupEngine] NewsAPI query: "${searchQuery}"`);
+        return `https://newsapi.org/v2/everything?q=${encodeURIComponent(searchQuery)}&sortBy=publishedAt&pageSize=5&apiKey=${apiKey}`;
       },
       parser: 'json',
       type: 'api',
       extract: (json) => {
         if (!json || !json.articles || !Array.isArray(json.articles)) return null;
-        const articles = json.articles.filter(a => a.title).slice(0, 5);
+        const articles = json.articles.filter(a => a.title && a.title !== '[Removed]').slice(0, 5);
         if (articles.length === 0) return null;
-        return articles.map(a => `[${a.domain || '[unknown source]'}] ${a.title} (${a.seendate || '[date unknown]'})`).join('\n\n');
+        return articles.map(a => {
+          const source = a.source?.name || '[unknown source]';
+          const date = a.publishedAt ? a.publishedAt.substring(0, 10) : '[date unknown]';
+          const description = a.description ? ` — ${a.description.substring(0, 200)}` : '';
+          return `[${source}] ${a.title} (${date})${description}`;
+        }).join('\n\n');
       }
     },
-    // 2. Google News RSS - primary discovery layer (fallback behind GDELT)
+
+    // 2. Serper — second: returns real Google Search results
+    // Requires SERPER_API_KEY environment variable (set in Railway)
+    {
+      name: 'Serper',
+      buildUrl: (query) => {
+        const apiKey = process.env.SERPER_API_KEY;
+        if (!apiKey) {
+          console.log('[externalLookupEngine] SERPER_API_KEY not set, skipping Serper source');
+          return null;
+        }
+        return null; // Serper uses POST, handled via fetchData below
+      },
+      fetchData: async (query, abortSignal) => {
+        const apiKey = process.env.SERPER_API_KEY;
+        if (!apiKey) {
+          console.log('[externalLookupEngine] SERPER_API_KEY not set, skipping Serper source');
+          return null;
+        }
+        const cleanedQuery = cleanNewsQuery(query);
+        const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 60).trim();
+        console.log(`[externalLookupEngine] Serper query: "${searchQuery}"`);
+        try {
+          const response = await fetch('https://google.serper.dev/news', {
+            method: 'POST',
+            signal: abortSignal,
+            headers: {
+              'X-API-KEY': apiKey,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ q: searchQuery, num: 5 })
+          });
+          if (!response.ok) {
+            console.log(`[externalLookupEngine] Serper returned ${response.status}`);
+            return null;
+          }
+          const json = await response.json();
+          if (!json || !json.news || !Array.isArray(json.news)) return null;
+          const items = json.news.filter(a => a.title).slice(0, 5);
+          if (items.length === 0) return null;
+          const text = items.map(a => {
+            const source = a.source || '[unknown source]';
+            const date = a.date || '[date unknown]';
+            const snippet = a.snippet ? ` — ${a.snippet.substring(0, 200)}` : '';
+            return `[${source}] ${a.title} (${date})${snippet}`;
+          }).join('\n\n');
+          return text.length >= 200 ? text : null;
+        } catch (err) {
+          if (err.name !== 'AbortError') console.log(`[externalLookupEngine] Serper error: ${err.message}`);
+          return null;
+        }
+      },
+      type: 'api'
+    },
+
+    // 3. TheNewsAPI — third: additional coverage and redundancy
+    // Requires THE_NEWS_API_KEY environment variable (set in Railway)
+    {
+      name: 'TheNewsAPI',
+      buildUrl: (query) => {
+        const apiKey = process.env.THE_NEWS_API_KEY;
+        if (!apiKey) {
+          console.log('[externalLookupEngine] THE_NEWS_API_KEY not set, skipping TheNewsAPI source');
+          return null;
+        }
+        const cleanedQuery = cleanNewsQuery(query);
+        const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
+        console.log(`[externalLookupEngine] TheNewsAPI query: "${searchQuery}"`);
+        return `https://api.thenewsapi.com/v1/news/all?api_token=${apiKey}&search=${encodeURIComponent(searchQuery)}&limit=5&language=en&sort=published_at`;
+      },
+      parser: 'json',
+      type: 'api',
+      extract: (json) => {
+        if (!json || !json.data || !Array.isArray(json.data)) return null;
+        const articles = json.data.filter(a => a.title).slice(0, 5);
+        if (articles.length === 0) return null;
+        return articles.map(a => {
+          const source = a.source || '[unknown source]';
+          const date = a.published_at ? a.published_at.substring(0, 10) : '[date unknown]';
+          const description = a.description ? ` — ${a.description.substring(0, 200)}` : '';
+          return `[${source}] ${a.title} (${date})${description}`;
+        }).join('\n\n');
+      }
+    },
+
+    // 4. Google News RSS — fourth/last resort: only consistently working free source
     // ISSUE #814 ITEM 3 (Post-Review): Apply entity extraction to ALL RSS queries, not just stock fallback.
     // Extract the topic/entity from conversational messages before sending to Google News.
     {
@@ -544,13 +640,26 @@ export const API_SOURCES = {
         return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
       }
     },
-    // 3. Wikipedia Current Events - fallback context only
+
+    // 5. GDELT — deprioritized: consistent HTTP 429 / timeouts in production
+    // GDELT is free to use with attribution; see https://www.gdeltproject.org/about.html
+    // ISSUE #877: Moved to last position due to rate limiting/timeout issues in production.
     {
-      name: 'Wikipedia Current Events',
-      url: 'https://en.wikipedia.org/api/rest_v1/page/summary/Portal:Current_events',
+      name: 'GDELT News',
+      buildUrl: (query) => {
+        const cleanedQuery = cleanNewsQuery(query);
+        const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
+        console.log(`[externalLookupEngine] GDELT query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`);
+        return `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(searchQuery)}&mode=artlist&maxrecords=5&format=json`;
+      },
       parser: 'json',
       type: 'api',
-      extract: (json) => json.extract?.substring(0, 2000) || null
+      extract: (json) => {
+        if (!json || !json.articles || !Array.isArray(json.articles)) return null;
+        const articles = json.articles.filter(a => a.title).slice(0, 5);
+        if (articles.length === 0) return null;
+        return articles.map(a => `[${a.domain || '[unknown source]'}] ${a.title} (${a.seendate || '[date unknown]'})`).join('\n\n');
+      }
     }
   ]
 };
@@ -1465,6 +1574,22 @@ export async function performLookup(query, sources, truthType = null) {
             name: source.name,
             type: source.type || 'unknown',
             status: 'no_data',
+            success: false
+          });
+          continue;
+        }
+
+        // ISSUE #877: Minimum content threshold — if source returns under 200 chars of usable
+        // content, treat it as a failure and cascade to the next source rather than injecting
+        // thin data into the prompt (e.g. DuckDuckGo null responses, GDELT title-only results).
+        const MIN_CONTENT_THRESHOLD = 200;
+        if (parsedData.length < MIN_CONTENT_THRESHOLD) {
+          console.log(`[externalLookupEngine] ${source.name} returned only ${parsedData.length} chars (below ${MIN_CONTENT_THRESHOLD} threshold), cascading to next source`);
+          sourcesUsed.push({
+            name: source.name,
+            type: source.type || 'unknown',
+            status: 'below_threshold',
+            text_length: parsedData.length,
             success: false
           });
           continue;
