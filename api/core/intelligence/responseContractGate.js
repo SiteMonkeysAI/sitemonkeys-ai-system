@@ -36,6 +36,9 @@ const ENGAGEMENT_PADDING_SECTIONS = [
 ];
 
 // FALSE CONTINUITY CLAIMS (Issue #435 - ALWAYS strip these lies)
+// ISSUE #875 FIX: Extended with additional patterns that catch fabricated memory references
+// like "things we discussed previously" and "we talked about X before" which the AI invents
+// when it doesn't have actual memory context about those topics.
 const FALSE_CONTINUITY_PATTERNS = [
   /\b(as|like) (we|I) (discussed|talked about|mentioned|said) (before|earlier|previously)\b/gi,
   /\b(as|like) (I|we) (said|mentioned|noted) (earlier|before|previously)\b/gi,
@@ -43,6 +46,13 @@ const FALSE_CONTINUITY_PATTERNS = [
   /\bearlier (in|during) (our|this) (conversation|discussion|chat)\b/gi,
   /\bwhen (we|you) (discussed|talked about|mentioned) this (earlier|before)\b/gi,
   /\bremember (when|that) (we|you|I) (discussed|talked about|said)\b/gi,
+  // ISSUE #875: Additional fabricated memory reference patterns
+  /\bthings? (we|I|you).{0,30}discussed\s+(previously|before|earlier)\b/gi,
+  /\b(we|I).{0,20}(previously|before|earlier).{0,20}(discussed|talked about|mentioned|went over)\b/gi,
+  /\bin (our|a) previous (conversation|discussion|session|chat)\b/gi,
+  /\bpreviously in (our|this) (conversation|discussion|chat)\b/gi,
+  /\bas (we've|we have) (discussed|talked about|gone over|covered)\b/gi,
+  /\b(from|based on) (our|a) previous (conversation|discussion|session)\b/gi,
 ];
 
 // ENGAGEMENT BAIT ENDINGS (Issue #435 - strip for simple/factual queries)
