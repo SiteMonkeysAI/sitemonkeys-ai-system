@@ -168,6 +168,67 @@ export const HIGH_STAKES_DOMAINS = {
 };
 
 /**
+ * ISSUE #881 FIX: Semantic Named-Entity + Action Pattern Detection
+ * Detects queries about named entities' recent actions without hardcoding entity names.
+ * Uses structural analysis: proper noun + action intent = current event query.
+ * This enables semantic classification of conversational current-event queries that lack
+ * explicit freshness markers ("current", "latest", "today", etc.).
+ * Cannot import hasProperNouns from externalLookupEngine (circular dependency), so uses
+ * an equivalent local implementation.
+ * @param {string} query - The user's query
+ * @returns {boolean} True if query is about a named entity's recent actions
+ */
+function hasNamedEntityActionPattern(query) {
+  if (!query || typeof query !== 'string') return false;
+
+  // Local proper noun detector — structural equivalent of externalLookupEngine's hasProperNouns
+  // Excludes common sentence starters that are capitalized but not proper nouns
+  const COMMON_SENTENCE_STARTERS = /^(What|Where|When|Who|Why|How|Is|Are|Does|Do|Can|Could|Would|Should|Tell|Please|The|A|An|I|You|We|They|He|She|It|Seems|Looks|Did|Does|Has|Have|Had|Was|Were|Will|Shall)$/;
+  const words = query.split(/\s+/);
+  let hasProperNoun = false;
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].replace(/[^\w]/g, '');
+    if (!word || word.length < 2) continue;
+    if (/^[A-Z][a-z]+/.test(word)) {
+      if (i === 0 && COMMON_SENTENCE_STARTERS.test(word)) continue;
+      hasProperNoun = true;
+      break;
+    }
+    // All-caps acronyms (e.g., FBI, NATO, CIA, UK)
+    if (/^[A-Z]{2,5}$/.test(word)) { hasProperNoun = true; break; }
+  }
+  if (!hasProperNoun) return false;
+
+  // Pattern 1: "Did [entity] [action verb]" — interrogative about named entity's past action
+  // Catches: "Did Saudi Arabia make a big commitment", "Did the Coast Guard have anything happen"
+  if (/\bdid\b.{2,80}\b(make|have|do|sign|commit|announce|launch|attack|strike|deploy|declare|pass|release|invest|pledge|agree|demand|arrest|fire|hire|resign|cancel|approve|reject|sanction|win|lose|reach|expand|impose|lift|grant|file|enter|leave|join|break|end|start|build|buy|sell|acquire|merge|cut|raise|drop|fall|rise|hit|happen|occur|create|form|lead|push|back|support|oppose|call|force|allow|ban|extend|suspend|halt|resume|begin|complete|close|open|fund|warn|threaten|withdraw|issue|send|meet|visit|submit|accomplish|achieve|secure|confirm|deny|reveal|report|claim|say|address|announce|express|propose|order|request|sign|receive|gain|secure|boost|increase|reduce|cut|drop)\b/i.test(query)) {
+    return true;
+  }
+
+  // Pattern 2: "[entity] has something/anything going on/happening"
+  // Catches: "Seems like Elon Musk has something going on"
+  if (/\b(has|have|had)\b.{1,60}\b(something|anything|big|major|significant|serious|important|happening)\b.{0,40}\b(going on|happening|happen|occurred|went down)\b/i.test(query)) {
+    return true;
+  }
+
+  // Pattern 3: "Seems like / I heard / apparently [entity] is doing something"
+  // Catches: "Seems like Elon Musk has something going on, what is it"
+  if (/\b(seems? like|looks? like|i heard|apparently|i read|i saw|they say|word is|apparently)\b.{0,80}\b(is|has|have|had|was|were|did|does|doing|making|getting|facing|dealing|happening|going)\b/i.test(query)) {
+    return true;
+  }
+
+  // Pattern 4: "What is [entity] [action gerund]" — current-state, NOT definitional
+  // Catches: "What is Schumer demanding from Trump"
+  // Distinguished from definitions by action gerunds (demanding, doing, proposing)
+  // vs static nouns (theorem, capital, formula) which are caught by PERMANENT patterns
+  if (/\bwhat (is|was|are|were)\b.{0,60}\b(demanding|doing|planning|saying|claiming|proposing|pushing|seeking|pursuing|blocking|calling|threatening|warning|fighting|preparing|negotiating|forcing|opposing|supporting|backing|leading|facing|dealing|managing|running|holding|trying|attempting|making|accusing|denying|defending|arguing|advocating|endorsing|announcing|declaring|building|developing|creating|launching|expanding|increasing|reducing|cutting|raising|ordering|requesting|filing)\b/i.test(query)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Helper: Check if query is a stable procedural fact
  * These are "how to" questions about unchanging processes, not current events
  * @param {string} query - The user's query
@@ -407,6 +468,24 @@ export function detectByPattern(query) {
       conflict_detected: false,
       reason: 'Conversational or personal statement — memory-first, no external lookup needed',
       skipExternalLookup: true
+    };
+  }
+
+  // ISSUE #881 FIX: Named Entity + Action Pattern Detection (Semantic, Not Keyword Lists)
+  // Detects queries about named entities' recent actions where surface freshness markers are absent.
+  // Must run AFTER conversational/personal check (to preserve personal query handling) and
+  // BEFORE PERMANENT patterns (to prevent "what is [entity] [action gerund]" misclassification).
+  // Examples caught: "Did Saudi Arabia make a commitment", "What is Schumer demanding from Trump",
+  //                  "Did the Coast Guard have anything really big happen"
+  if (hasNamedEntityActionPattern(query)) {
+    console.log('[truthTypeDetector] Named entity + action pattern detected — classifying as SEMI_STABLE (entity action current event)');
+    return {
+      type: TRUTH_TYPES.SEMI_STABLE,
+      confidence: 0.85,
+      stage: 1,
+      patterns_matched: [{ type: TRUTH_TYPES.SEMI_STABLE, pattern: 'entity_action_current_event' }],
+      conflict_detected: false,
+      reason: 'Named entity + action structure — likely current event query, external lookup required'
     };
   }
 

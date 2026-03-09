@@ -939,6 +939,52 @@ export function isFactualEntityQuery(query) {
 }
 
 /**
+ * ISSUE #881 FIX: Detect if query is about a named entity's recent actions or current events.
+ * Semantic structural detection: proper noun + action intent = current event query.
+ * Does NOT rely on hardcoded entity names — uses hasProperNouns() + action structure patterns.
+ * Catches conversational current-event queries that lack explicit freshness markers:
+ *   "Did Saudi Arabia make a big commitment"
+ *   "Did the Coast Guard have anything really big happen"
+ *   "Seems like Elon Musk has something going on, what is it"
+ *   "What is Schumer demanding from Trump"
+ * @param {string} query - The user's query
+ * @returns {boolean} True if query is about a named entity's current/recent actions
+ */
+export function isCurrentEventQuery(query) {
+  if (!query || typeof query !== 'string') return false;
+
+  // Must have a proper noun (named entity) — structural, not specific names
+  if (!hasProperNouns(query)) return false;
+
+  // Pattern 1: "Did [entity] [action verb]" — interrogative about named entity's past action
+  // Catches: "Did Saudi Arabia make a commitment", "Did the Coast Guard have anything happen"
+  if (/\bdid\b.{2,80}\b(make|have|do|sign|commit|announce|launch|attack|strike|deploy|declare|pass|release|invest|pledge|agree|demand|arrest|fire|hire|resign|cancel|approve|reject|sanction|win|lose|reach|expand|impose|lift|grant|file|enter|leave|join|break|end|start|build|buy|sell|acquire|merge|cut|raise|drop|fall|rise|hit|happen|occur|create|form|lead|push|back|support|oppose|call|force|allow|ban|extend|suspend|halt|resume|begin|complete|close|open|fund|warn|threaten|withdraw|issue|send|meet|visit|submit|accomplish|achieve|secure|confirm|deny|reveal|report|claim|say|address|propose|order|request|receive|gain|boost|increase|reduce)\b/i.test(query)) {
+    return true;
+  }
+
+  // Pattern 2: "[entity] has something/anything going on/happening"
+  // Catches: "Seems like Elon Musk has something going on"
+  if (/\b(has|have|had)\b.{1,60}\b(something|anything|big|major|significant|serious|important|happening)\b.{0,40}\b(going on|happening|happen|occurred|went down)\b/i.test(query)) {
+    return true;
+  }
+
+  // Pattern 3: "Seems like / I heard / apparently [entity] is doing something"
+  // Catches: "Seems like Elon Musk has something going on, what is it"
+  if (/\b(seems? like|looks? like|i heard|apparently|i read|i saw|they say|word is)\b.{0,80}\b(is|has|have|had|was|were|did|does|doing|making|getting|facing|dealing|happening|going)\b/i.test(query)) {
+    return true;
+  }
+
+  // Pattern 4: "What is [entity] [action gerund]" — current-state, NOT definitional
+  // Catches: "What is Schumer demanding from Trump"
+  // Distinguished from definitions by action gerunds vs static nouns
+  if (/\bwhat (is|was|are|were)\b.{0,60}\b(demanding|doing|planning|saying|claiming|proposing|pushing|seeking|pursuing|blocking|calling|threatening|warning|fighting|preparing|negotiating|forcing|opposing|supporting|backing|leading|facing|dealing|managing|running|holding|trying|attempting|making|accusing|denying|defending|arguing|advocating|endorsing|announcing|declaring|building|developing|creating|launching|expanding|increasing|reducing|cutting|raising|ordering|requesting|filing)\b/i.test(query)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Check if query has news intent (general news query)
  * PRINCIPLE-BASED: Detects news intent through STRUCTURE + PROPER NOUNS, not hardcoded name lists
  * @param {string} query - The user's query
@@ -1132,6 +1178,15 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
     reasons.push('factual_entity_query');
   }
 
+  // ISSUE #881 FIX: Current event queries about named entities' recent actions
+  // Catches conversational phrasing that lacks explicit freshness markers:
+  // "Did Saudi Arabia make a big commitment", "Seems like Elon Musk has something going on"
+  // "What is Schumer demanding from Trump", "Did the Coast Guard have anything really big happen"
+  if (isCurrentEventQuery(query)) {
+    reasons.push('current_event_query_named_entity');
+    priority = 'high';
+  }
+
   return {
     required: reasons.length > 0,
     reasons: reasons,
@@ -1291,7 +1346,9 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   const isEntertainmentQuery = lowerQuery.match(/\b(celebrity|entertainment|gossip)\b/i);
   
   // Note: Weather queries are already handled above
-  if (hasNewsIntent(query) || isGenericNewsQuery || isEntertainmentQuery) {
+  // ISSUE #881 FIX: Current event queries about named entities' actions go directly to NEWS
+  // "Did Saudi Arabia make a commitment", "What is Schumer demanding from Trump"
+  if (hasNewsIntent(query) || isGenericNewsQuery || isEntertainmentQuery || isCurrentEventQuery(query)) {
     return API_SOURCES.NEWS;
   }
 
@@ -2024,6 +2081,7 @@ export default {
   checkFreshnessMarkers,
   requiresCorroboration,
   hasReputableSource,
+  isCurrentEventQuery,
   isLookupRequired,
   selectSourcesForQuery,
   getSourcesForQuery,

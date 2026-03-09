@@ -46,7 +46,7 @@ import { sanitizePII } from "../memory/pii-sanitizer.js";
 // ========== PHASE 4/5/6/7 INTEGRATION ==========
 import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
 import { route } from "../core/intelligence/hierarchyRouter.js";
-import { lookup, isFactualEntityQuery } from "../core/intelligence/externalLookupEngine.js";
+import { lookup, isFactualEntityQuery, isCurrentEventQuery, hasProperNouns } from "../core/intelligence/externalLookupEngine.js";
 import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
 import { enforceBoundedReasoning } from "../core/intelligence/boundedReasoningGate.js";
 import { enforceResponseContract } from "../core/intelligence/responseContractGate.js";
@@ -1228,13 +1228,41 @@ export class Orchestrator {
           p => p.pattern === 'explicit_freshness_marker'
         );
 
+        // ISSUE #881 FIX: Semantic detection of named-entity current-event queries
+        // Catches conversational phrasing that lacks explicit freshness markers and isn't
+        // covered by matchesNewsPattern (hardcoded geo list) or isFactualEntityQuery ("who is/what is"):
+        //   "Did Saudi Arabia make a big commitment"
+        //   "Did the Coast Guard have anything really big happen"
+        //   "Seems like Elon Musk has something going on, what is it"
+        //   "What is Schumer demanding from Trump"
+        const isSemanticCurrentEventQuery = isCurrentEventQuery(message);
+
+        // ISSUE #881 FIX: Follow-up volatile inheritance
+        // If the current query is a follow-up (pronouns, short, continuation) AND prior user turns
+        // discussed named entities via current-event queries, inherit volatile classification.
+        // This ensures short follow-ups don't lose the current-event context established earlier.
+        const followUpLookupDetection = this.#detectFollowUp(message, conversationHistory);
+        const isVolatileFollowUp = followUpLookupDetection.isFollowUp &&
+          followUpLookupDetection.confidence >= 0.5 &&
+          !isFactualEntityLookupQuery && // not already handled
+          !isSemanticCurrentEventQuery && // not already handled
+          (conversationHistory || [])
+            .filter(m => m.role === 'user')
+            .slice(-3)
+            .some(m => typeof m.content === 'string' &&
+              hasProperNouns(m.content) &&
+              (isCurrentEventQuery(m.content) || isFactualEntityQuery(m.content))
+            );
+
         const shouldLookup =
           truthTypeResult.type === 'VOLATILE' ||
           (truthTypeResult.type === 'SEMI_STABLE' && matchesNewsPattern) ||
           (truthTypeResult.type === 'SEMI_STABLE' && hasExplicitFreshnessMarker) ||
           (truthTypeResult.high_stakes && truthTypeResult.high_stakes.isHighStakes) ||
           (routeResult.external_lookup_required && routeResult.hierarchy_name === "EXTERNAL_FIRST") ||
-          isFactualEntityLookupQuery;
+          isFactualEntityLookupQuery ||
+          isSemanticCurrentEventQuery ||   // Issue #881: entity + action pattern
+          isVolatileFollowUp;              // Issue #881: follow-up inherits volatile context
 
         // Debug logging for lookup decision
         console.log('[ORCHESTRATOR] Lookup decision:', {
@@ -1249,6 +1277,8 @@ export class Orchestrator {
           hierarchyName: routeResult.hierarchy_name,
           confidence: phase4Metadata.confidence,
           isFactualEntityLookupQuery: isFactualEntityLookupQuery,
+          isSemanticCurrentEventQuery: isSemanticCurrentEventQuery,
+          isVolatileFollowUp: isVolatileFollowUp,
           willAttemptLookup: shouldLookup
         });
 
