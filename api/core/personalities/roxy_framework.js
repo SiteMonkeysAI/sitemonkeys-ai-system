@@ -269,6 +269,39 @@ export class RoxyFramework {
         this.logger.log("Corrected to ensure empowerment");
       }
 
+      // STEP 7.5: Add confidence assessment (ISSUE #879 FIX)
+      // Confidence block must appear on ALL responses regardless of whether external lookup
+      // succeeded or failed. External lookup success suppresses the low-confidence DISCLAIMER
+      // (handled above) but must NOT suppress the confidence block — these are separate things.
+      // This mirrors Eli's STEP 7 to ensure Roxy responses also include confidence transparency.
+      const isSimpleFactForConf = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
+      const isDocReviewForConf = truthType === 'DOCUMENT_REVIEW';
+      const isNewsQueryForConf = context?.queryClassification?.classification === 'news_current_events';
+      const skipConfidenceBlock = isSimpleFactForConf || isDocReviewForConf || isNewsQueryForConf;
+      const alreadyHasConfidenceBlock = /My confidence in this response is \d+%/i.test(response) ||
+        enhancedResponse.includes('🎯 **Confidence Assessment:**');
+      if (!alreadyHasConfidenceBlock && !skipConfidenceBlock) {
+        let confLevel = 'Medium';
+        let confReasoning = '';
+        if (analysis.complexity < 0.3 && analysis.domainConfidence > 0.8) {
+          confLevel = 'High (85-95%)';
+          confReasoning = 'Straightforward domain with clear best practices';
+        } else if (analysis.complexity > 0.7 || analysis.domainConfidence < 0.5) {
+          confLevel = 'Low (40-60%)';
+          confReasoning = 'Complex situation with many variables and uncertainties';
+        } else {
+          confLevel = 'Medium (65-80%)';
+          confReasoning = 'Solid general guidance, but specifics depend on your context';
+        }
+        enhancedResponse += `\n\n🎯 **Confidence Assessment:**\n- **Level:** ${confLevel}\n- **Why:** ${confReasoning}\n`;
+        modificationsCount++;
+        this.logger.log('Added confidence assessment');
+      } else if (alreadyHasConfidenceBlock) {
+        this.logger.log('Skipping confidence assessment: response already has a structured confidence percentage');
+      } else if (skipConfidenceBlock) {
+        this.logger.log(`Skipping confidence assessment: ${isSimpleFactForConf ? 'simple fact' : isDocReviewForConf ? 'document review' : 'news query'}`);
+      }
+
       // STEP 8: Apply Roxy's empathetic signature
       enhancedResponse = this.#applyRoxySignature(
         enhancedResponse,
