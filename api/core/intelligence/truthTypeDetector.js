@@ -181,32 +181,21 @@ export const HIGH_STAKES_DOMAINS = {
 function hasNamedEntityActionPattern(query) {
   if (!query || typeof query !== 'string') return false;
 
-  // ISSUE #883 FIX: Known institutional abbreviations always count as named entities.
-  // These are real institutions whose current activities are volatile by definition.
-  // Matched case-insensitively so "the fed", "the fbi", etc. all trigger lookup.
-  const KNOWN_INSTITUTIONS = /\b(Fed|FBI|CIA|NSA|NATO|UN|EU|IMF|WHO|CDC|IRS|SEC|DOJ|DHS|Pentagon|Congress|Senate|SCOTUS|White\s+House|Kremlin|Vatican|OPEC|FDIC|CFPB|FDA|FTC|EPA|FCC|FEMA|ATF|DEA|CBP|ICE|Federal\s+Reserve|Treasury|Interpol|Europol|CFTC|NLRB|OMB|CBO|GAO|DNC|RNC|NATO|OECD|WTO|IMF|IAEA|UN\s+Security\s+Council)\b/i;
-
   // Local proper noun detector — structural equivalent of externalLookupEngine's hasProperNouns
   // Excludes common sentence starters that are capitalized but not proper nouns
   const COMMON_SENTENCE_STARTERS = /^(What|Where|When|Who|Why|How|Is|Are|Does|Do|Can|Could|Would|Should|Tell|Please|The|A|An|I|You|We|They|He|She|It|Seems|Looks|Did|Does|Has|Have|Had|Was|Were|Will|Shall)$/;
   const words = query.split(/\s+/);
   let hasProperNoun = false;
-
-  // Check for known institutional abbreviations first (case-insensitive)
-  if (KNOWN_INSTITUTIONS.test(query)) {
-    hasProperNoun = true;
-  } else {
-    for (let i = 0; i < words.length; i++) {
-      const word = words[i].replace(/[^\w]/g, '');
-      if (!word || word.length < 2) continue;
-      if (/^[A-Z][a-z]+/.test(word)) {
-        if (i === 0 && COMMON_SENTENCE_STARTERS.test(word)) continue;
-        hasProperNoun = true;
-        break;
-      }
-      // All-caps acronyms (e.g., FBI, NATO, CIA, UK)
-      if (/^[A-Z]{2,5}$/.test(word)) { hasProperNoun = true; break; }
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].replace(/[^\w]/g, '');
+    if (!word || word.length < 2) continue;
+    if (/^[A-Z][a-z]+/.test(word)) {
+      if (i === 0 && COMMON_SENTENCE_STARTERS.test(word)) continue;
+      hasProperNoun = true;
+      break;
     }
+    // All-caps acronyms (e.g., FBI, NATO, CIA, UK)
+    if (/^[A-Z]{2,5}$/.test(word)) { hasProperNoun = true; break; }
   }
   if (!hasProperNoun) return false;
 
