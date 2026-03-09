@@ -722,7 +722,20 @@ function cleanNewsQuery(query) {
   // Step 1: Strip first/second person pronouns and contractions FIRST to avoid stray apostrophe
   // artifacts (e.g. "I'm" → "'" when only "I" is removed by stop-word pass)
   cleaned = cleaned.replace(/\b(I'm|I've|I'd|I'll|we're|we've|we'd|we'll|you're|you've|you'd|you'll)\b/gi, ' ');
-  cleaned = cleaned.replace(/\b(I|we|you|me|my|our|your|us)\b/gi, ' ');
+  // ISSUE #883 FIX: Use case-SENSITIVE replacement for standalone pronouns to preserve "US", "UK"
+  // country/org codes. "us" (lowercase) is a pronoun; "US" (uppercase) is the United States.
+  cleaned = cleaned.replace(/\b(I|we|you|me|my|our|your|us)\b/g, ' ');
+
+  // Step 1b: ISSUE #883 FIX: Strip conversational question structure and lead-in phrases from the
+  // start of the string so "Did Saudi Arabia..." → "Saudi Arabia..." and
+  // "Seems like the Fed..." → "the Fed..." before stop-word removal.
+  cleaned = cleaned.replace(/^(seems? like|looks? like|i heard|apparently|i read|i saw|they say|word is|did you know|it seems|turns out)\s+/i, '');
+  cleaned = cleaned.replace(/^(did|does|has|have|had|was|were|is|are|will|would|could|should|can)\s+/i, '');
+  cleaned = cleaned.replace(/^(what is|what are|what was|what did|what does|what has|tell me about|how about|how is|how did|how has)\s+/i, '');
+
+  // Step 1c: ISSUE #883 FIX: Strip trailing/inline filler phrases common in current-event queries.
+  // "the Fed has something going on lately" → "the Fed" → "Fed" (after stop-word pass)
+  cleaned = cleaned.replace(/\b(has something going on|have something going on|anything going on|going on lately|going on recently|something happening|anything happening|anything new|any news)\b/gi, ' ');
 
   // Step 2: Strip conversational framing phrases before stop-word removal
   cleaned = cleaned.replace(/\b(specifically wondering|bring (me |us )?up[- ]to[- ](date|speed)|catch (me |us )?up (on|with|about|to)?|fill (me |us )?in (on|about)?|what'?s going on with|what is going on with|can you tell me|could you tell me|let me know about|clue (me |us )?in on|give me an update on|keep me informed about|going on with|in relationship to|in relation to)\b/gi, ' ');
@@ -733,14 +746,17 @@ function cleanNewsQuery(query) {
   // Step 4: Clean stray punctuation (apostrophes, commas, quotes left over from contractions)
   cleaned = cleaned.replace(/['"`,;:!?()\[\]{}]/g, ' ');
 
-  // Step 5: Strip 1-2 char fragments
-  cleaned = cleaned.replace(/\b\w{1,2}\b/g, ' ');
+  // Step 5: Strip 1-2 char fragments, but PRESERVE 2-letter all-caps codes (US, UK, EU, UN, etc.)
+  // ISSUE #883 FIX: Negative lookahead prevents removing country/org abbreviations.
+  cleaned = cleaned.replace(/\b(?![A-Z][A-Z]\b)\w{1,2}\b/g, ' ');
 
   // Step 6: Normalize whitespace
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
 
   // Step 7: Limit to 6 keywords maximum (improves search quality)
-  const words = cleaned.split(' ').filter(w => w.length > 2);
+  // ISSUE #883 FIX: Also keep 2-letter all-caps codes (US, UK, EU, UN, etc.) even though
+  // they're only 2 chars — they were preserved by step 5 and must survive the length filter.
+  const words = cleaned.split(' ').filter(w => w.length > 2 || /^[A-Z][A-Z]$/.test(w));
   if (words.length > 6) {
     cleaned = words.slice(0, 6).join(' ');
   } else {
@@ -885,6 +901,13 @@ export function extractSearchQuery(query) {
 export function hasProperNouns(query) {
   if (!query || typeof query !== 'string') {
     return false;
+  }
+
+  // ISSUE #883 FIX: Known institutional abbreviations always count as named entities.
+  // Matched case-insensitively so "the fed", "the fbi", "the senate" all return true.
+  const KNOWN_INSTITUTIONS = /\b(Fed|FBI|CIA|NSA|NATO|UN|EU|IMF|WHO|CDC|IRS|SEC|DOJ|DHS|Pentagon|Congress|Senate|SCOTUS|White\s+House|Kremlin|Vatican|OPEC|FDIC|CFPB|FDA|FTC|EPA|FCC|FEMA|ATF|DEA|CBP|ICE|Federal\s+Reserve|Treasury|Interpol|Europol|CFTC|NLRB|OMB|CBO|GAO|DNC|RNC|OECD|WTO|IAEA)\b/i;
+  if (KNOWN_INSTITUTIONS.test(query)) {
+    return true;
   }
 
   // Look for capitalized words that aren't at sentence start
