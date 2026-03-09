@@ -1,0 +1,37 @@
+Both changes are in place and look correct. Let me do a quick sanity check on the `UN` and `EU` abbreviations in the expansion map — they're 2-letter codes that the existing step 5 preserves, but `UN` lowercased is `'un'` which maps to `'United Nations'`. That's fine since the expansion map lookup is done with `.toLowerCase()`.
+
+Let me also verify that the `UN` and `EU` entries in `INSTITUTION_EXPANSION_MAP` won't cause issues — both are 2-letter codes that survive step 5, and both are in the institution pattern regex. Good.
+
+---SUMMARY---
+
+## Changes Made
+
+### File 1: `api/core/intelligence/externalLookupEngine.js`
+
+**Fix 1 — Fallback query construction for too-thin cleaned queries:**
+
+Added `INSTITUTION_EXPANSION_MAP` constant (lines 711–763) that maps common institution abbreviations and names to their expanded forms (e.g., `'fed'` → `'Federal Reserve'`, `'scotus'` → `'Supreme Court'`).
+
+Modified `cleanNewsQuery()` to add a viability check after step 7 (lines 820–835):
+- Defines `TIME_FILLER_WORDS` regex to identify non-meaningful words like "lately", "recently", "today", etc.
+- Counts meaningful words in the cleaned result (words that are >2 chars AND not time fillers)
+- If fewer than 2 meaningful words remain, attempts to extract an institution name from the **original** query using `INSTITUTION_PATTERN`
+- If an institution is found, returns `"[expanded name] latest news"` instead of the thin result
+
+**Example**: `"Seems like the fed has something going on lately"` → cleaned to `"fed lately"` → 0 meaningful words (both fail: "fed" is 3 chars but passes length; "lately" fails TIME_FILLER check) → actually "fed" does pass the meaningful word check... wait, let me re-verify.
+
+Actually "fed" has `length > 2` (3 > 2 = true) AND is not a TIME_FILLER → meaningful. "lately" has length > 2 AND IS a TIME_FILLER → not meaningful. So `meaningfulWords = ["fed"]`, count = 1 < 2 → fallback triggers → returns `"Federal Reserve latest news"`. ✓
+
+### File 2: `api/core/orchestrator.js`
+
+**Fix 2 — No more silent failures in prompt injection:**
+
+Added an `else if` branch at lines 4043–4049 in the `externalContext` building section:
+- Triggers when `phase4Metadata.lookup_attempted === true` AND `phase4Metadata.external_lookup === false`
+- Injects an explicit disclosure into the AI prompt telling GPT-4 that an external lookup was attempted but returned no usable data
+- Instructs GPT-4 to disclose this to the user and label any training-data answer as potentially outdated
+- Logs `[PHASE4] External lookup attempted but all sources failed — injecting failure disclosure`
+
+This ensures GPT-4 never silently answers from training data on topics where an external lookup was triggered but failed — it must tell the user it tried and couldn't retrieve current information.
+
+---END SUMMARY---

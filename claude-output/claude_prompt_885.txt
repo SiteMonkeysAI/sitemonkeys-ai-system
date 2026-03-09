@@ -1,0 +1,59 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #885: [claude-fix] Query rewriter produces empty string for institution-only queries causing silent lookup failure with no fallback
+
+Issue Description:
+Problem
+When the query rewriter strips conversational lead-ins and filler phrases from queries like "Seems like the fed has something going on lately", the result is a single word — "fed" — which is either too short to pass the word-length filter or produces a useless news API search. The lookup fires correctly (PR #881/#883 institution recognition is working — confirmed in logs) but then silently returns nothing, and GPT-4 responds from training data with no indication that a lookup was even attempted.
+Confirmed from Railway logs:
+[ORCHESTRATOR] Lookup triggered for: Seems like the fed has something going on lately
+[externalLookupEngine] Lookup requested for: "Seems like the fed has something going on lately..."
+[ttlCacheManager] Cache miss
+Then silence — no NewsAPI query: log line, no Serper query: log line, no source results. Compare to a working query like "What is the FDA doing about that ozempic situation?" which immediately logs NewsAPI query: "FDA ozempic situation" and returns rich results.
+Root cause 1 — Empty query after rewriting
+cleanNewsQuery() strips "Seems like the" (lead-in) and "has something going on lately" (filler), leaving only "fed". This single short token either fails the minimum word length filter or produces a search query so thin that no sources return content above the 200-char minimum threshold. The engine then falls through with zero sources.
+Root cause 2 — Silent failure
+When the cleaned query produces no usable search results, the engine returns empty context silently. GPT-4 receives no external data and no signal that lookup was attempted, so it answers from training data without any disclosure. This is the worst possible outcome — the user gets a confident-sounding training-data answer on a topic that was supposed to be verified externally.
+Fix 1 — Fallback query construction
+In cleanNewsQuery() or immediately after it in the lookup pipeline, add a minimum viability check: if the cleaned query results in fewer than 2 meaningful words (excluding stopwords), do not use it as-is. Instead construct a fallback query using:
+
+The detected institution/entity name expanded to its full form where known (Fed → "Federal Reserve", FBI → "Federal Bureau of Investigation" is too long, keep FBI, WHO → WHO, etc.)
+Plus the phrase "latest news"
+
+Examples:
+
+"Seems like the fed has something going on lately" → cleaned to "fed" → fallback: "Federal Reserve latest news"
+"Seems like NATO has something happening" → cleaned to "NATO" → fallback: "NATO latest news"
+"Did the WHO do anything recently" → cleaned to "WHO" → fallback: "WHO latest news"
+
+A small expansion map for the most common abbreviated institutions should handle the majority of cases: Fed → Federal Reserve, SCOTUS → Supreme Court, POTUS → President, DHS → Department of Homeland Security, and so on. Any institution not in the map just uses its abbreviation plus "latest news."
+Fix 2 — No more silent failures
+When the lookup fires but returns zero usable content from all sources, the system must not silently fall through to training data. Two acceptable behaviors:
+Option A — Disclose and use training data: inject a note into the context telling GPT-4 that external lookup was attempted but returned no results, so it should answer from training data and explicitly tell the user it couldn't verify current information.
+Option B — Return a minimal honest response: GPT-4 says "I tried to pull current information on the Federal Reserve but couldn't retrieve anything right now — here's what I know from my training data, which may not reflect the latest developments."
+Either option is acceptable. Silent fallthrough to confident training-data response is not acceptable.
+Expected behavior after fix
+
+"Seems like the fed has something going on lately" → lookup fires → cleaned query falls back to "Federal Reserve latest news" → NewsAPI/Serper return current Fed news → response reflects actual current events
+Any query where rewriting produces under 2 meaningful words → fallback query constructed from entity name + "latest news" → lookup proceeds normally
+If all sources return under 200 chars or time out → GPT-4 is explicitly told lookup failed → response includes honest disclosure
+
+Do not modify test files. Do not rewrite tests to pass. Stop and report before any change that risks SMDEEP regressions.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

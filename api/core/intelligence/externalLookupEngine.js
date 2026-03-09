@@ -708,6 +708,60 @@ export const AUTHORITATIVE_SOURCES = {
   ]
 };
 
+// ISSUE #885 FIX: Institution abbreviation expansion map for fallback query construction.
+// When cleanNewsQuery strips a conversational query down to a single institution name,
+// this map expands abbreviations to their full form so the search is more useful.
+const INSTITUTION_EXPANSION_MAP = {
+  'fed': 'Federal Reserve',
+  'federal reserve': 'Federal Reserve',
+  'scotus': 'Supreme Court',
+  'potus': 'President',
+  'dhs': 'Department of Homeland Security',
+  'fbi': 'FBI',
+  'cia': 'CIA',
+  'nsa': 'NSA',
+  'nato': 'NATO',
+  'un': 'United Nations',
+  'eu': 'European Union',
+  'imf': 'IMF',
+  'who': 'WHO',
+  'cdc': 'CDC',
+  'irs': 'IRS',
+  'sec': 'SEC',
+  'doj': 'Department of Justice',
+  'pentagon': 'Pentagon',
+  'congress': 'Congress',
+  'senate': 'Senate',
+  'white house': 'White House',
+  'kremlin': 'Kremlin',
+  'vatican': 'Vatican',
+  'opec': 'OPEC',
+  'fdic': 'FDIC',
+  'cfpb': 'CFPB',
+  'fda': 'FDA',
+  'ftc': 'FTC',
+  'epa': 'EPA',
+  'fcc': 'FCC',
+  'fema': 'FEMA',
+  'atf': 'ATF',
+  'dea': 'DEA',
+  'cbp': 'CBP',
+  'ice': 'ICE',
+  'treasury': 'US Treasury',
+  'interpol': 'Interpol',
+  'europol': 'Europol',
+  'cftc': 'CFTC',
+  'nlrb': 'NLRB',
+  'omb': 'OMB',
+  'cbo': 'CBO',
+  'gao': 'GAO',
+  'dnc': 'DNC',
+  'rnc': 'RNC',
+  'oecd': 'OECD',
+  'wto': 'WTO',
+  'iaea': 'IAEA',
+};
+
 /**
  * Clean a conversational query into a concise news search string.
  * Strips first-person pronouns, contractions, framing phrases, and filler words.
@@ -761,6 +815,23 @@ function cleanNewsQuery(query) {
     cleaned = words.slice(0, 6).join(' ');
   } else {
     cleaned = words.join(' ');
+  }
+
+  // ISSUE #885 FIX: Fallback query for institution-only or too-thin results.
+  // Time fillers like "lately" or "recently" are not meaningful search terms.
+  // If the cleaned result has fewer than 2 meaningful (non-filler) words, construct a
+  // fallback query using the detected institution name expanded to its full form + "latest news".
+  const TIME_FILLER_WORDS = /^(lately|recently|nowadays|days|weeks|months|soon|ago|before|after|times|currently|today|now)$/i;
+  const meaningfulWords = cleaned ? cleaned.split(' ').filter(w => w.length > 2 && !TIME_FILLER_WORDS.test(w)) : [];
+  if (meaningfulWords.length < 2) {
+    const INSTITUTION_PATTERN = /\b(Fed(?:eral\s+Reserve)?|FBI|CIA|NSA|NATO|UN|EU|IMF|WHO|CDC|IRS|SEC|DOJ|DHS|Pentagon|Congress|Senate|SCOTUS|White\s+House|Kremlin|Vatican|OPEC|FDIC|CFPB|FDA|FTC|EPA|FCC|FEMA|ATF|DEA|CBP|ICE|Treasury|Interpol|Europol|CFTC|NLRB|OMB|CBO|GAO|DNC|RNC|OECD|WTO|IAEA)\b/i;
+    const institutionMatch = query.match(INSTITUTION_PATTERN);
+    if (institutionMatch) {
+      const rawName = institutionMatch[1].replace(/\s+/g, ' ').trim();
+      const expanded = INSTITUTION_EXPANSION_MAP[rawName.toLowerCase()] || rawName;
+      console.log(`[externalLookupEngine] cleanNewsQuery fallback: thin result "${cleaned}" → "${expanded} latest news"`);
+      return `${expanded} latest news`;
+    }
   }
 
   return cleaned;
