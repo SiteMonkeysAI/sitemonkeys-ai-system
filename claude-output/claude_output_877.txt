@@ -1,0 +1,68 @@
+Good - `source.fetchData` is checked first and uses `continue`, so the Serper source correctly uses its `fetchData` POST implementation. The Serper `fetchData` also already enforces the 200-char threshold internally before returning.
+
+All four fixes are in place. Let me provide the summary:
+
+---SUMMARY---
+
+## Changes Made
+
+### Issue 1 — Confidence display fix (`api/core/personalities/eli_framework.js`)
+
+**Root cause:** `externalLookupSucceeded` was incorrectly included in the `skipConfidence` variable at line 380, causing the entire confidence assessment block (including the 🎯 percentage display) to be bypassed whenever external lookup succeeded.
+
+**Fix:** Removed `externalLookupSucceeded` from `skipConfidence`. The disclaimer suppression for external data is already handled separately at lines ~194-199 (the `externalLookupSucceeded` check in the confidence gating block). The confidence percentage block now runs for all queries except simple PERMANENT facts, document reviews, and news queries — exactly as Innovation #16 requires.
+
+```js
+// Before:
+const skipConfidence = isSimpleFact || externalLookupSucceeded || isDocumentReview || isNewsQuery;
+
+// After:
+const skipConfidence = isSimpleFact || isDocumentReview || isNewsQuery;
+```
+
+---
+
+### Issue 2 — Cross-topic memory contamination (`api/core/orchestrator.js`)
+
+**Root cause:** The existing MEMORY FABRICATION prohibition addressed fabricating memory references, but did not explicitly cover the pattern where GPT-4 takes real memories about Topic A and presents them as prior discussion about Topic B.
+
+**Fix:** Added a new `CRITICAL - CROSS-TOPIC MEMORY CONTAMINATION IS EQUALLY PROHIBITED` paragraph immediately after the existing prohibition. The new text explicitly instructs the model:
+- Retrieved memories about Topic A must never be presented as prior discussion about Topic B
+- If the user asks about Tesla but memory only contains Apple facts, state that there is no Tesla memory — do not volunteer Apple memories as adjacent conversation history
+- Memory is evidence of what was stored about specific topics, not evidence of what was discussed about the current topic
+
+---
+
+### Issue 3 — FALSE_CONTINUITY_PATTERNS (`api/core/intelligence/responseContractGate.js`)
+
+**Root cause:** Four specific phrases that appeared in real responses were not in the pattern list.
+
+**Fix:** Added 4 new patterns to `FALSE_CONTINUITY_PATTERNS`:
+```js
+/\bbased on our previous conversations?\b/gi,
+/\bbased on our prior conversations?\b/gi,
+/\btopics (we'?ve?|I'?ve?) covered include\b/gi,
+/\bin our conversations? (we'?ve?|I'?ve?) discussed\b/gi,
+```
+
+---
+
+### Issue 4 — External lookup source reliability (`api/core/intelligence/externalLookupEngine.js`)
+
+**Sources added and reordered in `API_SOURCES.NEWS`:**
+
+1. **NewsAPI** (highest priority) — Uses `NEWS_API_KEY`. Returns full article summaries with dates, sources, and descriptions. Skips gracefully if key not set.
+
+2. **Serper** (second) — Uses `SERPER_API_KEY`. Uses POST to `https://google.serper.dev/news` for real Google Search results. Implemented via `fetchData` since Serper requires POST. Includes internal 200-char threshold. Skips gracefully if key not set.
+
+3. **TheNewsAPI** (third) — Uses `THE_NEWS_API_KEY`. Fetches from `https://api.thenewsapi.com/v1/news/all`. Skips gracefully if key not set.
+
+4. **Google News RSS** (fourth/last resort) — unchanged, kept as previously working fallback.
+
+5. **GDELT** (deprioritized to last) — moved from first to last position due to consistent HTTP 429 and timeout failures in production.
+
+**200-char minimum content threshold added in `performLookup`:** After `parsedData` is extracted but before it's added to results, a check ensures sources returning fewer than 200 characters are treated as failures and the engine cascades to the next source. This prevents thin data (DuckDuckGo null responses, GDELT title-only results, Google News RSS headlines-only) from being injected into prompts.
+
+**GOLDAPI_KEY status:** Already wired in at lines 232–260 for the `Goldapi.io Free Tier` source in `API_SOURCES.COMMODITIES`. No changes needed.
+
+---END SUMMARY---

@@ -53,6 +53,11 @@ const FALSE_CONTINUITY_PATTERNS = [
   /\bpreviously in (our|this) (conversation|discussion|chat)\b/gi,
   /\bas (we've|we have) (discussed|talked about|gone over|covered)\b/gi,
   /\b(from|based on) (our|a) previous (conversation|discussion|session)\b/gi,
+  // ISSUE #877: Additional cross-topic contamination patterns not caught by prior patterns
+  /\bbased on our previous conversations?\b/gi,
+  /\bbased on our prior conversations?\b/gi,
+  /\btopics (we'?ve?|I'?ve?) covered include\b/gi,
+  /\bin our conversations? (we'?ve?|I'?ve?) discussed\b/gi,
 ];
 
 // ENGAGEMENT BAIT ENDINGS (Issue #435 - strip for simple/factual queries)

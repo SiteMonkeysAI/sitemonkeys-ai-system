@@ -362,9 +362,10 @@ export class EliFramework {
       }
 
       // STEP 7: Add confidence scoring (if not present)
-      // Skip confidence assessment for simple PERMANENT factual queries, external-verified data,
-      // document reviews, and news queries. Allow confidence for general advisory, decision-making,
-      // complex analysis, and any query where the user benefits from knowing reliability.
+      // Skip confidence assessment for simple PERMANENT factual queries, document reviews, and
+      // news queries. Allow confidence for general advisory, decision-making, complex analysis,
+      // and any query where the user benefits from knowing reliability — INCLUDING external-verified
+      // queries (external data verifies the content, but users still benefit from a confidence score).
       // ISSUE #804 FIX: Originally used !needsDecisionSupport which was too aggressive — it
       // suppressed confidence on ALL queries lacking explicit decision markers ("should I", "which").
       // FIX: Replace with targeted conditions for the specific types #804 identified as problematic.
@@ -374,10 +375,14 @@ export class EliFramework {
       // or natural language like "I'm confident that..."). Now we only skip if a STRUCTURED confidence
       // percentage was already added by the doctrineEnforcer ("My confidence in this response is X%")
       // or if the 🎯 block was already injected (shouldn't happen in normal flow).
+      // ISSUE #877 FIX: externalLookupSucceeded was incorrectly included in skipConfidence, causing
+      // the entire confidence block to be bypassed when external data was present. External data
+      // suppresses uncertainty DISCLAIMERS (handled at lines ~194-199 above) but must NOT suppress
+      // the confidence percentage display — that is a separate transparency feature per Innovation #16.
       const isSimpleFact = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
       const isDocumentReview = truthType === 'DOCUMENT_REVIEW';
       const isNewsQuery = context?.queryClassification?.classification === 'news_current_events';
-      const skipConfidence = isSimpleFact || externalLookupSucceeded || isDocumentReview || isNewsQuery;
+      const skipConfidence = isSimpleFact || isDocumentReview || isNewsQuery;
       const alreadyHasConfidencePercentage = /My confidence in this response is \d+%/i.test(response) ||
         response.includes('🎯 **Confidence Assessment:**');
       if (!alreadyHasConfidencePercentage && !skipConfidence) {
@@ -392,7 +397,7 @@ export class EliFramework {
       } else if (alreadyHasConfidencePercentage) {
         this.logger.log('Skipping confidence assessment: response already has a structured confidence percentage');
       } else if (skipConfidence) {
-        this.logger.log(`Skipping confidence assessment: ${isSimpleFact ? 'simple fact' : externalLookupSucceeded ? 'external data verified' : isDocumentReview ? 'document review' : 'news query'}`);
+        this.logger.log(`Skipping confidence assessment: ${isSimpleFact ? 'simple fact' : isDocumentReview ? 'document review' : 'news query'}`);
       }
 
       // STEP 8: Apply Eli's protective intelligence signature
