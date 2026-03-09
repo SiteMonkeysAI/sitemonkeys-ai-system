@@ -4048,18 +4048,6 @@ export class Orchestrator {
         console.log('[PHASE4] External lookup attempted but all sources failed — injecting failure disclosure');
       }
 
-      // ========== ISSUE #575: DIAGNOSTIC LOGGING - PROMPT DEBUG ==========
-      console.log('[PROMPT-DEBUG] ═══════════════════════════════════════════════════════');
-      console.log(`[PROMPT-DEBUG] System prompt length: ${systemPrompt.length} chars`);
-      console.log(`[PROMPT-DEBUG] Memory context present: ${hasMemoryContext}`);
-      console.log(`[PROMPT-DEBUG] Memory context length: ${context.memory ? context.memory.length : 0} chars`);
-      console.log(`[PROMPT-DEBUG] Semantic intelligence instructions present: ${hasMemoryContext && systemPrompt.includes('CRITICAL REASONING REQUIREMENTS')}`);
-      console.log(`[PROMPT-DEBUG] External context length: ${externalContext.length} chars`);
-      console.log(`[PROMPT-DEBUG] Context string length: ${contextString.length} chars`);
-      console.log(`[PROMPT-DEBUG] Full system prompt (first 500 chars):\n${systemPrompt.substring(0, 500)}...`);
-      console.log(`[PROMPT-DEBUG] Context string (first 500 chars):\n${contextString.substring(0, 500)}...`);
-      console.log('[PROMPT-DEBUG] ═══════════════════════════════════════════════════════');
-
       // ISSUE #787 FIX: Calculate full payload estimate for proper escalation routing
       // Estimate total input tokens INCLUDING system prompt, external data, message, and history
       const estimatedSystemPromptTokens = Math.ceil(systemPrompt.length / 4);
@@ -4167,15 +4155,6 @@ export class Orchestrator {
           });
         }
 
-        // ISSUE #781 FIX: Pre-AI-call diagnostic
-        console.log('[HANDOFF:CONTEXT→AI-CLAUDE] ═══════════════════════════════════');
-        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Sending ${messages.length} messages to Claude`);
-        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Total message content: ${messages.reduce((sum, m) => sum + m.content.length, 0)} chars`);
-        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Memory in context: ${!!context.memory ? 'YES' : 'NO'}`);
-        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Documents in context: ${!!context.documents ? 'YES' : 'NO'}`);
-        console.log(`[HANDOFF:CONTEXT→AI-CLAUDE] Vault in context: ${!!context.vault ? 'YES' : 'NO'}`);
-        console.log('[HANDOFF:CONTEXT→AI-CLAUDE] ═══════════════════════════════════');
-
         const claudeResponse = await this.anthropic.messages.create({
           model: "claude-sonnet-4-20250514",
           max_tokens: 2000,
@@ -4223,15 +4202,6 @@ export class Orchestrator {
           });
         }
 
-        // ISSUE #781 FIX: Pre-AI-call diagnostic
-        console.log('[HANDOFF:CONTEXT→AI-GPT4] ═══════════════════════════════════');
-        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Sending ${messages.length} messages to GPT-4`);
-        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Total message content: ${messages.reduce((sum, m) => sum + m.content.length, 0)} chars`);
-        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Memory in context: ${!!context.memory ? 'YES' : 'NO'}`);
-        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Documents in context: ${!!context.documents ? 'YES' : 'NO'}`);
-        console.log(`[HANDOFF:CONTEXT→AI-GPT4] Vault in context: ${!!context.vault ? 'YES' : 'NO'}`);
-        console.log('[HANDOFF:CONTEXT→AI-GPT4] ═══════════════════════════════════');
-
         const gptResponse = await this.openai.chat.completions.create({
           model: "gpt-4",
           messages: messages,
@@ -4253,15 +4223,8 @@ export class Orchestrator {
         });
       }
 
-      // Map model to personality for token tracking
-      let personality = "claude"; // Default for claude model
-      if (model === "gpt-4") {
-        // For GPT-4, use mode or default to eli
-        personality = mode === "business_validation" ? "eli" : "roxy";
-      }
-      
       trackApiCall(
-        personality,
+        useClaude ? 'claude' : (mode === 'business_validation' ? 'eli' : 'roxy'),
         inputTokens,
         outputTokens,
         context.vault ? (context.vault?.length || 0) / 4 : 0
