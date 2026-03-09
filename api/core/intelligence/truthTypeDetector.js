@@ -335,6 +335,11 @@ export function detectByPattern(query) {
     /\bwhat'?s (new|the latest) (with|in|on|about)\b/i,
     /\bany recent\b/i,
     /\b(made|making) (a lot of )?(announcements?|news|headlines)\b/i,
+    // ISSUE #875 FIX: "recent product announcements", "latest releases" — principle-based, no hardcoded entities.
+    // Catches queries like "Can you give me a breakdown of Apple's recent product announcements"
+    // which describe company/product/tech events using temporal markers without explicit "news" words.
+    /\brecent\b.{0,50}\b(announcements?|releases?|launches?)\b/i,
+    /\b(announcements?|releases?|launches?).{0,30}\b(recent|latest|newest|new)\b/i,
   ];
   const hasFreshnessMarker = FRESHNESS_OVERRIDE_PATTERNS.some(p => p.test(query));
   if (hasFreshnessMarker) {

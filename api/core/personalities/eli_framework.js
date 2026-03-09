@@ -368,11 +368,19 @@ export class EliFramework {
       // ISSUE #804 FIX: Originally used !needsDecisionSupport which was too aggressive — it
       // suppressed confidence on ALL queries lacking explicit decision markers ("should I", "which").
       // FIX: Replace with targeted conditions for the specific types #804 identified as problematic.
+      // ISSUE #875 FIX: Changed from !response.includes("confidence") to a specific format check.
+      // The old check was too broad — it prevented the 🎯 block from being added whenever the AI
+      // response naturally used the word "confidence" (e.g. from the uncertainty template "(Confidence: 0.X)"
+      // or natural language like "I'm confident that..."). Now we only skip if a STRUCTURED confidence
+      // percentage was already added by the doctrineEnforcer ("My confidence in this response is X%")
+      // or if the 🎯 block was already injected (shouldn't happen in normal flow).
       const isSimpleFact = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
       const isDocumentReview = truthType === 'DOCUMENT_REVIEW';
       const isNewsQuery = context?.queryClassification?.classification === 'news_current_events';
       const skipConfidence = isSimpleFact || externalLookupSucceeded || isDocumentReview || isNewsQuery;
-      if (!response.toLowerCase().includes("confidence") && !skipConfidence) {
+      const alreadyHasConfidencePercentage = /My confidence in this response is \d+%/i.test(response) ||
+        response.includes('🎯 **Confidence Assessment:**');
+      if (!alreadyHasConfidencePercentage && !skipConfidence) {
         const confidenceAssessment = this.#enhanceWithConfidenceScoring(
           enhancedResponse,
           analysis,
@@ -381,6 +389,8 @@ export class EliFramework {
         enhancedResponse = confidenceAssessment.enhanced;
         modificationsCount++;
         this.logger.log("Added confidence assessment");
+      } else if (alreadyHasConfidencePercentage) {
+        this.logger.log('Skipping confidence assessment: response already has a structured confidence percentage');
       } else if (skipConfidence) {
         this.logger.log(`Skipping confidence assessment: ${isSimpleFact ? 'simple fact' : externalLookupSucceeded ? 'external data verified' : isDocumentReview ? 'document review' : 'news query'}`);
       }

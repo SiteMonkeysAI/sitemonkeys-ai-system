@@ -1192,7 +1192,9 @@ export class Orchestrator {
         // Trigger conditions: VOLATILE truth type, high-stakes domains, or router requires external
 
         // News trigger patterns - what/when questions about current events
-        const NEWS_TRIGGER_PATTERNS = /\b(what happened|what's happening|news|today|this morning|yesterday|current events|latest|breaking|update on)\b/i;
+        // ISSUE #875 FIX: Added "announcement/announced/recent" so queries about
+        // "Apple's recent product announcements" trigger external lookup when classified SEMI_STABLE.
+        const NEWS_TRIGGER_PATTERNS = /\b(what happened|what's happening|news|today|this morning|yesterday|current events|latest|breaking|update on|announcement|announced|recently announced)\b/i;
 
         // Geopolitical patterns - specific countries/conflicts
         const GEOPOLITICAL_PATTERNS = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|war|attack|invasion|military|troops|sanctions|election|president|congress|senate)\b/i;
@@ -4964,6 +4966,9 @@ INFERENCE EXAMPLES (ISSUE #699-INF1):
 
 CRITICAL: Trust Memory Context
 When information is explicitly provided in MEMORY CONTEXT or DOCUMENT CONTEXT sections below, that information is FACTUAL about what the user has told you. Do NOT second-guess it or claim you "don't have" information that is clearly present in those sections. A caring family member doesn't forget what you've told them or pretend not to remember.
+
+CRITICAL - MEMORY FABRICATION IS A CATEGORY 1 TRUST VIOLATION:
+NEVER claim to have discussed, mentioned, or remember topics that are NOT explicitly present in the MEMORY CONTEXT section. If no MEMORY CONTEXT section appears below, you have NO stored information from previous conversations about any topic. DO NOT say "as we discussed previously", "things we talked about before", "you mentioned earlier", or any variant unless that specific information is shown in the MEMORY CONTEXT section. Fabricating memory references — even topics you know about from training data — destroys user trust and is strictly prohibited.
 
 CONFLICT ACKNOWLEDGMENT (NUA2):
 When memory contains conflicting facts (e.g., user is allergic to X but spouse loves X), you MUST explicitly acknowledge the conflict/tension:

@@ -1,0 +1,44 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #875: Claude-Fix>  Fix: Confidence percentage not displaying, current events queries still disclaiming real-time access, hallucinated memory context injected into responses
+
+Issue Description:
+Background
+Three related issues all pointing to the same root area — the AI generation layer is not respecting injected context and not including required response elements. Do not modify any test files. Trace the full execution path before changing any code. If fixing one issue risks a regression in memory, storage, or passing SMDEEP tests — stop and report.
+Issue 1 — Confidence percentage not appearing in responses
+Expected behavior per system spec (Innovation #16): Every response should display a user-visible confidence percentage based on source reliability, consistency, and reasoning about plausibility.
+Observed: No confidence percentage is appearing on any responses after the fix in PR that modified eli_framework.js line 370.
+Investigate: Trace the full path from confidence calculation through to response rendering. Is the percentage being calculated? Is it being appended to the response string? Is it being stripped somewhere in the enforcement chain before reaching the UI? The fix must ensure confidence percentages appear consistently across all response types — memory recall, external lookup, and general advisory.
+Issue 2 — Current events queries still disclaiming real-time access despite successful external lookup
+Observed: Query "Can you give me a breakdown of Apple's recent product announcements" — external lookup should fire, fetch current news, and respond with that data. Instead the AI responded "I don't have direct access to Apple's real-time announcements" and fabricated old context.
+Logs pattern: Similar queries show External context length: 0 chars — meaning the query was not classified as needing external lookup. Apple product announcements are clearly a current events / VOLATILE query.
+Investigate: Why is this query not triggering external lookup? Trace the truth type detector classification. The fix must ensure that queries about recent company announcements, product releases, and current events from named companies trigger external lookup without requiring those company names to be in a hardcoded list. Use semantic understanding of query intent, not keyword matching.
+Issue 3 — Hallucinated memory context injected into responses
+Observed: When asked about Apple product announcements, the system responded with detailed claims about battery throttling lawsuits and Warren Buffett selling Apple stock — referencing these as "things we discussed previously." These topics were never discussed. The system fabricated memory context that does not exist.
+This is a Category 1 trust violation per system doctrine. The system must never claim to recall something the user never said.
+Investigate: Where is this fabricated context coming from? Is the retrieval system returning semantically adjacent memories that don't actually match? Is GPT-4 generating fictional "previous conversation" references without any memory context to support them? Trace the exact memory retrieval results for this query and identify what was actually injected versus what the AI invented. The fix must prevent GPT-4 from referencing past conversations it does not have memory evidence for.
+Rules for this implementation
+
+Do not modify any test files
+Do not touch orchestrator protected zones without flagging first
+Investigate all three issues fully before writing any code
+Each fix must be traceable to a specific log line or code path
+If any fix risks regression in passing SMDEEP tests — stop and report
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
