@@ -179,30 +179,13 @@ export class RoxyFramework {
       const emotional = this.#assessEmotionalContext(response, analysis);
       analysisApplied.emotionalContext = emotional;
 
-      // ISSUE #883 FIX: Guard against empathy injection on simple memory recall queries.
-      // "What are the names of my children" should return facts only, not reassurance text.
-      // The semantic similarity model can spuriously flag possessive queries about family members
-      // as "anxious" because of thematic closeness to worried/concerned language.
-      const MEMORY_RECALL_PATTERNS = [
-        /\b(what are (the names|names) of my|what('s| is) (the name of |names of )?my)\b/i,
-        /\b(do you (recall|remember)|can you (recall|remember))\b.{0,60}\bmy\b/i,
-        /\b(what do you (know|have|remember) about my)\b/i,
-        /\b(from our (previous )?conversations?|i told you|we (discussed|talked) about)\b/i,
-        /\b(tell me (what you know about |about )?my)\b/i,
-        /\b(recall|remember).{0,30}\bmy\b/i,
-        /\bwhat'?s? my\b/i,
-      ];
-      const isMemoryRecallQuery = query && MEMORY_RECALL_PATTERNS.some(p => p.test(query));
-
-      if (emotional.needsSupport && !isMemoryRecallQuery) {
+      if (emotional.needsSupport) {
         enhancedResponse = this.#enhanceWithEmotionalSupport(
           enhancedResponse,
           emotional,
         );
         modificationsCount++;
         this.logger.log("Added emotional support");
-      } else if (emotional.needsSupport && isMemoryRecallQuery) {
-        this.logger.log("Skipping emotional support — simple memory recall query");
       }
 
       // Gate coaching blocks for PERMANENT low-stakes facts
