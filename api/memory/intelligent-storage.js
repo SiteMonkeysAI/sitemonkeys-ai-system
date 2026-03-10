@@ -1728,6 +1728,32 @@ Facts (preserve user terminology + add synonyms):`;
         }
       }
 
+      // ISSUE #889 FIX: Minimum token floor enforcement.
+      // The char-based quality gate above catches obviously over-compressed fragments, but the
+      // actual tiktoken count can be lower than the character-based approximation.  Memories
+      // with < 8 actual tokens produce embeddings too generic to retrieve against natural-language
+      // queries (e.g. "salary." → 2 tokens → never matches "what is my salary?").
+      // When compressed output is below the floor, use the original user message if it is
+      // concise enough (≤ 50 tokens) so the stored memory is self-explanatory and retrievable.
+      // If the original message is also too long to store verbatim, return '' to let the caller
+      // fall back to the raw message (existing storeWithIntelligence fallback path).
+      const MIN_TOKEN_FLOOR = 8;
+      const finalTokenCount = this.countTokens(finalFacts);
+      if (finalTokenCount < MIN_TOKEN_FLOOR) {
+        const userMsgTokens = this.countTokens(userMsg);
+        if (userMsgTokens >= MIN_TOKEN_FLOOR && userMsgTokens <= 50) {
+          // Original message is the right length — use it instead of the over-compressed facts.
+          // "My salary is $95,000 at my current job" stores far better than "salary."
+          console.log(`[INTELLIGENT-STORAGE] ⚠️ Token floor #889: compressed output has ${finalTokenCount} tokens (min=${MIN_TOKEN_FLOOR}), using original message (${userMsgTokens} tokens) instead`);
+          finalFacts = userMsg.substring(0, 200).trim();
+        } else {
+          // Original message is too long or too short — return empty so storeWithIntelligence
+          // can apply its own fallback (which already uses userMessage.substring(0, 200)).
+          console.log(`[INTELLIGENT-STORAGE] ⚠️ Token floor #889: compressed output has ${finalTokenCount} tokens (min=${MIN_TOKEN_FLOOR}), original message is ${userMsgTokens} tokens — returning empty to trigger fallback`);
+          return '';
+        }
+      }
+
       console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${finalFacts.split('\n').filter(l => l.trim()).length} facts`);
       console.log(`[EXTRACTION-DEBUG] Original: "${originalSnippet}"`);
       console.log(`[EXTRACTION-DEBUG] Extracted: "${finalFacts.substring(0, 150)}"`);
