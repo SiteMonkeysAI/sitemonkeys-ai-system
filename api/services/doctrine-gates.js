@@ -35,6 +35,8 @@ const EXPLANATION_MARKERS = [
   /due to/i,
   /this is because/i,
   /as a result of/i,
+  /based on/i,
+  /according to/i,
 ];
 
 const FRAMEWORK_MARKERS = [

@@ -758,15 +758,18 @@ function calculateHybridScore(memory, options = {}) {
     // ═══════════════════════════════════════════════════════════════
     // MEM-007 FIX: Importance-based ranking using stored relevance_score
     // High-importance memories (health-critical: allergy, medication, condition)
-    // score 0.85–0.95 at write time via analyzeContentImportance().
+    // score 0.90–1.0 at write time via analyzeContentImportance().
     // Casual preferences (ice cream, favorites) score ~0.50.
     // Without this boost, similar-sounding memories (food-related) rank equally,
     // causing allergy to lose to ice cream preference in food-context retrieval.
-    // Boost formula: (relevance_score - 0.85) * 3.0 → max +0.45
-    // Range: 1.00–1.45 (above non-boosted 1.0 cap, below safety-boosted 2.0+ tier)
+    // Threshold raised to 0.90 (from 0.85) — more surgical, only boosts truly
+    // safety-critical facts (allergy: 0.95) without affecting casual facts that
+    // may score 0.85–0.89, which was causing STR1 volume-stress regression.
+    // Boost formula: (relevance_score - 0.90) * 6.0 → max +0.60
+    // Range: 1.00–1.60 (above non-boosted 1.0 cap, below safety-boosted 2.0+ tier)
     // ═══════════════════════════════════════════════════════════════
-    if (memory.relevance_score && memory.relevance_score >= 0.85) {
-      const importanceBoost = (memory.relevance_score - 0.85) * 3.0;
+    if (memory.relevance_score && memory.relevance_score >= 0.90) {
+      const importanceBoost = (memory.relevance_score - 0.90) * 6.0;
       score += importanceBoost;
       console.log(`[IMPORTANCE-BOOST] Memory ${memory.id}: relevance_score=${memory.relevance_score.toFixed(2)} → +${importanceBoost.toFixed(3)} importance boost (final: ${score.toFixed(3)})`);
     }
