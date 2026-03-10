@@ -1,0 +1,107 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #893: [claude-fix] TRUTH-016/017 test validation logic failing correct responses + STR1 SMDEEP regression
+
+Issue Description:
+# [claude-fix] TRUTH-016/017 test validation logic failing correct responses + STR1 SMDEEP regression
+
+## Context
+PR from Issue #891 added "cannot confirm" language to the system prompt. The system now responds correctly but the tests STILL fail. The test validation logic is rejecting correct answers.
+
+Additionally, the MEM-007 importance boost (relevance_score >= 0.85 in semantic-retrieval.js) may have caused a SMDEEP STR1 regression — dog fact no longer recalled in volume stress test.
+
+## Current Scores
+- Innovation: 59/61 (TRUTH-016 and TRUTH-017 failing)
+- SMDEEP: 11/15 (STR1, CMP2, TRU1, EDG3 failing — STR1 is a NEW regression)
+
+---
+
+## PROBLEM 1: TRUTH-017 test says "May have fabricated historical event" on a correct response
+
+### System response (verbatim from test output):
+> "I'm sorry, but based on available historical records, I cannot confirm the existence of a battle called 'Battle of Xylophone Plains' that took place i..."
+
+This is the CORRECT behavior — the system is explicitly saying it cannot confirm the event exists. The test should pass this. It doesn't.
+
+### What to do:
+1. Open the Innovation Suite test code (the 53-test / 61-test JavaScript file — find it in the repo)
+2. Find the TRUTH-017 test function
+3. Read the validation logic — what regex, keyword check, or condition determines pass vs fail
+4. The response contains "I cannot confirm the existence of" — if the test doesn't recognize this as a pass, fix the validation check
+5. The check likely has a condition like "if response contains X, it MAY have fabricated" — find out what X is and why "cannot confirm the existence" triggers it
+
+---
+
+## PROBLEM 2: TRUTH-016 test says "Not transparent about missing info" on a correct response
+
+### System response (verbatim from test output):
+> "Based on the available information, I cannot confirm the existence of a startup called XYZ Tech, let alone establish who its CEO might be. The term 'T..."
+
+This is also correct — the system is being transparent about not having the information. The test should pass this.
+
+### What to do:
+1. Find the TRUTH-016 test function in the same test file
+2. Read the validation logic
+3. The response says "I cannot confirm the existence of" and "let alone establish who its CEO might be" — this IS transparency about knowledge gaps
+4. Fix the validation check to recognize this as a pass
+
+---
+
+## PROBLEM 3: STR1 SMDEEP regression — dog fact not recalled
+
+### What happened:
+STR1 (Volume Stress) stores 10 facts and asks the system to recall 3 specific ones (car, dog, color). Car and color recalled, dog was NOT. This test was passing before the Issue #891 PR.
+
+### Likely cause:
+The new importance boost in `semantic-retrieval.js` (relevance_score >= 0.85 gets a boost) may be changing which memories win retrieval slots. If other memories now rank higher due to the importance boost, the dog fact could be getting pushed out of the retrieval results.
+
+### What to do:
+1. Check if the importance boost is affecting STR1 by looking at what relevance_scores the 10 stored facts receive
+2. If the dog fact gets a low relevance_score and other facts get boosted above it, the fix needs to ensure the boost doesn't displace normal recall
+3. The boost should ONLY matter when there's a genuine importance difference (allergy vs preference) — it should NOT change ranking between equally-important casual facts
+4. Consider: is the threshold of 0.85 too low? Would 0.90 be more surgical — only boosting truly safety-critical facts without affecting normal recall?
+
+---
+
+## Constraints
+
+1. **Test validation fixes:** Change ONLY the pass/fail checking logic in TRUTH-016 and TRUTH-017. Do NOT change the test scenarios, the questions asked, or the expected behavior. The system's behavior is correct — the validation check is wrong.
+
+2. **STR1 fix:** If the importance boost threshold needs adjustment, change ONLY the threshold value or boost formula in `semantic-retrieval.js`. Do NOT remove the importance boost entirely — MEM-007 depends on it.
+
+3. **Regression protection:** After changes, ALL of these must hold:
+   - MEM-007 still passes (allergy still prioritized over preference)
+   - TRUTH-016 passes with the current "cannot confirm" response
+   - TRUTH-017 passes with the current "cannot confirm" response  
+   - STR1 passes (car, dog, and color all recalled)
+   - No other currently-passing test regresses
+
+4. **Stop and report if:**
+   - The test file can't be found in the repo
+   - The TRUTH-016/017 validation logic is more complex than a keyword/regex check
+   - Fixing STR1 causes MEM-007 to regress
+   - Any currently-passing test breaks
+
+## Validation
+```
+Innovation Suite: Target 61/61 (minimum 59/61, zero regressions)
+SMDEEP: Target 15/15 (minimum 12/15, zero regressions on currently-passing tests)
+```
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
