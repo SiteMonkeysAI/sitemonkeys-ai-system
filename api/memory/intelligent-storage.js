@@ -1296,11 +1296,16 @@ export class IntelligentMemoryStorage {
 CRITICAL RULES:
 1. ALWAYS preserve exact alphanumeric identifiers (e.g., ECHO-123-ABC, ALPHA-456)
 2. ALWAYS preserve names exactly as written (e.g., Dr. Smith, Dr. FOXTROT-123)
-3. *** CRITICAL: PRESERVE INTERNATIONAL NAMES WITH ALL SPECIAL CHARACTERS ***
+3. *** CRITICAL: PRESERVE ALL PROPER NAMES EXACTLY AS WRITTEN ***
    - Names with diacritics: José, Björn, François, Zoë (keep accents exactly)
    - Names with hyphens: García-López, Zhang-Müller, O'Brien (keep hyphens/apostrophes)
    - Multi-part names: Dr. Xiaoying Zhang-Müller, María José García (keep all parts)
    - DO NOT simplify: "José García-López" must stay "José García-López" (not "Jose Garcia Lopez")
+   - *** CRITICAL: MULTI-WORD NAMES WITHOUT SPECIAL CHARS MUST ALSO BE PRESERVED ***
+   - East Asian names: "Zhang Wei", "Li Ming", "Park Joon" → keep BOTH words exactly
+   - Scandinavian names: "Björn Lindqvist" → keep full name with diacritics
+   - ALL person names with two or more parts: NEVER drop any part of the name
+   - "Zhang Wei" must stay "Zhang Wei" (NOT just "Zhang" or "Wei" or dropped entirely)
 4. ALWAYS preserve numbers, codes, IDs, license plates, serial numbers VERBATIM
 5. ALWAYS preserve salary/income amounts EXACTLY including casual formats:
    - "55k" → store as "55k" AND "$55,000"
@@ -1440,6 +1445,12 @@ Output: "Contacts: Dr. Xiaoying Zhang-Müller, Björn O'Shaughnessy, José Garc�
 NOT: "Contacts: Dr. Xiaoying Zhang Muller, Bjorn O Shaughnessy, Jose Garcia Lopez" (WRONG - special characters removed)
 NOT: "Has contacts" or "Three contacts" (WRONG - names lost)
 CRITICAL: Keep ALL diacritics (ü, ö, é), hyphens, apostrophes exactly as written
+
+Input User: "My three key contacts are Zhang Wei, Björn Lindqvist, and José García" | AI: "I'll remember those contacts..."
+Output: "Contacts: Zhang Wei, Björn Lindqvist, José García"
+NOT: "Contacts: Zhang, Bjorn Lindqvist, Jose Garcia" (WRONG - "Zhang Wei" must keep BOTH words; Björn must keep ö)
+NOT: "Has three contacts" (WRONG - all names lost)
+CRITICAL: "Zhang Wei" is a TWO-WORD name — NEVER drop the second word "Wei"
 
 *** CRITICAL ANTI-PATTERN - Issue #540 Fix ***
 Input User: "I just got promoted! My current job title is Senior Architect" |

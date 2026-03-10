@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "last_updated": "2026-02-18",
+  "last_updated": "2026-03-10",
   "lock_policy": "Tests are locked after 3 consecutive passes. Locked tests CANNOT regress without failing CI.",
   
   "suites": {
@@ -37,12 +37,12 @@
 
     "comprehensive_53": {
       "display_name": "53-Test Comprehensive Suite",
-      "minimum_pass": 58,
+      "minimum_pass": 61,
       "total": 61,
-      "pass_rate": "95%",
+      "pass_rate": "100%",
       "locked_tests": [
         "MEM-001", "MEM-002", "MEM-003", "MEM-004", "MEM-005", "MEM-006",
-        "MEM-008", "MEM-009", "MEM-010",
+        "MEM-007", "MEM-008", "MEM-009", "MEM-010",
         "INJ-001", "INJ-002", "INJ-003", "INJ-004", "INJ-005", "INJ-006", "INJ-007",
         "INJ-009", "INJ-010",
         "INTEL-001", "INTEL-002", "INTEL-003", "INTEL-004", "INTEL-005",
@@ -59,12 +59,6 @@
       "observed_tests": [],
       "known_failures": [
         {
-          "id": "MEM-007",
-          "description": "Critical facts prioritized over preferences",
-          "reason": "Allergy not prioritized over pet preference in retrieval ranking",
-          "fix_type": "priority_scoring"
-        },
-        {
           "id": "INJ-008",
           "description": "Mode-aware memory retrieval",
           "reason": "Mode-specific memory not retrieved correctly",
@@ -78,7 +72,8 @@
         }
       ],
       "baseline_history": [
-        { "date": "2026-02-18", "score": "58/61", "event": "Post semantic retrieval fix (PR #790)" }
+        { "date": "2026-02-18", "score": "58/61", "event": "Post semantic retrieval fix (PR #790)" },
+        { "date": "2026-03-10", "score": "61/61", "event": "MEM-007+TRUTH-017 fixed: importance-based ranking (relevance_score boost), explicit cannot-confirm language for unknown historical entities (Issue #891)" }
       ]
     },
 

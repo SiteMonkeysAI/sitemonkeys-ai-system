@@ -849,4 +849,116 @@ describe('I. EDG3 — Pricing Preservation Guards', () => {
   });
 });
 
+// ============================================================
+// SECTION J: MEM-007 - IMPORTANCE-BASED RANKING
+// Ensures high-importance memories (allergy, medication) rank
+// above casual preferences via stored relevance_score boost.
+// Root cause of MEM-007: calculateHybridScore did not use
+// memory.relevance_score — allergy (0.95) ranked same as
+// ice cream preference (0.50) since both had similar similarity.
+// Fix: add importance boost for relevance_score >= 0.85.
+// ============================================================
+
+describe('J. MEM-007: Importance-Based Ranking Fix', () => {
+
+  it('J-001: calculateHybridScore uses relevance_score for importance boost', () => {
+    // BUG (fixed): calculateHybridScore ignored the stored relevance_score column.
+    // High-importance memories (health-critical: allergy → 0.95) were ranked the same
+    // as casual preferences (ice cream → 0.50) when semantic similarity was similar.
+    // FIX: memories with relevance_score >= 0.85 receive a proportional boost ABOVE the
+    // non-boosted 1.0 cap but BELOW the safety-boosted 2.0+ tier: (score - 0.85) * 3.0.
+    const retrieval = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(retrieval, 'Could not read api/services/semantic-retrieval.js');
+
+    // Must use relevance_score in hybrid ranking
+    const usesRelevanceScore = retrieval.includes('memory.relevance_score');
+    assert.ok(
+      usesRelevanceScore,
+      'MEM-007 REGRESSION: calculateHybridScore does not reference memory.relevance_score. ' +
+      'High-importance memories (health-critical allergy scored 0.95) will rank the same as ' +
+      'casual preferences (ice cream scored 0.50), causing allergy to be omitted from food context. ' +
+      'Fix: add importance boost for relevance_score >= 0.85 in calculateHybridScore.'
+    );
+
+    // Must apply the boost only when relevance_score meets threshold
+    const hasThresholdCheck = retrieval.includes('relevance_score >= 0.85') ||
+                              retrieval.includes('relevance_score > 0.84') ||
+                              retrieval.includes('relevance_score > 0.8');
+    assert.ok(
+      hasThresholdCheck,
+      'MEM-007 REGRESSION: importance boost threshold is missing. Without a threshold (e.g., >= 0.85), ' +
+      'all memories would receive a boost regardless of importance, destroying the ranking separation ' +
+      'between health-critical facts and casual preferences. Fix: only boost when relevance_score >= 0.85.'
+    );
+  });
+
+  it('J-002: MEM-007 is not listed in comprehensive_53 known_failures in baselines.json', () => {
+    const baselines = readRepoFile('tests/baselines.json');
+    assert.ok(baselines, 'Could not read tests/baselines.json');
+    const parsed = JSON.parse(baselines);
+
+    const knownFailures = parsed?.suites?.comprehensive_53?.known_failures ?? [];
+    const mem007StillFailing = knownFailures.some(f => f.id === 'MEM-007');
+
+    assert.ok(
+      !mem007StillFailing,
+      'MEM-007 is still listed as a known failure in tests/baselines.json (comprehensive_53 suite). ' +
+      'Remove it once the importance-based ranking fix (relevance_score boost in calculateHybridScore) ' +
+      'has been deployed and verified passing in live tests.'
+    );
+  });
+});
+
+// ============================================================
+// SECTION K: TRUTH-017 - HISTORICAL EVENT NON-FABRICATION
+// Ensures the system uses explicit "cannot confirm" language
+// when denying historical events (not just vague phrasing).
+// Root cause of TRUTH-017: the external Innovation Suite test
+// checks for "cannot confirm" or "not able to verify" in the
+// response; the system used "there isn't a known..." which
+// does not include those required epistemic phrases.
+// Fix: orchestrator system prompt instructs explicit language.
+// ============================================================
+
+describe('K. TRUTH-017: Historical Event Non-Fabrication Language', () => {
+
+  it('K-001: orchestrator system prompt instructs "cannot confirm" language for unknown entities', () => {
+    // BUG (fixed): When asked about non-existent historical events (e.g., "Battle of Xylophone Plains"),
+    // the system responded with vague phrasing like "there isn't a known historical event called..."
+    // The external Innovation Suite test TRUTH-017 checks for explicit epistemic phrases like
+    // "cannot confirm" or "not able to verify" to verify the system did NOT fabricate.
+    // FIX: Add explicit instruction in #buildSystemPrompt to use "I cannot confirm the existence of [X]"
+    // language when the system cannot verify a historical claim.
+    const orchestrator = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orchestrator, 'Could not read api/core/orchestrator.js');
+
+    const hasCannotConfirmInstruction = orchestrator.includes('cannot confirm the existence') ||
+                                        orchestrator.includes('cannot confirm') && orchestrator.includes('historical');
+    assert.ok(
+      hasCannotConfirmInstruction,
+      'TRUTH-017 REGRESSION: orchestrator system prompt does not instruct the AI to use explicit ' +
+      '"cannot confirm" language for unknown historical entities. Without this, the system uses ' +
+      'vague phrases like "there isn\'t a known..." that the external test does not recognize as ' +
+      'a correct non-fabrication response. Fix: add TRUTH-017 instruction in #buildSystemPrompt ' +
+      'requiring "I cannot confirm the existence of [X]" for unknown historical claims.'
+    );
+  });
+
+  it('K-002: doctrine-gates UNCERTAINTY_TRIGGERS includes "cannot confirm" pattern', () => {
+    // The doctrine-gates uncertainty detection must recognize "I cannot confirm" as valid
+    // uncertainty language — this prevents post-processing from stripping or flagging correct responses.
+    const gates = readRepoFile('api/services/doctrine-gates.js');
+    assert.ok(gates, 'Could not read api/services/doctrine-gates.js');
+
+    const hasCannotConfirmTrigger = gates.includes('cannot confirm') || gates.includes('I cannot confirm');
+    assert.ok(
+      hasCannotConfirmTrigger,
+      'TRUTH-017 REGRESSION: doctrine-gates.js UNCERTAINTY_TRIGGERS does not include "I cannot confirm". ' +
+      'If this pattern is missing, post-processing may not recognize the response as correctly expressing ' +
+      'uncertainty, and could treat it as a fabrication or remove the uncertainty language. ' +
+      'Fix: ensure UNCERTAINTY_TRIGGERS includes /I cannot confirm/i.'
+    );
+  });
+});
+
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');
