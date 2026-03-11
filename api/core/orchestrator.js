@@ -3890,6 +3890,7 @@ export class Orchestrator {
     phase4Metadata = null,
   ) {
     let useClaude = false;
+    let attemptedModel = 'gpt-4';
     let routingReason = [];
     let isSafetyCritical = false;
 
@@ -4102,6 +4103,7 @@ export class Orchestrator {
 
       // Update model selection after potential escalation
       const model = useClaude ? "claude-sonnet-4.5" : "gpt-4";
+      attemptedModel = model;
       const modelConfig = useClaude ? MODEL_LIMITS['claude-sonnet-4-20250514'] : MODEL_LIMITS['gpt-4'];
       const modelLimit = modelConfig.maxContext - modelConfig.reservedOutput;
 
@@ -4252,7 +4254,7 @@ export class Orchestrator {
       console.error('[AI-ERROR] ═══════════════════════════════════════════════════════');
       console.error('[AI-ERROR] AI API call failed with error:', error.message);
       console.error('[AI-ERROR] Error type:', error.constructor.name);
-      console.error('[AI-ERROR] Model attempted:', useClaude ? 'claude-sonnet-4-20250514' : 'gpt-4');
+      console.error('[AI-ERROR] Model attempted:', attemptedModel);
       console.error('[AI-ERROR] Total context tokens:', context.totalTokens || 'unknown');
       console.error('[AI-ERROR] Context breakdown:', {
         memory: context.tokenBreakdown?.memory || 0,
