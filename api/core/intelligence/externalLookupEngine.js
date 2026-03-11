@@ -1000,7 +1000,7 @@ function cleanNewsQuery(query) {
 // Freshness markers that trigger automatic lookup
 const FRESHNESS_MARKERS = [
   /\b(current|latest|today|now|live|real-?time)\b/i,
-  /\b(price|stock|rate|value|cost)\b/i,
+  /\b(price|stock|rate|value|cost|worth)\b/i,
   /\b(weather|forecast|temperature)\b/i,
   /\b(news|update|announcements?|breaking|situation|happening)\b/i,
   /\b(available|in stock|open|closed)\b/i,
