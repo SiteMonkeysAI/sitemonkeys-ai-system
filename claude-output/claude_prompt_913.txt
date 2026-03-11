@@ -1,0 +1,66 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #913: [claude-fix] Weight-based commodity queries not reaching metals.live — full diagnostic and fix required
+
+Issue Description:
+## Problem
+
+Weight-based commodity queries are still returning generic 
+non-answers despite PRs #908 and #911. The responses show the 
+system is not retrieving live prices or performing unit conversion 
+at all.
+
+Examples:
+- "What is 50 lbs of gold worth" → vague non-answer, no price, 
+  no calculation
+- "What is 2 kg of silver worth" → vague non-answer, no price, 
+  no calculation
+
+## What to do
+
+Do not assume the fix location. Trace the full execution path for 
+the query "what is 50 lbs of gold worth" from the point it enters 
+the orchestrator through to the external lookup engine.
+
+Specifically find:
+
+1. Whether willAttemptLookup is true or false for this query type
+2. Whether the commodity source selection block is being entered
+3. Whether metals.live fetchData is being called
+4. Whether the hasValueIntent guard inside metals.live fetchData 
+   is evaluating to true
+5. Whether the weight pattern detection inside metals.live fetchData 
+   is matching "50 lbs"
+
+Add temporary diagnostic logging at each of these decision points, 
+deploy, test the query, read the logs, then remove the diagnostic 
+logging and fix the actual root cause.
+
+Do not guess. Do not fix based on code reading alone. The logs must 
+confirm where the path breaks before any fix is applied.
+
+## Constraints
+
+- Do not modify test files
+- Stop and report if fix risks touching SMDEEP-covered paths
+- The fix must produce responses in this format:
+  "50 lbs = 729.17 troy oz × $5,169.48/troy oz = $3,769,277 USD"
+- Both lb/lbs and kg queries must work
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

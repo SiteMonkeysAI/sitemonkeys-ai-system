@@ -34,6 +34,7 @@ const VOLATILE_PATTERNS = [
   /\b(news|happening|update|situation)\b/i,
   /\bwhat('s| is) .* (right now|today|currently)\b/i,
   /\bhow much (is|does|are) .* (cost|worth)\b/i,
+  /\bwhat (is|are|'?s) .{0,60} worth\b/i,   // "what is 50 lbs of gold worth", "what's 2 kg of silver worth"
   // Event markers (not entity names) - these indicate current/breaking events
   /\b(attack|election|war|invasion|military|conflict|strike|bombing|sanctions|diplomatic|crisis|coup|protest|riot)\b/i
 ];

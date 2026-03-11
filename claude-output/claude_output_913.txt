@@ -1,0 +1,57 @@
+Both fixes are in place. Let me verify the complete execution path now with these fixes:
+
+**For "what is 50 lbs of gold worth" after the fix:**
+
+1. **truthTypeDetector.js `detectByPattern()`:**
+   - PERMANENT patterns: `/\b(what is|...)\b/i` → matches "what is" → PERMANENT count = 1
+   - VOLATILE patterns: NEW pattern `/\bwhat (is|are|'?s) .{0,60} worth\b/i` → matches "what is 50 lbs of gold worth" → VOLATILE count = 1
+   - Conflict resolution: VOLATILE wins → **Result: VOLATILE**
+
+2. **Orchestrator's `shouldLookup`**: `truthTypeResult.type === 'VOLATILE'` → **`shouldLookup = true`** ✓
+
+3. **`lookup()` → `isLookupRequired()`:**
+   - Re-runs `detectTruthType()` → VOLATILE (same as above)
+   - `truthTypeResult.type === VOLATILE` → `reasons.push('volatile_truth_type')` → **`required = true`** ✓
+   - Also: `checkFreshnessMarkers` → "worth" now in FRESHNESS_MARKERS → `hasFreshnessMarkers = true` (backup)
+
+4. **`selectSourcesForQuery()`:**
+   - `lowerQuery.match(/gold/)` ✓ and `lowerQuery.match(/worth/)` ✓ → commodity block entered → metals.live added ✓
+
+5. **`metals.live fetchData()`:**
+   - "gold" detected → `metalType = 'gold'` ✓
+   - `hasValueIntent` = "worth" matches → `true` ✓
+   - Weight pattern `/(\d+(?:\.\d+)?)\s*(pound|lb|lbs|...)/i` matches "50 lbs" → `qty=50, unitRaw='lbs'` ✓
+   - `convFactor = TROY_OZ_CONVERSIONS['lbs'] = 14.5833` ✓
+   - `weightInfo.troyOz = 50 × 14.5833 = 729.17 troy oz` ✓
+   - API call → calculation → formatted response ✓
+
+**For "what is 2 kg of silver worth":** Same path, silver detected, kg conversion 32.1507, correct result.
+
+---SUMMARY---
+## Root Cause
+
+Weight-based commodity queries like "what is 50 lbs of gold worth" were returning generic non-answers because they were being misclassified as `PERMANENT` truth type instead of `VOLATILE`, causing the external lookup to be skipped entirely.
+
+**Execution path break point:**
+- `detectByPattern()` in `truthTypeDetector.js` matched the query against PERMANENT pattern `/\b(what is|define|...)\b/i` (matched "what is")
+- The VOLATILE patterns only had `/\bhow much (is|does|are) .* (cost|worth)\b/i` which requires "how much" prefix — not "what is" prefix
+- Since `truthTypeResult.type = PERMANENT`, the orchestrator's `shouldLookup = false` and `lookup()` was never called
+
+The `metals.live` source, weight conversion math, and `hasValueIntent` guard were all correct. The failure was 100% in truth type classification — the query never reached the commodity lookup.
+
+## Files Modified
+
+### 1. `api/core/intelligence/truthTypeDetector.js`
+Added a new VOLATILE pattern to cover "what is/are/what's X worth" queries:
+```javascript
+/\bwhat (is|are|'?s) .{0,60} worth\b/i,
+```
+This catches "what is 50 lbs of gold worth", "what's 2 kg of silver worth", and similar price-intent queries that use "what is" phrasing instead of "how much is". VOLATILE wins over the existing PERMANENT match due to conflict resolution logic.
+
+### 2. `api/core/intelligence/externalLookupEngine.js`
+Added "worth" to `FRESHNESS_MARKERS` price-intent pattern:
+```javascript
+/\b(price|stock|rate|value|cost|worth)\b/i,  // was: price|stock|rate|value|cost
+```
+This ensures `isLookupRequired()` also triggers on "worth" as a secondary defense, even if truth type classification ever misses it.
+---END SUMMARY---
