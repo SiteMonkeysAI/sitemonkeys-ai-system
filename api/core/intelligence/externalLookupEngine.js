@@ -1441,8 +1441,11 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   // matched the substring inside "something" (somETHing). Guard: if the query references a known
   // institution and shows current-event structure, route to NEWS before any financial/crypto checks.
   // Reuses the INSTITUTION_PATTERN that already exists in ensureQueryViability / cleanNewsQuery.
+  // ISSUE #901 FIX: Added third condition — guard must NOT fire on genuine crypto queries.
+  // "What's the current price of Bitcoin" has current-event structure but is a crypto query;
+  // excluding crypto tokens here ensures CoinGecko is always reached for crypto price lookups.
   const _INSTITUTION_NEWS_GUARD = /\b(Fed(?:eral\s+Reserve)?|FBI|CIA|NSA|NATO|UN|EU|IMF|WHO|CDC|IRS|SEC|DOJ|DHS|Pentagon|Congress|Senate|SCOTUS|White\s+House|Kremlin|Vatican|OPEC|FDIC|CFPB|FDA|FTC|EPA|FCC|FEMA|ATF|DEA|CBP|ICE|Treasury|Interpol|Europol|CFTC|NLRB|OMB|CBO|GAO|DNC|RNC|OECD|WTO|IAEA)\b/i;
-  if (_INSTITUTION_NEWS_GUARD.test(query) && (isCurrentEventQuery(query) || hasNewsIntent(query))) {
+  if (_INSTITUTION_NEWS_GUARD.test(query) && (isCurrentEventQuery(query) || hasNewsIntent(query)) && !lowerQuery.match(/\b(bitcoin|btc|ethereum|eth|crypto|cryptocurrency)\b/)) {
     console.log('[externalLookupEngine] Institution news query detected — routing to NEWS sources (not financial/crypto)');
     return API_SOURCES.NEWS;
   }

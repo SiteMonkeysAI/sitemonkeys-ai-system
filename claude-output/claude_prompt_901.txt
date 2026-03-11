@@ -1,0 +1,79 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #901: [claude-fix] Bitcoin/crypto CoinGecko routing broken by institution news guard added in PR #899
+
+Issue Description:
+## Problem
+
+PR #899 added an institution news guard in `selectSourcesForQuery()` in `externalLookupEngine.js` that routes known-institution + current-event queries to NEWS sources before reaching the crypto check. This successfully fixed the Fed CoinGecko misrouting.
+
+However, the guard is now intercepting genuine crypto queries. "What's the current price of Bitcoin" is being routed to NEWS instead of CoinGecko, returning no useful data.
+
+**Confirmed via testing 2026-03-11:**
+- "Seems like the fed has something going on lately" → ✅ NEWS sources, Fed news returned
+- "What's the fed doing these days" → ✅ NEWS sources, Fed news returned  
+- "What's the current price of Bitcoin" → ❌ CoinGecko not reached, hollow response
+
+---
+
+## Root Cause
+
+The institution news guard fires when:
+1. Query contains a known institution name AND
+2. Query has current-event structure (`isCurrentEventQuery` or `hasNewsIntent`)
+
+Bitcoin queries satisfy condition 2 even without an institution name, so the guard fires too broadly. The fix needs a tighter negative condition.
+
+---
+
+## Required Fix
+
+In `selectSourcesForQuery()`, the institution news guard should only fire when:
+1. Query contains a known institution name (INSTITUTION_PATTERN match) AND
+2. Query has current-event structure AND
+3. Query does NOT match the crypto pattern (no bitcoin/btc/ethereum/eth/crypto/cryptocurrency with word boundaries)
+
+Condition 3 is the missing guard. Adding it ensures crypto queries always reach CoinGecko regardless of current-event structure, while Fed/NATO/FDA queries continue routing to NEWS.
+
+---
+
+## Expected Behavior After Fix
+
+- "Seems like the fed has something going on lately" → NEWS sources ✅
+- "What's the fed doing these days" → NEWS sources ✅
+- "What's the current price of Bitcoin" → CoinGecko ✅
+- "What is the current Ethereum price" → CoinGecko ✅
+
+---
+
+## Constraints
+
+- **Do not modify any test files**
+- **Stop and report** if any fix risks touching the SMDEEP test suite or the orchestrator's core routing logic
+- The word boundary fix on the crypto regex (`\b` boundaries) added in PR #899 must stay in place
+- The contraction fix in `truthTypeDetector.js` and `externalLookupEngine.js` added in PR #899 must not be touched
+- Only `selectSourcesForQuery()` in `externalLookupEngine.js` should need changing
+
+---
+
+## Files Involved
+
+- `api/core/intelligence/externalLookupEngine.js` — `selectSourcesForQuery()` only
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
