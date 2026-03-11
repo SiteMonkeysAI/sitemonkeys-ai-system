@@ -217,11 +217,13 @@ function hasNamedEntityActionPattern(query) {
     return true;
   }
 
-  // Pattern 4: "What is [entity] [action gerund]" — current-state, NOT definitional
-  // Catches: "What is Schumer demanding from Trump"
+  // Pattern 4: "What is/What's [entity] [action gerund]" — current-state, NOT definitional
+  // Catches: "What is Schumer demanding from Trump", "What's the fed doing these days"
   // Distinguished from definitions by action gerunds (demanding, doing, proposing)
-  // vs static nouns (theorem, capital, formula) which are caught by PERMANENT patterns
-  if (/\bwhat (is|was|are|were)\b.{0,60}\b(demanding|doing|planning|saying|claiming|proposing|pushing|seeking|pursuing|blocking|calling|threatening|warning|fighting|preparing|negotiating|forcing|opposing|supporting|backing|leading|facing|dealing|managing|running|holding|trying|attempting|making|accusing|denying|defending|arguing|advocating|endorsing|announcing|declaring|building|developing|creating|launching|expanding|increasing|reducing|cutting|raising|ordering|requesting|filing)\b/i.test(query)) {
+  // vs static nouns (theorem, capital, formula) which are caught by PERMANENT patterns.
+  // ISSUE #899 FIX (Bug 2): Extended to handle "What's" contraction (what'?s) in addition to
+  // "what is/was/are/were" so informal phrasings like "What's the fed doing" are not missed.
+  if (/\bwhat(?:'?s| is| was| are| were)\b.{0,60}\b(demanding|doing|planning|saying|claiming|proposing|pushing|seeking|pursuing|blocking|calling|threatening|warning|fighting|preparing|negotiating|forcing|opposing|supporting|backing|leading|facing|dealing|managing|running|holding|trying|attempting|making|accusing|denying|defending|arguing|advocating|endorsing|announcing|declaring|building|developing|creating|launching|expanding|increasing|reducing|cutting|raising|ordering|requesting|filing)\b/i.test(query)) {
     return true;
   }
 

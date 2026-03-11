@@ -1,0 +1,94 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #899: [claude-fix] Fed queries: wrong source routing (CoinGecko) and trigger detection miss
+
+Issue Description:
+## Problem
+
+Two distinct bugs prevent Federal Reserve queries from returning current news. Both confirmed via Railway logs on 2026-03-11.
+
+---
+
+## Bug 1 — Wrong source routing (CoinGecko instead of NewsAPI)
+
+**Query:** `"Seems like the fed has something going on lately"`
+
+**Log evidence:**
+willAttemptLookup: true
+isSemanticCurrentEventQuery: true
+[externalLookupEngine] Sources: CoinGecko
+[externalLookupEngine] CoinGecko returned only 35 chars (below 200 threshold), cascading to next source
+[externalLookupEngine] Lookup failed, executing graceful degradation
+
+The trigger fires correctly and the institution is recognized, but the query is being routed to CoinGecko (crypto pricing source) instead of NewsAPI. CoinGecko returns 35 chars of crypto price data, fails the minimum threshold, and the entire lookup fails. The source selection logic is misclassifying this as a financial/crypto query rather than a news query.
+
+**Root cause:** The source routing decision in `externalLookupEngine.js` is selecting CoinGecko based on something in the query (likely "fed" matching a financial keyword pattern) before the institution recognition has a chance to route it correctly to news sources.
+
+---
+
+## Bug 2 — Trigger detection miss
+
+**Query:** `"What's the fed doing these days"`
+
+**Log evidence:**
+willAttemptLookup: false
+isSemanticCurrentEventQuery: false
+
+The named entity + action pattern added in PR #881 (`hasNamedEntityActionPattern()`) is not matching this phrasing. "What's the fed doing" is structurally different from the patterns that were added — the contraction "What's" and informal structure causes a miss.
+
+**Root cause:** `hasNamedEntityActionPattern()` in `truthTypeDetector.js` needs to cover contraction-based phrasings and informal "what's X doing" structures when X is a known institution.
+
+---
+
+## Expected Behavior
+
+Both queries should:
+1. Trigger external lookup (`willAttemptLookup: true`)
+2. Route to NewsAPI / Serper / TheNewsAPI (not CoinGecko)
+3. Return current Federal Reserve news in the response
+
+---
+
+## Known Working Queries (must not regress)
+
+- `"Did Saudi Arabia make a big commitment to the US?"` → $600B investment response
+- `"What is the FDA doing about the Ozempic situation?"` → rich current response  
+- `"What is NATO doing right now?"` → Iran/Turkey intercept response
+- `"What are the names of my children?"` → memory recall, no lookup triggered
+- Photosynthesis / general knowledge → no lookup triggered
+- Crypto/Bitcoin price queries → CoinGecko routing must continue to work
+
+---
+
+## Constraints
+
+- **Do not modify any test files**
+- **Stop and report** if any fix risks touching the SMDEEP test suite or the orchestrator's core routing logic
+- CoinGecko routing for genuine crypto queries must not be broken — the fix should only prevent institution news queries from being misrouted there
+- The KNOWN_INSTITUTIONS regex already exists and is working — use it as the guard condition for source routing decisions
+- Intelligence over rules: fixes must use semantic understanding, not additional hardcoded keyword patches
+
+---
+
+## Files Likely Involved
+
+- `api/core/intelligence/externalLookupEngine.js` — source routing logic (Bug 1)
+- `api/core/intelligence/truthTypeDetector.js` — `hasNamedEntityActionPattern()` (Bug 2)
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
