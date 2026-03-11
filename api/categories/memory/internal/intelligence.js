@@ -1980,7 +1980,7 @@ class IntelligenceSystem {
                 // Add related memory with a temporal grouping boost
                 allMemories.push({
                   ...relatedMemory,
-                  relevanceScore: (relatedMemory.relevance_score || 0) + 0.4,
+                  relevanceScore: (parseFloat(relatedMemory.relevance_score) || 0) + 0.4,
                   temporalGrouping: true,
                   groupedEntity: matchedEntity,
                   source: "temporal_grouping"
@@ -3399,7 +3399,7 @@ class IntelligenceSystem {
     if (!memories || !intelligenceContext) return memories;
 
     return memories.map((memory) => {
-      let enhancedScore = memory.relevance_score || 0.5;
+      let enhancedScore = parseFloat(memory.relevance_score) || 0.5;
 
       // Boost for reasoning support
       if (
