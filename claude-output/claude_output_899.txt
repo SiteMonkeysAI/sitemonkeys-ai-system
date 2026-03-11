@@ -1,0 +1,41 @@
+All changes are in place and correct. Let me trace through both fixed queries to verify:
+
+**Bug 1 fix trace: `"Seems like the fed has something going on lately"`**
+- `_INSTITUTION_NEWS_GUARD.test(query)` → matches `\bFed\b` (case-insensitive) ✓
+- `isCurrentEventQuery(query)` → Pattern 3 matches: `\b(seems? like)\b` + `.{0,80}` + `\bhas\b` ✓  
+- Returns `API_SOURCES.NEWS` → NewsAPI, Serper, TheNewsAPI ✓
+- Never reaches the crypto check with the bad `eth` regex
+
+**Bug 2 fix trace: `"What's the fed doing these days"`**
+- `truthTypeDetector.hasNamedEntityActionPattern()`: Pattern 4 now matches `\bwhat(?:'?s| is...)\b` → "What's" matches → returns `true` → classified SEMI_STABLE ✓
+- `externalLookupEngine.isCurrentEventQuery()`: Pattern 4 now matches "What's...doing" → returns `true` → adds `current_event_query_named_entity` reason → `required=true` ✓
+- `selectSourcesForQuery()`: `_INSTITUTION_NEWS_GUARD` matches "Fed" AND `isCurrentEventQuery` returns true → returns `API_SOURCES.NEWS` ✓
+
+**Known working queries verified not to regress:**
+- `"Did Saudi Arabia make a big commitment to the US?"` → Pattern 1 in `isCurrentEventQuery` still matches, routes to NEWS ✓
+- Bitcoin/crypto price queries → `\b(bitcoin|btc|ethereum|eth|crypto|cryptocurrency)\b` still matches with word boundaries ✓
+- Photosynthesis/general knowledge → no institution match, no news intent → PERMANENT → no lookup ✓
+- Memory queries → `isPersonalMemoryRecall` guard still fires before source selection ✓
+
+---SUMMARY---
+**Files modified:** 2
+
+### `api/core/intelligence/externalLookupEngine.js`
+
+**Bug 1 Fix — Two-layer defense against CoinGecko misrouting:**
+
+1. **Institution news guard** (added before the crypto/financial checks in `selectSourcesForQuery`): A new early-return check that tests whether the query references a known institution (using the same `INSTITUTION_PATTERN` regex that already exists in `ensureQueryViability` and `cleanNewsQuery`) AND has current-event structure (via `isCurrentEventQuery` or `hasNewsIntent`). If both conditions are true, the function returns `API_SOURCES.NEWS` immediately — before reaching the crypto check. This is the primary semantic fix.
+
+2. **Word boundary fix on crypto regex**: Changed `/bitcoin|btc|ethereum|eth|crypto|cryptocurrency/` to `/\b(bitcoin|btc|ethereum|eth|crypto|cryptocurrency)\b/`. The missing `\b` word boundaries caused the substring `eth` in `"something"` (somETHing) to falsely match the Ethereum token symbol, routing "the fed has **something** going on" to CoinGecko. This is the secondary/defense-in-depth fix.
+
+**Bug 2 Fix — `isCurrentEventQuery()` Pattern 4 contraction handling:**
+
+Changed `\bwhat (is|was|are|were)\b` to `\bwhat(?:'?s| is| was| are| were)\b`. The `(?:'?s|...)` non-capturing group now handles "What's" contractions in addition to "What is/was/are/were" forms. This ensures "What's the fed doing these days" matches Pattern 4 and returns `true`, adding `current_event_query_named_entity` to the lookup reasons and making `required=true`.
+
+### `api/core/intelligence/truthTypeDetector.js`
+
+**Bug 2 Fix — `hasNamedEntityActionPattern()` Pattern 4 contraction handling:**
+
+Same contraction fix applied to the identical Pattern 4 in `hasNamedEntityActionPattern()`: `\bwhat (is|was|are|were)\b` → `\bwhat(?:'?s| is| was| are| were)\b`. This ensures "What's the fed doing these days" is correctly classified as SEMI_STABLE (entity action current event) by the truth type detector, complementing the `isCurrentEventQuery` fix in `externalLookupEngine.js`.
+
+---END SUMMARY---

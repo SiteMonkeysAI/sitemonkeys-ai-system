@@ -1088,10 +1088,12 @@ export function isCurrentEventQuery(query) {
     return true;
   }
 
-  // Pattern 4: "What is [entity] [action gerund]" — current-state, NOT definitional
-  // Catches: "What is Schumer demanding from Trump"
-  // Distinguished from definitions by action gerunds vs static nouns
-  if (/\bwhat (is|was|are|were)\b.{0,60}\b(demanding|doing|planning|saying|claiming|proposing|pushing|seeking|pursuing|blocking|calling|threatening|warning|fighting|preparing|negotiating|forcing|opposing|supporting|backing|leading|facing|dealing|managing|running|holding|trying|attempting|making|accusing|denying|defending|arguing|advocating|endorsing|announcing|declaring|building|developing|creating|launching|expanding|increasing|reducing|cutting|raising|ordering|requesting|filing)\b/i.test(query)) {
+  // Pattern 4: "What is/What's [entity] [action gerund]" — current-state, NOT definitional
+  // Catches: "What is Schumer demanding from Trump", "What's the fed doing these days"
+  // Distinguished from definitions by action gerunds vs static nouns.
+  // ISSUE #899 FIX (Bug 2): Extended to handle "What's" contraction (what'?s) in addition to
+  // "what is/was/are/were" so informal phrasings are not missed.
+  if (/\bwhat(?:'?s| is| was| are| were)\b.{0,60}\b(demanding|doing|planning|saying|claiming|proposing|pushing|seeking|pursuing|blocking|calling|threatening|warning|fighting|preparing|negotiating|forcing|opposing|supporting|backing|leading|facing|dealing|managing|running|holding|trying|attempting|making|accusing|denying|defending|arguing|advocating|endorsing|announcing|declaring|building|developing|creating|launching|expanding|increasing|reducing|cutting|raising|ordering|requesting|filing)\b/i.test(query)) {
     return true;
   }
 
@@ -1434,8 +1436,21 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     return API_SOURCES.GOVERNMENT;
   }
 
+  // ISSUE #899 FIX (Bug 1): Institution news queries must route to NEWS, not financial/crypto sources.
+  // "the fed has something going on" was routing to CoinGecko because "eth" (no word boundaries)
+  // matched the substring inside "something" (somETHing). Guard: if the query references a known
+  // institution and shows current-event structure, route to NEWS before any financial/crypto checks.
+  // Reuses the INSTITUTION_PATTERN that already exists in ensureQueryViability / cleanNewsQuery.
+  const _INSTITUTION_NEWS_GUARD = /\b(Fed(?:eral\s+Reserve)?|FBI|CIA|NSA|NATO|UN|EU|IMF|WHO|CDC|IRS|SEC|DOJ|DHS|Pentagon|Congress|Senate|SCOTUS|White\s+House|Kremlin|Vatican|OPEC|FDIC|CFPB|FDA|FTC|EPA|FCC|FEMA|ATF|DEA|CBP|ICE|Treasury|Interpol|Europol|CFTC|NLRB|OMB|CBO|GAO|DNC|RNC|OECD|WTO|IAEA)\b/i;
+  if (_INSTITUTION_NEWS_GUARD.test(query) && (isCurrentEventQuery(query) || hasNewsIntent(query))) {
+    console.log('[externalLookupEngine] Institution news query detected — routing to NEWS sources (not financial/crypto)');
+    return API_SOURCES.NEWS;
+  }
+
   // Crypto - use API
-  if (lowerQuery.match(/bitcoin|btc|ethereum|eth|crypto|cryptocurrency/)) {
+  // ISSUE #899 FIX (Bug 1): Added \b word boundaries to prevent "eth" matching inside words
+  // like "something" (somETHing), which was causing Federal Reserve queries to route to CoinGecko.
+  if (lowerQuery.match(/\b(bitcoin|btc|ethereum|eth|crypto|cryptocurrency)\b/)) {
     return API_SOURCES.CRYPTO;
   }
 
