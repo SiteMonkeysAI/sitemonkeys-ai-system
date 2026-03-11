@@ -767,11 +767,14 @@ function calculateHybridScore(memory, options = {}) {
     // may score 0.85–0.89, which was causing STR1 volume-stress regression.
     // Boost formula: (relevance_score - 0.90) * 6.0 → max +0.60
     // Range: 1.00–1.60 (above non-boosted 1.0 cap, below safety-boosted 2.0+ tier)
+    // NOTE: pg driver returns DECIMAL columns as strings — parseFloat converts to number
+    //       `relevance_score` below is the numeric local; `memory.relevance_score` is the raw string
     // ═══════════════════════════════════════════════════════════════
-    if (memory.relevance_score && memory.relevance_score >= 0.90) {
-      const importanceBoost = (memory.relevance_score - 0.90) * 6.0;
+    const relevance_score = parseFloat(memory.relevance_score) || 0;
+    if (relevance_score >= 0.90) {
+      const importanceBoost = (relevance_score - 0.90) * 6.0;
       score += importanceBoost;
-      console.log(`[IMPORTANCE-BOOST] Memory ${memory.id}: relevance_score=${memory.relevance_score.toFixed(2)} → +${importanceBoost.toFixed(3)} importance boost (final: ${score.toFixed(3)})`);
+      console.log(`[IMPORTANCE-BOOST] Memory ${memory.id}: relevance_score=${relevance_score.toFixed(2)} → +${importanceBoost.toFixed(3)} importance boost (final: ${score.toFixed(3)})`);
     }
   }
 
