@@ -1,0 +1,53 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #911: [claude-fix] Weight-based gold/silver calculation using wrong unit — must use troy ounces not grams, must complete and show the full calculation
+
+Issue Description:
+## Problem
+
+When a user asks "what is 50 lbs of gold worth", the system is 
+converting pounds to grams instead of troy ounces, and failing to 
+complete the calculation with a final dollar total.
+
+The response must use troy ounces (the standard unit for precious 
+metal spot prices) and must show the complete math with a final value.
+
+## Required behavior
+
+Query: "What is 50 lbs of gold worth"
+
+Required response format:
+"50 lbs = 729.17 troy oz × $5,169.48/troy oz = $3,769,277 USD"
+
+Conversion constants (already in PR #908 code — verify they are 
+actually being used):
+- 1 lb = 14.5833 troy oz
+- 1 kg = 32.1507 troy oz
+- 1 gram = 0.0321507 troy oz
+- 1 oz avoirdupois = 0.911458 troy oz
+
+## Constraints
+
+- Do not modify test files
+- Find why the troy ounce conversion path is not triggering and fix 
+  the root cause — do not add a parallel implementation
+- The calculation must complete and return a final dollar total, 
+  not a partial estimate
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
