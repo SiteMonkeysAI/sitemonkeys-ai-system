@@ -1,0 +1,62 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #897: [claude-fix] Fed/institution thin-query fallback — lookup fires but produces no results
+
+Issue Description:
+Problem
+When a user sends a conversational query referencing a known institution using informal language — e.g. "Seems like the fed has something going on lately" — the external lookup correctly triggers, but the response comes back hollow. No news results are surfaced, no disclosure that lookup failed.
+Root cause (confirmed via Railway logs):
+cleanNewsQuery() in api/core/intelligence/externalLookupEngine.js strips conversational lead-ins and filler words. For the Fed query, after stripping "seems like", "has something going on", and "lately", the cleaned query collapses to just "fed" — a single word that is either too thin to return meaningful results from NewsAPI, or matches noise rather than the Federal Reserve.
+The system then silently falls through with zero sources and GPT-4 generates a hollow training-data response with no indication the lookup failed.
+
+Expected Behavior
+
+When a cleaned query resolves to fewer than 2 meaningful words, the system should detect this and construct a viable fallback query using the recognized institution name — e.g. "Federal Reserve latest news" instead of "fed"
+If the lookup fires but all sources return empty or below a minimum threshold, the response should disclose this rather than silently falling back to training data
+
+
+Known Working Queries (must not regress)
+These were all confirmed working before this fix and must continue to work:
+
+"Did Saudi Arabia make a big commitment to the US?" → $600B investment response
+"What is the FDA doing about the Ozempic situation?" → rich current response
+"What is NATO doing right now?" → Iran/Turkey intercept response
+"What are the names of my children?" → memory recall, no lookup triggered
+Photosynthesis / general knowledge → no lookup triggered
+
+
+Constraints
+
+Do not modify the core cleanNewsQuery() function logic — it is working correctly for all other queries. The fix belongs in a post-cleaning viability check that runs after the existing function completes
+Do not modify any test files
+Stop and report if any fix risks touching the SMDEEP test suite or the orchestrator's core routing logic
+The institution recognition system (KNOWN_INSTITUTIONS regex) already exists and is working — the fix should leverage it, not replace it
+
+
+Suggested Approach
+After cleanNewsQuery() returns its result, add a viability check:
+
+Count meaningful words in the cleaned output (exclude stop words, single-letter tokens)
+If fewer than 2 meaningful words remain, check if the original query contained a known institution name
+If yes, construct fallback query: "{expanded institution name} latest news"
+If no institution match, use the cleaned query as-is (don't break unknown cases)
+
+For the silent failure disclosure: if willAttemptLookup = true but all sources return 0 results or fail, inject a brief disclosure into the GPT-4 prompt so it can acknowledge the limitation rather than hallucinating currency
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
