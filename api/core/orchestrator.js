@@ -1932,21 +1932,31 @@ export class Orchestrator {
               this.log(`✂️ Greeting hard-limited: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
             }
             // For simple_short: Keep first line or sentence (same as greeting)
+            // EXCEPTION (Issue #895): If an external lookup was performed, the response
+            // contains synthesized external data that must be delivered in full.
+            // Treat as news_current_events — skip the hard cut entirely.
             else if (classification.classification === 'simple_short') {
-              const lines = personalityResponse.response.split('\n');
-              const firstLine = lines[0].trim();
-              personalityResponse.response = firstLine;
+              if (phase4Metadata && phase4Metadata.external_lookup === true) {
+                // External lookup was performed — do not truncate
+                this.log(`✂️ simple_short with external lookup — skipping hard cut (${personalityResponse.response.length} chars)`);
+                responseIntelligence.applied = false;
+                responseIntelligence.reason = `simple_short_external_lookup_no_truncation`;
+              } else {
+                const lines = personalityResponse.response.split('\n');
+                const firstLine = lines[0].trim();
+                personalityResponse.response = firstLine;
 
-              // CRITICAL: Final safety check - NEVER exceed GREETING_LIMIT for simple_short
-              if (personalityResponse.response.length > GREETING_LIMIT) {
-                this.log(`⚠️ Simple short response over limit (${personalityResponse.response.length} > ${GREETING_LIMIT}), applying hard cut`);
-                personalityResponse.response = personalityResponse.response.substring(0, GREETING_LIMIT - 3).trim() + '...';
+                // CRITICAL: Final safety check - NEVER exceed GREETING_LIMIT for simple_short
+                if (personalityResponse.response.length > GREETING_LIMIT) {
+                  this.log(`⚠️ Simple short response over limit (${personalityResponse.response.length} > ${GREETING_LIMIT}), applying hard cut`);
+                  personalityResponse.response = personalityResponse.response.substring(0, GREETING_LIMIT - 3).trim() + '...';
+                }
+
+                responseIntelligence.applied = true;
+                responseIntelligence.finalLength = personalityResponse.response.length;
+                responseIntelligence.reason = `simple_short_truncated_to_first_line`;
+                this.log(`✂️ Simple short query truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
               }
-
-              responseIntelligence.applied = true;
-              responseIntelligence.finalLength = personalityResponse.response.length;
-              responseIntelligence.reason = `simple_short_truncated_to_first_line`;
-              this.log(`✂️ Simple short query truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
             }
             // For simple factual: Keep first paragraph or sentence
             // FIX: Skip truncation when memory context is present — the response is listing
