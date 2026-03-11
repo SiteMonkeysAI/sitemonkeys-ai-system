@@ -1,0 +1,13 @@
+`phase4Metadata` is declared at line 1156 with `let`, and Phase 7.5 is at line 1879 — both within the same function scope. The variable is in scope.
+
+---SUMMARY---
+**File modified:** `api/core/orchestrator.js`
+
+**What changed:** In Phase 7.5 (line ~1935), the `simple_short` truncation branch now checks `phase4Metadata.external_lookup` before applying the 150-char hard cut.
+
+**Logic:**
+- `simple_short` **AND** `phase4Metadata.external_lookup === true` → skip truncation entirely, log the bypass, set `responseIntelligence.applied = false` with reason `simple_short_external_lookup_no_truncation`
+- `simple_short` **AND** no external lookup → original behavior preserved (first-line extraction + 150-char hard cut)
+
+**Why this works:** `phase4Metadata` is declared at line 1156 with `let` in the same function scope as Phase 7.5 (line 1879). The field `phase4Metadata.external_lookup` is set to `true` at line 1356 only when a successful external lookup with real data was performed. This precisely matches the condition described in the issue — no lookup means the flag remains `false`, so "Hey" and "What time is it?" are unaffected.
+---END SUMMARY---
