@@ -512,7 +512,7 @@ export const API_SOURCES = {
           console.log('[externalLookupEngine] NEWS_API_KEY not set, skipping NewsAPI source');
           return null;
         }
-        const cleanedQuery = cleanNewsQuery(query);
+        const cleanedQuery = ensureQueryViability(cleanNewsQuery(query), query); // ISSUE #897 FIX
         const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
         console.log(`[externalLookupEngine] NewsAPI query: "${searchQuery}"`);
         return `https://newsapi.org/v2/everything?q=${encodeURIComponent(searchQuery)}&sortBy=publishedAt&pageSize=5&apiKey=${apiKey}`;
@@ -550,7 +550,7 @@ export const API_SOURCES = {
           console.log('[externalLookupEngine] SERPER_API_KEY not set, skipping Serper source');
           return null;
         }
-        const cleanedQuery = cleanNewsQuery(query);
+        const cleanedQuery = ensureQueryViability(cleanNewsQuery(query), query); // ISSUE #897 FIX
         const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 60).trim();
         console.log(`[externalLookupEngine] Serper query: "${searchQuery}"`);
         try {
@@ -596,7 +596,7 @@ export const API_SOURCES = {
           console.log('[externalLookupEngine] THE_NEWS_API_KEY not set, skipping TheNewsAPI source');
           return null;
         }
-        const cleanedQuery = cleanNewsQuery(query);
+        const cleanedQuery = ensureQueryViability(cleanNewsQuery(query), query); // ISSUE #897 FIX
         const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
         console.log(`[externalLookupEngine] TheNewsAPI query: "${searchQuery}"`);
         return `https://api.thenewsapi.com/v1/news/all?api_token=${apiKey}&search=${encodeURIComponent(searchQuery)}&limit=5&language=en&sort=published_at`;
@@ -622,8 +622,9 @@ export const API_SOURCES = {
     {
       name: 'Google News RSS',
       buildUrl: (query) => {
-        // Extract clean search query from conversational input using shared cleanNewsQuery helper
-        const cleanedQuery = cleanNewsQuery(query);
+        // Extract clean search query from conversational input using shared cleanNewsQuery helper,
+        // then apply the #897 viability check to catch noise-heavy thin queries.
+        const cleanedQuery = ensureQueryViability(cleanNewsQuery(query), query); // ISSUE #897 FIX
         const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
         console.log(`[externalLookupEngine] News RSS query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`);
         return `https://news.google.com/rss/search?q=${encodeURIComponent(searchQuery)}&hl=en-US&gl=US&ceid=US:en`;
@@ -647,7 +648,7 @@ export const API_SOURCES = {
     {
       name: 'GDELT News',
       buildUrl: (query) => {
-        const cleanedQuery = cleanNewsQuery(query);
+        const cleanedQuery = ensureQueryViability(cleanNewsQuery(query), query); // ISSUE #897 FIX
         const searchQuery = cleanedQuery.length >= 3 ? cleanedQuery : query.substring(0, 40).trim();
         console.log(`[externalLookupEngine] GDELT query cleaned: "${query.substring(0, 60)}..." → "${searchQuery}"`);
         return `https://api.gdeltproject.org/api/v2/doc/doc?query=${encodeURIComponent(searchQuery)}&mode=artlist&maxrecords=5&format=json`;
@@ -761,6 +762,48 @@ const INSTITUTION_EXPANSION_MAP = {
   'wto': 'WTO',
   'iaea': 'IAEA',
 };
+
+/**
+ * ISSUE #897 FIX: Post-cleaning viability check for institution-heavy conversational queries.
+ * Runs AFTER cleanNewsQuery() returns its result. If the cleaned query still contains
+ * conversational noise words that leave fewer than 2 truly meaningful search terms,
+ * and the original query references a known institution, construct a focused fallback.
+ *
+ * This is intentionally separate from cleanNewsQuery() — it validates the output without
+ * altering the cleaning logic. The noise list here is broader than the TIME_FILLER_WORDS
+ * inside cleanNewsQuery: it also covers conversational filler words ("seems", "like",
+ * "something") that pass the stop-word cleaning step but have no value as news search terms.
+ *
+ * @param {string} cleanedQuery - Result from cleanNewsQuery()
+ * @param {string} originalQuery - The original user query (before cleaning)
+ * @returns {string} A viable search query (fallback or original cleaned query)
+ */
+function ensureQueryViability(cleanedQuery, originalQuery) {
+  // Expanded noise word list for viability counting.
+  // Includes TIME_FILLER_WORDS plus common conversational words that cleanNewsQuery
+  // intentionally leaves in (to avoid over-stripping) but that are useless in a
+  // news API query string.
+  const VIABILITY_NOISE = /^(seems?|looks?|like|something|anything|everything|nothing|happen(?:ed|ing)?|makes?|think(?:ing)?|heard|feels?|believe|wonder|suggest(?:ing)?|lately|recently|nowadays|days|weeks|months|soon|ago|before|after|times|currently|today|now)$/i;
+
+  const meaningfulWords = cleanedQuery
+    ? cleanedQuery.split(' ').filter(w => w.length > 2 && !VIABILITY_NOISE.test(w))
+    : [];
+
+  // If fewer than 2 truly meaningful words remain, check for a known institution
+  // in the original query and construct a focused fallback query.
+  if (meaningfulWords.length < 2) {
+    const INSTITUTION_PATTERN = /\b(Fed(?:eral\s+Reserve)?|FBI|CIA|NSA|NATO|UN|EU|IMF|WHO|CDC|IRS|SEC|DOJ|DHS|Pentagon|Congress|Senate|SCOTUS|White\s+House|Kremlin|Vatican|OPEC|FDIC|CFPB|FDA|FTC|EPA|FCC|FEMA|ATF|DEA|CBP|ICE|Treasury|Interpol|Europol|CFTC|NLRB|OMB|CBO|GAO|DNC|RNC|OECD|WTO|IAEA)\b/i;
+    const institutionMatch = originalQuery.match(INSTITUTION_PATTERN);
+    if (institutionMatch) {
+      const rawName = institutionMatch[1].replace(/\s+/g, ' ').trim();
+      const expanded = INSTITUTION_EXPANSION_MAP[rawName.toLowerCase()] || rawName;
+      console.log(`[externalLookupEngine] ensureQueryViability: thin result "${cleanedQuery}" → "${expanded} latest news"`);
+      return `${expanded} latest news`;
+    }
+  }
+
+  return cleanedQuery;
+}
 
 /**
  * Clean a conversational query into a concise news search string.
