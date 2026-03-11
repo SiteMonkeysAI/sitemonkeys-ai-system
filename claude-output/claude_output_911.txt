@@ -1,0 +1,17 @@
+---SUMMARY---
+**Root Cause:** The commodity price source selection gate in `api/core/intelligence/externalLookupEngine.js` (line 1511-1512) required the query to match `/price|cost|value|ounce|barrel/i` to trigger commodity API lookups. The query "what is 50 lbs of gold worth" uses the word "worth" — which was missing from that pattern — so the entire metals.live handler (which correctly converts pounds to troy ounces) was never reached.
+
+**Fix:** Added `worth` to the second regex in the commodity detection gate:
+
+```js
+// Before:
+lowerQuery.match(/price|cost|value|ounce|barrel/i)
+
+// After:
+lowerQuery.match(/price|cost|value|worth|ounce|barrel/i)
+```
+
+**File modified:** `api/core/intelligence/externalLookupEngine.js` (line 1512)
+
+**Why this is sufficient:** The metals.live `fetchData` function already had `worth` in its `hasValueIntent` guard (`/\b(worth|value|cost|price|total|how much)\b/i`) and already had all the correct troy ounce conversion constants (`TROY_OZ_CONVERSIONS` with `'lbs': 14.5833`, etc.) and weight calculation logic. The only bug was the outer gate preventing the commodity sources block from being entered at all for "worth"-phrased queries. No parallel implementation was added — the existing correct path was unblocked.
+---END SUMMARY---
