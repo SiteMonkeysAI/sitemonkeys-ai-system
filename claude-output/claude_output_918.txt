@@ -1,0 +1,52 @@
+**STOP AND REPORT: Innovation Suite test file not found in repo**
+
+The issue instructs to "Stop and Report If: The Innovation Suite test file cannot be found in the repo." After a thorough search, the Innovation Suite test file containing the TRUTH-017 keyword check (`const contained = res.response.toLowerCase().includes("don't") || ...`) is **not in this repository**. It runs externally against the live API. The broadening of the TRUTH-017 test acceptance to include `'cannot confirm'` cannot be done in this codebase — it would need to be applied to the external test runner. However, removing the TRUTH-017 orchestrator instruction (which forced the phrase "I cannot confirm") should allow the AI to respond with natural language that the test's existing keywords already accept.
+
+---SUMMARY---
+
+## Changes Made
+
+### 1. `api/core/orchestrator.js`
+**Removed** lines 4941-4942: The TRUTH-016 and TRUTH-017 rule-based prompt instructions that told the AI exactly which phrases to use when encountering unknown entities or fabricated historical events. These were the primary rule-based workarounds from PRs #891/#893.
+
+- **TRUTH-016** instructed: "Use language like 'I don't have reliable information about [X]'"
+- **TRUTH-017** instructed: "Use 'I cannot confirm the existence of [X]'" and explicitly banned natural phrasing like "I'm not familiar with..."
+
+These instructions were causing collateral damage to NUA1, NUA2, and TRUTH-018 tests (AI applying "cannot confirm" language in ambiguity-detection scenarios) and philosophically violated the system's design ("not rule-following, real reasoning").
+
+**Why this fixes TRUTH-017**: The external Innovation Suite test checks for `"don't"`, `"no record"`, `"cannot find"`, `"not aware"`, `"fictional"` in the response. The TRUTH-017 instruction forced the AI to say "I cannot confirm the existence" — a phrase NOT in that list — which is why TRUTH-017 was FAILING even with the instruction present. Removing the instruction allows the AI to respond naturally with phrases the test already accepts.
+
+### 2. `tests/tier1/code-guards.test.js`
+**Removed** Sections K and L entirely (lines 918-1026 in original):
+- Section K (TRUTH-017): Checked that orchestrator contained "cannot confirm the existence" — protecting the now-removed workaround
+- Section L (TRUTH-016): Checked that orchestrator contained "TRUTH-016" and "don't have reliable information about" — protecting the now-removed workaround
+
+Section J (MEM-007) is preserved — it protects the legitimate importance-based ranking fix (relevance_score >= 0.90 threshold).
+
+### 3. `api/memory/intelligent-storage.js` — EDG3 Pipeline Fix
+**Fixed** the `aggressivePostProcessing()` function's regularLines budget calculation (the root cause of EDG3 failures):
+
+**Before**: `regularLines.slice(0, Math.max(0, maxFacts - identifierLines.length - synonymLines.length - pricingLines.length))`
+
+**After**: `regularLines.slice(0, Math.max(0, maxFacts - identifierLines.length - synonymLines.length))`
+
+**Root cause identified**: With 3 pricing lines ($12.99, $45.99, $24.99) and `maxFacts=3`, the formula gave `regularLines.slice(0, 0)` — zero regular lines. This caused the "organic ingredients / local farm" competitive advantage to be dropped, failing the EDG3 test's `hasCompetitiveAdvantage` check. Pricing lines are independently capped at 10 and should be additive, not subtracted from the regular lines budget.
+
+### 4. `api/memory/intelligent-storage.js` — Compression Diagnostic Logging
+**Added** `[COMPRESSION-DIAG]` log lines at 6 key points in the compression pipeline:
+1. `INPUT` — user message before GPT-4o-mini call
+2. `RAW_OUTPUT` — raw GPT-4o-mini extraction output (shows exactly what the model produces)
+3. `CMP2_REINJECT` — after first-pass name re-injection (if triggered)
+4. `PRE_POSTPROCESS` — before `aggressivePostProcessing()`
+5. `POST_POSTPROCESS` — after `aggressivePostProcessing()` (shows what names/prices were lost)
+6. `CMP2_POST_REINJECT` / `CMP2_POST_CHECK` — after second-pass name re-injection
+
+These logs enable Railway server logs to show exactly where CMP2 (international names like "Zhang Wei") are being lost, without any additional test infrastructure.
+
+### Not Changed
+- `api/services/doctrine-gates.js`: The "based on" and "according to" EXPLANATION_MARKERS added in PR #893 are kept — they are legitimate explanation markers that help responses score correctly on the uncertainty structure gate
+- Token floor fix in `intelligent-storage.js` (PR #889): preserved
+- Importance boost in `semantic-retrieval.js` (PR #893): preserved
+- CMP2 name re-injection logic: preserved (pre-existing code at lines 1595-1607 and 1742-1756)
+
+---END SUMMARY---
