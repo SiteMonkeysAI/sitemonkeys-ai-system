@@ -27,7 +27,12 @@ const RETRIEVAL_CONFIG = {
   recencyBoostDays: 7,          // Boost memories from last N days
   recencyBoostWeight: 0.1,      // How much to boost recent memories
   confidenceWeight: 0.05,       // Weight for fingerprint confidence
-  embeddingTimeout: 5000        // Timeout for query embedding
+  embeddingTimeout: 5000,       // Timeout for query embedding
+  // Issue #916: Retrieval diversity enforcement
+  diversityEnforcement: true,          // Master switch for MMR-style diversity
+  diversityPenaltyWeight: 0.3,         // How aggressively to penalize similar results
+  diversitySimilarityThreshold: 0.85,  // Cosine similarity above which penalty applies
+  prefilterUseEmbedding: true          // Use pgvector <=> when embedding available
 };
 
 // ============================================
@@ -569,7 +574,8 @@ function buildPrefilterQuery(options) {
     includeAllModes = false,
     allowCrossMode = false,
     limit = RETRIEVAL_CONFIG.maxCandidates,
-    intent = null  // FIX #683: Accept intent for EXPLICIT_RECALL queries
+    intent = null,  // FIX #683: Accept intent for EXPLICIT_RECALL queries
+    queryEmbedding = null  // Fix #916: Accept query embedding for pgvector distance ordering
   } = options;
 
   console.log('[MODE-DIAG] Mode from options:', mode);
@@ -640,7 +646,23 @@ function buildPrefilterQuery(options) {
     whereClauses = `(${whereClauses}) OR (user_id = $1 AND metadata->'anchors' ? 'explicit_token' AND embedding IS NOT NULL AND embedding_status = 'ready' AND (is_current = true OR is_current IS NULL))`;
   }
 
-  // Build query with ordering by relevance_score (importance), then recency
+  // Fix #916: Use pgvector <=> distance ordering when query embedding is available
+  // This ensures the 500-candidate pool contains memories most semantically similar
+  // to the current query, not just historically most-accessed memories.
+  // relevance_score remains as a secondary sort when no embedding is available.
+  let orderByClause;
+  if (queryEmbedding && RETRIEVAL_CONFIG.prefilterUseEmbedding) {
+    const embeddingLiteral = `[${queryEmbedding.join(',')}]`;
+    params.push(embeddingLiteral);
+    orderByClause = `embedding <=> $${paramIndex}::vector ASC, created_at DESC`;
+    paramIndex++;
+    console.log('[PREFILTER] Ordering strategy: pgvector_distance (semantic distance from query embedding)');
+  } else {
+    orderByClause = 'relevance_score DESC, created_at DESC';
+    console.log('[PREFILTER] Ordering strategy: relevance_score (no query embedding available)');
+  }
+
+  // Build query with ordering by semantic distance or relevance_score
   // Cast vector type to text for JSON parsing in Node.js
   const sql = `
     SELECT
@@ -658,7 +680,7 @@ function buildPrefilterQuery(options) {
       metadata
     FROM persistent_memories
     WHERE ${whereClauses}
-    ORDER BY relevance_score DESC, created_at DESC
+    ORDER BY ${orderByClause}
     LIMIT $${paramIndex}
   `;
   params.push(limit);
@@ -871,6 +893,92 @@ function detectRetrievalIntent(query) {
 }
 
 // ============================================
+// DIVERSITY ENFORCEMENT (Issue #916)
+// ============================================
+
+/**
+ * Apply MMR-style (Maximal Marginal Relevance) diversity re-ranking to prevent one
+ * dominant memory from crowding out all others (Issue #916 - Fix 3).
+ *
+ * Algorithm: Greedily select the next best candidate using a score that balances
+ * relevance (hybrid_score) against similarity to already-selected results.
+ * A candidate that is highly similar to something already selected gets penalized.
+ *
+ * @param {object[]} candidates - Sorted array of scored memories (highest hybrid_score first)
+ * @param {number} topK - Number of results to select via diversity-aware ranking
+ * @returns {object[]} Candidates reordered so selected diverse results come first
+ */
+function applyDiversityReranking(candidates, topK) {
+  if (!RETRIEVAL_CONFIG.diversityEnforcement || candidates.length <= 1) {
+    return candidates;
+  }
+
+  const {
+    diversityPenaltyWeight: penaltyWeight,
+    diversitySimilarityThreshold: similarityThreshold
+  } = RETRIEVAL_CONFIG;
+
+  const selected = [];
+  const remaining = [...candidates];
+  const penalizedIds = new Set();
+  let totalPenaltyApplied = 0;
+
+  while (selected.length < topK && remaining.length > 0) {
+    if (selected.length === 0) {
+      // Always select the top-scoring candidate first (no diversity consideration yet)
+      selected.push(remaining.shift());
+      continue;
+    }
+
+    // For each remaining candidate, compute effective score with diversity penalty
+    // based on max similarity to any already-selected memory
+    let bestIdx = 0;
+    let bestEffectiveScore = -Infinity;
+
+    for (let i = 0; i < remaining.length; i++) {
+      const candidate = remaining[i];
+      let effectiveScore = candidate.hybrid_score;
+      let maxSimilarityToSelected = 0;
+
+      // Compute max cosine similarity to any already-selected memory
+      if (candidate.embedding && Array.isArray(candidate.embedding)) {
+        for (const sel of selected) {
+          if (sel.embedding && Array.isArray(sel.embedding)) {
+            const sim = cosineSimilarity(candidate.embedding, sel.embedding);
+            if (sim > maxSimilarityToSelected) {
+              maxSimilarityToSelected = sim;
+            }
+          }
+        }
+      }
+
+      // Apply penalty if candidate is too similar to an already-selected result
+      if (maxSimilarityToSelected >= similarityThreshold) {
+        const penalty = penaltyWeight * maxSimilarityToSelected;
+        effectiveScore -= penalty;
+        penalizedIds.add(candidate.id);
+        totalPenaltyApplied += penalty;
+        console.log(`[DIVERSITY] Memory ${candidate.id}: max_sim_to_selected=${maxSimilarityToSelected.toFixed(3)} >= threshold=${similarityThreshold} → penalty=-${penalty.toFixed(3)}, effective_score=${effectiveScore.toFixed(3)}`);
+      }
+
+      if (effectiveScore > bestEffectiveScore) {
+        bestEffectiveScore = effectiveScore;
+        bestIdx = i;
+      }
+    }
+
+    selected.push(remaining[bestIdx]);
+    remaining.splice(bestIdx, 1);
+  }
+
+  console.log(`[DIVERSITY] Re-ranking complete: ${selected.length} selected from ${candidates.length} candidates`);
+  console.log(`[DIVERSITY] Unique candidates penalized: ${penalizedIds.size}, total penalty applied: ${totalPenaltyApplied.toFixed(3)}`);
+
+  // Return selected (diversity-enforced) followed by remaining candidates
+  return [...selected, ...remaining];
+}
+
+// ============================================
 // MAIN RETRIEVAL FUNCTION
 // ============================================
 
@@ -1076,7 +1184,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       includeAllModes,
       allowCrossMode,
       limit: RETRIEVAL_CONFIG.maxCandidates,
-      intent  // FIX #683: Pass intent to ensure explicit_token anchors are included for EXPLICIT_RECALL
+      intent,  // FIX #683: Pass intent to ensure explicit_token anchors are included for EXPLICIT_RECALL
+      queryEmbedding  // Fix #916: Use pgvector <=> ordering when embedding is available
     });
 
     const { rows: candidates } = await pool.query(sql, params);
@@ -2012,9 +2121,41 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // Filter by minimum similarity and sort
     // CRITICAL FIX #504: Use effectiveMinSimilarity (lower for personal queries)
-    const filtered = hybridScored
+    let filtered = hybridScored
       .filter(m => m.similarity >= effectiveMinSimilarity)
       .sort((a, b) => b.hybrid_score - a.hybrid_score);
+
+    // ═══════════════════════════════════════════════════════════════
+    // Fix #916 - Fix 2: Per-query memory ID deduplication
+    // A single memory ID must not appear more than once in final results.
+    // Since filtered is already sorted by hybrid_score DESC, first occurrence
+    // is the highest-scoring instance — keep it, discard duplicates.
+    // ═══════════════════════════════════════════════════════════════
+    {
+      const seenMemoryIds = new Set();
+      const deduplicated = [];
+      for (const memory of filtered) {
+        if (!seenMemoryIds.has(memory.id)) {
+          seenMemoryIds.add(memory.id);
+          deduplicated.push(memory);
+        }
+      }
+      const dupCount = filtered.length - deduplicated.length;
+      if (dupCount > 0) {
+        console.log(`[DEDUP] Removed ${dupCount} duplicate memory IDs from result set (kept highest-scoring instance of each)`);
+      } else {
+        console.log(`[DEDUP] No duplicate memory IDs found (${filtered.length} candidates)`);
+      }
+      filtered = deduplicated;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // Fix #916 - Fix 3: MMR-style diversity enforcement
+    // Apply diversity re-ranking so one dominant memory cannot fill all slots.
+    // High-priority memories (entity/keyword/ordinal/safety boosted) are exempt
+    // from penalty since they occupy the top tier (score > 2.0).
+    // ═══════════════════════════════════════════════════════════════
+    filtered = applyDiversityReranking(filtered, topK);
 
     // CRITICAL TRACE #560-T3: Log final ranking after all boosts
     console.log('[TRACE-T3] Final ranked memories (top 5) after hybrid scoring:');
