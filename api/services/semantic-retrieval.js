@@ -20,10 +20,12 @@ import { generateEmbedding, cosineSimilarity, rankBySimilarity } from './embeddi
 // ============================================
 
 const RETRIEVAL_CONFIG = {
-  maxCandidates: 500,           // Max memories to pull from DB for scoring
-  defaultTopK: 10,              // Default number of results to return
+  maxCandidates: 500,           // Max memories to pull from DB for scoring (SQL LIMIT for prefilter)
+  defaultTopK: 10,              // Default number of results to return to caller
   minSimilarity: 0.20,          // Minimum similarity threshold (default) - LOWERED from 0.25 for #609
   minSimilarityPersonal: 0.15,  // Lower threshold for personal fact queries - LOWERED from 0.18 for #609
+  minSimilarityRecall: 0.10,    // Ultra-low threshold for explicit memory recall queries ("what did I tell you?")
+  retrievalDedupThreshold: 0.97, // Cosine similarity above which two results are considered near-duplicates at retrieval time
   recencyBoostDays: 7,          // Boost memories from last N days
   recencyBoostWeight: 0.1,      // How much to boost recent memories
   confidenceWeight: 0.05,       // Weight for fingerprint confidence
@@ -569,7 +571,8 @@ function buildPrefilterQuery(options) {
     includeAllModes = false,
     allowCrossMode = false,
     limit = RETRIEVAL_CONFIG.maxCandidates,
-    intent = null  // FIX #683: Accept intent for EXPLICIT_RECALL queries
+    intent = null,  // FIX #683: Accept intent for EXPLICIT_RECALL queries
+    queryEmbedding = null  // Optional: when provided, order by pgvector <=> distance for semantic prefilter
   } = options;
 
   console.log('[MODE-DIAG] Mode from options:', mode);
@@ -577,6 +580,7 @@ function buildPrefilterQuery(options) {
   if (intent) {
     console.log(`[MODE-DIAG] Intent type: ${intent.type}`);
   }
+  console.log(`[MODE-DIAG] pgvector ordering: ${queryEmbedding ? 'enabled (<=> distance ASC)' : 'disabled (relevance_score DESC)'}`);
 
   const params = [userId];
   let paramIndex = 2;
@@ -640,7 +644,20 @@ function buildPrefilterQuery(options) {
     whereClauses = `(${whereClauses}) OR (user_id = $1 AND metadata->'anchors' ? 'explicit_token' AND embedding IS NOT NULL AND embedding_status = 'ready' AND (is_current = true OR is_current IS NULL))`;
   }
 
-  // Build query with ordering by relevance_score (importance), then recency
+  // Build ORDER BY clause:
+  // When query embedding is available, use pgvector <=> (cosine distance) to rank candidates by
+  // semantic proximity — this ensures the LIMIT fetches the most semantically relevant rows first.
+  // When no embedding is available (e.g., embedding API failed), fall back to relevance_score ordering.
+  let orderByClause;
+  if (queryEmbedding) {
+    params.push(JSON.stringify(queryEmbedding));
+    orderByClause = `embedding <=> $${paramIndex}::vector ASC, relevance_score DESC, created_at DESC`;
+    paramIndex++;
+    console.log(`[SQL-PARAMS] pgvector ORDER BY distance param: $${paramIndex - 1}`);
+  } else {
+    orderByClause = 'relevance_score DESC, created_at DESC';
+  }
+
   // Cast vector type to text for JSON parsing in Node.js
   const sql = `
     SELECT
@@ -658,7 +675,7 @@ function buildPrefilterQuery(options) {
       metadata
     FROM persistent_memories
     WHERE ${whereClauses}
-    ORDER BY relevance_score DESC, created_at DESC
+    ORDER BY ${orderByClause}
     LIMIT $${paramIndex}
   `;
   params.push(limit);
@@ -667,6 +684,7 @@ function buildPrefilterQuery(options) {
   console.log(`[SQL-PARAMS] ════════════════════════════════════════`);
   console.log(`[SQL-PARAMS] userId (param $1): "${params[0]}"`);
   console.log(`[SQL-PARAMS] Total params: ${params.length}`);
+  console.log(`[SQL-PARAMS] LIMIT value: ${limit} (RETRIEVAL_CONFIG.maxCandidates)`);
   console.log(`[SQL-PARAMS] ════════════════════════════════════════`);
 
   return { sql, params };
@@ -1056,7 +1074,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // we must return it because that's what they explicitly asked us to remember
     let effectiveMinSimilarity;
     if (isMemoryRecall) {
-      effectiveMinSimilarity = 0.10; // Very low threshold - prioritize recent explicit memories
+      effectiveMinSimilarity = RETRIEVAL_CONFIG.minSimilarityRecall; // Very low threshold - prioritize recent explicit memories
       console.log(`[MEMORY-RECALL] 🎯 Memory recall query - using ultra-low threshold: ${effectiveMinSimilarity}`);
       console.log(`[MEMORY-RECALL] Will prioritize recently stored memories and explicit storage requests`);
     } else if (isPersonal) {
@@ -1068,6 +1086,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     }
 
     // STEP 2: Prefilter candidates from DB (using effectiveCategories with safety injection)
+    // When query embedding is available, pass it so the SQL uses pgvector <=> ordering —
+    // this ensures the LIMIT 500 fetches the most semantically relevant candidates first.
     const dbStart = Date.now();
     const { sql, params } = buildPrefilterQuery({
       userId,
@@ -1076,7 +1096,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       includeAllModes,
       allowCrossMode,
       limit: RETRIEVAL_CONFIG.maxCandidates,
-      intent  // FIX #683: Pass intent to ensure explicit_token anchors are included for EXPLICIT_RECALL
+      intent,  // FIX #683: Pass intent to ensure explicit_token anchors are included for EXPLICIT_RECALL
+      queryEmbedding: queryEmbedding || null  // Enable pgvector distance ordering when embedding is available
     });
 
     const { rows: candidates } = await pool.query(sql, params);
@@ -2383,19 +2404,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     }
     // ═══════════════════════════════════════════════════════════════
 
-    telemetry.results_returned = results.length;
-    telemetry.results_injected = results.length;
     telemetry.tokens_used = usedTokens;  // Actual tokens used (within budget)
-
-    // Collect memory IDs and scores
-    telemetry.injected_memory_ids = results.map(r => r.id);
-    telemetry.top_scores = results.slice(0, 10).map(r => parseFloat(r.similarity.toFixed(3)));
-
-    // Calculate telemetry stats
-    if (results.length > 0) {
-      telemetry.top_similarity = results[0].similarity;
-      telemetry.avg_similarity = results.reduce((sum, r) => sum + r.similarity, 0) / results.length;
-    }
 
     telemetry.total_ms = Date.now() - startTime;
     telemetry.latency_ms = Date.now() - startTime;
@@ -2405,6 +2414,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     telemetry.safety_categories_injected = safetyCriticalCategories;
     telemetry.safety_memories_boosted = results.filter(r => r.safety_boosted).length;
     telemetry.safety_boost_applied = isSafetyCritical;  // FIX #688: Track whether boost was applied
+
+    // Expose key retrieval config values in telemetry for observability
+    telemetry.config_top_k = topK;
+    telemetry.config_prefilter_limit = RETRIEVAL_CONFIG.maxCandidates;
+    telemetry.config_min_similarity = effectiveMinSimilarity;
+    telemetry.config_prefilter_ordering = queryEmbedding ? 'pgvector_distance' : 'relevance_score';
+    telemetry.config_dedup_threshold = RETRIEVAL_CONFIG.retrievalDedupThreshold;
 
     // INNOVATION #7: Track semantic access to update importance scores
     // High-importance memories are those frequently semantically relevant to queries
@@ -2428,14 +2444,74 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     }
 
     // ═══════════════════════════════════════════════════════════════
+    // RETRIEVAL-TIME DEDUPLICATION
+    // Remove near-duplicate results before returning to caller.
+    // Two results are considered near-duplicates when their cosine similarity exceeds
+    // RETRIEVAL_CONFIG.retrievalDedupThreshold (default: 0.97). This can happen when
+    // very similar facts were stored multiple times (e.g., paraphrased versions of the
+    // same memory) and all pass the similarity threshold.
+    // Results are already sorted by hybrid_score DESC (highest first), so the first
+    // occurrence of any near-duplicate cluster is always the highest-ranked one —
+    // high-priority (entity/ordinal/keyword/explicit-recall boosted) memories already
+    // rank at the top due to their score boosts, so we simply keep the first-seen member
+    // of each near-duplicate cluster and drop the rest.
+    // ═══════════════════════════════════════════════════════════════
+    const dedupedResults = [];
+    let dedupRemovedCount = 0;
+
+    for (const candidate of results) {
+      let isDuplicate = false;
+
+      // Only perform embedding-based dedup when both candidates have valid embeddings
+      if (candidate.embedding && Array.isArray(candidate.embedding)) {
+        for (const kept of dedupedResults) {
+          if (kept.embedding && Array.isArray(kept.embedding)) {
+            const pairSim = cosineSimilarity(kept.embedding, candidate.embedding);
+            if (pairSim >= RETRIEVAL_CONFIG.retrievalDedupThreshold) {
+              // candidate is a near-duplicate of `kept` (which already ranked higher)
+              isDuplicate = true;
+              dedupRemovedCount++;
+              console.log(`[RETRIEVAL-DEDUP] Dropped near-duplicate memory ${candidate.id} (cosine sim=${pairSim.toFixed(3)} with already-kept memory ${kept.id})`);
+              break;
+            }
+          }
+        }
+      }
+
+      if (!isDuplicate) {
+        dedupedResults.push(candidate);
+      }
+    }
+
+    const finalResults = dedupRemovedCount > 0 ? dedupedResults : results;
+
+    if (dedupRemovedCount > 0) {
+      console.log(`[RETRIEVAL-DEDUP] ✅ Removed ${dedupRemovedCount} near-duplicate result(s), returning ${finalResults.length} memories`);
+    } else {
+      console.log(`[RETRIEVAL-DEDUP] No near-duplicates found (threshold: ${RETRIEVAL_CONFIG.retrievalDedupThreshold})`);
+    }
+    telemetry.retrieval_dedup_removed = dedupRemovedCount;
+
+    // Update count-based telemetry to reflect the final deduplicated set
+    telemetry.results_returned = finalResults.length;
+    telemetry.results_injected = finalResults.length;
+    telemetry.injected_memory_ids = finalResults.map(r => r.id);
+    telemetry.top_scores = finalResults.slice(0, 10).map(r => parseFloat(r.similarity.toFixed(3)));
+    if (finalResults.length > 0) {
+      telemetry.top_similarity = finalResults[0].similarity;
+      telemetry.avg_similarity = finalResults.reduce((sum, r) => sum + r.similarity, 0) / finalResults.length;
+    }
+    // ═══════════════════════════════════════════════════════════════
+
+    // ═══════════════════════════════════════════════════════════════
     // ISSUE #697: STR1 & NUA1 DIAGNOSTIC - Show final ranking with positions
     // Track exactly what memories are being returned and their rank positions
     // ═══════════════════════════════════════════════════════════════
     console.log('[ISSUE-697] ═══════════════════════════════════════════════════════');
-    console.log(`[ISSUE-697] FINAL RESULTS: Returning ${results.length} memories`);
+    console.log(`[ISSUE-697] FINAL RESULTS: Returning ${finalResults.length} memories`);
     console.log('[ISSUE-697] Rank | ID | Score | Sim | Category | Content Preview');
     console.log('[ISSUE-697] -----|-----|-------|-----|----------|------------------');
-    results.forEach((mem, idx) => {
+    finalResults.forEach((mem, idx) => {
       const rank = idx + 1;
       const id = String(mem.id).padEnd(5);
       const score = (mem.hybrid_score || 0).toFixed(3);
@@ -2446,13 +2522,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     });
 
     // Check if there are high-ranking memories that got cut off
-    if (filtered.length > results.length) {
-      const cutOff = filtered.slice(results.length, Math.min(filtered.length, results.length + 5));
+    if (filtered.length > finalResults.length) {
+      const cutOff = filtered.slice(finalResults.length, Math.min(filtered.length, finalResults.length + 5));
       console.log('[ISSUE-697] ');
-      console.log(`[ISSUE-697] MEMORIES CUT OFF: ${filtered.length - results.length} memories didn't make it`);
+      console.log(`[ISSUE-697] MEMORIES CUT OFF: ${filtered.length - finalResults.length} memories didn't make it`);
       console.log('[ISSUE-697] Next 5 memories that were cut:');
       cutOff.forEach((mem, idx) => {
-        const rank = results.length + idx + 1;
+        const rank = finalResults.length + idx + 1;
         const id = String(mem.id).padEnd(5);
         const score = (mem.hybrid_score || 0).toFixed(3);
         const sim = (mem.similarity || 0).toFixed(3);
@@ -2464,12 +2540,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // STR1-specific: Check for car/vehicle keywords in results and filtered
     if (isCarQuery) {
-      const carInResults = results.filter(m => /car|tesla|model|vehicle|drive/i.test(m.content || ''));
+      const carInResults = finalResults.filter(m => /car|tesla|model|vehicle|drive/i.test(m.content || ''));
       const carInFiltered = filtered.filter(m => /car|tesla|model|vehicle|drive/i.test(m.content || ''));
       console.log('[ISSUE-697] ');
       console.log(`[ISSUE-697] STR1 CAR QUERY: Found ${carInResults.length}/${carInFiltered.length} car-related memories in results`);
       if (carInFiltered.length > carInResults.length) {
-        const missing = carInFiltered.filter(m => !results.find(r => r.id === m.id));
+        const missing = carInFiltered.filter(m => !finalResults.find(r => r.id === m.id));
         console.log(`[ISSUE-697] STR1 MISSING: ${missing.length} car memories were filtered but not returned`);
         missing.forEach(mem => {
           const rank = filtered.indexOf(mem) + 1;
@@ -2480,13 +2556,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // NUA1-specific: Check for entity-boosted memories
     if (detectedEntities.length > 0) {
-      const entitiesInResults = results.filter(m => m.entity_boosted);
+      const entitiesInResults = finalResults.filter(m => m.entity_boosted);
       const entitiesInFiltered = filtered.filter(m => m.entity_boosted);
       console.log('[ISSUE-697] ');
       console.log(`[ISSUE-697] NUA1 ENTITY QUERY: Detected entities [${detectedEntities.join(', ')}]`);
       console.log(`[ISSUE-697] NUA1 ENTITY QUERY: Found ${entitiesInResults.length}/${entitiesInFiltered.length} entity-boosted memories in results`);
       if (entitiesInFiltered.length > entitiesInResults.length) {
-        const missing = entitiesInFiltered.filter(m => !results.find(r => r.id === m.id));
+        const missing = entitiesInFiltered.filter(m => !finalResults.find(r => r.id === m.id));
         console.log(`[ISSUE-697] NUA1 MISSING: ${missing.length} entity-boosted memories were filtered but not returned`);
         missing.forEach(mem => {
           const rank = filtered.indexOf(mem) + 1;
@@ -2500,13 +2576,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ═══════════════════════════════════════════════════════════════
 
     // Clean up results (remove embeddings from response to save bandwidth)
-    const cleanResults = results.map(({ embedding, ...rest }) => ({
+    const cleanResults = finalResults.map(({ embedding, ...rest }) => ({
       ...rest,
       similarity: Math.round(rest.similarity * 1000) / 1000,
       hybrid_score: Math.round(rest.hybrid_score * 1000) / 1000
     }));
 
-    console.log(`[SEMANTIC RETRIEVAL] ✅ Found ${results.length} memories for "${query.substring(0, 50)}..." (${telemetry.total_ms}ms)`);
+    console.log(`[SEMANTIC RETRIEVAL] ✅ Found ${cleanResults.length} memories for "${query.substring(0, 50)}..." (${telemetry.total_ms}ms)`);
 
     // DIAGNOSTIC: CMP2 - Log retrieval details for name preservation tests
     if (query && /who are my|my contacts|my key contacts/i.test(query)) {
