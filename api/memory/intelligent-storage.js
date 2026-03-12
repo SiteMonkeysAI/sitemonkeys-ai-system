@@ -1486,6 +1486,9 @@ Assistant: ${aiResponse}
 Facts (preserve user terminology + add synonyms):`;
 
     try {
+      // CMP2/EDG3 DIAGNOSTIC: Log input BEFORE compression so we can verify what GPT-4o-mini receives
+      console.log(`[COMPRESSION-DIAG] INPUT userMsg="${userMsg.substring(0, 150)}"`);
+
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
@@ -1494,6 +1497,9 @@ Facts (preserve user terminology + add synonyms):`;
       });
 
       let facts = response.choices[0].message.content.trim();
+
+      // CMP2/EDG3 DIAGNOSTIC: Log raw GPT-4o-mini output BEFORE any post-processing
+      console.log(`[COMPRESSION-DIAG] RAW_OUTPUT="${facts.substring(0, 200)}"`);
 
       // CRITICAL: Post-processing protection - verify identifiers survived
       facts = this.protectHighEntropyTokens(userMsg, facts);
@@ -1595,6 +1601,8 @@ Facts (preserve user terminology + add synonyms):`;
           console.warn(`[EXTRACTION-FIX #759-CMP2] Re-injecting ${missingNames.length} lost international names:`, missingNames);
           // Preserve original names with all special characters
           facts += '\nContacts: ' + missingNames.join(', ');
+          // CMP2 DIAGNOSTIC: confirm re-injection executed
+          console.log(`[COMPRESSION-DIAG] CMP2_REINJECT facts_after="${facts.substring(0, 200)}"`);
         } else {
           console.log(`[EXTRACTION-FIX #759] All ${inputNames.length} international names preserved in extraction`);
         }
@@ -1704,8 +1712,14 @@ Facts (preserve user terminology + add synonyms):`;
         return '';
       }
 
+      // CMP2/EDG3 DIAGNOSTIC: Log pre-aggressivePostProcessing state
+      console.log(`[COMPRESSION-DIAG] PRE_POSTPROCESS="${facts.substring(0, 200)}"`);
+
       // AGGRESSIVE POST-PROCESSING: Guarantee 10-20:1 compression
       const processedFacts = this.aggressivePostProcessing(facts);
+
+      // CMP2/EDG3 DIAGNOSTIC: Log post-aggressivePostProcessing state to see what was lost
+      console.log(`[COMPRESSION-DIAG] POST_POSTPROCESS="${processedFacts.substring(0, 200)}"`);
 
       // ISSUE #824 FIX: Quality gate — reject over-compressed fragments.
       // "reputational.", "architecture:." are the result of aggressive compression
@@ -1736,6 +1750,10 @@ Facts (preserve user terminology + add synonyms):`;
         if (missingAfterCompression.length > 0) {
           console.warn(`[EXTRACTION-FIX #CMP2] ${missingAfterCompression.length} international name(s) lost during aggressivePostProcessing, re-injecting:`, missingAfterCompression);
           finalFacts += '\nContacts: ' + missingAfterCompression.join(', ');
+          // CMP2 DIAGNOSTIC: confirm post-aggressivePostProcessing re-injection executed
+          console.log(`[COMPRESSION-DIAG] CMP2_POST_REINJECT finalFacts="${finalFacts.substring(0, 200)}"`);
+        } else {
+          console.log(`[COMPRESSION-DIAG] CMP2_POST_CHECK all ${inputNames.length} name(s) survived aggressivePostProcessing`);
         }
       }
 
@@ -1904,7 +1922,12 @@ Facts (preserve user terminology + add synonyms):`;
     const maxFacts = Math.max(baseMaxFacts, Math.min(regularLines.length, 15));
 
     // Process regular lines with adaptive limit (no longer a hard cap of 3–5)
-    let processedRegularLines = regularLines.slice(0, Math.max(0, maxFacts - identifierLines.length - synonymLines.length - pricingLines.length));
+    // EDG3 FIX: Do NOT subtract pricingLines.length from the regularLines budget.
+    // Pricing lines are independently capped at 10 (below) and must not crowd out
+    // regular narrative facts like competitive advantages or descriptions.
+    // Before this fix: 3 pricing lines left regularLines with 0 slots, dropping
+    // "organic ingredients" from the EDG3 competitive-advantage check.
+    let processedRegularLines = regularLines.slice(0, Math.max(0, maxFacts - identifierLines.length - synonymLines.length));
 
     // ADAPTIVE WORD LIMIT: Don't truncate lines with identifiers or synonyms
     processedRegularLines = processedRegularLines.map(line => {
