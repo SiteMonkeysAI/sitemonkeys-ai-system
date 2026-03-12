@@ -1,0 +1,35 @@
+All three fixes are implemented. Here's a summary:
+
+---SUMMARY---
+
+**File modified:** `api/services/semantic-retrieval.js`
+
+### Change 1: Added diversity configuration constants to `RETRIEVAL_CONFIG`
+Added four new constants for Issue #916:
+- `diversityEnforcement: true` — master switch for MMR-style diversity
+- `diversityPenaltyWeight: 0.3` — how aggressively to penalize similar results
+- `diversitySimilarityThreshold: 0.85` — cosine similarity above which penalty applies
+- `prefilterUseEmbedding: true` — use pgvector `<=>` when embedding is available
+
+### Fix 1: Semantic prefilter ordering (`buildPrefilterQuery`)
+- Added `queryEmbedding = null` to the function's destructured options
+- When `queryEmbedding` is present and `prefilterUseEmbedding` is true, the SQL `ORDER BY` clause now uses `embedding <=> $N::vector ASC` (pgvector semantic distance) instead of `relevance_score DESC`
+- This ensures the 500-candidate pool is ordered by semantic proximity to the current query, not by historical access frequency
+- Falls back to `relevance_score DESC` when no embedding is available
+- Emits `[PREFILTER]` telemetry logging which strategy was used
+- In `retrieveSemanticMemories`, `queryEmbedding` is now passed to `buildPrefilterQuery`
+
+### Fix 2: Per-query memory ID deduplication
+- Added immediately after `filtered` is sorted by `hybrid_score`
+- Iterates through the sorted array and discards any duplicate `memory.id`, keeping only the first (highest-scoring) occurrence
+- Emits `[DEDUP]` telemetry with count of duplicates removed
+- Changed `const filtered` to `let filtered` to allow reassignment
+
+### Fix 3: MMR-style diversity enforcement
+- Added new `applyDiversityReranking(candidates, topK)` helper function
+- Greedy MMR algorithm: selects top candidate first, then for each subsequent slot computes an effective score = `hybrid_score - (penaltyWeight * max_cosine_similarity_to_selected)` for candidates with max similarity ≥ threshold
+- Penalized candidates are tracked; emits `[DIVERSITY]` telemetry with unique candidates penalized and total penalty applied
+- Applied to `filtered` immediately after deduplication, before the two-pass result-building loop
+- High-priority memories (entity/keyword/ordinal/safety boosted) naturally avoid penalty because their scores exceed 2.0 while normal memory scores cap at 1.0
+
+---END SUMMARY---
