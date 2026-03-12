@@ -1,0 +1,30 @@
+---SUMMARY---
+
+## Changes Made
+
+### `api/memory/intelligent-storage.js` — CMP2 Label Preservation Fix
+
+**Root cause confirmed:** The `aggressivePostProcessing()` function's sentence-splitting regex `/\n|\.(?=\s|[A-Z]|$)/` treated "Dr." as a sentence boundary. When the AI extracts "Contacts: Dr. Xiaoying Zhang-Müller, Björn O'Shaughnessy, José García-López", the period in "Dr." (followed by space + uppercase "X") triggers a split into:
+1. `"Contacts: Dr"` → 2 words → filtered out as too short (< 3 words)
+2. `"Xiaoying Zhang-Müller, Björn O'Shaughnessy, José García-López"` → kept as unicodeNameLine
+
+The stored memory becomes a bare list of foreign names with no semantic label, so "Who are my contacts?" has near-zero embedding similarity and no keyword match against it.
+
+**Fix applied (lines 1853–1869):** Added an abbreviation sentinel pattern _before_ the sentence split. Common abbreviations (`Dr`, `Mr`, `Mrs`, `Ms`, `Prof`, `St`, `Jr`, `Sr`, `vs`, `etc`, `No`) have their period temporarily replaced with `\x01` before splitting, then restored afterward:
+
+```javascript
+const ABBREV_SENTINEL = '\x01';
+const protectedFacts = facts.replace(/\b(Dr|Mr|Mrs|Ms|Prof|St|Jr|Sr|vs|etc|No)\./g, `$1${ABBREV_SENTINEL}`);
+
+let lines = protectedFacts.split(/\n|\.(?=\s|[A-Z]|$)/)
+  .map(line => line.replace(new RegExp(ABBREV_SENTINEL, 'g'), '.').trim())
+  ...
+```
+
+**After fix:** "Contacts: Dr. Xiaoying Zhang-Müller, Björn O'Shaughnessy, José García-López" stays as one line, categorized as `unicodeNameLine` (has non-ASCII chars), preserved in full with the `"Contacts:"` label intact. The stored memory now contains the word "contacts", making it findable by both embedding similarity and keyword boost when the query "Who are my contacts?" is processed.
+
+### TRUTH-017 Fix — Not Applied (File Not In Repo)
+
+The issue asks to add `'no information'` to the `contained` check in the Innovation Suite test file (searching for "Battle of Xylophone Plains"). After thorough search, this test file does not exist in this repository — it is an external test runner. This is consistent with the finding from the previous PR #918. The TRUTH-017 acceptance broadening cannot be applied to a file that isn't in the codebase.
+
+---END SUMMARY---

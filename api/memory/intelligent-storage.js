@@ -1851,9 +1851,18 @@ Facts (preserve user terminology + add synonyms):`;
    * @returns {string} - Aggressively compressed facts
    */
   aggressivePostProcessing(facts) {
+    // CMP2 LABEL FIX: Protect common abbreviations (Dr., Mr., Mrs., etc.) from being treated
+    // as sentence boundaries. Without this, "Contacts: Dr. Xiaoying Zhang-Müller" splits into
+    // ["Contacts: Dr", "Xiaoying Zhang-Müller..."] — the label fragment "Contacts: Dr" then
+    // gets filtered out as too short (<3 words), stripping the category label from the stored
+    // memory and making it invisible to retrieval ("Who are my contacts?" can't match
+    // "Xiaoying Zhang-Müller, Björn O'Shaughnessy" because "contacts" is not in the text).
+    const ABBREV_SENTINEL = '\x01';
+    const protectedFacts = facts.replace(/\b(Dr|Mr|Mrs|Ms|Prof|St|Jr|Sr|vs|etc|No)\./g, `$1${ABBREV_SENTINEL}`);
+
     // Split into lines and clean
-    let lines = facts.split(/\n|\.(?=\s|[A-Z]|$)/)
-      .map(line => line.trim())
+    let lines = protectedFacts.split(/\n|\.(?=\s|[A-Z]|$)/)
+      .map(line => line.replace(new RegExp(ABBREV_SENTINEL, 'g'), '.').trim())
       .filter(line => line.length > 0)
       // Remove bullet points, numbers, and other formatting
       .map(line => line.replace(/^[-•*\d.)\]]+\s*/, '').trim())
