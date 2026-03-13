@@ -216,9 +216,22 @@ async function initializeMemorySystem() {
 }
 
 // ===== MIDDLEWARE CONFIGURATION =====
+const allowedOrigins = [
+  process.env.PRODUCTION_URL,
+  ...(process.env.NODE_ENV !== "production"
+    ? ["http://localhost:3000", "http://localhost:3001"]
+    : []),
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: true,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
   }),
 );
