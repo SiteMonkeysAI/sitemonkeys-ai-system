@@ -6,6 +6,12 @@ import { cleanupDuplicateCurrentFacts, createSupersessionConstraint } from '../s
 import { persistentMemory } from '../categories/memory/index.js';
 
 export async function handleCleanupRequest(req, res) {
+  const adminKey = req.headers['x-admin-key'] ||
+                   req.headers['authorization']?.replace('Bearer ', '');
+  if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
   const startTime = Date.now();
   const dryRun = req.query.dry_run === 'true';
   const createIndex = req.query.create_index === 'true';

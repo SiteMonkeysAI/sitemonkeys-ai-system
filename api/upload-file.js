@@ -6,17 +6,37 @@ import multer from "multer";
 import path from "path";
 import _fs from "fs";
 
+const ALLOWED_MIME_TYPES = [
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/csv',
+  'application/json'
+];
+
+const ALLOWED_EXTENSIONS = [
+  '.pdf', '.doc', '.docx', '.txt', '.csv', '.json'
+];
+
 // Configure multer for file uploads (in-memory storage)
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit
+    fileSize: 10 * 1024 * 1024, // 10MB limit
     files: 10, // Max 10 files at once
   },
   fileFilter: (req, file, cb) => {
-    // Accept all file types
-    cb(null, true);
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (
+      ALLOWED_MIME_TYPES.includes(file.mimetype) &&
+      ALLOWED_EXTENSIONS.includes(ext)
+    ) {
+      cb(null, true);
+    } else {
+      cb(new Error('File type not allowed. Accepted types: PDF, Word documents, text files, CSV, JSON'), false);
+    }
   },
 });
 
