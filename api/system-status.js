@@ -129,6 +129,12 @@ function addTest(results, category, name, status, details = {}) {
 // ================================================================
 
 export default async function systemStatus(req, res) {
+  const internalToken = req.headers['x-internal-token'] ||
+                        req.headers['authorization']?.replace('Bearer ', '');
+  if (!internalToken || internalToken !== process.env.INTERNAL_ACCESS_TOKEN) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
   const startTime = Date.now();
   const results = {
     timestamp: new Date().toISOString(),

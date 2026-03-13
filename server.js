@@ -272,6 +272,12 @@ app.get("/api/system-status", systemStatus); // <-- ADDED
 
 // Memory visibility endpoint - Innovation #46: Users can view what system remembers
 app.get('/api/memory/list', async (req, res) => {
+  const internalToken = req.headers['x-internal-token'] ||
+                        req.headers['authorization']?.replace('Bearer ', '');
+  if (!internalToken || internalToken !== process.env.INTERNAL_ACCESS_TOKEN) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
   try {
     const userId = req.headers['x-user-id'] || req.query.userId || 'anonymous';
     
@@ -327,6 +333,12 @@ app.get("/api/load-vault", loadVaultHandler);
 
 // Test suite endpoint - comprehensive feature validation
 app.get("/api/run-tests", async (req, res) => {
+  const internalToken = req.headers['x-internal-token'] ||
+                        req.headers['authorization']?.replace('Bearer ', '');
+  if (!internalToken || internalToken !== process.env.INTERNAL_ACCESS_TOKEN) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
   try {
     console.log("[TEST-ENDPOINT] Running comprehensive test suite...");
     const testResults = await runAllTests();
@@ -345,7 +357,17 @@ app.get("/api/run-tests", async (req, res) => {
 
 // Chat endpoint - main AI processing
 // SECURITY: Input validation and sanitization
-app.post("/api/chat", async (req, res) => {
+const chatRateLimit = rateLimit({
+  windowMs: 60 * 1000,        // 1 minute window
+  max: 20,                     // 20 requests per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: 'Too many requests. Please wait a moment before sending another message.'
+  }
+});
+
+app.post("/api/chat", chatRateLimit, async (req, res) => {
   try {
     console.log("[CHAT] 📨 Received chat request");
 
