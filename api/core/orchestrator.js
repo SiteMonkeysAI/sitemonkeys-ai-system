@@ -77,11 +77,17 @@ export class Orchestrator {
     this.eliFramework = new EliFramework();
     this.roxyFramework = new RoxyFramework();
     this.personalitySelector = new PersonalitySelector();
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('[ORCHESTRATOR] FATAL: OPENAI_API_KEY is not set.');
+    }
+    if (!process.env.ANTHROPIC_API_KEY) {
+      throw new Error('[ORCHESTRATOR] FATAL: ANTHROPIC_API_KEY is not set.');
+    }
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || "sk-dummy-key-for-testing",
+      apiKey: process.env.OPENAI_API_KEY,
     });
     this.anthropic = new Anthropic({
-      apiKey: process.env.ANTHROPIC_API_KEY || "sk-ant-dummy-key-for-testing",
+      apiKey: process.env.ANTHROPIC_API_KEY,
     });
 
     // Database pool for semantic retrieval (set during initialization)
