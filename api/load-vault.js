@@ -2,11 +2,7 @@
 // API endpoint that connects frontend vault loading requests to existing vault-loader.js
 // This file USES existing infrastructure - does not recreate vault loading logic
 
-import {
-  loadVaultContent,
-  getVaultFromKv,
-  storeVaultInKv,
-} from "../lib/vault-loader.js";
+import { vaultLoader } from "./utilities/vault-loader.js";
 
 /**
  * Load vault endpoint handler
@@ -25,80 +21,58 @@ export default async function loadVaultHandler(req, res) {
   );
 
   try {
-    let vaultData = null;
+    const stats = vaultLoader.getStats();
 
-    // Try to get from KV cache first (unless refresh requested)
-    if (!refresh) {
-      console.log("[LOAD-VAULT] Checking KV cache...");
-      vaultData = await getVaultFromKv();
+    // Use in-memory cache unless refresh is explicitly requested
+    if (!refresh && stats.initialized) {
+      console.log("[LOAD-VAULT] ✅ Vault loaded from in-memory cache");
+      const vaultContent = vaultLoader.getCoreContent();
 
-      if (vaultData) {
-        console.log(
-          "[LOAD-VAULT] ✅ Vault loaded from KV cache",
-        );
-        
-        // CRITICAL FIX: Store vault content in global for orchestrator access
-        const vaultContent = vaultData.vault_content || vaultData.content || "";
-        if (vaultContent.length > 1000) {
-          global.vaultContent = vaultContent;
-          console.log(`[LOAD-VAULT] ✅ Vault stored in global.vaultContent from cache: ${vaultContent.length} chars`);
-        }
-        
-        return res.json({
-          success: true,
-          vault_content: vaultData.vault_content || vaultData.content || "",
-          folders_loaded: vaultData.folders_loaded || vaultData.loadedFolders || [],
-          total_files: vaultData.total_files || vaultData.totalFiles || 0,
-          vault_status: "operational",
-          source: "cache",
-          cached: true,
-        });
+      // Store vault content in global for orchestrator access
+      if (vaultContent.length > 1000) {
+        global.vaultContent = vaultContent;
+        console.log(`[LOAD-VAULT] ✅ Vault stored in global.vaultContent from cache: ${vaultContent.length} chars`);
       }
 
-      console.log("[LOAD-VAULT] No cache found, loading from Google Drive...");
-    } else {
-      console.log(
-        "[LOAD-VAULT] Refresh requested, loading from Google Drive...",
-      );
+      return res.json({
+        success: true,
+        vault_content: vaultContent,
+        folders_loaded: Array.from(vaultLoader.fileIndex.keys()),
+        total_files: stats.indexedFiles,
+        vault_status: "operational",
+        source: "cache",
+        cached: true,
+      });
     }
 
-    // Load from Google Drive using existing vault-loader.js
-    console.log("[LOAD-VAULT] Calling loadVaultContent()...");
-    const result = await loadVaultContent();
+    if (refresh) {
+      console.log("[LOAD-VAULT] Refresh requested, reloading vault...");
+      await vaultLoader.refresh();
+    } else {
+      console.log("[LOAD-VAULT] Vault not yet initialized, loading now...");
+      await vaultLoader.initialize();
+    }
+
+    const updatedStats = vaultLoader.getStats();
+    const vaultContent = vaultLoader.getCoreContent();
 
     console.log(
-      `[LOAD-VAULT] ✅ Vault loaded: ${result.loadedFolders.length} folders, ${result.totalFiles} files`,
+      `[LOAD-VAULT] ✅ Vault loaded: ${updatedStats.indexedFiles} files, ${vaultContent.length} chars`,
     );
 
-    // Prepare response data
-    vaultData = {
-      vault_content: result.vaultContent,
-      folders_loaded: result.loadedFolders,
-      total_files: result.totalFiles,
-      vault_status: "operational",
-      source: "google_drive",
-      cached: false,
-      loaded_at: new Date().toISOString(),
-    };
+    // Store vault content in global for orchestrator access
+    global.vaultContent = vaultContent;
+    console.log(`[LOAD-VAULT] ✅ Vault stored in global.vaultContent: ${vaultContent.length} chars`);
 
-    // Store in KV cache for future requests
-    console.log("[LOAD-VAULT] Storing in KV cache...");
-    const stored = await storeVaultInKv(vaultData);
-
-    if (stored) {
-      console.log("[LOAD-VAULT] ✅ Vault cached in KV");
-    } else {
-      console.log("[LOAD-VAULT] ⚠️ KV caching failed (vault still loaded)");
-    }
-
-    // CRITICAL FIX: Store vault content in global for orchestrator access
-    global.vaultContent = result.vaultContent;
-    console.log(`[LOAD-VAULT] ✅ Vault stored in global.vaultContent: ${result.vaultContent.length} chars`);
-
-    // Return vault data to frontend
     return res.json({
       success: true,
-      ...vaultData,
+      vault_content: vaultContent,
+      folders_loaded: Array.from(vaultLoader.fileIndex.keys()),
+      total_files: updatedStats.indexedFiles,
+      vault_status: "operational",
+      source: refresh ? "refresh" : "google_drive",
+      cached: false,
+      loaded_at: new Date().toISOString(),
     });
   } catch (error) {
     console.error("[LOAD-VAULT] ❌ Error loading vault:", error.message);
