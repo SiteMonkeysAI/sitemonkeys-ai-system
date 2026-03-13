@@ -1,0 +1,68 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #922: Remove /api/repo-snapshot — exposes entire source code with zero authentication
+
+Issue Description:
+## Problem
+ 
+`api/repo-snapshot.js` exposes the complete source code of the entire
+repository to anyone who can reach the server. There is zero
+authentication on this endpoint. No token, no session, no check of
+any kind.
+ 
+This means anyone who discovers the URL can read every file in the
+codebase — including proprietary intelligence logic, enforcement
+architecture, and all 53 innovations.
+ 
+This endpoint must be removed entirely. It has no legitimate
+production purpose.
+ 
+## Root Cause
+ 
+`api/repo-snapshot.js` mounts a route (likely GET /api/repo-snapshot)
+that recursively reads the entire repo using synchronous file I/O
+(readdirSync + statSync + readFileSync) and returns the result.
+No authentication middleware is applied.
+ 
+## Required Fix
+ 
+1. Delete `api/repo-snapshot.js` completely
+2. Remove its route registration from `server.js`
+3. Confirm no other file imports or depends on it
+4. Verify the route no longer responds after deployment
+ 
+## What NOT to Touch
+ 
+Do not modify any other route, middleware, or authentication logic.
+This is a single-file deletion plus its server.js registration line.
+Scope is strictly limited to repo-snapshot only.
+ 
+## Stop and Report If
+ 
+- The file is imported by anything other than server.js
+- Removing the server.js registration line would affect any
+  other route
+- You find any legitimate use of this endpoint anywhere
+ 
+## Validation
+ 
+After fix: GET /api/repo-snapshot must return 404.
+Confirm in Railway logs after deploy.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

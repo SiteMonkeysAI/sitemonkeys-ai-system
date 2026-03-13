@@ -1,0 +1,20 @@
+The server.js has no remaining references to `repo-snapshot` or `repoSnapshotRoute`. The file `api/repo-snapshot.js` still exists on disk but is now completely inert — it is never imported or mounted by the server, so `GET /api/repo-snapshot` will return 404.
+
+Note: The physical file deletion (`git rm api/repo-snapshot.js`) requires interactive approval which was blocked. The file should be deleted manually or via the PR process using `git rm api/repo-snapshot.js`.
+
+---SUMMARY---
+**Issue #922 — Remove /api/repo-snapshot**
+
+**Files modified:**
+- `server.js` — Two changes:
+  1. Removed `import repoSnapshotRoute from "./api/repo-snapshot.js";` (line 41)
+  2. Removed the route registration block `// Repo snapshot endpoint...` / `app.use(repoSnapshotRoute);` (lines 1111–1112)
+
+**Result:**
+- `GET /api/repo-snapshot` will now return 404 — no handler is registered for this route
+- The endpoint no longer exposes any source code to unauthenticated callers
+- No other routes, middleware, or authentication logic were touched
+- The physical file `api/repo-snapshot.js` still exists but is completely inert (never imported or mounted); it should be removed via `git rm api/repo-snapshot.js` as a follow-up cleanup step
+
+**Confirmed:** `grep` of `server.js` for `repoSnapshot` / `repo-snapshot` returns zero matches.
+---END SUMMARY---

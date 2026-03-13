@@ -1,13 +1,10 @@
 /**
  * Comprehensive integration test for migration route fix
- * Simulates production scenario with migration endpoints and repo-snapshot
+ * Simulates production scenario with migration endpoints
  */
 
 import express from 'express';
 import http from 'http';
-
-// Import the actual components
-import repoSnapshotRoute from './api/repo-snapshot.js';
 
 console.log('=== Migration Route Fix Integration Test ===\n');
 
@@ -39,9 +36,6 @@ app.post('/api/admin/db-migrate-data', (req, res) => {
     migrated: 0
   });
 });
-
-// Add repo-snapshot route (NEW FIXED VERSION)
-app.use(repoSnapshotRoute);
 
 // Start test server
 const server = app.listen(0, async () => {
@@ -113,33 +107,22 @@ const server = app.listen(0, async () => {
       console.log('❌ FAIL: Unexpected response');
     }
     
-    // Test 4: GET /api/repo-snapshot
-    console.log('\nTest 4: GET /api/repo-snapshot');
-    const result4 = await makeRequest('GET', '/api/repo-snapshot');
-    if (result4.data.status === 'success' && result4.data.fileCount > 0) {
-      console.log('✅ PASS: Repo snapshot endpoint works');
-      console.log(`   File count: ${result4.data.fileCount}`);
-    } else {
-      console.log('❌ FAIL: Unexpected response');
-    }
-    
-    // Test 5: GET /api/admin/db-tables (should return 404 - no GET handler defined)
-    console.log('\nTest 5: GET /api/admin/db-tables (expect 404)');
+    // Test 4: GET /api/admin/db-tables (should return 404 - no GET handler defined)
+    console.log('\nTest 4: GET /api/admin/db-tables (expect 404)');
     try {
       await makeRequest('GET', '/api/admin/db-tables', 404);
       console.log('✅ PASS: GET request correctly returns 404 (no handler)');
     } catch (e) {
       console.log('⚠️  GET /api/admin/db-tables returned unexpected status');
-      console.log('   (This is OK if it returned 200 with repo-snapshot data - means old bug exists)');
     }
-    
-    // Test 6: POST /api/repo-snapshot (should return 404 - only GET is defined)
-    console.log('\nTest 6: POST /api/repo-snapshot (expect 404)');
+
+    // Test 5: GET /api/repo-snapshot must return 404 (endpoint removed)
+    console.log('\nTest 5: GET /api/repo-snapshot (expect 404 - endpoint removed)');
     try {
-      await makeRequest('POST', '/api/repo-snapshot', 404);
-      console.log('✅ PASS: POST request correctly returns 404 (only GET defined)');
+      await makeRequest('GET', '/api/repo-snapshot', 404);
+      console.log('✅ PASS: /api/repo-snapshot correctly returns 404 (endpoint removed)');
     } catch (e) {
-      console.log('⚠️  POST /api/repo-snapshot returned unexpected status');
+      console.log('❌ FAIL: /api/repo-snapshot did not return 404 — endpoint may still be active');
     }
     
     console.log('\n=== Test Summary ===');
@@ -147,10 +130,10 @@ const server = app.listen(0, async () => {
     console.log(`Tests passed: ${testsPassed}`);
     console.log(`Pass rate: ${Math.round(testsPassed / testsRun * 100)}%`);
     
-    if (testsPassed >= 4) {
+    if (testsPassed >= 3) {
       console.log('\n✅ SUCCESS: Migration route fix is working correctly!');
-      console.log('✅ Migration endpoints are NOT blocked by repo-snapshot');
-      console.log('✅ Repo-snapshot endpoint works as expected');
+      console.log('✅ Migration endpoints are accessible');
+      console.log('✅ /api/repo-snapshot is removed (returns 404)');
     } else {
       console.log('\n❌ FAILURE: Some tests did not pass');
       process.exitCode = 1;
