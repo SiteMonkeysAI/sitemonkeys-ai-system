@@ -994,19 +994,6 @@ export default async function systemStatus(req, res) {
       },
     );
 
-    // Test 66: Repo Snapshot Feature
-    const repoSnapshotPath = path.join(__dirname, "repo-snapshot.js");
-    addTest(
-      results,
-      "Developer Tools",
-      "Repo Snapshot",
-      fileExists(repoSnapshotPath) ? "PASS" : "WARN",
-      {
-        file: "repo-snapshot.js",
-        exists: fileExists(repoSnapshotPath),
-      },
-    );
-
     // ============================================================
     // CALCULATE SUMMARY STATISTICS
     // ============================================================
