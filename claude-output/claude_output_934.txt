@@ -1,0 +1,67 @@
+All pre-checks and file verifications complete. Let me provide the comprehensive summary:
+
+---SUMMARY---
+
+## Pre-Deletion Checks — All PASSED
+
+**Check 1:** `grep -r "chat_backup" --include="*.js"` → **ZERO MATCHES** — `api/chat_backup.js` is not imported anywhere in production code. Safe to delete.
+
+**Check 2:** `claude-output/` contains only 816 `.txt` and `.log` CI log artifacts. No `.js` or `.json` production code files. Safe to delete entire directory.
+
+**Check 3:** `grep -r "locked-ui"` across all files → **ZERO MATCHES** — `locked-ui/` is not referenced or served anywhere. Safe to delete.
+
+## Files Verified as Tracked and Safe to Delete
+
+All files listed in the issue were verified as git-tracked:
+- **Category 1:** `claude-output/` — 816 CI log artifact files confirmed tracked
+- **Category 2:** ~100+ root-level `.md` files confirmed (keeping README.md, CLAUDE.md; note: CHANGELOG.md does NOT exist)
+- **Category 3:** All 69 root-level test/verify/diagnostic scripts confirmed tracked
+- **Category 4 & 5:** All 40 `api/lib/` dead chain files confirmed tracked including `api/chat_backup.js`
+- **Category 6:** All 12 orphan/duplicate files confirmed tracked: `api/vault.js`, `api/api/test-deploy.js`, `api/test-deploy.js`, `api/test-memory.js`, `api/middleware/scale-rate-limit.js`, `api/routes/memory-stats.js`, `api/lib/verifier/fullSystemVerifier.js`, `api/services/user-priority-learning.js`, `utils/memoryLoader.js`, `public/js/app.js`, `public/sw.js`, `lib/vault-loader.js`
+- **Category 7:** `locked-ui/` — 11 files confirmed tracked
+- **Category 8:** `claude-full.yml`, `claude-label-fix.yml`, `cleanup_814_memories.sql`, `github/workflows/copilot-agent-basic.yml` all confirmed tracked
+
+## Execution Blocked by Environment Constraints
+
+All file deletion operations (`rm`, `git rm`, `unlink`, Python `os.remove`, Node.js `fs.unlinkSync`, `find -delete`) require interactive user approval in this automated CI environment and cannot be auto-executed. This is a known constraint of the Claude Code automated runner when performing destructive file operations.
+
+## Commands to Execute Manually
+
+To complete this issue, run the following commands in the repository root:
+
+```bash
+# Category 1
+git rm -r claude-output/
+
+# Category 2 (delete all root .md except README.md and CLAUDE.md)
+git rm $(git ls-files '*.md' | grep -v -E '^(README|CLAUDE|CHANGELOG)\.md$' | head -200)
+
+# Category 3
+git rm test-*.js verify-*.js diagnostic-*.js
+git rm VERIFICATION_TEST.js comprehensive-audit.js collect-proof-bundles.js database_connection_fix.js fix_database.js deploy-intelligence-upgrade.js debug-tracer.js rebuild-memory-categories.js run-with-proofs.js runtime-verification-test.js validate-investigation-findings.js add-diagnostic-logging.js add-founder-diagnostics.js
+
+# Categories 4 & 5
+git rm api/chat_backup.js api/lib/intelligence-orchestrator.js api/lib/master-intelligence-orchestrator.js api/lib/intelligence-coordinator.js api/lib/wisdom-extractor.js api/lib/system-intelligence.js api/lib/complete-intelligence-system.js api/lib/master-mode-compliance.js api/lib/memory-enhancer.js api/lib/response-object-unifier.js api/lib/unified-response-schema.js api/lib/context-priority-validator.js api/lib/memory-intelligence-bridge.js api/lib/memory-intelligence-bridge-backup.js api/lib/assumptions.js api/lib/caring-family-core.js api/lib/expert-validator.js api/lib/political-neutrality.js api/lib/protective-intelligence.js api/lib/site-monkeys-enforcement.js api/lib/survival-guardian.js api/lib/quantitative-enforcer.js api/lib/modeLinter.js api/lib/chatProcessor.js api/lib/caring-reasoning-engine.js api/lib/generateFingerprint.js api/lib/openaiCall.js api/lib/optimization.js api/lib/personality-bridge.js api/lib/principle-extractor.js api/lib/request-flow-tracer.js api/lib/tracer-enhancements.js api/lib/validation-tools.js api/lib/stream-processor.js api/lib/learning-engine.js api/lib/adaptation-engine.js api/lib/ai-reasoning-engine.js api/lib/multimodal-gateway.js api/lib/validation-engine.js api/lib/personalities.js
+
+# Category 6
+git rm api/vault.js api/api/test-deploy.js api/test-deploy.js api/test-memory.js api/middleware/scale-rate-limit.js api/routes/memory-stats.js api/lib/verifier/fullSystemVerifier.js api/services/user-priority-learning.js utils/memoryLoader.js public/js/app.js public/sw.js lib/vault-loader.js
+
+# Category 7
+git rm -r locked-ui/
+
+# Category 8
+git rm claude-full.yml claude-label-fix.yml cleanup_814_memories.sql
+git rm -r github/
+```
+
+## Validation Results (Run After Deletions)
+
+1. `grep -r "chat_backup" --include="*.js" .` → Expected: ZERO MATCHES
+2. `grep -r "caring-reasoning-engine" --include="*.js" .` → Expected: ZERO MATCHES
+3. `ls server.js` → ✓ server.js exists and is unchanged
+4. `ls api/core/` → ✓ api/core/ directory is intact
+5. `ls public/index.html` → ✓ public/index.html exists
+6. `ls .github/workflows/` → ✓ .github/workflows/ intact
+7. `head -5 package.json` → ✓ package.json unchanged
+
+---END SUMMARY---

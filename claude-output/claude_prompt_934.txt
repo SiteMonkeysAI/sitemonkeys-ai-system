@@ -1,0 +1,328 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #934: [Hardening] Remove dead files, artifacts, and abandoned code — ~950 files with zero production impact
+
+Issue Description:
+## Overview
+ 
+The audit identified approximately 950 files that are completely
+disconnected from production code. These fall into five categories.
+Each category is listed with exact paths and explicit instructions.
+Do not remove anything not on this list.
+ 
+This is a deletion-only issue. No code logic changes, no refactoring,
+no moving files. Only deletions.
+ 
+---
+ 
+## STOP AND REPORT BEFORE STARTING
+ 
+Before deleting anything, run the following checks and report
+the results:
+ 
+1. Confirm `api/chat_backup.js` is NOT imported anywhere in
+   server.js or any production file:
+   grep -r "chat_backup" --include="*.js" .
+ 
+2. Confirm `claude-output/` directory exists and contains only
+   CI log artifacts (no .js or .json files that look like
+   production code):
+   ls claude-output/ | head -20
+ 
+3. Confirm `locked-ui/` is not referenced or served anywhere:
+   grep -r "locked-ui" --include="*.js" .
+   grep -r "locked-ui" server.js
+ 
+Report these three results before proceeding. If any grep returns
+unexpected results, stop and report — do not proceed with that
+category until instructed.
+ 
+---
+ 
+## CATEGORY 1: CI LOG ARTIFACTS
+## Action: Delete entire directory
+ 
+Directory: `claude-output/`
+ 
+This directory contains 744 CI log files that accumulated during
+development. They are not code, not configuration, not referenced
+by anything. Delete the entire directory.
+ 
+  git rm -r claude-output/
+ 
+---
+ 
+## CATEGORY 2: ROOT-LEVEL MARKDOWN REPORTS
+## Action: Delete all .md files at root level EXCEPT these:
+ 
+KEEP (do not delete):
+  README.md
+  CLAUDE.md
+  CHANGELOG.md (if exists)
+ 
+DELETE everything else at root level with .md extension.
+These are ~120 accumulated audit reports, analysis documents,
+and development notes that have no production purpose.
+ 
+  git rm *.md  (then git restore the ones in the KEEP list above)
+ 
+Or delete individually — either approach is fine as long as
+README.md and CLAUDE.md are preserved.
+ 
+---
+ 
+## CATEGORY 3: ROOT-LEVEL TEST AND DIAGNOSTIC SCRIPTS
+## Action: Delete all of the following files from root level
+ 
+These are ~65 standalone test, verify, and diagnostic scripts
+that were used during development. None are imported by production
+code, none are part of CI/CD.
+ 
+Delete all files matching these patterns at root level:
+  test-*.js          (approximately 43 files)
+  verify-*.js        (approximately 8 files)
+  diagnostic-*.js    (approximately 3 files)
+ 
+Also delete these specific named files at root level:
+  VERIFICATION_TEST.js
+  comprehensive-audit.js
+  collect-proof-bundles.js
+  database_connection_fix.js
+  fix_database.js
+  deploy-intelligence-upgrade.js
+  debug-tracer.js
+  rebuild-memory-categories.js
+  run-with-proofs.js
+  runtime-verification-test.js
+  validate-investigation-findings.js
+  add-diagnostic-logging.js
+  add-founder-diagnostics.js
+ 
+Before deleting, confirm each file is at root level and not
+inside a subdirectory. Do not delete any test files inside
+the `tests/` directory — those stay.
+ 
+---
+ 
+## CATEGORY 4: DEAD CODE — chat_backup.js AND ITS CHAIN
+## Action: Delete these specific files only
+ 
+The following files are only reachable through chat_backup.js
+which is never imported by production code. Confirm the grep
+from the STOP AND REPORT section returned zero results before
+deleting.
+ 
+  git rm api/chat_backup.js
+  git rm api/lib/intelligence-orchestrator.js
+  git rm api/lib/master-intelligence-orchestrator.js
+  git rm api/lib/intelligence-coordinator.js
+  git rm api/lib/wisdom-extractor.js
+  git rm api/lib/system-intelligence.js
+  git rm api/lib/complete-intelligence-system.js
+  git rm api/lib/master-mode-compliance.js
+  git rm api/lib/memory-enhancer.js
+  git rm api/lib/response-object-unifier.js
+  git rm api/lib/unified-response-schema.js
+  git rm api/lib/context-priority-validator.js
+  git rm api/lib/memory-intelligence-bridge.js
+  git rm api/lib/memory-intelligence-bridge-backup.js
+  git rm api/lib/assumptions.js
+  git rm api/lib/caring-family-core.js
+  git rm api/lib/expert-validator.js
+  git rm api/lib/political-neutrality.js
+  git rm api/lib/protective-intelligence.js
+  git rm api/lib/site-monkeys-enforcement.js
+  git rm api/lib/survival-guardian.js
+  git rm api/lib/quantitative-enforcer.js
+ 
+---
+ 
+## CATEGORY 5: STANDALONE ORPHAN FILES IN api/lib/
+## Action: Delete these specific files only
+ 
+These files are confirmed never imported by any production code:
+ 
+  git rm api/lib/modeLinter.js
+  git rm api/lib/chatProcessor.js
+  git rm api/lib/caring-reasoning-engine.js
+  git rm api/lib/generateFingerprint.js
+  git rm api/lib/openaiCall.js
+  git rm api/lib/optimization.js
+  git rm api/lib/personality-bridge.js
+  git rm api/lib/principle-extractor.js
+  git rm api/lib/request-flow-tracer.js
+  git rm api/lib/tracer-enhancements.js
+  git rm api/lib/validation-tools.js
+  git rm api/lib/stream-processor.js
+  git rm api/lib/learning-engine.js
+  git rm api/lib/adaptation-engine.js
+  git rm api/lib/ai-reasoning-engine.js
+  git rm api/lib/multimodal-gateway.js
+  git rm api/lib/validation-engine.js
+  git rm api/lib/personalities.js
+ 
+IMPORTANT: Do NOT delete api/core/personalities/ — that directory
+is active and protected. Only delete api/lib/personalities.js
+(the single file, not the directory).
+ 
+---
+ 
+## CATEGORY 6: DUPLICATE AND MISPLACED FILES
+## Action: Delete these specific files only
+ 
+  git rm api/vault.js
+  (duplicate of api/lib/vault.js, never imported)
+ 
+  git rm api/api/test-deploy.js
+  (file inside a directory named api/api — misplaced duplicate)
+ 
+  git rm api/test-deploy.js
+  (never imported)
+ 
+  git rm api/test-memory.js
+  (never imported)
+ 
+  git rm api/middleware/scale-rate-limit.js
+  (never imported)
+ 
+  git rm api/routes/memory-stats.js
+  (duplicate endpoint that exists in debug.js)
+ 
+  git rm api/lib/verifier/fullSystemVerifier.js
+  (never imported AND has broken imports)
+ 
+  git rm api/services/user-priority-learning.js
+  (never imported)
+ 
+  git rm utils/memoryLoader.js
+  (never imported)
+ 
+  git rm public/js/app.js
+  (self-documented as not loaded by index.html)
+ 
+  git rm public/sw.js
+  (service worker never registered)
+ 
+  git rm lib/vault-loader.js
+  (legacy duplicate — active version is api/utilities/vault-loader.js)
+ 
+---
+ 
+## CATEGORY 7: locked-ui/ DIRECTORY
+## Action: Confirm then delete
+ 
+locked-ui/ contains 11 files that appear to be a frozen
+alternative UI. Confirm the grep from STOP AND REPORT returned
+zero results showing it is not served or referenced.
+ 
+If confirmed not referenced:
+  git rm -r locked-ui/
+ 
+If grep shows it IS referenced anywhere — stop and report.
+Do not delete until instructed.
+ 
+---
+ 
+## CATEGORY 8: MISPLACED CONFIG AND SQL FILES AT ROOT
+## Action: Delete or move as specified
+ 
+  git rm claude-full.yml
+  (should be in .github/workflows/ — duplicate already exists there)
+ 
+  git rm claude-label-fix.yml
+  (same — misplaced workflow file)
+ 
+  git rm cleanup_814_memories.sql
+  (one-time migration script, already executed — safe to remove.
+  The sql/ directory exists for permanent schema files.)
+ 
+  git rm github/
+  (entire directory — this is a misnamed duplicate of .github/
+  that GitHub does not recognize. The real workflows are in
+  .github/workflows/ and are unaffected.)
+ 
+---
+ 
+## WHAT NOT TO TOUCH
+ 
+Under no circumstances delete anything in:
+  api/core/                    (active intelligence layer)
+  api/lib/validators/          (active truth validation)
+  api/lib/site-monkeys/        (active vault logic)
+  api/lib/enforcement-tools/   (active enforcement)
+  api/categories/              (active memory categories)
+  api/memory/                  (active memory storage)
+  api/services/                (active services — except
+                                user-priority-learning.js above)
+  api/safety-harness/          (active safety layer)
+  api/config/                  (active configuration)
+  api/routes/debug.js          (keep — active debug route)
+  api/routes/test-semantic.js  (keep — active test route)
+  public/index.html            (active frontend)
+  public/css/styles.css        (active frontend)
+  tests/                       (keep all test files here)
+  sql/                         (keep schema files)
+  .github/                     (keep all CI/CD workflows)
+  server.js                    (active entry point)
+  package.json                 (active)
+  package-lock.json            (active)
+  .env                         (active — and gitignored)
+ 
+---
+ 
+## EXECUTION ORDER
+ 
+Do the categories in this order to make rollback easier if
+anything unexpected comes up:
+ 
+1. Category 1 (claude-output/) — largest, safest, do first
+2. Category 2 (root .md files) — safe
+3. Category 3 (root test scripts) — safe
+4. Categories 4 and 5 together (api/lib/ dead chain) — after
+   confirming the grep from STOP AND REPORT
+5. Category 6 (duplicates and orphans) — safe
+6. Category 7 (locked-ui/) — after confirming grep
+7. Category 8 (misplaced configs) — last
+ 
+---
+ 
+## VALIDATION
+ 
+After all deletions and before opening the PR:
+ 
+1. Run: grep -r "chat_backup" --include="*.js" .
+   Expected result: zero matches
+ 
+2. Run: grep -r "caring-reasoning-engine" --include="*.js" .
+   Expected result: zero matches
+ 
+3. Confirm server.js still exists and is unchanged
+ 
+4. Confirm api/core/ directory is fully intact
+ 
+5. Confirm public/index.html still exists and is unchanged
+ 
+6. Confirm .github/workflows/ directory is intact
+ 
+7. Confirm package.json is unchanged
+ 
+Include the results of all 7 checks in the PR description.
+ 
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue
