@@ -1,0 +1,285 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #929: [Security] Remove hardcoded session secret fallback in server.js
+
+Issue Description:
+## Problem
+ 
+`server.js` line 118 configures the session secret with a hardcoded
+fallback:
+ 
+  secret: process.env.SESSION_SECRET || "sitemonkeys-fallback-secret"
+ 
+If SESSION_SECRET is not set in Railway, all sessions use the same
+known fallback value. Anyone who knows this value can forge session
+cookies, effectively impersonating any user.
+ 
+The fallback must be removed. If the environment variable is not set,
+the server should refuse to start rather than proceed insecurely.
+ 
+## Required Fix
+ 
+Replace the fallback pattern with a hard requirement:
+ 
+  if (!process.env.SESSION_SECRET) {
+    console.error('[SERVER] FATAL: SESSION_SECRET environment variable
+    is not set. Refusing to start.');
+    process.exit(1);
+  }
+ 
+  // Then use it:
+  secret: process.env.SESSION_SECRET
+ 
+This goes in server.js near the top of the initialization block,
+before the session middleware is configured.
+ 
+## Required Railway Variable
+ 
+SESSION_SECRET must be set in Railway environment variables.
+Use a strong random value of at least 48 characters.
+Suggested value (generate your own or use this):
+ 
+  sm-session-2026-Rk7vXpN3mQwL9tZj4HsYcF2dBgAe
+ 
+## What NOT to Touch
+ 
+Only server.js session configuration. No other files, no other
+middleware, no routes.
+ 
+## Stop and Report If
+ 
+- SESSION_SECRET is already set in Railway (just remove the fallback)
+- The session middleware configuration spans multiple files
+- process.exit(1) would conflict with any Railway health check logic
+ 
+## Validation
+ 
+After deploy:
+- Confirm server starts successfully (SESSION_SECRET is set in Railway)
+- Confirm server.js no longer contains the string "sitemonkeys-fallback-secret"
+- grep entire codebase for "sitemonkeys-fallback-secret" — must return zero results
+ 
+================================================================
+ISSUE B: Fix Anthropic API authentication header
+================================================================
+ 
+TITLE:
+[Security] Fix Anthropic API using wrong auth header — Authorization:
+Bearer instead of x-api-key
+ 
+LABELS: security, high, hardening
+ 
+BODY:
+ 
+## Problem
+ 
+`api/lib/site-monkeys/ai-architecture.js` line 154 makes Anthropic
+API calls using the wrong authentication header:
+ 
+  Authorization: Bearer <key>
+ 
+The Anthropic API requires:
+ 
+  x-api-key: <key>
+ 
+Using the wrong header means the API key is being sent in a format
+Anthropic does not recognize as the auth mechanism. Depending on
+how the SDK handles this, calls may be succeeding through the SDK's
+own auth handling while the manual header is ignored — or calls may
+be failing silently. Either way the configuration is wrong and
+needs to be corrected.
+ 
+## Required Fix
+ 
+In `api/lib/site-monkeys/ai-architecture.js` line 154, replace:
+ 
+  'Authorization': 'Bearer ' + process.env.ANTHROPIC_API_KEY
+ 
+With:
+ 
+  'x-api-key': process.env.ANTHROPIC_API_KEY
+ 
+Also add the required Anthropic version header if not already present:
+ 
+  'anthropic-version': '2023-06-01'
+ 
+## What NOT to Touch
+ 
+Only this one header configuration in ai-architecture.js.
+Do not touch orchestrator.js, any other Anthropic call sites,
+or the @anthropic-ai/sdk usage elsewhere in the codebase —
+the SDK handles auth correctly on its own.
+ 
+## Stop and Report If
+ 
+- There are other manual Anthropic API calls (not using the SDK)
+  elsewhere in the codebase with the same wrong header pattern
+- The fix causes any test failures in the existing test suite
+ 
+## Validation
+ 
+After deploy:
+- Confirm ai-architecture.js no longer contains
+  "Authorization: Bearer" in any Anthropic call context
+- Confirm Anthropic calls from this file succeed in Railway logs
+ 
+================================================================
+ISSUE C: Remove dummy API key fallbacks
+================================================================
+ 
+TITLE:
+[Security] Remove dummy API key fallbacks in orchestrator.js and
+semantic_analyzer.js
+ 
+LABELS: security, high, hardening
+ 
+BODY:
+ 
+## Problem
+ 
+Two files contain dummy API key fallbacks that suppress startup
+failures when real keys are missing:
+ 
+1. `api/core/orchestrator.js` lines 81 and 84:
+   process.env.OPENAI_API_KEY || "sk-dummy-key-for-testing"
+   process.env.ANTHROPIC_API_KEY || "sk-ant-dummy-key-for-testing"
+ 
+2. `api/core/intelligence/semantic_analyzer.js` line 12:
+   Same dummy key fallback pattern
+ 
+These fallbacks mean the system silently initializes with fake keys
+when real ones are missing. Instead of failing loudly at startup
+with a clear error, the system starts up and then fails later during
+actual API calls — with confusing errors that don't point to the
+real problem.
+ 
+Dummy keys also look like real keys in logs, making debugging harder.
+ 
+## Required Fix
+ 
+In both files, replace the fallback patterns with hard requirement
+checks at startup:
+ 
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+ 
+  if (!openaiKey) {
+    throw new Error('[ORCHESTRATOR] FATAL: OPENAI_API_KEY is not set.');
+  }
+  if (!anthropicKey) {
+    throw new Error('[ORCHESTRATOR] FATAL: ANTHROPIC_API_KEY is not set.');
+  }
+ 
+Then use the variables directly without fallbacks.
+ 
+Apply the same pattern in semantic_analyzer.js for whichever key
+it uses.
+ 
+## What NOT to Touch
+ 
+Only the fallback patterns in these two files. Do not modify any
+other logic in orchestrator.js or semantic_analyzer.js. Do not
+touch any other files.
+ 
+## Stop and Report If
+ 
+- OPENAI_API_KEY or ANTHROPIC_API_KEY are not set in Railway
+  (stop immediately — do not deploy without real keys set)
+- The dummy key pattern appears in any other files beyond these two
+- Removing the fallback causes initialization to fail in a way
+  that suggests the real key is actually missing from Railway
+ 
+## Validation
+ 
+After deploy:
+- Confirm neither file contains "sk-dummy-key-for-testing" or
+  "sk-ant-dummy-key-for-testing"
+- grep entire codebase for "dummy-key" — must return zero results
+- Confirm system starts and responds normally in Railway logs
+ 
+================================================================
+ISSUE D: Fix MONITOR_KEY default value
+================================================================
+ 
+TITLE:
+[Security] Remove "changeme" default from MONITOR_KEY in
+system-monitor.js
+ 
+LABELS: security, high, hardening
+ 
+BODY:
+ 
+## Problem
+ 
+`api/system-monitor.js` uses a hardcoded default value for the
+monitor authentication key:
+ 
+  process.env.MONITOR_KEY || "changeme"
+ 
+"changeme" is a universally known default. Any attacker who finds
+the /api/system-monitor endpoint can access the live system
+dashboard using this default value if MONITOR_KEY is not set
+in Railway.
+ 
+## Required Fix
+ 
+Same pattern as the session secret fix — remove the fallback,
+require the environment variable to be set:
+ 
+  const monitorKey = process.env.MONITOR_KEY;
+  if (!monitorKey) {
+    console.error('[MONITOR] MONITOR_KEY not set —
+    /api/system-monitor is disabled.');
+    // Do not register the route at all if key is not configured
+  }
+ 
+The cleanest approach: if MONITOR_KEY is not set, do not mount
+the /api/system-monitor route. The endpoint simply does not exist
+rather than being accessible with a known default.
+ 
+## Required Railway Variable
+ 
+MONITOR_KEY must be set in Railway environment variables.
+Suggested value:
+ 
+  sm-monitor-2026-Wn5kTqM8pJxR2vCy
+ 
+## What NOT to Touch
+ 
+Only system-monitor.js and its route registration. No other files.
+ 
+## Stop and Report If
+ 
+- MONITOR_KEY is already set in Railway (just remove the fallback)
+- The monitor route registration is in server.js rather than
+  system-monitor.js (same fix, different file)
+- Conditional route mounting would conflict with any existing
+  middleware ordering
+ 
+## Validation
+ 
+After deploy:
+- Confirm system-monitor.js no longer contains the string "changeme"
+- grep entire codebase for "changeme" — must return zero results
+- If MONITOR_KEY is set in Railway: confirm /api/system-monitor
+  responds correctly with the right key
+- Confirm /api/system-monitor returns 403 with wrong key
+ 
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

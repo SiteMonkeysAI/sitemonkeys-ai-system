@@ -8,8 +8,11 @@ import { costTracker } from "../../utils/cost-tracker.js";
 
 export class SemanticAnalyzer {
   constructor() {
+    if (!process.env.OPENAI_API_KEY) {
+      throw new Error('[SEMANTIC_ANALYZER] FATAL: OPENAI_API_KEY is not set.');
+    }
     this.openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY || "sk-dummy-key-for-testing",
+      apiKey: process.env.OPENAI_API_KEY,
     });
     this.embeddingModel = "text-embedding-3-small";
     this.embeddingCache = new Map();

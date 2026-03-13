@@ -97,6 +97,12 @@ process.on("SIGTERM", () => {
   process.exit(0);
 });
 
+// SECURITY: Refuse to start if SESSION_SECRET is not set
+if (!process.env.SESSION_SECRET) {
+  console.error('[SERVER] FATAL: SESSION_SECRET environment variable is not set. Refusing to start.');
+  process.exit(1);
+}
+
 // NOW declare your variables:
 const app = express();
 // Trust proxy for Railway deployment (required for accurate rate limiting)
@@ -114,7 +120,7 @@ addInventoryEndpoint(app);
 // - httpOnly: true prevents JavaScript access to cookies
 // - secure: true in production requires HTTPS
 const sessionConfig = {
-  secret: process.env.SESSION_SECRET || "sitemonkeys-fallback-secret",
+  secret: process.env.SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
   cookie: {

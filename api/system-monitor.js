@@ -1,7 +1,10 @@
 // SYSTEM MONITOR DASHBOARD HANDLER
 // Import into server.js as: app.get('/api/system-monitor', monitorHandler)
 
-const MONITOR_KEY = process.env.MONITOR_KEY || "changeme";
+const MONITOR_KEY = process.env.MONITOR_KEY || null;
+if (!MONITOR_KEY) {
+  console.error('[MONITOR] MONITOR_KEY not set — /api/system-monitor is disabled.');
+}
 
 const MAX_LOG_LINES = 200;
 const MAX_REQUESTS = 20;
