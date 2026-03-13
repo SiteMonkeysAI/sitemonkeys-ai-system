@@ -38,7 +38,6 @@ import {
   handleAnalysisUpload,
   handleMulterError,
 } from "./api/upload-for-analysis.js";
-import repoSnapshotRoute from "./api/repo-snapshot.js";
 import { addInventoryEndpoint } from "./system-inventory-endpoint.js";
 import Orchestrator from "./api/core/orchestrator.js";
 import systemStatus from "./api/system-status.js"; // <-- ADDED
@@ -1108,8 +1107,6 @@ app.get("/api/admin/cleanup-stale-memories", handleCleanupRequest);
 // One-time zombie memory cleanup endpoint (remove after cleanup confirmed)
 app.get("/api/admin/cleanup-zombies", handleZombieCleanupRequest);
 
-// Repo snapshot endpoint - mount at root level so routes in router are absolute
-app.use(repoSnapshotRoute);
 
 console.log("[SERVER] ✅ Routes configured");
 
