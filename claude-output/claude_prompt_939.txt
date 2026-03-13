@@ -1,0 +1,191 @@
+You are Claude, an AI assistant tasked with fixing issues in a GitHub repository.
+
+Issue #939: [Performance] Add HNSW index on embedding column — memory retrieval currently does full sequential scans loading ~6MB per query
+
+Issue Description:
+## Problem
+ 
+The audit confirmed there is no vector index on the embedding column
+in the memories table. Every semantic memory retrieval query currently:
+ 
+1. Loads up to 500 rows with full embedding vectors into Node.js
+2. Computes cosine similarity in JavaScript
+3. Transfers approximately 6MB of embedding data per query over
+   the wire
+ 
+This works at current scale but degrades directly with memory
+growth. As the 3-6M token memory system grows, every query gets
+slower and more expensive. Adding a proper index moves similarity
+search into PostgreSQL where it belongs and keeps retrieval fast
+regardless of how large memory grows.
+ 
+## Read-Only Investigation Required First
+ 
+Before writing any migration, run these two queries against the
+production database and report the results:
+ 
+Query 1 — Confirm pgvector extension is active:
+  SELECT extname, extversion
+  FROM pg_extension
+  WHERE extname = 'vector';
+ 
+Query 2 — Check current indexes on the memories table:
+  SELECT indexname, indexdef
+  FROM pg_indexes
+  WHERE tablename = 'memories';
+ 
+Query 3 — Get current row count and embedding column details:
+  SELECT
+    COUNT(*) as total_rows,
+    COUNT(embedding) as rows_with_embeddings,
+    COUNT(*) - COUNT(embedding) as rows_without_embeddings
+  FROM memories;
+ 
+Report all three results before proceeding. If pgvector extension
+is not active, stop and report — do not proceed.
+ 
+## Required Fix
+ 
+### Step 1 — Create the migration file
+ 
+Create a new file: `sql/add_embedding_index.sql`
+ 
+Contents:
+ 
+  -- Add HNSW index for fast approximate nearest neighbor search
+  -- on the embedding column in the memories table
+  --
+  -- HNSW is preferred over IVFFLAT for this use case because:
+  -- - No training/clustering step required
+  -- - Better query performance at this scale
+  -- - Supports incremental inserts without rebuild
+  --
+  -- m=16, ef_construction=64 are standard starting values
+  -- for tables under 1M rows. Adjust upward if needed later.
+ 
+  CREATE INDEX CONCURRENTLY IF NOT EXISTS
+    memories_embedding_hnsw_idx
+  ON memories
+  USING hnsw (embedding vector_cosine_ops)
+  WITH (m = 16, ef_construction = 64);
+ 
+  -- Verify index was created
+  SELECT indexname, indexdef
+  FROM pg_indexes
+  WHERE tablename = 'memories'
+  AND indexname = 'memories_embedding_hnsw_idx';
+ 
+### Step 2 — Create the migration endpoint
+ 
+Add a protected migration route to run this SQL safely.
+The pattern already exists in the codebase (db-migration.js).
+ 
+In a new file `api/admin/add-embedding-index.js`:
+ 
+  import { readFileSync } from 'fs';
+  import { pool } from '../config/database.js';
+    (or wherever the pg pool is exported from)
+ 
+  export async function addEmbeddingIndex(req, res) {
+    const adminKey = req.headers['x-admin-key'] ||
+      req.headers['authorization']?.replace('Bearer ', '');
+ 
+    if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+ 
+    try {
+      console.log('[EMBEDDING-INDEX] Starting HNSW index creation...');
+      console.log('[EMBEDDING-INDEX] This may take several minutes
+        on large tables. CONCURRENTLY means no table lock.');
+ 
+      const sql = readFileSync('./sql/add_embedding_index.sql', 'utf8');
+      await pool.query(sql);
+ 
+      console.log('[EMBEDDING-INDEX] ✅ Index created successfully');
+      return res.json({
+        success: true,
+        message: 'HNSW index created on memories.embedding',
+        index_name: 'memories_embedding_hnsw_idx'
+      });
+    } catch (error) {
+      console.error('[EMBEDDING-INDEX] ❌ Error:', error.message);
+      return res.status(500).json({
+        success: false,
+        error: error.message
+      });
+    }
+  }
+ 
+### Step 3 — Register the route in server.js
+ 
+Add one route registration in server.js:
+ 
+  import { addEmbeddingIndex } from
+    './api/admin/add-embedding-index.js';
+ 
+  app.post('/api/admin/add-embedding-index', addEmbeddingIndex);
+ 
+### Step 4 — Run the migration
+ 
+After deploying, trigger the migration once by calling:
+  POST /api/admin/add-embedding-index
+  Header: x-admin-key: [your ADMIN_KEY value]
+ 
+The CONCURRENTLY keyword means the table stays fully readable
+and writable during index creation. No downtime, no lock.
+Index creation may take a few minutes depending on row count.
+ 
+## What NOT to Touch
+ 
+- Do not modify any query logic in semantic-retrieval.js
+- Do not modify any memory retrieval code
+- Do not change the embedding storage or generation logic
+- Only create the two new files and add one route registration
+ 
+## Stop and Report If
+ 
+- Query 1 shows pgvector extension is NOT installed
+- Query 2 shows an embedding index already exists
+  (different name — report what's there before proceeding)
+- Query 3 shows zero rows with embeddings
+  (index may not be needed yet — report the count)
+- The pg pool import path is unclear from the codebase
+ 
+## Validation
+ 
+After migration endpoint is deployed and triggered:
+ 
+1. Run this query to confirm index exists:
+   SELECT indexname FROM pg_indexes
+   WHERE tablename = 'memories'
+   AND indexname = 'memories_embedding_hnsw_idx';
+   Expected: one row returned
+ 
+2. Run EXPLAIN on a semantic query to confirm index is being used:
+   EXPLAIN SELECT id, content, embedding <=> '[0.1,0.2,...]'::vector
+   AS distance FROM memories
+   WHERE user_id = 'test' ORDER BY distance LIMIT 10;
+   Expected: should show "Index Scan" not "Seq Scan"
+ 
+3. Confirm memory retrieval still works normally after index creation
+ 
+Include results of both checks in the PR description.
+Your task is to:
+1. Analyze the issue carefully to understand the problem
+2. Look through the repository to identify the relevant files that need to be modified
+3. Make precise changes to fix the issue
+4. Use the Edit tool to modify files directly when needed
+5. Be minimal in your changes - only modify what's necessary to fix the issue
+
+After making changes, provide a summary of what you did in this format:
+
+---SUMMARY---
+[Your detailed summary of changes, including which files were modified and how]
+---END SUMMARY---
+
+Remember:
+- Be specific in your changes
+- Only modify files that are necessary to fix the issue
+- Follow existing code style and conventions
+- Make the minimal changes needed to resolve the issue

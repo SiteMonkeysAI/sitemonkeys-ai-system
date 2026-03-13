@@ -693,6 +693,68 @@ export async function setupVector(req, res) {
 }
 
 /**
+ * Endpoint: Create HNSW index on persistent_memories.embedding
+ * POST /api/admin/add-embedding-index
+ *
+ * Adds an HNSW vector index for fast approximate nearest neighbor search.
+ * Uses CONCURRENTLY so no table lock is held during creation.
+ * Safe to re-run — IF NOT EXISTS prevents duplicate index creation.
+ */
+export async function addEmbeddingIndex(req, res) {
+  const adminKey = req.headers['x-admin-key'] ||
+    req.headers['authorization']?.replace('Bearer ', '');
+
+  if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ error: 'Unauthorized' });
+  }
+
+  // Create a dedicated pool for this operation
+  const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    max: 3,
+    connectionTimeoutMillis: 10000
+  });
+
+  // HNSW index SQL — inlined to avoid filesystem dependency
+  // m=16, ef_construction=64 are standard starting values for tables under 1M rows
+  const sql = `
+    CREATE INDEX CONCURRENTLY IF NOT EXISTS
+      memories_embedding_hnsw_idx
+    ON persistent_memories
+    USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+
+    SELECT indexname, indexdef
+    FROM pg_indexes
+    WHERE tablename = 'persistent_memories'
+    AND indexname = 'memories_embedding_hnsw_idx';
+  `;
+
+  try {
+    console.log('[EMBEDDING-INDEX] Starting HNSW index creation...');
+    console.log('[EMBEDDING-INDEX] This may take several minutes on large tables. CONCURRENTLY means no table lock.');
+
+    await pool.query(sql);
+
+    console.log('[EMBEDDING-INDEX] Index created successfully');
+    return res.json({
+      success: true,
+      message: 'HNSW index created on persistent_memories.embedding',
+      index_name: 'memories_embedding_hnsw_idx'
+    });
+  } catch (error) {
+    console.error('[EMBEDDING-INDEX] Error:', error.message);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  } finally {
+    await pool.end();
+  }
+}
+
+/**
  * Main router function
  */
 export default function dbMigrationRouter(app) {

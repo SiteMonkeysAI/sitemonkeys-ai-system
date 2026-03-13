@@ -50,7 +50,7 @@ import memoryFullCheckRoutes from "./api/test/memory-full-check.js";
 import migrateSemanticHandler from "./api/routes/migrate-semantic.js";
 import migrateSemanticV2Handler from "./api/routes/migrate-semantic-v2.js";
 import testSemanticHandler from "./api/routes/test-semantic.js";
-import dbMigrationRouter from "./api/admin/db-migration.js";
+import dbMigrationRouter, { addEmbeddingIndex } from "./api/admin/db-migration.js";
 import { handleCleanupRequest } from "./api/admin/cleanup.js";
 import { handleZombieCleanupRequest } from "./api/admin/cleanup-zombies.js";
 import rateLimit from "express-rate-limit";
@@ -1148,6 +1148,15 @@ app.get("/api/admin/cleanup-stale-memories", handleCleanupRequest);
 // One-time zombie memory cleanup endpoint (remove after cleanup confirmed)
 app.get("/api/admin/cleanup-zombies", handleZombieCleanupRequest);
 
+// Admin endpoint to create HNSW index on persistent_memories.embedding
+const RateLimit = require('express-rate-limit');
+const adminEmbeddingIndexRateLimiter = RateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1, // allow only 1 index-creation request per window
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.post('/api/admin/add-embedding-index', adminEmbeddingIndexRateLimiter, addEmbeddingIndex);
 
 console.log("[SERVER] ✅ Routes configured");
 
