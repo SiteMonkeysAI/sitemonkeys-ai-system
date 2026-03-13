@@ -716,32 +716,54 @@ export async function addEmbeddingIndex(req, res) {
     connectionTimeoutMillis: 10000
   });
 
-  // HNSW index SQL — inlined to avoid filesystem dependency
+  // HNSW index SQL — two separate queries to avoid multi-statement issues with CONCURRENTLY
   // m=16, ef_construction=64 are standard starting values for tables under 1M rows
-  const sql = `
+  const createIndexSql = `
     CREATE INDEX CONCURRENTLY IF NOT EXISTS
       memories_embedding_hnsw_idx
     ON persistent_memories
     USING hnsw (embedding vector_cosine_ops)
-    WITH (m = 16, ef_construction = 64);
+    WITH (m = 16, ef_construction = 64)
+  `;
 
+  const verifyIndexSql = `
     SELECT indexname, indexdef
     FROM pg_indexes
     WHERE tablename = 'persistent_memories'
-    AND indexname = 'memories_embedding_hnsw_idx';
+    AND indexname = 'memories_embedding_hnsw_idx'
   `;
 
   try {
+    // Pre-check row count to warn if HNSW parameters may need tuning
+    const countResult = await pool.query(
+      'SELECT reltuples::bigint AS estimate FROM pg_class WHERE relname = $1',
+      ['persistent_memories']
+    );
+    const rowEstimate = Number(countResult.rows[0]?.estimate ?? 0);
+    if (rowEstimate > 1_000_000) {
+      console.warn(
+        `[EMBEDDING-INDEX] Table has ~${rowEstimate.toLocaleString()} rows. ` +
+        'Consider increasing m and ef_construction for better recall at this scale.'
+      );
+    }
+
     console.log('[EMBEDDING-INDEX] Starting HNSW index creation...');
     console.log('[EMBEDDING-INDEX] This may take several minutes on large tables. CONCURRENTLY means no table lock.');
 
-    await pool.query(sql);
+    await pool.query(createIndexSql);
 
     console.log('[EMBEDDING-INDEX] Index created successfully');
+
+    const verifyResult = await pool.query(verifyIndexSql);
+    const indexRow = verifyResult.rows[0] || null;
+
     return res.json({
       success: true,
       message: 'HNSW index created on persistent_memories.embedding',
-      index_name: 'memories_embedding_hnsw_idx'
+      index_name: 'memories_embedding_hnsw_idx',
+      index_verified: indexRow !== null,
+      index_def: indexRow ? indexRow.indexdef : null,
+      row_estimate: rowEstimate
     });
   } catch (error) {
     console.error('[EMBEDDING-INDEX] Error:', error.message);
