@@ -34,7 +34,7 @@ const logBuffer = new CircularLogBuffer(MAX_LOG_LINES);
 (function interceptConsole() {
   if (console._monkeyPatched) return; // Prevent double patch
 
-  ["log", "error", "warn"].forEach((type) => {
+  ['log', 'error', 'warn'].forEach((type) => {
     const original = console[type];
     console[type] = function (...args) {
       const timestamp = new Date().toISOString();
@@ -44,12 +44,12 @@ const logBuffer = new CircularLogBuffer(MAX_LOG_LINES);
         message: args
           .map((a) => {
             try {
-              return typeof a === "object" ? JSON.stringify(a) : String(a);
+              return typeof a === 'object' ? JSON.stringify(a) : String(a);
             } catch {
-              return "[Unserializable Object]";
+              return '[Unserializable Object]';
             }
           })
-          .join(" "),
+          .join(' '),
       });
       original.apply(console, args);
     };
@@ -73,8 +73,7 @@ let lastError = null;
 function trackError(err) {
   lastError = {
     timestamp: new Date().toISOString(),
-    message:
-      err?.stack || (typeof err === "string" ? err : JSON.stringify(err)),
+    message: err?.stack || (typeof err === 'string' ? err : JSON.stringify(err)),
   };
 }
 
@@ -119,9 +118,9 @@ function getSystemStatus() {
 function renderDashboard({ logs, status, sessionStats, recentRequests }) {
   // Helper for formatting
   function fmtBytes(b) {
-    if (b < 1024) return b + " B";
-    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + " KB";
-    return (b / (1024 * 1024)).toFixed(1) + " MB";
+    if (b < 1024) return b + ' B';
+    if (b < 1024 * 1024) return (b / 1024).toFixed(1) + ' KB';
+    return (b / (1024 * 1024)).toFixed(1) + ' MB';
   }
   function fmtTime(s) {
     let m = Math.floor(s / 60),
@@ -130,7 +129,7 @@ function renderDashboard({ logs, status, sessionStats, recentRequests }) {
     h %= 24;
     m %= 60;
     s = Math.floor(s % 60);
-    return `${d ? d + "d " : ""}${h ? h + "h " : ""}${m ? m + "m " : ""}${s}s`;
+    return `${d ? d + 'd ' : ''}${h ? h + 'h ' : ''}${m ? m + 'm ' : ''}${s}s`;
   }
   const healthy = status.healthy && !status.lastError;
   return `
@@ -149,7 +148,7 @@ h1 {
 }
 .health {
     text-align: center; font-size: 2.5em; margin: 0.5em 0;
-    color: ${healthy ? "#55dd88" : "#ff4444"};
+    color: ${healthy ? '#55dd88' : '#ff4444'};
     font-weight: bold;
 }
 .section {
@@ -190,7 +189,7 @@ tr:last-child td { border-bottom: none; }
 <div class="section">
     <h2>System Status</h2>
     <table>
-        <tr><th>Server Running</th><td>${healthy ? "✅" : "❌"}</td></tr>
+        <tr><th>Server Running</th><td>${healthy ? '✅' : '❌'}</td></tr>
         <tr><th>Uptime</th><td>${fmtTime(status.uptime)}</td></tr>
         <tr><th>Memory Usage</th>
             <td>
@@ -229,12 +228,12 @@ tr:last-child td { border-bottom: none; }
             (r) => `
         <tr>
             <td>${r.timestamp}</td>
-            <td><code>${(r.userMessage || "").slice(0, 50)}</code></td>
+            <td><code>${(r.userMessage || '').slice(0, 50)}</code></td>
             <td>${r.status}</td>
-            <td>${r.tokensUsed != null ? r.tokensUsed : ""}</td>
+            <td>${r.tokensUsed != null ? r.tokensUsed : ''}</td>
         </tr>`,
           )
-          .join("")}
+          .join('')}
     </table>
 </div>
 
@@ -251,11 +250,11 @@ tr:last-child td { border-bottom: none; }
             (log) => `
         <tr>
             <td style="font-size:0.95em">${log.timestamp}</td>
-            <td>${log.type === "log" ? "🟢" : log.type === "warn" ? "🟡" : "🔴"} <code>${log.type}</code></td>
+            <td>${log.type === 'log' ? '🟢' : log.type === 'warn' ? '🟡' : '🔴'} <code>${log.type}</code></td>
             <td style="font-family:monospace;font-size:0.98em;">${log.message.slice(0, 1000)}</td>
         </tr>`,
           )
-          .join("")}
+          .join('')}
     </table>
 </div>
 <footer style="text-align:center; color:#555; font-size:0.95em; margin:2em 0">Auto-refreshes every 10 seconds.</footer>
@@ -267,9 +266,9 @@ tr:last-child td { border-bottom: none; }
 // --- MAIN HANDLER ---
 async function monitorHandler(req, res) {
   // --- SECURITY ---
-  const key = req.query.key || req.headers["x-monitor-key"];
+  const key = req.query.key || req.headers['x-monitor-key'];
   if (!MONITOR_KEY || key !== MONITOR_KEY) {
-    res.status(403).send("Forbidden: Invalid monitor key");
+    res.status(403).send('Forbidden: Invalid monitor key');
     return;
   }
 
@@ -281,7 +280,7 @@ async function monitorHandler(req, res) {
 
   // --- HTML RESPONSE ---
   res
-    .set("Content-Type", "text/html; charset=utf-8")
+    .set('Content-Type', 'text/html; charset=utf-8')
     .status(200)
     .send(
       renderDashboard({

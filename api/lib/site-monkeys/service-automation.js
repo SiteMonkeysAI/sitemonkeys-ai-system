@@ -6,12 +6,12 @@ const SERVICE_AUTOMATION = {
   workflows: {
     customer_onboarding: {
       steps: [
-        "stripe_webhook_received",
-        "airtable_record_created",
-        "tier_assignment_completed",
-        "welcome_email_sent",
-        "dashboard_access_created",
-        "initial_services_activated",
+        'stripe_webhook_received',
+        'airtable_record_created',
+        'tier_assignment_completed',
+        'welcome_email_sent',
+        'dashboard_access_created',
+        'initial_services_activated',
       ],
       timeout: 300000, // 5 minutes
       retry_attempts: 3,
@@ -19,11 +19,11 @@ const SERVICE_AUTOMATION = {
 
     seo_audit_generation: {
       steps: [
-        "website_scan_initiated",
-        "technical_analysis_completed",
-        "optimization_recommendations_generated",
-        "audit_report_compiled",
-        "customer_notification_sent",
+        'website_scan_initiated',
+        'technical_analysis_completed',
+        'optimization_recommendations_generated',
+        'audit_report_compiled',
+        'customer_notification_sent',
       ],
       timeout: 180000, // 3 minutes
       retry_attempts: 2,
@@ -31,11 +31,11 @@ const SERVICE_AUTOMATION = {
 
     content_creation: {
       steps: [
-        "topic_research_completed",
-        "ai_content_generation",
-        "quality_validation",
-        "brand_alignment_check",
-        "final_content_delivery",
+        'topic_research_completed',
+        'ai_content_generation',
+        'quality_validation',
+        'brand_alignment_check',
+        'final_content_delivery',
       ],
       timeout: 120000, // 2 minutes
       retry_attempts: 3,
@@ -43,11 +43,11 @@ const SERVICE_AUTOMATION = {
 
     ppc_campaign_setup: {
       steps: [
-        "business_analysis_completed",
-        "keyword_research_performed",
-        "ad_copy_generated",
-        "campaign_structure_created",
-        "recommendations_delivered",
+        'business_analysis_completed',
+        'keyword_research_performed',
+        'ad_copy_generated',
+        'campaign_structure_created',
+        'recommendations_delivered',
       ],
       timeout: 240000, // 4 minutes
       retry_attempts: 2,
@@ -122,12 +122,7 @@ async function executeWorkflow(workflowType, parameters, customerTier) {
   try {
     for (let i = 0; i < workflow.steps.length; i++) {
       const stepName = workflow.steps[i];
-      const stepResult = await executeWorkflowStep(
-        stepName,
-        parameters,
-        customerTier,
-        execution,
-      );
+      const stepResult = await executeWorkflowStep(stepName, parameters, customerTier, execution);
 
       execution.steps.push({
         name: stepName,
@@ -152,9 +147,7 @@ async function executeWorkflow(workflowType, parameters, customerTier) {
         `✅ Workflow completed: ${workflowType} in ${Date.now() - execution.startTime}ms`,
       );
     } else {
-      console.error(
-        `❌ Workflow failed: ${workflowType} at step ${execution.failedStep}`,
-      );
+      console.error(`❌ Workflow failed: ${workflowType} at step ${execution.failedStep}`);
     }
   } catch (error) {
     execution.failed = true;
@@ -169,66 +162,58 @@ async function executeWorkflow(workflowType, parameters, customerTier) {
 }
 
 // WORKFLOW STEP EXECUTION
-async function executeWorkflowStep(
-  stepName,
-  parameters,
-  customerTier,
-  _execution,
-) {
+async function executeWorkflowStep(stepName, parameters, customerTier, _execution) {
   const startTime = Date.now();
 
   try {
     let result;
 
     switch (stepName) {
-      case "stripe_webhook_received":
+      case 'stripe_webhook_received':
         result = await processStripeWebhook(parameters);
         break;
 
-      case "airtable_record_created":
+      case 'airtable_record_created':
         result = await createAirtableRecord(parameters);
         break;
 
-      case "tier_assignment_completed":
+      case 'tier_assignment_completed':
         result = await assignCustomerTier(parameters, customerTier);
         break;
 
-      case "welcome_email_sent":
+      case 'welcome_email_sent':
         result = await sendWelcomeEmail(parameters, customerTier);
         break;
 
-      case "dashboard_access_created":
+      case 'dashboard_access_created':
         result = await createDashboardAccess(parameters, customerTier);
         break;
 
-      case "initial_services_activated":
+      case 'initial_services_activated':
         result = await activateInitialServices(parameters, customerTier);
         break;
 
-      case "website_scan_initiated":
+      case 'website_scan_initiated':
         result = await initiateWebsiteScan(parameters);
         break;
 
-      case "technical_analysis_completed":
+      case 'technical_analysis_completed':
         result = await performTechnicalAnalysis(parameters);
         break;
 
-      case "optimization_recommendations_generated":
-        result = await generateOptimizationRecommendations(
-          parameters,
-          customerTier,
-        );
+      case 'optimization_recommendations_generated':
+        result = await generateOptimizationRecommendations(parameters, customerTier);
         break;
 
-      case "topic_research_completed":
+      case 'topic_research_completed':
         result = await performTopicResearch(parameters);
         break;
 
-      case "ai_content_generation":
+      case 'ai_content_generation':
         result = await generateAIContent(parameters, customerTier);
         break;
 
-      case "quality_validation":
+      case 'quality_validation':
         result = await validateContentQuality(parameters, customerTier);
         break;
 
@@ -270,10 +255,7 @@ async function executeWithRetry(operation, maxAttempts = 3, _context = {}) {
       lastError = error;
 
       if (attempt === maxAttempts) {
-        console.error(
-          `❌ Operation failed after ${maxAttempts} attempts:`,
-          error.message,
-        );
+        console.error(`❌ Operation failed after ${maxAttempts} attempts:`, error.message);
         break;
       }
 
@@ -292,15 +274,12 @@ async function executeWithRetry(operation, maxAttempts = 3, _context = {}) {
     }
   }
 
-  throw new Error(
-    `Operation failed after ${maxAttempts} attempts: ${lastError.message}`,
-  );
+  throw new Error(`Operation failed after ${maxAttempts} attempts: ${lastError.message}`);
 }
 
 // SERVICE DELIVERY TRACKING
 function trackServiceDelivery(customerTier, serviceType, deliveryTime) {
-  const guarantees =
-    SERVICE_AUTOMATION.automation_rules.service_guarantees[customerTier];
+  const guarantees = SERVICE_AUTOMATION.automation_rules.service_guarantees[customerTier];
   const guaranteedTime = guarantees[`${serviceType}_delivery`] * 3600000; // Convert hours to milliseconds
 
   const performance = {
@@ -329,8 +308,8 @@ function checkEscalationRequired(metrics) {
   // Check response time violations
   if (metrics.avg_response_time > thresholds.customer_response_time) {
     escalations.push({
-      type: "response_time",
-      severity: "medium",
+      type: 'response_time',
+      severity: 'medium',
       message: `Average response time ${metrics.avg_response_time}ms exceeds limit ${thresholds.customer_response_time}ms`,
     });
   }
@@ -338,8 +317,8 @@ function checkEscalationRequired(metrics) {
   // Check technical failure rate
   if (metrics.failure_rate > thresholds.technical_failure_limit / 100) {
     escalations.push({
-      type: "technical_failures",
-      severity: "high",
+      type: 'technical_failures',
+      severity: 'high',
       message: `Failure rate ${(metrics.failure_rate * 100).toFixed(1)}% exceeds limit ${thresholds.technical_failure_limit}%`,
     });
   }
@@ -347,8 +326,8 @@ function checkEscalationRequired(metrics) {
   // Check quality threshold violations
   if (metrics.quality_violations > thresholds.quality_threshold_violations) {
     escalations.push({
-      type: "quality_issues",
-      severity: "medium",
+      type: 'quality_issues',
+      severity: 'medium',
       message: `Quality violations ${metrics.quality_violations} exceeds limit ${thresholds.quality_threshold_violations}`,
     });
   }
@@ -356,8 +335,8 @@ function checkEscalationRequired(metrics) {
   // Check if founder escalation threshold reached
   if (metrics.manual_intervention_rate > thresholds.founder_escalation_limit) {
     escalations.push({
-      type: "founder_escalation",
-      severity: "high",
+      type: 'founder_escalation',
+      severity: 'high',
       message: `Manual intervention rate ${(metrics.manual_intervention_rate * 100).toFixed(1)}% requires founder attention`,
     });
   }
@@ -365,25 +344,20 @@ function checkEscalationRequired(metrics) {
   return {
     escalationRequired: escalations.length > 0,
     escalations: escalations,
-    highSeverityCount: escalations.filter((e) => e.severity === "high").length,
+    highSeverityCount: escalations.filter((e) => e.severity === 'high').length,
   };
 }
 
 // AUTOMATION PERFORMANCE MONITORING
 function calculateAutomationMetrics(operationalData) {
-  const total_operations =
-    operationalData.automated_operations + operationalData.manual_operations;
+  const total_operations = operationalData.automated_operations + operationalData.manual_operations;
 
   return {
-    automation_coverage:
-      operationalData.automated_operations / total_operations,
-    manual_intervention_rate:
-      operationalData.manual_operations / total_operations,
-    avg_response_time:
-      operationalData.total_response_time / operationalData.total_requests,
+    automation_coverage: operationalData.automated_operations / total_operations,
+    manual_intervention_rate: operationalData.manual_operations / total_operations,
+    avg_response_time: operationalData.total_response_time / operationalData.total_requests,
     success_rate: operationalData.successful_operations / total_operations,
-    quality_score:
-      operationalData.quality_passed / operationalData.quality_checked,
+    quality_score: operationalData.quality_passed / operationalData.quality_checked,
     uptime: operationalData.uptime_minutes / operationalData.total_minutes,
 
     meets_targets: {
@@ -408,7 +382,7 @@ async function processStripeWebhook(_params) {
   return { processed: true };
 }
 async function createAirtableRecord(_params) {
-  return { recordId: "rec123" };
+  return { recordId: 'rec123' };
 }
 async function assignCustomerTier(params, tier) {
   return { tier: tier };

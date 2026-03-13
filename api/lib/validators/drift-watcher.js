@@ -14,18 +14,10 @@ function getValidDomains(semanticAnalysis) {
   if (semanticAnalysis?.validCategories?.domains) {
     return semanticAnalysis.validCategories.domains;
   }
-  
+
   // Fallback: Extract from the semantic analysis result structure
   // This ensures we validate against what the analyzer actually produces
-  return [
-    "business",
-    "technical", 
-    "personal",
-    "health",
-    "financial",
-    "creative",
-    "general",
-  ];
+  return ['business', 'technical', 'personal', 'health', 'financial', 'creative', 'general'];
 }
 
 /**
@@ -37,39 +29,39 @@ function getValidIntents(semanticAnalysis) {
   if (semanticAnalysis?.validCategories?.intents) {
     return semanticAnalysis.validCategories.intents;
   }
-  
+
   // Fallback: Extract from the semantic analysis result structure
   return [
-    "question",
-    "command",
-    "discussion",
-    "problem_solving",
-    "decision_making",
-    "emotional_expression",
-    "information_sharing",
+    'question',
+    'command',
+    'discussion',
+    'problem_solving',
+    'decision_making',
+    'emotional_expression',
+    'information_sharing',
   ];
 }
 
 // Deprecated: Keep for backward compatibility only
 // NEW CODE: Use getValidDomains() and getValidIntents() functions instead
 const BASELINE_DOMAINS = [
-  "business",
-  "technical", 
-  "personal",
-  "health",
-  "financial",
-  "creative",
-  "general",
+  'business',
+  'technical',
+  'personal',
+  'health',
+  'financial',
+  'creative',
+  'general',
 ];
 
 const BASELINE_INTENTS = [
-  "question",
-  "command",
-  "discussion",
-  "problem_solving",
-  "decision_making",
-  "emotional_expression",
-  "information_sharing",
+  'question',
+  'command',
+  'discussion',
+  'problem_solving',
+  'decision_making',
+  'emotional_expression',
+  'information_sharing',
 ];
 
 class DriftWatcher {
@@ -112,7 +104,7 @@ class DriftWatcher {
 
         result.warning = `Semantic analyzer classified domain as "${domain}" which is not in baseline. Reduced confidence from ${confidence.toFixed(2)} to ${newConfidence.toFixed(2)}.`;
 
-        this.#recordDrift("domain", domain, context);
+        this.#recordDrift('domain', domain, context);
       }
 
       // Check intent drift
@@ -130,12 +122,12 @@ class DriftWatcher {
 
         result.warning = `Semantic analyzer classified intent as "${intent}" which is not in baseline. Reduced confidence from ${confidence.toFixed(2)} to ${newConfidence.toFixed(2)}.`;
 
-        this.#recordDrift("intent", intent, context);
+        this.#recordDrift('intent', intent, context);
       }
 
       return result;
     } catch (error) {
-      console.error("[DRIFT-WATCHER] Validation error:", error);
+      console.error('[DRIFT-WATCHER] Validation error:', error);
 
       return {
         driftDetected: false,
@@ -169,8 +161,8 @@ class DriftWatcher {
   getDriftStats() {
     return {
       totalDrifts: this.driftHistory.length,
-      domainDrifts: this.driftHistory.filter((d) => d.type === "domain").length,
-      intentDrifts: this.driftHistory.filter((d) => d.type === "intent").length,
+      domainDrifts: this.driftHistory.filter((d) => d.type === 'domain').length,
+      intentDrifts: this.driftHistory.filter((d) => d.type === 'intent').length,
       recentDrifts: this.driftHistory.slice(-10),
     };
   }
