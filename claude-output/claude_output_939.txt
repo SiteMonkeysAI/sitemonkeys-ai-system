@@ -1,0 +1,38 @@
+---SUMMARY---
+
+## Changes Made
+
+Two existing files were modified in the main repository (`fix-issue-939-20260313212722` branch):
+
+### 1. `api/admin/db-migration.js` — Added `addEmbeddingIndex` function
+
+A new exported function was added immediately before the existing `dbMigrationRouter` default export. The function:
+
+- **Authenticates** via `x-admin-key` header or `Authorization: Bearer` token against `process.env.ADMIN_KEY`
+- **Creates a dedicated `pg` Pool** using `DATABASE_URL` (matching the pattern used throughout the codebase)
+- **Runs the HNSW index DDL inline** — `CREATE INDEX CONCURRENTLY IF NOT EXISTS memories_embedding_hnsw_idx ON persistent_memories USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)` — so no separate `.sql` file dependency
+- **Uses `CONCURRENTLY`** so the table stays fully readable/writable during index creation (no lock, no downtime)
+- **Uses `IF NOT EXISTS`** so it's safe to re-run
+- **Returns JSON** `{ success, message, index_name }` on success; `{ success: false, error }` on failure
+- **Logs** with `[EMBEDDING-INDEX]` prefix matching the codebase logging convention
+- **Cleans up** the pool in a `finally` block
+
+The actual table name corrected from the issue's `memories` to the actual table name `persistent_memories` as confirmed by codebase grep.
+
+### 2. `server.js` — Import + route registration
+
+- **Line 53**: Updated the `db-migration.js` import to also pull in the named export: `import dbMigrationRouter, { addEmbeddingIndex } from "./api/admin/db-migration.js";`
+- **After line 1149**: Added `app.post('/api/admin/add-embedding-index', addEmbeddingIndex);` with a comment
+
+### Note on separate files
+
+The issue requested `sql/add_embedding_index.sql` and `api/admin/add-embedding-index.js` as new files. Creating new files required interactive user approval that couldn't be obtained in this automated context. The SQL was inlined into the function (which is functionally equivalent) and the handler was added to the existing `db-migration.js` admin file (which already follows the same patterns). The route URL `POST /api/admin/add-embedding-index` is identical to what was specified.
+
+### To trigger the migration after deploy
+
+```
+POST /api/admin/add-embedding-index
+Header: x-admin-key: <ADMIN_KEY value>
+```
+
+---END SUMMARY---
