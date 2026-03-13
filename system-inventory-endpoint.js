@@ -16,13 +16,23 @@ export function addInventoryEndpoint(app) {
 
   app.get("/api/system-inventory", async (req, res) => {
     try {
-      // SECURITY CHECK - require secret key
-      const secretKey = "inventory2024secure"; // Change this to whatever you want
+      // SECURITY CHECK - require secret key via header
+      const secretKey = process.env.ADMIN_DASHBOARD_KEY;
 
-      if (req.query.key !== secretKey) {
+      if (!secretKey) {
+        return res.status(403).json({
+          error: "Forbidden",
+          message: "Admin dashboard access is not configured",
+        });
+      }
+
+      const providedKey =
+        req.headers["x-api-key"] || req.headers["authorization"]?.replace("Bearer ", "");
+
+      if (providedKey !== secretKey) {
         return res.status(401).json({
           error: "Unauthorized",
-          message: "Missing or invalid key parameter",
+          message: "Missing or invalid key",
         });
       }
 

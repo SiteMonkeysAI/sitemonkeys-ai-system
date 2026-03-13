@@ -25,13 +25,23 @@ export function addTracerDashboardEndpoint(app) {
 
   app.get("/api/tracer/dashboard", (req, res) => {
     try {
-      // SECURITY CHECK - same pattern as inventory
-      const secretKey = "inventory2024secure";
+      // SECURITY CHECK - require secret key via header
+      const secretKey = process.env.ADMIN_DASHBOARD_KEY;
 
-      if (req.query.key !== secretKey) {
+      if (!secretKey) {
+        return res.status(403).json({
+          error: "Forbidden",
+          message: "Admin dashboard access is not configured",
+        });
+      }
+
+      const providedKey =
+        req.headers["x-api-key"] || req.headers["authorization"]?.replace("Bearer ", "");
+
+      if (providedKey !== secretKey) {
         return res.status(401).json({
           error: "Unauthorized",
-          message: "Missing or invalid key parameter",
+          message: "Missing or invalid key",
         });
       }
 
@@ -77,12 +87,22 @@ export function addTracerDashboardEndpoint(app) {
 
   app.get("/api/tracer/trace/:traceId", (req, res) => {
     try {
-      const secretKey = "inventory2024secure";
+      const secretKey = process.env.ADMIN_DASHBOARD_KEY;
 
-      if (req.query.key !== secretKey) {
+      if (!secretKey) {
+        return res.status(403).json({
+          error: "Forbidden",
+          message: "Admin dashboard access is not configured",
+        });
+      }
+
+      const providedKey =
+        req.headers["x-api-key"] || req.headers["authorization"]?.replace("Bearer ", "");
+
+      if (providedKey !== secretKey) {
         return res.status(401).json({
           error: "Unauthorized",
-          message: "Missing or invalid key parameter",
+          message: "Missing or invalid key",
         });
       }
 
@@ -503,10 +523,10 @@ export function addTracerDashboardEndpoint(app) {
     </div>
     
     <div class="controls">
-      <a href="/api/tracer/dashboard?key=inventory2024secure" class="btn">🔄 Refresh</a>
-      <a href="/api/tracer/dashboard?key=inventory2024secure&format=json" class="btn btn-secondary">📥 JSON</a>
-      <a href="/api/tracer/dashboard?key=inventory2024secure&filter=warnings" class="btn btn-secondary">⚠️ Warnings Only</a>
-      <a href="/api/tracer/dashboard?key=inventory2024secure&filter=errors" class="btn btn-secondary">❌ Errors Only</a>
+      <a href="/api/tracer/dashboard" class="btn">🔄 Refresh</a>
+      <a href="/api/tracer/dashboard?format=json" class="btn btn-secondary">📥 JSON</a>
+      <a href="/api/tracer/dashboard?filter=warnings" class="btn btn-secondary">⚠️ Warnings Only</a>
+      <a href="/api/tracer/dashboard?filter=errors" class="btn btn-secondary">❌ Errors Only</a>
     </div>
     
     <div class="stats-grid">
@@ -722,8 +742,8 @@ export function addTracerDashboardEndpoint(app) {
       }
       
       <div style="margin-top: 15px;">
-        <a href="/api/tracer/trace/${trace.traceId}?key=inventory2024secure" 
-           class="btn btn-secondary" 
+        <a href="/api/tracer/trace/${trace.traceId}"
+           class="btn btn-secondary"
            style="font-size: 12px; padding: 6px 12px;">
           View Full Details
         </a>
