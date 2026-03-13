@@ -1149,7 +1149,14 @@ app.get("/api/admin/cleanup-stale-memories", handleCleanupRequest);
 app.get("/api/admin/cleanup-zombies", handleZombieCleanupRequest);
 
 // Admin endpoint to create HNSW index on persistent_memories.embedding
-app.post('/api/admin/add-embedding-index', addEmbeddingIndex);
+const RateLimit = require('express-rate-limit');
+const adminEmbeddingIndexRateLimiter = RateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1, // allow only 1 index-creation request per window
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.post('/api/admin/add-embedding-index', adminEmbeddingIndexRateLimiter, addEmbeddingIndex);
 
 console.log("[SERVER] ✅ Routes configured");
 
