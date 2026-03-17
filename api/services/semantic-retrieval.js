@@ -191,9 +191,11 @@ function applySafetyCriticalBoost(memories) {
  */
 function applyOrdinalBoost(memories, query) {
   // CRITICAL TRACE #560-T3: Log function entry
-  console.log('[TRACE-T3] applyOrdinalBoost called');
-  console.log('[TRACE-T3] Query:', query?.substring(0, 100));
-  console.log('[TRACE-T3] Memories count:', memories?.length || 0);
+  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+    console.log('[TRACE-T3] applyOrdinalBoost called');
+    console.log('[TRACE-T3] Query:', query?.substring(0, 100));
+    console.log('[TRACE-T3] Memories count:', memories?.length || 0);
+  }
 
   // Ordinal patterns to detect and match
   const ORDINAL_PATTERNS = {
@@ -213,14 +215,18 @@ function applyOrdinalBoost(memories, query) {
     if (pattern.test(query)) {
       queryOrdinal = ordinalName;
       console.log(`[ORDINAL-BOOST] 🎯 Query contains ordinal: "${ordinalName}"`);
-      console.log(`[TRACE-T3] Detected ordinal: "${ordinalName}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[TRACE-T3] Detected ordinal: "${ordinalName}"`);
+      }
       break;
     }
   }
 
   // If no ordinal in query, no boost needed
   if (!queryOrdinal) {
-    console.log('[TRACE-T3] No ordinal detected in query, returning memories unchanged');
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[TRACE-T3] No ordinal detected in query, returning memories unchanged');
+    }
     return memories;
   }
 
@@ -293,10 +299,14 @@ function applyOrdinalBoost(memories, query) {
   }
 
   // CRITICAL TRACE #560-T3: Log all memory scores after boost
-  console.log('[TRACE-T3] Memories after ordinal boost (top 5):');
+  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+    console.log('[TRACE-T3] Memories after ordinal boost (top 5):');
+  }
   result.slice(0, 5).forEach((m, idx) => {
-    console.log(`[TRACE-T3]   ${idx+1}. Memory ${m.id}: score=${m.similarity?.toFixed(3)}, boosted=${m.ordinal_boosted || false}, penalized=${m.ordinal_penalized || false}`);
-    console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[TRACE-T3]   ${idx+1}. Memory ${m.id}: score=${m.similarity?.toFixed(3)}, boosted=${m.ordinal_boosted || false}, penalized=${m.ordinal_penalized || false}`);
+      console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
+    }
   });
 
   return result;
@@ -1116,8 +1126,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // STEP 0.5: Expand query with synonyms for better matching (Issue #504)
     const { expanded: expandedQuery, isPersonal, isMemoryRecall } = expandQuery(normalizedQuery);
     if (isMemoryRecall) {
-      console.log(`[A5-DEBUG] Retrieval: Memory recall query detected`);
-      console.log(`[A5-DEBUG] Retrieval: Original query: "${normalizedQuery}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[A5-DEBUG] Retrieval: Memory recall query detected`);
+        console.log(`[A5-DEBUG] Retrieval: Original query: "${normalizedQuery}"`);
+      }
     }
 
     // STEP 0.6: Detect proper names in query (FIX #577 - NUA1)
@@ -2158,13 +2170,17 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     filtered = applyDiversityReranking(filtered, topK);
 
     // CRITICAL TRACE #560-T3: Log final ranking after all boosts
-    console.log('[TRACE-T3] Final ranked memories (top 5) after hybrid scoring:');
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[TRACE-T3] Final ranked memories (top 5) after hybrid scoring:');
+    }
     filtered.slice(0, 5).forEach((m, idx) => {
-      console.log(`[TRACE-T3]   ${idx+1}. Memory ${m.id}: hybrid_score=${m.hybrid_score?.toFixed(3)}, similarity=${m.similarity?.toFixed(3)}`);
-      console.log(`[TRACE-T3]      ordinal_boosted=${m.ordinal_boosted || false}, ordinal_penalized=${m.ordinal_penalized || false}`);
-      console.log(`[TRACE-T3]      keyword_boosted=${m.keyword_boosted || false}, keyword_match_ratio=${m.keyword_match_ratio?.toFixed(2) || 'N/A'}`);
-      console.log(`[TRACE-T3]      explicit_recall_boosted=${m.explicit_recall_boosted || false}, explicit_storage=${m.explicit_storage_request || false}`);
-      console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[TRACE-T3]   ${idx+1}. Memory ${m.id}: hybrid_score=${m.hybrid_score?.toFixed(3)}, similarity=${m.similarity?.toFixed(3)}`);
+        console.log(`[TRACE-T3]      ordinal_boosted=${m.ordinal_boosted || false}, ordinal_penalized=${m.ordinal_penalized || false}`);
+        console.log(`[TRACE-T3]      keyword_boosted=${m.keyword_boosted || false}, keyword_match_ratio=${m.keyword_match_ratio?.toFixed(2) || 'N/A'}`);
+        console.log(`[TRACE-T3]      explicit_recall_boosted=${m.explicit_recall_boosted || false}, explicit_storage=${m.explicit_storage_request || false}`);
+        console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
+      }
     });
 
     // ═══════════════════════════════════════════════════════════════
@@ -2223,46 +2239,64 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ISSUE #575: STR1 DEBUG - Track Tesla/car queries through pipeline
     // ═══════════════════════════════════════════════════════════════
     if (isCarQuery) {
-      console.log('[STR1-DEBUG] ═══════════════════════════════════════════════════════');
-      console.log(`[STR1-DEBUG] Query: "${normalizedQuery}"`);
-      console.log(`[STR1-DEBUG] Candidates found: ${candidates.length}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[STR1-DEBUG] ═══════════════════════════════════════════════════════');
+        console.log(`[STR1-DEBUG] Query: "${normalizedQuery}"`);
+        console.log(`[STR1-DEBUG] Candidates found: ${candidates.length}`);
+      }
 
       // Find any Tesla memories in candidates
       const teslaCandidates = candidates.filter(c => /tesla|model\s*3/i.test(c.content || ''));
-      console.log(`[STR1-DEBUG] Tesla memories in candidates: ${teslaCandidates.length}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[STR1-DEBUG] Tesla memories in candidates: ${teslaCandidates.length}`);
+      }
       if (teslaCandidates.length > 0) {
         teslaCandidates.forEach((mem, idx) => {
-          console.log(`[STR1-DEBUG]   Tesla candidate ${idx + 1}: ID ${mem.id}`);
-          console.log(`[STR1-DEBUG]     Content: "${(mem.content || '').substring(0, 100)}"`);
-          console.log(`[STR1-DEBUG]     Has embedding: ${!!mem.embedding}`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[STR1-DEBUG]   Tesla candidate ${idx + 1}: ID ${mem.id}`);
+            console.log(`[STR1-DEBUG]     Content: "${(mem.content || '').substring(0, 100)}"`);
+            console.log(`[STR1-DEBUG]     Has embedding: ${!!mem.embedding}`);
+          }
         });
       }
 
       // Check if Tesla is in filtered results
       const teslaFiltered = filtered.filter(m => /tesla|model\s*3/i.test(m.content || ''));
-      console.log(`[STR1-DEBUG] Tesla memories after filtering: ${teslaFiltered.length}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[STR1-DEBUG] Tesla memories after filtering: ${teslaFiltered.length}`);
+      }
       if (teslaFiltered.length > 0) {
         teslaFiltered.forEach((mem, idx) => {
-          console.log(`[STR1-DEBUG]   Tesla filtered ${idx + 1}: ID ${mem.id}`);
-          console.log(`[STR1-DEBUG]     Similarity: ${mem.similarity?.toFixed(3)}`);
-          console.log(`[STR1-DEBUG]     Hybrid score: ${mem.hybrid_score?.toFixed(3)}`);
-          console.log(`[STR1-DEBUG]     Keyword boost: ${mem.keyword_boosted || false}`);
-          console.log(`[STR1-DEBUG]     Final rank: ${filtered.indexOf(mem) + 1} of ${filtered.length}`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[STR1-DEBUG]   Tesla filtered ${idx + 1}: ID ${mem.id}`);
+            console.log(`[STR1-DEBUG]     Similarity: ${mem.similarity?.toFixed(3)}`);
+            console.log(`[STR1-DEBUG]     Hybrid score: ${mem.hybrid_score?.toFixed(3)}`);
+            console.log(`[STR1-DEBUG]     Keyword boost: ${mem.keyword_boosted || false}`);
+            console.log(`[STR1-DEBUG]     Final rank: ${filtered.indexOf(mem) + 1} of ${filtered.length}`);
+          }
         });
       } else {
-        console.log('[STR1-DEBUG]   ❌ No Tesla memories passed similarity threshold');
-        console.log(`[STR1-DEBUG]   Threshold used: ${effectiveMinSimilarity}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[STR1-DEBUG]   ❌ No Tesla memories passed similarity threshold');
+          console.log(`[STR1-DEBUG]   Threshold used: ${effectiveMinSimilarity}`);
+        }
         if (teslaCandidates.length > 0) {
-          console.log('[STR1-DEBUG]   Tesla candidates were retrieved but filtered out:');
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log('[STR1-DEBUG]   Tesla candidates were retrieved but filtered out:');
+          }
           teslaCandidates.forEach(mem => {
             const scored = allScored.find(s => s.id === mem.id);
             if (scored) {
-              console.log(`[STR1-DEBUG]     ID ${mem.id}: similarity ${scored.similarity?.toFixed(3)} (below ${effectiveMinSimilarity})`);
+              if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                console.log(`[STR1-DEBUG]     ID ${mem.id}: similarity ${scored.similarity?.toFixed(3)} (below ${effectiveMinSimilarity})`);
+              }
             }
           });
         }
       }
-      console.log('[STR1-DEBUG] ═══════════════════════════════════════════════════════');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[STR1-DEBUG] ═══════════════════════════════════════════════════════');
+      }
     }
     // ═══════════════════════════════════════════════════════════════
 
@@ -2487,12 +2521,18 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ═══════════════════════════════════════════════════════════════
     if (isCarQuery) {
       const teslaInResults = results.filter(r => /tesla|model\s*3/i.test(r.content || ''));
-      console.log(`[STR1-DEBUG] Tesla in final injection: ${teslaInResults.length > 0}`);
-      if (teslaInResults.length === 0 && filtered.some(m => /tesla|model\s*3/i.test(m.content || ''))) {
-        console.log('[STR1-DEBUG]   ⚠️ Tesla was in filtered results but NOT injected (token budget or topK limit)');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[STR1-DEBUG] Tesla in final injection: ${teslaInResults.length > 0}`);
       }
-      console.log(`[STR1-DEBUG] Memories injected: ${results.map(r => r.id).join(', ')}`);
-      console.log('[STR1-DEBUG] ═══════════════════════════════════════════════════════');
+      if (teslaInResults.length === 0 && filtered.some(m => /tesla|model\s*3/i.test(m.content || ''))) {
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[STR1-DEBUG]   ⚠️ Tesla was in filtered results but NOT injected (token budget or topK limit)');
+        }
+      }
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[STR1-DEBUG] Memories injected: ${results.map(r => r.id).join(', ')}`);
+        console.log('[STR1-DEBUG] ═══════════════════════════════════════════════════════');
+      }
     }
     // ═══════════════════════════════════════════════════════════════
 
@@ -2500,9 +2540,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ISSUE #575: INF3 DEBUG - Track temporal reasoning queries
     // ═══════════════════════════════════════════════════════════════
     if (isTemporalQuery) {
-      console.log('[INF3-DEBUG] ═══════════════════════════════════════════════════════');
-      console.log(`[INF3-DEBUG] Query: "${normalizedQuery}"`);
-      console.log(`[INF3-DEBUG] Memories retrieved: ${results.length}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[INF3-DEBUG] ═══════════════════════════════════════════════════════');
+        console.log(`[INF3-DEBUG] Query: "${normalizedQuery}"`);
+        console.log(`[INF3-DEBUG] Memories retrieved: ${results.length}`);
+      }
 
       // Look for temporal facts in results
       const temporalFacts = results.filter(m => {
@@ -2510,17 +2552,29 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         return /\d{4}|years?|months?|graduated|started|worked|joined|left|duration|google|amazon|mit/.test(content);
       });
 
-      console.log(`[INF3-DEBUG] Temporal facts in results: ${temporalFacts.length}`);
-      if (temporalFacts.length > 0) {
-        console.log('[INF3-DEBUG] Memory contents:');
-        temporalFacts.forEach((mem, idx) => {
-          console.log(`[INF3-DEBUG]   ${idx + 1}. "${mem.content}"`);
-        });
-        console.log('[INF3-DEBUG] All temporal facts present: true');
-      } else {
-        console.log('[INF3-DEBUG] All temporal facts present: false');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[INF3-DEBUG] Temporal facts in results: ${temporalFacts.length}`);
       }
-      console.log('[INF3-DEBUG] ═══════════════════════════════════════════════════════');
+      if (temporalFacts.length > 0) {
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[INF3-DEBUG] Memory contents:');
+        }
+        temporalFacts.forEach((mem, idx) => {
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[INF3-DEBUG]   ${idx + 1}. "${mem.content}"`);
+          }
+        });
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[INF3-DEBUG] All temporal facts present: true');
+        }
+      } else {
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[INF3-DEBUG] All temporal facts present: false');
+        }
+      }
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[INF3-DEBUG] ═══════════════════════════════════════════════════════');
+      }
     }
     // ═══════════════════════════════════════════════════════════════
 
@@ -2572,10 +2626,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ISSUE #697: STR1 & NUA1 DIAGNOSTIC - Show final ranking with positions
     // Track exactly what memories are being returned and their rank positions
     // ═══════════════════════════════════════════════════════════════
-    console.log('[ISSUE-697] ═══════════════════════════════════════════════════════');
-    console.log(`[ISSUE-697] FINAL RESULTS: Returning ${results.length} memories`);
-    console.log('[ISSUE-697] Rank | ID | Score | Sim | Category | Content Preview');
-    console.log('[ISSUE-697] -----|-----|-------|-----|----------|------------------');
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[ISSUE-697] ═══════════════════════════════════════════════════════');
+      console.log(`[ISSUE-697] FINAL RESULTS: Returning ${results.length} memories`);
+      console.log('[ISSUE-697] Rank | ID | Score | Sim | Category | Content Preview');
+      console.log('[ISSUE-697] -----|-----|-------|-----|----------|------------------');
+    }
     results.forEach((mem, idx) => {
       const rank = idx + 1;
       const id = String(mem.id).padEnd(5);
@@ -2583,15 +2639,19 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       const sim = (mem.similarity || 0).toFixed(3);
       const cat = (mem.category_name || 'unknown').substring(0, 10).padEnd(10);
       const preview = (mem.content || '').substring(0, 50);
-      console.log(`[ISSUE-697]  #${rank.toString().padStart(2)}  | ${id} | ${score} | ${sim} | ${cat} | ${preview}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[ISSUE-697]  #${rank.toString().padStart(2)}  | ${id} | ${score} | ${sim} | ${cat} | ${preview}`);
+      }
     });
 
     // Check if there are high-ranking memories that got cut off
     if (filtered.length > results.length) {
       const cutOff = filtered.slice(results.length, Math.min(filtered.length, results.length + 5));
-      console.log('[ISSUE-697] ');
-      console.log(`[ISSUE-697] MEMORIES CUT OFF: ${filtered.length - results.length} memories didn't make it`);
-      console.log('[ISSUE-697] Next 5 memories that were cut:');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[ISSUE-697] ');
+        console.log(`[ISSUE-697] MEMORIES CUT OFF: ${filtered.length - results.length} memories didn't make it`);
+        console.log('[ISSUE-697] Next 5 memories that were cut:');
+      }
       cutOff.forEach((mem, idx) => {
         const rank = results.length + idx + 1;
         const id = String(mem.id).padEnd(5);
@@ -2599,7 +2659,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         const sim = (mem.similarity || 0).toFixed(3);
         const cat = (mem.category_name || 'unknown').substring(0, 10).padEnd(10);
         const preview = (mem.content || '').substring(0, 50);
-        console.log(`[ISSUE-697]  #${rank.toString().padStart(2)}  | ${id} | ${score} | ${sim} | ${cat} | ${preview}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[ISSUE-697]  #${rank.toString().padStart(2)}  | ${id} | ${score} | ${sim} | ${cat} | ${preview}`);
+        }
       });
     }
 
@@ -2607,14 +2669,20 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     if (isCarQuery) {
       const carInResults = results.filter(m => /car|tesla|model|vehicle|drive/i.test(m.content || ''));
       const carInFiltered = filtered.filter(m => /car|tesla|model|vehicle|drive/i.test(m.content || ''));
-      console.log('[ISSUE-697] ');
-      console.log(`[ISSUE-697] STR1 CAR QUERY: Found ${carInResults.length}/${carInFiltered.length} car-related memories in results`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[ISSUE-697] ');
+        console.log(`[ISSUE-697] STR1 CAR QUERY: Found ${carInResults.length}/${carInFiltered.length} car-related memories in results`);
+      }
       if (carInFiltered.length > carInResults.length) {
         const missing = carInFiltered.filter(m => !results.find(r => r.id === m.id));
-        console.log(`[ISSUE-697] STR1 MISSING: ${missing.length} car memories were filtered but not returned`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[ISSUE-697] STR1 MISSING: ${missing.length} car memories were filtered but not returned`);
+        }
         missing.forEach(mem => {
           const rank = filtered.indexOf(mem) + 1;
-          console.log(`[ISSUE-697]   Rank #${rank}: ID ${mem.id}, Score ${(mem.hybrid_score || 0).toFixed(3)}, "${(mem.content || '').substring(0, 60)}"`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[ISSUE-697]   Rank #${rank}: ID ${mem.id}, Score ${(mem.hybrid_score || 0).toFixed(3)}, "${(mem.content || '').substring(0, 60)}"`);
+          }
         });
       }
     }
@@ -2623,21 +2691,29 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     if (detectedEntities.length > 0) {
       const entitiesInResults = results.filter(m => m.entity_boosted);
       const entitiesInFiltered = filtered.filter(m => m.entity_boosted);
-      console.log('[ISSUE-697] ');
-      console.log(`[ISSUE-697] NUA1 ENTITY QUERY: Detected entities [${detectedEntities.join(', ')}]`);
-      console.log(`[ISSUE-697] NUA1 ENTITY QUERY: Found ${entitiesInResults.length}/${entitiesInFiltered.length} entity-boosted memories in results`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[ISSUE-697] ');
+        console.log(`[ISSUE-697] NUA1 ENTITY QUERY: Detected entities [${detectedEntities.join(', ')}]`);
+        console.log(`[ISSUE-697] NUA1 ENTITY QUERY: Found ${entitiesInResults.length}/${entitiesInFiltered.length} entity-boosted memories in results`);
+      }
       if (entitiesInFiltered.length > entitiesInResults.length) {
         const missing = entitiesInFiltered.filter(m => !results.find(r => r.id === m.id));
-        console.log(`[ISSUE-697] NUA1 MISSING: ${missing.length} entity-boosted memories were filtered but not returned`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[ISSUE-697] NUA1 MISSING: ${missing.length} entity-boosted memories were filtered but not returned`);
+        }
         missing.forEach(mem => {
           const rank = filtered.indexOf(mem) + 1;
           const entities = mem.matched_entities ? mem.matched_entities.join(', ') : 'unknown';
-          console.log(`[ISSUE-697]   Rank #${rank}: ID ${mem.id}, Score ${(mem.hybrid_score || 0).toFixed(3)}, Entities [${entities}]`);
-          console.log(`[ISSUE-697]     Content: "${(mem.content || '').substring(0, 80)}"`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[ISSUE-697]   Rank #${rank}: ID ${mem.id}, Score ${(mem.hybrid_score || 0).toFixed(3)}, Entities [${entities}]`);
+            console.log(`[ISSUE-697]     Content: "${(mem.content || '').substring(0, 80)}"`);
+          }
         });
       }
     }
-    console.log('[ISSUE-697] ═══════════════════════════════════════════════════════');
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[ISSUE-697] ═══════════════════════════════════════════════════════');
+    }
     // ═══════════════════════════════════════════════════════════════
 
     // Clean up results (remove embeddings from response to save bandwidth)

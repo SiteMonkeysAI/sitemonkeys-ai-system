@@ -808,23 +808,31 @@ export class Orchestrator {
       // STEP 0.4: MEMORY VISIBILITY REQUEST DETECTION (UX-046)
       // Detect if user is asking to see their stored memories
       // NOW USES SEMANTIC ANALYZER instead of regex patterns
-      console.log('[VISIBILITY-DIAG] ════════════════════════════════════════');
-      console.log('[VISIBILITY-DIAG] Input message:', message);
-      console.log('[VISIBILITY-DIAG] Message length:', message.length);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[VISIBILITY-DIAG] ════════════════════════════════════════');
+        console.log('[VISIBILITY-DIAG] Input message:', message);
+        console.log('[VISIBILITY-DIAG] Message length:', message.length);
+      }
 
       let isMemoryVisibilityRequest = false;
 
       try {
         // Use semantic analyzer for intent detection
-        console.log('[VISIBILITY-DIAG] Using semantic analyzer for intent detection...');
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[VISIBILITY-DIAG] Using semantic analyzer for intent detection...');
+        }
         const intentResult = await this.semanticAnalyzer.analyzeIntent(message);
 
         if (intentResult.intent === 'MEMORY_VISIBILITY') {
           isMemoryVisibilityRequest = true;
           console.log(`[SEMANTIC-VISIBILITY] Intent detected, similarity: ${intentResult.confidence.toFixed(2)}`);
-          console.log(`[VISIBILITY-DIAG] ✅ Semantic analyzer detected MEMORY_VISIBILITY intent (confidence: ${intentResult.confidence.toFixed(3)})`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[VISIBILITY-DIAG] ✅ Semantic analyzer detected MEMORY_VISIBILITY intent (confidence: ${intentResult.confidence.toFixed(3)})`);
+          }
         } else {
-          console.log(`[VISIBILITY-DIAG] Semantic analyzer detected intent: ${intentResult.intent} (confidence: ${intentResult.confidence.toFixed(3)})`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[VISIBILITY-DIAG] Semantic analyzer detected intent: ${intentResult.intent} (confidence: ${intentResult.confidence.toFixed(3)})`);
+          }
         }
       } catch (error) {
         console.error('[VISIBILITY-DIAG] ⚠️ Semantic analyzer failed, using regex fallback:', error.message);
@@ -848,15 +856,21 @@ export class Orchestrator {
               msgLower.includes('see my memories') ||
               msgLower.includes('view stored')) {
             isMemoryVisibilityRequest = true;
-            console.log('[VISIBILITY-DIAG] Matched via safe string fallback');
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log('[VISIBILITY-DIAG] Matched via safe string fallback');
+            }
           }
         }
       }
 
-      console.log(`[VISIBILITY-DIAG] Final decision: ${isMemoryVisibilityRequest}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[VISIBILITY-DIAG] Final decision: ${isMemoryVisibilityRequest}`);
+      }
 
       if (isMemoryVisibilityRequest) {
-        console.log('[VISIBILITY-DIAG] ✅ TRIGGERING MEMORY VISIBILITY HANDLER');
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[VISIBILITY-DIAG] ✅ TRIGGERING MEMORY VISIBILITY HANDLER');
+        }
         this.log(`[MEMORY-VISIBILITY] Detected memory visibility request`);
 
         try {
@@ -2633,15 +2647,21 @@ export class Orchestrator {
         
         // DIAGNOSTIC: NUA1 - Log all memory scores before cap (especially for ambiguity testing)
         if (result.memories && result.memories.length > 0) {
-          console.log('[DIAG-NUA1] ═══════════════════════════════════════════════════════');
-          console.log(`[DIAG-NUA1] Retrieved ${result.memories.length} memories before MAX_MEMORIES_FINAL cap`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log('[DIAG-NUA1] ═══════════════════════════════════════════════════════');
+            console.log(`[DIAG-NUA1] Retrieved ${result.memories.length} memories before MAX_MEMORIES_FINAL cap`);
+          }
           result.memories.forEach((mem, idx) => {
             const preview = (mem.content || '').substring(0, 80).replace(/\n/g, ' ');
             const score = (mem.hybrid_score || mem.similarity || 0).toFixed(3);
             const will_inject = idx < MAX_MEMORIES_FINAL ? 'INJECT' : 'CUT';
-            console.log(`[DIAG-NUA1]   #${idx + 1} [${will_inject}] ID:${mem.id} Score:${score} "${preview}"`);
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(`[DIAG-NUA1]   #${idx + 1} [${will_inject}] ID:${mem.id} Score:${score} "${preview}"`);
+            }
           });
-          console.log('[DIAG-NUA1] ═══════════════════════════════════════════════════════');
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log('[DIAG-NUA1] ═══════════════════════════════════════════════════════');
+          }
         }
         
         memoriesToFormat = result.memories.slice(0, MAX_MEMORIES_FINAL);
@@ -2714,14 +2734,18 @@ export class Orchestrator {
           m.metadata?.explicit_storage_request === true
         );
         if (zebraMemoryPresent) {
-          console.log(`[A5-DEBUG] Orchestrator: zebra_memory_in_context=true`);
-          console.log(`[A5-DEBUG] Orchestrator: Injecting ${memoriesToFormat.length} memories into AI context`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[A5-DEBUG] Orchestrator: zebra_memory_in_context=true`);
+            console.log(`[A5-DEBUG] Orchestrator: Injecting ${memoriesToFormat.length} memories into AI context`);
+          }
           memoriesToFormat.filter(m => 
             /zebra|anchor/i.test(m.content || '') || 
             m.metadata?.explicit_storage_request === true
           ).forEach(m => {
-            console.log(`[A5-DEBUG] Orchestrator:   Memory ${m.id}: explicit=${m.metadata?.explicit_storage_request || false}`);
-            console.log(`[A5-DEBUG] Orchestrator:   Content: "${(m.content || '').substring(0, 100)}"`);
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(`[A5-DEBUG] Orchestrator:   Memory ${m.id}: explicit=${m.metadata?.explicit_storage_request || false}`);
+              console.log(`[A5-DEBUG] Orchestrator:   Content: "${(m.content || '').substring(0, 100)}"`);
+            }
           });
         }
         
@@ -4789,9 +4813,13 @@ When using this memory context, a caring family member would naturally apply tem
 
       // FIX #721 STR1: Log what memories are being injected
       const memoryLines = memoryText.split('\n').filter(line => line.trim().length > 0);
-      console.log(`[STR1-DEBUG] Injecting ${memoryLines.length} memory lines into prompt`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[STR1-DEBUG] Injecting ${memoryLines.length} memory lines into prompt`);
+      }
       memoryLines.slice(0, 5).forEach((line, idx) => {
-        console.log(`[STR1-DEBUG]   Memory ${idx + 1}: "${line.substring(0, 100)}"`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[STR1-DEBUG]   Memory ${idx + 1}: "${line.substring(0, 100)}"`);
+        }
       });
 
       contextStr += `
@@ -5848,13 +5876,17 @@ Mode: ${modeConfig?.display_name || mode}
               const content = (row.content || '').substring(0, 500);
 
               // FIX #721 INF3: Add debug telemetry for DB query path
-              console.log(`[INF3-DEBUG] DB row content: "${content.substring(0, 150)}"`);
+              if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                console.log(`[INF3-DEBUG] DB row content: "${content.substring(0, 150)}"`);
+              }
 
               if (!duration) {
                 const durationMatch = content.match(/(?:worked|for|spent)\s+(\d+)\s+years?/i);
                 if (durationMatch) {
                   duration = parseInt(durationMatch[1]);
-                  console.log(`[INF3-DEBUG] Found duration=${duration} from DB`);
+                  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                    console.log(`[INF3-DEBUG] Found duration=${duration} from DB`);
+                  }
                 }
               }
 
@@ -5863,7 +5895,9 @@ Mode: ${modeConfig?.display_name || mode}
                 const startedInYear = content.match(/\b(started|joined|began)\b.*?\bin\s+((19|20)\d{2})/i);
                 if (startedInYear) {
                   startYear = parseInt(startedInYear[2]);
-                  console.log(`[INF3-DEBUG] Found startYear=${startYear} from "started/joined/began...in YYYY" in DB`);
+                  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                    console.log(`[INF3-DEBUG] Found startYear=${startYear} from "started/joined/began...in YYYY" in DB`);
+                  }
                 }
               }
 
@@ -5872,7 +5906,9 @@ Mode: ${modeConfig?.display_name || mode}
                 const leftInYear = content.match(/\b(left|quit|ended)\b.*?\bin\s+((19|20)\d{2})/i);
                 if (leftInYear) {
                   endYear = parseInt(leftInYear[2]);
-                  console.log(`[INF3-DEBUG] Found endYear=${endYear} from "left...in YYYY" in DB`);
+                  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                    console.log(`[INF3-DEBUG] Found endYear=${endYear} from "left...in YYYY" in DB`);
+                  }
                 }
 
                 // Second try: "until YYYY" or "through YYYY"
@@ -5880,7 +5916,9 @@ Mode: ${modeConfig?.display_name || mode}
                   const untilYear = content.match(/\b(until|through)\s+((19|20)\d{2})/i);
                   if (untilYear) {
                     endYear = parseInt(untilYear[2]);
-                    console.log(`[INF3-DEBUG] Found endYear=${endYear} from "until/through YYYY" in DB`);
+                    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                      console.log(`[INF3-DEBUG] Found endYear=${endYear} from "until/through YYYY" in DB`);
+                    }
                   }
                 }
 
@@ -5890,10 +5928,14 @@ Mode: ${modeConfig?.display_name || mode}
                   if (anyYear) {
                     if (/\b(started|joined|began)\b/i.test(content)) {
                       startYear = parseInt(anyYear[0]);
-                      console.log(`[INF3-DEBUG] Found startYear=${startYear} from year with start context in DB`);
+                      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                        console.log(`[INF3-DEBUG] Found startYear=${startYear} from year with start context in DB`);
+                      }
                     } else {
                       endYear = parseInt(anyYear[0]);
-                      console.log(`[INF3-DEBUG] Found endYear=${endYear} from any year fallback in DB`);
+                      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                        console.log(`[INF3-DEBUG] Found endYear=${endYear} from any year fallback in DB`);
+                      }
                     }
                   }
                 }
@@ -6578,7 +6620,9 @@ Mode: ${modeConfig?.display_name || mode}
         q.includes("list my");
 
       // FIX #721 CMP2: Add debug telemetry to diagnose contact query detection
-      console.log(`[CMP2-DEBUG] q="${q.substring(0, 100)}" isContactQuery=${isContactQuery}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[CMP2-DEBUG] q="${q.substring(0, 100)}" isContactQuery=${isContactQuery}`);
+      }
 
       if (!isContactQuery) {
         console.log(`[UNICODE-AUTHORITATIVE] skipped reason=not_contact_query`);
@@ -6814,7 +6858,9 @@ Mode: ${modeConfig?.display_name || mode}
       const ageAsked = agePattern.test(query);
 
       // FIX #721 INF1: Add debug telemetry
-      console.log(`[INF1-DEBUG] query="${query}" age_asked=${ageAsked}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[INF1-DEBUG] query="${query}" age_asked=${ageAsked}`);
+      }
 
       if (!ageAsked) {
         console.log(`[AGE-INFERENCE] skipped reason=age_not_explicitly_asked`);

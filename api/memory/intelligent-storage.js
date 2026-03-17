@@ -122,7 +122,9 @@ export class IntelligentMemoryStorage {
     }
 
     const factsLower = facts.toLowerCase();
-    console.log('[SEMANTIC-FINGERPRINT] Analyzing facts:', facts.substring(0, 100));
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[SEMANTIC-FINGERPRINT] Analyzing facts:', facts.substring(0, 100));
+    }
 
     // CANONICAL FACT PATTERNS - Semantic, comprehensive detection
     // These patterns work on CLEANED facts, not raw user input
@@ -235,7 +237,9 @@ export class IntelligentMemoryStorage {
         if (pattern.valuePatterns) {
           const hasValue = pattern.valuePatterns.some(vp => vp.test(facts));
           if (hasValue) {
-            console.log(`[SEMANTIC-FINGERPRINT] ✅ Detected ${pattern.id} from facts (indicator + value, confidence: ${pattern.confidence})`);
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(`[SEMANTIC-FINGERPRINT] ✅ Detected ${pattern.id} from facts (indicator + value, confidence: ${pattern.confidence})`);
+            }
             return {
               fingerprint: pattern.id,
               confidence: pattern.confidence,
@@ -244,7 +248,9 @@ export class IntelligentMemoryStorage {
           } else {
             // Indicator found but no value - assign with LOWER confidence
             // This ensures supersession still triggers, just with less certainty
-            console.log(`[SEMANTIC-FINGERPRINT] ⚠️ Found ${pattern.id} indicator but no value pattern - assigning with reduced confidence`);
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(`[SEMANTIC-FINGERPRINT] ⚠️ Found ${pattern.id} indicator but no value pattern - assigning with reduced confidence`);
+            }
             return {
               fingerprint: pattern.id,
               confidence: pattern.confidence * 0.6,  // 60% of normal confidence
@@ -253,7 +259,9 @@ export class IntelligentMemoryStorage {
           }
         } else {
           // No value pattern required, indicator is sufficient
-          console.log(`[SEMANTIC-FINGERPRINT] ✅ Detected ${pattern.id} from facts (semantic indicator, confidence: ${pattern.confidence})`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[SEMANTIC-FINGERPRINT] ✅ Detected ${pattern.id} from facts (semantic indicator, confidence: ${pattern.confidence})`);
+          }
           return {
             fingerprint: pattern.id,
             confidence: pattern.confidence,
@@ -263,7 +271,9 @@ export class IntelligentMemoryStorage {
       }
     }
 
-    console.log('[SEMANTIC-FINGERPRINT] ❌ No fingerprint detected in facts');
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[SEMANTIC-FINGERPRINT] ❌ No fingerprint detected in facts');
+    }
     return { fingerprint: null, confidence: 0, method: 'no_match' };
   }
 
@@ -565,7 +575,9 @@ export class IntelligentMemoryStorage {
     // SECURITY: Bound input to prevent ReDoS (CodeQL fix for polynomial regex)
     const safeContent = content.substring(0, 500);
 
-    console.log(`[STORAGE-CONTRACT] unicode_input="${safeContent.substring(0, 100)}"`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[STORAGE-CONTRACT] unicode_input="${safeContent.substring(0, 100)}"`);
+    }
 
     // Pattern 1: Multi-word names like "José García-López", "O'Shaughnessy", "Zhang-Müller"
     // Uses Unicode property escapes for proper international character support
@@ -597,7 +609,9 @@ export class IntelligentMemoryStorage {
     // Combine all matches and deduplicate
     const allMatches = [...new Set([...multiMatches, ...singleMatches, ...cjkMatches, ...adjacentMatches])];
 
-    console.log(`[STORAGE-CONTRACT] pattern_matches=${JSON.stringify(allMatches)}`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[STORAGE-CONTRACT] pattern_matches=${JSON.stringify(allMatches)}`);
+    }
 
     // Clean up matches
     const unicodeNames = allMatches
@@ -635,12 +649,16 @@ export class IntelligentMemoryStorage {
 
     for (const descriptor of descriptors) {
       if (contentLower.includes(descriptor)) {
-        console.log(`[STORAGE-CONTRACT] descriptor_content="${content.substring(0, 50)}" detected="${descriptor}"`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[STORAGE-CONTRACT] descriptor_content="${content.substring(0, 50)}" detected="${descriptor}"`);
+        }
         return descriptor;
       }
     }
 
-    console.log(`[STORAGE-CONTRACT] descriptor_content="${content.substring(0, 50)}" detected="unknown"`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[STORAGE-CONTRACT] descriptor_content="${content.substring(0, 50)}" detected="unknown"`);
+    }
     return 'unknown';
   }
 
@@ -927,10 +945,14 @@ export class IntelligentMemoryStorage {
       console.log('[TRACE-INTELLIGENT] I5. aiResponse length:', aiResponse?.length || 0);
 
       // CRITICAL TRACE #560: Log the actual user message for T2 debugging
-      console.log('[TRACE-T2] User message:', userMessage?.substring(0, 200));
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-T2] User message:', userMessage?.substring(0, 200));
+      }
 
       // STORAGE CONTRACT DIAGNOSTIC LOGGING (Issue #648)
-      console.log(`[STORAGE-CONTRACT] input_length=${userMessage?.length || 0} first_100_chars="${userMessage?.substring(0, 100) || ''}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[STORAGE-CONTRACT] input_length=${userMessage?.length || 0} first_100_chars="${userMessage?.substring(0, 100) || ''}"`);
+      }
 
       console.log('[INTELLIGENT-STORAGE] 🧠 Processing conversation for intelligent storage');
 
@@ -945,10 +967,14 @@ export class IntelligentMemoryStorage {
 
       // FIX #557-T2: Check for explicit memory storage requests FIRST
       // When user says "Remember this exactly: X", store X verbatim without compression
-      console.log('[TRACE-T2] Calling detectExplicitMemoryRequest...');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-T2] Calling detectExplicitMemoryRequest...');
+      }
       const explicitRequest = this.detectExplicitMemoryRequest(userMessage);
-      console.log('[TRACE-T2] detectExplicitMemoryRequest result:', JSON.stringify(explicitRequest));
-      console.log(`[A5-DEBUG] Storage: detectExplicitMemoryRequest returned: ${JSON.stringify(explicitRequest)}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-T2] detectExplicitMemoryRequest result:', JSON.stringify(explicitRequest));
+        console.log(`[A5-DEBUG] Storage: detectExplicitMemoryRequest returned: ${JSON.stringify(explicitRequest)}`);
+      }
 
       if (explicitRequest.isExplicit) {
         console.log('[INTELLIGENT-STORAGE] 🎯 EXPLICIT MEMORY REQUEST - storing verbatim without compression');
@@ -984,8 +1010,10 @@ export class IntelligentMemoryStorage {
         explicitMetadata = this.extractAndPersistAnchors(verbatimFacts, explicitMetadata);
 
         const result = await this.storeCompressedMemory(userId, category, verbatimFacts, explicitMetadata, mode);
-        console.log(`[A5-DEBUG] Storage: Set explicit_storage_request=true in metadata`);
-        console.log(`[A5-DEBUG] Storage: Set wait_for_embedding=true in metadata`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[A5-DEBUG] Storage: Set explicit_storage_request=true in metadata`);
+          console.log(`[A5-DEBUG] Storage: Set wait_for_embedding=true in metadata`);
+        }
 
         console.log('[INTELLIGENT-STORAGE] ✅ Explicit memory stored verbatim');
         return result;
@@ -1111,7 +1139,9 @@ export class IntelligentMemoryStorage {
       console.log('[FLOW] Step 1: Facts extracted ✓');
 
       // STORAGE CONTRACT DIAGNOSTIC LOGGING (Issue #648)
-      console.log(`[STORAGE-CONTRACT] extracted_facts_length=${facts?.length || 0} first_100_chars="${facts?.substring(0, 100) || ''}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[STORAGE-CONTRACT] extracted_facts_length=${facts?.length || 0} first_100_chars="${facts?.substring(0, 100) || ''}"`);
+      }
 
       // Post-extraction validation: reject facts containing system component metadata
       // Prevents AI architecture terms (truthTypeDetector, externalLookupEngine, etc.)
@@ -1487,7 +1517,9 @@ Facts (preserve user terminology + add synonyms):`;
 
     try {
       // CMP2/EDG3 DIAGNOSTIC: Log input BEFORE compression so we can verify what GPT-4o-mini receives
-      console.log(`[COMPRESSION-DIAG] INPUT userMsg="${userMsg.substring(0, 150)}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[COMPRESSION-DIAG] INPUT userMsg="${userMsg.substring(0, 150)}"`);
+      }
 
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -1499,7 +1531,9 @@ Facts (preserve user terminology + add synonyms):`;
       let facts = response.choices[0].message.content.trim();
 
       // CMP2/EDG3 DIAGNOSTIC: Log raw GPT-4o-mini output BEFORE any post-processing
-      console.log(`[COMPRESSION-DIAG] RAW_OUTPUT="${facts.substring(0, 200)}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[COMPRESSION-DIAG] RAW_OUTPUT="${facts.substring(0, 200)}"`);
+      }
 
       // CRITICAL: Post-processing protection - verify identifiers survived
       facts = this.protectHighEntropyTokens(userMsg, facts);
@@ -1602,7 +1636,9 @@ Facts (preserve user terminology + add synonyms):`;
           // Preserve original names with all special characters
           facts += '\nContacts: ' + missingNames.join(', ');
           // CMP2 DIAGNOSTIC: confirm re-injection executed
-          console.log(`[COMPRESSION-DIAG] CMP2_REINJECT facts_after="${facts.substring(0, 200)}"`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[COMPRESSION-DIAG] CMP2_REINJECT facts_after="${facts.substring(0, 200)}"`);
+          }
         } else {
           console.log(`[EXTRACTION-FIX #759] All ${inputNames.length} international names preserved in extraction`);
         }
@@ -1700,26 +1736,34 @@ Facts (preserve user terminology + add synonyms):`;
 
       if (hasAssistantLanguage) {
         console.log('[INTELLIGENT-STORAGE] ⚠️ Extracted facts contain assistant boilerplate, rejecting');
-        console.log(`[EXTRACTION-DEBUG] Rejected facts: "${facts.substring(0, 100)}"`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[EXTRACTION-DEBUG] Rejected facts: "${facts.substring(0, 100)}"`);
+        }
         // Return empty string to trigger fallback to user message
         return '';
       }
 
       if (hasHistoricalLanguage) {
         console.log('[INTELLIGENT-STORAGE] ⚠️ Extracted facts contain historical references from AI, rejecting');
-        console.log(`[EXTRACTION-DEBUG] Rejected historical facts: "${facts.substring(0, 100)}"`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[EXTRACTION-DEBUG] Rejected historical facts: "${facts.substring(0, 100)}"`);
+        }
         // Return empty string to trigger fallback to user message
         return '';
       }
 
       // CMP2/EDG3 DIAGNOSTIC: Log pre-aggressivePostProcessing state
-      console.log(`[COMPRESSION-DIAG] PRE_POSTPROCESS="${facts.substring(0, 200)}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[COMPRESSION-DIAG] PRE_POSTPROCESS="${facts.substring(0, 200)}"`);
+      }
 
       // AGGRESSIVE POST-PROCESSING: Guarantee 10-20:1 compression
       const processedFacts = this.aggressivePostProcessing(facts);
 
       // CMP2/EDG3 DIAGNOSTIC: Log post-aggressivePostProcessing state to see what was lost
-      console.log(`[COMPRESSION-DIAG] POST_POSTPROCESS="${processedFacts.substring(0, 200)}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[COMPRESSION-DIAG] POST_POSTPROCESS="${processedFacts.substring(0, 200)}"`);
+      }
 
       // ISSUE #824 FIX: Quality gate — reject over-compressed fragments.
       // "reputational.", "architecture:." are the result of aggressive compression
@@ -1751,9 +1795,13 @@ Facts (preserve user terminology + add synonyms):`;
           console.warn(`[EXTRACTION-FIX #CMP2] ${missingAfterCompression.length} international name(s) lost during aggressivePostProcessing, re-injecting:`, missingAfterCompression);
           finalFacts += '\nContacts: ' + missingAfterCompression.join(', ');
           // CMP2 DIAGNOSTIC: confirm post-aggressivePostProcessing re-injection executed
-          console.log(`[COMPRESSION-DIAG] CMP2_POST_REINJECT finalFacts="${finalFacts.substring(0, 200)}"`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[COMPRESSION-DIAG] CMP2_POST_REINJECT finalFacts="${finalFacts.substring(0, 200)}"`);
+          }
         } else {
-          console.log(`[COMPRESSION-DIAG] CMP2_POST_CHECK all ${inputNames.length} name(s) survived aggressivePostProcessing`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[COMPRESSION-DIAG] CMP2_POST_CHECK all ${inputNames.length} name(s) survived aggressivePostProcessing`);
+          }
         }
       }
 
@@ -1784,8 +1832,10 @@ Facts (preserve user terminology + add synonyms):`;
       }
 
       console.log(`[INTELLIGENT-STORAGE] ✅ Extracted ${finalFacts.split('\n').filter(l => l.trim()).length} facts`);
-      console.log(`[EXTRACTION-DEBUG] Original: "${originalSnippet}"`);
-      console.log(`[EXTRACTION-DEBUG] Extracted: "${finalFacts.substring(0, 150)}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[EXTRACTION-DEBUG] Original: "${originalSnippet}"`);
+        console.log(`[EXTRACTION-DEBUG] Extracted: "${finalFacts.substring(0, 150)}"`);
+      }
 
       return finalFacts;
     } catch (error) {
@@ -2214,14 +2264,18 @@ Facts (preserve user terminology + add synonyms):`;
           const newDescriptor = this.getDescriptorSignature(facts);
 
           // STORAGE CONTRACT DIAGNOSTIC LOGGING (Issue #648)
-          console.log(`[STORAGE-CONTRACT] dedup_decision existing_id=${row.id} existing_desc="${existingDescriptor}" new_desc="${newDescriptor}"`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[STORAGE-CONTRACT] dedup_decision existing_id=${row.id} existing_desc="${existingDescriptor}" new_desc="${newDescriptor}"`);
+          }
 
           // FIX #648-NUA1: Block merge if EITHER descriptor is known and they differ
           // Original logic required BOTH to be non-unknown, but we should block if we detect ANY descriptor mismatch
           if ((existingDescriptor !== 'unknown' || newDescriptor !== 'unknown') && existingDescriptor !== newDescriptor) {
             console.log(`[DEDUP] force_separate=true reason=descriptor_mismatch existing="${existingDescriptor}" new="${newDescriptor}"`);
             console.log(`[DEDUP] ⏭️ Same entity name but different relationship - storing as separate memory`);
-            console.log(`[STORAGE-CONTRACT] dedup_decision action=force_separate reason=descriptor_mismatch`);
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(`[STORAGE-CONTRACT] dedup_decision action=force_separate reason=descriptor_mismatch`);
+            }
             // Return null means "no duplicate found" - caller will proceed to store new memory normally
             return null;
           }
@@ -2287,7 +2341,9 @@ Facts (preserve user terminology + add synonyms):`;
       console.log('[TRACE-INTELLIGENT] I11. category:', category);
       console.log('[TRACE-INTELLIGENT] I12. facts length:', facts?.length || 0);
       console.log('[TRACE-INTELLIGENT] I12a. mode (normalized):', normalizedMode);
-      console.log('[SESSION-DIAG] Storing for userId:', userId);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[SESSION-DIAG] Storing for userId:', userId);
+      }
 
       // GUARD: Refuse to store empty or meaningless content at database layer
       const isMeaningless = !facts ||
@@ -2582,7 +2638,9 @@ Facts (preserve user terminology + add synonyms):`;
 
       // STORAGE CONTRACT DIAGNOSTIC LOGGING (Issue #648)
       const metadataKeys = Object.keys(metadata || {}).join(',');
-      console.log(`[STORAGE-CONTRACT] stored_id=${memoryId} category=${category} metadata_keys=${metadataKeys}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[STORAGE-CONTRACT] stored_id=${memoryId} category=${category} metadata_keys=${metadataKeys}`);
+      }
 
       // ANCHOR STORAGE DIAGNOSTIC LOGGING (Issue #656)
       // Prove anchors are persisted at storage time

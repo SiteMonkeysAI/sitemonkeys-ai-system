@@ -414,10 +414,12 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
 
     // Map user_id to userId for internal use
     // Check all possible sources for consistency (UX-044)
-    console.log('[SESSION-DIAG] ════════════════════════════════════════');
-    console.log('[SESSION-DIAG] Headers x-user-id:', req.headers['x-user-id']);
-    console.log('[SESSION-DIAG] Body user_id:', user_id);
-    console.log('[SESSION-DIAG] Query userId:', req.query?.userId);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[SESSION-DIAG] ════════════════════════════════════════');
+      console.log('[SESSION-DIAG] Headers x-user-id:', req.headers['x-user-id']);
+      console.log('[SESSION-DIAG] Body user_id:', user_id);
+      console.log('[SESSION-DIAG] Query userId:', req.query?.userId);
+    }
 
     // CRITICAL FIX #553: Do NOT default to "anonymous" - require explicit user_id
     const userId = user_id || req.headers['x-user-id'] || req.query?.userId;
@@ -425,7 +427,9 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
     // TRACE LOGGING - Step 1 & 2
     console.log("[TRACE] 1. Received user_id from request:", user_id);
     console.log("[TRACE] 2. Mapped to userId:", userId);
-    console.log('[SESSION-DIAG] Final userId:', userId);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[SESSION-DIAG] Final userId:', userId);
+    }
 
     // CRITICAL VALIDATION #553: Reject requests without valid user_id
     // This prevents cross-user memory retrieval when user_id is missing
