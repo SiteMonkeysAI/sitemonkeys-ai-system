@@ -40,7 +40,7 @@ export default async function handler(req, res) {
   const { Pool } = await import('pg');
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false
   });
 
   const { action = 'retrieve', userId, query, mode = 'truth-general', limit = 10 } = req.query;
