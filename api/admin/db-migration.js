@@ -84,14 +84,14 @@ function validateMigrationRequest(req, res) {
 function getDatabasePools() {
   const oldPool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
     max: 5,
     connectionTimeoutMillis: 10000
   });
 
   const newPool = new Pool({
     connectionString: process.env.NEW_DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
     max: 5,
     connectionTimeoutMillis: 10000
   });
@@ -615,7 +615,7 @@ export async function setupVector(req, res) {
     const { Client } = await import('pg');
     client = new Client({
       connectionString: newDbUrl,
-      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+      ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false
     });
     await client.connect();
 
@@ -711,7 +711,7 @@ export async function addEmbeddingIndex(req, res) {
   // Create a dedicated pool for this operation
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false,
     max: 3,
     connectionTimeoutMillis: 10000
   });
