@@ -2554,9 +2554,11 @@ export class Orchestrator {
   async #retrieveMemoryContext(userId, message, options = {}) {
     const { mode = 'truth-general', tokenBudget = 2000, previousMode = null } = options;
 
-    console.log('[CROSS-MODE-DIAG] ════════════════════════════════════════');
-    console.log('[CROSS-MODE-DIAG] Current mode:', mode);
-    console.log('[CROSS-MODE-DIAG] Previous mode:', previousMode);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[CROSS-MODE-DIAG] ════════════════════════════════════════');
+      console.log('[CROSS-MODE-DIAG] Current mode:', mode);
+      console.log('[CROSS-MODE-DIAG] Previous mode:', previousMode);
+    }
 
     let telemetry = {
       method: 'keyword_fallback',
@@ -2586,12 +2588,18 @@ export class Orchestrator {
       if (mode === 'site-monkeys' || mode === 'site_monkeys') {
         // Site monkeys has access to everything including vault
         allowCrossMode = false; // Use all modes, handled by buildPrefilterQuery
-        console.log('[CROSS-MODE-DIAG] Site Monkeys mode - accessing all modes including vault');
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[CROSS-MODE-DIAG] Site Monkeys mode - accessing all modes including vault');
+        }
       } else {
-        console.log('[CROSS-MODE-DIAG] ✅ Cross-mode transfer ENABLED by default - including truth-general memories');
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[CROSS-MODE-DIAG] ✅ Cross-mode transfer ENABLED by default - including truth-general memories');
+        }
       }
 
-      console.log('[CROSS-MODE-DIAG] allowCrossMode:', allowCrossMode);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[CROSS-MODE-DIAG] allowCrossMode:', allowCrossMode);
+      }
 
       // EXECUTION PROOF - Verify memory retrieval is active
       console.log('[PROOF] orchestrator:memory-retrieval v=2026-01-29a file=api/core/orchestrator.js fn=processMessage');
@@ -2706,26 +2714,28 @@ export class Orchestrator {
 
           // Show what was cut off
           const cutOffMemories = result.memories.slice(MAX_MEMORIES_FINAL);
-          console.log('[ISSUE-697-ORCH] ═══════════════════════════════════════════════════════');
-          console.log(`[ISSUE-697-ORCH] ORCHESTRATOR CAP: ${cutOffMemories.length} memories cut by MAX_MEMORIES_FINAL=${MAX_MEMORIES_FINAL}`);
-          console.log('[ISSUE-697-ORCH] Memories that were CUT OFF:');
-          cutOffMemories.slice(0, 5).forEach((mem, idx) => {
-            const originalRank = MAX_MEMORIES_FINAL + idx + 1;
-            const score = (mem.hybrid_score || 0).toFixed(3);
-            const sim = (mem.similarity || 0).toFixed(3);
-            const preview = (mem.content || '').substring(0, 60);
-            console.log(`[ISSUE-697-ORCH]   Was rank #${originalRank}: ID ${mem.id}, Score ${score}, Sim ${sim}`);
-            console.log(`[ISSUE-697-ORCH]     Content: "${preview}"`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log('[ISSUE-697-ORCH] ═══════════════════════════════════════════════════════');
+            console.log(`[ISSUE-697-ORCH] ORCHESTRATOR CAP: ${cutOffMemories.length} memories cut by MAX_MEMORIES_FINAL=${MAX_MEMORIES_FINAL}`);
+            console.log('[ISSUE-697-ORCH] Memories that were CUT OFF:');
+            cutOffMemories.slice(0, 5).forEach((mem, idx) => {
+              const originalRank = MAX_MEMORIES_FINAL + idx + 1;
+              const score = (mem.hybrid_score || 0).toFixed(3);
+              const sim = (mem.similarity || 0).toFixed(3);
+              const preview = (mem.content || '').substring(0, 60);
+              console.log(`[ISSUE-697-ORCH]   Was rank #${originalRank}: ID ${mem.id}, Score ${score}, Sim ${sim}`);
+              console.log(`[ISSUE-697-ORCH]     Content: "${preview}"`);
 
-            // Check for special markers
-            const isEntityBoosted = mem.entity_boosted || false;
-            const isKeywordBoosted = mem.keyword_boosted || false;
-            const isExplicitRecall = mem.explicit_recall_boosted || false;
-            if (isEntityBoosted || isKeywordBoosted || isExplicitRecall) {
-              console.log(`[ISSUE-697-ORCH]     ⚠️ BOOSTED MEMORY CUT: entity=${isEntityBoosted}, keyword=${isKeywordBoosted}, explicit=${isExplicitRecall}`);
-            }
-          });
-          console.log('[ISSUE-697-ORCH] ═══════════════════════════════════════════════════════');
+              // Check for special markers
+              const isEntityBoosted = mem.entity_boosted || false;
+              const isKeywordBoosted = mem.keyword_boosted || false;
+              const isExplicitRecall = mem.explicit_recall_boosted || false;
+              if (isEntityBoosted || isKeywordBoosted || isExplicitRecall) {
+                console.log(`[ISSUE-697-ORCH]     ⚠️ BOOSTED MEMORY CUT: entity=${isEntityBoosted}, keyword=${isKeywordBoosted}, explicit=${isExplicitRecall}`);
+              }
+            });
+            console.log('[ISSUE-697-ORCH] ═══════════════════════════════════════════════════════');
+          }
         }
 
         // FOUNDER DIAGNOSTIC #579-A5: Log memory injection details
@@ -6113,8 +6123,10 @@ Mode: ${modeConfig?.display_name || mode}
 
         console.log(`[PROOF] authoritative-db domain=ambiguity ran=true rows=${dbResult.rows.length}`);
         console.log(`[AMBIGUITY-AUTHORITATIVE] db_rows=${dbResult.rows?.length || 0}`);
-        console.log(`[AMBIGUITY-DEBUG] Query names: ${candidateNames.join(', ')}`);
-        console.log(`[AMBIGUITY-DEBUG] Like patterns: ${likeParams.join(', ')}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[AMBIGUITY-DEBUG] Query names: ${candidateNames.join(', ')}`);
+          console.log(`[AMBIGUITY-DEBUG] Like patterns: ${likeParams.join(', ')}`);
+        }
 
         // FIX #659: NUA1 diagnostic - Show ALL rows for entity regardless of is_current (gated by DEBUG_DIAGNOSTICS)
         if (process.env.DEBUG_DIAGNOSTICS === 'true') {
@@ -6138,13 +6150,15 @@ Mode: ${modeConfig?.display_name || mode}
         }
 
         // AUTHORITATIVE DEBUG (Issue #656) - Explain which filters are applied
-        console.log(`[AMBIGUITY-DEBUG] entity=${candidateNames.join(', ')} query_filters={user_id=${userId}, is_current=true OR NULL, categories=all, mode=all} returned_ids=[${dbResult.rows.map(r => r.id).join(', ')}]`);
-        if (dbResult.rows.length > 0) {
-          console.log(`[AMBIGUITY-DEBUG] content_previews:`);
-          dbResult.rows.forEach((row, idx) => {
-            const preview = (row.content || '').substring(0, 100).replace(/\n/g, ' ');
-            console.log(`[AMBIGUITY-DEBUG]   Row ${idx + 1} (id=${row.id}): "${preview}..."`);
-          });
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[AMBIGUITY-DEBUG] entity=${candidateNames.join(', ')} query_filters={user_id=${userId}, is_current=true OR NULL, categories=all, mode=all} returned_ids=[${dbResult.rows.map(r => r.id).join(', ')}]`);
+          if (dbResult.rows.length > 0) {
+            console.log(`[AMBIGUITY-DEBUG] content_previews:`);
+            dbResult.rows.forEach((row, idx) => {
+              const preview = (row.content || '').substring(0, 100).replace(/\n/g, ' ');
+              console.log(`[AMBIGUITY-DEBUG]   Row ${idx + 1} (id=${row.id}): "${preview}..."`);
+            });
+          }
         }
 
         if (dbResult.rows && dbResult.rows.length >= 2) {
@@ -6163,14 +6177,18 @@ Mode: ${modeConfig?.display_name || mode}
             for (const name of candidateNames) {
               if (contentLower.includes(name.toLowerCase())) {
                 nameMatches.get(name).push(content);
-                console.log(`[AMBIGUITY-DEBUG] Row ${row.id} matched name "${name}": "${content.substring(0, 80)}..."`);
+                if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                  console.log(`[AMBIGUITY-DEBUG] Row ${row.id} matched name "${name}": "${content.substring(0, 80)}..."`);
+                }
               }
             }
           }
 
           // Debug: Log nameMatches counts
           for (const [name, contents] of nameMatches) {
-            console.log(`[AMBIGUITY-DEBUG] Name "${name}" found in ${contents.length} memories`);
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(`[AMBIGUITY-DEBUG] Name "${name}" found in ${contents.length} memories`);
+            }
           }
 
           // Extract descriptors for each name using STATIC regex patterns (no interpolation)
@@ -6192,7 +6210,9 @@ Mode: ${modeConfig?.display_name || mode}
                 const [_, relation, matchedName] = match;
                 if (matchedName.toLowerCase() === nameLower) {
                   descriptors.add(relation.toLowerCase());
-                  console.log(`[AMBIGUITY-DEBUG] Found relation descriptor: ${relation} for ${name}`);
+                  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                    console.log(`[AMBIGUITY-DEBUG] Found relation descriptor: ${relation} for ${name}`);
+                  }
                 }
               }
 
@@ -6202,7 +6222,9 @@ Mode: ${modeConfig?.display_name || mode}
                 const [_, matchedName, prep, location] = match;
                 if (matchedName.toLowerCase() === nameLower) {
                   descriptors.add(`${prep} ${location}`);
-                  console.log(`[AMBIGUITY-DEBUG] Found location descriptor: ${prep} ${location} for ${name}`);
+                  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                    console.log(`[AMBIGUITY-DEBUG] Found location descriptor: ${prep} ${location} for ${name}`);
+                  }
                 }
               }
 
@@ -6212,7 +6234,9 @@ Mode: ${modeConfig?.display_name || mode}
                 const [_, relation, matchedName] = match;
                 if (matchedName.toLowerCase() === nameLower) {
                   descriptors.add(relation.toLowerCase());
-                  console.log(`[AMBIGUITY-DEBUG] Found my-relation descriptor: ${relation} for ${name}`);
+                  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                    console.log(`[AMBIGUITY-DEBUG] Found my-relation descriptor: ${relation} for ${name}`);
+                  }
                 }
               }
 
@@ -6221,7 +6245,9 @@ Mode: ${modeConfig?.display_name || mode}
               const isMyMatches = content.matchAll(isMyPattern);
               for (const match of isMyMatches) {
                 descriptors.add(match[1].toLowerCase());
-                console.log(`[AMBIGUITY-DEBUG] Found is-my descriptor: ${match[1]} for ${name}`);
+                if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                  console.log(`[AMBIGUITY-DEBUG] Found is-my descriptor: ${match[1]} for ${name}`);
+                }
               }
 
               // NEW: Extract workplace/location from "colleague in X at Y" or "who lives in Z"
@@ -6230,7 +6256,9 @@ Mode: ${modeConfig?.display_name || mode}
               for (const match of contextMatches) {
                 if (match[2]) {
                   descriptors.add(match[2].toLowerCase());
-                  console.log(`[AMBIGUITY-DEBUG] Found context descriptor: ${match[2]} for ${name}`);
+                  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                    console.log(`[AMBIGUITY-DEBUG] Found context descriptor: ${match[2]} for ${name}`);
+                  }
                 }
               }
             }

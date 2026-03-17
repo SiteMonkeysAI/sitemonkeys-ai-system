@@ -456,36 +456,48 @@ function validateValueSignature(content, fingerprint) {
  * @returns {{ fingerprint: string|null, confidence: number, method: string, valueSignature: boolean, isOptional: boolean, updateIntent: boolean }}
  */
 function detectFingerprintDeterministic(content) {
-  console.log('[SUPERSESSION-DIAG] ════════════════════════════════════════');
-  console.log('[SUPERSESSION-DIAG] Input content:', content?.substring(0, 100));
-  console.log('[SUPERSESSION-DIAG] Content length:', content?.length || 0);
+  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+    console.log('[SUPERSESSION-DIAG] ════════════════════════════════════════');
+    console.log('[SUPERSESSION-DIAG] Input content:', content?.substring(0, 100));
+    console.log('[SUPERSESSION-DIAG] Content length:', content?.length || 0);
+  }
 
   if (!content || typeof content !== 'string') {
-    console.log('[SUPERSESSION-DIAG] ❌ Invalid content type');
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[SUPERSESSION-DIAG] ❌ Invalid content type');
+    }
     return { fingerprint: null, confidence: 0, method: 'none', valueSignature: false, isOptional: false, updateIntent: false };
   }
 
   for (const { fingerprint, patterns, confidence } of FINGERPRINT_PATTERNS) {
-    console.log(`[SUPERSESSION-DIAG] Checking fingerprint: ${fingerprint}`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[SUPERSESSION-DIAG] Checking fingerprint: ${fingerprint}`);
+    }
     for (let i = 0; i < patterns.length; i++) {
       const pattern = patterns[i];
       const match = content.match(pattern);
-      console.log(`[SUPERSESSION-DIAG]   Pattern ${i}: ${pattern.toString().substring(0, 80)}...`);
-      console.log(`[SUPERSESSION-DIAG]   Match: ${match ? 'YES - ' + match[0] : 'NO'}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[SUPERSESSION-DIAG]   Pattern ${i}: ${pattern.toString().substring(0, 80)}...`);
+        console.log(`[SUPERSESSION-DIAG]   Match: ${match ? 'YES - ' + match[0] : 'NO'}`);
+      }
       if (match) {
         // FIX #710: Validate value signature before accepting fingerprint
         const validation = validateValueSignature(content, fingerprint);
 
         if (!validation.hasValueSignature) {
-          console.log(`[SUPERSESSION-DIAG] ⚠️ Pattern matched but value signature missing: ${fingerprint}`);
-          console.log(`[SUPERSESSION-DIAG]    Reason: ${validation.reason}`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[SUPERSESSION-DIAG] ⚠️ Pattern matched but value signature missing: ${fingerprint}`);
+            console.log(`[SUPERSESSION-DIAG]    Reason: ${validation.reason}`);
+          }
           // FIX #710 Requirement C: Log rejections with sanitized preview
           const preview = sanitizeLogPreview(content, 50);
           console.log(`[FINGERPRINT-REJECTED] fingerprint=${fingerprint} reason=no_value_signature preview="${preview}"`);
           continue;  // Try next pattern
         }
 
-        console.log(`[SUPERSESSION-DIAG] ✅ PATTERN MATCH FOUND: ${fingerprint} with valid value signature`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[SUPERSESSION-DIAG] ✅ PATTERN MATCH FOUND: ${fingerprint} with valid value signature`);
+        }
         console.log(`[SUPERSESSION] Deterministic match: ${fingerprint} (confidence: ${confidence})`);
 
         // Detect update intent for optional fields
@@ -499,7 +511,9 @@ function detectFingerprintDeterministic(content) {
     }
   }
 
-  console.log('[SUPERSESSION-DIAG] ❌ No pattern matches found');
+  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+    console.log('[SUPERSESSION-DIAG] ❌ No pattern matches found');
+  }
   return { fingerprint: null, confidence: 0, method: 'none', valueSignature: false, isOptional: false, updateIntent: false };
 }
 
