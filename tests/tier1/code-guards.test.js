@@ -915,4 +915,147 @@ describe('J. MEM-007: Importance-Based Ranking Fix', () => {
   });
 });
 
+// ============================================================
+// SECTION K: News Source Credibility Guards
+// Ensures satirical/unreliable sources are filtered before
+// injection into AI context, preventing fabricated content
+// from being presented as verified fact.
+// Root cause: Google News RSS accepted articles from any outlet
+// (including The Babylon Bee, The Onion) with no domain filter.
+// The "[VERIFIED EXTERNAL DATA — MANDATORY SOURCE]" label then
+// forced the AI to treat all content as established fact.
+// ============================================================
+
+describe('K. News Source Credibility Guards', () => {
+
+  it('K-001: BANNED_NEWS_SOURCES constant exists and includes known satirical outlets', () => {
+    const engine = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(engine, 'Could not read externalLookupEngine.js');
+
+    assert.ok(
+      engine.includes('BANNED_NEWS_SOURCES'),
+      'K-001 FAIL: BANNED_NEWS_SOURCES constant is missing from externalLookupEngine.js. ' +
+      'Without it, satirical outlets (Babylon Bee, The Onion, etc.) can pass through to AI context.'
+    );
+
+    // Verify key satirical outlets are listed
+    const hasBabylonBee = engine.includes('babylon bee') || engine.includes('the babylon bee');
+    assert.ok(
+      hasBabylonBee,
+      'K-001 FAIL: "babylon bee" is not in BANNED_NEWS_SOURCES. ' +
+      'The Babylon Bee is a satirical outlet whose fabricated geopolitical headlines ' +
+      'can be presented as fact if not filtered.'
+    );
+
+    const hasTheOnion = engine.includes("'the onion'") || engine.includes('"the onion"');
+    assert.ok(
+      hasTheOnion,
+      'K-001 FAIL: "the onion" is not in BANNED_NEWS_SOURCES. ' +
+      'The Onion is a well-known satirical outlet that must be excluded from fact injection.'
+    );
+  });
+
+  it('K-002: isSourceBanned function exists and is exported', () => {
+    const engine = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(engine, 'Could not read externalLookupEngine.js');
+
+    assert.ok(
+      engine.includes('export function isSourceBanned'),
+      'K-002 FAIL: isSourceBanned is not exported from externalLookupEngine.js. ' +
+      'The function must be exported so it can be unit-tested and used by other modules.'
+    );
+  });
+
+  it('K-003: Google News RSS extractor filters banned sources before collecting items', () => {
+    const engine = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(engine, 'Could not read externalLookupEngine.js');
+
+    // The RSS extract function must call isSourceBanned on each item's source before
+    // adding it to the items array.
+    const hasRSSFilter = engine.includes('isSourceBanned(source)') ||
+                         engine.includes('isSourceBanned(match[2])') ||
+                         (engine.includes('isSourceBanned') && engine.includes('Google News RSS'));
+
+    assert.ok(
+      hasRSSFilter,
+      'K-003 FAIL: The Google News RSS extractor does not call isSourceBanned to filter articles. ' +
+      'Satirical headlines from banned outlets can pass through unfiltered and be injected ' +
+      'into the AI context as verified facts.'
+    );
+  });
+
+  it('K-004: NewsAPI extractor filters banned sources', () => {
+    const engine = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(engine, 'Could not read externalLookupEngine.js');
+
+    // The NewsAPI extractor must filter using isSourceBanned
+    const hasNewsAPIFilter = engine.includes('isSourceBanned') &&
+                             (engine.includes("a.source?.name || ''") ||
+                              engine.includes('isSourceBanned(a.source') ||
+                              engine.includes("a.source?.name"));
+
+    assert.ok(
+      hasNewsAPIFilter,
+      'K-004 FAIL: The NewsAPI extractor does not call isSourceBanned to filter articles. ' +
+      'Unreliable sources returned by NewsAPI can pass through into AI context.'
+    );
+  });
+
+  it('K-005: GDELT extractor filters banned domains', () => {
+    const engine = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(engine, 'Could not read externalLookupEngine.js');
+
+    // GDELT returns article domains; the extractor must filter using isSourceBanned on a.domain
+    const hasGDELTFilter = engine.includes('isSourceBanned(a.domain');
+
+    assert.ok(
+      hasGDELTFilter,
+      'K-005 FAIL: The GDELT extractor does not call isSourceBanned on article domains. ' +
+      'Domains from banned outlets (e.g. babylonbee.com) can pass through GDELT results.'
+    );
+  });
+
+  it('K-006: orchestrator adds credibility warning for geopolitical queries without reputable sources', () => {
+    const orchestrator = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orchestrator, 'Could not read api/core/orchestrator.js');
+
+    const hasCredibilityWarning = orchestrator.includes('CREDIBILITY WARNING') ||
+                                  orchestrator.includes('credibilityNote');
+    assert.ok(
+      hasCredibilityWarning,
+      'K-006 FAIL: The orchestrator does not add a credibility warning when geopolitical ' +
+      'external content lacks a reputable source. Without this guard, the AI presents ' +
+      'unverified headlines as established fact via the "[VERIFIED EXTERNAL DATA]" label.'
+    );
+
+    // Must import hasReputableSource to perform this check
+    const importsHasReputableSource = orchestrator.includes('hasReputableSource');
+    assert.ok(
+      importsHasReputableSource,
+      'K-006 FAIL: orchestrator does not import or call hasReputableSource. ' +
+      'The credibility warning cannot fire without this check.'
+    );
+  });
+
+  it('K-007: BANNED_NEWS_DOMAINS constant exists for domain-based filtering', () => {
+    const engine = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(engine, 'Could not read externalLookupEngine.js');
+
+    assert.ok(
+      engine.includes('BANNED_NEWS_DOMAINS'),
+      'K-007 FAIL: BANNED_NEWS_DOMAINS is missing from externalLookupEngine.js. ' +
+      'GDELT returns raw domains (e.g. babylonbee.com); without a domain-level list, ' +
+      'domain-based filtering in isSourceBanned cannot work.'
+    );
+
+    const hasBabylonBeeDomain = engine.includes("'babylonbee.com'") || engine.includes('"babylonbee.com"');
+    assert.ok(
+      hasBabylonBeeDomain,
+      'K-007 FAIL: "babylonbee.com" is not in BANNED_NEWS_DOMAINS. ' +
+      'GDELT articles from this domain will not be filtered.'
+    );
+  });
+
+});
+
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');
