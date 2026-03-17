@@ -1,0 +1,31 @@
+name: Invoke Embedding Index Endpoint
+
+on:
+  workflow_dispatch:
+
+jobs:
+  call-endpoint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /api/admin/add-embedding-index
+        id: call
+        run: |
+          RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
+            "https://sitemonkeys-ai-system-production.up.railway.app/api/admin/add-embedding-index" \
+            -H "x-admin-key: sm-admin-2026-xyz" \
+            -H "Content-Type: application/json" \
+            --max-time 120)
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          JSON_BODY=$(echo "$RESPONSE" | head -n -1)
+          echo "HTTP status: $HTTP_CODE"
+          echo "Response body:"
+          echo "$JSON_BODY" | python3 -m json.tool 2>/dev/null || echo "$JSON_BODY"
+          echo "json_response<<EOF" >> "$GITHUB_OUTPUT"
+          echo "$JSON_BODY" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+          echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+      - name: Report result
+        run: |
+          echo "=== Full JSON Response ==="
+          echo '${{ steps.call.outputs.json_response }}' | python3 -m json.tool 2>/dev/null || echo '${{ steps.call.outputs.json_response }}'
+          echo "HTTP Status Code: ${{ steps.call.outputs.http_code }}"
