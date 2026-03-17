@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   // Use existing DATABASE_URL from environment
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: true } : false
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
   });
 
   const results = {
