@@ -2,9 +2,18 @@ name: Invoke Embedding Index Endpoint
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - copilot/report-json-response
+    inputs:
+      admin_key:
+        description: "Admin key (x-admin-key header value)"
+        required: true
+      target_url:
+        description: "Base URL of the deployment to target"
+        required: true
+        default: "https://sitemonkeys-ai-system-production.up.railway.app"
+      timeout_seconds:
+        description: "curl timeout in seconds (index creation can take minutes on large tables)"
+        required: false
+        default: "300"
 
 permissions:
   contents: write
@@ -20,10 +29,10 @@ jobs:
         id: call
         run: |
           RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-            "https://sitemonkeys-ai-system-production.up.railway.app/api/admin/add-embedding-index" \
-            -H "x-admin-key: sm-admin-2026-xyz" \
+            "${{ github.event.inputs.target_url }}/api/admin/add-embedding-index" \
+            -H "x-admin-key: ${{ github.event.inputs.admin_key }}" \
             -H "Content-Type: application/json" \
-            --max-time 120)
+            --max-time "${{ github.event.inputs.timeout_seconds }}")
           HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
           JSON_BODY=$(echo "$RESPONSE" | head -n -1)
           echo "HTTP status: $HTTP_CODE"
