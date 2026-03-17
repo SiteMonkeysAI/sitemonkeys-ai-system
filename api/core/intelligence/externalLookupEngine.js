@@ -654,7 +654,10 @@ export const API_SOURCES = {
       type: 'api',
       extract: (json) => {
         if (!json || !json.articles || !Array.isArray(json.articles)) return null;
-        const articles = json.articles.filter(a => a.title && a.title !== '[Removed]').slice(0, 5);
+        const articles = json.articles
+          .filter(a => a.title && a.title !== '[Removed]')
+          .filter(a => !isSourceBanned(a.source?.name || '') && !isSourceBanned(a.url || ''))
+          .slice(0, 5);
         if (articles.length === 0) return null;
         return articles.map(a => {
           const source = a.source?.name || '[unknown source]';
@@ -702,7 +705,10 @@ export const API_SOURCES = {
           }
           const json = await response.json();
           if (!json || !json.news || !Array.isArray(json.news)) return null;
-          const items = json.news.filter(a => a.title).slice(0, 5);
+          const items = json.news
+            .filter(a => a.title)
+            .filter(a => !isSourceBanned(a.source || '') && !isSourceBanned(a.link || ''))
+            .slice(0, 5);
           if (items.length === 0) return null;
           const text = items.map(a => {
             const source = a.source || '[unknown source]';
@@ -738,7 +744,10 @@ export const API_SOURCES = {
       type: 'api',
       extract: (json) => {
         if (!json || !json.data || !Array.isArray(json.data)) return null;
-        const articles = json.data.filter(a => a.title).slice(0, 5);
+        const articles = json.data
+          .filter(a => a.title)
+          .filter(a => !isSourceBanned(a.source || '') && !isSourceBanned(a.url || ''))
+          .slice(0, 5);
         if (articles.length === 0) return null;
         return articles.map(a => {
           const source = a.source || '[unknown source]';
@@ -768,8 +777,14 @@ export const API_SOURCES = {
         const items = [];
         const itemRegex = /<item>[\s\S]*?<title>(?:<!\[CDATA\[)?(.*?)(?:\]\]>)?<\/title>[\s\S]*?<source[^>]*>(.*?)<\/source>[\s\S]*?<pubDate>(.*?)<\/pubDate>[\s\S]*?<\/item>/gi;
         let match;
-        while ((match = itemRegex.exec(text)) !== null && items.length < 5) {
-          items.push({ title: match[1], source: match[2], date: match[3] });
+        while ((match = itemRegex.exec(text)) !== null) {
+          const source = match[2];
+          if (isSourceBanned(source)) {
+            console.log(`[externalLookupEngine] Filtered banned RSS source: "${source}"`);
+            continue;
+          }
+          items.push({ title: match[1], source, date: match[3] });
+          if (items.length >= 5) break;
         }
         return items.length > 0 ? items.map(i => `[${i.source}] ${i.title} (${i.date})`).join('\n\n') : null;
       }
@@ -790,7 +805,10 @@ export const API_SOURCES = {
       type: 'api',
       extract: (json) => {
         if (!json || !json.articles || !Array.isArray(json.articles)) return null;
-        const articles = json.articles.filter(a => a.title).slice(0, 5);
+        const articles = json.articles
+          .filter(a => a.title)
+          .filter(a => !isSourceBanned(a.domain || ''))
+          .slice(0, 5);
         if (articles.length === 0) return null;
         return articles.map(a => `[${a.domain || '[unknown source]'}] ${a.title} (${a.seendate || '[date unknown]'})`).join('\n\n');
       }
@@ -1076,6 +1094,131 @@ const GEOPOLITICAL_CONTEXT_MARKERS = [
 
 // Reputable news sources for corroboration
 const REPUTABLE_SOURCES = /reuters|associated press|ap news|bbc|afp|npr|guardian|new york times|nytimes|washington post|wall street journal|wsj|cnn|abc news|cbs news|nbc news/i;
+
+// Known satirical, parody, and unreliable news sources that must never be injected as fact.
+// Display names (lowercase) used by Google News RSS <source> tags and API source fields.
+// Domains used by GDELT which returns article domains directly.
+export const BANNED_NEWS_SOURCES = new Set([
+  // Satirical / parody outlets
+  'the babylon bee', 'babylon bee',
+  'the onion',
+  'clickhole',
+  'the beaverton',
+  'the daily mash',
+  'waterford whispers news',
+  'reductress',
+  'hard times',
+  'the hard times',
+  'duffel blog',
+  'the spoof',
+  'the borowitz report',
+  'newsthump',
+  'newsbiscuit',
+  'the science post',
+  'private eye',
+  'the daily squib',
+  'world news daily report',
+  'national report',
+  // Known misinformation / conspiracy outlets
+  'infowars',
+  'natural news',
+  'naturalnews',
+  'before its news',
+  'beforeitsnews',
+  'yournewswire',
+  'newspunch',
+  'newswars',
+  'veterans today',
+  'americas last line of defense',
+  "america's last line of defense",
+  'freedom daily',
+  'the free thought project',
+  'activist post',
+  'shtfplan',
+  'zero hedge',       // frequent misinformation/conspiracy framing on geopolitical topics
+  'the epoch times',  // state-linked misinformation concerns
+  'ntd news',         // affiliated with epoch times
+  'gateway pundit',
+  'the gateway pundit',
+  'breitbart',
+  'breitbart news',
+  'worldnetdaily',
+  'wnd',
+  'oann',
+  'one america news',
+  'one america news network',
+  'newsmax',          // frequent unverified geopolitical claims
+]);
+
+// Domain-based ban list for sources that provide domains (e.g. GDELT)
+export const BANNED_NEWS_DOMAINS = new Set([
+  'babylonbee.com',
+  'theonion.com',
+  'clickhole.com',
+  'thebeaverton.com',
+  'thedailymash.co.uk',
+  'waterfordwhispersnews.com',
+  'reductress.com',
+  'thehardtimes.net',
+  'duffelblog.com',
+  'thespoof.com',
+  'newsthump.com',
+  'newsbiscuit.com',
+  'thesciencepost.com',
+  'dailysquib.co.uk',
+  'worldnewsdailyreport.com',
+  'nationalreport.net',
+  'infowars.com',
+  'naturalnews.com',
+  'beforeitsnews.com',
+  'yournewswire.com',
+  'newspunch.com',
+  'newswars.com',
+  'veteranstoday.com',
+  'freedomdaily.com',
+  'thefreethoughtproject.com',
+  'activistpost.com',
+  'shtfplan.com',
+  'zerohedge.com',
+  'theepochtimes.com',
+  'ntd.com',
+  'thegatewaypundit.com',
+  'breitbart.com',
+  'wnd.com',
+  'oann.com',
+  'newsmax.com',
+]);
+
+/**
+ * Pre-compiled domain regex for isSourceBanned — avoids recompilation on every call.
+ * Matches bare domains like "babylonbee.com" or "www.babylonbee.com".
+ */
+const _BANNED_DOMAIN_PATTERN = /^(?:www\.)?([a-z0-9.-]+\.[a-z]{2,})$/;
+
+/**
+ * Check whether a news source name or domain is on the banned list.
+ * Accepts the display name (from RSS <source> or API source field) or a domain string.
+ * @param {string} sourceName - Source display name or domain
+ * @returns {boolean} True if the source is banned
+ */
+export function isSourceBanned(sourceName) {
+  if (!sourceName || typeof sourceName !== 'string') return false;
+  const lower = sourceName.toLowerCase().trim();
+  if (BANNED_NEWS_SOURCES.has(lower)) return true;
+  // Strip www prefix and check the cleaned value as a bare domain
+  const domainMatch = _BANNED_DOMAIN_PATTERN.exec(lower);
+  if (domainMatch) {
+    // domainMatch[1] is the bare domain (e.g. "babylonbee.com")
+    if (BANNED_NEWS_DOMAINS.has(domainMatch[1])) return true;
+  } else {
+    // Input is not a bare domain (e.g. a URL like "https://babylonbee.com/story/…").
+    // Fall back to substring search so domain fragments embedded in URLs are caught.
+    for (const domain of BANNED_NEWS_DOMAINS) {
+      if (lower.includes(domain)) return true;
+    }
+  }
+  return false;
+}
 
 /**
  * Extract clean search query from conversational input

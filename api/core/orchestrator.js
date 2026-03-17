@@ -46,7 +46,7 @@ import { sanitizePII } from "../memory/pii-sanitizer.js";
 // ========== PHASE 4/5/6/7 INTEGRATION ==========
 import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
 import { route } from "../core/intelligence/hierarchyRouter.js";
-import { lookup, isFactualEntityQuery, isCurrentEventQuery, hasProperNouns } from "../core/intelligence/externalLookupEngine.js";
+import { lookup, isFactualEntityQuery, isCurrentEventQuery, hasProperNouns, hasReputableSource } from "../core/intelligence/externalLookupEngine.js";
 import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
 import { enforceBoundedReasoning } from "../core/intelligence/boundedReasoningGate.js";
 import { enforceResponseContract } from "../core/intelligence/responseContractGate.js";
@@ -65,6 +65,15 @@ import {
 // Response Intelligence Configuration
 const GREETING_LIMIT = 150; // Max chars for greeting responses (Anti-Engagement)
 const MIN_SENTENCE_LENGTH = 50; // Minimum chars to consider a valid sentence
+
+// Geopolitical topic pattern — used to detect when credibility warnings should be applied
+// to external lookup results that lack reputable source corroboration.
+const GEOPOLITICAL_TOPIC_PATTERN = /\b(war|conflict|military|sanctions|iran|russia|china|ukraine|north\s*korea|geopolit|diplomacy|treaty|invasion|missile|troops)\b/i;
+
+// Warning injected into the AI prompt when external content for a geopolitical / VOLATILE
+// query contains no reputable source. Prevents unverified headlines from being stated as fact.
+const UNVERIFIED_GEOPOLITICAL_CONTENT_WARNING =
+  '\n[CREDIBILITY WARNING: None of the sources retrieved for this geopolitical query match known reputable outlets (Reuters, AP, BBC, etc.). You MUST NOT present any claim from this data as established fact. Treat every headline as unverified and tell the user these headlines could not be corroborated by a reputable news source. Do NOT state claims from this data in declarative form — always attribute and hedge ("According to [source], which has not been independently verified, ..."). If the user asks about geopolitical events, advise them to check Reuters, AP, or BBC directly.]';
 
 // ==================== ORCHESTRATOR CLASS ====================
 
@@ -4082,7 +4091,21 @@ export class Orchestrator {
       // PHASE 4: Inject external content if fetched
       let externalContext = "";
       if (phase4Metadata.fetched_content && phase4Metadata.sources_used > 0) {
-        externalContext = `\n\n[VERIFIED EXTERNAL DATA — MANDATORY SOURCE]\nIMPORTANT: The following data was JUST retrieved from live external sources. You MUST use this data to answer the user's question. Do NOT say "I don't have real-time data" or "I can't access current information" — this data IS the real-time source. Base your answer on this data.\n\n${phase4Metadata.fetched_content}\n[END VERIFIED EXTERNAL DATA]\n\n`;
+        // Check whether the fetched content includes at least one reputable source.
+        // For geopolitical / VOLATILE queries, unverified-only sources get a credibility warning
+        // so the AI does not present unvetted claims as established fact.
+        const isGeopoliticalOrVolatile =
+          phase4Metadata.truth_type === 'VOLATILE' ||
+          GEOPOLITICAL_TOPIC_PATTERN.test(message);
+        const contentHasReputableSource = hasReputableSource(phase4Metadata.fetched_content);
+
+        let credibilityNote = '';
+        if (isGeopoliticalOrVolatile && !contentHasReputableSource) {
+          credibilityNote = UNVERIFIED_GEOPOLITICAL_CONTENT_WARNING;
+          console.log('[PHASE4] Geopolitical query with no reputable source — credibility warning injected');
+        }
+
+        externalContext = `\n\n[VERIFIED EXTERNAL DATA — MANDATORY SOURCE]\nIMPORTANT: The following data was JUST retrieved from live external sources. You MUST use this data to answer the user's question. Do NOT say "I don't have real-time data" or "I can't access current information" — this data IS the real-time source. Base your answer on this data.${credibilityNote}\n\n${phase4Metadata.fetched_content}\n[END VERIFIED EXTERNAL DATA]\n\n`;
 
         // ISSUE #790 FIX: Add disclosure instruction if present
         if (phase4Metadata.disclosure) {
