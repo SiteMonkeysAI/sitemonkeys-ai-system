@@ -2,11 +2,20 @@ name: Invoke Embedding Index Endpoint
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - copilot/report-json-response
+
+permissions:
+  contents: write
 
 jobs:
   call-endpoint:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: POST /api/admin/add-embedding-index
         id: call
         run: |
@@ -24,8 +33,22 @@ jobs:
           echo "$JSON_BODY" >> "$GITHUB_OUTPUT"
           echo "EOF" >> "$GITHUB_OUTPUT"
           echo "http_code=$HTTP_CODE" >> "$GITHUB_OUTPUT"
+          echo "$JSON_BODY" > EMBEDDING_INDEX_RESPONSE.json
+
       - name: Report result
         run: |
           echo "=== Full JSON Response ==="
-          echo '${{ steps.call.outputs.json_response }}' | python3 -m json.tool 2>/dev/null || echo '${{ steps.call.outputs.json_response }}'
+          cat EMBEDDING_INDEX_RESPONSE.json | python3 -m json.tool 2>/dev/null || cat EMBEDDING_INDEX_RESPONSE.json
           echo "HTTP Status Code: ${{ steps.call.outputs.http_code }}"
+
+      - name: Commit response file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add EMBEDDING_INDEX_RESPONSE.json
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: capture embedding-index endpoint response"
+            git push
+          fi
