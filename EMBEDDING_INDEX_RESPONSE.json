@@ -1,0 +1,1 @@
+{"success":true,"message":"HNSW index created on persistent_memories.embedding","index_name":"memories_embedding_hnsw_idx","index_verified":true,"index_def":"CREATE INDEX memories_embedding_hnsw_idx ON public.persistent_memories USING hnsw (embedding vector_cosine_ops) WITH (m='16', ef_construction='64')","row_estimate":8154}
