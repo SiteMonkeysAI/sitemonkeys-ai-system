@@ -295,12 +295,16 @@ class ConflictDetectionValidator {
           const injection = `There's a real tradeoff here: ${allergyFact}, and ${preferenceFact}.`;
           injections.push(injection);
           // FIX #721 NUA2: Log exact injection for debugging
-          console.log(`[NUA2-DEBUG] Injected conflict sentence: "${injection}"`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[NUA2-DEBUG] Injected conflict sentence: "${injection}"`);
+          }
         } else {
           // Fallback to generic message
           const injection = "There's a real tradeoff here: your allergy vs your wife's preference.";
           injections.push(injection);
-          console.log(`[NUA2-DEBUG] Injected fallback sentence: "${injection}"`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[NUA2-DEBUG] Injected fallback sentence: "${injection}"`);
+          }
         }
       }
     }
@@ -312,7 +316,9 @@ class ConflictDetectionValidator {
     // Prepend to response for maximum visibility
     const finalResponse = `${injections.join(' ')}\n\n${response}`;
     // FIX #721 NUA2: Log the full final response to see if injection is preserved
-    console.log(`[NUA2-DEBUG] Final response starts with: "${finalResponse.substring(0, 200)}"`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[NUA2-DEBUG] Final response starts with: "${finalResponse.substring(0, 200)}"`);
+    }
     return finalResponse;
   }
 

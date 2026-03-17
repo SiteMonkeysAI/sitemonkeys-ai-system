@@ -2157,10 +2157,12 @@ Facts (preserve user terminology + add synonyms):`;
     );
 
     // DEBUG: Log what we're comparing to catch any logic errors
-    console.log(`[DEDUP-DEBUG] Comparing tokens:`);
-    console.log(`[DEDUP-DEBUG]   NEW tokens: [${normalizedNew.join(', ')}]`);
-    console.log(`[DEDUP-DEBUG]   EXISTING tokens: [${normalizedExisting.join(', ')}]`);
-    console.log(`[DEDUP-DEBUG]   hasUniqueNewToken: ${hasUniqueNewToken}`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[DEDUP-DEBUG] Comparing tokens:`);
+      console.log(`[DEDUP-DEBUG]   NEW tokens: [${normalizedNew.join(', ')}]`);
+      console.log(`[DEDUP-DEBUG]   EXISTING tokens: [${normalizedExisting.join(', ')}]`);
+      console.log(`[DEDUP-DEBUG]   hasUniqueNewToken: ${hasUniqueNewToken}`);
+    }
 
     if (hasUniqueNewToken) {
       // New content has a unique identifier - store separately
@@ -2650,14 +2652,16 @@ Facts (preserve user terminology + add synonyms):`;
       console.log(`[ANCHOR-STORAGE] stored_id=${memoryId} anchors_keys=[${anchorKeys.join(',')}] unicode_count=${unicodeCount} pricing_count=${pricingCount}`);
 
       // DIAGNOSTIC LOGGING: Track exact storage details
-      console.log('[STORAGE-DEBUG] Memory stored:', {
-        id: memoryId,
-        user_id: userId,
-        category: category,
-        content: facts.substring(0, 100),
-        table: 'persistent_memories',
-        timestamp: new Date().toISOString()
-      });
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[STORAGE-DEBUG] Memory stored:', {
+          id: memoryId,
+          user_id: userId,
+          category: category,
+          content: facts.substring(0, 100),
+          table: 'persistent_memories',
+          timestamp: new Date().toISOString()
+        });
+      }
 
       // CRITICAL: Generate embedding for the newly stored memory
       // This enables semantic retrieval for this memory
@@ -2776,14 +2780,16 @@ Facts (preserve user terminology + add synonyms):`;
       console.log(`[INTELLIGENT-STORAGE] ⚠️ Stored uncompressed fallback: ID=${memoryId}, tokens=${tokenCount}`);
 
       // DIAGNOSTIC LOGGING: Track exact storage details
-      console.log('[STORAGE-DEBUG] Memory stored (fallback):', {
-        id: memoryId,
-        user_id: userId,
-        category: category,
-        content: content.substring(0, 100),
-        table: 'persistent_memories',
-        timestamp: new Date().toISOString()
-      });
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[STORAGE-DEBUG] Memory stored (fallback):', {
+          id: memoryId,
+          user_id: userId,
+          category: category,
+          content: content.substring(0, 100),
+          table: 'persistent_memories',
+          timestamp: new Date().toISOString()
+        });
+      }
 
       // CRITICAL: Generate embedding for the newly stored memory
       // This enables semantic retrieval for this memory

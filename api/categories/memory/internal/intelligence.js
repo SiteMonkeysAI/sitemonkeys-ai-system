@@ -2086,12 +2086,14 @@ class IntelligenceSystem {
       this.logger.log(`Extracting from primary category: ${primaryCategory} for user: ${userId}`);
 
       // DIAGNOSTIC LOGGING: Track exact retrieval parameters
-      console.log('[RETRIEVAL-DEBUG] Searching for memories:', {
-        user_id: userId,
-        query: query.substring(0, 100),
-        category: primaryCategory,
-        table: 'persistent_memories'
-      });
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[RETRIEVAL-DEBUG] Searching for memories:', {
+          user_id: userId,
+          query: query.substring(0, 100),
+          category: primaryCategory,
+          table: 'persistent_memories'
+        });
+      }
 
       return await this.coreSystem.withDbClient(async (client) => {
         // SIMPLIFIED INTELLIGENT QUERY - MAIN TABLE ONLY
@@ -2136,11 +2138,13 @@ class IntelligenceSystem {
         const queryNouns = this.extractImportantNouns(query.toLowerCase());
         
         // DIAGNOSTIC LOGGING: Show extracted topics
-        console.log('[RETRIEVAL-DEBUG] Extracted topics from query:', {
-          query: query,
-          extracted_nouns: queryNouns,
-          noun_count: queryNouns.length
-        });
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[RETRIEVAL-DEBUG] Extracted topics from query:', {
+            query: query,
+            extracted_nouns: queryNouns,
+            noun_count: queryNouns.length
+          });
+        }
         
         if (queryNouns.length > 0) {
           // Build topic filter with correct parameter indexing
@@ -2198,13 +2202,15 @@ class IntelligenceSystem {
         );
         
         // DIAGNOSTIC LOGGING: Show exact SQL query parameters
-        console.log('[RETRIEVAL-DEBUG] SQL Query Parameters:', {
-          param_count: queryParams.length,
-          user_id: queryParams[0],
-          category: queryParams[1],
-          topic_filters: queryParams.slice(2).slice(0, queryNouns.length),
-          all_params: queryParams
-        });
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[RETRIEVAL-DEBUG] SQL Query Parameters:', {
+            param_count: queryParams.length,
+            user_id: queryParams[0],
+            category: queryParams[1],
+            topic_filters: queryParams.slice(2).slice(0, queryNouns.length),
+            all_params: queryParams
+          });
+        }
         
         // DIAGNOSTIC: Log the actual SQL being executed
         console.log(`[MEMORY-ISOLATION] SQL user_id param: ${userId}`);
@@ -2212,13 +2218,15 @@ class IntelligenceSystem {
         const result = await client.query(baseQuery, queryParams);
 
         // DIAGNOSTIC LOGGING: Track exact database results
-        console.log('[RETRIEVAL-DEBUG] Raw DB results:', {
-          count: result.rows.length,
-          user_ids: result.rows.map(r => r.user_id).slice(0, 5),
-          memory_ids: result.rows.map(r => r.id).slice(0, 5),
-          categories: result.rows.map(r => r.category_name).slice(0, 5),
-          content_preview: result.rows.map(r => r.content?.substring(0, 50)).slice(0, 3)
-        });
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[RETRIEVAL-DEBUG] Raw DB results:', {
+            count: result.rows.length,
+            user_ids: result.rows.map(r => r.user_id).slice(0, 5),
+            memory_ids: result.rows.map(r => r.id).slice(0, 5),
+            categories: result.rows.map(r => r.category_name).slice(0, 5),
+            content_preview: result.rows.map(r => r.content?.substring(0, 50)).slice(0, 3)
+          });
+        }
 
         // ═══════════════════════════════════════════════════════════════
         // CRITICAL: Verify all returned rows belong to this user
