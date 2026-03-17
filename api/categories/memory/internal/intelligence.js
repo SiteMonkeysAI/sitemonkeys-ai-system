@@ -3996,56 +3996,49 @@ class IntelligenceSystem {
 
     const fallbackMemories = [];
 
-    if (relatedCategories.length === 0) {
-      return fallbackMemories;
-    }
-
-    try {
-      const allCategoryMemories = await this.coreSystem.withDbClient(
-        async (client) => {
-          const result = await client.query(
-            `
+    for (const category of relatedCategories) {
+      try {
+        const categoryMemories = await this.coreSystem.withDbClient(
+          async (client) => {
+            const result = await client.query(
+              `
             SELECT id, user_id, category_name, subcategory_name, content, token_count,
                    relevance_score, usage_frequency, created_at, last_accessed, metadata
-            FROM (
-              SELECT id, user_id, category_name, subcategory_name, content, token_count,
-                     relevance_score, usage_frequency, created_at, last_accessed, metadata,
-                     ROW_NUMBER() OVER (PARTITION BY category_name ORDER BY relevance_score DESC, created_at DESC) AS rn
-              FROM persistent_memories
-              WHERE user_id = $1 AND category_name = ANY($2::text[]) AND relevance_score > 0.3
-              AND (is_current = true OR is_current IS NULL)
-              AND NOT (
-                content::text ~* '\\b(remember anything|do you remember|what did i tell|can you recall)\\b'
-                AND NOT content::text ~* '\\b(i have|i own|my \\w+\\s+(is|are|was)|name is|work at|live in)\\b'
-              )
-            ) ranked
-            WHERE rn <= 5
+            FROM persistent_memories
+            WHERE user_id = $1 AND category_name = $2 AND relevance_score > 0.3
+            AND (is_current = true OR is_current IS NULL)
+            AND NOT (
+              content::text ~* '\\b(remember anything|do you remember|what did i tell|can you recall)\\b'
+              AND NOT content::text ~* '\\b(i have|i own|my \\w+\\s+(is|are|was)|name is|work at|live in)\\b'
+            )
             ORDER BY relevance_score DESC, created_at DESC
+            LIMIT 5
           `,
-            [userId, relatedCategories],
-          );
+              [userId, category],
+            );
 
-          return result.rows;
-        },
-      );
+            return result.rows;
+          },
+        );
 
-      // Score each memory for relevance to the query
-      const scoredMemories = allCategoryMemories.map((memory) => ({
-        ...memory,
-        similarityScore: this.calculateContentSimilarity(
-          query,
-          memory.content,
-        ),
-        source: "related_category",
-      }));
+        // Score each memory for relevance to the query
+        const scoredMemories = categoryMemories.map((memory) => ({
+          ...memory,
+          similarityScore: this.calculateContentSimilarity(
+            query,
+            memory.content,
+          ),
+          source: "related_category",
+        }));
 
-      // Only include memories with reasonable similarity
-      const relevantMemories = scoredMemories.filter(
-        (m) => m.similarityScore > 0.2,
-      );
-      fallbackMemories.push(...relevantMemories);
-    } catch (error) {
-      this.logger.error(`Error searching related categories:`, error);
+        // Only include memories with reasonable similarity
+        const relevantMemories = scoredMemories.filter(
+          (m) => m.similarityScore > 0.2,
+        );
+        fallbackMemories.push(...relevantMemories);
+      } catch (error) {
+        this.logger.error(`Error searching category ${category}:`, error);
+      }
     }
 
     this.logger.log(
