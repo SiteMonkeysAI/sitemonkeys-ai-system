@@ -1048,7 +1048,7 @@ describe('K. News Source Credibility Guards', () => {
       'domain-based filtering in isSourceBanned cannot work.'
     );
 
-    const hasBabylonBeeDomain = engine.includes('babylonbee.com');
+    const hasBabylonBeeDomain = engine.includes("'babylonbee.com'") || engine.includes('"babylonbee.com"');
     assert.ok(
       hasBabylonBeeDomain,
       'K-007 FAIL: "babylonbee.com" is not in BANNED_NEWS_DOMAINS. ' +
