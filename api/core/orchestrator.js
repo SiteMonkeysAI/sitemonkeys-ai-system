@@ -3440,24 +3440,23 @@ export class Orchestrator {
 
     // PRIORITY 1: Folder name matching (from spec)
     // Check if section contains folder indicators and match against query
+    // All patterns use the 'g' flag so matchAll() can be used uniformly,
+    // ensuring match[1] is the capture group rather than a string character index.
     const folderPatterns = [
-      /folder[:\s]+([^\n]{1,200})/i,
-      /directory[:\s]+([^\n]{1,200})/i,
-      /path[:\s]+([^\n\/]{1,200})/i,
+      /folder[:\s]+([^\n]{1,200})/gi,
+      /directory[:\s]+([^\n]{1,200})/gi,
+      /path[:\s]+([^\n\/]{1,200})/gi,
       /\/([^\/\n]{1,100})\//g, // Extract folder names from paths, limit to 100 chars
     ];
 
     for (const pattern of folderPatterns) {
-      const matches = section.match(pattern);
-      if (matches) {
-        for (const match of Array.isArray(matches) ? matches : [matches]) {
-          const folderName = (match[1] || match).toLowerCase();
-          // Check if any keyword matches the folder name
-          for (const keyword of keywords) {
-            if (folderName.includes(keyword) || keyword.includes(folderName)) {
-              score += 50; // High priority boost for folder match
-              this.log(`[VAULT] Folder match: "${folderName}" matches keyword "${keyword}"`);
-            }
+      for (const match of section.matchAll(pattern)) {
+        const folderName = (match[1] || match[0]).toLowerCase();
+        // Check if any keyword matches the folder name
+        for (const keyword of keywords) {
+          if (folderName.includes(keyword) || keyword.includes(folderName)) {
+            score += 50; // High priority boost for folder match
+            this.log(`[VAULT] Folder match: "${folderName}" matches keyword "${keyword}"`);
           }
         }
       }
