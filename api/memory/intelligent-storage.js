@@ -2370,24 +2370,8 @@ Facts (preserve user terminology + add synonyms):`;
       if (tokenCount > MAX_ENTRY_TOKENS) {
         console.log(`[INTELLIGENT-STORAGE] ⚠️ Entry exceeds ${MAX_ENTRY_TOKENS} token cap (${tokenCount} tokens) — truncating`);
         // Truncate to approximately MAX_ENTRY_TOKENS tokens (rough char estimate: 4 chars/token)
-        // Uses sentence-aware truncation: cuts at the last complete sentence before the limit,
-        // or at the last complete word if no sentence boundary exists within the limit.
         const maxChars = MAX_ENTRY_TOKENS * 4;
-        let truncated = facts.substring(0, maxChars);
-        // Find the last sentence boundary (. ! ?) followed by whitespace or end-of-string
-        const sentenceMatch = truncated.match(/^([\s\S]*[.!?])(\s|$)/);
-        if (sentenceMatch) {
-          truncated = sentenceMatch[1].trimEnd();
-        } else {
-          // Fall back to the last complete word boundary
-          const lastSpace = truncated.lastIndexOf(' ');
-          if (lastSpace > 0) {
-            truncated = truncated.substring(0, lastSpace).trimEnd();
-          } else {
-            truncated = truncated.trimEnd();
-          }
-        }
-        facts = truncated + '\n[truncated — original exceeded memory token cap]';
+        facts = facts.substring(0, maxChars).trim() + '\n[truncated — original exceeded memory token cap]';
         console.log(`[INTELLIGENT-STORAGE] Truncated to ${facts.length} chars`);
       }
 
