@@ -1471,14 +1471,30 @@ export class Orchestrator {
       }
 
       // STEP 6.4: QUERY COMPLEXITY CLASSIFICATION (uses Phase 4 metadata)
-      // Use genuine semantic intelligence to determine response approach
+      // Use genuine semantic intelligence to determine response approach.
+      // NOTE: The query embedding is cached by the classifier (embeddingCache) so no duplicate
+      // embedding API call is made. The second call is kept because phase4Metadata (truth_type,
+      // high_stakes) can meaningfully change the response approach for non-greeting queries.
+      // Optimisation: when phase4Metadata adds no new information beyond what STEP 0.5 used,
+      // reuse earlyClassification directly to skip the cosine-similarity computation.
       let queryClassification = null;
       try {
-        this.log('🎯 [QUERY_CLASSIFICATION] Analyzing query complexity...');
-        queryClassification = await classifyQueryComplexity(message, phase4Metadata);
-        this.log(`🎯 [QUERY_CLASSIFICATION] Result: ${queryClassification.classification} (confidence: ${queryClassification.confidence.toFixed(2)})`);
-        this.log(`🎯 [QUERY_CLASSIFICATION] Scaffolding required: ${queryClassification.requiresScaffolding}`);
-        this.log(`🎯 [QUERY_CLASSIFICATION] Response approach: ${queryClassification.responseApproach?.type || 'default'}`);
+        const phase4AddsMeaningfulInfo = (
+          (phase4Metadata.truth_type !== null && phase4Metadata.truth_type !== 'UNKNOWN') ||
+          phase4Metadata.high_stakes?.isHighStakes === true
+        );
+
+        if (earlyClassification && !phase4AddsMeaningfulInfo) {
+          // Phase 4 has no additional signal — reuse the STEP 0.5 result directly
+          queryClassification = earlyClassification;
+          this.log(`🎯 [QUERY_CLASSIFICATION] Reusing earlyClassification (phase4 adds no new signal): ${queryClassification.classification} (confidence: ${queryClassification.confidence.toFixed(2)})`);
+        } else {
+          this.log('🎯 [QUERY_CLASSIFICATION] Analyzing query complexity...');
+          queryClassification = await classifyQueryComplexity(message, phase4Metadata);
+          this.log(`🎯 [QUERY_CLASSIFICATION] Result: ${queryClassification.classification} (confidence: ${queryClassification.confidence.toFixed(2)})`);
+          this.log(`🎯 [QUERY_CLASSIFICATION] Scaffolding required: ${queryClassification.requiresScaffolding}`);
+          this.log(`🎯 [QUERY_CLASSIFICATION] Response approach: ${queryClassification.responseApproach?.type || 'default'}`);
+        }
         
         // Add to context for personality frameworks
         context.queryClassification = queryClassification;
@@ -1587,6 +1603,70 @@ export class Orchestrator {
             mode: mode,
             timestamp: new Date().toISOString(),
             duration: Date.now() - startTime
+          }
+        };
+      }
+
+      // STEP 6.9: GREETING SHORTCUT — bypass GPT-4 for pure greetings
+      // Only fires when ALL conditions are met:
+      // - classified as greeting with high confidence (≥0.85)
+      // - no personal intent detected
+      // - no memory context present
+      // - no document or vault context
+      // If any condition fails, fall through to normal GPT-4 call.
+      if (
+        earlyClassification?.classification === 'greeting' &&
+        earlyClassification.confidence >= 0.85 &&
+        !hasPersonalIntent &&
+        !memoryContext.hasMemory &&
+        !context.documents &&
+        !context.vault
+      ) {
+        const personalitySelection = this.personalitySelector.selectPersonality(analysis, mode, context);
+        const isEli = personalitySelection.personality === 'eli';
+
+        const eliGreetings = [
+          'Hello. What can I help you with?',
+          'Hi. What do you need?',
+          'Good to hear from you. What\'s on your mind?'
+        ];
+        const roxyGreetings = [
+          'Hey! Great to hear from you. What can I help with?',
+          'Hi there! What\'s on your mind?',
+          'Hello! How can I help you today?'
+        ];
+        const pool = isEli ? eliGreetings : roxyGreetings;
+        const greetingResponse = pool[Math.floor(Math.random() * pool.length)];
+
+        this.log(`[GREETING-SHORTCUT] Returning deterministic greeting (personality=${personalitySelection.personality}, confidence=${earlyClassification.confidence.toFixed(2)}) — GPT-4 bypassed`);
+
+        const processingTime = Date.now() - startTime;
+        return {
+          success: true,
+          response: greetingResponse,
+          metadata: {
+            mode,
+            confidence: earlyClassification.confidence,
+            model: 'greeting-shortcut',
+            personality: personalitySelection.personality,
+            greetingShortcut: true,
+            classification: 'greeting',
+            timestamp: new Date().toISOString(),
+            processingTime,
+            cost: { totalCost: 0, inputTokens: 0, outputTokens: 0 },
+            token_usage: {
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: 0,
+              cost_usd: 0,
+              cost_display: '$0.0000'
+            }
+          },
+          sources: {
+            hasDocuments: false,
+            hasExternal: false,
+            hasVault: false,
+            hasMemory: false
           }
         };
       }
@@ -5044,6 +5124,11 @@ INFERENCE EXAMPLES (ISSUE #699-INF1):
 CRITICAL: Trust Memory Context
 When information is explicitly provided in MEMORY CONTEXT or DOCUMENT CONTEXT sections below, that information is FACTUAL about what the user has told you. Do NOT second-guess it or claim you "don't have" information that is clearly present in those sections. A caring family member doesn't forget what you've told them or pretend not to remember.
 
+You are a world-class expert who can reason through problems. When you have the information needed to answer a question through calculation or logical inference, you MUST do so. Refusing to think through available data is not being careful - it's being unhelpful.
+`;
+
+    if (hasMemoryContext) {
+      prompt += `
 CRITICAL - MEMORY FABRICATION IS A CATEGORY 1 TRUST VIOLATION:
 NEVER claim to have discussed, mentioned, or remember topics that are NOT explicitly present in the MEMORY CONTEXT section. If no MEMORY CONTEXT section appears below, you have NO stored information from previous conversations about any topic. DO NOT say "as we discussed previously", "things we talked about before", "you mentioned earlier", or any variant unless that specific information is shown in the MEMORY CONTEXT section. Fabricating memory references — even topics you know about from training data — destroys user trust and is strictly prohibited.
 
@@ -5056,9 +5141,8 @@ When memory contains conflicting facts (e.g., user is allergic to X but spouse l
 - Don't just list both facts - connect them as conflicting
 - Example: "There's a real tradeoff here: your allergy vs your wife's preference."
 - A caring family member acknowledges difficult tradeoffs, not just lists facts
-
-You are a world-class expert who can reason through problems. When you have the information needed to answer a question through calculation or logical inference, you MUST do so. Refusing to think through available data is not being careful - it's being unhelpful.
 `;
+    }
 
     // Memory context is already injected earlier - no need for additional instructions here
 
