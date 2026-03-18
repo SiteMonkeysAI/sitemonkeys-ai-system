@@ -128,9 +128,10 @@ function detectUpdateIntent(content, fingerprint) {
       /\b(?:my|our)\s+(?:divorce|wedding|marriage|separation)\b/i
     ],
     user_pet: [
-      /\b(?:got|adopted|have|own)\s+(?:a|an|my)?\s*(?:dog|cat|pet|bird|fish)\b/i,
-      /\b(?:no longer have|lost|gave away|don't have)\s+(?:a|my)?\s*(?:dog|cat|pet)\b/i,
-      /\b(?:my|our)\s+(?:new|current)?\s*(?:dog|cat|pet)\b/i
+      /\b(?:got|adopted|have|own)\s+(?:a|an|my)?\s*(?:dog|cat|pet|bird|fish|monkey|primate|capuchin|parrot)\b/i,
+      /\b(?:no longer have|lost|gave away|don't have)\s+(?:a|my)?\s*(?:dog|cat|pet|monkey|primate)\b/i,
+      /\b(?:my|our)\s+(?:new|current)?\s*(?:dog|cat|pet|monkey|primate|capuchin)\b/i,
+      /\b(?:male|female)(?:'s|s)?\s+(?:name|monkey|capuchin)\b/i
     ]
   };
   
@@ -274,14 +275,15 @@ const FINGERPRINT_PATTERNS = [
     ],
     confidence: 0.85
   },
-  // Pet
+  // Pet (including exotic animals and primates)
   {
     fingerprint: 'user_pet',
     patterns: [
-      /\bi\s+have\s+a\s+(dog|cat|pet|bird|fish|hamster|rabbit)(?:\s+named\s+([A-Z][a-z]+))?/i,
-      /\b(?:my|our)\s+(?:dog|cat|pet)(?:'s name)?\s+(?:is|:)\s+([A-Z][a-z]+)/i
+      /\bi\s+have\s+a\s+(dog|cat|pet|bird|fish|hamster|rabbit|monkey|primate|parrot|reptile|turtle)(?:\s+named\s+([A-Z][a-z]+))?/i,
+      /\b(?:my|our)\s+(?:dog|cat|pet|monkey|primate|parrot|capuchin)(?:'s name)?\s+(?:is|:)\s+([A-Z][a-z]+)/i,
+      /\b(?:male|female)(?:'s|s)?\s+(?:name|monkey|capuchin)\b/i
     ],
-    confidence: 0.80
+    confidence: 0.85
   },
   // Favorite Color
   {
@@ -395,7 +397,7 @@ function validateValueSignature(content, fingerprint) {
       optional: true  // Names are flexible
     },
     user_pet: {
-      patterns: [/\b(?:dog|cat|pet|bird|fish|hamster|rabbit|animal)\b/i],
+      patterns: [/\b(?:dog|cat|pet|bird|fish|hamster|rabbit|animal|monkey|primate|capuchin|parrot|reptile|turtle)\b/i],
       description: 'pet type',
       optional: true
     },
