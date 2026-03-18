@@ -999,10 +999,24 @@ export class Orchestrator {
       // ISSUE #790 FIX: Skip memory for external market queries
       const skipMemoryForMarketQuery = isMarketQuery;
 
+      // A pure greeting with no personal intent never needs memory context regardless of
+      // whether the user has stored memories.  The !hasPersonalIntent guard already
+      // protects cases like "Hi, what's my name?" where memory is genuinely required.
+      // Without this bypass the userHasMemories check forces memory retrieval for "Hello",
+      // which sets memoryContext.hasMemory=true and prevents the STEP 6.9 greeting shortcut
+      // from firing — causing an unnecessary GPT-4 call and downstream truncation.
+      const isPureGreeting =
+        earlyClassification !== null &&
+        earlyClassification !== undefined &&
+        earlyClassification.classification === 'greeting' &&
+        !hasPersonalIntent &&
+        message.length < 50;
+
       // Issue #612 Refinement 2: Additional safety check
-      // Even if we think we can skip, check if user has memories first
+      // Even if we think we can skip, check if user has memories first.
+      // Exception: pure greetings bypass this check entirely (see isPureGreeting above).
       let userHasMemories = false;
-      if (skipMemoryForSimpleQuery) {
+      if (skipMemoryForSimpleQuery && !isPureGreeting) {
         userHasMemories = await this.#hasUserMemories(userId);
         if (userHasMemories) {
           this.log(`[MEMORY] ⚠️  User has existing memories - will NOT skip retrieval even for simple query`);
@@ -1013,7 +1027,7 @@ export class Orchestrator {
       let memoryDuration = 0;
 
       // ISSUE #790 FIX: Skip memory for external market queries OR simple queries
-      if ((skipMemoryForSimpleQuery && !userHasMemories) || skipMemoryForMarketQuery) {
+      if ((skipMemoryForSimpleQuery && (!userHasMemories || isPureGreeting)) || skipMemoryForMarketQuery) {
         if (skipMemoryForMarketQuery) {
           this.log(`[MEMORY-GATE] intent=market_query memory_injected_tokens=0 reason=external_market_data_query`);
         } else {
@@ -2021,7 +2035,10 @@ export class Orchestrator {
                 if (lastSentence > MIN_SENTENCE_LENGTH) {
                   personalityResponse.response = personalityResponse.response.substring(0, lastSentence + 1);
                 } else {
-                  personalityResponse.response = truncated.trim() + '...';
+                  // Cut at last word boundary to avoid mid-word truncation (e.g. "Senior Arc..." → "Senior...")
+                  const lastSpace = truncated.lastIndexOf(' ');
+                  personalityResponse.response =
+                    (lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated).trim() + '...';
                 }
               } else {
                 // Still strip to first line if under limit but multi-line
@@ -2033,7 +2050,10 @@ export class Orchestrator {
               // CRITICAL: Final safety check - NEVER exceed GREETING_LIMIT
               if (personalityResponse.response.length > GREETING_LIMIT) {
                 this.log(`⚠️ Response still over limit after truncation (${personalityResponse.response.length} > ${GREETING_LIMIT}), applying hard cut`);
-                personalityResponse.response = personalityResponse.response.substring(0, GREETING_LIMIT - 3).trim() + '...';
+                const safeChunk = personalityResponse.response.substring(0, GREETING_LIMIT - 3);
+                const lastSpace = safeChunk.lastIndexOf(' ');
+                personalityResponse.response =
+                  (lastSpace > 0 ? safeChunk.substring(0, lastSpace) : safeChunk).trim() + '...';
               }
 
               responseIntelligence.applied = true;
