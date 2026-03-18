@@ -2687,7 +2687,9 @@ Facts (preserve user terminology + add synonyms):`;
       const anchorKeys = Object.keys(metadata.anchors || {});
       const unicodeCount = (metadata.anchors?.unicode || []).length;
       const pricingCount = (metadata.anchors?.pricing || []).length;
-      console.log(`[ANCHOR-STORAGE] stored_id=${memoryId} anchors_keys=[${anchorKeys.join(',')}] unicode_count=${unicodeCount} pricing_count=${pricingCount}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[ANCHOR-STORAGE] stored_id=${memoryId} anchors_keys=[${anchorKeys.join(',')}] unicode_count=${unicodeCount} pricing_count=${pricingCount}`);
+      }
 
       // DIAGNOSTIC LOGGING: Track exact storage details
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
