@@ -491,19 +491,23 @@ function detectFingerprintDeterministic(content) {
           }
           // FIX #710 Requirement C: Log rejections with sanitized preview
           const preview = sanitizeLogPreview(content, 50);
-          console.log(`[FINGERPRINT-REJECTED] fingerprint=${fingerprint} reason=no_value_signature preview="${preview}"`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[FINGERPRINT-REJECTED] fingerprint=${fingerprint} reason=no_value_signature preview="${preview}"`);
+          }
           continue;  // Try next pattern
         }
 
         if (process.env.DEBUG_DIAGNOSTICS === 'true') {
           console.log(`[SUPERSESSION-DIAG] ✅ PATTERN MATCH FOUND: ${fingerprint} with valid value signature`);
+          console.log(`[SUPERSESSION] Deterministic match: ${fingerprint} (confidence: ${confidence})`);
         }
-        console.log(`[SUPERSESSION] Deterministic match: ${fingerprint} (confidence: ${confidence})`);
 
         // Detect update intent for optional fields
         const updateIntent = validation.isOptional ? detectUpdateIntent(content, fingerprint) : false;
         if (validation.isOptional && updateIntent) {
-          console.log(`[SUPERSESSION] ✓ Update intent detected for optional field: ${fingerprint}`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[SUPERSESSION] ✓ Update intent detected for optional field: ${fingerprint}`);
+          }
         }
 
         return { fingerprint, confidence, method: 'deterministic', valueSignature: true, isOptional: validation.isOptional, updateIntent };
@@ -594,7 +598,9 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
     const timeMs = Date.now() - startTime;
 
     if (!fingerprint || fingerprint === 'null' || fingerprint.toLowerCase() === 'null') {
-      console.log(`[SUPERSESSION] Model returned null (${timeMs}ms)`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[SUPERSESSION] Model returned null (${timeMs}ms)`);
+      }
       return { fingerprint: null, confidence: 0, method: 'model', timeMs, valueSignature: false, isOptional: false };
     }
 
@@ -607,7 +613,9 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
     const allValid = [...validFingerprints, ...additionalValid];
 
     if (!allValid.includes(fingerprint)) {
-      console.log(`[SUPERSESSION] Model returned unknown fingerprint: ${fingerprint}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[SUPERSESSION] Model returned unknown fingerprint: ${fingerprint}`);
+      }
       return { fingerprint: null, confidence: 0, method: 'model', timeMs, valueSignature: false, isOptional: false };
     }
 
@@ -615,26 +623,34 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
     const validation = validateValueSignature(content, fingerprint);
 
     if (!validation.hasValueSignature) {
-      console.log(`[SUPERSESSION] Model detected ${fingerprint} but value signature missing: ${validation.reason} (${timeMs}ms)`);
-      // FIX #710 Requirement C: Log rejections with sanitized preview
-      const preview = sanitizeLogPreview(content, 50);
-      console.log(`[FINGERPRINT-REJECTED] fingerprint=${fingerprint} reason=model_no_value_signature preview="${preview}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[SUPERSESSION] Model detected ${fingerprint} but value signature missing: ${validation.reason} (${timeMs}ms)`);
+        // FIX #710 Requirement C: Log rejections with sanitized preview
+        const preview = sanitizeLogPreview(content, 50);
+        console.log(`[FINGERPRINT-REJECTED] fingerprint=${fingerprint} reason=model_no_value_signature preview="${preview}"`);
+      }
       return { fingerprint: null, confidence: 0, method: 'model_rejected', timeMs, valueSignature: false, isOptional: false, updateIntent: false };
     }
 
     // Detect update intent for optional fields
     const updateIntent = validation.isOptional ? detectUpdateIntent(content, fingerprint) : false;
     if (validation.isOptional && updateIntent) {
-      console.log(`[SUPERSESSION] ✓ Update intent detected for optional field: ${fingerprint}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[SUPERSESSION] ✓ Update intent detected for optional field: ${fingerprint}`);
+      }
     }
 
-    console.log(`[SUPERSESSION] Model match: ${fingerprint} with valid value signature (${timeMs}ms)`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[SUPERSESSION] Model match: ${fingerprint} with valid value signature (${timeMs}ms)`);
+    }
     return { fingerprint, confidence: 0.75, method: 'model', timeMs, valueSignature: true, isOptional: validation.isOptional, updateIntent };
 
   } catch (error) {
     const timeMs = Date.now() - startTime;
     if (error.name === 'AbortError') {
-      console.log(`[SUPERSESSION] Model timeout after ${timeMs}ms`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[SUPERSESSION] Model timeout after ${timeMs}ms`);
+      }
       return { fingerprint: null, confidence: 0, method: 'timeout', error: 'timeout', timeMs, valueSignature: false, isOptional: false, updateIntent: false };
     }
     console.error(`[SUPERSESSION] Model error: ${error.message}`);
@@ -773,22 +789,26 @@ export async function storeWithSupersession(pool, memoryData) {
           WHERE id = ANY($1::integer[])
         `, [oldIds]);
 
-        console.log(`[SUPERSESSION] Marked ${existing.rows.length} old memories as not current`);
-        console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
-        console.log(`[SUPERSESSION]    Superseded IDs: ${oldIds.join(', ')}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[SUPERSESSION] Marked ${existing.rows.length} old memories as not current`);
+          console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
+          console.log(`[SUPERSESSION]    Superseded IDs: ${oldIds.join(', ')}`);
 
-        // Log content preview for debugging
-        existing.rows.forEach((row, idx) => {
-          console.log(`[SUPERSESSION]    Memory ${row.id}: "${row.content.substring(0, 60)}..."`);
-        });
+          // Log content preview for debugging
+          existing.rows.forEach((row, idx) => {
+            console.log(`[SUPERSESSION]    Memory ${row.id}: "${row.content.substring(0, 60)}..."`);
+          });
+        }
       }
 
       // Insert new memory (id is INTEGER with sequence, auto-generated)
       // FIX #659: Include metadata in INSERT to preserve anchors
       // FIX #673: Log metadata before INSERT to verify anchors are present
-      console.log(`[FIX-673-SUPERSESSION] PRE-INSERT metadata check: has_anchors=${!!metadata.anchors}, anchor_keys=[${Object.keys(metadata.anchors || {}).join(',')}]`);
-      if (metadata.anchors) {
-        console.log(`[FIX-673-SUPERSESSION] PRE-INSERT anchor counts: unicode=${(metadata.anchors.unicode || []).length}, pricing=${(metadata.anchors.pricing || []).length}, explicit_token=${(metadata.anchors.explicit_token || []).length}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[FIX-673-SUPERSESSION] PRE-INSERT metadata check: has_anchors=${!!metadata.anchors}, anchor_keys=[${Object.keys(metadata.anchors || {}).join(',')}]`);
+        if (metadata.anchors) {
+          console.log(`[FIX-673-SUPERSESSION] PRE-INSERT anchor counts: unicode=${(metadata.anchors.unicode || []).length}, pricing=${(metadata.anchors.pricing || []).length}, explicit_token=${(metadata.anchors.explicit_token || []).length}`);
+        }
       }
 
       const newMemory = await client.query(`
@@ -821,13 +841,17 @@ export async function storeWithSupersession(pool, memoryData) {
           WHERE id = ANY($2::integer[])
         `, [newId, oldIds]);
 
-        console.log(`[SUPERSESSION] ✅ Comprehensive supersession complete`);
-        console.log(`[SUPERSESSION]    New memory ID: ${newId}`);
-        console.log(`[SUPERSESSION]    Superseded ${oldIds.length} old memories: ${oldIds.join(', ')}`);
-        console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[SUPERSESSION] ✅ Comprehensive supersession complete`);
+          console.log(`[SUPERSESSION]    New memory ID: ${newId}`);
+          console.log(`[SUPERSESSION]    Superseded ${oldIds.length} old memories: ${oldIds.join(', ')}`);
+          console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
+        }
       } else {
-        console.log(`[SUPERSESSION] ✅ Stored new memory ID ${newId} (no existing memories to supersede)`);
-        console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[SUPERSESSION] ✅ Stored new memory ID ${newId} (no existing memories to supersede)`);
+          console.log(`[SUPERSESSION]    Fingerprint: ${factFingerprint}`);
+        }
       }
 
       await client.query('COMMIT');
@@ -846,7 +870,9 @@ export async function storeWithSupersession(pool, memoryData) {
       // Check for serialization failure or deadlock - retry
       if (error.code === '40001' || error.code === '40P01') {
         retries++;
-        console.log(`[SUPERSESSION] ⚠️ Conflict detected, retry ${retries}/${maxRetries}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[SUPERSESSION] ⚠️ Conflict detected, retry ${retries}/${maxRetries}`);
+        }
         await new Promise(r => setTimeout(r, SUPERSESSION_CONFIG.retryDelayMs * retries));
         continue;
       }
@@ -927,7 +953,9 @@ async function storeWithoutSupersession(pool, memoryData) {
         //        server start will create the index; until then, fall back to no-fingerprint.
         // 23505: unique_violation (should not happen with DO NOTHING, but guard anyway)
         if (fpInsertError.code === '42P10' || fpInsertError.code === '23505') {
-          console.log(`[SUPERSESSION] ON CONFLICT fingerprint insert failed (${fpInsertError.code}) — falling back to no-fingerprint insert`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[SUPERSESSION] ON CONFLICT fingerprint insert failed (${fpInsertError.code}) — falling back to no-fingerprint insert`);
+          }
           result = null;
         } else {
           throw fpInsertError;
@@ -935,7 +963,9 @@ async function storeWithoutSupersession(pool, memoryData) {
       }
 
       if (result && result.rows.length > 0) {
-        console.log(`[SUPERSESSION] Stored non-superseding memory ID ${result.rows[0].id} (fingerprint: ${factFingerprint})`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[SUPERSESSION] Stored non-superseding memory ID ${result.rows[0].id} (fingerprint: ${factFingerprint})`);
+        }
         return {
           success: true,
           memoryId: result.rows[0].id,
@@ -950,9 +980,13 @@ async function storeWithoutSupersession(pool, memoryData) {
       // - result.rows is empty → DO NOTHING fired: an is_current=true row with this fingerprint
       //   already exists (user simply re-stated the same fact, no supersession needed)
       if (!result) {
-        console.log(`[SUPERSESSION] Fingerprint index unavailable for ${factFingerprint} — storing content without fingerprint`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[SUPERSESSION] Fingerprint index unavailable for ${factFingerprint} — storing content without fingerprint`);
+        }
       } else {
-        console.log(`[SUPERSESSION] Duplicate current fingerprint ${factFingerprint} — storing content without fingerprint`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[SUPERSESSION] Duplicate current fingerprint ${factFingerprint} — storing content without fingerprint`);
+        }
       }
     }
 
@@ -972,7 +1006,9 @@ async function storeWithoutSupersession(pool, memoryData) {
       JSON.stringify(metadata)
     ]);
 
-    console.log(`[SUPERSESSION] Stored non-superseding memory ID ${result.rows[0].id}`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[SUPERSESSION] Stored non-superseding memory ID ${result.rows[0].id}`);
+    }
 
     return {
       success: true,
@@ -1010,7 +1046,9 @@ export async function createSupersessionConstraint(pool) {
     `);
 
     if (oldCheck.rows.length > 0) {
-      console.log('[SUPERSESSION] 🔄 Dropping old index (with mode filter)...');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[SUPERSESSION] 🔄 Dropping old index (with mode filter)...');
+      }
       await pool.query(`DROP INDEX idx_one_current_fact`);
     }
 
@@ -1032,8 +1070,10 @@ export async function createSupersessionConstraint(pool) {
       WHERE is_current = true AND fact_fingerprint IS NOT NULL
     `);
 
-    console.log('[SUPERSESSION] ✅ Created comprehensive unique constraint: idx_one_current_fact_comprehensive');
-    console.log('[SUPERSESSION]    (enforces one current fact per user per fingerprint, across all modes)');
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[SUPERSESSION] ✅ Created comprehensive unique constraint: idx_one_current_fact_comprehensive');
+      console.log('[SUPERSESSION]    (enforces one current fact per user per fingerprint, across all modes)');
+    }
     return { success: true, message: 'Comprehensive index created successfully' };
 
   } catch (error) {
@@ -1085,20 +1125,24 @@ export async function cleanupDuplicateCurrentFacts(pool) {
     const cleanedCount = result.rowCount;
 
     if (cleanedCount > 0) {
-      console.log(`[SUPERSESSION] 🧹 Comprehensive cleanup: Marked ${cleanedCount} duplicate current facts as superseded`);
-      console.log(`[SUPERSESSION]    (cleaned duplicates across all modes per fingerprint)`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[SUPERSESSION] 🧹 Comprehensive cleanup: Marked ${cleanedCount} duplicate current facts as superseded`);
+        console.log(`[SUPERSESSION]    (cleaned duplicates across all modes per fingerprint)`);
 
-      // Group by fingerprint for reporting
-      const byFingerprint = {};
-      result.rows.forEach(row => {
-        byFingerprint[row.fact_fingerprint] = (byFingerprint[row.fact_fingerprint] || 0) + 1;
-      });
+        // Group by fingerprint for reporting
+        const byFingerprint = {};
+        result.rows.forEach(row => {
+          byFingerprint[row.fact_fingerprint] = (byFingerprint[row.fact_fingerprint] || 0) + 1;
+        });
 
-      Object.entries(byFingerprint).forEach(([fp, count]) => {
-        console.log(`[SUPERSESSION]    ${fp}: ${count} duplicates removed`);
-      });
+        Object.entries(byFingerprint).forEach(([fp, count]) => {
+          console.log(`[SUPERSESSION]    ${fp}: ${count} duplicates removed`);
+        });
+      }
     } else {
-      console.log(`[SUPERSESSION] ✅ No duplicate current facts found`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[SUPERSESSION] ✅ No duplicate current facts found`);
+      }
     }
 
     return { success: true, cleaned: cleanedCount };
