@@ -1058,4 +1058,93 @@ describe('K. News Source Credibility Guards', () => {
 
 });
 
+// ============================================================
+// SECTION L: GREETING SHORTCUT GUARDS (Issue: BV-mode fallthrough)
+// ============================================================
+
+describe('L. Greeting Shortcut Guards', () => {
+
+  it('L-001: isPureGreeting bypasses userHasMemories check so shortcut fires in all modes', () => {
+    // ROOT CAUSE (Issue): In Business Validation mode, a user with stored memories caused
+    // userHasMemories=true which set memoryContext.hasMemory=true which blocked the
+    // STEP 6.9 greeting shortcut, routing "Hello" to GPT-4 at $0.04+ cost.
+    // FIX: A pure greeting (no personal intent) must skip memory regardless of userHasMemories.
+    const orchestrator = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orchestrator, 'Could not read api/core/orchestrator.js');
+
+    // The isPureGreeting flag must exist and reference both the classification and hasPersonalIntent
+    const hasIsPureGreeting =
+      orchestrator.includes('isPureGreeting') &&
+      orchestrator.includes("classification === 'greeting'") &&
+      orchestrator.includes('!hasPersonalIntent');
+
+    assert.ok(
+      hasIsPureGreeting,
+      'L-001 FAIL: isPureGreeting guard is missing from orchestrator.js. ' +
+      'Without it, "Hello" in Business Validation mode (user with memories) bypasses ' +
+      'the greeting shortcut and hits GPT-4, costing ~$0.04 per greeting.'
+    );
+  });
+
+  it('L-002: isPureGreeting gates the userHasMemories database call', () => {
+    // The DB query this.#hasUserMemories() must NOT be called for pure greetings —
+    // it is both unnecessary (result unused) and a latency source.
+    const orchestrator = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orchestrator, 'Could not read api/core/orchestrator.js');
+
+    // The check `skipMemoryForSimpleQuery && !isPureGreeting` (or equivalent) must guard
+    // the hasUserMemories call so pure greetings skip it entirely.
+    const gatesMemoryCall =
+      orchestrator.includes('skipMemoryForSimpleQuery && !isPureGreeting') ||
+      (orchestrator.includes('!isPureGreeting') && orchestrator.includes('#hasUserMemories'));
+
+    assert.ok(
+      gatesMemoryCall,
+      'L-002 FAIL: The isPureGreeting guard does not gate the #hasUserMemories DB call. ' +
+      'Pure greetings will still trigger an unnecessary database query before the shortcut check.'
+    );
+  });
+
+  it('L-003: greeting shortcut memory skip condition includes isPureGreeting', () => {
+    // The condition that skips memory retrieval must allow pure greetings to bypass
+    // even when userHasMemories is true.
+    const orchestrator = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orchestrator, 'Could not read api/core/orchestrator.js');
+
+    // Expected pattern: (!userHasMemories || isPureGreeting)
+    const hasCorrectCondition =
+      orchestrator.includes('!userHasMemories || isPureGreeting') ||
+      orchestrator.includes('isPureGreeting || !userHasMemories');
+
+    assert.ok(
+      hasCorrectCondition,
+      'L-003 FAIL: The memory-skip condition does not include isPureGreeting. ' +
+      'A user with stored memories sending "Hello" will still retrieve memory context, ' +
+      'setting memoryContext.hasMemory=true and blocking the STEP 6.9 shortcut.'
+    );
+  });
+
+  it('L-004: greeting hard-cut uses word boundary to prevent mid-word truncation', () => {
+    // ROOT CAUSE (Issue): When GPT-4 was mistakenly called for "Hello" (Issue L-001),
+    // the 150-char greeting truncation hard-cut the response mid-word:
+    // "...perhaps related to your work as a Senior Arc..."
+    // FIX: The hard-cut fallback must trim at the last space (word boundary).
+    const orchestrator = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orchestrator, 'Could not read api/core/orchestrator.js');
+
+    // The else-branch of the sentence-boundary check must now call lastIndexOf(' ')
+    // on the truncated string before appending '...'
+    const hasWordBoundaryFallback =
+      orchestrator.includes("lastSpace = truncated.lastIndexOf(' ')") ||
+      orchestrator.includes('truncated.lastIndexOf(" ")');
+
+    assert.ok(
+      hasWordBoundaryFallback,
+      'L-004 FAIL: The greeting truncation hard-cut does not find the last word boundary. ' +
+      'Responses will be cut mid-word (e.g. "Senior Arc..." instead of "Senior Architect.").'
+    );
+  });
+
+});
+
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');
