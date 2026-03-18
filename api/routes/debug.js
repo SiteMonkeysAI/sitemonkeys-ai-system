@@ -17,6 +17,21 @@ import express from 'express';
 
 const router = express.Router();
 
+/**
+ * Escape HTML special characters to prevent stored XSS when database
+ * content is rendered into HTML debug pages.
+ */
+function escapeHtml(str) {
+  if (str == null) return '';
+  if (typeof str !== 'string') return String(str);
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // In-memory tracking of recent operations (per user)
 // This gets populated by hooks in the memory system
 const operationLog = new Map();
@@ -423,32 +438,32 @@ router.get('/memory-stats', async (req, res) => {
   <h2>📁 By Category</h2>
   <table>
     <tr><th>Category</th><th>Count</th><th>Tokens</th></tr>
-    ${stats.by_category.map(c => `<tr><td>${c.category_name || 'NULL'}</td><td>${c.count}</td><td>${c.total_tokens || 0}</td></tr>`).join('')}
+    ${stats.by_category.map(c => `<tr><td>${escapeHtml(c.category_name || 'NULL')}</td><td>${c.count}</td><td>${c.total_tokens || 0}</td></tr>`).join('')}
   </table>
 
   <h2>👤 By User ID</h2>
   <table>
     <tr><th>User ID</th><th>Count</th><th>Tokens</th></tr>
-    ${stats.by_user.map(u => `<tr><td>${u.user_id}</td><td>${u.count}</td><td>${u.total_tokens || 0}</td></tr>`).join('')}
+    ${stats.by_user.map(u => `<tr><td>${escapeHtml(u.user_id)}</td><td>${u.count}</td><td>${u.total_tokens || 0}</td></tr>`).join('')}
   </table>
 
   <h2>📝 Recent Memories</h2>
   ${stats.recent.map(m => `
     <div class="box">
-      <strong>ID ${m.id}</strong> | ${m.user_id} | ${m.category_name}<br>
-      <small>Tokens: ${m.token_count} | Relevance: ${m.relevance_score} | ${m.created_at}</small>
-      <pre>${m.preview}...</pre>
+      <strong>ID ${escapeHtml(m.id)}</strong> | ${escapeHtml(m.user_id)} | ${escapeHtml(m.category_name)}<br>
+      <small>Tokens: ${escapeHtml(m.token_count)} | Relevance: ${escapeHtml(m.relevance_score)} | ${escapeHtml(m.created_at)}</small>
+      <pre>${escapeHtml(m.preview)}...</pre>
     </div>
   `).join('')}
 
   <h2>🔧 Schema</h2>
   <table>
     <tr><th>Column</th><th>Type</th></tr>
-    ${stats.schema.map(s => `<tr><td>${s.column_name}</td><td>${s.data_type}</td></tr>`).join('')}
+    ${stats.schema.map(s => `<tr><td>${escapeHtml(s.column_name)}</td><td>${escapeHtml(s.data_type)}</td></tr>`).join('')}
   </table>
 
   <h2>📊 Raw JSON</h2>
-  <pre>${JSON.stringify(stats, null, 2)}</pre>
+  <pre>${escapeHtml(JSON.stringify(stats, null, 2))}</pre>
 </body>
 </html>`;
 
