@@ -405,7 +405,9 @@ export class Orchestrator {
       // ========== STEP 9: ANCHOR PRESERVATION (Issue #606 Phase 1) ==========
       try {
         // FIX #667: Verification logging - prove memories reach validator
-        console.log(`[VALIDATOR-WIRE] Passing to anchor validator: count=${context.memory_context?.length || 0} ids=${JSON.stringify(context.memory_context?.map(m => m.id) || [])}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[VALIDATOR-WIRE] Passing to anchor validator: count=${context.memory_context?.length || 0} ids=${JSON.stringify(context.memory_context?.map(m => m.id) || [])}`);
+        }
 
         // FIX #659: VALIDATOR-TRACE diagnostic logging (gated by DEBUG_DIAGNOSTICS)
         if (process.env.DEBUG_DIAGNOSTICS === 'true') {
@@ -1080,20 +1082,26 @@ export class Orchestrator {
       const documentData = await this.#loadDocumentContext(effectiveDocumentContext, sessionId, message);
 
       // ISSUE #781 FIX: Enhanced document loading diagnostic
-      console.log('[HANDOFF:DOCUMENT-LOAD→CONTEXT] ═══════════════════════════════════');
       if (documentData) {
         this.log(
           `[DOCUMENTS] Loaded ${documentData.tokens} tokens from ${documentData.filename}`,
         );
-        console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] ✅ Document loaded: ${documentData.filename}`);
-        console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] Tokens: ${documentData.tokens}, Source: ${documentData.source}`);
-        console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] Content preview: "${documentData.content.substring(0, 100).replace(/\n/g, ' ')}..."`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[HANDOFF:DOCUMENT-LOAD→CONTEXT] ═══════════════════════════════════');
+          console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] ✅ Document loaded: ${documentData.filename}`);
+          console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] Tokens: ${documentData.tokens}, Source: ${documentData.source}`);
+          console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] Content preview: "${documentData.content.substring(0, 100).replace(/\n/g, ' ')}..."`);
+          console.log('[HANDOFF:DOCUMENT-LOAD→CONTEXT] ═══════════════════════════════════');
+        }
       } else {
         this.log("[DOCUMENTS] No document available");
-        console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] ❌ No document found`);
-        console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] extractedDocuments Map size: ${extractedDocuments.size}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[HANDOFF:DOCUMENT-LOAD→CONTEXT] ═══════════════════════════════════');
+          console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] ❌ No document found`);
+          console.log(`[HANDOFF:DOCUMENT-LOAD→CONTEXT] extractedDocuments Map size: ${extractedDocuments.size}`);
+          console.log('[HANDOFF:DOCUMENT-LOAD→CONTEXT] ═══════════════════════════════════');
+        }
       }
-      console.log('[HANDOFF:DOCUMENT-LOAD→CONTEXT] ═══════════════════════════════════');
 
       // STEP 3: Load vault (if Site Monkeys mode and enabled)
       let vaultData = vaultContext
@@ -1159,8 +1167,10 @@ export class Orchestrator {
         // ISSUE #826 FIX (Problem 3): Diagnostic logging to reveal which checks are evaluated,
         // including uploadedRecently which was previously computed after the log and therefore
         // never visible in diagnostics.
-        console.log(`[DOCUMENTS] Gating check — query: "${message.substring(0, 100)}"`);
-        console.log(`[DOCUMENTS] Gating check — refersToDocument: ${refersToDocument}, hasDocVerb: ${hasDocVerb}, hasPronounDocRef: ${hasPronounDocRef}, isDocumentReviewByClassifier: ${isDocumentReviewByClassifier}, uploadedRecently: ${uploadedRecently}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[DOCUMENTS] Gating check — query: "${message.substring(0, 100)}"`);
+          console.log(`[DOCUMENTS] Gating check — refersToDocument: ${refersToDocument}, hasDocVerb: ${hasDocVerb}, hasPronounDocRef: ${hasPronounDocRef}, isDocumentReviewByClassifier: ${isDocumentReviewByClassifier}, uploadedRecently: ${uploadedRecently}`);
+        }
 
         if (!refersToDocument && !hasDocVerb && !isDocumentReview && !uploadedRecently) {
           this.log('[DOCUMENTS] ⏭️ Skipping document injection — query does not reference document');
@@ -1184,14 +1194,16 @@ export class Orchestrator {
       this.log(`[CONTEXT] Total: ${context.totalTokens} tokens`);
 
       // ISSUE #781 FIX: Comprehensive context assembly diagnostic
-      console.log('[HANDOFF:CONTEXT-ASSEMBLY→AI] ═══════════════════════════════════');
-      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Total tokens: ${context.totalTokens}`);
-      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Token breakdown:`);
-      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Memory: ${context.tokenBreakdown?.memory || 0}t (${!!context.memory ? '✅' : '❌'})`);
-      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Documents: ${context.tokenBreakdown?.documents || 0}t (${!!context.documents ? '✅' : '❌'})`);
-      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Vault: ${context.tokenBreakdown?.vault || 0}t (${!!context.vault ? '✅' : '❌'})`);
-      console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Sources present: memory=${!!context.memory}, docs=${!!context.documents}, vault=${!!context.vault}`);
-      console.log('[HANDOFF:CONTEXT-ASSEMBLY→AI] ═══════════════════════════════════');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[HANDOFF:CONTEXT-ASSEMBLY→AI] ═══════════════════════════════════');
+        console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Total tokens: ${context.totalTokens}`);
+        console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Token breakdown:`);
+        console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Memory: ${context.tokenBreakdown?.memory || 0}t (${!!context.memory ? '✅' : '❌'})`);
+        console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Documents: ${context.tokenBreakdown?.documents || 0}t (${!!context.documents ? '✅' : '❌'})`);
+        console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI]   - Vault: ${context.tokenBreakdown?.vault || 0}t (${!!context.vault ? '✅' : '❌'})`);
+        console.log(`[HANDOFF:CONTEXT-ASSEMBLY→AI] Sources present: memory=${!!context.memory}, docs=${!!context.documents}, vault=${!!context.vault}`);
+        console.log('[HANDOFF:CONTEXT-ASSEMBLY→AI] ═══════════════════════════════════');
+      }
 
       // STEP 5: Perform semantic analysis
       const analysisStartTime = Date.now();

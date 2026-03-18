@@ -340,7 +340,9 @@ app.get("/api/run-tests", async (req, res) => {
   }
 
   try {
-    console.log("[TEST-ENDPOINT] Running comprehensive test suite...");
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log("[TEST-ENDPOINT] Running comprehensive test suite...");
+    }
     const testResults = await runAllTests();
     res.json(testResults);
   } catch (error) {
@@ -425,8 +427,10 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
     const userId = user_id || req.headers['x-user-id'] || req.query?.userId;
 
     // TRACE LOGGING - Step 1 & 2
-    console.log("[TRACE] 1. Received user_id from request:", user_id);
-    console.log("[TRACE] 2. Mapped to userId:", userId);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log("[TRACE] 1. Received user_id from request:", user_id);
+      console.log("[TRACE] 2. Mapped to userId:", userId);
+    }
     if (process.env.DEBUG_DIAGNOSTICS === 'true') {
       console.log('[SESSION-DIAG] Final userId:', userId);
     }
@@ -470,7 +474,9 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       // Use session history if available, otherwise use provided history
       if (sessionHistory && sessionHistory.length > 0) {
         effectiveConversationHistory = sessionHistory;
-        console.log(`[CHAT] Using session conversation history: ${sessionHistory.length} turns`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[CHAT] Using session conversation history: ${sessionHistory.length} turns`);
+        }
       }
     }
 
@@ -481,13 +487,15 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
         content: vault_content,
         loaded: true,
       };
-      console.log(
-        `[CHAT] 🍌 Vault content transformed: ${vault_content.length} chars`,
-      );
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(
+          `[CHAT] 🍌 Vault content transformed: ${vault_content.length} chars`,
+        );
+      }
     }
 
     // Diagnostic logging for vault flow
-    if (mode === "site_monkeys") {
+    if (mode === "site_monkeys" && process.env.DEBUG_DIAGNOSTICS === 'true') {
       console.log("[CHAT] 🍌 Site Monkeys mode detected:");
       console.log(`  - vaultEnabled: ${vaultEnabled}`);
       console.log(`  - vault_content length: ${vault_content?.length || 0}`);
@@ -497,19 +505,23 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
     }
 
     // TRACE LOGGING - Step 3
-    console.log(
-      "[TRACE] 3. About to call orchestrator.processRequest with userId:",
-      userId,
-    );
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(
+        "[TRACE] 3. About to call orchestrator.processRequest with userId:",
+        userId,
+      );
+    }
 
     // HANDOFF LOGGING (Issue #392): server → orchestrator
-    console.log('[HANDOFF] server → orchestrator:', {
-      hasConversationHistory: Array.isArray(effectiveConversationHistory),
-      historyLength: effectiveConversationHistory?.length || 0,
-      sessionId: sessionId ? 'present' : 'missing',
-      hasMessage: !!message,
-      messageLength: message?.length || 0
-    });
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[HANDOFF] server → orchestrator:', {
+        hasConversationHistory: Array.isArray(effectiveConversationHistory),
+        historyLength: effectiveConversationHistory?.length || 0,
+        sessionId: sessionId ? 'present' : 'missing',
+        hasMessage: !!message,
+        messageLength: message?.length || 0
+      });
+    }
 
     // Process request through orchestrator
     const result = await orchestrator.processRequest({
@@ -525,25 +537,29 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
     });
 
     // TRACE LOGGING - Step 4 & 5 & 6
-    console.log(
-      "[TRACE] 4. orchestrator.processRequest returned, result.success:",
-      result.success,
-    );
-    console.log(
-      "[TRACE] 5. global.memorySystem exists:",
-      !!global.memorySystem,
-    );
-    console.log(
-      "[TRACE] 6. storeMemory exists:",
-      !!global.memorySystem?.storeMemory,
-    );
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(
+        "[TRACE] 4. orchestrator.processRequest returned, result.success:",
+        result.success,
+      );
+      console.log(
+        "[TRACE] 5. global.memorySystem exists:",
+        !!global.memorySystem,
+      );
+      console.log(
+        "[TRACE] 6. storeMemory exists:",
+        !!global.memorySystem?.storeMemory,
+      );
+    }
 
     // Store conversation turn in session (Issue #391: Conversation Context Continuity)
     if (sessionId && result.success) {
       try {
         sessionManager.addConversationTurn(sessionId, 'user', message);
         sessionManager.addConversationTurn(sessionId, 'assistant', result.response);
-        console.log(`[CHAT] Conversation turns stored in session ${sessionId}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[CHAT] Conversation turns stored in session ${sessionId}`);
+        }
       } catch (turnError) {
         console.error('[CHAT] Failed to store conversation turn:', turnError.message);
         // Non-fatal - continue processing
@@ -556,18 +572,22 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       global.memorySystem.storeMemory
     ) {
       // TRACE LOGGING - Step 7 & 8
-      console.log("[TRACE] 7. STORAGE BLOCK ENTERED");
-      console.log("[TRACE] 8. Storing for userId:", userId);
-      console.log(
-        "[CHAT] [STORAGE] ✓ Storage conditions met - proceeding with storage...",
-      );
-      console.log("[CHAT] [STORAGE] Storing for userId:", userId);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log("[TRACE] 7. STORAGE BLOCK ENTERED");
+        console.log("[TRACE] 8. Storing for userId:", userId);
+        console.log(
+          "[CHAT] [STORAGE] ✓ Storage conditions met - proceeding with storage...",
+        );
+        console.log("[CHAT] [STORAGE] Storing for userId:", userId);
+      }
       try {
         // Intelligent memory storage with compression and deduplication
-        console.log(
-          "[CHAT] [STORAGE] ENABLE_INTELLIGENT_STORAGE:",
-          process.env.ENABLE_INTELLIGENT_STORAGE,
-        );
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(
+            "[CHAT] [STORAGE] ENABLE_INTELLIGENT_STORAGE:",
+            process.env.ENABLE_INTELLIGENT_STORAGE,
+          );
+        }
         if (process.env.ENABLE_INTELLIGENT_STORAGE === "true") {
           const { IntelligentMemoryStorage } =
             await import("./api/memory/intelligent-storage.js");
@@ -584,7 +604,9 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
               userId,
             );
           const category = routing.primaryCategory;
-          console.log(`[CHAT] [STORAGE] Routed to category: ${category}`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[CHAT] [STORAGE] Routed to category: ${category}`);
+          }
 
           // ISSUE #776 FIX 1: Tag response with source type before storage
           let taggedResponse = result.response;
@@ -592,7 +614,9 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
           // If this response was about an uploaded document, tag it
           if (result.sources?.hasDocuments) {
             taggedResponse = `[SOURCE:document] ${taggedResponse}`;
-            console.log('[STORE] Tagged memory with [SOURCE:document]');
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log('[STORE] Tagged memory with [SOURCE:document]');
+            }
           }
 
           // ISSUE #804 FIX (Area 7): Do NOT store external real-time data (prices, news) as persistent
@@ -620,14 +644,20 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
             /^(hello|hi|hey|greetings|howdy|good (morning|afternoon|evening))\b/i.test(message.trim())
           );
           if (result.sources?.hasExternal && !isPersonalOrMemoryQuery) {
-            console.log('[STORE] ⏭️ Skipping intelligent storage for volatile external data response');
-            console.log('[STORE] Reason: External real-time data (prices/news) should not be stored as persistent memory');
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log('[STORE] ⏭️ Skipping intelligent storage for volatile external data response');
+              console.log('[STORE] Reason: External real-time data (prices/news) should not be stored as persistent memory');
+            }
             // Skip to cleanup without storing
             intelligentStorage.cleanup();
-            console.log('[CHAT] 💾 Storage skipped for external data response');
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log('[CHAT] 💾 Storage skipped for external data response');
+            }
           } else {
             if (result.sources?.hasExternal && isPersonalOrMemoryQuery) {
-              console.log('[STORE] ℹ️ External data present but query is personal/memory — storing user content');
+              if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                console.log('[STORE] ℹ️ External data present but query is personal/memory — storing user content');
+              }
             }
             const storageResult = await intelligentStorage.storeWithIntelligence(
               userId,
@@ -637,23 +667,29 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
             );
 
             intelligentStorage.cleanup();
-            console.log(
-              `[CHAT] 💾 Intelligent storage complete: ${storageResult.action} (ID: ${storageResult.memoryId})`,
-            );
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(
+                `[CHAT] 💾 Intelligent storage complete: ${storageResult.action} (ID: ${storageResult.memoryId})`,
+              );
+            }
 
             // TRACE LOGGING - Step 9 (Intelligent path)
-            console.log(
-              "[TRACE] 9. Intelligent storage complete, result:",
-              JSON.stringify({
-                action: storageResult.action,
-                memoryId: storageResult.memoryId,
-                success: storageResult.success,
-              }),
-            );
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(
+                "[TRACE] 9. Intelligent storage complete, result:",
+                JSON.stringify({
+                  action: storageResult.action,
+                  memoryId: storageResult.memoryId,
+                  success: storageResult.success,
+                }),
+              );
+            }
           }
         } else {
           // Supersession-aware storage path
-          console.log("[CHAT] [STORAGE] Using supersession-aware storage...");
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log("[CHAT] [STORAGE] Using supersession-aware storage...");
+          }
 
           // Combine message and response for storage
           let content = `User: ${message}\nAssistant: ${result.response}`;
@@ -662,7 +698,9 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
           // If this response was about an uploaded document, tag it
           if (result.sources?.hasDocuments) {
             content = `[SOURCE:document] ${content}`;
-            console.log('[STORE] Tagged memory with [SOURCE:document]');
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log('[STORE] Tagged memory with [SOURCE:document]');
+            }
           }
 
           // ISSUE #804 FIX (Area 7): Do NOT store external real-time data as persistent memory.
@@ -684,7 +722,9 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
             /^(hello|hi|hey|greetings|howdy|good (morning|afternoon|evening))\b/i.test(message.trim())
           );
           if (result.sources?.hasExternal && !isPersonalOrMemoryQuerySup) {
-            console.log('[STORE] ⏭️ Skipping supersession-aware storage for volatile external data response');
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log('[STORE] ⏭️ Skipping supersession-aware storage for volatile external data response');
+            }
             // Skip storage entirely for external data responses
           } else {
 
@@ -708,10 +748,14 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
             updateIntent = fpResult.updateIntent || false;  // FIX #710
 
             if (fingerprint) {
-              console.log(`[STORE] Fingerprint detected: ${fingerprint} (${fpResult.method}, confidence: ${fingerprintConfidence}, valueSignature: ${valueSignature}, isOptional: ${isOptional}, updateIntent: ${updateIntent})`);
+              if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                console.log(`[STORE] Fingerprint detected: ${fingerprint} (${fpResult.method}, confidence: ${fingerprintConfidence}, valueSignature: ${valueSignature}, isOptional: ${isOptional}, updateIntent: ${updateIntent})`);
+              }
             }
           } catch (e) {
-            console.log(`[STORE] Fingerprint generation skipped: ${e.message}`);
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(`[STORE] Fingerprint generation skipped: ${e.message}`);
+            }
           }
 
           // Get database pool
@@ -725,12 +769,16 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
             // If this response was about an uploaded document, tag it
             if (result.sources?.hasDocuments) {
               taggedResponse = `[SOURCE:document] ${taggedResponse}`;
-              console.log('[STORE] Tagged memory with [SOURCE:document]');
+              if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                console.log('[STORE] Tagged memory with [SOURCE:document]');
+              }
             }
 
             // ISSUE #804 FIX (Area 7): Skip legacy storage for volatile external data too
             if (result.sources?.hasExternal) {
-              console.log('[STORE] ⏭️ Skipping legacy storage for volatile external data response');
+              if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                console.log('[STORE] ⏭️ Skipping legacy storage for volatile external data response');
+              }
             } else {
             const storageResult = await global.memorySystem.storeMemory(
               userId,
@@ -743,7 +791,9 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
                 timestamp: new Date().toISOString(),
               },
             );
-            console.log("[CHAT] 💾 Legacy fallback storage complete");
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log("[CHAT] 💾 Legacy fallback storage complete");
+            }
             } // close else (not external data)
           } else {
             // Store with supersession (transaction-safe)
@@ -761,25 +811,37 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
               tokenCount: Math.ceil(content.length / 4)
             });
 
-            console.log(
-              `[CHAT] 💾 Supersession storage complete (ID: ${storeResult.memoryId}, superseded: ${storeResult.supersededCount})`
-            );
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(
+                `[CHAT] 💾 Supersession storage complete (ID: ${storeResult.memoryId}, superseded: ${storeResult.supersededCount})`
+              );
+            }
 
             // Generate embedding (non-blocking, fire-and-forget)
             embedMemoryNonBlocking(pool, storeResult.memoryId, content)
-              .then(r => console.log(`[STORE] Embedding ${r.status || 'initiated'} for ID ${storeResult.memoryId}`))
-              .catch(e => console.log(`[STORE] Embedding deferred for ID ${storeResult.memoryId}: ${e.message}`));
+              .then(r => {
+                if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                  console.log(`[STORE] Embedding ${r.status || 'initiated'} for ID ${storeResult.memoryId}`);
+                }
+              })
+              .catch(e => {
+                if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+                  console.log(`[STORE] Embedding deferred for ID ${storeResult.memoryId}: ${e.message}`);
+                }
+              });
 
             // TRACE LOGGING - Step 9 (Supersession path)
-            console.log(
-              "[TRACE] 9. Supersession storage complete, result:",
-              JSON.stringify({
-                success: storeResult.success,
-                memoryId: storeResult.memoryId,
-                superseded: storeResult.supersededCount,
-                fingerprint: fingerprint
-              }),
-            );
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(
+                "[TRACE] 9. Supersession storage complete, result:",
+                JSON.stringify({
+                  success: storeResult.success,
+                  memoryId: storeResult.memoryId,
+                  superseded: storeResult.supersededCount,
+                  fingerprint: fingerprint
+                }),
+              );
+            }
           }
           } // close else (not external data)
         }
@@ -793,25 +855,29 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
         // Don't fail the request if storage fails
       }
     } else {
-      console.log(
-        "[CHAT] [STORAGE] ✗ Storage conditions NOT met - skipping storage",
-      );
-      if (!result.success)
-        console.log("[CHAT] [STORAGE] Reason: result.success is false");
-      if (!global.memorySystem)
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
         console.log(
-          "[CHAT] [STORAGE] Reason: global.memorySystem is not available",
+          "[CHAT] [STORAGE] ✗ Storage conditions NOT met - skipping storage",
         );
-      if (!global.memorySystem?.storeMemory)
-        console.log(
-          "[CHAT] [STORAGE] Reason: storeMemory method not available",
-        );
+        if (!result.success)
+          console.log("[CHAT] [STORAGE] Reason: result.success is false");
+        if (!global.memorySystem)
+          console.log(
+            "[CHAT] [STORAGE] Reason: global.memorySystem is not available",
+          );
+        if (!global.memorySystem?.storeMemory)
+          console.log(
+            "[CHAT] [STORAGE] Reason: storeMemory method not available",
+          );
+      }
     }
 
     // ========== HANDLE CLAUDE CONFIRMATION REQUEST (BIBLE REQUIREMENT - Section D) ==========
     // If orchestrator returns needsConfirmation, pass it to frontend immediately
     if (result.needsConfirmation) {
-      console.log('[CHAT] ⚠️ Claude escalation requires user confirmation');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[CHAT] ⚠️ Claude escalation requires user confirmation');
+      }
       return res.json(result);
     }
 
@@ -1009,7 +1075,9 @@ app.post("/api/session/end", async (req, res) => {
     const ended = sessionManager.endSession(sessionId, "user_logout");
 
     if (ended) {
-      console.log(`[SESSION] Session ${sessionId} ended and cache flushed`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[SESSION] Session ${sessionId} ended and cache flushed`);
+      }
       return res.json({
         success: true,
         message: "Session ended and cache flushed",

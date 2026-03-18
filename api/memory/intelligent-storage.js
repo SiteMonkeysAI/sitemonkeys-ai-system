@@ -483,7 +483,9 @@ export class IntelligentMemoryStorage {
 
     for (const pattern of PRIORITY_PATTERNS) {
       if (pattern.test(content)) {
-        console.log(`[PRIORITY-DETECT] Pattern matched: ${pattern.toString()}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[PRIORITY-DETECT] Pattern matched: ${pattern.toString()}`);
+        }
         return true;
       }
     }
@@ -509,14 +511,18 @@ export class IntelligentMemoryStorage {
     const endYearMatch = safeContent.match(/(left|quit|ended|until|departed|finished|stopped).*?((?:19|20)\d{2})/i);
     if (endYearMatch) {
       temporal.end_year = parseInt(endYearMatch[2]);
-      console.log(`[TEMPORAL] anchor_stored end_year=${temporal.end_year}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[TEMPORAL] anchor_stored end_year=${temporal.end_year}`);
+      }
     }
 
     // Detect duration pattern: "worked for 5 years", "spent 3 years"
     const durationMatch = safeContent.match(/(worked|spent|for)\s+(\d+)\s+years?/i);
     if (durationMatch) {
       temporal.duration_years = parseInt(durationMatch[2]);
-      console.log(`[TEMPORAL] anchor_stored duration_years=${temporal.duration_years}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[TEMPORAL] anchor_stored duration_years=${temporal.duration_years}`);
+      }
     }
 
     return temporal;
@@ -555,7 +561,9 @@ export class IntelligentMemoryStorage {
       .filter(p => p.length > 0);
 
     if (uniquePrices.length > 0) {
-      console.log(`[PRICING] anchors_stored prices=[${uniquePrices.join(', ')}]`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[PRICING] anchors_stored prices=[${uniquePrices.join(', ')}]`);
+      }
     }
 
     return uniquePrices;
@@ -624,10 +632,12 @@ export class IntelligentMemoryStorage {
                /[-'']/.test(m);
       });
 
-    if (unicodeNames.length > 0) {
-      console.log(`[UNICODE] anchors_stored names=[${unicodeNames.join(', ')}]`);
-    } else {
-      console.log(`[UNICODE] anchors_stored names=[] (no matches found)`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      if (unicodeNames.length > 0) {
+        console.log(`[UNICODE] anchors_stored names=[${unicodeNames.join(', ')}]`);
+      } else {
+        console.log(`[UNICODE] anchors_stored names=[] (no matches found)`);
+      }
     }
 
     return unicodeNames;
@@ -726,7 +736,9 @@ export class IntelligentMemoryStorage {
     const standaloneMatch = safeContent.trim().match(standaloneTokenRegex);
     if (standaloneMatch && anchors.explicit_token.length === 0) {
       // Only add if no other explicit tokens were found
-      console.log(`[FIX-677] Detected standalone token anchor: "${standaloneMatch[1]}"`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[FIX-677] Detected standalone token anchor: "${standaloneMatch[1]}"`);
+      }
       anchors.explicit_token.push({
         type: 'explicit_token',
         value: standaloneMatch[1]
@@ -766,13 +778,13 @@ export class IntelligentMemoryStorage {
       })
       .join(', ');
 
-    if (anchorCounts) {
-      console.log(`[ANCHOR-STORAGE] Detected anchors: ${anchorCounts}`);
-      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      if (anchorCounts) {
+        console.log(`[ANCHOR-STORAGE] Detected anchors: ${anchorCounts}`);
         console.log(`[ANCHOR-STORAGE] Persisting: ${JSON.stringify(nonEmptyAnchors).substring(0, 200)}`);
+      } else {
+        console.log(`[ANCHOR-STORAGE] Detected anchors: none`);
       }
-    } else {
-      console.log(`[ANCHOR-STORAGE] Detected anchors: none`);
     }
 
     // Merge with existing metadata
@@ -795,7 +807,9 @@ export class IntelligentMemoryStorage {
    */
   detectExplicitMemoryRequest(content) {
     // EXECUTION PROOF - Verify explicit memory detection is active (A5)
-    console.log('[PROOF] storage:explicit-detect v=2026-01-29a file=api/memory/intelligent-storage.js fn=detectExplicitMemoryRequest');
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[PROOF] storage:explicit-detect v=2026-01-29a file=api/memory/intelligent-storage.js fn=detectExplicitMemoryRequest');
+    }
     
     if (!content || typeof content !== 'string') {
       return { isExplicit: false, extractedContent: null };
@@ -838,9 +852,11 @@ export class IntelligentMemoryStorage {
         const extracted = content.slice(startIdx).trim();
         
         if (extracted && extracted.length > 0) {
-          console.log(`[EXPLICIT-MEMORY] ✅ Detected explicit storage request`);
-          console.log(`[EXPLICIT-MEMORY] Trigger: "${prefix}"`);
-          console.log(`[EXPLICIT-MEMORY] Content to store: "${extracted.substring(0, 100)}..."`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[EXPLICIT-MEMORY] ✅ Detected explicit storage request`);
+            console.log(`[EXPLICIT-MEMORY] Trigger: "${prefix}"`);
+            console.log(`[EXPLICIT-MEMORY] Content to store: "${extracted.substring(0, 100)}..."`);
+          }
           return { isExplicit: true, extractedContent: extracted };
         }
       }
@@ -909,7 +925,9 @@ export class IntelligentMemoryStorage {
           const staticValueMatch = valueCandidate.match(/^([A-Z0-9][A-Z0-9-_]{2,})/i);
           if (staticValueMatch) {
             value = staticValueMatch[1];
-            console.log(`[ORDINAL-DETECT] Found ordinal with value: ${ordinalWord} ${subject} = ${value} (#${ordinalNum})`);
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(`[ORDINAL-DETECT] Found ordinal with value: ${ordinalWord} ${subject} = ${value} (#${ordinalNum})`);
+            }
           }
         }
       }
@@ -938,11 +956,13 @@ export class IntelligentMemoryStorage {
   async storeWithIntelligence(userId, userMessage, aiResponse, category, mode = 'truth-general') {
     try {
       // TRACE LOGGING - Intelligent storage entry
-      console.log('[TRACE-INTELLIGENT] I1. storeWithIntelligence called');
-      console.log('[TRACE-INTELLIGENT] I2. userId:', userId);
-      console.log('[TRACE-INTELLIGENT] I3. category:', category);
-      console.log('[TRACE-INTELLIGENT] I4. userMessage length:', userMessage?.length || 0);
-      console.log('[TRACE-INTELLIGENT] I5. aiResponse length:', aiResponse?.length || 0);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-INTELLIGENT] I1. storeWithIntelligence called');
+        console.log('[TRACE-INTELLIGENT] I2. userId:', userId);
+        console.log('[TRACE-INTELLIGENT] I3. category:', category);
+        console.log('[TRACE-INTELLIGENT] I4. userMessage length:', userMessage?.length || 0);
+        console.log('[TRACE-INTELLIGENT] I5. aiResponse length:', aiResponse?.length || 0);
+      }
 
       // CRITICAL TRACE #560: Log the actual user message for T2 debugging
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
@@ -959,9 +979,11 @@ export class IntelligentMemoryStorage {
       // FIX #633: Detect ordinal facts for B3 validator
       const ordinalInfo = this.detectOrdinalFact(userMessage);
       if (ordinalInfo.hasOrdinal) {
-        console.log(`[ORDINAL] Detected ordinal fact: ${ordinalInfo.pattern} (#${ordinalInfo.ordinal})`);
-        if (ordinalInfo.value) {
-          console.log(`[ORDINAL] Detected value: ${ordinalInfo.value}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[ORDINAL] Detected ordinal fact: ${ordinalInfo.pattern} (#${ordinalInfo.ordinal})`);
+          if (ordinalInfo.value) {
+            console.log(`[ORDINAL] Detected value: ${ordinalInfo.value}`);
+          }
         }
       }
 
@@ -1039,15 +1061,21 @@ export class IntelligentMemoryStorage {
       // Step 0: Sanitize AI response before processing
       // CRITICAL FIX #586: Don't reject storage if AI response is boilerplate
       // The USER MESSAGE may contain facts even if AI response is generic
-      console.log('[TRACE-INTELLIGENT] I6. About to sanitize content...');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-INTELLIGENT] I6. About to sanitize content...');
+      }
       const sanitizedResponse = this.sanitizeForStorage(aiResponse);
       const hasBoilerplate = !sanitizedResponse || sanitizedResponse.length < 10;
 
       if (hasBoilerplate) {
-        console.log('[TRACE-INTELLIGENT] I7. AI response contains boilerplate, will extract from user message only');
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[TRACE-INTELLIGENT] I7. AI response contains boilerplate, will extract from user message only');
+        }
         console.log('[INTELLIGENT-STORAGE] AI response is boilerplate, but proceeding with user message extraction');
       } else {
-        console.log('[TRACE-INTELLIGENT] I8. Content sanitized, length:', sanitizedResponse.length);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[TRACE-INTELLIGENT] I8. Content sanitized, length:', sanitizedResponse.length);
+        }
       }
 
       // Use sanitized response if available, otherwise use empty string for extraction
@@ -2338,11 +2366,13 @@ Facts (preserve user terminology + add synonyms):`;
       const normalizedMode = mode.replace(/_/g, '-');
 
       // TRACE LOGGING - Store compressed memory
-      console.log('[TRACE-INTELLIGENT] I9. storeCompressedMemory called');
-      console.log('[TRACE-INTELLIGENT] I10. userId:', userId);
-      console.log('[TRACE-INTELLIGENT] I11. category:', category);
-      console.log('[TRACE-INTELLIGENT] I12. facts length:', facts?.length || 0);
-      console.log('[TRACE-INTELLIGENT] I12a. mode (normalized):', normalizedMode);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-INTELLIGENT] I9. storeCompressedMemory called');
+        console.log('[TRACE-INTELLIGENT] I10. userId:', userId);
+        console.log('[TRACE-INTELLIGENT] I11. category:', category);
+        console.log('[TRACE-INTELLIGENT] I12. facts length:', facts?.length || 0);
+        console.log('[TRACE-INTELLIGENT] I12a. mode (normalized):', normalizedMode);
+      }
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
         console.log('[SESSION-DIAG] Storing for userId:', userId);
       }
@@ -2360,7 +2390,9 @@ Facts (preserve user terminology + add synonyms):`;
       }
 
       const tokenCount = this.countTokens(facts);
-      console.log('[TRACE-INTELLIGENT] I13. tokenCount:', tokenCount);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-INTELLIGENT] I13. tokenCount:', tokenCount);
+      }
 
       // ISSUE #814 FIX (ROOT CAUSE F): Per-entry token cap.
       // A single memory entry was 1,322 tokens (an entire document summary), consuming nearly
@@ -2583,7 +2615,9 @@ Facts (preserve user terminology + add synonyms):`;
       let importanceScore = metadata.importance_score || 0.5;
       console.log(`[INTELLIGENT-STORAGE] 📊 Using pre-calculated importance score: ${importanceScore.toFixed(2)} (category: ${category})`);
 
-      console.log('[TRACE-INTELLIGENT] I14. About to execute INSERT query...');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-INTELLIGENT] I14. About to execute INSERT query...');
+      }
 
       // CRITICAL FIX #504: Store original user message snippet in metadata for fallback matching
       const originalUserSnippet = metadata.original_user_phrase || '';
@@ -2632,10 +2666,14 @@ Facts (preserve user terminology + add synonyms):`;
         JSON.stringify(metadataToStore)
       ]);
 
-      console.log('[TRACE-INTELLIGENT] I15. INSERT query completed');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-INTELLIGENT] I15. INSERT query completed');
+      }
 
       const memoryId = result.rows[0].id;
-      console.log('[TRACE-INTELLIGENT] I16. Stored memory ID:', memoryId);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-INTELLIGENT] I16. Stored memory ID:', memoryId);
+      }
       console.log(`[INTELLIGENT-STORAGE] ✅ Stored compressed memory: ID=${memoryId}, tokens=${tokenCount}`);
 
       // STORAGE CONTRACT DIAGNOSTIC LOGGING (Issue #648)
@@ -2649,7 +2687,9 @@ Facts (preserve user terminology + add synonyms):`;
       const anchorKeys = Object.keys(metadata.anchors || {});
       const unicodeCount = (metadata.anchors?.unicode || []).length;
       const pricingCount = (metadata.anchors?.pricing || []).length;
-      console.log(`[ANCHOR-STORAGE] stored_id=${memoryId} anchors_keys=[${anchorKeys.join(',')}] unicode_count=${unicodeCount} pricing_count=${pricingCount}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[ANCHOR-STORAGE] stored_id=${memoryId} anchors_keys=[${anchorKeys.join(',')}] unicode_count=${unicodeCount} pricing_count=${pricingCount}`);
+      }
 
       // DIAGNOSTIC LOGGING: Track exact storage details
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
@@ -2736,15 +2776,19 @@ Facts (preserve user terminology + add synonyms):`;
       const normalizedMode = mode.replace(/_/g, '-');
 
       // TRACE LOGGING - Fallback storage
-      console.log('[TRACE-INTELLIGENT] I17. storeUncompressed (fallback) called');
-      console.log('[TRACE-INTELLIGENT] I18. userId:', userId);
-      console.log('[TRACE-INTELLIGENT] I19. category:', category);
-      console.log('[TRACE-INTELLIGENT] I19a. mode (normalized):', normalizedMode);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-INTELLIGENT] I17. storeUncompressed (fallback) called');
+        console.log('[TRACE-INTELLIGENT] I18. userId:', userId);
+        console.log('[TRACE-INTELLIGENT] I19. category:', category);
+        console.log('[TRACE-INTELLIGENT] I19a. mode (normalized):', normalizedMode);
+      }
 
       const content = `User: ${userMessage}\nAssistant: ${aiResponse}`;
       const tokenCount = this.countTokens(content);
-      console.log('[TRACE-INTELLIGENT] I20. Uncompressed content length:', content.length);
-      console.log('[TRACE-INTELLIGENT] I21. About to execute INSERT query (fallback)...');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[TRACE-INTELLIGENT] I20. Uncompressed content length:', content.length);
+        console.log('[TRACE-INTELLIGENT] I21. About to execute INSERT query (fallback)...');
+      }
 
       const result = await this.db.query(`
         INSERT INTO persistent_memories (
