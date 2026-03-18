@@ -1,6 +1,8 @@
 // SITE MONKEYS SERVICE AUTOMATION
 // Workflow Logic, Retry Systems, and Delivery Orchestration
 
+import { randomInt } from "crypto";
+
 const SERVICE_AUTOMATION = {
   // SERVICE DELIVERY WORKFLOWS
   workflows: {
@@ -282,7 +284,7 @@ async function executeWithRetry(operation, maxAttempts = 3, _context = {}) {
       delay = Math.min(delay, retryConfig.max_delay);
 
       if (retryConfig.jitter) {
-        delay = delay * (0.5 + Math.random() * 0.5); // Add ±50% jitter
+        delay = delay * (0.5 + randomInt(0, 500) / 1000); // Add ±50% jitter
       }
 
       console.warn(
