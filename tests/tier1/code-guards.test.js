@@ -1225,4 +1225,192 @@ describe('M. Greeting Classifier Deterministic Short-Circuit', () => {
 
 });
 
+// ============================================================
+// SECTION N: THREE-ISSUE FIX GUARDS (Memory Bloat + Personal Lookup + Biz Validation)
+// Guards for three bugs diagnosed in the read-only investigation:
+//   Issue 1 — Memory record 2903 (1,322 tokens) consuming 66% of 2,000-token budget
+//   Issue 2 — "what are my pets names" triggering isFactualEntityLookupQuery=true
+//   Issue 3 — Business validation checker firing on personal pet-name queries
+// ============================================================
+
+describe('N. Issue 1 — Per-Record Memory Token Cap', () => {
+
+  it('N-001: RETRIEVAL_CONFIG defines maxTokensPerRecord as a numeric property', () => {
+    const src = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(src, 'Could not read api/services/semantic-retrieval.js');
+
+    // Verify it's an actual config property assignment, not just a comment
+    const hasConfigProperty = /maxTokensPerRecord\s*:\s*\d+/.test(src);
+    assert.ok(
+      hasConfigProperty,
+      'N-001 FAIL: RETRIEVAL_CONFIG.maxTokensPerRecord is missing or not set to a numeric value. ' +
+      'Without a per-record cap, a single bloated record (e.g. id=2903 at 1,322 tokens) ' +
+      'can consume >50% of the 2,000-token memory budget on every query.'
+    );
+  });
+
+  it('N-002: capRecordTokens helper is defined and called before results.push()', () => {
+    const src = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(src, 'Could not read api/services/semantic-retrieval.js');
+
+    // Helper must be defined (function or arrow function)
+    const hasHelper = /const capRecordTokens\s*=/.test(src);
+    // capRecordTokens() call must appear before the first results.push() that follows it
+    const capCallIdx  = src.indexOf('capRecordTokens(memory)');
+    const pushIdx     = src.indexOf('results.push(', capCallIdx);
+    const appliedBeforePush = capCallIdx !== -1 && pushIdx !== -1 && capCallIdx < pushIdx;
+
+    assert.ok(
+      hasHelper && appliedBeforePush,
+      'N-002 FAIL: capRecordTokens helper is not defined or not called before results.push(). ' +
+      'Bloated records will not be truncated at retrieval time.'
+    );
+  });
+
+  it('N-003: per-record cap uses sentence-boundary truncation and marks truncated content', () => {
+    const src = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(src, 'Could not read api/services/semantic-retrieval.js');
+
+    // Locate the capRecordTokens function body
+    const fnStart = src.indexOf('const capRecordTokens');
+    const fnEnd   = src.indexOf('\n    };', fnStart) + 7;
+    assert.ok(fnStart !== -1, 'N-003 FAIL: capRecordTokens function not found');
+
+    const fnBody = src.substring(fnStart, fnEnd);
+    const hasSentenceBoundary = fnBody.includes('lastSentence') && fnBody.includes('lastIndexOf');
+    const marksContent = fnBody.includes('[truncated]');
+
+    assert.ok(
+      hasSentenceBoundary && marksContent,
+      'N-003 FAIL: capRecordTokens must find a sentence boundary (lastSentence/lastIndexOf) and ' +
+      'append "[truncated]" so the memory content remains coherent after truncation.'
+    );
+  });
+
+});
+
+describe('N. Issue 2 — Personal Possessive Queries Must Not Trigger External Lookup', () => {
+
+  it('N-004: isFactualEntityQuery has early return false for possessive "my" queries', () => {
+    const src = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(src, 'Could not read api/core/intelligence/externalLookupEngine.js');
+
+    // Find the function body
+    const fnStart = src.indexOf('export function isFactualEntityQuery(');
+    const fnEnd   = src.indexOf('\n}', fnStart) + 2;
+    assert.ok(fnStart !== -1, 'N-004 FAIL: isFactualEntityQuery function not found');
+
+    const fnBody = src.substring(fnStart, fnEnd);
+
+    // The guard must: (a) match /\bmy\b/ and (b) return false
+    const hasMyPattern = fnBody.includes('\\bmy\\b');
+    const hasReturnFalse = /if\s*\(.*\\bmy\\b.*\)\s*return\s*false/.test(fnBody) ||
+      // Also accept multi-line form: if (/\bmy\b/...) { ... return false }
+      (hasMyPattern && fnBody.includes('return false'));
+
+    assert.ok(
+      hasMyPattern && hasReturnFalse,
+      'N-004 FAIL: isFactualEntityQuery must check for possessive /\\bmy\\b/ and return false. ' +
+      '"what are my pets names Bella and Max" will match /what are/ + hasProperNouns("Bella") ' +
+      'and incorrectly set isFactualEntityLookupQuery=true, triggering Wikipedia/NewsAPI.'
+    );
+  });
+
+  it('N-005: isPersonalMemoryRecall catches "what are/is my" pattern', () => {
+    const src = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(src, 'Could not read api/core/intelligence/externalLookupEngine.js');
+
+    // The isPersonalMemoryRecall block must now include a pattern matching
+    // "what are my", "what is my", "what were my", "what was my", "who are my"
+    const blockStart = src.indexOf('const isPersonalMemoryRecall');
+    const blockEnd   = src.indexOf(');', blockStart) + 2;
+    assert.ok(blockStart !== -1, 'N-005 FAIL: isPersonalMemoryRecall block not found');
+
+    const block = src.substring(blockStart, blockEnd);
+    const hasBroadPattern =
+      block.includes('what (are|is|were|was)') ||
+      block.includes('what are') ||
+      block.includes('what is') ||
+      block.includes('who (are|is|were|was)');
+
+    assert.ok(
+      hasBroadPattern,
+      'N-005 FAIL: isPersonalMemoryRecall does not catch "what are/is my" patterns. ' +
+      '"what are my pets names" will bypass the early-exit and fall through to confidence-based ' +
+      'lookup triggers, hitting Wikipedia/NewsAPI on every personal memory question.'
+    );
+  });
+
+});
+
+describe('N. Issue 3 — Business Validation Must Not Fire on Personal Queries', () => {
+
+  it('N-006: #validateCompliance accepts a query parameter', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // The private method signature must include a 5th parameter (query/message)
+    const sigMatch = src.match(/#validateCompliance\s*\([^)]*\)/);
+    assert.ok(sigMatch, 'N-006 FAIL: #validateCompliance signature not found');
+
+    const signature = sigMatch[0];
+    // Accept any 5th parameter name: query, message, userQuery, rawQuery, etc.
+    const paramCount = (signature.match(/,/g) || []).length + 1; // commas + 1
+    assert.ok(
+      paramCount >= 5,
+      `N-006 FAIL: #validateCompliance has only ${paramCount} parameter(s) but needs at least 5 ` +
+      'so the personal-query guard can inspect the original user query.'
+    );
+  });
+
+  it('N-007: #validateCompliance call site passes message as 5th argument', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Find the call site and verify it passes a 5th argument (message)
+    const callIdx = src.indexOf('#validateCompliance(');
+    assert.ok(callIdx !== -1, 'N-007 FAIL: #validateCompliance call not found');
+
+    const callEnd = src.indexOf(');', callIdx) + 2;
+    const callBlock = src.substring(callIdx, callEnd);
+    const argCount = (callBlock.match(/,/g) || []).length + 1;
+
+    assert.ok(
+      argCount >= 5,
+      `N-007 FAIL: #validateCompliance is called with only ${argCount} argument(s). ` +
+      'The 5th argument (message) is required for the personal-query guard.'
+    );
+  });
+
+  it('N-008: business_validation check is gated by personal query detection', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Find the #validateCompliance method body
+    const methodStart = src.indexOf('async #validateCompliance(');
+    const methodEnd   = src.indexOf('\n  }', methodStart + 10) + 4;
+    assert.ok(methodStart !== -1, 'N-008 FAIL: #validateCompliance method not found');
+
+    const methodBody = src.substring(methodStart, methodEnd);
+
+    // The personal-query guard must exist AND come before the business_validation block
+    const guardIdx      = methodBody.indexOf('isPersonalQuery');
+    const bizValidIdx   = methodBody.indexOf("mode === \"business_validation\"");
+
+    assert.ok(
+      guardIdx !== -1,
+      'N-008 FAIL: isPersonalQuery variable not found inside #validateCompliance. ' +
+      'Personal queries (e.g. "what are my pets names") in business_validation mode ' +
+      'will be incorrectly flagged for missing risk/business-impact language.'
+    );
+
+    assert.ok(
+      guardIdx < bizValidIdx,
+      'N-008 FAIL: isPersonalQuery guard must be declared BEFORE the business_validation check ' +
+      'so it can be used to skip that check for personal queries.'
+    );
+  });
+
+});
+
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');

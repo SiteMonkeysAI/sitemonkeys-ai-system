@@ -1316,11 +1316,17 @@ export function hasProperNouns(query) {
  * Used by both isLookupRequired() and the orchestrator's shouldLookup check
  * to avoid duplicating this logic in two places.
  * "who are" requires a proper noun to avoid triggering for "who are you".
+ * Personal possessive queries ("what are my pets names") are explicitly excluded —
+ * these are memory-recall requests, not external entity lookups.
  * @param {string} query - The user's query
  * @returns {boolean} True if query is a factual entity question about a named entity
  */
 export function isFactualEntityQuery(query) {
   if (!query || typeof query !== 'string') return false;
+  // Personal possessive queries always refer to the user's own memories, not external entities.
+  // Even if pet names (Bella, Max) look like proper nouns, the presence of "my" means this is
+  // a personal memory recall request that must never trigger an external lookup.
+  if (/\bmy\b/i.test(query)) return false;
   return (
     /\b(who is|who was)\b/i.test(query) ||
     (/\b(who are)\b/i.test(query) && hasProperNouns(query)) ||
@@ -1493,11 +1499,19 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
   // "Do you recall names of my monkeys?" should use ONLY persistent memory, never external lookup.
   // These queries contain memory-recall verbs + possessive pronouns indicating personal context.
   // Previously "recall" matched the SAFETY domain and triggered Google News RSS — now blocked.
+  // Extended patterns also catch "what are my pets names", "what is my dog's name", etc. where
+  // the "my" possessive makes clear this is a personal memory question, not an external lookup.
   const isPersonalMemoryRecall = (
     /\b(do you (recall|remember)|can you (recall|remember))\b.{0,60}\bmy\b/i.test(query) ||
     /\b(what do you (know|have|remember) about my|tell me (what you know about |about )?my)\b/i.test(query) ||
     /\b(what'?s? my|recall|remember).{0,40}\bmy\b/i.test(query) ||
-    /\b(from our (previous )?conversations?|i told you|we (discussed|talked) about)\b/i.test(query)
+    /\b(from our (previous )?conversations?|i told you|we (discussed|talked) about)\b/i.test(query) ||
+    // Broad possessive patterns: "what are my pets names", "what is my dog called", "who are my friends"
+    /\b(what (are|is|were|was)|who (are|is|were|was)) my\b/i.test(query) ||
+    // "my [personal topic]" — user asking about their own stored information.
+    // 'allerg' and 'medic' are intentional prefix matches: they match 'allergy', 'allergies',
+    // 'medication', 'medicine', 'medical' etc. so no personal health queries slip through.
+    /\bmy\b.{0,50}\b(pet|dog|cat|fish|bird|rabbit|horse|hamster|name|kid|child|son|daughter|family|friend|boss|job|salary|email|phone|address|birthday|anniversary|allerg|medic|prescription)\b/i.test(query)
   );
   if (isPersonalMemoryRecall) {
     console.log('[externalLookupEngine] Skipping lookup — personal memory recall query (use persistent memory only)');

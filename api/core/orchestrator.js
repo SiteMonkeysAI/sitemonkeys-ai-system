@@ -2232,6 +2232,7 @@ export class Orchestrator {
         mode,
         analysis,
         confidence,
+        message,
       );
       this.log(
         `[VALIDATION] Compliant: ${validatedResponse.compliant ? "PASS" : "FAIL"}`,
@@ -4579,7 +4580,7 @@ export class Orchestrator {
 
   // ==================== STEP 9: VALIDATE COMPLIANCE ====================
 
-  async #validateCompliance(response, mode, analysis, confidence) {
+  async #validateCompliance(response, mode, analysis, confidence, query = '') {
     try {
       const issues = [];
       const adjustments = [];
@@ -4598,7 +4599,11 @@ export class Orchestrator {
       }
 
       // FIX #3: Less strict business validation - accept more flexible language
-      if (mode === "business_validation") {
+      // Personal queries (possessive "my") in business_validation mode must NOT be flagged
+      // for lacking risk/business-impact language — a question like "what are my pets names"
+      // is a memory recall request, not a business recommendation.
+      const isPersonalQuery = query && /\bmy\b/i.test(query);
+      if (mode === "business_validation" && !isPersonalQuery) {
         // Accept broader range of risk-related keywords
         const hasRiskAnalysis = /risk|downside|worst case|if this fails|concern|challenge|issue|problem|difficulty|obstacle/i.test(
           response,
