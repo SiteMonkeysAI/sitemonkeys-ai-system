@@ -19,6 +19,7 @@ import {
 import { EMERGENCY_FALLBACKS } from "../lib/site-monkeys/emergency-fallbacks.js";
 import Anthropic from "@anthropic-ai/sdk";
 import OpenAI from "openai";
+import { randomInt } from "crypto";
 import _ from "lodash";
 // ========== ENFORCEMENT MODULE IMPORTS ==========
 import { driftWatcher } from "../lib/validators/drift-watcher.js";
@@ -1636,7 +1637,7 @@ export class Orchestrator {
       ) {
         const personalitySelection = this.personalitySelector.selectPersonality(analysis, mode, context);
         const pool = GREETING_RESPONSES[personalitySelection.personality] ?? GREETING_RESPONSES.eli;
-        const greetingResponse = pool[Math.floor(Math.random() * pool.length)];
+        const greetingResponse = pool[randomInt(0, pool.length)];
 
         this.log(`[GREETING-SHORTCUT] Returning deterministic greeting (personality=${personalitySelection.personality}, confidence=${earlyClassification.confidence.toFixed(2)}) — GPT-4 bypassed`);
 

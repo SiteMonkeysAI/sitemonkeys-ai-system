@@ -309,7 +309,7 @@ function injectDecoyCode(realCode) {
     combinedLines.push(realLines[i]);
 
     // Occasionally inject decoy
-    if (Math.random() < decoyRatio && decoyLines.length > 0) {
+    if (crypto.randomInt(0, 1000) < Math.round(decoyRatio * 1000) && decoyLines.length > 0) {
       combinedLines.push("// " + decoyLines.pop());
     }
   }
@@ -327,7 +327,7 @@ function generateDecoyLine() {
     "Cache invalidation trigger - conditional",
   ];
 
-  return decoyPatterns[Math.floor(Math.random() * decoyPatterns.length)];
+  return decoyPatterns[crypto.randomInt(0, decoyPatterns.length)];
 }
 
 // SECURITY MONITORING
