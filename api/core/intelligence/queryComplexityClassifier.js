@@ -183,15 +183,16 @@ export async function classifyQueryComplexity(query, phase4Metadata = {}) {
           classification: 'greeting',
           confidence: 0.95,
           requiresScaffolding: false,
-        dataFreshnessRequirement: 'TIMELESS',
-        externalLookupRequired: false,
-        responseApproach: {
-          type: 'direct',
-          reason: 'Pure greeting pattern match — direct friendly response without scaffolding',
-          maxLength: 100
-        },
-        similarities: {}
-      };
+          dataFreshnessRequirement: 'TIMELESS',
+          externalLookupRequired: false,
+          responseApproach: {
+            type: 'direct',
+            reason: 'Pure greeting pattern match — direct friendly response without scaffolding',
+            maxLength: 100
+          },
+          similarities: {}
+        };
+      }
     }
 
     // ISSUE #810 FIX G: For classification, use only the user's question intent (first 500 chars).
