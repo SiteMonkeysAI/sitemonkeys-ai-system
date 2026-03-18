@@ -66,6 +66,21 @@ import {
 const GREETING_LIMIT = 150; // Max chars for greeting responses (Anti-Engagement)
 const MIN_SENTENCE_LENGTH = 50; // Minimum chars to consider a valid sentence
 
+// Greeting shortcut response pools (indexed by personality)
+// Used by STEP 6.9 to return a deterministic greeting without calling GPT-4.
+const GREETING_RESPONSES = {
+  eli: [
+    'Hello. What can I help you with?',
+    'Hi. What do you need?',
+    "Good to hear from you. What's on your mind?",
+  ],
+  roxy: [
+    'Hey! Great to hear from you. What can I help with?',
+    "Hi there! What's on your mind?",
+    'Hello! How can I help you today?',
+  ],
+};
+
 // Geopolitical topic pattern — used to detect when credibility warnings should be applied
 // to external lookup results that lack reputable source corroboration.
 const GEOPOLITICAL_TOPIC_PATTERN = /\b(war|conflict|military|sanctions|iran|russia|china|ukraine|north\s*korea|geopolit|diplomacy|treaty|invasion|missile|troops)\b/i;
@@ -1479,10 +1494,7 @@ export class Orchestrator {
       // reuse earlyClassification directly to skip the cosine-similarity computation.
       let queryClassification = null;
       try {
-        const phase4AddsMeaningfulInfo = (
-          (phase4Metadata.truth_type !== null && phase4Metadata.truth_type !== 'UNKNOWN') ||
-          phase4Metadata.high_stakes?.isHighStakes === true
-        );
+        const phase4AddsMeaningfulInfo = this.#doesPhase4AddSignal(phase4Metadata);
 
         if (earlyClassification && !phase4AddsMeaningfulInfo) {
           // Phase 4 has no additional signal — reuse the STEP 0.5 result directly
@@ -1623,19 +1635,7 @@ export class Orchestrator {
         !context.vault
       ) {
         const personalitySelection = this.personalitySelector.selectPersonality(analysis, mode, context);
-        const isEli = personalitySelection.personality === 'eli';
-
-        const eliGreetings = [
-          'Hello. What can I help you with?',
-          'Hi. What do you need?',
-          'Good to hear from you. What\'s on your mind?'
-        ];
-        const roxyGreetings = [
-          'Hey! Great to hear from you. What can I help with?',
-          'Hi there! What\'s on your mind?',
-          'Hello! How can I help you today?'
-        ];
-        const pool = isEli ? eliGreetings : roxyGreetings;
+        const pool = GREETING_RESPONSES[personalitySelection.personality] ?? GREETING_RESPONSES.eli;
         const greetingResponse = pool[Math.floor(Math.random() * pool.length)];
 
         this.log(`[GREETING-SHORTCUT] Returning deterministic greeting (personality=${personalitySelection.personality}, confidence=${earlyClassification.confidence.toFixed(2)}) — GPT-4 bypassed`);
@@ -5278,6 +5278,22 @@ Mode: ${modeConfig?.display_name || mode}
     }
 
     return prompt;
+  }
+
+  /**
+   * Returns true when phase4Metadata carries information that can meaningfully change
+   * the query-complexity classification compared to the STEP 0.5 result.
+   * When this returns false the earlyClassification result can be reused directly,
+   * saving the cosine-similarity computation at STEP 6.4.
+   *
+   * @param {object} phase4Metadata
+   * @returns {boolean}
+   */
+  #doesPhase4AddSignal(phase4Metadata) {
+    return (
+      (phase4Metadata.truth_type !== null && phase4Metadata.truth_type !== 'UNKNOWN') ||
+      phase4Metadata.high_stakes?.isHighStakes === true
+    );
   }
 
   #calculateCost(model, inputTokens, outputTokens) {
