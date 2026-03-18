@@ -3,6 +3,9 @@
 // This is the CEO approach: understand context, not match rules
 
 import OpenAI from "openai";
+import { PURE_GREETINGS, normalizeGreeting } from "./greetingUtils.js";
+
+const MAX_GREETING_LENGTH = 50;
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -84,12 +87,6 @@ function cosineSimilarity(vecA, vecB) {
 // These represent the MEANING of each category, not keyword lists
 
 let CONCEPT_ANCHORS = null;
-
-// ===== DETERMINISTIC GREETING PATTERN (module-level constant) =====
-// Defined here once so the regex is compiled a single time, not on every classify call.
-// Matches trivially obvious pure greetings that never need embedding confirmation.
-// Per doctrines: exact-match prefilters may finalize for trivially non-semantic cases.
-const PURE_GREETING_PATTERN = /^(hello|hi|hey|greetings|howdy|yo|sup|hiya|hola|good\s+(morning|afternoon|evening|night))\s*[!.,?]?\s*$/i;
 
 /**
  * Initialize concept anchors on first use
@@ -176,12 +173,16 @@ export async function classifyQueryComplexity(query, phase4Metadata = {}) {
     // the request to GPT-4 at $0.04+ per greeting.
     // A bare "hello" needs no embedding confirmation; classify it immediately.
     const trimmedQuery = query.trim();
-    if (PURE_GREETING_PATTERN.test(trimmedQuery) && trimmedQuery.length < 50) {
-      console.log('[QUERY_CLASSIFIER] ✅ Classified as: greeting (confidence: 0.95) — deterministic pattern match, embedding skipped');
-      return {
-        classification: 'greeting',
-        confidence: 0.95,
-        requiresScaffolding: false,
+
+    if (trimmedQuery.length < MAX_GREETING_LENGTH) {
+      const normalizedGreeting = normalizeGreeting(trimmedQuery);
+      // Guardrail: keep shortcut limited to short, pure greetings (avoid long mixed-content messages)
+      if (PURE_GREETINGS.has(normalizedGreeting)) {
+        console.log('[QUERY_CLASSIFIER] ✅ Classified as: greeting (confidence: 0.95) — deterministic pattern match, embedding skipped');
+        return {
+          classification: 'greeting',
+          confidence: 0.95,
+          requiresScaffolding: false,
         dataFreshnessRequirement: 'TIMELESS',
         externalLookupRequired: false,
         responseApproach: {
@@ -268,6 +269,8 @@ export async function classifyQueryComplexity(query, phase4Metadata = {}) {
     };
   }
 }
+
+// Exported for targeted unit tests (no network calls) to ensure normalization stays regex-free and deterministic
 
 /**
  * Determine data freshness requirement from query

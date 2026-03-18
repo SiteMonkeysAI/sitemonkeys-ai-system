@@ -1157,21 +1157,22 @@ describe('L. Greeting Shortcut Guards', () => {
 
 describe('M. Greeting Classifier Deterministic Short-Circuit', () => {
 
-  it('M-001: classifyQueryComplexity has deterministic pattern check before embedding call', () => {
+  it('M-001: classifyQueryComplexity imports and uses PURE_GREETINGS Set before embedding call', () => {
     // ROOT CAUSE: "Hello" embedding similarity (~0.587) < HIGH_CONFIDENCE (0.70), so
     // determineClassification() returned `simple_short` instead of `greeting`.
-    // FIX: A PURE_GREETING_PATTERN regex in classifyQueryComplexity() must short-circuit
-    // before the embedding API call for trivially obvious greetings.
+    // FIX: A PURE_GREETINGS Set (in greetingUtils.js) must short-circuit
+    // before the embedding API call for trivially obvious greetings (no regex on input).
     const classifier = readRepoFile('api/core/intelligence/queryComplexityClassifier.js');
     assert.ok(classifier, 'Could not read api/core/intelligence/queryComplexityClassifier.js');
 
-    const hasPureGreetingPattern =
-      classifier.includes('PURE_GREETING_PATTERN') &&
-      classifier.includes('hello|hi|hey');
+    const importsSet =
+      classifier.includes("PURE_GREETINGS") &&
+      classifier.includes("greetingUtils");
+    const usesSet = classifier.includes('PURE_GREETINGS.has(');
 
     assert.ok(
-      hasPureGreetingPattern,
-      'M-001 FAIL: PURE_GREETING_PATTERN is missing from queryComplexityClassifier.js. ' +
+      importsSet && usesSet,
+      'M-001 FAIL: PURE_GREETINGS Set is not imported/used in queryComplexityClassifier.js. ' +
       '"Hello" will score ~0.587 cosine similarity, fall below the 0.70 threshold, and ' +
       'be misclassified as simple_short — blocking the greeting shortcut and hitting GPT-4.'
     );
@@ -1180,16 +1181,16 @@ describe('M. Greeting Classifier Deterministic Short-Circuit', () => {
   it('M-002: deterministic greeting short-circuit returns confidence >= 0.85', () => {
     // The orchestrator STEP 6.9 shortcut requires confidence >= 0.85.
     // The deterministic path must return a confidence value that satisfies this gate.
-    // We check that the return block following PURE_GREETING_PATTERN contains a
+    // We check that the return block following the PURE_GREETINGS.has(...) check contains a
     // `confidence:` property with a numeric value >= 0.85.
     const classifier = readRepoFile('api/core/intelligence/queryComplexityClassifier.js');
     assert.ok(classifier, 'Could not read api/core/intelligence/queryComplexityClassifier.js');
 
-    // Find the deterministic return block (between PURE_GREETING_PATTERN test and the next
+    // Find the deterministic return block (between PURE_GREETINGS.has() check and the next
     // getCachedEmbedding call) and verify it contains a qualifying confidence value.
-    const patternIdx = classifier.indexOf('PURE_GREETING_PATTERN.test(');
+    const patternIdx = classifier.indexOf('PURE_GREETINGS.has(');
     const embeddingIdx = classifier.indexOf('getCachedEmbedding(classificationText)');
-    assert.ok(patternIdx !== -1, 'M-002 FAIL: PURE_GREETING_PATTERN.test() call not found');
+    assert.ok(patternIdx !== -1, 'M-002 FAIL: PURE_GREETINGS.has() check not found');
     assert.ok(embeddingIdx !== -1, 'M-002 FAIL: getCachedEmbedding call not found');
 
     const shortCircuitBlock = classifier.substring(patternIdx, embeddingIdx);
@@ -1205,14 +1206,14 @@ describe('M. Greeting Classifier Deterministic Short-Circuit', () => {
 
   it('M-003: deterministic greeting short-circuit fires before embedding API call', () => {
     // Cost guard: the pattern check must appear BEFORE getCachedEmbedding() is called.
-    // If embedding is called first and THEN the pattern is checked, cost saving is lost.
+    // If embedding is called first and THEN the set check is performed, cost saving is lost.
     const classifier = readRepoFile('api/core/intelligence/queryComplexityClassifier.js');
     assert.ok(classifier, 'Could not read api/core/intelligence/queryComplexityClassifier.js');
 
-    const patternIdx = classifier.indexOf('PURE_GREETING_PATTERN');
+    const patternIdx = classifier.indexOf('PURE_GREETINGS');
     const embeddingIdx = classifier.indexOf('getCachedEmbedding(classificationText)');
 
-    assert.ok(patternIdx !== -1, 'M-003 FAIL: PURE_GREETING_PATTERN not found');
+    assert.ok(patternIdx !== -1, 'M-003 FAIL: PURE_GREETINGS not found');
     assert.ok(embeddingIdx !== -1, 'M-003 FAIL: getCachedEmbedding call not found');
 
     assert.ok(
