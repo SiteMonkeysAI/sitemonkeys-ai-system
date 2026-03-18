@@ -656,8 +656,11 @@ class IntelligenceSystem {
     ]);
 
     this.logger = {
-      log: (message) =>
-        console.log(`[INTELLIGENCE] ${new Date().toISOString()} ${message}`),
+      log: (message) => {
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[INTELLIGENCE] ${new Date().toISOString()} ${message}`);
+        }
+      },
       error: (message, error) =>
         console.error(
           `[INTELLIGENCE ERROR] ${new Date().toISOString()} ${message}`,
@@ -1617,7 +1620,9 @@ class IntelligenceSystem {
       const sanitizedUserId = userId.trim();
 
       // Log for audit trail
-      console.log(`[MEMORY-ISOLATION] Retrieving memories for userId: ${sanitizedUserId.substring(0, 8)}...`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[MEMORY-ISOLATION] Retrieving memories for userId: ${sanitizedUserId.substring(0, 8)}...`);
+      }
       // ═══════════════════════════════════════════════════════════════
 
       this.logger.log(
@@ -1630,7 +1635,9 @@ class IntelligenceSystem {
       const queryOrdinal = this.detectOrdinalFact(query);
 
       if (queryOrdinal.hasOrdinal) {
-        console.log(`[ORDINAL-RETRIEVAL] Query asks for ordinal #${queryOrdinal.ordinal} of ${queryOrdinal.subject}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[ORDINAL-RETRIEVAL] Query asks for ordinal #${queryOrdinal.ordinal} of ${queryOrdinal.subject}`);
+        }
 
         try {
           // CRITICAL FIX #597/#600: Retrieve ALL related ordinal memories in NATURAL ORDER
@@ -1655,15 +1662,19 @@ class IntelligenceSystem {
           ]);
 
           if (ordinalResults.rows.length > 0) {
-            console.log(`[ORDINAL-RETRIEVAL] ✅ Found ${ordinalResults.rows.length} memories with ordinal subject "${queryOrdinal.subject}"`);
-            console.log(`[ORDINAL-RETRIEVAL] Returning in NATURAL ORDER (1st, 2nd, 3rd...) for AI context`);
-            ordinalResults.rows.forEach((row, idx) => {
-              const ord = row.metadata?.ordinal || 'N/A';
-              console.log(`[ORDINAL-RETRIEVAL]   Position #${idx + 1}: Ordinal ${ord} - "${row.content?.substring(0, 60)}"`);
-            });
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(`[ORDINAL-RETRIEVAL] ✅ Found ${ordinalResults.rows.length} memories with ordinal subject "${queryOrdinal.subject}"`);
+              console.log(`[ORDINAL-RETRIEVAL] Returning in NATURAL ORDER (1st, 2nd, 3rd...) for AI context`);
+              ordinalResults.rows.forEach((row, idx) => {
+                const ord = row.metadata?.ordinal || 'N/A';
+                console.log(`[ORDINAL-RETRIEVAL]   Position #${idx + 1}: Ordinal ${ord} - "${row.content?.substring(0, 60)}"`);
+              });
+            }
             return ordinalResults.rows;
           } else {
-            console.log(`[ORDINAL-RETRIEVAL] No memories found with ordinal metadata, falling through to normal retrieval`);
+            if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+              console.log(`[ORDINAL-RETRIEVAL] No memories found with ordinal metadata, falling through to normal retrieval`);
+            }
           }
         } catch (error) {
           this.logger.error('[ORDINAL-RETRIEVAL] Ordinal query failed:', error);
@@ -1790,10 +1801,12 @@ class IntelligenceSystem {
         // ISSUE #544 FIX: Comprehensive trace logging for ranking analysis
         const ageInSeconds = (Date.now() - new Date(memory.created_at).getTime()) / 1000;
         if (idx < 3 || ageInSeconds < 300) {  // Log first 3 AND any very recent memories
-          console.log(`[MEMORY-TRACE] Memory ${memory.id} scoring:`);
-          console.log(`  Age: ${ageInSeconds.toFixed(1)}s | Recency: ${recencyScore.toFixed(3)} | Semantic: ${semanticScore.toFixed(3)} | Keyword: ${keywordScore.toFixed(3)}`);
-          console.log(`  Base relevance: ${baseRelevance.toFixed(3)} | Match-first: ${matchFirstScore} | FINAL: ${(matchFirstScore + baseRelevance).toFixed(3)}`);
-          console.log(`  Content preview: ${memory.content.substring(0, 80)}...`);
+          if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+            console.log(`[MEMORY-TRACE] Memory ${memory.id} scoring:`);
+            console.log(`  Age: ${ageInSeconds.toFixed(1)}s | Recency: ${recencyScore.toFixed(3)} | Semantic: ${semanticScore.toFixed(3)} | Keyword: ${keywordScore.toFixed(3)}`);
+            console.log(`  Base relevance: ${baseRelevance.toFixed(3)} | Match-first: ${matchFirstScore} | FINAL: ${(matchFirstScore + baseRelevance).toFixed(3)}`);
+            console.log(`  Content preview: ${memory.content.substring(0, 80)}...`);
+          }
         }
 
         return {
@@ -2004,14 +2017,16 @@ class IntelligenceSystem {
       });
 
       // ISSUE #544 FIX: Comprehensive logging of ranked results
-      console.log(`[MEMORY-TRACE] ========== RANKING RESULTS (Top 5) ==========`);
-      rankedMemories.slice(0, 5).forEach((mem, idx) => {
-        const ageInSeconds = (Date.now() - new Date(mem.created_at).getTime()) / 1000;
-        console.log(`[MEMORY-TRACE] #${idx + 1}: ID ${mem.id} | Score: ${mem.relevanceScore.toFixed(3)} | Age: ${ageInSeconds.toFixed(1)}s`);
-        console.log(`[MEMORY-TRACE]      Recency: ${mem.recencyScore?.toFixed(3)} | Semantic: ${mem.semanticScore?.toFixed(3)} | Keyword: ${mem.keywordScore?.toFixed(3)}`);
-        console.log(`[MEMORY-TRACE]      Content: ${mem.content.substring(0, 100)}...`);
-      });
-      console.log(`[MEMORY-TRACE] ================================================`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[MEMORY-TRACE] ========== RANKING RESULTS (Top 5) ==========`);
+        rankedMemories.slice(0, 5).forEach((mem, idx) => {
+          const ageInSeconds = (Date.now() - new Date(mem.created_at).getTime()) / 1000;
+          console.log(`[MEMORY-TRACE] #${idx + 1}: ID ${mem.id} | Score: ${mem.relevanceScore.toFixed(3)} | Age: ${ageInSeconds.toFixed(1)}s`);
+          console.log(`[MEMORY-TRACE]      Recency: ${mem.recencyScore?.toFixed(3)} | Semantic: ${mem.semanticScore?.toFixed(3)} | Keyword: ${mem.keywordScore?.toFixed(3)}`);
+          console.log(`[MEMORY-TRACE]      Content: ${mem.content.substring(0, 100)}...`);
+        });
+        console.log(`[MEMORY-TRACE] ================================================`);
+      }
 
       // Issue #210 Fix 3: Log match-first scoring results
       const matchedMemories = rankedMemories.filter(m => m.exactTokenMatch || m.keyTermMatches > 0);
@@ -2034,13 +2049,15 @@ class IntelligenceSystem {
       );
 
       // ISSUE #544 FIX: Log final selected memories
-      console.log(`[MEMORY-TRACE] ========== FINAL SELECTION ==========`);
-      console.log(`[MEMORY-TRACE] Selected ${finalMemories.length} memories for injection`);
-      finalMemories.forEach((mem, idx) => {
-        const ageInSeconds = (Date.now() - new Date(mem.created_at).getTime()) / 1000;
-        console.log(`[MEMORY-TRACE] Selected #${idx + 1}: ID ${mem.id} | Age: ${ageInSeconds.toFixed(1)}s | Score: ${mem.relevanceScore?.toFixed(3)}`);
-      });
-      console.log(`[MEMORY-TRACE] ==========================================`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[MEMORY-TRACE] ========== FINAL SELECTION ==========`);
+        console.log(`[MEMORY-TRACE] Selected ${finalMemories.length} memories for injection`);
+        finalMemories.forEach((mem, idx) => {
+          const ageInSeconds = (Date.now() - new Date(mem.created_at).getTime()) / 1000;
+          console.log(`[MEMORY-TRACE] Selected #${idx + 1}: ID ${mem.id} | Age: ${ageInSeconds.toFixed(1)}s | Score: ${mem.relevanceScore?.toFixed(3)}`);
+        });
+        console.log(`[MEMORY-TRACE] ==========================================`);
+      }
 
       // Update analytics
       this.updateExtractionAnalytics(
@@ -2076,9 +2093,11 @@ class IntelligenceSystem {
       // ═══════════════════════════════════════════════════════════════
       // CRITICAL: Explicit userId logging for isolation verification
       // ═══════════════════════════════════════════════════════════════
-      console.log(`[MEMORY-ISOLATION] extractFromPrimaryCategory called with:`);
-      console.log(`[MEMORY-ISOLATION]   userId: ${userId}`);
-      console.log(`[MEMORY-ISOLATION]   category: ${routing.primaryCategory || "personal_life_interests"}`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[MEMORY-ISOLATION] extractFromPrimaryCategory called with:`);
+        console.log(`[MEMORY-ISOLATION]   userId: ${userId}`);
+        console.log(`[MEMORY-ISOLATION]   category: ${routing.primaryCategory || "personal_life_interests"}`);
+      }
       // ═══════════════════════════════════════════════════════════════
 
       const primaryCategory =
@@ -2213,7 +2232,9 @@ class IntelligenceSystem {
         }
         
         // DIAGNOSTIC: Log the actual SQL being executed
-        console.log(`[MEMORY-ISOLATION] SQL user_id param: ${userId}`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[MEMORY-ISOLATION] SQL user_id param: ${userId}`);
+        }
 
         const result = await client.query(baseQuery, queryParams);
 
@@ -2335,7 +2356,9 @@ class IntelligenceSystem {
         console.error('[MEMORY-ISOLATION] searchByTopics called without userId');
         return [];
       }
-      console.log(`[MEMORY-ISOLATION] searchByTopics for userId: ${userId.substring(0, 8)}...`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[MEMORY-ISOLATION] searchByTopics for userId: ${userId.substring(0, 8)}...`);
+      }
       // ═══════════════════════════════════════════════════════════════
 
       this.logger.log(
