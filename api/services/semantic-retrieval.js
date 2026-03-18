@@ -32,7 +32,10 @@ const RETRIEVAL_CONFIG = {
   diversityEnforcement: true,          // Master switch for MMR-style diversity
   diversityPenaltyWeight: 0.3,         // How aggressively to penalize similar results
   diversitySimilarityThreshold: 0.85,  // Cosine similarity above which penalty applies
-  prefilterUseEmbedding: true          // Use pgvector <=> when embedding available
+  prefilterUseEmbedding: true,         // Use pgvector <=> when embedding available
+  // Issue #2903: Per-record token cap to prevent a single bloated record from
+  // consuming the majority of the token budget and starving other memories.
+  maxTokensPerRecord: 500,             // Hard cap per individual memory record (≈2,000 chars)
 };
 
 // ============================================
@@ -2394,10 +2397,43 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     console.log(`  Keyword-boosted: ${keywordBoostedMemories.length}`);  // FIX #697-STR1
     console.log(`  Related groups: ${relatedGroups.size}`);
     
+    // Issue #2903: Apply per-record token cap before budget accounting.
+    // A single bloated record (e.g. id=2903 at 1,322 tokens) can consume >50% of the
+    // 2,000-token budget, leaving insufficient room for other relevant memories.
+    // Cap each record at RETRIEVAL_CONFIG.maxTokensPerRecord tokens and truncate at a
+    // sentence boundary so the stored fact remains coherent.
+    const capRecordTokens = (memory) => {
+      const rawTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
+      const cap = RETRIEVAL_CONFIG.maxTokensPerRecord;
+      if (rawTokens <= cap) return memory; // Within limit — return as-is
+
+      const targetChars = cap * 4;
+      let truncated = (memory.content || '').substring(0, targetChars);
+      // Prefer truncating at a sentence boundary
+      const lastSentence = Math.max(
+        truncated.lastIndexOf('. '),
+        truncated.lastIndexOf('.\n'),
+        truncated.lastIndexOf('\n\n')
+      );
+      // 0.7 threshold: only snap to a sentence boundary when the boundary falls within the
+      // last 30% of the target range. Boundaries earlier than that sacrifice too much content
+      // for minimal coherence gain, so we fall back to a word boundary instead.
+      if (lastSentence > targetChars * 0.7) {
+        truncated = truncated.substring(0, lastSentence + 1);
+      } else {
+        const lastSpace = truncated.lastIndexOf(' ');
+        truncated = lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
+      }
+      truncated += ' [truncated]';
+      console.log(`[RETRIEVAL-TOKEN-CAP] Memory ${memory.id} capped: ${rawTokens} → ${Math.ceil(truncated.length / 4)} tokens`);
+      return { ...memory, content: truncated, token_count: Math.ceil(truncated.length / 4) };
+    };
+
     // First pass: Add ALL high-priority memories together (they come as a group)
     for (const memory of filtered) {
       if (highPriorityIds.has(memory.id)) {
-        const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
+        const capped = capRecordTokens(memory);
+        const memoryTokens = capped.token_count || Math.ceil((capped.content?.length || 0) / 4);
         
         // For high-priority memories, be more lenient with token budget
         // Allow up to 20% overflow to ensure related memories stay together
@@ -2407,7 +2443,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           break;
         }
         
-        results.push(memory);
+        results.push(capped);
         usedTokens += memoryTokens;
         console.log(`[RETRIEVAL-GROUPING] ✅ Added high-priority memory ${memory.id} (${memoryTokens} tokens)`);
       }
@@ -2420,7 +2456,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         continue;
       }
       
-      const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
+      const capped = capRecordTokens(memory);
+      const memoryTokens = capped.token_count || Math.ceil((capped.content?.length || 0) / 4);
       
       // Check if adding this memory would exceed budget
       if (usedTokens + memoryTokens > tokenBudget) {
@@ -2428,7 +2465,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         break;
       }
       
-      results.push(memory);
+      results.push(capped);
       usedTokens += memoryTokens;
       
       // For non-high-priority memories, respect strict topK limit
