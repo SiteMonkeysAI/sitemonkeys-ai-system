@@ -2077,12 +2077,23 @@ export class Orchestrator {
             // EXCEPTION (Issue #895): If an external lookup was performed, the response
             // contains synthesized external data that must be delivered in full.
             // Treat as news_current_events — skip the hard cut entirely.
+            // EXCEPTION (Issue fix): If memory context is present, the response is recalling
+            // stored information (names, lists of pets/children/contacts) that may require
+            // more than 150 chars to answer completely. Skip the hard cut to avoid truncating
+            // mid-list — same pattern already used for simple_factual.
             else if (classification.classification === 'simple_short') {
               if (phase4Metadata && phase4Metadata.external_lookup === true) {
                 // External lookup was performed — do not truncate
                 this.log(`✂️ simple_short with external lookup — skipping hard cut (${personalityResponse.response.length} chars)`);
                 responseIntelligence.applied = false;
                 responseIntelligence.reason = `simple_short_external_lookup_no_truncation`;
+              } else if (context.memory) {
+                // Memory context is present — response is recalling stored facts (names, lists).
+                // Do not truncate: the answer may be longer than GREETING_LIMIT but is complete
+                // and necessary. Mirrors the simple_factual exception above.
+                this.log(`✂️ simple_short with memory recall — skipping hard cut (${personalityResponse.response.length} chars)`);
+                responseIntelligence.applied = false;
+                responseIntelligence.reason = `simple_short_memory_recall_no_truncation`;
               } else {
                 const lines = personalityResponse.response.split('\n');
                 const firstLine = lines[0].trim();

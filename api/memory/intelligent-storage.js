@@ -14,6 +14,13 @@ import { SemanticAnalyzer } from '../core/intelligence/semantic_analyzer.js';
 const semanticAnalyzer = new SemanticAnalyzer();
 
 /**
+ * Category names that represent pet/animal memories.
+ * Used to widen supersession similarity thresholds and bias fingerprint detection
+ * toward user_pet over user_name for entries like "Name: Lyric (male's name).".
+ */
+const PET_CATEGORIES = new Set(['pets', 'animals', 'pet']);
+
+/**
  * Boilerplate patterns that should NEVER be stored in memory
  */
 const BOILERPLATE_PATTERNS = [
@@ -116,7 +123,7 @@ export class IntelligentMemoryStorage {
    * @param {string} facts - Extracted facts (compressed, cleaned content)
    * @returns {Promise<{ fingerprint: string|null, confidence: number, method: string }>}
    */
-  async detectFingerprintFromFacts(facts) {
+  async detectFingerprintFromFacts(facts, category = null) {
     if (!facts || typeof facts !== 'string') {
       return { fingerprint: null, confidence: 0, method: 'invalid_input' };
     }
@@ -124,6 +131,9 @@ export class IntelligentMemoryStorage {
     const factsLower = facts.toLowerCase();
     if (process.env.DEBUG_DIAGNOSTICS === 'true') {
       console.log('[SEMANTIC-FINGERPRINT] Analyzing facts:', facts.substring(0, 100));
+      if (category) {
+        console.log('[SEMANTIC-FINGERPRINT] Category context:', category);
+      }
     }
 
     // CANONICAL FACT PATTERNS - Semantic, comprehensive detection
@@ -207,8 +217,8 @@ export class IntelligentMemoryStorage {
       },
       {
         id: 'user_pet',
-        semanticIndicators: ['pet', 'dog', 'cat', 'bird', 'fish', 'animal'],
-        confidence: 0.80
+        semanticIndicators: ['pet', 'dog', 'cat', 'bird', 'fish', 'animal', 'monkey', 'primate', 'capuchin', 'exotic'],
+        confidence: 0.85
       },
       {
         id: 'user_meeting_time',
@@ -228,8 +238,21 @@ export class IntelligentMemoryStorage {
       }
     ];
 
+    // When category context is 'pets', prefer user_pet over user_name to prevent
+    // pet name corrections (e.g. "Name: Lyric (male's name).") from being misclassified
+    // as the user's own name. Check user_pet FIRST when in pet context.
+    const checkPetFirst = category && PET_CATEGORIES.has(category.toLowerCase());
+
+    // Reorder patterns so user_pet is evaluated before user_name when in pet category context
+    const orderedPatterns = checkPetFirst
+      ? [
+          ...canonicalPatterns.filter(p => p.id === 'user_pet'),
+          ...canonicalPatterns.filter(p => p.id !== 'user_pet')
+        ]
+      : canonicalPatterns;
+
     // Semantic matching: Check for indicator presence + value patterns (if required)
-    for (const pattern of canonicalPatterns) {
+    for (const pattern of orderedPatterns) {
       const hasIndicator = pattern.semanticIndicators.some(ind => factsLower.includes(ind.toLowerCase()));
 
       if (hasIndicator) {
@@ -1256,7 +1279,8 @@ export class IntelligentMemoryStorage {
                                     !facts.toLowerCase().includes('general query');
 
       if (factsContainUserInfo) {
-        fingerprintResult = await this.detectFingerprintFromFacts(facts);
+        // Pass category so pet-context facts (e.g. name corrections) prefer user_pet fingerprint
+        fingerprintResult = await this.detectFingerprintFromFacts(facts, category);
         console.log('[FLOW] Step 2: Fingerprint detected ✓', fingerprintResult);
         console.log(`[INTELLIGENT-STORAGE] Fingerprint result: ${fingerprintResult.fingerprint || 'none'} (confidence: ${fingerprintResult.confidence}, method: ${fingerprintResult.method})`);
       } else {
@@ -2255,15 +2279,20 @@ Facts (preserve user terminology + add synonyms):`;
         LIMIT 5
       `, [JSON.stringify(embeddingResult.embedding), userId, category]);
 
-      // Check for semantic duplicates (distance < 0.15)
+      // Check for semantic duplicates.
+      // For pet/animal categories, use a slightly wider window (0.25) to catch name
+      // corrections like "Name: Lyric (male's name)." against a stored monkey list.
+      // For all other categories the standard threshold (0.15) applies.
+      const similarityThreshold = PET_CATEGORIES.has((category || '').toLowerCase()) ? 0.25 : 0.15;
+
       for (const row of result.rows) {
-        if (row.distance < 0.15) {
+        if (row.distance < similarityThreshold) {
           // CRITICAL FIX: Check if this is an UPDATE (supersession) or DUPLICATE (same fact)
           // High similarity could mean either:
           // 1. DUPLICATE: "My wife is Sarah" + "My wife Sarah" = SAME FACT → Boost
           // 2. SUPERSESSION: "My salary is $80K" + "My salary is $95K" = UPDATED FACT → Don't boost, supersede instead
 
-          console.log(`[DEDUP] High similarity detected (distance: ${row.distance.toFixed(3)}), checking if update or duplicate...`);
+          console.log(`[DEDUP] High similarity detected (distance: ${row.distance.toFixed(3)}, threshold: ${similarityThreshold}), checking if update or duplicate...`);
 
           // Use semantic analyzer to determine if this is an update
           // Pass the OLD memory's embedding from the database
