@@ -214,8 +214,8 @@ function applyOrdinalBoost(memories, query) {
   for (const [ordinalName, pattern] of Object.entries(ORDINAL_PATTERNS)) {
     if (pattern.test(query)) {
       queryOrdinal = ordinalName;
-      console.log(`[ORDINAL-BOOST] 🎯 Query contains ordinal: "${ordinalName}"`);
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[ORDINAL-BOOST] 🎯 Query contains ordinal: "${ordinalName}"`);
         console.log(`[TRACE-T3] Detected ordinal: "${ordinalName}"`);
       }
       break;
@@ -252,8 +252,10 @@ function applyOrdinalBoost(memories, query) {
       boostedCount++;
       const originalScore = memory.similarity;
       const newSimilarity = Math.min(originalScore + ORDINAL_BOOST, 1.0);
-      console.log(`[ORDINAL-BOOST] ✅ Memory ${memory.id}: "${queryOrdinal}" MATCH - boosting ${originalScore.toFixed(3)} → ${newSimilarity.toFixed(3)} (+${ORDINAL_BOOST})`);
-      console.log(`[ORDINAL-BOOST]    Content preview: "${content.substring(0, 60)}..."`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log(`[ORDINAL-BOOST] ✅ Memory ${memory.id}: "${queryOrdinal}" MATCH - boosting ${originalScore.toFixed(3)} → ${newSimilarity.toFixed(3)} (+${ORDINAL_BOOST})`);
+        console.log(`[ORDINAL-BOOST]    Content preview: "${content.substring(0, 60)}..."`);
+      }
       return {
         ...memory,
         similarity: newSimilarity,
@@ -268,8 +270,10 @@ function applyOrdinalBoost(memories, query) {
         penalizedCount++;
         const originalScore = memory.similarity;
         const newSimilarity = Math.max(originalScore + ORDINAL_PENALTY, 0.0);
-        console.log(`[ORDINAL-BOOST] ⬇️  Memory ${memory.id}: DIFFERENT ordinal detected - penalizing ${originalScore.toFixed(3)} → ${newSimilarity.toFixed(3)} (${ORDINAL_PENALTY})`);
-        console.log(`[ORDINAL-BOOST]    Content preview: "${content.substring(0, 60)}..."`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[ORDINAL-BOOST] ⬇️  Memory ${memory.id}: DIFFERENT ordinal detected - penalizing ${originalScore.toFixed(3)} → ${newSimilarity.toFixed(3)} (${ORDINAL_PENALTY})`);
+          console.log(`[ORDINAL-BOOST]    Content preview: "${content.substring(0, 60)}..."`);
+        }
         return {
           ...memory,
           similarity: newSimilarity,
@@ -279,7 +283,7 @@ function applyOrdinalBoost(memories, query) {
       } else {
         nonMatchCount++;
         // Log non-matches for debugging ordinal detection issues
-        if (nonMatchCount <= 3) {  // Only log first 3 non-matches to avoid spam
+        if (nonMatchCount <= 3 && process.env.DEBUG_DIAGNOSTICS === 'true') {  // Only log first 3 non-matches to avoid spam
           console.log(`[ORDINAL-BOOST] ❌ Memory ${memory.id}: No ordinal in content - score stays ${memory.similarity.toFixed(3)}`);
           console.log(`[ORDINAL-BOOST]    Content preview: "${content.substring(0, 60)}..."`);
         }
@@ -289,13 +293,15 @@ function applyOrdinalBoost(memories, query) {
     return memory;
   });
 
-  if (boostedCount > 0 || penalizedCount > 0) {
-    console.log(`[ORDINAL-BOOST] ⚡ Applied ordinal adjustments for "${queryOrdinal}":`);
-    console.log(`[ORDINAL-BOOST]    ✅ Boosted: ${boostedCount} memories (+${ORDINAL_BOOST})`);
-    console.log(`[ORDINAL-BOOST]    ⬇️  Penalized: ${penalizedCount} memories (${ORDINAL_PENALTY})`);
-    console.log(`[ORDINAL-BOOST]    ➖ Neutral: ${nonMatchCount} memories (no ordinal in content)`);
-  } else {
-    console.log(`[ORDINAL-BOOST] ⚠️ Query has "${queryOrdinal}" but NO memories matched - possible detection issue`);
+  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+    if (boostedCount > 0 || penalizedCount > 0) {
+      console.log(`[ORDINAL-BOOST] ⚡ Applied ordinal adjustments for "${queryOrdinal}":`);
+      console.log(`[ORDINAL-BOOST]    ✅ Boosted: ${boostedCount} memories (+${ORDINAL_BOOST})`);
+      console.log(`[ORDINAL-BOOST]    ⬇️  Penalized: ${penalizedCount} memories (${ORDINAL_PENALTY})`);
+      console.log(`[ORDINAL-BOOST]    ➖ Neutral: ${nonMatchCount} memories (no ordinal in content)`);
+    } else {
+      console.log(`[ORDINAL-BOOST] ⚠️ Query has "${queryOrdinal}" but NO memories matched - possible detection issue`);
+    }
   }
 
   // CRITICAL TRACE #560-T3: Log all memory scores after boost
@@ -424,7 +430,9 @@ function detectProperNames(query) {
   const unique = [...new Set(names)];
 
   if (unique.length > 0) {
-    console.log(`[ENTITY-DETECTION] 🏷️  Detected proper names in query: [${unique.join(', ')}]`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[ENTITY-DETECTION] 🏷️  Detected proper names in query: [${unique.join(', ')}]`);
+    }
   }
 
   return unique;
@@ -548,15 +556,19 @@ function expandQuery(query) {
   if (addedSynonyms.length > 0) {
     const uniqueSynonyms = [...new Set(addedSynonyms)];
     expanded = `${query} ${uniqueSynonyms.join(' ')}`;
-    console.log(`[QUERY-EXPANSION] Original: "${query}"`);
-    console.log(`[QUERY-EXPANSION] Expanded: "${expanded}"`);
-    console.log(`[QUERY-EXPANSION] Added synonyms: [${uniqueSynonyms.join(', ')}]`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[QUERY-EXPANSION] Original: "${query}"`);
+      console.log(`[QUERY-EXPANSION] Expanded: "${expanded}"`);
+      console.log(`[QUERY-EXPANSION] Added synonyms: [${uniqueSynonyms.join(', ')}]`);
+    }
   }
 
   // CRITICAL FIX #562-T2: Log memory recall detection
   if (isMemoryRecall) {
-    console.log(`[MEMORY-RECALL] 🎯 Memory recall query detected: "${query}"`);
-    console.log(`[MEMORY-RECALL] This query asks "what did I tell you?" - will use lower similarity threshold and prioritize recent explicit storage`);
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log(`[MEMORY-RECALL] 🎯 Memory recall query detected: "${query}"`);
+      console.log(`[MEMORY-RECALL] This query asks "what did I tell you?" - will use lower similarity threshold and prioritize recent explicit storage`);
+    }
   }
 
   return { expanded, isPersonal, isMemoryRecall };
@@ -574,8 +586,10 @@ function expandQuery(query) {
  * @returns {{sql: string, params: any[]}} Query and parameters
  */
 function buildPrefilterQuery(options) {
-  console.log('[MODE-DIAG] ════════════════════════════════════════');
-  console.log('[MODE-DIAG] Options:', JSON.stringify(options, null, 2));
+  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+    console.log('[MODE-DIAG] ════════════════════════════════════════');
+    console.log('[MODE-DIAG] Options:', JSON.stringify(options, null, 2));
+  }
 
   const {
     userId,
@@ -588,10 +602,12 @@ function buildPrefilterQuery(options) {
     queryEmbedding = null  // Fix #916: Accept query embedding for pgvector distance ordering
   } = options;
 
-  console.log('[MODE-DIAG] Mode from options:', mode);
-  console.log('[MODE-DIAG] allowCrossMode:', allowCrossMode);
-  if (intent) {
-    console.log(`[MODE-DIAG] Intent type: ${intent.type}`);
+  if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+    console.log('[MODE-DIAG] Mode from options:', mode);
+    console.log('[MODE-DIAG] allowCrossMode:', allowCrossMode);
+    if (intent) {
+      console.log(`[MODE-DIAG] Intent type: ${intent.type}`);
+    }
   }
 
   const params = [userId];
@@ -617,25 +633,33 @@ function buildPrefilterQuery(options) {
     if (mode === 'site-monkeys') {
       // Site Monkeys can access all modes
       // No mode filter needed
-      console.log('[MODE-DIAG] Site Monkeys mode - no mode filter applied');
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[MODE-DIAG] Site Monkeys mode - no mode filter applied');
+      }
     } else {
       // If cross-mode allowed, include memories from truth-general mode (shared base)
       // Otherwise, strict mode isolation
       if (allowCrossMode) {
-        console.log(`[MODE-DIAG] ✅ Cross-mode transfer ENABLED - including truth-general`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[MODE-DIAG] ✅ Cross-mode transfer ENABLED - including truth-general`);
+        }
         conditions.push(`(mode = $${paramIndex} OR mode = 'truth-general')`);
         params.push(mode);
         paramIndex++;
       } else {
         // All modes use exact matching (mode isolation)
-        console.log(`[MODE-DIAG] Adding mode filter for: ${mode} (strict isolation)`);
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log(`[MODE-DIAG] Adding mode filter for: ${mode} (strict isolation)`);
+        }
         conditions.push(`mode = $${paramIndex}`);
         params.push(mode);
         paramIndex++;
       }
     }
   } else {
-    console.log('[MODE-DIAG] includeAllModes = true - no mode filter');
+    if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+      console.log('[MODE-DIAG] includeAllModes = true - no mode filter');
+    }
   }
 
   // Category filtering
