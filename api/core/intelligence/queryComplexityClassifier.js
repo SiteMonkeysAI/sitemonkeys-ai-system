@@ -3,6 +3,9 @@
 // This is the CEO approach: understand context, not match rules
 
 import OpenAI from "openai";
+import { PURE_GREETINGS, normalizeGreeting } from "./greetingUtils.js";
+
+const MAX_GREETING_LENGTH = 50;
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -161,6 +164,37 @@ export async function classifyQueryComplexity(query, phase4Metadata = {}) {
   try {
     console.log('[QUERY_CLASSIFIER] Classifying query:', query.substring(0, 50) + '...');
 
+    // ===== DETERMINISTIC GREETING SHORT-CIRCUIT =====
+    // Per doctrines: exact-match prefilters may finalize for trivially non-semantic cases.
+    // Single-word/bare greetings ("Hello", "Hi", "Hey") score only ~0.587 cosine similarity
+    // against the embedding anchor — below the HIGH_CONFIDENCE 0.70 threshold — causing
+    // them to fall through to `simple_short` instead of `greeting`.  That prevents
+    // `isPureGreeting` from being true, which blocks the STEP 6.9 shortcut and routes
+    // the request to GPT-4 at $0.04+ per greeting.
+    // A bare "hello" needs no embedding confirmation; classify it immediately.
+    const trimmedQuery = query.trim();
+
+    if (trimmedQuery.length < MAX_GREETING_LENGTH) {
+      const normalizedGreeting = normalizeGreeting(trimmedQuery);
+      // Guardrail: keep shortcut limited to short, pure greetings (avoid long mixed-content messages)
+      if (PURE_GREETINGS.has(normalizedGreeting)) {
+        console.log('[QUERY_CLASSIFIER] ✅ Classified as: greeting (confidence: 0.95) — deterministic pattern match, embedding skipped');
+        return {
+          classification: 'greeting',
+          confidence: 0.95,
+          requiresScaffolding: false,
+          dataFreshnessRequirement: 'TIMELESS',
+          externalLookupRequired: false,
+          responseApproach: {
+            type: 'direct',
+            reason: 'Pure greeting pattern match — direct friendly response without scaffolding',
+            maxLength: 100
+          },
+          similarities: {}
+        };
+      }
+    }
+
     // ISSUE #810 FIX G: For classification, use only the user's question intent (first 500 chars).
     // When a user pastes a large document into the message field, the full text can exceed the
     // 8192-token embedding model limit. Classification should be based on what the user asked,
@@ -236,6 +270,8 @@ export async function classifyQueryComplexity(query, phase4Metadata = {}) {
     };
   }
 }
+
+// Exported for targeted unit tests (no network calls) to ensure normalization stays regex-free and deterministic
 
 /**
  * Determine data freshness requirement from query
