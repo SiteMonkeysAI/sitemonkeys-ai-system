@@ -1318,6 +1318,8 @@ export function hasProperNouns(query) {
  * "who are" requires a proper noun to avoid triggering for "who are you".
  * Personal possessive queries ("what are my pets names") are explicitly excluded —
  * these are memory-recall requests, not external entity lookups.
+ * Organizational possessive queries ("what is our network monitoring system") are also excluded —
+ * "our" and possessive "we" indicate internal organizational context, never external entities.
  * @param {string} query - The user's query
  * @returns {boolean} True if query is a factual entity question about a named entity
  */
@@ -1327,6 +1329,16 @@ export function isFactualEntityQuery(query) {
   // Even if pet names (Bella, Max) look like proper nouns, the presence of "my" means this is
   // a personal memory recall request that must never trigger an external lookup.
   if (/\bmy\b/i.test(query)) return false;
+  // Organizational possessive queries refer to internal systems, teams, or processes.
+  // "our network monitoring system", "our team's deployment", "our current policy" — these are
+  // internal operational context queries; external lookup adds zero value and inflates token cost.
+  if (/\bour\b/i.test(query)) return false;
+  // "we" as organizational first-person possessive: "what are we using for monitoring",
+  // "how do we handle incidents", "what do we have for backup" all refer to internal context.
+  // Guard uses word boundary + verb pattern to distinguish possessive "we" from incidental use
+  // (e.g. "We asked the vendor about their system" won't match because "their" follows, not a
+  // possessive referencing the org's own assets).
+  if (/\bwe\b.{0,40}\b(our|use|have|do|handle|follow|track|monitor|deploy|run|manage|support|own|maintain|build|store|send|process|host|operate|call|report|log|test|review|schedule)\b/i.test(query)) return false;
   return (
     /\b(who is|who was)\b/i.test(query) ||
     (/\b(who are)\b/i.test(query) && hasProperNouns(query)) ||
@@ -1501,6 +1513,8 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
   // Previously "recall" matched the SAFETY domain and triggered Google News RSS — now blocked.
   // Extended patterns also catch "what are my pets names", "what is my dog's name", etc. where
   // the "my" possessive makes clear this is a personal memory question, not an external lookup.
+  // Organizational context patterns block "our network monitoring system" style queries —
+  // "our" always indicates internal organizational systems, never external lookup candidates.
   const isPersonalMemoryRecall = (
     /\b(do you (recall|remember)|can you (recall|remember))\b.{0,60}\bmy\b/i.test(query) ||
     /\b(what do you (know|have|remember) about my|tell me (what you know about |about )?my)\b/i.test(query) ||
@@ -1511,10 +1525,20 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
     // "my [personal topic]" — user asking about their own stored information.
     // 'allerg' and 'medic' are intentional prefix matches: they match 'allergy', 'allergies',
     // 'medication', 'medicine', 'medical' etc. so no personal health queries slip through.
-    /\bmy\b.{0,50}\b(pet|dog|cat|fish|bird|rabbit|horse|hamster|name|kid|child|son|daughter|family|friend|boss|job|salary|email|phone|address|birthday|anniversary|allerg|medic|prescription)\b/i.test(query)
+    /\bmy\b.{0,50}\b(pet|dog|cat|fish|bird|rabbit|horse|hamster|name|kid|child|son|daughter|family|friend|boss|job|salary|email|phone|address|birthday|anniversary|allerg|medic|prescription)\b/i.test(query) ||
+    // ORGANIZATIONAL CONTEXT: "our [system/service/infrastructure]" — internal operational queries.
+    // These refer to systems and processes owned by the user's organization.
+    // External lookup adds zero value (and wastes tokens) for all of these patterns.
+    /\b(what is|what'?s?) (the )?current status of our\b/i.test(query) ||
+    /\bhow is our\b.{0,60}\b(team|division|department|staff|group|org|service|system|infrastructure|process|project|product|platform|pipeline|deployment|environment|setup|monitoring|network|database|server|cluster|instance|stack|build|release|app|application)\b/i.test(query) ||
+    /\bwhat are our\b.{0,60}\b(polic|procedur|protocol|process|standard|guideline|rule|practice|workflow|sop|step|requirement|objective|goal|plan|sprint|backlog|ticket|issue|incident|milestone|metric|kpi|sla|ola)\b/i.test(query) ||
+    /\b(summarize|describe|explain|review) our\b.{0,60}\b(incident|situation|problem|issue|outage|alert|status|update|report|meeting|discussion|deployment|release|change|event|timeline|runbook|postmortem|root cause)\b/i.test(query) ||
+    /\bwhat happened (with|to) our\b.{0,60}\b(service|system|deployment|release|build|server|network|database|pipeline|app|application|platform|environment|cluster|instance|monitor|alert)\b/i.test(query) ||
+    // Catch-all: any query that starts with "our [owned noun]" framing (e.g. "our network monitoring system")
+    /\bour\b.{0,30}\b(system|service|infrastructure|network|monitoring|team|policy|process|procedure|database|server|cluster|platform|pipeline|deployment|environment|setup|stack|product|project|application|app|tool|vendor|provider|contract|budget|incident|alert|oncall|on-call|runbook|dashboard|metric|kpi|sla|ola|backup|recovery|failover|config|configuration|architecture|design|plan|roadmap|sprint|backlog|ticket|repo|repository|codebase|code|branch|pr|pull request|ci|cd|build|release|version|changelog|log|audit)\b/i.test(query)
   );
   if (isPersonalMemoryRecall) {
-    console.log('[externalLookupEngine] Skipping lookup — personal memory recall query (use persistent memory only)');
+    console.log('[externalLookupEngine] Skipping lookup — personal/organizational memory recall query (use persistent memory only)');
     return {
       required: false,
       reasons: ['Personal memory recall — use persistent memory retrieval, no external lookup'],
