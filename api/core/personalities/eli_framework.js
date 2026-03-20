@@ -382,7 +382,10 @@ export class EliFramework {
       const isSimpleFact = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
       const isDocumentReview = truthType === 'DOCUMENT_REVIEW';
       const isNewsQuery = context?.queryClassification?.classification === 'news_current_events';
-      const skipConfidence = isSimpleFact || isDocumentReview || isNewsQuery;
+      const isSimpleShort = context?.queryClassification?.classification === 'simple_short';
+      const isSimpleFactual = context?.queryClassification?.classification === 'simple_factual';
+      const isVolatile = truthType === 'VOLATILE';
+      const skipConfidence = isSimpleFact || isDocumentReview || isNewsQuery || isSimpleShort || isSimpleFactual || isVolatile;
       const alreadyHasConfidencePercentage = /My confidence in this response is \d+%/i.test(response) ||
         response.includes('🎯 **Confidence Assessment:**');
       if (!alreadyHasConfidencePercentage && !skipConfidence) {
@@ -397,7 +400,7 @@ export class EliFramework {
       } else if (alreadyHasConfidencePercentage) {
         this.logger.log('Skipping confidence assessment: response already has a structured confidence percentage');
       } else if (skipConfidence) {
-        this.logger.log(`Skipping confidence assessment: ${isSimpleFact ? 'simple fact' : isDocumentReview ? 'document review' : 'news query'}`);
+        this.logger.log(`Skipping confidence assessment: ${isSimpleFact ? 'simple fact' : isDocumentReview ? 'document review' : isNewsQuery ? 'news query' : isSimpleShort ? 'simple_short' : isSimpleFactual ? 'simple_factual' : 'VOLATILE'}`);
       }
 
       // STEP 8: Apply Eli's protective intelligence signature

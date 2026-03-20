@@ -277,7 +277,10 @@ export class RoxyFramework {
       const isSimpleFactForConf = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
       const isDocReviewForConf = truthType === 'DOCUMENT_REVIEW';
       const isNewsQueryForConf = context?.queryClassification?.classification === 'news_current_events';
-      const skipConfidenceBlock = isSimpleFactForConf || isDocReviewForConf || isNewsQueryForConf;
+      const isSimpleShortForConf = context?.queryClassification?.classification === 'simple_short';
+      const isSimpleFactualForConf = context?.queryClassification?.classification === 'simple_factual';
+      const isVolatileForConf = truthType === 'VOLATILE';
+      const skipConfidenceBlock = isSimpleFactForConf || isDocReviewForConf || isNewsQueryForConf || isSimpleShortForConf || isSimpleFactualForConf || isVolatileForConf;
       const alreadyHasConfidenceBlock = /My confidence in this response is \d+%/i.test(response) ||
         enhancedResponse.includes('🎯 **Confidence Assessment:**');
       if (!alreadyHasConfidenceBlock && !skipConfidenceBlock) {
@@ -299,7 +302,7 @@ export class RoxyFramework {
       } else if (alreadyHasConfidenceBlock) {
         this.logger.log('Skipping confidence assessment: response already has a structured confidence percentage');
       } else if (skipConfidenceBlock) {
-        this.logger.log(`Skipping confidence assessment: ${isSimpleFactForConf ? 'simple fact' : isDocReviewForConf ? 'document review' : 'news query'}`);
+        this.logger.log(`Skipping confidence assessment: ${isSimpleFactForConf ? 'simple fact' : isDocReviewForConf ? 'document review' : isNewsQueryForConf ? 'news query' : isSimpleShortForConf ? 'simple_short' : isSimpleFactualForConf ? 'simple_factual' : 'VOLATILE'}`);
       }
 
       // STEP 8: Apply Roxy's empathetic signature
