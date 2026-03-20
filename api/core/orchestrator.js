@@ -4121,9 +4121,26 @@ export class Orchestrator {
         routingReason.push(`high_token_count:${context.totalTokens}`);
       }
 
-      // PRIORITY 3: Confidence and complexity (original logic)
+      // PRIORITY 3: Medium complexity → GPT-4o (faster, lower cost, comparable quality)
+      // Runs BEFORE the confidence check (PRIORITY 4) so that medium_complexity queries are
+      // not incorrectly escalated to Claude merely because confidence < 0.85.
+      // Does NOT apply when: high_stakes detected (P0), vault present (P1), token budget exceeded (P2).
       if (!useClaude) {
-        if (confidence < 0.85 ||
+        const queryTier = context.queryClassification?.classification;
+        if (queryTier === 'medium_complexity') {
+          useGpt4o = true;
+          routingReason.push('medium_complexity:gpt-4o');
+          this.log(`[AI ROUTING] medium_complexity query → GPT-4o (faster, cost-efficient)`);
+        }
+      }
+
+      // PRIORITY 4: Confidence and complexity → Claude
+      // Low confidence alone does NOT override an already-set GPT-4o routing decision —
+      // medium_complexity queries are well within GPT-4o capability.
+      // requiresExpertise and business_validation+high_complexity still escalate to Claude
+      // even when GPT-4o was selected above.
+      if (!useClaude) {
+        if ((!useGpt4o && confidence < 0.85) ||
             analysis.requiresExpertise ||
             (mode === "business_validation" && analysis.complexity > 0.7)) {
           useClaude = true;
@@ -4132,18 +4149,6 @@ export class Orchestrator {
           if (mode === "business_validation" && analysis.complexity > 0.7) {
             routingReason.push(`high_complexity:${analysis.complexity.toFixed(2)}`);
           }
-        }
-      }
-
-      // PRIORITY 4: Medium complexity → GPT-4o (faster, lower cost, comparable quality)
-      // Applies ONLY when we're staying in the GPT family (not escalating to Claude)
-      // Does NOT apply when: high_stakes detected, vault present, or payload will overflow GPT-4o
-      if (!useClaude) {
-        const queryTier = context.queryClassification?.classification;
-        if (queryTier === 'medium_complexity') {
-          useGpt4o = true;
-          routingReason.push('medium_complexity:gpt-4o');
-          this.log(`[AI ROUTING] medium_complexity query → GPT-4o (faster, cost-efficient)`);
         }
       }
 
