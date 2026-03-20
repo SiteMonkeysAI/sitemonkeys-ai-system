@@ -2,6 +2,8 @@
 // ELI FRAMEWORK - Analytical & Protective Reasoning
 // Identifies risks, challenges assumptions, models downsides, finds blind spots
 
+import { buildConfidenceMetadata } from './confidence_calculator.js';
+
 const MIN_CONFIDENCE_FOR_ENHANCEMENTS = 0.65;
 
 /**
@@ -388,15 +390,17 @@ export class EliFramework {
       const skipConfidence = isSimpleFact || isDocumentReview || isNewsQuery || isSimpleShort || isSimpleFactual || isVolatile;
       const alreadyHasConfidencePercentage = /My confidence in this response is \d+%/i.test(response) ||
         response.includes('🎯 **Confidence Assessment:**');
-      if (!alreadyHasConfidencePercentage && !skipConfidence) {
-        const confidenceAssessment = this.#enhanceWithConfidenceScoring(
-          enhancedResponse,
-          analysis,
-        );
-        analysisApplied.confidenceAssessment = confidenceAssessment.assessment;
-        enhancedResponse = confidenceAssessment.enhanced;
-        modificationsCount++;
-        this.logger.log("Added confidence assessment");
+
+      // Confidence Scoring Toggle — calculate metadata, never append to response text
+      const showConfidenceBlock = context?.showConfidence === true;
+      let confidenceMetadata = null;
+
+      if (showConfidenceBlock && !alreadyHasConfidencePercentage && !skipConfidence) {
+        // Genuine calculated confidence from Phase 4 signals
+        confidenceMetadata = buildConfidenceMetadata(context?.phase4Metadata);
+        this.logger.log(`[CONFIDENCE-TOGGLE] Calculated confidence metadata: ${confidenceMetadata.score}% — ${confidenceMetadata.reason}`);
+      } else if (!showConfidenceBlock) {
+        this.logger.log('[CONFIDENCE-TOGGLE] Skipping confidence metadata: showConfidence is false (default)');
       } else if (alreadyHasConfidencePercentage) {
         this.logger.log('Skipping confidence assessment: response already has a structured confidence percentage');
       } else if (skipConfidence) {
@@ -419,6 +423,7 @@ export class EliFramework {
         analysisApplied: analysisApplied,
         modificationsCount: modificationsCount,
         reasoningApplied: true,
+        confidenceMetadata: confidenceMetadata,
       };
     } catch (error) {
       this.logger.error("Eli framework failed", error);

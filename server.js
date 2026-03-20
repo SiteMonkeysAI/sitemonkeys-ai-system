@@ -387,6 +387,7 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       vault_content,
       conversationHistory = [],
       claude_confirmed = false, // BIBLE FIX: User confirmation for Claude escalation
+      showConfidence = false, // Confidence Scoring Toggle — default off
     } = req.body;
 
     // ═══════════════════════════════════════════════════════════════
@@ -534,6 +535,7 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       vaultContext: finalVaultContext,
       conversationHistory: effectiveConversationHistory,
       claudeConfirmed: claude_confirmed, // BIBLE FIX: Pass confirmation flag
+      showConfidence, // Confidence Scoring Toggle
     });
 
     // TRACE LOGGING - Step 4 & 5 & 6
