@@ -1345,7 +1345,7 @@ describe('N. Issue 2 — Personal Possessive Queries Must Not Trigger External L
 
 describe('N. Issue 4 — Organizational Possessive Queries Must Not Trigger External Lookup', () => {
 
-  it('N-009: isFactualEntityQuery blocks "our" possessive queries before proper-noun detection', () => {
+  it('N-009: isFactualEntityQuery blocks "our" possessive queries before proper noun detection', () => {
     const src = readRepoFile('api/core/intelligence/externalLookupEngine.js');
     assert.ok(src, 'Could not read api/core/intelligence/externalLookupEngine.js');
 
@@ -1360,19 +1360,14 @@ describe('N. Issue 4 — Organizational Possessive Queries Must Not Trigger Exte
     const ourGuardIdx   = fnBody.indexOf('\\bour\\b');
     const properNounIdx = fnBody.indexOf('hasProperNouns(');
     const guardReturnsFalse =
-      /if\s*\(.*\bour\b.*\)\s*return\s*false/i.test(fnBody) ||
-      (hasOurPattern && fnBody.includes('return false')); // multi-line guard block
+      /if\s*\(\s*\/\\bour\\b\/i\.test\(query\)\s*\)\s*return\s*false/.test(fnBody) ||
+      /if\s*\(\s*\/\\bour\\b\/i\.test\(query\)\s*\)\s*\{[\s\S]{0,120}?return\s+false/.test(fnBody); // multi-line guard block
 
-    assert.ok(
-      hasOurPattern &&
-      guardReturnsFalse &&
-      properNounIdx !== -1 &&
-      ourGuardIdx !== -1 &&
-      ourGuardIdx < properNounIdx,
-      'N-009 FAIL: isFactualEntityQuery must check for organizational possessive /\\bour\\b/ and return false. ' +
-      '"What is the current status of our network monitoring system" will match hasProperNouns() ' +
-      'and incorrectly trigger external lookup.'
-    );
+    assert.ok(hasOurPattern, 'N-009 FAIL: /\\bour\\b/ guard missing from isFactualEntityQuery.');
+    assert.ok(guardReturnsFalse, 'N-009 FAIL: /\\bour\\b/ guard must return false.');
+    assert.ok(properNounIdx !== -1, 'N-009 FAIL: hasProperNouns() call not found in isFactualEntityQuery.');
+    assert.ok(ourGuardIdx !== -1 && ourGuardIdx < properNounIdx,
+      'N-009 FAIL: /\\bour\\b/ guard must appear before hasProperNouns() so it short-circuits external lookup.');
   });
 
   it('N-010: isFactualEntityQuery "our" guard fires before entity-pattern checks', () => {
