@@ -4244,6 +4244,9 @@ export class Orchestrator {
         // the user. Silent fallthrough to confident training-data responses is not acceptable.
         externalContext = `\n\n[EXTERNAL LOOKUP ATTEMPTED — NO DATA RETRIEVED]\nAn attempt was made to retrieve current information for this query, but no external sources returned usable data.\nYou MUST disclose this in your response. Tell the user that you tried to pull current information but could not retrieve it right now, then provide what you know from training data and explicitly label it as potentially outdated.\nExample phrasing: "I tried to pull current information on [topic] but couldn't retrieve anything right now — here's what I know from my training data, which may not reflect the latest developments: ..."\n[END DISCLOSURE]\n\n`;
         console.log('[PHASE4] External lookup attempted but all sources failed — injecting failure disclosure');
+      } else if (!phase4Metadata.lookup_attempted && /\b(our|my)\b/i.test(message)) {
+        externalContext = `\n\n[INTERNAL CONTEXT QUERY — NO EXTERNAL LOOKUP PERFORMED]\nThis query refers to internal or personal context. External data retrieval was NOT attempted and is NOT relevant here. Answer directly from available memory context and internal knowledge. Do NOT say "I attempted to retrieve", "I tried to pull current information", or any language implying a failed external lookup — none was attempted.\n[END INTERNAL CONTEXT NOTE]\n\n`;
+        console.log('[PHASE4] Internal context query — injecting no-external-lookup note');
       }
 
       // ISSUE #787 FIX: Calculate full payload estimate for proper escalation routing

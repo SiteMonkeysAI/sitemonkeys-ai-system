@@ -29,10 +29,10 @@ const GUIDANCE_REQUEST_PATTERNS = [
 // HYGIENE BAD: Engagement padding sections (Issue #378)
 // Strip by default UNLESS user explicitly requested guidance
 const ENGAGEMENT_PADDING_SECTIONS = [
-  /\*\*Simpler Paths Forward:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
-  /\*\*Practical Next Steps:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
-  /\*\*Do More With Less:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
-  /\*\*Opportunities I See:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+  /\*\*Simpler Paths Forward:\*\*[\s\S]{0,2000}?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+  /\*\*Practical Next Steps:\*\*[\s\S]{0,2000}?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+  /\*\*Do More With Less:\*\*[\s\S]{0,2000}?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+  /\*\*Opportunities I See:\*\*[\s\S]{0,2000}?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
 ];
 
 // FALSE CONTINUITY CLAIMS (Issue #435 - ALWAYS strip these lies)
@@ -77,16 +77,13 @@ const ENGAGEMENT_BAIT_ENDINGS = [
 
 // HYGIENE BAD: False claims and theater phrases (ALWAYS strip)
 const ALWAYS_STRIP_SECTIONS = [
-  /\[Note: Evaluate this recommendation.*?\]/gs,
-  /\[FOUNDER PROTECTION:.*?\]/gs,
-  /I want to be honest with you—I'm not as confident.*?perspectives\./gs,
-  /My confidence in this analysis is lower than ideal.*?expert input\./gs,
-  /To verify this information, you could:[\s\S]*?(?=\n\n[A-Z]|$)/gi,
+  /\[Note: Evaluate this recommendation[^\]]{0,500}\]/gs,
+  /\[FOUNDER PROTECTION:[^\]]{0,500}\]/gs,
+  /I want to be honest with you—I'm not as confident[\s\S]{0,500}?perspectives\./gs,
+  /\n*(?:\*\*Note:\*\*\s*)?My confidence in this analysis is lower than ideal[\s\S]{0,1000}?expert input\./gs,
+  /To verify this information, you could:[\s\S]{0,2000}?(?=\n\n[A-Z]|$)/gi,
   /I'm reasoning from general knowledge here, not verified specifics\.\n\n/g,
   /I'm reasoning about future possibilities, not verified facts\.\n\n/g,
-  // False capability denials (Issue #378 Problem 2)
-  /I don't have access to real-time information or current news feeds\.?\n*/gi,
-  /I cannot access real-time information\.?\n*/gi,
   /I don't have the ability to access real-time data\.?\n*/gi,
 ];
 
@@ -371,7 +368,7 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
       // Skip any that are just emoji headers like "🍌 **Roxy:**"
       let firstReal = paragraphs.find(p => p.trim().length > 50) || paragraphs[0];
       // Remove personality headers if present
-      firstReal = firstReal.replace(/^🍌 \*\*(?:Eli|Roxy):\*\*.*?\n+/i, '').trim();
+      firstReal = firstReal.replace(/^🍌 \*\*(?:Eli|Roxy):\*\*.{0,200}?\n+/i, '').trim();
       cleanedResponse = firstReal;
     }
   }
@@ -387,10 +384,10 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
   if (constraint === 'minimal') {
     // Strip all coaching/enhancement blocks
     cleanedResponse = cleanedResponse
-      .replace(/🎯 \*\*Confidence Assessment:\*\*[\s\S]*?(?=\n\n[^🎯]|$)/gi, '')
-      .replace(/\*\*Why:\*\*.*?\n/gi, '')
-      .replace(/🍌 \*\*(?:Eli|Roxy):\*\*.*?\n+/gi, '')
-      .replace(/\((?:Analytical|Empathetic) framework applied.*?\)\n*/gi, '');
+      .replace(/🎯 \*\*Confidence Assessment:\*\*[\s\S]{0,2000}?(?=\n\n[^🎯]|$)/gi, '')
+      .replace(/\*\*Why:\*\*.{0,500}?\n/gi, '')
+      .replace(/🍌 \*\*(?:Eli|Roxy):\*\*.{0,200}?\n+/gi, '')
+      .replace(/\((?:Analytical|Empathetic) framework applied.{0,200}?\)\n*/gi, '');
 
     // If still too long, keep only first substantive sections
     if (cleanedResponse.length > 600) {
