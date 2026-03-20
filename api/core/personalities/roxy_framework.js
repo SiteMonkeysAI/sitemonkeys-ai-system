@@ -277,7 +277,10 @@ export class RoxyFramework {
       const isSimpleFactForConf = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
       const isDocReviewForConf = truthType === 'DOCUMENT_REVIEW';
       const isNewsQueryForConf = context?.queryClassification?.classification === 'news_current_events';
-      const skipConfidenceBlock = isSimpleFactForConf || isDocReviewForConf || isNewsQueryForConf;
+      const isSimpleShortForConf = context?.queryClassification?.classification === 'simple_short';
+      const isSimpleFactualForConf = context?.queryClassification?.classification === 'simple_factual';
+      const isVolatileForConf = truthType === 'VOLATILE';
+      const skipConfidenceBlock = isSimpleFactForConf || isDocReviewForConf || isNewsQueryForConf || isSimpleShortForConf || isSimpleFactualForConf || isVolatileForConf;
       const alreadyHasConfidenceBlock = /My confidence in this response is \d+%/i.test(response) ||
         enhancedResponse.includes('🎯 **Confidence Assessment:**');
       if (!alreadyHasConfidenceBlock && !skipConfidenceBlock) {
