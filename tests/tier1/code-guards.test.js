@@ -1535,4 +1535,104 @@ describe('N. Issue 3 — Business Validation Must Not Fire on Personal Queries',
 
 });
 
+// ============================================================
+// SECTION P: INTELLIGENT MODEL ROUTING — GPT-4o GUARDS
+// Ensures medium_complexity queries route to GPT-4o and that
+// high_stakes / vault / Claude escalation remain unchanged.
+// ============================================================
+
+describe('P. Intelligent Model Routing — GPT-4o', () => {
+
+  it('P-001: gpt-4o exists in MODEL_COSTS configuration in cost-tracker.js', () => {
+    const costTracker = readRepoFile('api/utils/cost-tracker.js');
+    assert.ok(costTracker, 'Could not read api/utils/cost-tracker.js');
+
+    assert.ok(
+      costTracker.includes('"gpt-4o"') || costTracker.includes("'gpt-4o'"),
+      'P-001 FAIL: "gpt-4o" is not present in api/utils/cost-tracker.js MODEL_COSTS. ' +
+      'GPT-4o cost tracking will fall back to incorrect pricing.'
+    );
+  });
+
+  it('P-002: medium_complexity routing logic references gpt-4o in orchestrator', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The routing must check for medium_complexity classification AND associate it with gpt-4o
+    const hasMediumComplexityGpt4o = (
+      orch.includes('medium_complexity') &&
+      (orch.includes('"gpt-4o"') || orch.includes("'gpt-4o'") || orch.includes('useGpt4o'))
+    );
+
+    assert.ok(
+      hasMediumComplexityGpt4o,
+      'P-002 FAIL: orchestrator.js does not contain medium_complexity routing to gpt-4o. ' +
+      'medium_complexity queries will continue routing to gpt-4 instead of the faster, cheaper gpt-4o.'
+    );
+  });
+
+  it('P-003: high_stakes queries still route to Claude (GPT-4 minimum)', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The high_stakes check (PRIORITY 0) must set useClaude = true AND appear
+    // before the medium_complexity GPT-4o routing (PRIORITY 4) in the source file.
+    // We use the actual conditional expression as the index marker (not a log string).
+    const highStakesIdx = orch.indexOf('phase4Metadata?.high_stakes?.isHighStakes');
+    const mediumComplexityIdx = orch.indexOf("queryTier === 'medium_complexity'");
+
+    assert.ok(
+      highStakesIdx !== -1,
+      'P-003 FAIL: high_stakes escalation block (phase4Metadata?.high_stakes?.isHighStakes) ' +
+      'is missing from orchestrator.js. High-stakes medical/legal/financial queries may not escalate to Claude.'
+    );
+
+    assert.ok(
+      mediumComplexityIdx !== -1,
+      'P-003 FAIL: medium_complexity GPT-4o routing block is missing from orchestrator.js.'
+    );
+
+    assert.ok(
+      highStakesIdx < mediumComplexityIdx,
+      'P-003 FAIL: high_stakes escalation must appear BEFORE medium_complexity GPT-4o routing. ' +
+      'High-stakes queries may incorrectly route to GPT-4o instead of Claude.'
+    );
+  });
+
+  it('P-004: Claude escalation on payload overflow still present', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The escalation must set useClaude = true when payload exceeds model limit
+    const hasPayloadOverflowEscalation = (
+      orch.includes('escalatedDueToPayloadSize') &&
+      orch.includes('payload_exceeds_') &&
+      orch.includes('useClaude = true')
+    );
+
+    assert.ok(
+      hasPayloadOverflowEscalation,
+      'P-004 FAIL: Payload overflow escalation to Claude is missing in orchestrator.js. ' +
+      'Large payloads may crash GPT-4o/GPT-4 instead of safely escalating to Claude.'
+    );
+  });
+
+  it('P-005: vault query routing unchanged — vault presence still routes to Claude', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The vault routing check must set useClaude = true when vault is present in site_monkeys mode.
+    // Check for the key components: vault_access reason and context.vault condition with site_monkeys mode.
+    const hasVaultReason = orch.includes('vault_access');
+    const hasVaultCondition = orch.includes('context.vault') && orch.includes('site_monkeys');
+
+    assert.ok(
+      hasVaultReason && hasVaultCondition,
+      'P-005 FAIL: Vault query routing to Claude is missing or changed in orchestrator.js. ' +
+      'Vault/Site Monkeys queries must always route to Claude to maintain content isolation.'
+    );
+  });
+
+});
+
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');

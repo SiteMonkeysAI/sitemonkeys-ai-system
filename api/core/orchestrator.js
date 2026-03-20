@@ -4076,6 +4076,7 @@ export class Orchestrator {
     phase4Metadata = null,
   ) {
     let useClaude = false;
+    let useGpt4o = false;
     let attemptedModel = 'gpt-4';
     let routingReason = [];
     let isSafetyCritical = false;
@@ -4087,9 +4088,11 @@ export class Orchestrator {
       // ISSUE #787 FIX 1: Define model limits at the start for consistent use throughout routing
       const MODEL_LIMITS = {
         'gpt-4': { maxContext: 8192, reservedOutput: 2000 },
+        'gpt-4o': { maxContext: 128000, reservedOutput: 4000 },
         'claude-sonnet-4-20250514': { maxContext: 200000, reservedOutput: 4000 }
       };
       const gpt4MaxInput = MODEL_LIMITS['gpt-4'].maxContext - MODEL_LIMITS['gpt-4'].reservedOutput;
+      const gpt4oMaxInput = MODEL_LIMITS['gpt-4o'].maxContext - MODEL_LIMITS['gpt-4o'].reservedOutput;
       const claudeMaxInput = MODEL_LIMITS['claude-sonnet-4-20250514'].maxContext - MODEL_LIMITS['claude-sonnet-4-20250514'].reservedOutput;
 
       // PRIORITY 0: High-stakes domain detection (BIBLE REQUIREMENT - Section D)
@@ -4132,6 +4135,18 @@ export class Orchestrator {
         }
       }
 
+      // PRIORITY 4: Medium complexity → GPT-4o (faster, lower cost, comparable quality)
+      // Applies ONLY when we're staying in the GPT family (not escalating to Claude)
+      // Does NOT apply when: high_stakes detected, vault present, or payload will overflow GPT-4o
+      if (!useClaude) {
+        const queryTier = context.queryClassification?.classification;
+        if (queryTier === 'medium_complexity') {
+          useGpt4o = true;
+          routingReason.push('medium_complexity:gpt-4o');
+          this.log(`[AI ROUTING] medium_complexity query → GPT-4o (faster, cost-efficient)`);
+        }
+      }
+
       // ========== USER CONFIRMATION FOR CLAUDE (BIBLE REQUIREMENT - Section D) ==========
       // "User confirmation required before Claude (except safety-critical)"
       // CRITICAL FIX: Respect user's explicit choice when confirmation is provided
@@ -4169,7 +4184,7 @@ export class Orchestrator {
 
       // NOTE: Model selection will be finalized after payload size check
       // Initial routing decision logged here, final decision after pre-flight check
-      const initialModel = useClaude ? "claude-sonnet-4.5" : "gpt-4";
+      const initialModel = useClaude ? "claude-sonnet-4.5" : (useGpt4o ? "gpt-4o" : "gpt-4");
 
       this.log(
         `[AI ROUTING] Initial routing: ${initialModel} (reasons: ${routingReason.join(", ") || "default"})`,
@@ -4279,40 +4294,45 @@ export class Orchestrator {
         estimatedHistoryTokens;
 
       // ISSUE #787 FIX 2: Pre-flight check must REROUTE to Claude automatically (no user confirmation)
-      // If we're using GPT-4 and the full payload exceeds its limit, escalate to Claude deterministically
+      // If we're using a GPT model and the full payload exceeds its limit, escalate to Claude deterministically
       // ISSUE #790 FIX: This escalation overrides user_declined_claude - payload size is safety-critical
       let escalatedDueToPayloadSize = false;
-      if (!useClaude && estimatedTotalInputTokens > gpt4MaxInput) {
+      // For GPT-4o use its larger context window; for GPT-4 use its smaller window
+      const currentGptMaxInput = useGpt4o ? gpt4oMaxInput : gpt4MaxInput;
+      const currentGptModelName = useGpt4o ? 'gpt-4o' : 'gpt-4';
+      if (!useClaude && estimatedTotalInputTokens > currentGptMaxInput) {
         // ISSUE #787 FIX 3: Enhanced logging with full decision context
-        this.log(`[AI-PREFLIGHT] model_before=gpt-4, estimated_input=${estimatedTotalInputTokens}t, model_max=8192t, reserved_output=2000t, max_input_budget=${gpt4MaxInput}t, reroute=true`);
+        this.log(`[AI-PREFLIGHT] model_before=${currentGptModelName}, estimated_input=${estimatedTotalInputTokens}t, max_input_budget=${currentGptMaxInput}t, reroute=true`);
         this.log(`[AI-PREFLIGHT] Breakdown: system=${estimatedSystemPromptTokens}t, context=${estimatedContextTokens}t, external=${estimatedExternalTokens}t, message=${estimatedMessageTokens}t, history=${estimatedHistoryTokens}t`);
 
         // ISSUE #790 FIX: Check if user declined Claude - if so, log override reason
         const userDeclinedClaude = context.claudeConfirmed === false;
         if (userDeclinedClaude) {
-          this.log(`[AI-PREFLIGHT] ⚠️ Overriding user_declined_claude: payload size exceeds GPT-4 capacity`);
-          this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds GPT-4 max input budget (required for reliability)`);
+          this.log(`[AI-PREFLIGHT] ⚠️ Overriding user_declined_claude: payload size exceeds ${currentGptModelName} capacity`);
+          this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds ${currentGptModelName} max input budget (required for reliability)`);
         } else {
-          this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds GPT-4 max input budget`);
+          this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds ${currentGptModelName} max input budget`);
         }
 
         useClaude = true;
+        useGpt4o = false;
         escalatedDueToPayloadSize = true;
 
         // ISSUE #790 FIX: Replace user_declined_claude with payload_overflow reason
         routingReason = routingReason.filter(r => r !== 'user_declined_claude');
-        routingReason.push(`payload_exceeds_gpt-4_limit:${estimatedTotalInputTokens}/${gpt4MaxInput}`);
+        routingReason.push(`payload_exceeds_${currentGptModelName}_limit:${estimatedTotalInputTokens}/${currentGptMaxInput}`);
       }
 
       // Update model selection after potential escalation
-      const model = useClaude ? "claude-sonnet-4.5" : "gpt-4";
+      const model = useClaude ? "claude-sonnet-4.5" : (useGpt4o ? "gpt-4o" : "gpt-4");
       attemptedModel = model;
-      const modelConfig = useClaude ? MODEL_LIMITS['claude-sonnet-4-20250514'] : MODEL_LIMITS['gpt-4'];
+      const modelConfigKey = useClaude ? 'claude-sonnet-4-20250514' : (useGpt4o ? 'gpt-4o' : 'gpt-4');
+      const modelConfig = MODEL_LIMITS[modelConfigKey];
       const modelLimit = modelConfig.maxContext - modelConfig.reservedOutput;
 
       // Log final routing decision if it changed due to payload size
       if (escalatedDueToPayloadSize) {
-        this.log(`[AI-PREFLIGHT] model_after=claude-sonnet-4-20250514, reason=payload_exceeds_gpt-4_limit`);
+        this.log(`[AI-PREFLIGHT] model_after=claude-sonnet-4-20250514, reason=payload_exceeds_${currentGptModelName}_limit`);
       }
 
       // Final pre-flight validation - now just logs and validates, no rerouting needed
@@ -4418,7 +4438,7 @@ export class Orchestrator {
         }
 
         const gptResponse = await this.openai.chat.completions.create({
-          model: "gpt-4",
+          model: model,
           messages: messages,
           temperature: 0.7,
           max_tokens: 2000,
@@ -5364,6 +5384,7 @@ Mode: ${modeConfig?.display_name || mode}
   #calculateCost(model, inputTokens, outputTokens) {
     const rates = {
       "gpt-4": { input: 0.01, output: 0.03 },
+      "gpt-4o": { input: 0.005, output: 0.015 },
       "claude-sonnet-4.5": { input: 0.003, output: 0.015 },
     };
 
