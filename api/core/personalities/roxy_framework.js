@@ -2,6 +2,8 @@
 // ROXY FRAMEWORK - Empathetic & Opportunity-Focused Reasoning
 // Identifies opportunities, finds simplifications, provides practical steps, optimizes resources
 
+import { buildConfidenceMetadata } from './confidence_calculator.js';
+
 const MIN_CONFIDENCE_FOR_SIMPLIFICATION = 0.6;
 
 /**
@@ -283,22 +285,17 @@ export class RoxyFramework {
       const skipConfidenceBlock = isSimpleFactForConf || isDocReviewForConf || isNewsQueryForConf || isSimpleShortForConf || isSimpleFactualForConf || isVolatileForConf;
       const alreadyHasConfidenceBlock = /My confidence in this response is \d+%/i.test(response) ||
         enhancedResponse.includes('🎯 **Confidence Assessment:**');
-      if (!alreadyHasConfidenceBlock && !skipConfidenceBlock) {
-        let confLevel = 'Medium';
-        let confReasoning = '';
-        if (analysis.complexity < 0.3 && analysis.domainConfidence > 0.8) {
-          confLevel = 'High (85-95%)';
-          confReasoning = 'Straightforward domain with clear best practices';
-        } else if (analysis.complexity > 0.7 || analysis.domainConfidence < 0.5) {
-          confLevel = 'Low (40-60%)';
-          confReasoning = 'Complex situation with many variables and uncertainties';
-        } else {
-          confLevel = 'Medium (65-80%)';
-          confReasoning = 'Solid general guidance, but specifics depend on your context';
-        }
-        enhancedResponse += `\n\n🎯 **Confidence Assessment:**\n- **Level:** ${confLevel}\n- **Why:** ${confReasoning}\n`;
-        modificationsCount++;
-        this.logger.log('Added confidence assessment');
+
+      // Confidence Scoring Toggle — calculate metadata, never append to response text
+      const showConfidenceBlock = context?.showConfidence === true;
+      let confidenceMetadata = null;
+
+      if (showConfidenceBlock && !alreadyHasConfidenceBlock && !skipConfidenceBlock) {
+        // Genuine calculated confidence from Phase 4 signals
+        confidenceMetadata = buildConfidenceMetadata(context?.phase4Metadata);
+        this.logger.log(`[CONFIDENCE-TOGGLE] Calculated confidence metadata: ${confidenceMetadata.score}% — ${confidenceMetadata.reason}`);
+      } else if (!showConfidenceBlock) {
+        this.logger.log('[CONFIDENCE-TOGGLE] Skipping confidence metadata: showConfidence is false (default)');
       } else if (alreadyHasConfidenceBlock) {
         this.logger.log('Skipping confidence assessment: response already has a structured confidence percentage');
       } else if (skipConfidenceBlock) {
@@ -342,6 +339,7 @@ export class RoxyFramework {
         analysisApplied: analysisApplied,
         modificationsCount: modificationsCount,
         reasoningApplied: true,
+        confidenceMetadata: confidenceMetadata,
       };
     } catch (error) {
       this.logger.error("Roxy framework failed", error);

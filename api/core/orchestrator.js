@@ -815,6 +815,7 @@ export class Orchestrator {
       vaultEnabled = false,
       conversationHistory = [],
       claudeConfirmed = false, // BIBLE FIX: User confirmation for Claude escalation
+      showConfidence = false, // Confidence Scoring Toggle — default off
     } = requestData;
 
     const vaultContext = requestData.vaultContext || null;
@@ -1191,6 +1192,7 @@ export class Orchestrator {
       context.claudeConfirmed = claudeConfirmed; // BIBLE FIX: Pass confirmation flag
       context.memory_context = memoryContext.memory_objects || [];  // FIX #659: Pass memory objects to validators
       context.memory_ids = memoryContext.memory_ids || [];  // FIX #659: Pass memory IDs for validator trace
+      context.showConfidence = showConfidence === true; // Confidence Scoring Toggle
       this.log(`[CONTEXT] Total: ${context.totalTokens} tokens`);
 
       // ISSUE #781 FIX: Comprehensive context assembly diagnostic
@@ -2304,6 +2306,8 @@ export class Orchestrator {
       return {
         success: true,
         response: personalityResponse.response,
+        // Confidence Scoring Toggle — metadata field (null when showConfidence is false)
+        confidence: personalityResponse.confidenceMetadata || null,
         // ISSUE #781 FIX: Add explicit context status for transparency
         sources: {
           memoryLoaded: !!context.memory,
@@ -4601,6 +4605,7 @@ export class Orchestrator {
         analysisApplied: personalityResult.analysisApplied || {},
         reasoningApplied: personalityResult.reasoningApplied || false,
         selectionReasoning: selection.reasoning,
+        confidenceMetadata: personalityResult.confidenceMetadata || null,
       };
     } catch (error) {
       this.error(

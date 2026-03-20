@@ -2106,3 +2106,91 @@ describe('R. System Pipeline Audit — Area 6: Context Source Prioritisation', (
   });
 
 });
+
+// ============================================================
+// SECTION S: CONFIDENCE SCORING TOGGLE
+// S-001 through S-006 — validates the showConfidence flag wiring
+// and genuine confidence metadata calculation.
+// ============================================================
+
+describe('S. Confidence Scoring Toggle', () => {
+
+  it('S-001: showConfidence flag is set on context in orchestrator.js', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('context.showConfidence'),
+      'S-001 FAIL: context.showConfidence is not assigned in orchestrator.js. ' +
+      'The flag must be copied from requestData onto the context object so personality frameworks can read it.'
+    );
+  });
+
+  it('S-002: eli_framework confidence block is gated on context.showConfidence', () => {
+    const eli = readRepoFile('api/core/personalities/eli_framework.js');
+    assert.ok(eli, 'Could not read api/core/personalities/eli_framework.js');
+    assert.ok(
+      eli.includes('context?.showConfidence === true') || eli.includes("context.showConfidence === true"),
+      'S-002 FAIL: eli_framework.js does not gate the confidence block on context.showConfidence === true. ' +
+      'Confidence metadata must only be calculated and returned when the user has opted in.'
+    );
+  });
+
+  it('S-003: roxy_framework confidence block is gated on context.showConfidence', () => {
+    const roxy = readRepoFile('api/core/personalities/roxy_framework.js');
+    assert.ok(roxy, 'Could not read api/core/personalities/roxy_framework.js');
+    assert.ok(
+      roxy.includes('context?.showConfidence === true') || roxy.includes("context.showConfidence === true"),
+      'S-003 FAIL: roxy_framework.js does not gate the confidence block on context.showConfidence === true. ' +
+      'Confidence metadata must only be calculated and returned when the user has opted in.'
+    );
+  });
+
+  it('S-004: calculateConfidence function exists in confidence_calculator.js and uses truthType as input', () => {
+    const calc = readRepoFile('api/core/personalities/confidence_calculator.js');
+    assert.ok(calc, 'S-004 FAIL: api/core/personalities/confidence_calculator.js is missing.');
+    assert.ok(
+      calc.includes('export function calculateConfidence'),
+      'S-004 FAIL: calculateConfidence is not exported from confidence_calculator.js.'
+    );
+    assert.ok(
+      calc.includes("truthType === 'PERMANENT'") || calc.includes('truthType === "PERMANENT"'),
+      'S-004 FAIL: calculateConfidence does not branch on truthType. ' +
+      'The function must use truthType (PERMANENT/SEMI_STABLE/VOLATILE) as the primary input.'
+    );
+  });
+
+  it('S-005: confidence metadata returned by orchestrator contains score and reason', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('confidenceMetadata'),
+      'S-005 FAIL: orchestrator.js does not reference confidenceMetadata. ' +
+      'The confidence object (score + reason) must be surfaced in the API response when the toggle is on.'
+    );
+    // Verify the top-level confidence field is present in the return object
+    assert.ok(
+      orch.includes("confidence: personalityResponse.confidenceMetadata"),
+      'S-005 FAIL: The top-level "confidence" field is not set from personalityResponse.confidenceMetadata ' +
+      'in the orchestrator return object. Frontend cannot read confidence metadata.'
+    );
+  });
+
+  it('S-006: existing skipConfidence conditions are still present alongside the new gate', () => {
+    const eli = readRepoFile('api/core/personalities/eli_framework.js');
+    assert.ok(eli, 'Could not read api/core/personalities/eli_framework.js');
+    assert.ok(
+      eli.includes('skipConfidence'),
+      'S-006 FAIL: skipConfidence variable is missing from eli_framework.js. ' +
+      'The existing skip conditions (simple fact, document review, news query, volatile) must remain in place.'
+    );
+
+    const roxy = readRepoFile('api/core/personalities/roxy_framework.js');
+    assert.ok(roxy, 'Could not read api/core/personalities/roxy_framework.js');
+    assert.ok(
+      roxy.includes('skipConfidenceBlock'),
+      'S-006 FAIL: skipConfidenceBlock variable is missing from roxy_framework.js. ' +
+      'The existing skip conditions must remain in place alongside the new showConfidence gate.'
+    );
+  });
+
+});
