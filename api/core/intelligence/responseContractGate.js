@@ -97,7 +97,7 @@ const ALWAYS_STRIP_SECTIONS = [
   /I don't have the ability to access real-time data\.?\n*/gi,
 ];
 
-const STRIPPABLE_SECTIONS = [...ALWAYS_STRIP_SECTIONS, ...ENGAGEMENT_PADDING_SECTIONS];
+const STRIPPABLE_SECTIONS = [...new Set([...ALWAYS_STRIP_SECTIONS, ...ENGAGEMENT_PADDING_SECTIONS])];
 
 /**
  * Extract technical/unique terms from document (Issue #380 Fix 6)
