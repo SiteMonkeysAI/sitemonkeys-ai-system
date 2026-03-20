@@ -81,17 +81,10 @@ const ALWAYS_STRIP_SECTIONS = [
   /\[Note: Evaluate this recommendation[^\]]{0,500}\]/gs,
   /\[FOUNDER PROTECTION:[^\]]{0,500}\]/gs,
   /I want to be honest with you—I'm not as confident[\s\S]{0,500}?perspectives\./gs,
-  // ISSUE #887 FIX: The low-confidence note in eli_framework.js is formatted as
-  // "\n\n**Note:** My confidence in this analysis is lower than ideal...expert input."
-  // The previous pattern stripped only "My confidence..." leaving "**Note:** " orphaned,
-  // which caused responses to end with a truncated "Note:" fragment.
-  // The fix extends the pattern to also match and strip the optional "**Note:** " prefix
-  // and any preceding blank lines so no orphan text remains.
   /\n*(?:\*\*Note:\*\*\s*)?My confidence in this analysis is lower than ideal[\s\S]{0,1000}?expert input\./gs,
   /To verify this information, you could:[\s\S]{0,2000}?(?=\n\n[A-Z]|$)/gi,
   /I'm reasoning from general knowledge here, not verified specifics\.\n\n/g,
   /I'm reasoning about future possibilities, not verified facts\.\n\n/g,
-  // False capability denials (Issue #378 Problem 2)
   /I don't have access to real-time information or current news feeds\.?\n*/gi,
   /I cannot access real-time information\.?\n*/gi,
   /I don't have the ability to access real-time data\.?\n*/gi,
