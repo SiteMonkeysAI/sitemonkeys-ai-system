@@ -103,10 +103,12 @@
         display: inline-flex;
         align-items: center;
         justify-content: center;
+        width: clamp(60px, 8vh, 80px);
+        height: clamp(60px, 8vh, 80px);
       }
       .ai-robot {
-        height: clamp(60px, 8vh, 80px);
-        flex-shrink: 0;
+        height: 100%;
+        width: auto;
         cursor: pointer;
         transition: filter 0.2s ease;
       }
@@ -707,11 +709,15 @@
         }
         .ai-robot-wrapper {
           position: static;
+          display: inline-block;
           margin: 0;
           order: 3;
+          width: clamp(35px, 8vw, 50px);
+          height: clamp(35px, 8vw, 50px);
         }
         .ai-robot {
-          height: clamp(35px, 8vw, 50px);
+          height: 100%;
+          width: auto;
         }
         .header-center {
           margin: 0;
@@ -882,9 +888,12 @@
           position: absolute;
           right: calc(50% - clamp(350px, 45vw, 450px));
           z-index: 1;
+          width: clamp(100px, 15vh, 120px);
+          height: clamp(100px, 15vh, 120px);
         }
         .ai-robot {
-          height: clamp(100px, 15vh, 120px);
+          height: 100%;
+          width: auto;
         }
 
         .header-center {
