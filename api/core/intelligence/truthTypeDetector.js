@@ -405,7 +405,13 @@ export function detectByPattern(query) {
     /\brecent\b.{0,50}\b(announcements?|releases?|launches?)\b/i,
     /\b(announcements?|releases?|launches?).{0,30}\b(recent|latest|newest|new)\b/i,
   ];
-  const hasFreshnessMarker = FRESHNESS_OVERRIDE_PATTERNS.some(p => p.test(query));
+  let hasFreshnessMarker = FRESHNESS_OVERRIDE_PATTERNS.some(p => p.test(query));
+  if (hasFreshnessMarker && /\b(our|my)\b/i.test(query)) {
+    // Possessive + freshness marker = internal context query
+    // Do not treat as external lookup candidate
+    // Fall through to conversational/personal detection
+    hasFreshnessMarker = false;
+  }
   if (hasFreshnessMarker) {
     console.log(`[TRUTH-TYPE] Freshness marker detected — forcing SEMI_STABLE classification (external lookup required)`);
     return {
