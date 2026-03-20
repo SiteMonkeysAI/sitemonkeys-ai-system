@@ -22,7 +22,9 @@ import { generateEmbedding, cosineSimilarity, rankBySimilarity } from './embeddi
 const RETRIEVAL_CONFIG = {
   maxCandidates: 500,           // Max memories to pull from DB for scoring
   defaultTopK: 10,              // Default number of results to return
-  minSimilarity: 0.20,          // Minimum similarity threshold (default) - LOWERED from 0.25 for #609
+  minSimilarity: 0.35,          // Minimum similarity threshold for non-personal queries (Issue #4)
+                                 // Raised from 0.20 (was previously 0.25 before #609 lowered it)
+                                 // At 0.20, up to 230 rows of low-relevance memories were injected per query
   minSimilarityPersonal: 0.15,  // Lower threshold for personal fact queries - LOWERED from 0.18 for #609
   recencyBoostDays: 7,          // Boost memories from last N days
   recencyBoostWeight: 0.1,      // How much to boost recent memories
@@ -2160,8 +2162,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // Filter by minimum similarity and sort
     // CRITICAL FIX #504: Use effectiveMinSimilarity (lower for personal queries)
+    // Issue #4: Safety-critical memories (relevance_score >= 0.90) bypass the threshold
+    //           so allergy/medication memories are never blocked by the raised threshold.
     let filtered = hybridScored
-      .filter(m => m.similarity >= effectiveMinSimilarity)
+      .filter(m => m.similarity >= effectiveMinSimilarity || parseFloat(m.relevance_score || 0) >= 0.90)
       .sort((a, b) => b.hybrid_score - a.hybrid_score);
 
     // ═══════════════════════════════════════════════════════════════
