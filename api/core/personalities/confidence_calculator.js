@@ -66,7 +66,6 @@ export function buildConfidenceMetadata(phase4Metadata) {
   };
 }
 
- *
  * @param {string|null} truthType     - PERMANENT | SEMI_STABLE | VOLATILE | null
  * @param {number}      sourcesUsed   - How many external sources confirmed the answer
  * @param {boolean}     lookupPerformed - Whether an external lookup was performed
