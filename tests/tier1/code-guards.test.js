@@ -1536,3 +1536,94 @@ describe('N. Issue 3 — Business Validation Must Not Fire on Personal Queries',
 });
 
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');
+
+// ============================================================
+// SECTION P: INTELLIGENT MODEL ROUTING — GPT-4o for Medium Complexity
+// Tier-1 code guards for intelligent model routing feature
+// ============================================================
+
+describe('P. Intelligent Model Routing — GPT-4o for Medium Complexity', () => {
+
+  it('P-001: gpt-4o exists in MODEL_COSTS in cost-tracker', () => {
+    const src = readRepoFile('api/utils/cost-tracker.js');
+    assert.ok(src, 'Could not read api/utils/cost-tracker.js');
+    assert.ok(
+      src.includes('"gpt-4o"') || src.includes("'gpt-4o'"),
+      'P-001 FAIL: "gpt-4o" entry not found in MODEL_COSTS in api/utils/cost-tracker.js'
+    );
+  });
+
+  it('P-002: medium_complexity routing sets useGpt4o = true in orchestrator', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    assert.ok(
+      src.includes('useGpt4o'),
+      'P-002 FAIL: useGpt4o variable not found in orchestrator.js — ' +
+      'medium_complexity routing must use a useGpt4o flag'
+    );
+
+    // Verify useGpt4o = true is set within the medium_complexity routing block
+    const medIdx = src.indexOf("'medium_complexity'") !== -1
+      ? src.indexOf("'medium_complexity'")
+      : src.indexOf('"medium_complexity"');
+    assert.ok(medIdx !== -1, 'P-002 FAIL: medium_complexity classification reference not found in orchestrator.js');
+
+    const block = src.substring(Math.max(0, medIdx - 200), medIdx + 300);
+    assert.ok(
+      block.includes('useGpt4o = true') || block.includes('useGpt4o=true'),
+      'P-002 FAIL: useGpt4o = true not set near medium_complexity routing block'
+    );
+  });
+
+  it('P-003: high_stakes guard present in medium_complexity routing block', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    const medIdx = src.indexOf('medium_complexity');
+    assert.ok(medIdx !== -1, 'P-003 FAIL: medium_complexity routing block not found');
+
+    const block = src.substring(Math.max(0, medIdx - 100), medIdx + 400);
+    assert.ok(
+      block.includes('isHighStakes') || block.includes('high_stakes') || block.includes('highStakes'),
+      'P-003 FAIL: high_stakes guard not found in or near medium_complexity routing block. ' +
+      'high_stakes queries must NOT be routed to GPT-4o.'
+    );
+  });
+
+  it('P-004: Claude escalation on payload overflow is still present', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    assert.ok(
+      src.includes('payload_exceeds') &&
+        (src.includes('useClaude = true') || src.includes('useClaude=true')),
+      'P-004 FAIL: Claude escalation on payload overflow not found. ' +
+      'The pre-flight check must still escalate to Claude when payload exceeds the GPT model limit.'
+    );
+  });
+
+  it('P-005: Vault query routing to Claude unchanged', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // PRIORITY 1 vault routing block must still set useClaude = true for vault queries
+    assert.ok(
+      src.includes('vault_access') &&
+        (src.includes('useClaude = true') || src.includes('useClaude=true')),
+      'P-005 FAIL: Vault routing to Claude not found. ' +
+      'Vault queries in site_monkeys mode must still route to Claude.'
+    );
+
+    // medium_complexity routing block must exclude vault mode
+    const medIdx = src.indexOf('medium_complexity');
+    assert.ok(medIdx !== -1, 'P-005 FAIL: medium_complexity routing block not found');
+    const block = src.substring(Math.max(0, medIdx - 100), medIdx + 400);
+    assert.ok(
+      block.includes('hasVault') || block.includes('context.vault') || block.includes('site_monkeys'),
+      'P-005 FAIL: Vault guard not found in medium_complexity routing block. ' +
+      'Vault queries must NOT be routed to GPT-4o.'
+    );
+  });
+
+});

@@ -4076,6 +4076,7 @@ export class Orchestrator {
     phase4Metadata = null,
   ) {
     let useClaude = false;
+    let useGpt4o = false;
     let attemptedModel = 'gpt-4';
     let routingReason = [];
     let isSafetyCritical = false;
@@ -4087,6 +4088,7 @@ export class Orchestrator {
       // ISSUE #787 FIX 1: Define model limits at the start for consistent use throughout routing
       const MODEL_LIMITS = {
         'gpt-4': { maxContext: 8192, reservedOutput: 2000 },
+        'gpt-4o': { maxContext: 128000, reservedOutput: 4000 },
         'claude-sonnet-4-20250514': { maxContext: 200000, reservedOutput: 4000 }
       };
       const gpt4MaxInput = MODEL_LIMITS['gpt-4'].maxContext - MODEL_LIMITS['gpt-4'].reservedOutput;
@@ -4167,9 +4169,24 @@ export class Orchestrator {
         }
       }
 
+      // MEDIUM COMPLEXITY ROUTING: GPT-4o for medium_complexity queries
+      // Provides 2-4x faster generation at lower cost with comparable quality on operational queries.
+      // Guards: skip if high_stakes (Claude already chosen) or vault/site_monkeys mode (Claude already chosen).
+      if (!useClaude) {
+        const queryClassification = context.queryClassification?.classification
+          || context.earlyClassification?.classification;
+        const isHighStakes = !!phase4Metadata?.high_stakes?.isHighStakes;
+        const hasVault = !!context.vault && mode === 'site_monkeys';
+        if (queryClassification === 'medium_complexity' && !isHighStakes && !hasVault) {
+          useGpt4o = true;
+          routingReason.push('medium_complexity:gpt-4o');
+          this.log(`[AI ROUTING] medium_complexity → routing to GPT-4o`);
+        }
+      }
+
       // NOTE: Model selection will be finalized after payload size check
       // Initial routing decision logged here, final decision after pre-flight check
-      const initialModel = useClaude ? "claude-sonnet-4.5" : "gpt-4";
+      const initialModel = useClaude ? "claude-sonnet-4.5" : (useGpt4o ? "gpt-4o" : "gpt-4");
 
       this.log(
         `[AI ROUTING] Initial routing: ${initialModel} (reasons: ${routingReason.join(", ") || "default"})`,
@@ -4278,36 +4295,44 @@ export class Orchestrator {
         estimatedMessageTokens +
         estimatedHistoryTokens;
 
+      // Determine the intended GPT model and its input limit for pre-flight check.
+      // GPT-4o has a 128K context window; GPT-4 has 8K. Use the correct limit for overflow detection.
+      const intendedGptModel = useGpt4o ? 'gpt-4o' : 'gpt-4';
+      const intendedGptMaxInput = MODEL_LIMITS[intendedGptModel].maxContext - MODEL_LIMITS[intendedGptModel].reservedOutput;
+
       // ISSUE #787 FIX 2: Pre-flight check must REROUTE to Claude automatically (no user confirmation)
-      // If we're using GPT-4 and the full payload exceeds its limit, escalate to Claude deterministically
+      // If we're using GPT-4/GPT-4o and the full payload exceeds its limit, escalate to Claude deterministically
       // ISSUE #790 FIX: This escalation overrides user_declined_claude - payload size is safety-critical
       let escalatedDueToPayloadSize = false;
-      if (!useClaude && estimatedTotalInputTokens > gpt4MaxInput) {
+      if (!useClaude && estimatedTotalInputTokens > intendedGptMaxInput) {
         // ISSUE #787 FIX 3: Enhanced logging with full decision context
-        this.log(`[AI-PREFLIGHT] model_before=gpt-4, estimated_input=${estimatedTotalInputTokens}t, model_max=8192t, reserved_output=2000t, max_input_budget=${gpt4MaxInput}t, reroute=true`);
+        this.log(`[AI-PREFLIGHT] model_before=${intendedGptModel}, estimated_input=${estimatedTotalInputTokens}t, max_input_budget=${intendedGptMaxInput}t, reroute=true`);
         this.log(`[AI-PREFLIGHT] Breakdown: system=${estimatedSystemPromptTokens}t, context=${estimatedContextTokens}t, external=${estimatedExternalTokens}t, message=${estimatedMessageTokens}t, history=${estimatedHistoryTokens}t`);
 
         // ISSUE #790 FIX: Check if user declined Claude - if so, log override reason
         const userDeclinedClaude = context.claudeConfirmed === false;
         if (userDeclinedClaude) {
-          this.log(`[AI-PREFLIGHT] ⚠️ Overriding user_declined_claude: payload size exceeds GPT-4 capacity`);
-          this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds GPT-4 max input budget (required for reliability)`);
+          this.log(`[AI-PREFLIGHT] ⚠️ Overriding user_declined_claude: payload size exceeds ${intendedGptModel} capacity`);
+          this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds ${intendedGptModel} max input budget (required for reliability)`);
         } else {
-          this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds GPT-4 max input budget`);
+          this.log(`[AI-PREFLIGHT] 🔄 Auto-escalating to Claude: payload exceeds ${intendedGptModel} max input budget`);
         }
 
         useClaude = true;
+        useGpt4o = false;
         escalatedDueToPayloadSize = true;
 
         // ISSUE #790 FIX: Replace user_declined_claude with payload_overflow reason
         routingReason = routingReason.filter(r => r !== 'user_declined_claude');
-        routingReason.push(`payload_exceeds_gpt-4_limit:${estimatedTotalInputTokens}/${gpt4MaxInput}`);
+        routingReason.push(`payload_exceeds_${intendedGptModel}_limit:${estimatedTotalInputTokens}/${intendedGptMaxInput}`);
       }
 
       // Update model selection after potential escalation
-      const model = useClaude ? "claude-sonnet-4.5" : "gpt-4";
+      const model = useClaude ? "claude-sonnet-4.5" : (useGpt4o ? "gpt-4o" : "gpt-4");
       attemptedModel = model;
-      const modelConfig = useClaude ? MODEL_LIMITS['claude-sonnet-4-20250514'] : MODEL_LIMITS['gpt-4'];
+      const modelConfig = useClaude
+        ? MODEL_LIMITS['claude-sonnet-4-20250514']
+        : MODEL_LIMITS[useGpt4o ? 'gpt-4o' : 'gpt-4'];
       const modelLimit = modelConfig.maxContext - modelConfig.reservedOutput;
 
       // Log final routing decision if it changed due to payload size
@@ -4418,7 +4443,7 @@ export class Orchestrator {
         }
 
         const gptResponse = await this.openai.chat.completions.create({
-          model: "gpt-4",
+          model: model,
           messages: messages,
           temperature: 0.7,
           max_tokens: 2000,
@@ -5364,6 +5389,7 @@ Mode: ${modeConfig?.display_name || mode}
   #calculateCost(model, inputTokens, outputTokens) {
     const rates = {
       "gpt-4": { input: 0.01, output: 0.03 },
+      "gpt-4o": { input: 0.005, output: 0.015 },
       "claude-sonnet-4.5": { input: 0.003, output: 0.015 },
     };
 
