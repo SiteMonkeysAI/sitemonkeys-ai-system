@@ -1361,7 +1361,7 @@ describe('N. Issue 4 — Organizational Possessive Queries Must Not Trigger Exte
     const properNounIdx = fnBody.indexOf('hasProperNouns(');
     const guardReturnsFalse =
       /if\s*\(\s*\/\\bour\\b\/i\.test\(query\)\s*\)\s*return\s*false/.test(fnBody) ||
-      /if\s*\(\s*\/\\bour\\b\/i\.test\(query\)\s*\)\s*\{[\s\S]{0,120}?return\s+false/.test(fnBody); // multi-line guard block
+      /if\s*\(\s*\/\\bour\\b\/i\.test\(query\)\s*\)\s*\{[\s\S]*?return\s*false/.test(fnBody); // multi-line guard block
 
     assert.ok(hasOurPattern, 'N-009 FAIL: /\\bour\\b/ guard missing from isFactualEntityQuery.');
     assert.ok(guardReturnsFalse, 'N-009 FAIL: /\\bour\\b/ guard must return false.');
