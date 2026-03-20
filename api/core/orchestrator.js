@@ -1325,7 +1325,7 @@ export class Orchestrator {
               (isCurrentEventQuery(m.content) || isFactualEntityQuery(m.content))
             );
 
-        const shouldLookup =
+        let shouldLookup =
           truthTypeResult.type === 'VOLATILE' ||
           (truthTypeResult.type === 'SEMI_STABLE' && matchesNewsPattern) ||
           (truthTypeResult.type === 'SEMI_STABLE' && hasExplicitFreshnessMarker) ||
@@ -1334,6 +1334,13 @@ export class Orchestrator {
           isFactualEntityLookupQuery ||
           isSemanticCurrentEventQuery ||   // Issue #881: entity + action pattern
           isVolatileFollowUp;              // Issue #881: follow-up inherits volatile context
+
+        // Possessive guard: queries about "our"/"my" things refer to internal context,
+        // not external data. Override shouldLookup to prevent wasted external API calls.
+        const hasPersonalOrgContext = /\b(our|my)\b/i.test(message);
+        if (hasPersonalOrgContext) {
+          shouldLookup = false;
+        }
 
         // Debug logging for lookup decision
         console.log('[ORCHESTRATOR] Lookup decision:', {
@@ -1496,13 +1503,19 @@ export class Orchestrator {
             phase4Metadata.failure_reason = lookupResult.failure_reason || 'No reliable parseable source available for this query type';
             this.log(`⚠️ External lookup: ${phase4Metadata.failure_reason}`);
           } else {
-            // Lookup failed or returned no data
+            // Lookup returned no data — distinguish between "not required" (possessive gate)
+            // and genuine failure (error/timeout). Only mark as attempted if a real error occurred.
+            const wasGenuineFailure = !!lookupResult.error;
             phase4Metadata.external_lookup = false;
-            phase4Metadata.lookup_attempted = true;
+            phase4Metadata.lookup_attempted = wasGenuineFailure;
             phase4Metadata.fetched_content = null;
             phase4Metadata.sources_used = 0;
-            phase4Metadata.failure_reason = lookupResult.error || 'External lookup failed or returned no data';
-            this.log("⚠️ External lookup failed or returned no data");
+            if (wasGenuineFailure) {
+              phase4Metadata.failure_reason = lookupResult.error;
+              this.log("⚠️ External lookup failed or returned no data");
+            } else {
+              this.log("[PHASE4] Lookup not required by engine (possessive/internal query) — lookup_attempted stays false");
+            }
           }
           } // end else (refersToDocumentForLookup)
         }
