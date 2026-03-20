@@ -689,7 +689,7 @@
         opacity: 1;
       }
 
-      @media (max-width: 768px) and (orientation: portrait) {
+      @media (max-width: 768px) {
         header {
           min-height: clamp(60px, 10vh, 80px);
         }
@@ -852,6 +852,18 @@
           position: fixed;
           bottom: 0;
           width: 100%;
+        }
+      }
+
+      /* Portrait tablets/large phones between 769px-950px */
+      @media (max-width: 950px) and (orientation: portrait) {
+        .ai-robot-wrapper {
+          width: clamp(35px, 8vw, 50px);
+          height: clamp(35px, 8vw, 50px);
+        }
+        .ai-robot {
+          height: 100%;
+          width: auto;
         }
       }
 
