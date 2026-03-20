@@ -382,7 +382,16 @@ export class EliFramework {
       const isSimpleFact = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
       const isDocumentReview = truthType === 'DOCUMENT_REVIEW';
       const isNewsQuery = context?.queryClassification?.classification === 'news_current_events';
-      const skipConfidence = isSimpleFact || isDocumentReview || isNewsQuery;
+      // ISSUE #887 FIX: Confidence Assessment adds no value on simple/factual/volatile queries.
+      // simple_short and simple_factual: query complexity classifier already determined these are
+      // straightforward questions — confidence scoring adds noise, not insight.
+      // VOLATILE truth type: price lookups, current status, live data — the user asked for a fact,
+      // not an uncertainty assessment; confidence block undermines the response on these queries.
+      const isSimpleClassification =
+        context?.queryClassification?.classification === 'simple_short' ||
+        context?.queryClassification?.classification === 'simple_factual';
+      const isFactualVolatileLookup = truthType === 'VOLATILE';
+      const skipConfidence = isSimpleFact || isDocumentReview || isNewsQuery || isSimpleClassification || isFactualVolatileLookup;
       const alreadyHasConfidencePercentage = /My confidence in this response is \d+%/i.test(response) ||
         response.includes('🎯 **Confidence Assessment:**');
       if (!alreadyHasConfidencePercentage && !skipConfidence) {
@@ -397,7 +406,12 @@ export class EliFramework {
       } else if (alreadyHasConfidencePercentage) {
         this.logger.log('Skipping confidence assessment: response already has a structured confidence percentage');
       } else if (skipConfidence) {
-        this.logger.log(`Skipping confidence assessment: ${isSimpleFact ? 'simple fact' : isDocumentReview ? 'document review' : 'news query'}`);
+        const skipReason = isSimpleFact ? 'simple fact'
+          : isDocumentReview ? 'document review'
+          : isNewsQuery ? 'news query'
+          : isSimpleClassification ? 'simple/factual classification'
+          : 'volatile factual lookup';
+        this.logger.log(`Skipping confidence assessment: ${skipReason}`);
       }
 
       // STEP 8: Apply Eli's protective intelligence signature

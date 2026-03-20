@@ -277,7 +277,16 @@ export class RoxyFramework {
       const isSimpleFactForConf = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
       const isDocReviewForConf = truthType === 'DOCUMENT_REVIEW';
       const isNewsQueryForConf = context?.queryClassification?.classification === 'news_current_events';
-      const skipConfidenceBlock = isSimpleFactForConf || isDocReviewForConf || isNewsQueryForConf;
+      // ISSUE #887 FIX: Confidence Assessment adds no value on simple/factual/volatile queries.
+      // simple_short and simple_factual: query complexity classifier already determined these are
+      // straightforward questions — confidence scoring adds noise, not insight.
+      // VOLATILE truth type: price lookups, current status, live data — the user asked for a fact,
+      // not an uncertainty assessment; confidence block undermines the response on these queries.
+      const isSimpleClassificationForConf =
+        context?.queryClassification?.classification === 'simple_short' ||
+        context?.queryClassification?.classification === 'simple_factual';
+      const isFactualVolatileLookupForConf = truthType === 'VOLATILE';
+      const skipConfidenceBlock = isSimpleFactForConf || isDocReviewForConf || isNewsQueryForConf || isSimpleClassificationForConf || isFactualVolatileLookupForConf;
       const alreadyHasConfidenceBlock = /My confidence in this response is \d+%/i.test(response) ||
         enhancedResponse.includes('🎯 **Confidence Assessment:**');
       if (!alreadyHasConfidenceBlock && !skipConfidenceBlock) {
@@ -299,7 +308,12 @@ export class RoxyFramework {
       } else if (alreadyHasConfidenceBlock) {
         this.logger.log('Skipping confidence assessment: response already has a structured confidence percentage');
       } else if (skipConfidenceBlock) {
-        this.logger.log(`Skipping confidence assessment: ${isSimpleFactForConf ? 'simple fact' : isDocReviewForConf ? 'document review' : 'news query'}`);
+        const skipReason = isSimpleFactForConf ? 'simple fact'
+          : isDocReviewForConf ? 'document review'
+          : isNewsQueryForConf ? 'news query'
+          : isSimpleClassificationForConf ? 'simple/factual classification'
+          : 'volatile factual lookup';
+        this.logger.log(`Skipping confidence assessment: ${skipReason}`);
       }
 
       // STEP 8: Apply Roxy's empathetic signature

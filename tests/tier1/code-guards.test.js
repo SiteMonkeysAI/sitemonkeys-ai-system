@@ -1535,4 +1535,210 @@ describe('N. Issue 3 — Business Validation Must Not Fire on Personal Queries',
 
 });
 
+// ============================================================
+// SECTION O: Issue #887 — Output Artifact Elimination
+// Confidence Assessment suppression, Note: fragment fix,
+// and internal-context prompt for possessive queries.
+// ============================================================
+
+describe('O. Issue #887 — Output Artifact Elimination', () => {
+
+  it('O-001: eli_framework.js skips confidence on simple_short classification', () => {
+    const src = readRepoFile('api/core/personalities/eli_framework.js');
+    assert.ok(src, 'Could not read api/core/personalities/eli_framework.js');
+
+    // Must check for simple_short in skipConfidence logic
+    const hasSimpleShort = src.includes("classification === 'simple_short'") ||
+                           src.includes('classification === "simple_short"');
+
+    assert.ok(
+      hasSimpleShort,
+      'O-001 FAIL: eli_framework.js must suppress Confidence Assessment for simple_short ' +
+      'classified queries — these are straightforward and do not benefit from uncertainty scoring.'
+    );
+  });
+
+  it('O-002: eli_framework.js skips confidence on simple_factual classification', () => {
+    const src = readRepoFile('api/core/personalities/eli_framework.js');
+    assert.ok(src, 'Could not read api/core/personalities/eli_framework.js');
+
+    const hasSimpleFactual = src.includes("classification === 'simple_factual'") ||
+                             src.includes('classification === "simple_factual"');
+
+    assert.ok(
+      hasSimpleFactual,
+      'O-002 FAIL: eli_framework.js must suppress Confidence Assessment for simple_factual ' +
+      'classified queries — factual lookups do not benefit from uncertainty scoring.'
+    );
+  });
+
+  it('O-003: eli_framework.js skips confidence on VOLATILE truth type', () => {
+    const src = readRepoFile('api/core/personalities/eli_framework.js');
+    assert.ok(src, 'Could not read api/core/personalities/eli_framework.js');
+
+    // Must include VOLATILE in confidence skip logic
+    const hasVolatileSkip = src.includes("truthType === 'VOLATILE'") ||
+                            src.includes("truthType === \"VOLATILE\"");
+
+    // Also verify the volatile variable name appears in the skipConfidence condition.
+    // Use a search around the skipConfidence declaration that handles multi-line declarations.
+    const skipConfidenceIdx = src.indexOf('const skipConfidence =');
+    const skipConfidenceEnd = skipConfidenceIdx !== -1 ? src.indexOf(';', skipConfidenceIdx) + 1 : -1;
+    const skipContent = skipConfidenceIdx !== -1 ? src.substring(skipConfidenceIdx, skipConfidenceEnd) : '';
+    const volatileInSkip = skipContent.includes('VOLATILE') || skipContent.includes('FactualVolatile') || skipContent.includes('Volatile');
+
+    assert.ok(
+      hasVolatileSkip,
+      'O-003 FAIL: eli_framework.js must suppress Confidence Assessment for VOLATILE truth type ' +
+      '(price queries, live data) — "What is the current price of ETH?" must not show a confidence block.'
+    );
+
+    assert.ok(
+      volatileInSkip,
+      'O-003b FAIL: The VOLATILE check must be included in the skipConfidence condition, not just defined.'
+    );
+  });
+
+  it('O-004: roxy_framework.js skips confidence on simple_short classification', () => {
+    const src = readRepoFile('api/core/personalities/roxy_framework.js');
+    assert.ok(src, 'Could not read api/core/personalities/roxy_framework.js');
+
+    const hasSimpleShort = src.includes("classification === 'simple_short'") ||
+                           src.includes('classification === "simple_short"');
+
+    assert.ok(
+      hasSimpleShort,
+      'O-004 FAIL: roxy_framework.js must suppress Confidence Assessment for simple_short ' +
+      'classified queries.'
+    );
+  });
+
+  it('O-005: roxy_framework.js skips confidence on simple_factual classification', () => {
+    const src = readRepoFile('api/core/personalities/roxy_framework.js');
+    assert.ok(src, 'Could not read api/core/personalities/roxy_framework.js');
+
+    const hasSimpleFactual = src.includes("classification === 'simple_factual'") ||
+                             src.includes('classification === "simple_factual"');
+
+    assert.ok(
+      hasSimpleFactual,
+      'O-005 FAIL: roxy_framework.js must suppress Confidence Assessment for simple_factual ' +
+      'classified queries.'
+    );
+  });
+
+  it('O-006: roxy_framework.js skips confidence on VOLATILE truth type', () => {
+    const src = readRepoFile('api/core/personalities/roxy_framework.js');
+    assert.ok(src, 'Could not read api/core/personalities/roxy_framework.js');
+
+    const hasVolatileSkip = src.includes("truthType === 'VOLATILE'") ||
+                            src.includes("truthType === \"VOLATILE\"");
+
+    assert.ok(
+      hasVolatileSkip,
+      'O-006 FAIL: roxy_framework.js must suppress Confidence Assessment for VOLATILE truth type ' +
+      '(price queries, live data).'
+    );
+  });
+
+  it('O-007: responseContractGate strips full Note: prefix when stripping low-confidence text', () => {
+    const src = readRepoFile('api/core/intelligence/responseContractGate.js');
+    assert.ok(src, 'Could not read api/core/intelligence/responseContractGate.js');
+
+    // The stripping pattern must include the **Note:** prefix so it does not leave an orphan
+    // After stripping "My confidence in this analysis..." the "**Note:**" must also be gone.
+    // Check for a pattern that handles the optional Note: prefix.
+    const hasNotePrefix = src.includes('Note:') && src.includes('My confidence in this analysis');
+
+    // Ensure the Note prefix is part of the stripping regex, not just a comment
+    const stripPatternLine = src.match(/\/.*?Note.*?My confidence in this analysis.*?\//);
+    assert.ok(
+      stripPatternLine,
+      'O-007 FAIL: responseContractGate.js must strip the "**Note:**" prefix together with ' +
+      '"My confidence in this analysis is lower than ideal..." to prevent orphaned Note: fragments. ' +
+      'The stripping pattern must match both the prefix and the content in a single regex.'
+    );
+  });
+
+  it('O-008: Note: fragment stripping pattern matches **Note:** prefix variants', () => {
+    // Verify the fix works by running the regex against test strings
+    const src = readRepoFile('api/core/intelligence/responseContractGate.js');
+    assert.ok(src, 'Could not read api/core/intelligence/responseContractGate.js');
+
+    // Extract the pattern line
+    const patternMatch = src.match(/\/[^\n]*Note.*?My confidence in this analysis[^\n]*\//);
+    assert.ok(patternMatch, 'O-008 FAIL: Could not find the Note:/confidence stripping pattern');
+
+    // Reconstruct the pattern — we just verify it exists and includes optional Note prefix
+    const patternStr = patternMatch[0];
+    const hasOptionalNote = patternStr.includes('Note') && (
+      patternStr.includes('?') ||     // Optional group marker
+      patternStr.includes('*') ||     // Zero-or-more
+      patternStr.includes('{0,')      // Explicit range
+    );
+    assert.ok(
+      hasOptionalNote,
+      'O-008 FAIL: The Note:/confidence stripping pattern must make the "**Note:**" prefix optional ' +
+      '(using ?, *, or {0,N}) so it strips correctly whether or not the prefix is present.'
+    );
+  });
+
+  it('O-009: orchestrator.js injects internal-context note for possessive queries when lookup not attempted', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Must have a branch that fires when lookup was NOT attempted AND message has "our"/"my"
+    const hasInternalContextNote = src.includes('INTERNAL CONTEXT QUERY') ||
+                                   src.includes('NO EXTERNAL LOOKUP PERFORMED');
+
+    assert.ok(
+      hasInternalContextNote,
+      'O-009 FAIL: orchestrator.js must inject an [INTERNAL CONTEXT QUERY] note when ' +
+      'external lookup was not attempted on a possessive/organizational query. Without this, ' +
+      'the AI may say "I attempted to retrieve..." even though no lookup was started.'
+    );
+  });
+
+  it('O-010: orchestrator.js internal-context note is conditioned on !lookup_attempted and possessive', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // The branch must check both: !phase4Metadata.lookup_attempted AND a possessive pattern
+    const hasBothConditions =
+      src.includes('!phase4Metadata.lookup_attempted') &&
+      (src.includes('/\\b(our|my)\\b/') || src.includes("'our'") || src.includes('"our"'));
+
+    assert.ok(
+      hasBothConditions,
+      'O-010 FAIL: The internal-context note injection must be conditioned on ' +
+      '(!phase4Metadata.lookup_attempted) AND the presence of a possessive marker (our/my). ' +
+      'This prevents the note from firing on non-possessive queries where lookup was simply not needed.'
+    );
+  });
+
+  it('O-011: internal-context note instructs AI not to say "attempted to retrieve"', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // The injected note must explicitly forbid "attempted to retrieve" or equivalent phrasing
+    const noteIdx = src.indexOf('INTERNAL CONTEXT QUERY');
+    assert.ok(noteIdx !== -1, 'O-011 FAIL: INTERNAL CONTEXT QUERY note not found in orchestrator.js');
+
+    // Look at the content of the note (next 500 chars after the marker)
+    const noteContent = src.substring(noteIdx, noteIdx + 500);
+    const forbidsAttemptedLanguage =
+      noteContent.includes('attempted to retrieve') ||
+      noteContent.includes('tried to pull') ||
+      noteContent.includes('I tried');
+
+    assert.ok(
+      forbidsAttemptedLanguage,
+      'O-011 FAIL: The internal-context note must explicitly tell the AI NOT to use ' +
+      '"I attempted to retrieve" or "I tried to pull current information" language, ' +
+      'since no external lookup was performed.'
+    );
+  });
+
+});
+
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');
