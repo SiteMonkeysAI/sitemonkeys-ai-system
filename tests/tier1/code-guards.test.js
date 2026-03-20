@@ -1535,4 +1535,198 @@ describe('N. Issue 3 — Business Validation Must Not Fire on Personal Queries',
 
 });
 
-console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');
+// ============================================================
+// SECTION O: Output Artifact & ReDoS Vulnerability Guards
+// Validates fixes from the output-artifacts + ReDoS PR:
+//   - Bounded regex in responseContractGate.js
+//   - skipConfidence / skipConfidenceBlock extensions
+//   - Internal context query branch in orchestrator.js
+// ============================================================
+
+describe('O. Output Artifact & ReDoS Vulnerability Guards', () => {
+
+  it('O-001: ENGAGEMENT_PADDING_SECTIONS uses bounded {0,2000} instead of unbounded *?', () => {
+    const src = readRepoFile('api/core/intelligence/responseContractGate.js');
+    assert.ok(src, 'Could not read responseContractGate.js');
+
+    const start = src.indexOf('const ENGAGEMENT_PADDING_SECTIONS = [');
+    const end = src.indexOf('];', start) + 2;
+    assert.ok(start !== -1, 'O-001 FAIL: ENGAGEMENT_PADDING_SECTIONS not found');
+
+    const block = src.substring(start, end);
+    // Must not contain [\s\S]*?
+    assert.ok(
+      !block.includes('[\\s\\S]*?'),
+      'O-001 FAIL: ENGAGEMENT_PADDING_SECTIONS contains unbounded [\\s\\S]*? — use {0,2000}?'
+    );
+    // Must contain bounded quantifier
+    assert.ok(
+      block.includes('{0,2000}'),
+      'O-001 FAIL: ENGAGEMENT_PADDING_SECTIONS must use {0,2000} bounded quantifier'
+    );
+  });
+
+  it('O-002: ALWAYS_STRIP_SECTIONS contains no unbounded .*? patterns', () => {
+    const src = readRepoFile('api/core/intelligence/responseContractGate.js');
+    assert.ok(src, 'Could not read responseContractGate.js');
+
+    const start = src.indexOf('const ALWAYS_STRIP_SECTIONS = [');
+    const end = src.indexOf('];', start) + 2;
+    assert.ok(start !== -1, 'O-002 FAIL: ALWAYS_STRIP_SECTIONS not found');
+
+    const block = src.substring(start, end);
+    assert.ok(
+      !block.includes('.*?]'),
+      'O-002 FAIL: ALWAYS_STRIP_SECTIONS contains .*?] — use [^\\]]{0,500} instead'
+    );
+    assert.ok(
+      !block.includes('.*?perspectives'),
+      'O-002 FAIL: ALWAYS_STRIP_SECTIONS contains .*?perspectives — use {0,500}? instead'
+    );
+    assert.ok(
+      !block.includes('.*?expert input'),
+      'O-002 FAIL: ALWAYS_STRIP_SECTIONS contains .*?expert input — use {0,1000}? instead'
+    );
+  });
+
+  it('O-003: responseContractGate.js contains no [\\/s\\/S]*?(?= outside comments', () => {
+    const src = readRepoFile('api/core/intelligence/responseContractGate.js');
+    assert.ok(src, 'Could not read responseContractGate.js');
+
+    const lines = src.split('\n');
+    const violations = lines
+      .map((line, i) => ({ line: line.trim(), num: i + 1 }))
+      .filter(({ line }) => !line.startsWith('//') && line.includes('[\\s\\S]*?(?='));
+
+    assert.strictEqual(
+      violations.length,
+      0,
+      `O-003 FAIL: Found unbounded [\\s\\S]*?(?= at line(s): ${violations.map(v => v.num).join(', ')}`
+    );
+  });
+
+  it('O-004: ALWAYS_STRIP_SECTIONS has exactly 8 entries', () => {
+    const src = readRepoFile('api/core/intelligence/responseContractGate.js');
+    assert.ok(src, 'Could not read responseContractGate.js');
+
+    const start = src.indexOf('const ALWAYS_STRIP_SECTIONS = [');
+    const end = src.indexOf('];', start) + 2;
+    const block = src.substring(start, end);
+
+    // Count regex literals — each starts with /
+    const regexCount = (block.match(/^\s*\//gm) || []).length;
+    assert.strictEqual(
+      regexCount,
+      8,
+      `O-004 FAIL: ALWAYS_STRIP_SECTIONS should have 8 entries, found ${regexCount}`
+    );
+  });
+
+  it('O-005: eli_framework.js skipConfidence skips when classification is simple_short', () => {
+    const src = readRepoFile('api/core/personalities/eli_framework.js');
+    assert.ok(src, 'Could not read eli_framework.js');
+
+    assert.ok(
+      src.includes("'simple_short'") && src.includes('skipConfidence'),
+      'O-005 FAIL: eli_framework.js skipConfidence must include simple_short classification check'
+    );
+
+    // Verify simple_short is in the skipConfidence expression
+    const skipIdx = src.indexOf('const skipConfidence =');
+    assert.ok(skipIdx !== -1, 'O-005 FAIL: skipConfidence declaration not found');
+    const skipLine = src.substring(skipIdx, src.indexOf('\n', skipIdx));
+    assert.ok(
+      skipLine.includes('isSimpleShort') || skipLine.includes("'simple_short'"),
+      'O-005 FAIL: simple_short not included in skipConfidence expression'
+    );
+  });
+
+  it('O-006: eli_framework.js skipConfidence skips when classification is simple_factual', () => {
+    const src = readRepoFile('api/core/personalities/eli_framework.js');
+    assert.ok(src, 'Could not read eli_framework.js');
+
+    const skipIdx = src.indexOf('const skipConfidence =');
+    assert.ok(skipIdx !== -1, 'O-006 FAIL: skipConfidence declaration not found');
+    const skipLine = src.substring(skipIdx, src.indexOf('\n', skipIdx));
+    assert.ok(
+      skipLine.includes('isSimpleFactual') || skipLine.includes("'simple_factual'"),
+      'O-006 FAIL: simple_factual not included in skipConfidence expression'
+    );
+  });
+
+  it('O-007: eli_framework.js skipConfidence skips when truthType is VOLATILE', () => {
+    const src = readRepoFile('api/core/personalities/eli_framework.js');
+    assert.ok(src, 'Could not read eli_framework.js');
+
+    const skipIdx = src.indexOf('const skipConfidence =');
+    assert.ok(skipIdx !== -1, 'O-007 FAIL: skipConfidence declaration not found');
+    const skipLine = src.substring(skipIdx, src.indexOf('\n', skipIdx));
+    assert.ok(
+      skipLine.includes('isVolatile') || skipLine.includes("'VOLATILE'"),
+      "O-007 FAIL: VOLATILE truthType not included in skipConfidence expression"
+    );
+  });
+
+  it('O-008: roxy_framework.js skipConfidenceBlock skips when classification is simple_short', () => {
+    const src = readRepoFile('api/core/personalities/roxy_framework.js');
+    assert.ok(src, 'Could not read roxy_framework.js');
+
+    const skipIdx = src.indexOf('const skipConfidenceBlock =');
+    assert.ok(skipIdx !== -1, 'O-008 FAIL: skipConfidenceBlock declaration not found');
+    const skipLine = src.substring(skipIdx, src.indexOf('\n', skipIdx));
+    assert.ok(
+      skipLine.includes('isSimpleShortForConf') || skipLine.includes("'simple_short'"),
+      'O-008 FAIL: simple_short not included in skipConfidenceBlock expression'
+    );
+  });
+
+  it('O-009: roxy_framework.js skipConfidenceBlock skips when classification is simple_factual', () => {
+    const src = readRepoFile('api/core/personalities/roxy_framework.js');
+    assert.ok(src, 'Could not read roxy_framework.js');
+
+    const skipIdx = src.indexOf('const skipConfidenceBlock =');
+    assert.ok(skipIdx !== -1, 'O-009 FAIL: skipConfidenceBlock declaration not found');
+    const skipLine = src.substring(skipIdx, src.indexOf('\n', skipIdx));
+    assert.ok(
+      skipLine.includes('isSimpleFactualForConf') || skipLine.includes("'simple_factual'"),
+      'O-009 FAIL: simple_factual not included in skipConfidenceBlock expression'
+    );
+  });
+
+  it('O-010: roxy_framework.js skipConfidenceBlock skips when truthType is VOLATILE', () => {
+    const src = readRepoFile('api/core/personalities/roxy_framework.js');
+    assert.ok(src, 'Could not read roxy_framework.js');
+
+    const skipIdx = src.indexOf('const skipConfidenceBlock =');
+    assert.ok(skipIdx !== -1, 'O-010 FAIL: skipConfidenceBlock declaration not found');
+    const skipLine = src.substring(skipIdx, src.indexOf('\n', skipIdx));
+    assert.ok(
+      skipLine.includes('isVolatileForConf') || skipLine.includes("'VOLATILE'"),
+      "O-010 FAIL: VOLATILE truthType not included in skipConfidenceBlock expression"
+    );
+  });
+
+  it('O-011: orchestrator.js has internal context query branch after external lookup failure block', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // The branch must test !phase4Metadata.lookup_attempted with our/my pattern
+    assert.ok(
+      src.includes('!phase4Metadata.lookup_attempted') && src.includes('INTERNAL CONTEXT QUERY'),
+      'O-011 FAIL: orchestrator.js missing internal context query branch'
+    );
+
+    // The internal context note must contain the required text
+    assert.ok(
+      src.includes('INTERNAL CONTEXT QUERY — NO EXTERNAL LOOKUP PERFORMED'),
+      'O-011 FAIL: orchestrator.js internal context note missing required header text'
+    );
+
+    // Must use word-boundary regex for our/my
+    assert.ok(
+      src.includes('\\b(our|my)\\b') || src.includes('/\\b(our|my)\\b/i'),
+      'O-011 FAIL: internal context query branch must use word-boundary regex /\\b(our|my)\\b/i'
+    );
+  });
+
+});
