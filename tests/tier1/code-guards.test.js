@@ -1636,3 +1636,91 @@ describe('P. Intelligent Model Routing — GPT-4o', () => {
 });
 
 console.log('✅ Tier 1 Code Guards loaded (ESM-safe, pure file scanning, $0 cost)');
+
+// ============================================================
+// SECTION Q: MEMORY RELEVANCE THRESHOLD (Issue #4)
+// Ensures only genuinely relevant memories are injected.
+// Raising the minimum similarity threshold eliminates 1,200–1,750
+// tokens of irrelevant context per prompt while preserving
+// safety-critical memories via the importance-based bypass.
+// ============================================================
+
+describe('Q. Memory Relevance Threshold Guards', () => {
+
+  it('Q-001: RETRIEVAL_CONFIG defines minSimilarity as a numeric value', () => {
+    const retrieval = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(retrieval, 'Could not read api/services/semantic-retrieval.js');
+
+    const hasNumericThreshold = /minSimilarity:\s*0\.\d+/.test(retrieval);
+    assert.ok(
+      hasNumericThreshold,
+      'Q-001 FAIL: RETRIEVAL_CONFIG.minSimilarity is not defined as a numeric value in ' +
+      'api/services/semantic-retrieval.js. The field must exist as a decimal number (e.g. 0.35) ' +
+      'to gate which memories are injected into each prompt.'
+    );
+  });
+
+  it('Q-002: minSimilarity threshold is higher than the previous baseline of 0.20', () => {
+    const retrieval = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(retrieval, 'Could not read api/services/semantic-retrieval.js');
+
+    const match = retrieval.match(/minSimilarity:\s*(0\.\d+)/);
+    assert.ok(
+      match,
+      'Q-002 FAIL: Could not parse minSimilarity value from RETRIEVAL_CONFIG in ' +
+      'api/services/semantic-retrieval.js.'
+    );
+
+    const threshold = parseFloat(match[1]);
+    assert.ok(
+      threshold > 0.20,
+      `Q-002 FAIL: minSimilarity is ${threshold} — must be greater than the previous baseline of 0.20. ` +
+      'A threshold of 0.20 allowed up to 230 rows of low-relevance memories to be injected on ' +
+      'every query, adding 1,200–1,750 tokens of noise. Raise to at least 0.35.'
+    );
+  });
+
+  it('Q-003: filtering logic applies effectiveMinSimilarity before memory injection', () => {
+    const retrieval = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(retrieval, 'Could not read api/services/semantic-retrieval.js');
+
+    const hasFilterWithThreshold = retrieval.includes('m.similarity >= effectiveMinSimilarity');
+    assert.ok(
+      hasFilterWithThreshold,
+      'Q-003 FAIL: The filter expression "m.similarity >= effectiveMinSimilarity" is missing from ' +
+      'api/services/semantic-retrieval.js. Without this gate, all candidates regardless of similarity ' +
+      'score are injected into every prompt.'
+    );
+  });
+
+  it('Q-004: safety-critical memories (relevance_score >= 0.90) bypass the threshold', () => {
+    const retrieval = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(retrieval, 'Could not read api/services/semantic-retrieval.js');
+
+    // The filter that applies effectiveMinSimilarity must also allow memories with a high
+    // relevance_score (>= 0.90) to pass through regardless of cosine similarity.
+    // Verify: the filter line that references effectiveMinSimilarity also references
+    // relevance_score and the 0.90 threshold so safety-critical memories (allergy, medication)
+    // are never silently blocked after the threshold was raised.
+    const filterIdx = retrieval.indexOf('m.similarity >= effectiveMinSimilarity');
+    assert.ok(
+      filterIdx !== -1,
+      'Q-004 FAIL: Could not locate the effectiveMinSimilarity filter expression.'
+    );
+
+    // Inspect the 200 characters surrounding the filter for the bypass markers
+    const filterContext = retrieval.substring(filterIdx, filterIdx + 200);
+    const hasBypass =
+      filterContext.includes('relevance_score') &&
+      filterContext.includes('0.90');
+
+    assert.ok(
+      hasBypass,
+      'Q-004 FAIL: The similarity filter does not include a bypass for safety-critical memories ' +
+      '(relevance_score >= 0.90). After raising the similarity threshold, allergy and medication ' +
+      'memories with low cosine similarity (e.g. 0.15) would be incorrectly blocked from injection. ' +
+      'Fix: add "|| parseFloat(m.relevance_score || 0) >= 0.90" (or equivalent) to the filter expression.'
+    );
+  });
+
+});
