@@ -1724,3 +1724,385 @@ describe('Q. Memory Relevance Threshold Guards', () => {
   });
 
 });
+
+// ============================================================
+// SECTION R: SYSTEM PIPELINE AUDIT
+// Six-area investigation verifying that each critical pipeline
+// is structurally intact.  Tests are static file scans ($0 cost).
+//
+// Area 1: Document injection pipeline
+// Area 2: Vault content pipeline
+// Area 3: Claude escalation on large payload
+// Area 4: High-stakes domain detection (medical / legal)
+// Area 5: Session context (multi-turn conversation history)
+// Area 6: Context source prioritisation (document > memory)
+// ============================================================
+
+describe('R. System Pipeline Audit — Area 1: Document Injection', () => {
+
+  it('R-001: #loadDocumentContext method exists in orchestrator', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('#loadDocumentContext'),
+      'R-001 FAIL: "#loadDocumentContext" method is missing from orchestrator.js. ' +
+      'Uploaded document content will never be loaded for injection into AI prompts.'
+    );
+  });
+
+  it('R-002: document gating checks refersToDocument, hasDocVerb, and uploadedRecently', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+
+    const hasRefersCheck = orch.includes('refersToDocument');
+    const hasDocVerbCheck = orch.includes('hasDocVerb');
+    const hasUploadedRecentlyCheck = orch.includes('uploadedRecently');
+
+    assert.ok(
+      hasRefersCheck && hasDocVerbCheck && hasUploadedRecentlyCheck,
+      'R-002 FAIL: Document injection gating is incomplete. ' +
+      `Missing: ${[
+        !hasRefersCheck && 'refersToDocument',
+        !hasDocVerbCheck && 'hasDocVerb',
+        !hasUploadedRecentlyCheck && 'uploadedRecently'
+      ].filter(Boolean).join(', ')}. ` +
+      'Without these checks, documents may be injected on unrelated queries wasting tokens.'
+    );
+  });
+
+  it('R-003: document enforcement instruction present in #buildContextString', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('YOU MUST USE THIS DOCUMENT CONTENT'),
+      'R-003 FAIL: Document enforcement instruction "YOU MUST USE THIS DOCUMENT CONTENT" is missing ' +
+      'from #buildContextString in orchestrator.js. The AI may ignore uploaded document content.'
+    );
+  });
+
+  it('R-004: contextString containing document is included in AI messages', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    // Both Claude and GPT paths must include contextString in the message payload
+    const hasClaudeContextStr = orch.includes('contextString') &&
+      orch.includes('"claude-sonnet-4-20250514"');
+    const hasGptContextStr = orch.includes('externalContext}${contextString}');
+    assert.ok(
+      hasClaudeContextStr && hasGptContextStr,
+      'R-004 FAIL: contextString (which carries document content) is not correctly included in ' +
+      'AI message payloads. Check #routeToAI in orchestrator.js for both Claude and GPT paths.'
+    );
+  });
+
+});
+
+describe('R. System Pipeline Audit — Area 2: Vault Content Pipeline', () => {
+
+  it('R-005: #loadVaultContext method exists in orchestrator', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('#loadVaultContext'),
+      'R-005 FAIL: "#loadVaultContext" method is missing from orchestrator.js. ' +
+      'Site Monkeys vault content will never be loaded.'
+    );
+  });
+
+  it('R-006: #selectRelevantVaultSections method exists for intelligent vault selection', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('#selectRelevantVaultSections'),
+      'R-006 FAIL: "#selectRelevantVaultSections" method is missing from orchestrator.js. ' +
+      'The full vault will be injected without intelligent selection, wasting tokens.'
+    );
+  });
+
+  it('R-007: vault injected as PRIMARY context with SITE MONKEYS VAULT header', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('SITE MONKEYS VAULT'),
+      'R-007 FAIL: Vault primary context header "SITE MONKEYS VAULT" is missing from ' +
+      '#buildContextString in orchestrator.js. Vault content may not be clearly labelled for the AI.'
+    );
+  });
+
+  it('R-008: vault presence routes to Claude in site_monkeys mode (vault_access reason)', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    const hasVaultAccess = orch.includes("vault_access");
+    const hasVaultClaudeRoute = orch.includes('context.vault') && orch.includes('site_monkeys');
+    assert.ok(
+      hasVaultAccess && hasVaultClaudeRoute,
+      'R-008 FAIL: Vault-to-Claude routing is broken. ' +
+      'Vault queries in site_monkeys mode must always route to Claude (200K context window).'
+    );
+  });
+
+  it('R-009: memory injection in no-vault section is guarded when vault and documents coexist', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+
+    // The vault path (if context.vault) falls through when documents are also present.
+    // The no-vault section that follows must guard its memory injection with !context.vault
+    // to prevent duplicate memory injection when vault + documents are both active.
+    const vaultFallthroughIdx = orch.indexOf('// Otherwise, fall through to add document content alongside vault');
+    assert.ok(
+      vaultFallthroughIdx !== -1,
+      'R-009 FAIL: Could not locate vault fall-through comment in #buildContextString. ' +
+      'The vault + document code path may have been restructured.'
+    );
+
+    // Find where memory is injected in the no-vault section (after the vault block closes)
+    const noVaultSectionStart = orch.indexOf('// ========== FALLBACK: NO VAULT', vaultFallthroughIdx);
+    assert.ok(
+      noVaultSectionStart !== -1,
+      'R-009 FAIL: Could not locate "FALLBACK: NO VAULT" section after vault fall-through.'
+    );
+
+    // The memory injection in the no-vault section must be guarded against vault being present
+    // Find the memory injection line ("PERSISTENT MEMORY CONTEXT") in the no-vault section
+    const noVaultMemoryIdx = orch.indexOf('PERSISTENT MEMORY CONTEXT', noVaultSectionStart);
+    assert.ok(
+      noVaultMemoryIdx !== -1,
+      'R-009 FAIL: Could not find "PERSISTENT MEMORY CONTEXT" injection in the no-vault section.'
+    );
+
+    // The guard must appear between the no-vault section start and the no-vault memory injection
+    const sectionSlice = orch.substring(noVaultSectionStart, noVaultMemoryIdx);
+    const hasVaultGuard = sectionSlice.includes('!context.vault');
+    assert.ok(
+      hasVaultGuard,
+      'R-009 FAIL: Memory injection in the no-vault section of #buildContextString is NOT guarded ' +
+      'with "!context.vault". When vault + documents are both present, memory is injected twice: ' +
+      'once in the vault path and again in the no-vault fallthrough. This doubles the memory token ' +
+      'budget and produces misleading "No vault available" log output. ' +
+      'Fix: wrap the no-vault memory injection with `if (!context.vault) { ... }`.'
+    );
+  });
+
+});
+
+describe('R. System Pipeline Audit — Area 3: Claude Escalation on Large Payload', () => {
+
+  it('R-010: full payload token estimate includes system prompt, context, external, message, history', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+
+    const hasSystemEst = orch.includes('estimatedSystemPromptTokens');
+    const hasContextEst = orch.includes('estimatedContextTokens');
+    const hasExternalEst = orch.includes('estimatedExternalTokens');
+    const hasMessageEst = orch.includes('estimatedMessageTokens');
+    const hasHistoryEst = orch.includes('estimatedHistoryTokens');
+
+    assert.ok(
+      hasSystemEst && hasContextEst && hasExternalEst && hasMessageEst && hasHistoryEst,
+      'R-010 FAIL: Full payload token estimate is incomplete. ' +
+      `Missing: ${[
+        !hasSystemEst && 'estimatedSystemPromptTokens',
+        !hasContextEst && 'estimatedContextTokens',
+        !hasExternalEst && 'estimatedExternalTokens',
+        !hasMessageEst && 'estimatedMessageTokens',
+        !hasHistoryEst && 'estimatedHistoryTokens'
+      ].filter(Boolean).join(', ')}. ` +
+      'Without a complete token estimate, payload-overflow escalation to Claude may fail.'
+    );
+  });
+
+  it('R-011: payload overflow sets useClaude = true and escalatedDueToPayloadSize = true', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+
+    const hasEscalatedFlag = orch.includes('escalatedDueToPayloadSize = true');
+    const hasUseClaude = orch.includes('useClaude = true');
+
+    assert.ok(
+      hasEscalatedFlag && hasUseClaude,
+      'R-011 FAIL: Payload overflow escalation is missing. ' +
+      'Large payloads will overflow the GPT context window instead of safely routing to Claude.'
+    );
+  });
+
+  it('R-012: payload overflow escalation overrides user_declined_claude', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+
+    // The payload overflow section must filter out 'user_declined_claude' from routing reasons
+    const hasOverrideDecline = orch.includes("routingReason.filter(r => r !== 'user_declined_claude')");
+    assert.ok(
+      hasOverrideDecline,
+      'R-012 FAIL: Payload overflow escalation does not override user_declined_claude. ' +
+      'Users who declined Claude will still have their GPT request fail when the payload is too large.'
+    );
+  });
+
+});
+
+describe('R. System Pipeline Audit — Area 4: High-Stakes Domain Detection', () => {
+
+  it('R-013: HIGH_STAKES_DOMAINS constant exists with medical and legal patterns', () => {
+    const detector = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(detector, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    const hasMedical = detector.includes('MEDICAL');
+    const hasLegal = detector.includes('LEGAL');
+    const hasHighStakes = detector.includes('HIGH_STAKES_DOMAINS');
+
+    assert.ok(
+      hasMedical && hasLegal && hasHighStakes,
+      'R-013 FAIL: HIGH_STAKES_DOMAINS is missing or does not include MEDICAL/LEGAL domains in ' +
+      'truthTypeDetector.js. Medical and legal queries will not escalate to Claude.'
+    );
+  });
+
+  it('R-014: detectHighStakesDomain function is exported from truthTypeDetector', () => {
+    const detector = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(detector, 'Could not read api/core/intelligence/truthTypeDetector.js');
+    assert.ok(
+      detector.includes('export function detectHighStakesDomain'),
+      'R-014 FAIL: "detectHighStakesDomain" is not exported from truthTypeDetector.js. ' +
+      'High-stakes detection results cannot be consumed by the orchestrator.'
+    );
+  });
+
+  it('R-015: PRIORITY 0 routing escalates high_stakes queries to Claude before all other checks', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+
+    const highStakesIdx = orch.indexOf('phase4Metadata?.high_stakes?.isHighStakes');
+    const vaultPriority1Idx = orch.indexOf('PRIORITY 1: Vault presence');
+    const mediumComplexityIdx = orch.indexOf("queryTier === 'medium_complexity'");
+
+    assert.ok(highStakesIdx !== -1, 'R-015 FAIL: PRIORITY 0 high_stakes check missing from orchestrator.');
+    assert.ok(vaultPriority1Idx !== -1, 'R-015 FAIL: PRIORITY 1 vault check missing from orchestrator.');
+    assert.ok(
+      highStakesIdx < vaultPriority1Idx && highStakesIdx < mediumComplexityIdx,
+      'R-015 FAIL: high_stakes escalation (PRIORITY 0) must appear BEFORE vault (PRIORITY 1) ' +
+      'and medium_complexity routing in orchestrator.js. High-stakes queries may route to GPT instead of Claude.'
+    );
+  });
+
+  it('R-016: high_stakes routing sets isSafetyCritical = true (bypasses user confirmation)', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('isSafetyCritical = true'),
+      'R-016 FAIL: "isSafetyCritical = true" is missing from orchestrator.js. ' +
+      'High-stakes medical/legal queries will prompt the user for Claude confirmation ' +
+      'instead of escalating automatically.'
+    );
+  });
+
+});
+
+describe('R. System Pipeline Audit — Area 5: Session Context (Multi-Turn History)', () => {
+
+  it('R-017: addConversationTurn method exists in session-manager.js', () => {
+    const sm = readRepoFile('api/lib/session-manager.js');
+    assert.ok(sm, 'Could not read api/lib/session-manager.js');
+    assert.ok(
+      sm.includes('addConversationTurn'),
+      'R-017 FAIL: "addConversationTurn" method is missing from session-manager.js. ' +
+      'Conversation turns will not be persisted and multi-turn context will break.'
+    );
+  });
+
+  it('R-018: getConversationHistory method exists in session-manager.js', () => {
+    const sm = readRepoFile('api/lib/session-manager.js');
+    assert.ok(sm, 'Could not read api/lib/session-manager.js');
+    assert.ok(
+      sm.includes('getConversationHistory'),
+      'R-018 FAIL: "getConversationHistory" method is missing from session-manager.js. ' +
+      'The server cannot retrieve stored conversation history for multi-turn context.'
+    );
+  });
+
+  it('R-019: server.js uses session history as effectiveConversationHistory', () => {
+    const server = readRepoFile('server.js');
+    assert.ok(server, 'Could not read server.js');
+
+    const hasSessionHistory = server.includes('getConversationHistory');
+    const hasEffective = server.includes('effectiveConversationHistory');
+    const storesUserTurn = server.includes("addConversationTurn(sessionId, 'user'");
+    const storesAssistantTurn = server.includes("addConversationTurn(sessionId, 'assistant'");
+
+    assert.ok(
+      hasSessionHistory && hasEffective && storesUserTurn && storesAssistantTurn,
+      'R-019 FAIL: Session conversation context pipeline is broken in server.js. ' +
+      `Missing: ${[
+        !hasSessionHistory && 'getConversationHistory call',
+        !hasEffective && 'effectiveConversationHistory',
+        !storesUserTurn && "addConversationTurn for 'user'",
+        !storesAssistantTurn && "addConversationTurn for 'assistant'"
+      ].filter(Boolean).join(', ')}.`
+    );
+  });
+
+  it('R-020: conversation history is sliced to last 5 exchanges before AI calls', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('conversationHistory.slice(-5)'),
+      'R-020 FAIL: "conversationHistory.slice(-5)" is missing from orchestrator.js. ' +
+      'The full conversation history (unbounded) will be passed to AI models, ' +
+      'causing context window overflow on long conversations.'
+    );
+  });
+
+});
+
+describe('R. System Pipeline Audit — Area 6: Context Source Prioritisation', () => {
+
+  it('R-021: vault takes absolute priority over documents and memory in context string', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+
+    // In #buildContextString, vault section must appear BEFORE document section
+    const vaultHeaderIdx = orch.indexOf('SITE MONKEYS VAULT - COMPLETE BUSINESS KNOWLEDGE BASE');
+    const docHeaderIdx = orch.indexOf('CURRENT DOCUMENT (uploaded just now)');
+
+    assert.ok(vaultHeaderIdx !== -1, 'R-021 FAIL: Vault header not found in #buildContextString.');
+    assert.ok(docHeaderIdx !== -1, 'R-021 FAIL: Document header not found in #buildContextString.');
+    assert.ok(
+      vaultHeaderIdx < docHeaderIdx,
+      'R-021 FAIL: Vault header appears AFTER document header in #buildContextString. ' +
+      'Vault must always take priority as PRIMARY context in site_monkeys mode.'
+    );
+  });
+
+  it('R-022: document enforcement instruction exists to prioritise document over stale memory', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('Do NOT reference previous documents from memory unless explicitly asked'),
+      'R-022 FAIL: Document priority instruction is missing from #buildContextString. ' +
+      'The AI may incorrectly draw from stale memory instead of the uploaded document.'
+    );
+  });
+
+  it('R-023: document gating prevents injection when query does not reference the document', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+
+    // The gating must set effectiveDocumentData = null when no document reference is found
+    const hasNullGate = orch.includes('effectiveDocumentData = null');
+    assert.ok(
+      hasNullGate,
+      'R-023 FAIL: Document gating "effectiveDocumentData = null" is missing from orchestrator.js. ' +
+      'Documents will be injected on every query regardless of relevance, wasting tokens.'
+    );
+  });
+
+  it('R-024: recently-uploaded documents bypass the gating check (90-second window)', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('90000'),
+      'R-024 FAIL: The 90-second (90000 ms) upload recency window is missing from orchestrator.js. ' +
+      'Documents uploaded just moments before a query will be silently dropped even when the ' +
+      'user clearly intends to discuss them.'
+    );
+  });
+
+});

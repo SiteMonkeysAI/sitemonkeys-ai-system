@@ -4998,14 +4998,19 @@ When using this memory context, a caring family member would naturally apply tem
     }
 
     // ========== FALLBACK: NO VAULT - USE DOCUMENTS AND MEMORY ==========
-    console.log(
-      "[ORCHESTRATOR] No vault available - using standard context priority",
-    );
+    // When vault IS present but documents are also present, we fall through here from the vault
+    // path solely to add the document section below.  Memory was already injected above in the
+    // vault path, so we must NOT inject it again — that would double the memory token budget and
+    // produce a misleading "No vault available" log line.
+    if (!context.vault) {
+      console.log(
+        "[ORCHESTRATOR] No vault available - using standard context priority",
+      );
 
-    // FIX #4: Enhanced memory acknowledgment in standard mode
-    // ISSUE #570: Strengthen memory context injection with explicit reasoning requirements
-    // FIX #577 - EDG3: Extract and highlight numerical data for preservation
-    if (context.memory) {
+      // FIX #4: Enhanced memory acknowledgment in standard mode
+      // ISSUE #570: Strengthen memory context injection with explicit reasoning requirements
+      // FIX #577 - EDG3: Extract and highlight numerical data for preservation
+      if (context.memory) {
       // memoryCount: if memory is an array of objects, use its length directly; otherwise estimate from string length
       const memoryCount = Array.isArray(context.memory)
         ? context.memory.length
@@ -5074,8 +5079,13 @@ The information above represents what you've shared with me in our previous conv
 If you're asking about something you've told me before, I should be able to find it in this context.
 
 `;
+      } else {
+        contextStr += `\n\n**📝 MEMORY STATUS:** This appears to be our first conversation, or no relevant previous context was found. I'll provide the best response based on your current query.\n`;
+      }
     } else {
-      contextStr += `\n\n**📝 MEMORY STATUS:** This appears to be our first conversation, or no relevant previous context was found. I'll provide the best response based on your current query.\n`;
+      console.log(
+        "[ORCHESTRATOR] Vault active + document present - adding document content alongside vault",
+      );
     }
 
     // ========== DOCUMENT CONTEXT (Issue #407 Fix + Enhancement) ==========
