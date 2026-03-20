@@ -29,11 +29,12 @@ const GUIDANCE_REQUEST_PATTERNS = [
 // HYGIENE BAD: Engagement padding sections (Issue #378)
 // Strip by default UNLESS user explicitly requested guidance
 const ENGAGEMENT_PADDING_SECTIONS = [
-  /\*\*Simpler Paths Forward:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
-  /\*\*Practical Next Steps:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
-  /\*\*Do More With Less:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
-  /\*\*Opportunities I See:\*\*[\s\S]*?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+  /\*\*Simpler Paths Forward:\*\*[\s\S]{0,2000}?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+  /\*\*Practical Next Steps:\*\*[\s\S]{0,2000}?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+  /\*\*Do More With Less:\*\*[\s\S]{0,2000}?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
+  /\*\*Opportunities I See:\*\*[\s\S]{0,2000}?(?=\n\n\*\*[A-Z]|\n\n---|\n\n[A-Z][a-z]|$)/gi,
 ];
+
 
 // FALSE CONTINUITY CLAIMS (Issue #435 - ALWAYS strip these lies)
 // ISSUE #875 FIX: Extended with additional patterns that catch fabricated memory references
@@ -77,17 +78,17 @@ const ENGAGEMENT_BAIT_ENDINGS = [
 
 // HYGIENE BAD: False claims and theater phrases (ALWAYS strip)
 const ALWAYS_STRIP_SECTIONS = [
-  /\[Note: Evaluate this recommendation.*?\]/gs,
-  /\[FOUNDER PROTECTION:.*?\]/gs,
-  /I want to be honest with you—I'm not as confident.*?perspectives\./gs,
+  /\[Note: Evaluate this recommendation[^\]]{0,500}\]/gs,
+  /\[FOUNDER PROTECTION:[^\]]{0,500}\]/gs,
+  /I want to be honest with you—I'm not as confident[\s\S]{0,500}?perspectives\./gs,
   // ISSUE #887 FIX: The low-confidence note in eli_framework.js is formatted as
   // "\n\n**Note:** My confidence in this analysis is lower than ideal...expert input."
   // The previous pattern stripped only "My confidence..." leaving "**Note:** " orphaned,
   // which caused responses to end with a truncated "Note:" fragment.
   // The fix extends the pattern to also match and strip the optional "**Note:** " prefix
   // and any preceding blank lines so no orphan text remains.
-  /\n*(?:\*\*Note:\*\*\s*)?My confidence in this analysis is lower than ideal.*?expert input\./gs,
-  /To verify this information, you could:[\s\S]*?(?=\n\n[A-Z]|$)/gi,
+  /\n*(?:\*\*Note:\*\*\s*)?My confidence in this analysis is lower than ideal[\s\S]{0,1000}?expert input\./gs,
+  /To verify this information, you could:[\s\S]{0,2000}?(?=\n\n[A-Z]|$)/gi,
   /I'm reasoning from general knowledge here, not verified specifics\.\n\n/g,
   /I'm reasoning about future possibilities, not verified facts\.\n\n/g,
   // False capability denials (Issue #378 Problem 2)
@@ -377,7 +378,7 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
       // Skip any that are just emoji headers like "🍌 **Roxy:**"
       let firstReal = paragraphs.find(p => p.trim().length > 50) || paragraphs[0];
       // Remove personality headers if present
-      firstReal = firstReal.replace(/^🍌 \*\*(?:Eli|Roxy):\*\*.*?\n+/i, '').trim();
+      firstReal = firstReal.replace(/^🍌 \*\*(?:Eli|Roxy):\*\*[^\n]{0,500}?\n+/i, '').trim();
       cleanedResponse = firstReal;
     }
   }
@@ -393,10 +394,10 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
   if (constraint === 'minimal') {
     // Strip all coaching/enhancement blocks
     cleanedResponse = cleanedResponse
-      .replace(/🎯 \*\*Confidence Assessment:\*\*[\s\S]*?(?=\n\n[^🎯]|$)/gi, '')
-      .replace(/\*\*Why:\*\*.*?\n/gi, '')
-      .replace(/🍌 \*\*(?:Eli|Roxy):\*\*.*?\n+/gi, '')
-      .replace(/\((?:Analytical|Empathetic) framework applied.*?\)\n*/gi, '');
+      .replace(/🎯 \*\*Confidence Assessment:\*\*[\s\S]{0,2000}?(?=\n\n[^🎯]|$)/gi, '')
+      .replace(/\*\*Why:\*\*[^\n]{0,500}\n/gi, '')
+      .replace(/🍌 \*\*(?:Eli|Roxy):\*\*[^\n]{0,500}\n+/gi, '')
+      .replace(/\((?:Analytical|Empathetic) framework applied[^)]{0,500}?\)\n*/gi, '');
 
     // If still too long, keep only first substantive sections
     if (cleanedResponse.length > 600) {
