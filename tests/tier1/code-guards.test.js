@@ -1343,6 +1343,128 @@ describe('N. Issue 2 — Personal Possessive Queries Must Not Trigger External L
 
 });
 
+describe('N. Issue 4 — Organizational Possessive Queries Must Not Trigger External Lookup', () => {
+
+  it('N-009: isFactualEntityQuery blocks "our" possessive queries before proper noun detection', () => {
+    const src = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(src, 'Could not read api/core/intelligence/externalLookupEngine.js');
+
+    const fnStart = src.indexOf('export function isFactualEntityQuery(');
+    const fnEnd   = src.indexOf('\n}', fnStart) + 2;
+    assert.ok(fnStart !== -1, 'N-009 FAIL: isFactualEntityQuery function not found');
+
+    const fnBody = src.substring(fnStart, fnEnd);
+
+    // Must have a guard for /\bour\b/ that returns false and appears before hasProperNouns()
+    const hasOurPattern = fnBody.includes('\\bour\\b');
+    const ourGuardIdx   = fnBody.indexOf('\\bour\\b');
+    const properNounIdx = fnBody.indexOf('hasProperNouns(');
+    const guardReturnsFalse =
+      /if\s*\(\s*\/\\bour\\b\/i\.test\(query\)\s*\)\s*return\s*false/.test(fnBody) ||
+      /if\s*\(\s*\/\\bour\\b\/i\.test\(query\)\s*\)\s*\{[\s\S]{0,200}?return\s*false/.test(fnBody); // multi-line guard block (bounded to ~200 chars to avoid catastrophic backtracking)
+
+    assert.ok(hasOurPattern, 'N-009 FAIL: /\\bour\\b/ guard missing from isFactualEntityQuery.');
+    assert.ok(guardReturnsFalse, 'N-009 FAIL: /\\bour\\b/ guard must return false.');
+    assert.ok(properNounIdx !== -1, 'N-009 FAIL: hasProperNouns() call not found in isFactualEntityQuery.');
+    assert.ok(ourGuardIdx !== -1 && ourGuardIdx < properNounIdx,
+      'N-009 FAIL: /\\bour\\b/ guard must appear before hasProperNouns() so it short-circuits external lookup.');
+  });
+
+  it('N-010: isFactualEntityQuery "our" guard fires before entity-pattern checks', () => {
+    const src = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(src, 'Could not read api/core/intelligence/externalLookupEngine.js');
+
+    const fnStart = src.indexOf('export function isFactualEntityQuery(');
+    const fnEnd   = src.indexOf('\n}', fnStart) + 2;
+    const fnBody  = src.substring(fnStart, fnEnd);
+
+    // "our" guard must appear before the return statement with entity patterns
+    const ourGuardIdx    = fnBody.indexOf('\\bour\\b');
+    const entityReturnIdx = fnBody.indexOf('/\\b(who is|who was)\\b/i.test(query)');
+
+    assert.ok(
+      ourGuardIdx !== -1 && entityReturnIdx !== -1 && ourGuardIdx < entityReturnIdx,
+      'N-010 FAIL: The /\\bour\\b/ guard must be declared before the entity-pattern return block ' +
+      'so it short-circuits before hasProperNouns() is evaluated.'
+    );
+  });
+
+  it('N-011: isPersonalMemoryRecall contains organizational context patterns', () => {
+    const src = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(src, 'Could not read api/core/intelligence/externalLookupEngine.js');
+
+    const blockStart = src.indexOf('const isPersonalMemoryRecall');
+    const blockEnd   = src.indexOf(');', blockStart) + 2;
+    assert.ok(blockStart !== -1, 'N-011 FAIL: isPersonalMemoryRecall block not found');
+
+    const block = src.substring(blockStart, blockEnd);
+
+    // Must reference "our" to catch organizational queries — the regex uses \bour\b or literal "our"
+    const hasOurPattern = block.includes('\\bour\\b') || block.includes('of our') || block.includes('status of our');
+
+    assert.ok(
+      hasOurPattern,
+      'N-011 FAIL: isPersonalMemoryRecall must include organizational "our" patterns. ' +
+      '"What is the current status of our network monitoring system" bypasses the personal block ' +
+      'and falls through to confidence-based lookup triggers.'
+    );
+  });
+
+  it('N-012: isFactualEntityQuery returns true for non-possessive entity queries', async () => {
+    const moduleUrl = new URL('../../api/core/intelligence/externalLookupEngine.js', import.meta.url);
+    const { isFactualEntityQuery } = await import(moduleUrl.href);
+    assert.ok(isFactualEntityQuery, 'N-012 FAIL: isFactualEntityQuery not exported');
+
+    const result = isFactualEntityQuery('who is the CEO of Microsoft');
+
+    assert.strictEqual(
+      result,
+      true,
+      'N-012 FAIL: "who is the CEO of Microsoft" must return true so external lookup triggers for real entities.'
+    );
+  });
+
+  it('N-013: isPersonalMemoryRecall org patterns cover "what is the current status of our" phrasing', () => {
+    const src = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(src, 'Could not read api/core/intelligence/externalLookupEngine.js');
+
+    const blockStart = src.indexOf('const isPersonalMemoryRecall');
+    const blockEnd   = src.indexOf(');', blockStart) + 2;
+    const block      = src.substring(blockStart, blockEnd);
+
+    // The exact production failure pattern must be covered
+    const coversStatusQuery =
+      block.includes('current status of our') ||
+      block.includes('status of our') ||
+      (block.includes('\\bour\\b') && block.includes('system'));
+
+    assert.ok(
+      coversStatusQuery,
+      'N-013 FAIL: isPersonalMemoryRecall must cover "what is the current status of our [system]" — ' +
+      'this is the exact query pattern observed triggering NewsAPI in production.'
+    );
+  });
+
+  it('N-014: isFactualEntityQuery has "we" possessive guard for organizational first-person queries', () => {
+    const src = readRepoFile('api/core/intelligence/externalLookupEngine.js');
+    assert.ok(src, 'Could not read api/core/intelligence/externalLookupEngine.js');
+
+    const fnStart = src.indexOf('export function isFactualEntityQuery(');
+    const fnEnd   = src.indexOf('\n}', fnStart) + 2;
+    const fnBody  = src.substring(fnStart, fnEnd);
+
+    // Should have a guard for possessive "we" (organizational first-person)
+    const hasWePattern = fnBody.includes('\\bwe\\b');
+
+    assert.ok(
+      hasWePattern,
+      'N-014 FAIL: isFactualEntityQuery should include a guard for possessive "we" (organizational ' +
+      'first-person) to block queries like "what do we use for monitoring" from triggering external lookup.'
+    );
+  });
+
+});
+
 describe('N. Issue 3 — Business Validation Must Not Fire on Personal Queries', () => {
 
   it('N-006: #validateCompliance accepts a query parameter', () => {
