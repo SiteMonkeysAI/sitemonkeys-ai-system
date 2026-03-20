@@ -1345,7 +1345,7 @@ describe('N. Issue 2 — Personal Possessive Queries Must Not Trigger External L
 
 describe('N. Issue 4 — Organizational Possessive Queries Must Not Trigger External Lookup', () => {
 
-  it('N-009: isFactualEntityQuery blocks "our" possessive queries', () => {
+  it('N-009: isFactualEntityQuery blocks "our" possessive queries before proper-noun detection', () => {
     const src = readRepoFile('api/core/intelligence/externalLookupEngine.js');
     assert.ok(src, 'Could not read api/core/intelligence/externalLookupEngine.js');
 
@@ -1355,12 +1355,20 @@ describe('N. Issue 4 — Organizational Possessive Queries Must Not Trigger Exte
 
     const fnBody = src.substring(fnStart, fnEnd);
 
-    // Must have a guard for /\bour\b/ that returns false
+    // Must have a guard for /\bour\b/ that returns false and appears before hasProperNouns()
     const hasOurPattern = fnBody.includes('\\bour\\b');
-    const hasReturnFalse = fnBody.includes('return false');
+    const ourGuardIdx   = fnBody.indexOf('\\bour\\b');
+    const properNounIdx = fnBody.indexOf('hasProperNouns(');
+    const guardReturnsFalse =
+      /if\s*\(.*\bour\b.*\)\s*return\s*false/i.test(fnBody) ||
+      (hasOurPattern && fnBody.includes('return false')); // multi-line guard block
 
     assert.ok(
-      hasOurPattern && hasReturnFalse,
+      hasOurPattern &&
+      guardReturnsFalse &&
+      properNounIdx !== -1 &&
+      ourGuardIdx !== -1 &&
+      ourGuardIdx < properNounIdx,
       'N-009 FAIL: isFactualEntityQuery must check for organizational possessive /\\bour\\b/ and return false. ' +
       '"What is the current status of our network monitoring system" will match hasProperNouns() ' +
       'and incorrectly trigger external lookup.'
@@ -1407,23 +1415,17 @@ describe('N. Issue 4 — Organizational Possessive Queries Must Not Trigger Exte
     );
   });
 
-  it('N-012: isFactualEntityQuery still returns true for external entity queries without possessives', () => {
-    const src = readRepoFile('api/core/intelligence/externalLookupEngine.js');
-    assert.ok(src, 'Could not read api/core/intelligence/externalLookupEngine.js');
+  it('N-012: isFactualEntityQuery returns true for non-possessive entity queries', async () => {
+    const moduleUrl = new URL('../../api/core/intelligence/externalLookupEngine.js', import.meta.url);
+    const { isFactualEntityQuery } = await import(moduleUrl.href);
+    assert.ok(isFactualEntityQuery, 'N-012 FAIL: isFactualEntityQuery not exported');
 
-    const fnStart = src.indexOf('export function isFactualEntityQuery(');
-    const fnEnd   = src.indexOf('\n}', fnStart) + 2;
-    const fnBody  = src.substring(fnStart, fnEnd);
+    const result = isFactualEntityQuery('who is the CEO of Microsoft');
 
-    // The function must still contain the entity-pattern return block
-    const hasWhoIsPattern   = fnBody.includes('who is|who was');
-    const hasWhatIsPattern  = fnBody.includes('what is|what are|what does|what did');
-    const hasProperNounCall = fnBody.includes('hasProperNouns(query)');
-
-    assert.ok(
-      hasWhoIsPattern && hasWhatIsPattern && hasProperNounCall,
-      'N-012 FAIL: isFactualEntityQuery must still detect "who is the CEO of Microsoft" style queries. ' +
-      'The organizational possessive guard must not remove the entity-detection return block.'
+    assert.strictEqual(
+      result,
+      true,
+      'N-012 FAIL: "who is the CEO of Microsoft" must return true so external lookup triggers for real entities.'
     );
   });
 
