@@ -85,8 +85,6 @@ const ALWAYS_STRIP_SECTIONS = [
   /To verify this information, you could:[\s\S]{0,2000}?(?=\n\n[A-Z]|$)/gi,
   /I'm reasoning from general knowledge here, not verified specifics\.\n\n/g,
   /I'm reasoning about future possibilities, not verified facts\.\n\n/g,
-  /I don't have access to real-time information or current news feeds\.?\n*/gi,
-  /I cannot access real-time information\.?\n*/gi,
   /I don't have the ability to access real-time data\.?\n*/gi,
 ];
 
