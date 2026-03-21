@@ -29,12 +29,9 @@ export function calculateConfidence(truthType, sourcesUsed, lookupPerformed, mod
   else if (lookupPerformed && sourcesUsed === 2) base += 0.10;
   else if (lookupPerformed && sourcesUsed === 1) base += 0.05;
 
-  // Model confidence blend — 40% when genuine logprobs signal, 20% when absent
+  // Model confidence as a secondary signal (20% weight maximum)
   if (modelConfidence != null && !isNaN(modelConfidence)) {
-    const hasGenuineLogprobs = phase4Metadata?.modelConfidence != null;
-    const modelWeight = hasGenuineLogprobs ? 0.40 : 0.20;
-    const baseWeight = 1 - modelWeight;
-    base = (base * baseWeight) + (modelConfidence * modelWeight);
+    base = (base * 0.80) + (modelConfidence * 0.20);
   }
 
   return Math.min(0.97, Math.max(0.15, base));

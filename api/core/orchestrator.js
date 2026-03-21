@@ -4467,51 +4467,11 @@ export class Orchestrator {
           messages: messages,
           temperature: 0.7,
           max_tokens: 2000,
-          logprobs: true,
-          top_logprobs: 3,
         });
 
         response = gptResponse.choices[0].message.content;
         inputTokens = gptResponse.usage.prompt_tokens;
         outputTokens = gptResponse.usage.completion_tokens;
-
-        // Extract genuine model confidence from logprobs
-        let modelConfidenceFromLogprobs = null;
-
-        if (gptResponse.choices[0].logprobs?.content) {
-          const logprobTokens = gptResponse.choices[0].logprobs.content;
-
-          // Use first 15 tokens — captures the core answer
-          // before elaboration/hedging language
-          const sampleTokens = logprobTokens.slice(0, 15);
-
-          if (sampleTokens.length > 0) {
-            // Average log probability
-            const avgLogprob = sampleTokens.reduce(
-              (sum, token) => sum + token.logprob, 0
-            ) / sampleTokens.length;
-
-            // Convert to 0-1 confidence scale
-            // logprob of 0 = 100% certain
-            // logprob of -0.1 = ~90% certain
-            // logprob of -0.5 = ~60% certain
-            // logprob of -1.0 = ~37% certain
-            // logprob of -2.0 = ~14% certain
-            // Clamp to reasonable range
-            modelConfidenceFromLogprobs = Math.max(0.1,
-              Math.min(1.0, Math.exp(avgLogprob)));
-
-            this.logger.log(
-              `[LOGPROBS] avgLogprob: ${avgLogprob.toFixed(3)}, ` +
-              `modelConfidence: ${modelConfidenceFromLogprobs.toFixed(3)}`
-            );
-          }
-        }
-
-        if (modelConfidenceFromLogprobs !== null && phase4Metadata) {
-          phase4Metadata.modelConfidence = modelConfidenceFromLogprobs;
-          phase4Metadata.confidence = modelConfidenceFromLogprobs;
-        }
       }
 
       const cost = this.#calculateCost(model, inputTokens, outputTokens);
