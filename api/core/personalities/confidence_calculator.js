@@ -14,7 +14,7 @@
 export function calculateConfidence(truthType, sourcesUsed, lookupPerformed, modelConfidence) {
   // Base score by truth type
   let base = 0.5;
-  if (truthType === 'PERMANENT') base = 0.90;
+  if (truthType === 'PERMANENT') base = 0.97;
   else if (truthType === 'SEMI_STABLE') base = 0.65;
   else if (truthType === 'VOLATILE') base = 0.45;
 

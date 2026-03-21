@@ -1333,8 +1333,11 @@ export class Orchestrator {
           (truthTypeResult.type === 'SEMI_STABLE' && hasExplicitFreshnessMarker) ||
           (truthTypeResult.high_stakes && truthTypeResult.high_stakes.isHighStakes) ||
           (routeResult.external_lookup_required && routeResult.hierarchy_name === "EXTERNAL_FIRST") ||
-          isFactualEntityLookupQuery ||
-          isSemanticCurrentEventQuery ||   // Issue #881: entity + action pattern
+          // PERMANENT guard: if truthTypeDetector already classified the query as an established fact,
+          // do not trigger lookup via entity detection — capitals, historical facts, and settled
+          // scientific facts are permanent and do not need external verification.
+          (isFactualEntityLookupQuery && truthTypeResult.type !== 'PERMANENT') ||
+          (isSemanticCurrentEventQuery && truthTypeResult.type !== 'PERMANENT') ||   // Issue #881: entity + action pattern
           isVolatileFollowUp;              // Issue #881: follow-up inherits volatile context
 
         // Possessive guard: queries about "our"/"my" things refer to internal context,
