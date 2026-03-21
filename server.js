@@ -390,6 +390,8 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       showConfidence = false, // Confidence Scoring Toggle — default off
     } = req.body;
 
+    console.log('[DEBUG] showConfidence received:', showConfidence, typeof showConfidence);
+
     // ═══════════════════════════════════════════════════════════════
     // CRITICAL FIX #553: User ID Isolation - Root Cause & Solution
     // ═══════════════════════════════════════════════════════════════
