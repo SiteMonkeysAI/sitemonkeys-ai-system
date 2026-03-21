@@ -2408,3 +2408,136 @@ describe('V. Confidence Scoring — Memory Source Detection and PERMANENT Patter
     );
   });
 });
+
+// ============================================================
+// SECTION W: LOGPROBS — Genuine Model Confidence
+// These guards verify the logprobs implementation is correct
+// and that the confidence weighting logic is updated properly.
+// ============================================================
+
+describe('W. Logprobs — Genuine Model Confidence', () => {
+
+  // W-001: GPT-4 API call includes logprobs: true
+  it('W-001: GPT-4/GPT-4o API call includes logprobs: true', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('logprobs: true'),
+      'W-001 FAIL: chat.completions.create must include logprobs: true. ' +
+      'Logprobs provide the genuine model certainty signal.'
+    );
+  });
+
+  // W-002: GPT-4/GPT-4o API call includes top_logprobs: 3
+  it('W-002: GPT-4/GPT-4o API call includes top_logprobs: 3', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('top_logprobs: 3'),
+      'W-002 FAIL: chat.completions.create must include top_logprobs: 3.'
+    );
+  });
+
+  // W-003: Claude API call does NOT include logprobs
+  it('W-003: Claude API call does NOT include logprobs parameter', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Claude section uses anthropic.messages.create — ensure no logprobs there
+    const claudeBlock = orch.match(/anthropic\.messages\.create\(\{[\s\S]{0,500}?\}\)/);
+    assert.ok(
+      claudeBlock,
+      'W-003 FAIL: Could not find anthropic.messages.create block in orchestrator.js'
+    );
+    assert.ok(
+      !claudeBlock[0].includes('logprobs'),
+      'W-003 FAIL: Claude API call must NOT include logprobs — Claude does not support it.'
+    );
+  });
+
+  // W-004: logprobs extraction and conversion code is present
+  it('W-004: orchestrator extracts logprobs and converts to confidence signal', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('modelConfidenceFromLogprobs') &&
+      orch.includes('gptResponse.choices[0].logprobs?.content') &&
+      orch.includes('Math.exp(avgLogprob)'),
+      'W-004 FAIL: orchestrator must extract logprobs.content and convert avgLogprob via Math.exp(). ' +
+      'This converts log probabilities to the 0-1 confidence scale.'
+    );
+  });
+
+  // W-005: modelConfidence flows into phase4Metadata
+  it('W-005: orchestrator writes logprobs confidence into phase4Metadata', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('phase4Metadata.modelConfidence = modelConfidenceFromLogprobs') &&
+      orch.includes('phase4Metadata.confidence = modelConfidenceFromLogprobs'),
+      'W-005 FAIL: orchestrator must set phase4Metadata.modelConfidence and ' +
+      'phase4Metadata.confidence from modelConfidenceFromLogprobs.'
+    );
+  });
+
+  // W-006: When logprobs present, weight is 40%
+  it('W-006: calculateConfidence uses 40% model weight when genuine logprobs are present', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+
+    // SEMI_STABLE base = 0.65, modelConfidence = 0.90 with logprobs present
+    // Expected: (0.65 * 0.60) + (0.90 * 0.40) = 0.39 + 0.36 = 0.75
+    const phase4WithLogprobs = { modelConfidence: 0.90 };
+    const score = calculateConfidence('SEMI_STABLE', 0, false, 0.90, phase4WithLogprobs);
+    const expected = (0.65 * 0.60) + (0.90 * 0.40);
+    assert.ok(
+      Math.abs(score - expected) < 0.001,
+      `W-006 FAIL: with logprobs present, expected ${expected.toFixed(3)} but got ${score.toFixed(3)}. ` +
+      'Model weight should be 40% when genuine logprobs confidence is available.'
+    );
+  });
+
+  // W-007: When logprobs absent, weight is 20%
+  it('W-007: calculateConfidence uses 20% model weight when logprobs are absent', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+
+    // SEMI_STABLE base = 0.65, modelConfidence = 0.90, no logprobs in phase4Metadata
+    // Expected: (0.65 * 0.80) + (0.90 * 0.20) = 0.52 + 0.18 = 0.70
+    const score = calculateConfidence('SEMI_STABLE', 0, false, 0.90, null);
+    const expected = (0.65 * 0.80) + (0.90 * 0.20);
+    assert.ok(
+      Math.abs(score - expected) < 0.001,
+      `W-007 FAIL: without logprobs, expected ${expected.toFixed(3)} but got ${score.toFixed(3)}. ` +
+      'Model weight should be 20% when no genuine logprobs confidence is available.'
+    );
+  });
+
+  // W-008: "capital of France" style query — PERMANENT still scores 90%+
+  it('W-008: PERMANENT truth type still scores 90%+ (e.g. capital of France)', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    const score = calculateConfidence('PERMANENT', 0, false, null, null);
+    assert.ok(
+      score >= 0.90,
+      `W-008 FAIL: PERMANENT without logprobs returned ${score} — expected >= 0.90.`
+    );
+  });
+
+  // W-009: Uncertain queries still score below 70%
+  it('W-009: uncertain queries (SEMI_STABLE, no lookup, low logprobs) score below 70%', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+
+    // SEMI_STABLE base = 0.65, uncertain modelConfidence = 0.55 with logprobs
+    // Expected: (0.65 * 0.60) + (0.55 * 0.40) = 0.39 + 0.22 = 0.61
+    const phase4WithLogprobs = { modelConfidence: 0.55 };
+    const score = calculateConfidence('SEMI_STABLE', 0, false, 0.55, phase4WithLogprobs);
+    assert.ok(
+      score < 0.70,
+      `W-009 FAIL: uncertain query scored ${score} — expected < 0.70. ` +
+      'Uncertain speculative queries must stay below 70%.'
+    );
+  });
+
+});
