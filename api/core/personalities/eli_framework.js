@@ -381,30 +381,16 @@ export class EliFramework {
       // the entire confidence block to be bypassed when external data was present. External data
       // suppresses uncertainty DISCLAIMERS (handled at lines ~194-199 above) but must NOT suppress
       // the confidence percentage display — that is a separate transparency feature per Innovation #16.
-      const isSimpleFact = truthType === 'PERMANENT' && isSimpleFactualQuery(query);
-      const isDocumentReview = truthType === 'DOCUMENT_REVIEW';
-      const isNewsQuery = context?.queryClassification?.classification === 'news_current_events';
-      const isSimpleShort = context?.queryClassification?.classification === 'simple_short';
-      const isSimpleFactual = context?.queryClassification?.classification === 'simple_factual';
-      const isVolatile = truthType === 'VOLATILE';
-      const skipConfidence = isSimpleFact || isDocumentReview || isNewsQuery || isSimpleShort || isSimpleFactual || isVolatile;
-      const alreadyHasConfidencePercentage = /My confidence in this response is \d+%/i.test(response) ||
-        response.includes('🎯 **Confidence Assessment:**');
-
-      // Confidence Scoring Toggle — calculate metadata, never append to response text
-      const showConfidenceBlock = context?.showConfidence === true;
+      // Confidence Scoring Toggle — calculate metadata when user explicitly enabled confidence
+      // skipConfidence conditions only controlled text appending (removed); metadata is always
+      // returned when the user toggled confidence on, regardless of query type.
       let confidenceMetadata = null;
 
-      if (showConfidenceBlock && !alreadyHasConfidencePercentage && !skipConfidence) {
-        // Genuine calculated confidence from Phase 4 signals
+      if (context?.showConfidence === true) {
         confidenceMetadata = buildConfidenceMetadata(context?.phase4Metadata);
         this.logger.log(`[CONFIDENCE-TOGGLE] Calculated confidence metadata: ${confidenceMetadata.score}% — ${confidenceMetadata.reason}`);
-      } else if (!showConfidenceBlock) {
+      } else {
         this.logger.log('[CONFIDENCE-TOGGLE] Skipping confidence metadata: showConfidence is false (default)');
-      } else if (alreadyHasConfidencePercentage) {
-        this.logger.log('Skipping confidence assessment: response already has a structured confidence percentage');
-      } else if (skipConfidence) {
-        this.logger.log(`Skipping confidence assessment: ${isSimpleFact ? 'simple fact' : isDocumentReview ? 'document review' : 'news query'}`);
       }
 
       // STEP 8: Apply Eli's protective intelligence signature
