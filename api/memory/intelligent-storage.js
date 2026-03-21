@@ -21,6 +21,19 @@ const semanticAnalyzer = new SemanticAnalyzer();
 const PET_CATEGORIES = new Set(['pets', 'animals', 'pet']);
 
 /**
+ * Health/safety category names for which the access boost ceiling is 1.0.
+ * Non-health categories are capped at 0.85 to prevent them from reaching the 0.90
+ * safety bypass threshold in the similarity filter.
+ */
+const SAFETY_BYPASS_CATEGORIES = new Set([
+  'health_wellness',
+  'health',
+  'medical',
+  'allergies',
+  'medications'
+]);
+
+/**
  * Boilerplate patterns that should NEVER be stored in memory
  */
 const BOILERPLATE_PATTERNS = [
@@ -1296,7 +1309,7 @@ export class IntelligentMemoryStorage {
       if (existing) {
         // findSimilarMemories returns non-null only for TRUE DUPLICATES (not supersessions)
         console.log(`[DEDUP] ♻️ Found similar memory (id=${existing.id}), boosting instead of duplicating`);
-        const boostResult = await this.boostExistingMemory(existing.id);
+        const boostResult = await this.boostExistingMemory(existing.id, category);
 
         // Debug logging hook for dedup case
         logMemoryOperation(userId, 'store', {
@@ -2357,22 +2370,31 @@ Facts (preserve user terminology + add synonyms):`;
    * Makes it more likely to be retrieved
    * Innovation #7: Importance increases when memory is semantically retrieved
    * @param {number} memoryId - ID of existing memory
+   * @param {string} [categoryName] - Category of the memory (used for boost ceiling)
    * @returns {Promise<object>} - Boost result
    */
-  async boostExistingMemory(memoryId) {
+  async boostExistingMemory(memoryId, categoryName) {
     try {
       // SEMANTIC BOOST: Increase importance score based on semantic access
       // This implements Innovation #7 - semantic access patterns determine importance
+      // Fix: Non-health categories are capped at 0.85 to prevent bypass of the similarity
+      //      threshold on unrelated queries (e.g. Apple/Amazon memories reaching 0.90+).
+      //      When categoryName is unknown we default to non-health (0.85) — conservative and safe.
+      const isHealthCategory = SAFETY_BYPASS_CATEGORIES.has(categoryName);
+      const boostCeiling = isHealthCategory ? 1.0 : 0.85;
+      if (!categoryName) {
+        console.warn(`[SEMANTIC-IMPORTANCE] ⚠️ boostExistingMemory called without category for memory ${memoryId} — defaulting to non-health ceiling (0.85)`);
+      }
       await this.db.query(`
         UPDATE persistent_memories
         SET
           usage_frequency = usage_frequency + 1,
-          relevance_score = LEAST(relevance_score + 0.05, 1.0),
+          relevance_score = LEAST(relevance_score + 0.05, $2::numeric),
           last_accessed = CURRENT_TIMESTAMP
         WHERE id = $1
-      `, [memoryId]);
+      `, [memoryId, boostCeiling]);
 
-      console.log(`[SEMANTIC-IMPORTANCE] ✅ Boosted memory ${memoryId} (semantic access tracked)`);
+      console.log(`[SEMANTIC-IMPORTANCE] ✅ Boosted memory ${memoryId} (ceiling=${boostCeiling}, category=${categoryName || 'unknown'})`);
       return { action: 'boosted', memoryId };
     } catch (error) {
       console.error('[DEDUP] ❌ Boost failed:', error.message);
