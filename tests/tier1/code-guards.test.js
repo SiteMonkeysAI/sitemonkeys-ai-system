@@ -2317,3 +2317,91 @@ describe('U. Memory Safety Bypass — Health Category Scoping', () => {
   });
 
 });
+
+describe('V. Confidence Scoring — Memory Source Detection and PERMANENT Pattern Coverage', () => {
+  // V-001: "what are" queries classified PERMANENT
+  it('V-001: PERMANENT_PATTERNS includes "what are" alongside "what is"', () => {
+    const detector = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(detector, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    assert.ok(
+      detector.includes('what are'),
+      'V-001 FAIL: PERMANENT_PATTERNS does not include "what are". ' +
+      'Queries like "what are the Ninja Turtles names" fall through to AMBIGUOUS → SEMI_STABLE → 62%.'
+    );
+  });
+
+  // V-002: "what are the Ninja Turtles names" scores 90%+ not 62%
+  it('V-002: calculateConfidence returns >= 0.90 for PERMANENT truth type (no lookup)', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    const score = calculateConfidence('PERMANENT', 0, false, null, null);
+    assert.ok(
+      score >= 0.90,
+      `V-002 FAIL: calculateConfidence for PERMANENT returned ${score} — expected >= 0.90. ` +
+      '"What are the Ninja Turtles names" must not score 62%.'
+    );
+  });
+
+  // V-003: Memory-sourced answers score 95%
+  it('V-003: calculateConfidence returns 0.95 when memory_sourced=true', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    const score = calculateConfidence(null, 0, false, null, { memory_sourced: true });
+    assert.strictEqual(
+      score,
+      0.95,
+      `V-003 FAIL: calculateConfidence returned ${score} for memory_sourced=true — expected 0.95.`
+    );
+  });
+
+  // V-004: Memory-sourced reason text is "confirmed from your personal records"
+  it('V-004: buildConfidenceReason returns "confirmed from your personal records" for memory-sourced answers', async () => {
+    const { buildConfidenceReason } = await import('../../api/core/personalities/confidence_calculator.js');
+    const reason = buildConfidenceReason(null, 0, false, 0.95, { memory_sourced: true });
+    assert.strictEqual(
+      reason,
+      'confirmed from your personal records',
+      `V-004 FAIL: buildConfidenceReason returned "${reason}" for memory_sourced=true — ` +
+      'expected "confirmed from your personal records".'
+    );
+  });
+
+  // V-005: Non-memory training knowledge reason unchanged
+  it('V-005: buildConfidenceReason returns original reason when memory_sourced is not set', async () => {
+    const { buildConfidenceReason } = await import('../../api/core/personalities/confidence_calculator.js');
+    const reason = buildConfidenceReason('SEMI_STABLE', 0, false, 0.65, null);
+    assert.strictEqual(
+      reason,
+      'based on training knowledge — may not reflect latest',
+      `V-005 FAIL: buildConfidenceReason changed non-memory reason — expected ` +
+      '"based on training knowledge — may not reflect latest", got "${reason}".'
+    );
+  });
+
+  // V-006: PERMANENT facts still score 97%
+  it('V-006: calculateConfidence still returns 0.97 for PERMANENT without memory flag', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    const score = calculateConfidence('PERMANENT', 0, false, null, null);
+    assert.strictEqual(
+      score,
+      0.97,
+      `V-006 FAIL: calculateConfidence returned ${score} for PERMANENT — expected 0.97.`
+    );
+  });
+
+  // V-007: buildConfidenceMetadata passes phase4Metadata to score and reason functions
+  it('V-007: buildConfidenceMetadata produces score=95 and memory reason for memory_sourced=true', async () => {
+    const { buildConfidenceMetadata } = await import('../../api/core/personalities/confidence_calculator.js');
+    const result = buildConfidenceMetadata({ memory_sourced: true, sources_used: 0 });
+    assert.strictEqual(
+      result.score,
+      95,
+      `V-007 FAIL: buildConfidenceMetadata score=${result.score} — expected 95 for memory_sourced=true.`
+    );
+    assert.strictEqual(
+      result.reason,
+      'confirmed from your personal records',
+      `V-007 FAIL: buildConfidenceMetadata reason="${result.reason}" — ` +
+      'expected "confirmed from your personal records" for memory_sourced=true.'
+    );
+  });
+});

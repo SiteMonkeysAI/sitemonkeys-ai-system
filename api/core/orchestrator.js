@@ -1241,6 +1241,13 @@ export class Orchestrator {
         phase4_error: null,
       };
 
+      // Update source_class to "memory" when persistent memory is available for injection
+      if (memoryContext && memoryContext.hasMemory) {
+        phase4Metadata.source_class = 'memory';
+        phase4Metadata.memory_sourced = true;
+        this.log('[PHASE4] source_class=memory: answer may come from persistent memory context');
+      }
+
       try {
         // Step 1: Detect truth type
         const truthTypeResult = await detectTruthType(message, {
