@@ -112,17 +112,6 @@
         cursor: pointer;
         transition: filter 0.2s ease;
       }
-      .ai-robot-ring {
-        position: absolute;
-        inset: -4px;
-        border-radius: 50%;
-        border: 2px solid transparent;
-        transition: border-color 0.2s ease;
-        pointer-events: none;
-      }
-      .ai-robot-ring.active {
-        border-color: #FFD700;
-      }
       .ai-robot-badge {
         position: absolute;
         top: -2px;
@@ -1336,7 +1325,6 @@
           </div>
         </div>
         <div class="ai-robot-wrapper" id="confidenceToggleWrapper" title="Toggle confidence scoring">
-          <div class="ai-robot-ring" id="confidenceRing"></div>
           <img src="AI Robot.png" alt="AI Robot" class="ai-robot" id="confidenceToggleBtn" />
           <div class="ai-robot-badge" id="confidenceBadge">C</div>
         </div>
@@ -1566,25 +1554,26 @@
       function toggleConfidenceScoring() {
         confidenceScoringEnabled = !confidenceScoringEnabled;
 
-        const ring = document.getElementById('confidenceRing');
         const badge = document.getElementById('confidenceBadge');
         const btn = document.getElementById('confidenceToggleBtn');
 
         if (confidenceScoringEnabled) {
-          ring.classList.add('active');
+          btn.style.outline = '2px solid #FFD700';
+          btn.style.outlineOffset = '3px';
+          btn.style.borderRadius = '50%';
           badge.classList.add('active');
-          btn.classList.add('confidence-active');
         } else {
-          ring.classList.remove('active');
+          btn.style.outline = 'none';
+          btn.style.outlineOffset = '0';
+          btn.style.borderRadius = '0';
           badge.classList.remove('active');
-          btn.classList.remove('confidence-active');
         }
 
         // Force inline styles on wrapper — beats all CSS including !important
         const wrapper = document.getElementById('confidenceToggleWrapper');
         wrapper.style.cssText = `
           display: inline-flex !important;
-          width: 35px !important;
+          width: 23px !important;
           height: 35px !important;
           align-items: center !important;
           justify-content: center !important;
@@ -1600,7 +1589,7 @@
         const wrapper = document.getElementById('confidenceToggleWrapper');
         if (wrapper) {
           wrapper.style.display = 'inline-flex';
-          wrapper.style.width = '35px';
+          wrapper.style.width = '23px';
           wrapper.style.height = '35px';
           wrapper.style.alignItems = 'center';
           wrapper.style.justifyContent = 'center';
