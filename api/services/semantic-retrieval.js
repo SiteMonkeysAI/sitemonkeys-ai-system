@@ -93,6 +93,22 @@ const SAFETY_CRITICAL_DOMAINS = {
 };
 
 /**
+ * Categories for which a high relevance_score (>= 0.90) bypasses the similarity threshold.
+ * Only health/safety memories should bypass — business/general memories must not bypass
+ * regardless of how high their relevance_score grows through repeated access.
+ *
+ * Fix for Issue: non-health memories (Apple, Amazon, Tesla) were bypassing the threshold
+ * after accumulating access boosts, injecting into completely unrelated queries.
+ */
+const SAFETY_BYPASS_CATEGORIES = new Set([
+  'health_wellness',
+  'health',
+  'medical',
+  'allergies',
+  'medications'
+]);
+
+/**
  * Detect if query involves safety-critical domains and return categories that MUST be checked
  * This is Stage 1 deterministic detection (zero tokens)
  *
@@ -2164,8 +2180,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // CRITICAL FIX #504: Use effectiveMinSimilarity (lower for personal queries)
     // Issue #4: Safety-critical memories (relevance_score >= 0.90) bypass the threshold
     //           so allergy/medication memories are never blocked by the raised threshold.
+    // Fix: Bypass is scoped to health/safety categories only — non-health memories that
+    //      accumulated high relevance_score through repeated access must not bypass.
     let filtered = hybridScored
-      .filter(m => m.similarity >= effectiveMinSimilarity || parseFloat(m.relevance_score || 0) >= 0.90)
+      .filter(m => m.similarity >= effectiveMinSimilarity || (parseFloat(m.relevance_score || 0) >= 0.90 && SAFETY_BYPASS_CATEGORIES.has(m.category_name)))
       .sort((a, b) => b.hybrid_score - a.hybrid_score);
 
     // ═══════════════════════════════════════════════════════════════
@@ -2670,15 +2688,23 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // High-importance memories are those frequently semantically relevant to queries
     if (results.length > 0) {
       // Update importance scores for retrieved memories (non-blocking)
+      // Fix: Non-health memories are capped at 0.85 to prevent them from reaching 0.90
+      // and bypassing the similarity threshold on unrelated queries.
+      // Note: An empty healthMemoryIds array is valid — PostgreSQL's ANY('{}') matches
+      //       nothing, so all memories are capped at 0.85, which is the correct behavior.
       const memoryIds = results.map(r => r.id);
+      const healthMemoryIds = results.filter(r => SAFETY_BYPASS_CATEGORIES.has(r.category_name)).map(r => r.id);
       pool.query(`
         UPDATE persistent_memories
         SET
           usage_frequency = usage_frequency + 1,
-          relevance_score = LEAST(relevance_score + 0.03, 1.0),
+          relevance_score = CASE
+            WHEN id = ANY($2::int[]) THEN LEAST(relevance_score + 0.03, 1.0)
+            ELSE LEAST(relevance_score + 0.03, 0.85)
+          END,
           last_accessed = CURRENT_TIMESTAMP
         WHERE id = ANY($1::int[])
-      `, [memoryIds])
+      `, [memoryIds, healthMemoryIds])
         .then(() => {
           console.log(`[SEMANTIC-IMPORTANCE] Updated importance for ${memoryIds.length} semantically retrieved memories`);
         })

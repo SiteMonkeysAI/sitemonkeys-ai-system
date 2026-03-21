@@ -2185,3 +2185,135 @@ describe('S. Confidence Scoring Toggle', () => {
   });
 
 });
+
+// ============================================================
+// SECTION U: MEMORY SAFETY BYPASS — HEALTH CATEGORY SCOPING
+// Ensures the relevance_score >= 0.90 bypass in the similarity
+// filter is restricted to health/safety categories only.
+// Non-health memories (e.g. Apple, Amazon) must never bypass
+// regardless of how high their relevance_score grows through
+// repeated access boosts.
+// ============================================================
+
+describe('U. Memory Safety Bypass — Health Category Scoping', () => {
+
+  it('U-001: safety bypass filter is scoped to SAFETY_BYPASS_CATEGORIES (health memories still bypass)', () => {
+    const retrieval = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(retrieval, 'Could not read api/services/semantic-retrieval.js');
+
+    // The bypass must check the memory's category so only health/safety memories
+    // with relevance_score >= 0.90 are allowed through.
+    const filterIdx = retrieval.indexOf('m.similarity >= effectiveMinSimilarity');
+    assert.ok(filterIdx !== -1, 'U-001 FAIL: effectiveMinSimilarity filter not found');
+
+    const filterContext = retrieval.substring(filterIdx, filterIdx + 300);
+    assert.ok(
+      filterContext.includes('SAFETY_BYPASS_CATEGORIES'),
+      'U-001 FAIL: Safety bypass filter does not check SAFETY_BYPASS_CATEGORIES. ' +
+      'Health memories (allergy, medication) must still bypass the threshold, ' +
+      'but the bypass must be gated on the memory\'s category.'
+    );
+  });
+
+  it('U-002: non-health memories are blocked from bypassing similarity threshold', () => {
+    const retrieval = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(retrieval, 'Could not read api/services/semantic-retrieval.js');
+
+    // The bypass must NOT be a plain relevance_score >= 0.90 check without a category guard.
+    // Verify the filter includes SAFETY_BYPASS_CATEGORIES (the category guard) alongside the threshold.
+    const filterIdx = retrieval.indexOf('m.similarity >= effectiveMinSimilarity');
+    assert.ok(filterIdx !== -1, 'U-002 FAIL: effectiveMinSimilarity filter not found');
+
+    const filterContext = retrieval.substring(filterIdx, filterIdx + 300);
+    const hasCategoryGuard = filterContext.includes('SAFETY_BYPASS_CATEGORIES');
+    const hasThreshold = filterContext.includes('0.90');
+
+    assert.ok(
+      hasCategoryGuard && hasThreshold,
+      'U-002 FAIL: Filter does not combine a 0.90 threshold with SAFETY_BYPASS_CATEGORIES. ' +
+      'Non-health memories (Apple, Amazon) will bypass the threshold after accumulating access boosts.'
+    );
+
+    // Extra guard: the bypass expression must not be a plain OR without the category check.
+    // A plain "|| parseFloat(m.relevance_score || 0) >= 0.90)" (without SAFETY_BYPASS_CATEGORIES)
+    // in the filter context would indicate the fix was reverted.
+    const bypassWithoutCategory =
+      filterContext.includes('relevance_score || 0) >= 0.90)') &&
+      !filterContext.includes('SAFETY_BYPASS_CATEGORIES');
+    assert.ok(
+      !bypassWithoutCategory,
+      'U-002 FAIL: Filter still uses "|| relevance_score >= 0.90" without a category check. ' +
+      'Non-health memories (Apple, Amazon) will bypass the threshold after accumulating access boosts.'
+    );
+  });
+
+  it('U-003: boostExistingMemory caps non-health memories at 0.85', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'Could not read api/memory/intelligent-storage.js');
+
+    assert.ok(
+      storage.includes('0.85'),
+      'U-003 FAIL: boostExistingMemory does not contain a 0.85 ceiling. ' +
+      'Non-health memories must be capped at 0.85 to prevent them from reaching ' +
+      'the 0.90 safety bypass threshold through repeated access.'
+    );
+
+    assert.ok(
+      storage.includes('SAFETY_BYPASS_CATEGORIES'),
+      'U-003 FAIL: SAFETY_BYPASS_CATEGORIES is not referenced in intelligent-storage.js. ' +
+      'boostExistingMemory must use this set to determine the correct boost ceiling.'
+    );
+  });
+
+  it('U-004: boostExistingMemory still allows health memories to reach 1.0', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'Could not read api/memory/intelligent-storage.js');
+
+    // The boost function must still use 1.0 as the ceiling for health categories.
+    const boostFnIdx = storage.indexOf('async boostExistingMemory(');
+    assert.ok(boostFnIdx !== -1, 'U-004 FAIL: boostExistingMemory function not found');
+
+    const fnContext = storage.substring(boostFnIdx, boostFnIdx + 1200);
+    assert.ok(
+      fnContext.includes('1.0'),
+      'U-004 FAIL: boostExistingMemory does not reference 1.0 ceiling. ' +
+      'Health memories (allergy, medication) must still be boostable to 1.0.'
+    );
+  });
+
+  it('U-005: SAFETY_BYPASS_CATEGORIES in semantic-retrieval.js does not include generic business categories', () => {
+    const retrieval = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(retrieval, 'Could not read api/services/semantic-retrieval.js');
+
+    // Business/general categories must NOT be in SAFETY_BYPASS_CATEGORIES.
+    const bypassIdx = retrieval.indexOf('SAFETY_BYPASS_CATEGORIES = new Set(');
+    assert.ok(bypassIdx !== -1, 'U-005 FAIL: SAFETY_BYPASS_CATEGORIES set not found in semantic-retrieval.js');
+
+    const setContext = retrieval.substring(bypassIdx, bypassIdx + 400);
+    const forbiddenCategories = ['business', 'companies', 'finance', 'technology', 'general'];
+    for (const cat of forbiddenCategories) {
+      assert.ok(
+        !setContext.includes(`'${cat}'`) && !setContext.includes(`"${cat}"`),
+        `U-005 FAIL: SAFETY_BYPASS_CATEGORIES includes "${cat}" — only health/safety ` +
+        'categories should appear in this set.'
+      );
+    }
+  });
+
+  it('U-006: SAFETY_BYPASS_CATEGORIES includes health_wellness so allergy/medication memories surface correctly', () => {
+    const retrieval = readRepoFile('api/services/semantic-retrieval.js');
+    assert.ok(retrieval, 'Could not read api/services/semantic-retrieval.js');
+
+    const bypassIdx = retrieval.indexOf('SAFETY_BYPASS_CATEGORIES = new Set(');
+    assert.ok(bypassIdx !== -1, 'U-006 FAIL: SAFETY_BYPASS_CATEGORIES set not found in semantic-retrieval.js');
+
+    const setContext = retrieval.substring(bypassIdx, bypassIdx + 300);
+    assert.ok(
+      setContext.includes('health_wellness'),
+      'U-006 FAIL: SAFETY_BYPASS_CATEGORIES does not include "health_wellness". ' +
+      'Allergy and medication memories stored under health_wellness would no longer ' +
+      'bypass the similarity threshold on health-related queries.'
+    );
+  });
+
+});
