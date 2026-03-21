@@ -9,13 +9,13 @@ const COST_CEILINGS = {
 };
 
 const MODEL_COSTS = {
-  "gpt-4": {
-    input: 0.03 / 1000,
-    output: 0.06 / 1000,
+  "gpt-5.4-mini": {
+    input: 0.00025 / 1000,
+    output: 0.002 / 1000,
   },
-  "gpt-4o": {
-    input: 0.005 / 1000,
-    output: 0.015 / 1000,
+  "gpt-5.4": {
+    input: 0.00175 / 1000,
+    output: 0.014 / 1000,
   },
   "claude-sonnet-4.5": {
     input: 0.003 / 1000,
