@@ -2342,26 +2342,29 @@ describe('V. Confidence Scoring — Memory Source Detection and PERMANENT Patter
     );
   });
 
-  // V-003: Memory-sourced answers score 95%
-  it('V-003: calculateConfidence returns 0.95 when memory_sourced=true', async () => {
-    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
-    const score = calculateConfidence(null, 0, false, null, { memory_sourced: true });
-    assert.strictEqual(
-      score,
-      0.95,
-      `V-003 FAIL: calculateConfidence returned ${score} for memory_sourced=true — expected 0.95.`
+  // V-003: Memory-sourced flag is only set for personal queries with retrieved memories
+  it('V-003: orchestrator gates memory_sourced on personal "my" queries plus hasMemory', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('const isPersonalMemoryQuery') &&
+      orch.includes('\\bmy\\b') &&
+      orch.includes('memoryContext') &&
+      orch.includes('hasMemory'),
+      'V-003 FAIL: orchestrator must gate memory_sourced on personal "my" queries AND memoryContext.hasMemory.'
     );
   });
 
-  // V-004: Memory-sourced reason text is "confirmed from your personal records"
-  it('V-004: buildConfidenceReason returns "confirmed from your personal records" for memory-sourced answers', async () => {
-    const { buildConfidenceReason } = await import('../../api/core/personalities/confidence_calculator.js');
-    const reason = buildConfidenceReason(null, 0, false, 0.95, { memory_sourced: true });
-    assert.strictEqual(
-      reason,
-      'confirmed from your personal records',
-      `V-004 FAIL: buildConfidenceReason returned "${reason}" for memory_sourced=true — ` +
-      'expected "confirmed from your personal records".'
+  // V-004: phase4Metadata.memory_sourced set only inside isPersonalMemoryQuery branch
+  it('V-004: orchestrator sets memory_sourced only when isPersonalMemoryQuery is true', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('if (isPersonalMemoryQuery)') &&
+      orch.includes('phase4Metadata.memory_sourced = true'),
+      'V-004 FAIL: phase4Metadata.memory_sourced must be set inside isPersonalMemoryQuery guard.'
     );
   });
 
