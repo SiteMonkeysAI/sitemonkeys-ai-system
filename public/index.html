@@ -705,7 +705,8 @@
           justify-content: center !important;
           margin: 0;
           order: 3;
-          overflow: hidden !important;
+          overflow: visible !important;
+          z-index: 10;
         }
         .ai-robot {
           max-width: 100% !important;
@@ -1577,7 +1578,7 @@
           height: 35px !important;
           align-items: center !important;
           justify-content: center !important;
-          overflow: hidden !important;
+          overflow: visible !important;
           position: static !important;
         `;
       }
@@ -1593,7 +1594,7 @@
           wrapper.style.height = '35px';
           wrapper.style.alignItems = 'center';
           wrapper.style.justifyContent = 'center';
-          wrapper.style.overflow = 'hidden';
+          wrapper.style.overflow = 'visible';
         }
       });
 
