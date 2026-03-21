@@ -716,10 +716,14 @@
           justify-content: center !important;
           margin: 0;
           order: 3;
+          overflow: hidden !important;
         }
         .ai-robot {
-          height: 100%;
-          width: auto;
+          max-width: 100% !important;
+          max-height: 100% !important;
+          width: auto !important;
+          height: auto !important;
+          object-fit: contain !important;
         }
         .header-center {
           margin: 0;
