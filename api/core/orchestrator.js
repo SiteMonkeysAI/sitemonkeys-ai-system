@@ -1241,6 +1241,19 @@ export class Orchestrator {
         phase4_error: null,
       };
 
+      // Update source_class to "memory" only for personal memory recall queries
+      const isPersonalMemoryQuery =
+        message &&
+        /\bmy\b/i.test(message) &&
+        memoryContext &&
+        memoryContext.hasMemory;
+
+      if (isPersonalMemoryQuery) {
+        phase4Metadata.source_class = 'memory';
+        phase4Metadata.memory_sourced = true;
+        this.log('[PHASE4] source_class=memory: answer may come from persistent memory context (personal query)');
+      }
+
       try {
         // Step 1: Detect truth type
         const truthTypeResult = await detectTruthType(message, {
