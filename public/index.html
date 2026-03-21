@@ -114,7 +114,12 @@
       }
       .ai-robot-ring {
         position: absolute;
-        inset: -4px;
+        top: -3px;
+        left: -3px;
+        right: -3px;
+        bottom: -3px;
+        width: calc(100% + 6px);
+        height: calc(100% + 6px);
         border-radius: 50%;
         border: 2px solid transparent;
         transition: border-color 0.2s ease;
@@ -1584,7 +1589,7 @@
         const wrapper = document.getElementById('confidenceToggleWrapper');
         wrapper.style.cssText = `
           display: inline-flex !important;
-          width: 35px !important;
+          width: 23px !important;
           height: 35px !important;
           align-items: center !important;
           justify-content: center !important;
@@ -1600,7 +1605,7 @@
         const wrapper = document.getElementById('confidenceToggleWrapper');
         if (wrapper) {
           wrapper.style.display = 'inline-flex';
-          wrapper.style.width = '35px';
+          wrapper.style.width = '23px';
           wrapper.style.height = '35px';
           wrapper.style.alignItems = 'center';
           wrapper.style.justifyContent = 'center';
