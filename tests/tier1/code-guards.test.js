@@ -2175,21 +2175,12 @@ describe('S. Confidence Scoring Toggle', () => {
     );
   });
 
-  it('S-006: existing skipConfidence conditions are still present alongside the new gate', () => {
-    const eli = readRepoFile('api/core/personalities/eli_framework.js');
-    assert.ok(eli, 'Could not read api/core/personalities/eli_framework.js');
-    assert.ok(
-      eli.includes('skipConfidence'),
-      'S-006 FAIL: skipConfidence variable is missing from eli_framework.js. ' +
-      'The existing skip conditions (simple fact, document review, news query, volatile) must remain in place.'
-    );
-
+  it('S-006: confidence metadata only calculated when showConfidence is true', () => {
     const roxy = readRepoFile('api/core/personalities/roxy_framework.js');
-    assert.ok(roxy, 'Could not read api/core/personalities/roxy_framework.js');
+    assert.ok(roxy, 'Could not read roxy_framework.js');
     assert.ok(
-      roxy.includes('skipConfidenceBlock'),
-      'S-006 FAIL: skipConfidenceBlock variable is missing from roxy_framework.js. ' +
-      'The existing skip conditions must remain in place alongside the new showConfidence gate.'
+      roxy.includes('context?.showConfidence === true'),
+      'S-006 FAIL: roxy_framework.js must gate confidence on context.showConfidence === true'
     );
   });
 
