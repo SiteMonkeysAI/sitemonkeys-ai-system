@@ -1579,9 +1579,34 @@
           badge.classList.remove('active');
           btn.classList.remove('confidence-active');
         }
+
+        // Force inline styles on wrapper — beats all CSS including !important
+        const wrapper = document.getElementById('confidenceToggleWrapper');
+        wrapper.style.cssText = `
+          display: inline-flex !important;
+          width: 35px !important;
+          height: 35px !important;
+          align-items: center !important;
+          justify-content: center !important;
+          overflow: hidden !important;
+          position: static !important;
+        `;
       }
       document.getElementById('confidenceToggleWrapper')
         .addEventListener('click', toggleConfidenceScoring);
+
+      // Apply wrapper sizing on page load (not just on toggle)
+      document.addEventListener('DOMContentLoaded', function() {
+        const wrapper = document.getElementById('confidenceToggleWrapper');
+        if (wrapper) {
+          wrapper.style.display = 'inline-flex';
+          wrapper.style.width = '35px';
+          wrapper.style.height = '35px';
+          wrapper.style.alignItems = 'center';
+          wrapper.style.justifyContent = 'center';
+          wrapper.style.overflow = 'hidden';
+        }
+      });
 
       function handleApiError(error, context = "API call") {
         console.error(`❌ ${context} failed:`, error);
