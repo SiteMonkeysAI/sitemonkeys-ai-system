@@ -1563,13 +1563,13 @@
           btn.style.outline = '2px solid #FFD700';
           btn.style.outlineOffset = '3px';
           btn.style.borderRadius = '50%';
-          btn.style.filter = 'drop-shadow(0 0 8px rgba(255, 215, 0, 0.5))';
+          btn.style.boxShadow = '0 0 12px 4px rgba(255, 215, 0, 0.4)';
           badge.classList.add('active');
         } else {
           btn.style.outline = 'none';
           btn.style.outlineOffset = '0px';
           btn.style.borderRadius = '0';
-          btn.style.filter = 'none';
+          btn.style.boxShadow = 'none';
           badge.classList.remove('active');
         }
       }
