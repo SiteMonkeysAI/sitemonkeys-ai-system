@@ -462,3 +462,46 @@
   margin-top: auto;
   flex-shrink: 0;
 }
+
+/* ------------------------------------------------------------------
+   Mobile Portrait Robot Fix — Cascade-winning overrides
+   Must live here (after inline <style>) so !important wins by source order.
+   ------------------------------------------------------------------ */
+@media (max-width: 768px) and (orientation: portrait) {
+  .ai-robot-wrapper {
+    position: static !important;
+    display: inline-flex !important;
+    width: 35px !important;
+    height: 35px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    margin: 0 !important;
+    order: 3 !important;
+    overflow: hidden !important;
+  }
+  .ai-robot {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain !important;
+  }
+}
+
+@media (min-width: 769px) and (max-width: 950px) and (orientation: portrait) {
+  .ai-robot-wrapper {
+    display: inline-flex !important;
+    width: 40px !important;
+    height: 40px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    overflow: hidden !important;
+  }
+  .ai-robot {
+    max-width: 100% !important;
+    max-height: 100% !important;
+    width: auto !important;
+    height: auto !important;
+    object-fit: contain !important;
+  }
+}
