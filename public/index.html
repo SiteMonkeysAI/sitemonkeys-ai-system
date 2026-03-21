@@ -105,7 +105,7 @@
         justify-content: center;
       }
       .ai-robot {
-        height: clamp(60px, 8vh, 80px);
+        height: clamp(75px, 10vh, 100px);
         width: auto;
         cursor: pointer;
         transition: filter 0.2s ease;
@@ -689,6 +689,7 @@
           justify-content: center;
           gap: clamp(15px, 4vw, 25px);
           align-items: center;
+          overflow: visible !important;
         }
         .logo {
           position: static;
@@ -705,7 +706,8 @@
           justify-content: center !important;
           margin: 0;
           order: 3;
-          overflow: hidden !important;
+          z-index: 999 !important;
+          overflow: visible !important;
         }
         .ai-robot {
           max-width: 100% !important;
