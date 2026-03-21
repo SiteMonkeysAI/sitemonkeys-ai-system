@@ -142,6 +142,13 @@ export class EliFramework {
       const query = context?.message || '';
       const externalLookupSucceeded = (context?.phase4Metadata?.sources_used > 0) || (context?.phase4Metadata?.sources_succeeded > 0);
 
+      // Confidence Scoring Toggle — calculate early so ALL return paths include it
+      let confidenceMetadata = null;
+      if (context?.showConfidence === true) {
+        confidenceMetadata = buildConfidenceMetadata(context?.phase4Metadata);
+        this.logger.log(`[CONFIDENCE-TOGGLE] Calculated: ${confidenceMetadata.score}% — ${confidenceMetadata.reason}`);
+      }
+
       // ISSUE #430: Check query classification for simple queries (GENUINE semantic intelligence)
       if (context?.queryClassification?.responseApproach?.type === 'direct') {
         this.logger.log(`[ISSUE #430 FIX] Skipping all enhancements: Simple query detected via semantic classification (${context.queryClassification.classification})`);
@@ -153,7 +160,8 @@ export class EliFramework {
           reasoningApplied: false,
           skipped: true,
           skipReason: context.queryClassification.responseApproach.reason,
-          classification: context.queryClassification.classification
+          classification: context.queryClassification.classification,
+          confidenceMetadata,
         };
       }
 
@@ -168,7 +176,8 @@ export class EliFramework {
           modificationsCount: 0,
           reasoningApplied: false,
           skipped: true,
-          skipReason: relevanceCheck.reason
+          skipReason: relevanceCheck.reason,
+          confidenceMetadata,
         };
       }
 
@@ -192,6 +201,7 @@ export class EliFramework {
           reasoningApplied: true,
           confidenceLimited: true,
           reason: "Added uncertainty note due to low confidence",
+          confidenceMetadata,
         };
       } else if ((confidence < MIN_CONFIDENCE_FOR_ENHANCEMENTS && truthType === 'PERMANENT') || externalLookupSucceeded) {
         this.logger.log(
@@ -377,22 +387,6 @@ export class EliFramework {
       // or natural language like "I'm confident that..."). Now we only skip if a STRUCTURED confidence
       // percentage was already added by the doctrineEnforcer ("My confidence in this response is X%")
       // or if the 🎯 block was already injected (shouldn't happen in normal flow).
-      // ISSUE #877 FIX: externalLookupSucceeded was incorrectly included in skipConfidence, causing
-      // the entire confidence block to be bypassed when external data was present. External data
-      // suppresses uncertainty DISCLAIMERS (handled at lines ~194-199 above) but must NOT suppress
-      // the confidence percentage display — that is a separate transparency feature per Innovation #16.
-      // Confidence Scoring Toggle — calculate metadata when user explicitly enabled confidence
-      // skipConfidence conditions only controlled text appending (removed); metadata is always
-      // returned when the user toggled confidence on, regardless of query type.
-      let confidenceMetadata = null;
-
-      if (context?.showConfidence === true) {
-        confidenceMetadata = buildConfidenceMetadata(context?.phase4Metadata);
-        this.logger.log(`[CONFIDENCE-TOGGLE] Calculated confidence metadata: ${confidenceMetadata.score}% — ${confidenceMetadata.reason}`);
-      } else {
-        this.logger.log('[CONFIDENCE-TOGGLE] Skipping confidence metadata: showConfidence is false (default)');
-      }
-
       // STEP 8: Apply Eli's protective intelligence signature
       enhancedResponse = this.#applyEliSignature(
         enhancedResponse,

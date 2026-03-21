@@ -108,6 +108,13 @@ export class RoxyFramework {
       const query = context?.message || '';
       const externalLookupSucceeded = (context?.phase4Metadata?.sources_used > 0) || (context?.phase4Metadata?.sources_succeeded > 0);
 
+      // Confidence Scoring Toggle — calculate early so ALL return paths include it
+      let confidenceMetadata = null;
+      if (context?.showConfidence === true) {
+        confidenceMetadata = buildConfidenceMetadata(context?.phase4Metadata);
+        this.logger.log(`[CONFIDENCE-TOGGLE] Calculated: ${confidenceMetadata.score}% — ${confidenceMetadata.reason}`);
+      }
+
       // ISSUE #430: Check query classification for simple queries (GENUINE semantic intelligence)
       if (context?.queryClassification?.responseApproach?.type === 'direct') {
         this.logger.log(`[ISSUE #430 FIX] Skipping all enhancements: Simple query detected via semantic classification (${context.queryClassification.classification})`);
@@ -119,7 +126,8 @@ export class RoxyFramework {
           reasoningApplied: false,
           skipped: true,
           skipReason: context.queryClassification.responseApproach.reason,
-          classification: context.queryClassification.classification
+          classification: context.queryClassification.classification,
+          confidenceMetadata,
         };
       }
 
@@ -134,7 +142,8 @@ export class RoxyFramework {
           modificationsCount: 0,
           reasoningApplied: false,
           skipped: true,
-          skipReason: relevanceCheck.reason
+          skipReason: relevanceCheck.reason,
+          confidenceMetadata,
         };
       }
 
@@ -158,6 +167,7 @@ export class RoxyFramework {
           reasoningApplied: true,
           truthPrioritized: true,
           reason: "Prioritized truth over empathy due to low confidence",
+          confidenceMetadata,
         };
       } else if ((confidence < MIN_CONFIDENCE_FOR_SIMPLIFICATION && truthType === 'PERMANENT') || externalLookupSucceeded) {
         this.logger.log(
@@ -269,23 +279,6 @@ export class RoxyFramework {
         enhancedResponse = empowermentCheck.corrected;
         modificationsCount++;
         this.logger.log("Corrected to ensure empowerment");
-      }
-
-      // STEP 7.5: Add confidence assessment (ISSUE #879 FIX)
-      // Confidence block must appear on ALL responses regardless of whether external lookup
-      // succeeded or failed. External lookup success suppresses the low-confidence DISCLAIMER
-      // (handled above) but must NOT suppress the confidence block — these are separate things.
-      // This mirrors Eli's STEP 7 to ensure Roxy responses also include confidence transparency.
-      // Confidence Scoring Toggle — calculate metadata when user explicitly enabled confidence
-      // skipConfidence conditions only controlled text appending (removed); metadata is always
-      // returned when the user toggled confidence on, regardless of query type.
-      let confidenceMetadata = null;
-
-      if (context?.showConfidence === true) {
-        confidenceMetadata = buildConfidenceMetadata(context?.phase4Metadata);
-        this.logger.log(`[CONFIDENCE-TOGGLE] Calculated confidence metadata: ${confidenceMetadata.score}% — ${confidenceMetadata.reason}`);
-      } else {
-        this.logger.log('[CONFIDENCE-TOGGLE] Skipping confidence metadata: showConfidence is false (default)');
       }
 
       // STEP 8: Apply Roxy's empathetic signature
