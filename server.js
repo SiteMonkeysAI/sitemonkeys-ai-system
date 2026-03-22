@@ -1,4 +1,5 @@
 // COMPLETE CARING FAMILY INTELLIGENCE SYSTEM
+// Deploy trigger - force Railway rebuild
 // Preserves all breakthrough insights from this conversation
 // Ready for immediate Railway deployment
 //Redeploy2

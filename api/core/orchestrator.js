@@ -4470,7 +4470,7 @@ export class Orchestrator {
           top_logprobs: 3,
         };
 
-        const gptResponse = await openai.chat.completions.create(apiParams);
+        const gptResponse = await this.openai.chat.completions.create(apiParams);
 
         if (gptResponse.choices[0].finish_reason === 'length') {
           console.log('[WARNING] Response truncated — consider increasing max_completion_tokens');
@@ -5455,6 +5455,7 @@ Mode: ${modeConfig?.display_name || mode}
       "gpt-5.4-mini": { input: 0.00025, output: 0.002 },
       "gpt-5.4": { input: 0.00175, output: 0.014 },
       "claude-sonnet-4.5": { input: 0.003, output: 0.015 },
+      "claude-sonnet-4-20250514": { input: 0.003, output: 0.015 },
     };
 
     const rate = rates[model] || rates["gpt-5.4-mini"];
