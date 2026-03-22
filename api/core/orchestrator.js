@@ -2337,6 +2337,8 @@ export class Orchestrator {
       return {
         success: true,
         response: personalityResponse.response,
+        escalated: aiResponse.escalated || false,
+        escalationReason: aiResponse.escalationReason || null,
         // Confidence Scoring Toggle — metadata field (null when showConfidence is false)
         confidence: personalityResponse.confidenceMetadata || null,
         // Escalation indicator: true when an advanced model was used due to capability gap
