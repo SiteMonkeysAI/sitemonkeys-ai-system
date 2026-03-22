@@ -1537,8 +1537,10 @@ describe('N. Issue 3 — Business Validation Must Not Fire on Personal Queries',
 
 // ============================================================
 // SECTION P: INTELLIGENT MODEL ROUTING — GPT-4o GUARDS
-// Ensures medium_complexity queries route to GPT-4o and that
-// high_stakes / vault / Claude escalation remain unchanged.
+// Ensures medium_complexity queries route to GPT-4o (via the
+// capability-gap detector — only complex_analytical triggers
+// advanced reasoning escalation) and that high_stakes / vault /
+// Claude escalation remain unchanged.
 // ============================================================
 
 describe('P. Intelligent Model Routing — GPT-4o', () => {
@@ -1554,32 +1556,39 @@ describe('P. Intelligent Model Routing — GPT-4o', () => {
     );
   });
 
-  it('P-002: medium_complexity routing logic references gpt-4o in orchestrator', () => {
-    const orch = readRepoFile('api/core/orchestrator.js');
-    assert.ok(orch, 'Could not read orchestrator.js');
-
-    // The routing must check for medium_complexity classification AND associate it with gpt-4o
-    const hasMediumComplexityGpt4o = (
-      orch.includes('medium_complexity') &&
-      (orch.includes('"gpt-4o"') || orch.includes("'gpt-4o'") || orch.includes('useGpt4o'))
-    );
+  it('P-002: capability-gap detector gates advanced routing on complex_analytical only', () => {
+    // medium_complexity queries stay on GPT-4o because the capability-gap detector
+    // only requires advanced reasoning for 'complex_analytical' classification.
+    // This test verifies the detector enforces that boundary.
+    const detector = readRepoFile('api/core/intelligence/capability-gap-detector.js');
+    assert.ok(detector, 'Could not read api/core/intelligence/capability-gap-detector.js');
 
     assert.ok(
-      hasMediumComplexityGpt4o,
-      'P-002 FAIL: orchestrator.js does not contain medium_complexity routing to gpt-4o. ' +
-      'medium_complexity queries will continue routing to gpt-4 instead of the faster, cheaper gpt-4o.'
+      detector.includes("complex_analytical") &&
+      detector.includes("reasoning_tier") &&
+      detector.includes("'advanced'"),
+      'P-002 FAIL: capability-gap-detector.js must gate advanced reasoning_tier on complex_analytical. ' +
+      'Without this, medium_complexity queries may escalate to Claude unnecessarily.'
+    );
+
+    // Also verify medium_complexity is NOT used as a conditional trigger in the detector.
+    // It may appear in JSDoc param descriptions — that is fine.
+    // The restriction is: no if-block should set a capability requirement when
+    // queryClassification === 'medium_complexity'.
+    assert.ok(
+      !detector.includes("queryClassification === 'medium_complexity'"),
+      'P-002 FAIL: capability-gap-detector.js should NOT use medium_complexity as a ' +
+      'conditional escalation trigger. medium_complexity must stay on GPT-4o (the default adapter).'
     );
   });
 
-  it('P-003: high_stakes queries still route to Claude (GPT-4 minimum)', () => {
+  it('P-003: high_stakes queries still auto-escalate to Claude before capability-gap routing', () => {
     const orch = readRepoFile('api/core/orchestrator.js');
     assert.ok(orch, 'Could not read orchestrator.js');
 
-    // The high_stakes check (PRIORITY 0) must set useClaude = true AND appear
-    // before the medium_complexity GPT-4o routing (PRIORITY 4) in the source file.
-    // We use the actual conditional expression as the index marker (not a log string).
+    // PRIORITY 0 (high_stakes) must appear before PRIORITY 3 (capability-gap routing).
     const highStakesIdx = orch.indexOf('phase4Metadata?.high_stakes?.isHighStakes');
-    const mediumComplexityIdx = orch.indexOf("queryTier === 'medium_complexity'");
+    const capabilityGapIdx = orch.indexOf('PRIORITY 3: Capability-Gap Driven Routing');
 
     assert.ok(
       highStakesIdx !== -1,
@@ -1588,14 +1597,14 @@ describe('P. Intelligent Model Routing — GPT-4o', () => {
     );
 
     assert.ok(
-      mediumComplexityIdx !== -1,
-      'P-003 FAIL: medium_complexity GPT-4o routing block is missing from orchestrator.js.'
+      capabilityGapIdx !== -1,
+      'P-003 FAIL: PRIORITY 3 capability-gap routing block is missing from orchestrator.js.'
     );
 
     assert.ok(
-      highStakesIdx < mediumComplexityIdx,
-      'P-003 FAIL: high_stakes escalation must appear BEFORE medium_complexity GPT-4o routing. ' +
-      'High-stakes queries may incorrectly route to GPT-4o instead of Claude.'
+      highStakesIdx < capabilityGapIdx,
+      'P-003 FAIL: high_stakes escalation (PRIORITY 0) must appear BEFORE capability-gap routing (PRIORITY 3). ' +
+      'High-stakes queries may not auto-escalate to Claude.'
     );
   });
 
@@ -1972,14 +1981,15 @@ describe('R. System Pipeline Audit — Area 4: High-Stakes Domain Detection', ()
 
     const highStakesIdx = orch.indexOf('phase4Metadata?.high_stakes?.isHighStakes');
     const vaultPriority1Idx = orch.indexOf('PRIORITY 1: Vault presence');
-    const mediumComplexityIdx = orch.indexOf("queryTier === 'medium_complexity'");
+    const capabilityGapIdx = orch.indexOf('PRIORITY 3: Capability-Gap Driven Routing');
 
     assert.ok(highStakesIdx !== -1, 'R-015 FAIL: PRIORITY 0 high_stakes check missing from orchestrator.');
     assert.ok(vaultPriority1Idx !== -1, 'R-015 FAIL: PRIORITY 1 vault check missing from orchestrator.');
+    assert.ok(capabilityGapIdx !== -1, 'R-015 FAIL: PRIORITY 3 capability-gap routing missing from orchestrator.');
     assert.ok(
-      highStakesIdx < vaultPriority1Idx && highStakesIdx < mediumComplexityIdx,
+      highStakesIdx < vaultPriority1Idx && highStakesIdx < capabilityGapIdx,
       'R-015 FAIL: high_stakes escalation (PRIORITY 0) must appear BEFORE vault (PRIORITY 1) ' +
-      'and medium_complexity routing in orchestrator.js. High-stakes queries may route to GPT instead of Claude.'
+      'and capability-gap routing (PRIORITY 3) in orchestrator.js. High-stakes queries may route to GPT instead of Claude.'
     );
   });
 
@@ -2409,3 +2419,199 @@ describe('V. Confidence Scoring — Memory Source Detection and PERMANENT Patter
   });
 });
 
+// ============================================================
+// SECTION AA: CAPABILITY-GAP ROUTING SYSTEM
+// Verifies the adapter registry, capability-gap detector, and
+// orchestrator routing integration introduced in Issue #33.
+// All tests are ESM-safe file scans — no API calls, $0 cost.
+// ============================================================
+
+describe('AA. Capability-Gap Routing System', () => {
+
+  it('AA-001: adapter-registry.js exists', () => {
+    assert.ok(
+      existsSync(join(REPO_ROOT, 'api/core/adapters/adapter-registry.js')),
+      'AA-001 FAIL: api/core/adapters/adapter-registry.js is missing. ' +
+      'The adapter registry is required for capability-gap routing.'
+    );
+  });
+
+  it('AA-002: inactive adapter never selected — active() checks env var at runtime', () => {
+    const registry = readRepoFile('api/core/adapters/adapter-registry.js');
+    assert.ok(registry, 'Could not read adapter-registry.js');
+
+    // Each adapter must have an active() function that checks an environment variable.
+    // This ensures adapters without API keys are never routed to.
+    // Check for the exact pattern used in the registry: active: () => !!process.env.
+    assert.ok(
+      registry.includes('active: () => !!process.env.'),
+      'AA-002 FAIL: adapter-registry.js adapters must have active() functions that check ' +
+      'environment variables (pattern: active: () => !!process.env.KEY). ' +
+      'Inactive adapters (missing API key) must never be selected.'
+    );
+
+    // getActiveAdapters must filter on adapter.active()
+    assert.ok(
+      registry.includes('getActiveAdapters') && registry.includes('adapter.active()'),
+      'AA-002 FAIL: getActiveAdapters() must filter adapters by adapter.active(). ' +
+      'Without this filter, adapters without API keys could be selected.'
+    );
+  });
+
+  it('AA-003: capability-gap-detector.js exists', () => {
+    assert.ok(
+      existsSync(join(REPO_ROOT, 'api/core/intelligence/capability-gap-detector.js')),
+      'AA-003 FAIL: api/core/intelligence/capability-gap-detector.js is missing. ' +
+      'Capability gap detection is required for intelligent routing.'
+    );
+  });
+
+  it('AA-004: complex_analytical classification triggers advanced reasoning requirement', () => {
+    const detector = readRepoFile('api/core/intelligence/capability-gap-detector.js');
+    assert.ok(detector, 'Could not read capability-gap-detector.js');
+
+    // complex_analytical must set reasoning_tier: 'advanced'
+    assert.ok(
+      detector.includes("queryClassification === 'complex_analytical'") &&
+      detector.includes("reasoning_tier") &&
+      detector.includes("'advanced'"),
+      'AA-004 FAIL: capability-gap-detector.js must set reasoning_tier: "advanced" when ' +
+      'queryClassification === "complex_analytical". Complex queries will not escalate.'
+    );
+  });
+
+  it('AA-005: low confidence alone does NOT trigger escalation', () => {
+    const detector = readRepoFile('api/core/intelligence/capability-gap-detector.js');
+    assert.ok(detector, 'Could not read capability-gap-detector.js');
+
+    // The confidence block must be guarded by Object.keys(required).length > 0
+    // so that low confidence alone cannot create a new requirement.
+    assert.ok(
+      detector.includes('confidenceScore < 0.65') &&
+      detector.includes('Object.keys(required).length > 0'),
+      'AA-005 FAIL: capability-gap-detector.js confidence check must be guarded by ' +
+      '"Object.keys(required).length > 0". Without this guard, low confidence alone ' +
+      'would trigger escalation on every uncertain query.'
+    );
+  });
+
+  it('AA-006: escalation only occurs when better adapter is available', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // getBestAdapterForCapabilities must be called and its result checked
+    // before setting useClaude = true
+    assert.ok(
+      orch.includes('getBestAdapterForCapabilities') &&
+      orch.includes('betterAdapter && betterAdapter.model !== defaultAdapter.model'),
+      'AA-006 FAIL: orchestrator.js must call getBestAdapterForCapabilities() and verify ' +
+      'a better adapter exists before escalating. Without this, escalation may occur ' +
+      'even when no advanced adapter is configured.'
+    );
+  });
+
+  it('AA-007: claudeConfirmed decline is session-scoped via in-memory Map', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Session-scoped decline tracking must use a Map and be keyed by sessionId
+    assert.ok(
+      orch.includes('_sessionClaudeDeclined') &&
+      orch.includes('new Map()') &&
+      orch.includes('_sessionClaudeDeclined.set(') &&
+      orch.includes('_sessionClaudeDeclined.get('),
+      'AA-007 FAIL: orchestrator.js must use an in-memory Map (_sessionClaudeDeclined) ' +
+      'to track Claude decline per session. Decline must persist within a session ' +
+      'but reset when the server restarts (no DB persistence).'
+    );
+  });
+
+  it('AA-008: escalated field is returned by #routeToAI()', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('capabilityGapEscalated') &&
+      orch.includes('escalated: capabilityGapEscalated'),
+      'AA-008 FAIL: #routeToAI() must return an "escalated" field. ' +
+      'Without it, the API response cannot indicate which model was used.'
+    );
+  });
+
+  it('AA-009: escalated is false on standard (non-escalated) paths', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The cost_fallback path must explicitly return escalated: false
+    assert.ok(
+      orch.includes('escalated: false'),
+      'AA-009 FAIL: orchestrator.js must return "escalated: false" on fallback paths ' +
+      '(e.g., cost_fallback). Otherwise the frontend cannot reliably detect non-escalated responses.'
+    );
+  });
+
+  it('AA-010: escalated is true when capability gap triggered escalation', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // capabilityGapEscalated must be set to true when a gap is detected and a
+    // better adapter is selected
+    assert.ok(
+      orch.includes('capabilityGapEscalated = true') &&
+      orch.includes('capabilityGapReason = Object.keys(gaps).join'),
+      'AA-010 FAIL: orchestrator.js must set capabilityGapEscalated = true and record ' +
+      'capabilityGapReason when a capability gap triggers escalation. ' +
+      'Without this, escalation telemetry will be missing.'
+    );
+  });
+
+  it('AA-011: contract lock gate runs before capability-gap escalation', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const contractLockIdx = orch.indexOf('checkContractLock(context)');
+    const gapDetectIdx = orch.indexOf('detectRequiredCapabilities(');
+
+    assert.ok(
+      contractLockIdx !== -1,
+      'AA-011 FAIL: checkContractLock() is missing from orchestrator.js. ' +
+      'The contract lock gate must run before any escalation attempt.'
+    );
+
+    assert.ok(
+      gapDetectIdx !== -1,
+      'AA-011 FAIL: detectRequiredCapabilities() is missing from orchestrator.js.'
+    );
+
+    assert.ok(
+      contractLockIdx < gapDetectIdx,
+      'AA-011 FAIL: checkContractLock() must appear BEFORE detectRequiredCapabilities() ' +
+      'in orchestrator.js. The contract lock must gate all escalation attempts.'
+    );
+  });
+
+  it('AA-012: requiresExpertise and analysisComplexity are passed to detectRequiredCapabilities', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('analysis.requiresExpertise') &&
+      orch.includes('analysis.complexity'),
+      'AA-012 FAIL: orchestrator.js must pass analysis.requiresExpertise and analysis.complexity ' +
+      'to detectRequiredCapabilities(). These semantic analyzer signals must feed into routing.'
+    );
+  });
+
+  it('AA-013: adapter registry has a primary adapter marked primary: true', () => {
+    const registry = readRepoFile('api/core/adapters/adapter-registry.js');
+    assert.ok(registry, 'Could not read adapter-registry.js');
+
+    assert.ok(
+      registry.includes('primary: true'),
+      'AA-013 FAIL: adapter-registry.js must mark exactly one adapter as primary: true. ' +
+      'getDefaultAdapter() returns the primary adapter — the customer\'s contract default. ' +
+      'Without this, the default adapter selection is undefined.'
+    );
+  });
+
+});
