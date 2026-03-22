@@ -4201,7 +4201,7 @@ export class Orchestrator {
             message: `This query would benefit from Claude Sonnet 4.5 analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use gpt-4o (faster, ~$0.005-0.02)?`,
             estimatedCost: {
               claude: '$0.05-0.15',
-              gpt4: '$0.01-0.03'
+              gpt4o: '$0.005-0.02'
             }
           };
         }
