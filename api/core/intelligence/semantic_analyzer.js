@@ -882,8 +882,12 @@ Answer (yes/no):`;
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 10
+        max_completion_tokens: 10
       });
+
+      if (response.choices[0].finish_reason === 'length') {
+        console.log('[WARNING] Semantic supersession response truncated — consider increasing max_completion_tokens');
+      }
 
       const answer = response.choices[0].message.content.trim().toLowerCase();
       const isUpdate = answer === 'yes';

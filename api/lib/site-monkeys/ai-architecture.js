@@ -6,7 +6,7 @@
 const AI_ARCHITECTURE = {
   // PRIMARY AI CONFIGURATION
   primary: {
-    model: "claude-3-sonnet-20240229",
+    model: "claude-sonnet-4-20250514",
     provider: "anthropic",
     max_tokens: 1000,
     temperature: 0.7,
@@ -200,7 +200,7 @@ async function callGPT4API(prompt, _customerTier) {
       },
       body: JSON.stringify({
         model: config.model,
-        max_tokens: config.max_tokens,
+        max_completion_tokens: config.max_tokens,
         temperature: config.temperature,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -215,6 +215,10 @@ async function callGPT4API(prompt, _customerTier) {
 
     if (!data.choices || !data.choices[0] || !data.choices[0].message) {
       throw new Error("OpenAI API returned invalid response structure");
+    }
+
+    if (data.choices[0].finish_reason === 'length') {
+      console.log('[WARNING] GPT fallback response truncated — consider increasing max_completion_tokens');
     }
 
     return {
@@ -243,7 +247,7 @@ async function callMistralAPI(prompt, _customerTier) {
       },
       body: JSON.stringify({
         model: config.model,
-        max_tokens: config.max_tokens,
+        max_tokens: config.max_tokens, // Mistral API uses max_tokens
         temperature: config.temperature,
         messages: [{ role: "user", content: prompt }],
       }),

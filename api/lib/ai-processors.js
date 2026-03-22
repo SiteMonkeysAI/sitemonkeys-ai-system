@@ -1093,15 +1093,19 @@ Respond with practical business analysis, always considering survival implicatio
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-5.4-mini",
       messages: [
         { role: "system", content: systemPrompt },
         ...history.slice(-5),
         { role: "user", content: prompt },
       ],
-      max_tokens: 800,
+      max_completion_tokens: 800,
       temperature: 0.3,
     });
+
+    if (completion.choices[0].finish_reason === 'length') {
+      console.log('[WARNING] Eli response truncated — consider increasing max_completion_tokens');
+    }
 
     return {
       response: completion.choices[0].message.content,
@@ -1251,15 +1255,19 @@ Provide honest, accurate analysis with clear confidence indicators. REASON from 
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-5.4-mini",
       messages: [
         { role: "system", content: systemPrompt },
         ...history.slice(-5),
         { role: "user", content: prompt },
       ],
-      max_tokens: 800,
+      max_completion_tokens: 800,
       temperature: 0.2,
     });
+
+    if (completion.choices[0].finish_reason === 'length') {
+      console.log('[WARNING] Roxy response truncated — consider increasing max_completion_tokens');
+    }
 
     return {
       response: completion.choices[0].message.content,
