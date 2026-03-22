@@ -4184,7 +4184,7 @@ export class Orchestrator {
       // If user explicitly said NO to Claude (claudeConfirmed: false), force GPT-4
       // BUT: This can be overridden later if payload size requires Claude
       if (context.claudeConfirmed === false) {
-        this.log(`[AI ROUTING] User declined Claude, initially forcing GPT-4`);
+        this.log(`[AI ROUTING] User declined Claude, initially forcing gpt-4o`);
         useClaude = false;
         routingReason = ['user_declined_claude'];
       }
@@ -4198,10 +4198,10 @@ export class Orchestrator {
           return {
             needsConfirmation: true,
             reason: routingReason.join(', '),
-            message: `This query would benefit from Claude Sonnet 4.5 analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use GPT-4 (faster, $0.01-0.03)?`,
+            message: `This query would benefit from Claude Sonnet 4.5 analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use gpt-4o (faster, ~$0.005-0.02)?`,
             estimatedCost: {
               claude: '$0.05-0.15',
-              gpt4: '$0.01-0.03'
+              gpt4o: '$0.005-0.02'
             }
           };
         }
