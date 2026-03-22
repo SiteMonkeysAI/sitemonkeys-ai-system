@@ -4141,7 +4141,9 @@ export class Orchestrator {
       if (phase4Metadata?.high_stakes?.isHighStakes) {
         useClaude = true;
         isSafetyCritical = true;
+        capabilityGapEscalated = true;
         const domains = phase4Metadata.high_stakes.domains || [];
+        capabilityGapReason = `high_stakes:${domains.join(',')}`;
         routingReason.push(`high_stakes:${domains.join(',')}`);
         this.log(`[AI ROUTING] High-stakes domain detected: ${domains.join(', ')} - auto-escalating to Claude`);
       }
@@ -4149,6 +4151,8 @@ export class Orchestrator {
       // PRIORITY 1: Vault presence (Site Monkeys mode always uses Claude)
       if (!!context.vault && mode === "site_monkeys") {
         useClaude = true;
+        capabilityGapEscalated = true;
+        capabilityGapReason = capabilityGapReason || 'vault_access';
         routingReason.push("vault_access");
       }
 
@@ -4159,6 +4163,8 @@ export class Orchestrator {
       // Full payload (including system prompt, external data, message, history) is checked later.
       if (context.totalTokens > gpt4oMaxInput) {
         useClaude = true;
+        capabilityGapEscalated = true;
+        capabilityGapReason = capabilityGapReason || `high_token_count:${context.totalTokens}`;
         routingReason.push(`high_token_count:${context.totalTokens}`);
       }
 
@@ -4221,6 +4227,8 @@ export class Orchestrator {
         if (!useClaude &&
             mode === "business_validation" && analysis.complexity > 0.7) {
           useClaude = true;
+          capabilityGapEscalated = true;
+          capabilityGapReason = capabilityGapReason || `high_complexity:${analysis.complexity.toFixed(2)}`;
           routingReason.push(`high_complexity:${analysis.complexity.toFixed(2)}`);
         }
       }
@@ -4388,6 +4396,8 @@ export class Orchestrator {
         useClaude = true;
         useGpt4o = false;
         escalatedDueToPayloadSize = true;
+        capabilityGapEscalated = true;
+        capabilityGapReason = capabilityGapReason || `payload_exceeds_${currentGptModelName}_limit`;
 
         // ISSUE #790 FIX: Replace user_declined_claude with payload_overflow reason
         routingReason = routingReason.filter(r => r !== 'user_declined_claude');
