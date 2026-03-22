@@ -1099,7 +1099,7 @@ Respond with practical business analysis, always considering survival implicatio
         ...history.slice(-5),
         { role: "user", content: prompt },
       ],
-      max_tokens: 800,
+      max_completion_tokens: 800,
       temperature: 0.3,
     });
 
@@ -1257,7 +1257,7 @@ Provide honest, accurate analysis with clear confidence indicators. REASON from 
         ...history.slice(-5),
         { role: "user", content: prompt },
       ],
-      max_tokens: 800,
+      max_completion_tokens: 800,
       temperature: 0.2,
     });
 

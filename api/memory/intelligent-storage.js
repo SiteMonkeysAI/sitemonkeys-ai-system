@@ -1590,7 +1590,7 @@ Facts (preserve user terminology + add synonyms):`;
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 300  // STR1 FIX: Increased from 150 to allow extraction of 10+ facts (10 facts × ~15 tokens each ≈ 150, leaving no room)
+        max_completion_tokens: 300  // STR1 FIX: Increased from 150 to allow extraction of 10+ facts (10 facts × ~15 tokens each ≈ 150, leaving no room)
       });
 
       let facts = response.choices[0].message.content.trim();

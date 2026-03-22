@@ -882,7 +882,7 @@ Answer (yes/no):`;
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0,
-        max_tokens: 10
+        max_completion_tokens: 10
       });
 
       const answer = response.choices[0].message.content.trim().toLowerCase();

@@ -759,7 +759,7 @@ describe('H. STR1 — Volume Stress Guards', () => {
     const storage = readRepoFile('api/memory/intelligent-storage.js');
     assert.ok(storage, 'Could not read intelligent-storage.js');
 
-    const tokenMatch = storage.match(/max_tokens:\s*(\d+)/);
+    const tokenMatch = storage.match(/max_completion_tokens:\s*(\d+)/);
     const tokenValue = tokenMatch ? parseInt(tokenMatch[1]) : 0;
 
     assert.ok(

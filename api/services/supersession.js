@@ -587,7 +587,7 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
           role: 'user',
           content: content
         }],
-        max_tokens: 50,
+        max_completion_tokens: 50,
         temperature: 0
       }),
       signal: controller.signal

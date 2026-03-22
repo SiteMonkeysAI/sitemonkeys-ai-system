@@ -200,7 +200,7 @@ async function callGPT4API(prompt, _customerTier) {
       },
       body: JSON.stringify({
         model: config.model,
-        max_tokens: config.max_tokens,
+        max_completion_tokens: config.max_tokens,
         temperature: config.temperature,
         messages: [{ role: "user", content: prompt }],
       }),
@@ -243,7 +243,7 @@ async function callMistralAPI(prompt, _customerTier) {
       },
       body: JSON.stringify({
         model: config.model,
-        max_tokens: config.max_tokens,
+        max_tokens: config.max_tokens, // Mistral API uses max_tokens
         temperature: config.temperature,
         messages: [{ role: "user", content: prompt }],
       }),
