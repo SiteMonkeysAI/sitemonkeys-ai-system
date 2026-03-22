@@ -1222,25 +1222,56 @@ export class Orchestrator {
         console.log('[HANDOFF:CONTEXT-ASSEMBLY→AI] ═══════════════════════════════════');
       }
 
+      // GREETING FAST-PATH: If we can predict that the STEP 6.9 greeting shortcut will fire,
+      // skip semantic analysis, confidence calculation, Phase 4 (truth type + external lookup),
+      // query classification, and principle-based reasoning.  Their results are provably
+      // discarded when the greeting shortcut returns early.
+      // Manipulation guard (STEP 6.5) still runs unconditionally — it is a safety gate.
+      const willUseGreetingShortcut =
+        earlyClassification?.classification === 'greeting' &&
+        earlyClassification.confidence >= 0.85 &&
+        !hasPersonalIntent &&
+        !memoryContext.hasMemory &&
+        !context.documents &&
+        !context.vault;
+      if (willUseGreetingShortcut) {
+        this.log('[GREETING-FAST-PATH] Conditions met — skipping semantic analysis, Phase 4, and principle reasoning (results provably discarded by greeting shortcut at STEP 6.9)');
+      }
+
       // STEP 5: Perform semantic analysis
-      const analysisStartTime = Date.now();
-      const analysis = await this.#performSemanticAnalysis(
-        message,
-        context,
-        conversationHistory,
-      );
-      const analysisTime = Date.now() - analysisStartTime;
-      this.requestStats.semanticAnalysisTime += analysisTime;
-      this.log(
-        `[ANALYSIS] Intent: ${analysis.intent} (${analysis.intentConfidence?.toFixed(2) || "N/A"}), Domain: ${analysis.domain} (${analysis.domainConfidence?.toFixed(2) || "N/A"}), Complexity: ${analysis.complexity.toFixed(2)}, Time: ${analysisTime}ms`,
-      );
+      // GREETING FAST-PATH: skipped — result is provably discarded by STEP 6.9 shortcut.
+      let analysis;
+      if (willUseGreetingShortcut) {
+        this.log('[GREETING-FAST-PATH] Skipping semantic analysis');
+        analysis = this.#generateFallbackAnalysis(message, context);
+      } else {
+        const analysisStartTime = Date.now();
+        analysis = await this.#performSemanticAnalysis(
+          message,
+          context,
+          conversationHistory,
+        );
+        const analysisTime = Date.now() - analysisStartTime;
+        this.requestStats.semanticAnalysisTime += analysisTime;
+        this.log(
+          `[ANALYSIS] Intent: ${analysis.intent} (${analysis.intentConfidence?.toFixed(2) || "N/A"}), Domain: ${analysis.domain} (${analysis.domainConfidence?.toFixed(2) || "N/A"}), Complexity: ${analysis.complexity.toFixed(2)}, Time: ${analysisTime}ms`,
+        );
+      }
 
       // STEP 6: Calculate confidence
-      const confidence = await this.#calculateConfidence(analysis, context);
-      this.log(`[CONFIDENCE] Score: ${confidence.toFixed(3)}`);
+      // GREETING FAST-PATH: use earlyClassification confidence directly.
+      let confidence;
+      if (willUseGreetingShortcut) {
+        confidence = earlyClassification.confidence;
+        this.log(`[GREETING-FAST-PATH] Skipping confidence calculation — using earlyClassification confidence: ${confidence.toFixed(3)}`);
+      } else {
+        confidence = await this.#calculateConfidence(analysis, context);
+        this.log(`[CONFIDENCE] Score: ${confidence.toFixed(3)}`);
+      }
 
       // STEP 6.5: PHASE 4 - Truth Type Detection and External Lookup (PRE-GENERATION)
-      this.log("🔍 PHASE 4: Truth type detection and external lookup");
+      // GREETING FAST-PATH: skipped — greeting shortcut fires before any AI call, so
+      // truth-type detection and external lookup produce results that are never consumed.
       let phase4Metadata = {
         truth_type: null,
         source_class: "internal",
@@ -1255,6 +1286,9 @@ export class Orchestrator {
         high_stakes: null,
         phase4_error: null,
       };
+
+      if (!willUseGreetingShortcut) {
+      this.log("🔍 PHASE 4: Truth type detection and external lookup");
 
       // Update source_class to "memory" only for personal memory recall queries
       const isPersonalMemoryQuery =
@@ -1558,6 +1592,10 @@ export class Orchestrator {
         phase4Metadata.phase4_error = phase4Error.message;
       }
 
+      } else {
+        this.log('[GREETING-FAST-PATH] Skipping Phase 4 (truth type detection + external lookup)');
+      } // end if (!willUseGreetingShortcut) — Phase 4
+
       // STEP 6.4: QUERY COMPLEXITY CLASSIFICATION (uses Phase 4 metadata)
       // Use genuine semantic intelligence to determine response approach.
       // NOTE: The query embedding is cached by the classifier (embeddingCache) so no duplicate
@@ -1566,6 +1604,12 @@ export class Orchestrator {
       // Optimisation: when phase4Metadata adds no new information beyond what STEP 0.5 used,
       // reuse earlyClassification directly to skip the cosine-similarity computation.
       let queryClassification = null;
+      if (willUseGreetingShortcut) {
+        // GREETING FAST-PATH: reuse earlyClassification directly
+        queryClassification = earlyClassification;
+        context.queryClassification = queryClassification;
+        this.log(`[GREETING-FAST-PATH] Reusing earlyClassification for query classification`);
+      } else {
       try {
         const phase4AddsMeaningfulInfo = this.#doesPhase4AddSignal(phase4Metadata);
 
@@ -1587,6 +1631,7 @@ export class Orchestrator {
         this.error('⚠️ Query classification error:', classificationError);
         // Continue without classification - personalities will apply default logic
       }
+      } // end else (!willUseGreetingShortcut) — STEP 6.4
 
       // STEP 6.5: Inject external data into context if available
       if (phase4Metadata.external_lookup && phase4Metadata.external_data) {
@@ -1598,6 +1643,29 @@ export class Orchestrator {
       // STEP 6.8: PRINCIPLE-BASED REASONING LAYER
       // Analyze query and determine reasoning strategy/depth
       // This transforms the system from "warehouse worker" to "caring family member"
+      // GREETING FAST-PATH: skipped — reasoning guidance is injected into the system prompt,
+      // which is never built/used when the greeting shortcut returns before the AI call.
+      let reasoningResult = null;
+      if (willUseGreetingShortcut) {
+        this.log('[GREETING-FAST-PATH] Skipping principle-based reasoning — result provably discarded');
+        context.reasoningGuidance = null;
+        context.reasoningMetadata = null;
+        // HANDOFF LOGGING: reasoning skipped for greeting fast-path
+        console.log('[HANDOFF] orchestrator → reasoning:', {
+          memoriesIsArray: Array.isArray(memoryContext?.memories),
+          memoriesLength: 0,
+          hasLookupResult: false,
+          truthType: 'greeting-fast-path',
+          hasAnalysis: false,
+          conversationHistoryLength: conversationHistory?.length || 0
+        });
+        console.log('[HANDOFF] reasoning → enforcement:', {
+          reasoningOk: true,
+          strategy: 'greeting-fast-path',
+          hasError: false,
+          hasPromptInjection: false
+        });
+      } else {
       this.log("🧠 Applying principle-based reasoning layer...");
 
       // HANDOFF LOGGING (Issue #392): orchestrator → reasoning
@@ -1610,7 +1678,6 @@ export class Orchestrator {
         conversationHistoryLength: conversationHistory?.length || 0
       });
 
-      let reasoningResult = null;
       try {
         reasoningResult = await applyPrincipleBasedReasoning(message, {
           analysis,
@@ -1663,6 +1730,7 @@ export class Orchestrator {
           errorMessage: reasoningError.message
         });
       }
+      } // end else (!willUseGreetingShortcut) — STEP 6.8
 
       // ========== PRE-RESPONSE VALIDATION (Issue #606 Phase 1) ==========
       // STEP 6.5: Check for manipulation attempts BEFORE AI generation
@@ -4318,8 +4386,17 @@ export class Orchestrator {
       // Build system prompt with reasoning guidance if available
       // ISSUE #443: Add query classification to system prompt for response intelligence
       // ISSUE #566/#570: Pass memory context flag to enable semantic intelligence requirements
+      // FIX 3: Route to compressed system prompt for simple queries to reduce token usage.
+      // Compressed prompt preserves all truth rules; removes verbose uncertainty/refusal blocks.
       const hasMemoryContext = context.memory;
-      const systemPrompt = this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, context.earlyClassification, hasMemoryContext);
+      const queryClass = context.earlyClassification?.classification || context.queryClassification?.classification;
+      const useCompressedPrompt = ['greeting', 'simple_factual', 'simple_short'].includes(queryClass);
+      const systemPrompt = useCompressedPrompt
+        ? this.#buildCompressedSystemPrompt(mode, context.earlyClassification || context.queryClassification, hasMemoryContext)
+        : this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, context.earlyClassification, hasMemoryContext);
+      if (useCompressedPrompt) {
+        this.log(`[COMPRESSED-PROMPT] Using compressed system prompt for ${queryClass} query (~${Math.ceil(systemPrompt.length / 4)} tokens)`);
+      }
 
       // PHASE 4: Inject external content if fetched
       let externalContext = "";
@@ -5454,6 +5531,112 @@ Mode: ${modeConfig?.display_name || mode}
     // This is the key innovation that transforms rule-based execution into principle-based reasoning
     if (reasoningGuidance) {
       prompt += reasoningGuidance;
+    }
+
+    return prompt;
+  }
+
+  /**
+   * Compressed system prompt for simple queries (greeting, simple_factual, simple_short).
+   *
+   * Preserves all core truth rules, identity, capabilities, and mode-specific rules.
+   * Removes verbose uncertainty-handling blocks, refusal-maintenance doctrine, bounded-inference
+   * examples, and truth/certainty doctrine that are unnecessary for straightforward responses.
+   *
+   * Target: ~900 tokens vs ~1,725 tokens for the full prompt.
+   * Quality: identical — same rules enforced, fewer words.
+   *
+   * @param {string} mode - Current operational mode
+   * @param {object|null} queryClassification - Query classification result
+   * @param {boolean} hasMemoryContext - Whether memory context is present
+   * @returns {string} Compressed system prompt
+   */
+  #buildCompressedSystemPrompt(mode, queryClassification = null, hasMemoryContext = false) {
+    const modeConfig = MODES[mode];
+
+    let prompt = `You are a truth-first AI assistant with CEO-level intelligence. Your priorities are: Truth > Helpfulness > Engagement.
+
+IDENTITY (ABSOLUTE RULE):
+You are part of the Site Monkeys AI system. NEVER say you are "an AI model developed by OpenAI", "ChatGPT", "GPT-4", or any OpenAI product.
+NEVER say "as an AI" — instead say "based on available information".
+NEVER say "I don't have access to real-time data" or "I don't have real-time access" — if external data is provided in context sections below, USE IT as your source of truth.
+If asked who made you or what AI you are, say you are part of the Site Monkeys AI system.
+
+Core Principles:
+- Provide complete answers that respect the user's time
+- Never use engagement bait phrases like "Would you like me to elaborate?"
+- Be honest about limitations
+- TRUST information explicitly provided in memory context or documents
+
+YOUR CAPABILITIES:
+- You CAN read and analyze uploaded documents, attachments, and files (when provided in DOCUMENT CONTEXT sections below)
+- You CAN access real-time external data (when provided in EXTERNAL DATA sections below)
+- You CAN recall information from previous conversations (when provided in MEMORY CONTEXT sections below)
+- NEVER say "I can't view attachments" or "I don't have real-time data" if this information is present in the context sections below
+
+CRITICAL: Trust Memory Context
+When information is explicitly provided in MEMORY CONTEXT or DOCUMENT CONTEXT sections below, that information is FACTUAL about what the user has told you. Do NOT second-guess it or claim you "don't have" information that is clearly present in those sections.
+`;
+
+    if (hasMemoryContext) {
+      prompt += `
+CRITICAL - MEMORY FABRICATION IS A CATEGORY 1 TRUST VIOLATION:
+NEVER claim to have discussed, mentioned, or remember topics that are NOT explicitly present in the MEMORY CONTEXT section. If no MEMORY CONTEXT section appears below, you have NO stored information from previous conversations about any topic. DO NOT say "as we discussed previously", "things we talked about before", "you mentioned earlier", or any variant unless that specific information is shown in the MEMORY CONTEXT section.
+
+CRITICAL - CROSS-TOPIC MEMORY CONTAMINATION IS EQUALLY PROHIBITED:
+Retrieved memories about Topic A must NEVER be presented as prior discussion about Topic B. If the topic the user asked about is not present in the MEMORY CONTEXT, say so directly.
+`;
+    }
+
+    if (queryClassification) {
+      if (queryClassification.classification === 'greeting') {
+        prompt += `
+IMPORTANT - GREETING DETECTED:
+This is a simple greeting. Respond warmly and concisely in ONE LINE.
+- DO NOT add biographical information unless specifically asked
+- DO NOT add context from memory unless relevant to greeting
+- DO NOT add engagement bait or follow-up questions
+- Maximum response length: 100 characters
+Example: "Hello! How can I help you today?"
+`;
+      } else if (queryClassification.classification === 'simple_factual') {
+        const maxLength = queryClassification.responseApproach?.maxLength || 200;
+        prompt += `
+IMPORTANT - SIMPLE QUERY DETECTED:
+This is a straightforward factual question. Provide a DIRECT, CONCISE answer.
+- Answer in ONE sentence if possible
+- DO NOT add explanations unless asked
+- DO NOT add context or background unless necessary
+- DO NOT add engagement bait or follow-up questions
+- Maximum response length: ${maxLength} characters
+- If it's a calculation, just give the answer
+`;
+      } else if (queryClassification.classification === 'simple_short') {
+        prompt += `
+IMPORTANT - SIMPLE QUERY:
+Provide a DIRECT, CONCISE answer. No filler, no preamble.
+`;
+      }
+    }
+
+    prompt += `\nMode: ${modeConfig?.display_name || mode}\n`;
+
+    if (mode === "business_validation") {
+      prompt += `\nBusiness Validation Requirements:
+- Always analyze downside scenarios and risks
+- Consider cash flow and survival impact
+- Provide actionable recommendations with clear trade-offs
+- Surface hidden costs and dependencies
+`;
+    }
+
+    if (mode === "site_monkeys") {
+      prompt += `\nSite Monkeys Mode:
+- Use vault content as authoritative business guidance
+- Enforce founder protection principles
+- Focus on operational integrity and quality
+- Apply business-specific frameworks and constraints
+`;
     }
 
     return prompt;

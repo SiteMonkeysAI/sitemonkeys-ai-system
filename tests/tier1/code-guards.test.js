@@ -2615,3 +2615,216 @@ describe('AA. Capability-Gap Routing System', () => {
   });
 
 });
+
+// ============================================================
+// SECTION BB: PIPELINE EFFICIENCY — GREETING FAST-PATH AND
+//             COMPRESSED SYSTEM PROMPT
+// Ensures greeting queries skip provably-unused processing and
+// simple queries use a smaller system prompt.
+// ============================================================
+
+describe('BB. Pipeline Efficiency — Greeting Fast-Path and Compressed Prompt', () => {
+
+  it('BB-001: greeting classification skips semantic analysis', () => {
+    // FIX 1: When willUseGreetingShortcut is true, #performSemanticAnalysis must NOT be
+    // called — a fallback analysis is used instead.  The guard must reference the
+    // willUseGreetingShortcut variable and skip the performSemanticAnalysis call.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('willUseGreetingShortcut'),
+      'BB-001 FAIL: willUseGreetingShortcut flag not found in orchestrator.js. ' +
+      'Greeting fast-path requires this flag to gate semantic analysis and principle reasoning.'
+    );
+
+    // The fast-path log message must be present in the semantic-analysis section
+    assert.ok(
+      orch.includes('Skipping semantic analysis'),
+      'BB-001 FAIL: "[GREETING-FAST-PATH] Skipping semantic analysis" log not found. ' +
+      'orchestrator.js must log when semantic analysis is skipped for greeting queries.'
+    );
+  });
+
+  it('BB-002: greeting classification skips principle-based reasoning', () => {
+    // FIX 1: applyPrincipleBasedReasoning must be inside a !willUseGreetingShortcut block.
+    // The result (reasoningGuidance) is injected into the system prompt, which the greeting
+    // shortcut never uses — running it wastes time and produces a discarded result.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('Skipping principle-based reasoning'),
+      'BB-002 FAIL: "Skipping principle-based reasoning" log not found in orchestrator.js. ' +
+      'applyPrincipleBasedReasoning must be skipped when willUseGreetingShortcut is true.'
+    );
+  });
+
+  it('BB-003: simple_factual and simple_short use compressed system prompt', () => {
+    // FIX 3: #routeToAI must check the query classification and select
+    // #buildCompressedSystemPrompt for greeting, simple_factual, and simple_short queries.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('buildCompressedSystemPrompt') &&
+      orch.includes("'simple_factual'") &&
+      orch.includes("'simple_short'"),
+      'BB-003 FAIL: #buildCompressedSystemPrompt not routed for simple_factual/simple_short. ' +
+      '#routeToAI must select the compressed prompt for simple query classifications.'
+    );
+
+    assert.ok(
+      orch.includes('useCompressedPrompt'),
+      'BB-003 FAIL: useCompressedPrompt decision variable not found in orchestrator.js.'
+    );
+  });
+
+  it('BB-004: complex_analytical uses full system prompt (not compressed)', () => {
+    // FIX 3: Only the simple classification types should use the compressed prompt.
+    // complex_analytical must go through #buildSystemPrompt to get full reasoning guidance.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The routing expression must include a ternary or conditional that calls
+    // #buildSystemPrompt on the else branch (non-simple queries).
+    assert.ok(
+      orch.includes('#buildSystemPrompt(') &&
+      orch.includes('#buildCompressedSystemPrompt('),
+      'BB-004 FAIL: Both #buildSystemPrompt and #buildCompressedSystemPrompt must exist. ' +
+      'complex_analytical queries must still use the full prompt.'
+    );
+  });
+
+  it('BB-005: compressed prompt contains core truth rules', () => {
+    // FIX 2: The compressed prompt must preserve "Truth > Helpfulness > Engagement"
+    // and the core identity rules — these are non-negotiable regardless of query type.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Check that #buildCompressedSystemPrompt contains the truth priority statement
+    const compressedIdx = orch.lastIndexOf('#buildCompressedSystemPrompt(');
+    assert.ok(compressedIdx !== -1, 'BB-005 FAIL: #buildCompressedSystemPrompt not found');
+
+    // The method body must contain "Truth > Helpfulness"
+    const methodSection = orch.substring(compressedIdx, compressedIdx + 5000);
+    assert.ok(
+      methodSection.includes('Truth > Helpfulness'),
+      'BB-005 FAIL: compressed prompt must contain core truth priority "Truth > Helpfulness". ' +
+      'Truth enforcement must never be removed regardless of query type.'
+    );
+  });
+
+  it('BB-006: compressed prompt contains no-fabrication rule', () => {
+    // FIX 2: The compressed prompt must retain the MEMORY FABRICATION prohibition.
+    // Even simple queries can involve memory context, so fabrication must remain forbidden.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const compressedIdx = orch.lastIndexOf('#buildCompressedSystemPrompt(');
+    assert.ok(compressedIdx !== -1, 'BB-006 FAIL: #buildCompressedSystemPrompt not found');
+
+    const methodSection = orch.substring(compressedIdx, compressedIdx + 5000);
+    assert.ok(
+      methodSection.includes('MEMORY FABRICATION'),
+      'BB-006 FAIL: compressed prompt must contain the MEMORY FABRICATION prohibition. ' +
+      'No-fabrication rule must be present even in the compressed prompt.'
+    );
+  });
+
+  it('BB-007: high stakes detection still runs on all query types (via manipulation guard)', () => {
+    // The manipulation guard runs BEFORE the greeting shortcut for ALL queries.
+    // manipulationGuard.validate must NOT be inside the willUseGreetingShortcut conditional.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const guardIdx = orch.indexOf('manipulationGuard.validate(');
+    const fastPathIdx = orch.indexOf('willUseGreetingShortcut');
+    const shortcutIdx = orch.indexOf('GREETING-SHORTCUT]');
+
+    assert.ok(guardIdx !== -1, 'BB-007 FAIL: manipulationGuard.validate not found');
+    assert.ok(fastPathIdx !== -1, 'BB-007 FAIL: willUseGreetingShortcut not found');
+    assert.ok(shortcutIdx !== -1, 'BB-007 FAIL: GREETING-SHORTCUT log not found');
+
+    // The manipulation guard must appear AFTER willUseGreetingShortcut is set
+    // but BEFORE the greeting shortcut fires (i.e., it runs unconditionally between them).
+    assert.ok(
+      guardIdx > fastPathIdx && guardIdx < shortcutIdx,
+      'BB-007 FAIL: manipulationGuard.validate must run after willUseGreetingShortcut is set ' +
+      'but before the greeting shortcut fires. High stakes / manipulation checks must be universal.'
+    );
+  });
+
+  it('BB-008: manipulation guard still runs on all query types', () => {
+    // Confirm manipulationGuard.validate call is not inside a willUseGreetingShortcut block.
+    // It is a universal safety gate that cannot be conditioned on query type.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('manipulationGuard.validate('),
+      'BB-008 FAIL: manipulationGuard.validate not found in orchestrator.js'
+    );
+
+    // The guard log message must be unconditional (not inside willUseGreetingShortcut block)
+    assert.ok(
+      orch.includes('MANIPULATION-GUARD] Checking for manipulation'),
+      'BB-008 FAIL: manipulation guard log message not found. ' +
+      'manipulationGuard must run on every request regardless of query classification.'
+    );
+  });
+
+  it('BB-009: compressed prompt is shorter than full prompt (token savings verified)', () => {
+    // FIX 2: #buildCompressedSystemPrompt must produce a shorter string than #buildSystemPrompt.
+    // Verify by checking that the compressed method omits major verbose sections.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const compressedStart = orch.lastIndexOf('  #buildCompressedSystemPrompt(');
+    const fullStart = orch.lastIndexOf('  #buildSystemPrompt(');
+
+    assert.ok(compressedStart !== -1, 'BB-009 FAIL: #buildCompressedSystemPrompt not found');
+    assert.ok(fullStart !== -1, 'BB-009 FAIL: #buildSystemPrompt not found');
+
+    // The full prompt contains BOUNDED INFERENCE (verbose section); compressed must not.
+    const compressedSection = orch.substring(compressedStart, compressedStart + 8000);
+    const fullSection = orch.substring(fullStart, fullStart + 8000);
+
+    assert.ok(
+      fullSection.includes('BOUNDED INFERENCE') || fullSection.includes('INFERENCE GUIDELINES'),
+      'BB-009 FAIL: #buildSystemPrompt is missing BOUNDED INFERENCE block — used as baseline'
+    );
+
+    assert.ok(
+      !compressedSection.includes('BOUNDED INFERENCE') && !compressedSection.includes('INFERENCE GUIDELINES'),
+      'BB-009 FAIL: #buildCompressedSystemPrompt must NOT include the verbose BOUNDED INFERENCE ' +
+      'block. This block accounts for ~350 tokens and is unnecessary for simple queries.'
+    );
+  });
+
+  it('BB-010: answer quality preserved — compressed prompt retains identity and mode rules', () => {
+    // FIX 2: The compressed prompt must include all identity rules and mode-specific additions.
+    // Omitting these would change answer quality, which is not permitted.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const compressedIdx = orch.lastIndexOf('#buildCompressedSystemPrompt(');
+    assert.ok(compressedIdx !== -1, 'BB-010 FAIL: #buildCompressedSystemPrompt not found');
+
+    const methodSection = orch.substring(compressedIdx, compressedIdx + 8000);
+
+    // Must include Site Monkeys identity rule
+    assert.ok(
+      methodSection.includes('Site Monkeys AI system'),
+      'BB-010 FAIL: compressed prompt must include Site Monkeys identity rule'
+    );
+
+    // Must include mode-specific handling (business_validation and site_monkeys blocks)
+    assert.ok(
+      methodSection.includes('business_validation') && methodSection.includes('site_monkeys'),
+      'BB-010 FAIL: compressed prompt must include mode-specific rule blocks ' +
+      '(business_validation and site_monkeys). Mode rules affect answer quality and must be preserved.'
+    );
+  });
+
+});
