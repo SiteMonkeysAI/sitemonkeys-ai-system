@@ -1651,12 +1651,14 @@ export class Orchestrator {
         context.reasoningGuidance = null;
         context.reasoningMetadata = null;
         // HANDOFF LOGGING: reasoning skipped for greeting fast-path
+        // Phase 4 was skipped so external_lookup=false and truth_type=null by default.
+        // Semantic analysis was skipped so hasAnalysis reflects the fallback analysis state.
         console.log('[HANDOFF] orchestrator → reasoning:', {
           memoriesIsArray: Array.isArray(memoryContext?.memories),
-          memoriesLength: 0,
-          hasLookupResult: false,
+          memoriesLength: memoryContext?.memories?.length || 0,
+          hasLookupResult: false, // Phase 4 skipped — no external lookup attempted
           truthType: 'greeting-fast-path',
-          hasAnalysis: false,
+          hasAnalysis: !!analysis, // fallback analysis was generated
           conversationHistoryLength: conversationHistory?.length || 0
         });
         console.log('[HANDOFF] reasoning → enforcement:', {

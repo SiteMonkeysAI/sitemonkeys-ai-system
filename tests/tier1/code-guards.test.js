@@ -2703,7 +2703,7 @@ describe('BB. Pipeline Efficiency — Greeting Fast-Path and Compressed Prompt',
     assert.ok(orch, 'Could not read orchestrator.js');
 
     // Check that #buildCompressedSystemPrompt contains the truth priority statement
-    const compressedIdx = orch.lastIndexOf('#buildCompressedSystemPrompt(');
+    const compressedIdx = orch.indexOf('buildCompressedSystemPrompt(mode, queryClassification');
     assert.ok(compressedIdx !== -1, 'BB-005 FAIL: #buildCompressedSystemPrompt not found');
 
     // The method body must contain "Truth > Helpfulness"
@@ -2721,7 +2721,7 @@ describe('BB. Pipeline Efficiency — Greeting Fast-Path and Compressed Prompt',
     const orch = readRepoFile('api/core/orchestrator.js');
     assert.ok(orch, 'Could not read orchestrator.js');
 
-    const compressedIdx = orch.lastIndexOf('#buildCompressedSystemPrompt(');
+    const compressedIdx = orch.indexOf('buildCompressedSystemPrompt(mode, queryClassification');
     assert.ok(compressedIdx !== -1, 'BB-006 FAIL: #buildCompressedSystemPrompt not found');
 
     const methodSection = orch.substring(compressedIdx, compressedIdx + 5000);
@@ -2780,8 +2780,8 @@ describe('BB. Pipeline Efficiency — Greeting Fast-Path and Compressed Prompt',
     const orch = readRepoFile('api/core/orchestrator.js');
     assert.ok(orch, 'Could not read orchestrator.js');
 
-    const compressedStart = orch.lastIndexOf('  #buildCompressedSystemPrompt(');
-    const fullStart = orch.lastIndexOf('  #buildSystemPrompt(');
+    const compressedStart = orch.indexOf('buildCompressedSystemPrompt(mode, queryClassification');
+    const fullStart = orch.indexOf('buildSystemPrompt(mode, _analysis');
 
     assert.ok(compressedStart !== -1, 'BB-009 FAIL: #buildCompressedSystemPrompt not found');
     assert.ok(fullStart !== -1, 'BB-009 FAIL: #buildSystemPrompt not found');
@@ -2808,7 +2808,7 @@ describe('BB. Pipeline Efficiency — Greeting Fast-Path and Compressed Prompt',
     const orch = readRepoFile('api/core/orchestrator.js');
     assert.ok(orch, 'Could not read orchestrator.js');
 
-    const compressedIdx = orch.lastIndexOf('#buildCompressedSystemPrompt(');
+    const compressedIdx = orch.indexOf('buildCompressedSystemPrompt(mode, queryClassification');
     assert.ok(compressedIdx !== -1, 'BB-010 FAIL: #buildCompressedSystemPrompt not found');
 
     const methodSection = orch.substring(compressedIdx, compressedIdx + 8000);
