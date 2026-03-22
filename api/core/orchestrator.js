@@ -55,7 +55,6 @@ import { enforceReasoningEscalation } from "./intelligence/reasoningEscalationEn
 import { applyPrincipleBasedReasoning } from "./intelligence/principleBasedReasoning.js";
 import { classifyQueryComplexity } from "./intelligence/queryComplexityClassifier.js";
 import {
-  getActiveAdapters,
   getDefaultAdapter,
   getBestAdapterForCapabilities,
   checkContractLock
@@ -4186,7 +4185,9 @@ export class Orchestrator {
               phase4Metadata?.truth_type || null,
               phase4Metadata?.high_stakes || null,
               context.totalTokens || 0,
-              confidence
+              confidence,
+              analysis.requiresExpertise || false,
+              analysis.complexity || 0
             );
 
             const { hasGap, gaps } = calculateCapabilityGap(
@@ -4211,16 +4212,14 @@ export class Orchestrator {
           }
         }
 
-        // Business validation with high complexity is an explicit override that
-        // takes effect independently of the capability-gap detector.
+        // Business validation mode with high complexity: domain-specific override.
+        // Uses a lower threshold (0.7) than the generic detector (0.8) because
+        // business_validation queries benefit from advanced reasoning at moderate complexity.
+        // requiresExpertise is already handled inside detectRequiredCapabilities().
         if (!useClaude &&
-            (analysis.requiresExpertise ||
-             (mode === "business_validation" && analysis.complexity > 0.7))) {
+            mode === "business_validation" && analysis.complexity > 0.7) {
           useClaude = true;
-          if (analysis.requiresExpertise) routingReason.push("requires_expertise");
-          if (mode === "business_validation" && analysis.complexity > 0.7) {
-            routingReason.push(`high_complexity:${analysis.complexity.toFixed(2)}`);
-          }
+          routingReason.push(`high_complexity:${analysis.complexity.toFixed(2)}`);
         }
       }
 

@@ -75,10 +75,13 @@ function countPatternSignals(query, capability) {
  *
  * @param {string}      query                - The user query text
  * @param {string|null} queryClassification  - Result from queryComplexityClassifier
+ *                                             (greeting|simple_short|simple_factual|medium_complexity|complex_analytical)
  * @param {string|null} truthType            - VOLATILE | SEMI_STABLE | PERMANENT | null
  * @param {Object|null} highStakes           - phase4Metadata.high_stakes object
  * @param {number}      contextTokens        - Total context tokens
  * @param {number}      confidenceScore      - Current confidence (0–1); supporting signal only
+ * @param {boolean}     requiresExpertise    - From analysis.requiresExpertise (semantic analyzer)
+ * @param {number}      analysisComplexity   - From analysis.complexity (0–1, semantic analyzer)
  * @returns {Object}  required capability map (empty = no advanced capability needed)
  */
 export function detectRequiredCapabilities(
@@ -87,7 +90,9 @@ export function detectRequiredCapabilities(
   truthType,
   highStakes,
   contextTokens,
-  confidenceScore
+  confidenceScore,
+  requiresExpertise = false,
+  analysisComplexity = 0
 ) {
   const required = {};
 
@@ -115,7 +120,21 @@ export function detectRequiredCapabilities(
     required.long_context = 'high';
   }
 
-  // ── PRIMARY TRIGGER 4: Output contract / structured multi-part instructions
+  // ── PRIMARY TRIGGER 4: Expert-level signal from semantic analyzer ─────────
+  // analysis.requiresExpertise is set by the semantic analyzer when the query
+  // demonstrates expert-level domain complexity.
+  if (requiresExpertise) {
+    required.reasoning_tier = 'advanced';
+  }
+
+  // ── PRIMARY TRIGGER 5: High semantic complexity score ─────────────────────
+  // analysis.complexity > 0.8 represents the top of the complexity scale from
+  // the semantic analyzer — benefits from advanced reasoning tier.
+  if (analysisComplexity > 0.8) {
+    required.reasoning_tier = required.reasoning_tier || 'advanced';
+  }
+
+  // ── PRIMARY TRIGGER 6: Output contract / structured multi-part instructions
   // Assessed via secondary patterns when patterns fire on ≥2 structured_output
   // indicators AND classification is not simple_factual.
   const structuredSignals = countPatternSignals(query, 'structured_output');
@@ -124,10 +143,15 @@ export function detectRequiredCapabilities(
   }
 
   // ── SECONDARY SIGNAL REINFORCEMENT ────────────────────────────────────────
-  // Patterns may UPGRADE an already-required capability tier or confirm a
-  // primary trigger. They cannot CREATE a requirement on their own.
+  // Patterns may UPGRADE an already-required capability tier.
+  // They cannot CREATE a requirement when no primary trigger has fired.
+  // The guard `Object.keys(required).length > 0` ensures a primary trigger
+  // has already populated `required` before patterns can add reasoning_tier.
+  // (If required is empty, patterns have no effect regardless of match count.)
 
-  if (required.reasoning_tier !== 'advanced') {
+  if (required.reasoning_tier !== 'advanced' && Object.keys(required).length > 0) {
+    // Some other primary trigger already fired. If the query also looks like it
+    // needs advanced reasoning (2+ pattern matches, not simple_factual), require it.
     const reasoningSignals = countPatternSignals(query, 'reasoning_tier');
     if (reasoningSignals >= 2 && queryClassification !== 'simple_factual') {
       required.reasoning_tier = 'advanced';
@@ -135,6 +159,9 @@ export function detectRequiredCapabilities(
   }
 
   if (!required.hallucination_control) {
+    // hallucination_control patterns are risk signals — two or more domain hits
+    // (legal, medical, financial, safety) represent a genuine risk-level concern
+    // and can create a requirement independently.
     const hallucinationSignals = countPatternSignals(query, 'hallucination_control');
     if (hallucinationSignals >= 2) {
       required.hallucination_control = 'high';
