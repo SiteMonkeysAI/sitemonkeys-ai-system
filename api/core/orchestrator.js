@@ -2322,6 +2322,8 @@ export class Orchestrator {
       return {
         success: true,
         response: personalityResponse.response,
+        escalated: aiResponse.escalated || false,
+        escalationReason: aiResponse.escalationReason || null,
         // Confidence Scoring Toggle — metadata field (null when showConfidence is false)
         confidence: personalityResponse.confidenceMetadata || null,
         // ISSUE #781 FIX: Add explicit context status for transparency
@@ -4493,6 +4495,8 @@ export class Orchestrator {
         response: response,
         model: model,
         cost: cost,
+        escalated: useClaude,
+        escalationReason: useClaude ? (routingReason.join(', ') || null) : null,
       };
     } catch (error) {
       this.error("[AI] Routing failed", error);

@@ -516,6 +516,13 @@
         font-size: 11px;
         color: #888;
       }
+      .escalation-indicator {
+        font-size: 11px;
+        color: #888;
+        text-align: right;
+        padding: 2px 8px 6px;
+        opacity: 0.8;
+      }
 
       .input-area {
         display: flex;
@@ -2147,6 +2154,13 @@
             box.appendChild(panel);
           }
 
+          if (data.escalated === true) {
+            const indicator = document.createElement('div');
+            indicator.className = 'escalation-indicator';
+            indicator.innerHTML = '⚡ Advanced reasoning applied';
+            box.appendChild(indicator);
+          }
+
           // Fix 1: Scroll to TOP of new response so user reads from the beginning
           responseBubble.scrollIntoView({ block: 'start', behavior: 'smooth' });
 
@@ -2360,6 +2374,13 @@
               </div>
             `;
             box.appendChild(panel);
+          }
+
+          if (data.escalated === true) {
+            const indicator = document.createElement('div');
+            indicator.className = 'escalation-indicator';
+            indicator.innerHTML = '⚡ Advanced reasoning applied';
+            box.appendChild(indicator);
           }
 
           // Fix 1: Scroll to TOP of new response so user reads from the beginning
