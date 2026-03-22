@@ -4107,8 +4107,6 @@ export class Orchestrator {
 
       // ISSUE #787 FIX 1: Define model limits at the start for consistent use throughout routing
       const MODEL_LIMITS = {
-        'gpt-4': { maxContext: 8192, reservedOutput: 2000 },
-        'gpt-4o': { maxContext: 128000, reservedOutput: 4000 },
         'gpt-5.4-mini': { maxContext: 128000, reservedOutput: 4000 },
         'gpt-5.4': { maxContext: 1050000, reservedOutput: 4000 },
         'claude-sonnet-4-20250514': { maxContext: 200000, reservedOutput: 4000 }
@@ -4470,7 +4468,9 @@ export class Orchestrator {
           max_completion_tokens: 2000,
           logprobs: true,
           top_logprobs: 3,
-        });
+        };
+
+        const gptResponse = await openai.chat.completions.create(apiParams);
 
         if (gptResponse.choices[0].finish_reason === 'length') {
           console.log('[WARNING] Response truncated — consider increasing max_completion_tokens');
