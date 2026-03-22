@@ -4083,8 +4083,8 @@ export class Orchestrator {
     phase4Metadata = null,
   ) {
     let useClaude = false;
-    let useGpt4o = false;
-    let attemptedModel = 'gpt-4';
+    let useGpt54 = false;
+    let attemptedModel = 'gpt-5.4-mini';
     let routingReason = [];
     let isSafetyCritical = false;
 
@@ -4094,14 +4094,12 @@ export class Orchestrator {
 
       // ISSUE #787 FIX 1: Define model limits at the start for consistent use throughout routing
       const MODEL_LIMITS = {
-        'gpt-4': { maxContext: 8192, reservedOutput: 2000 },
-        'gpt-4o': { maxContext: 128000, reservedOutput: 4000 },
         'gpt-5.4-mini': { maxContext: 128000, reservedOutput: 4000 },
         'gpt-5.4': { maxContext: 1050000, reservedOutput: 4000 },
         'claude-sonnet-4-20250514': { maxContext: 200000, reservedOutput: 4000 }
       };
-      const gpt4MaxInput = MODEL_LIMITS['gpt-4'].maxContext - MODEL_LIMITS['gpt-4'].reservedOutput;
-      const gpt4oMaxInput = MODEL_LIMITS['gpt-4o'].maxContext - MODEL_LIMITS['gpt-4o'].reservedOutput;
+      const gpt54MiniMaxInput = MODEL_LIMITS['gpt-5.4-mini'].maxContext - MODEL_LIMITS['gpt-5.4-mini'].reservedOutput;
+      const gpt54MaxInput = MODEL_LIMITS['gpt-5.4'].maxContext - MODEL_LIMITS['gpt-5.4'].reservedOutput;
       const claudeMaxInput = MODEL_LIMITS['claude-sonnet-4-20250514'].maxContext - MODEL_LIMITS['claude-sonnet-4-20250514'].reservedOutput;
 
       // PRIORITY 0: High-stakes domain detection (BIBLE REQUIREMENT - Section D)
@@ -4121,35 +4119,34 @@ export class Orchestrator {
       }
 
       // PRIORITY 2: Token budget check (high token count prefers Claude)
-      // ISSUE #784/#787 FIX: Use dynamic threshold based on GPT-4's actual max input budget
-      // GPT-4 has 8K context (6192t input + 2K output). Context >6192t routes to Claude (200K window)
+      // ISSUE #784/#787 FIX: Use dynamic threshold based on base GPT model's max input budget
       // NOTE: This is a preliminary check based on context tokens only.
       // Full payload (including system prompt, external data, message, history) is checked later.
-      if (context.totalTokens > gpt4MaxInput) {
+      if (context.totalTokens > gpt54MiniMaxInput) {
         useClaude = true;
         routingReason.push(`high_token_count:${context.totalTokens}`);
       }
 
-      // PRIORITY 3: Medium complexity → GPT-4o (faster, lower cost, comparable quality)
+      // PRIORITY 3: Medium complexity → GPT-5.4 (faster, lower cost, comparable quality)
       // Runs BEFORE the confidence check (PRIORITY 4) so that medium_complexity queries are
       // not incorrectly escalated to Claude merely because confidence < 0.85.
       // Does NOT apply when: high_stakes detected (P0), vault present (P1), token budget exceeded (P2).
       if (!useClaude) {
         const queryTier = context.queryClassification?.classification;
         if (queryTier === 'medium_complexity') {
-          useGpt4o = true;
-          routingReason.push('medium_complexity:gpt-4o');
-          this.log(`[AI ROUTING] medium_complexity query → GPT-4o (faster, cost-efficient)`);
+          useGpt54 = true;
+          routingReason.push('medium_complexity:gpt-5.4');
+          this.log(`[AI ROUTING] medium_complexity query → GPT-5.4 (faster, cost-efficient)`);
         }
       }
 
       // PRIORITY 4: Confidence and complexity → Claude
-      // Low confidence alone does NOT override an already-set GPT-4o routing decision —
-      // medium_complexity queries are well within GPT-4o capability.
+      // Low confidence alone does NOT override an already-set GPT-5.4 routing decision —
+      // medium_complexity queries are well within GPT-5.4 capability.
       // requiresExpertise and business_validation+high_complexity still escalate to Claude
-      // even when GPT-4o was selected above.
+      // even when GPT-5.4 was selected above.
       if (!useClaude) {
-        if ((!useGpt4o && confidence < 0.85) ||
+        if ((!useGpt54 && confidence < 0.85) ||
             analysis.requiresExpertise ||
             (mode === "business_validation" && analysis.complexity > 0.7)) {
           useClaude = true;
@@ -4170,10 +4167,10 @@ export class Orchestrator {
       const initialRouteDecision = useClaude;
       const initialRoutingReason = [...routingReason];
 
-      // If user explicitly said NO to Claude (claudeConfirmed: false), force GPT-4
+      // If user explicitly said NO to Claude (claudeConfirmed: false), force GPT-5.4-mini
       // BUT: This can be overridden later if payload size requires Claude
       if (context.claudeConfirmed === false) {
-        this.log(`[AI ROUTING] User declined Claude, initially forcing GPT-4`);
+        this.log(`[AI ROUTING] User declined Claude, initially forcing GPT-5.4-mini`);
         useClaude = false;
         routingReason = ['user_declined_claude'];
       }
@@ -4187,10 +4184,10 @@ export class Orchestrator {
           return {
             needsConfirmation: true,
             reason: routingReason.join(', '),
-            message: `This query would benefit from Claude Sonnet 4.5 analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use GPT-4 (faster, $0.01-0.03)?`,
+            message: `This query would benefit from Claude Sonnet 4.5 analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use GPT-5.4-mini (faster, $0.01-0.03)?`,
             estimatedCost: {
               claude: '$0.05-0.15',
-              gpt4: '$0.01-0.03'
+              gpt54Mini: '$0.01-0.03'
             }
           };
         }
@@ -4198,7 +4195,7 @@ export class Orchestrator {
 
       // NOTE: Model selection will be finalized after payload size check
       // Initial routing decision logged here, final decision after pre-flight check
-      const initialModel = useClaude ? "claude-sonnet-4.5" : (useGpt4o ? "gpt-4o" : "gpt-4");
+      const initialModel = useClaude ? "claude-sonnet-4.5" : (useGpt54 ? "gpt-5.4" : "gpt-5.4-mini");
 
       this.log(
         `[AI ROUTING] Initial routing: ${initialModel} (reasons: ${routingReason.join(", ") || "default"})`,
@@ -4311,9 +4308,8 @@ export class Orchestrator {
       // If we're using a GPT model and the full payload exceeds its limit, escalate to Claude deterministically
       // ISSUE #790 FIX: This escalation overrides user_declined_claude - payload size is safety-critical
       let escalatedDueToPayloadSize = false;
-      // For GPT-4o use its larger context window; for GPT-4 use its smaller window
-      const currentGptMaxInput = useGpt4o ? gpt4oMaxInput : gpt4MaxInput;
-      const currentGptModelName = useGpt4o ? 'gpt-4o' : 'gpt-4';
+      const currentGptMaxInput = useGpt54 ? gpt54MaxInput : gpt54MiniMaxInput;
+      const currentGptModelName = useGpt54 ? 'gpt-5.4' : 'gpt-5.4-mini';
       if (!useClaude && estimatedTotalInputTokens > currentGptMaxInput) {
         // ISSUE #787 FIX 3: Enhanced logging with full decision context
         this.log(`[AI-PREFLIGHT] model_before=${currentGptModelName}, estimated_input=${estimatedTotalInputTokens}t, max_input_budget=${currentGptMaxInput}t, reroute=true`);
@@ -4329,7 +4325,7 @@ export class Orchestrator {
         }
 
         useClaude = true;
-        useGpt4o = false;
+        useGpt54 = false;
         escalatedDueToPayloadSize = true;
 
         // ISSUE #790 FIX: Replace user_declined_claude with payload_overflow reason
@@ -4338,9 +4334,9 @@ export class Orchestrator {
       }
 
       // Update model selection after potential escalation
-      const model = useClaude ? "claude-sonnet-4.5" : (useGpt4o ? "gpt-4o" : "gpt-4");
+      const model = useClaude ? "claude-sonnet-4.5" : (useGpt54 ? "gpt-5.4" : "gpt-5.4-mini");
       attemptedModel = model;
-      const modelConfigKey = useClaude ? 'claude-sonnet-4-20250514' : (useGpt4o ? 'gpt-4o' : 'gpt-4');
+      const modelConfigKey = useClaude ? 'claude-sonnet-4-20250514' : (useGpt54 ? 'gpt-5.4' : 'gpt-5.4-mini');
       const modelConfig = MODEL_LIMITS[modelConfigKey];
       const modelLimit = modelConfig.maxContext - modelConfig.reservedOutput;
 
@@ -5414,12 +5410,13 @@ Mode: ${modeConfig?.display_name || mode}
 
   #calculateCost(model, inputTokens, outputTokens) {
     const rates = {
-      "gpt-4": { input: 0.01, output: 0.03 },
-      "gpt-4o": { input: 0.005, output: 0.015 },
+      "gpt-5.4-mini": { input: 0.00025, output: 0.002 },
+      "gpt-5.4": { input: 0.00175, output: 0.014 },
       "claude-sonnet-4.5": { input: 0.003, output: 0.015 },
+      "claude-sonnet-4-20250514": { input: 0.003, output: 0.015 },
     };
 
-    const rate = rates[model] || rates["gpt-4"];
+    const rate = rates[model] || rates["gpt-5.4-mini"];
 
     const inputCost = (inputTokens / 1000) * rate.input;
     const outputCost = (outputTokens / 1000) * rate.output;
