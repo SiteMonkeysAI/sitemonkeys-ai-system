@@ -4454,6 +4454,8 @@ export class Orchestrator {
           messages: messages,
           temperature: 0.7,
           max_completion_tokens: 2000,
+          logprobs: true,
+          top_logprobs: 3,
         });
 
         response = gptResponse.choices[0].message.content;
