@@ -885,6 +885,10 @@ Answer (yes/no):`;
         max_completion_tokens: 10
       });
 
+      if (response.choices[0].finish_reason === 'length') {
+        console.log('[WARNING] Semantic supersession response truncated — consider increasing max_completion_tokens');
+      }
+
       const answer = response.choices[0].message.content.trim().toLowerCase();
       const isUpdate = answer === 'yes';
 

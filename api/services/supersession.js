@@ -596,6 +596,11 @@ Return ONLY the fingerprint or "null", nothing else. No explanation.`
     clearTimeout(timeoutId);
 
     const data = await response.json();
+
+    if (data.choices?.[0]?.finish_reason === 'length') {
+      console.log('[WARNING] Supersession fingerprint response truncated — consider increasing max_completion_tokens');
+    }
+
     const fingerprint = data.choices?.[0]?.message?.content?.trim();
     const timeMs = Date.now() - startTime;
 

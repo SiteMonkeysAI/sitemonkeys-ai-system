@@ -1593,6 +1593,10 @@ Facts (preserve user terminology + add synonyms):`;
         max_completion_tokens: 300  // STR1 FIX: Increased from 150 to allow extraction of 10+ facts (10 facts × ~15 tokens each ≈ 150, leaving no room)
       });
 
+      if (response.choices[0].finish_reason === 'length') {
+        console.log('[WARNING] Extraction response truncated — consider increasing max_completion_tokens');
+      }
+
       let facts = response.choices[0].message.content.trim();
 
       // CMP2/EDG3 DIAGNOSTIC: Log raw GPT-4o-mini output BEFORE any post-processing

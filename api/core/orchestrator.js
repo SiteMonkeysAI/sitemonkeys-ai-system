@@ -4096,6 +4096,8 @@ export class Orchestrator {
       const MODEL_LIMITS = {
         'gpt-4': { maxContext: 8192, reservedOutput: 2000 },
         'gpt-4o': { maxContext: 128000, reservedOutput: 4000 },
+        'gpt-5.4-mini': { maxContext: 128000, reservedOutput: 4000 },
+        'gpt-5.4': { maxContext: 1050000, reservedOutput: 4000 },
         'claude-sonnet-4-20250514': { maxContext: 200000, reservedOutput: 4000 }
       };
       const gpt4MaxInput = MODEL_LIMITS['gpt-4'].maxContext - MODEL_LIMITS['gpt-4'].reservedOutput;
@@ -4457,6 +4459,10 @@ export class Orchestrator {
           logprobs: true,
           top_logprobs: 3,
         });
+
+        if (gptResponse.choices[0].finish_reason === 'length') {
+          console.log('[WARNING] Response truncated — consider increasing max_completion_tokens');
+        }
 
         response = gptResponse.choices[0].message.content;
         inputTokens = gptResponse.usage.prompt_tokens;

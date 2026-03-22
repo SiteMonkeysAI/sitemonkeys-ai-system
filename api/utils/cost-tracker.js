@@ -17,7 +17,23 @@ const MODEL_COSTS = {
     input: 0.005 / 1000,
     output: 0.015 / 1000,
   },
+  "gpt-4o-mini": {
+    input: 0.00015 / 1000,
+    output: 0.0006 / 1000,
+  },
+  "gpt-5.4-mini": {
+    input: 0.00025 / 1000,
+    output: 0.002 / 1000,
+  },
+  "gpt-5.4": {
+    input: 0.00175 / 1000,
+    output: 0.014 / 1000,
+  },
   "claude-sonnet-4.5": {
+    input: 0.003 / 1000,
+    output: 0.015 / 1000,
+  },
+  "claude-sonnet-4-20250514": {
     input: 0.003 / 1000,
     output: 0.015 / 1000,
   },
