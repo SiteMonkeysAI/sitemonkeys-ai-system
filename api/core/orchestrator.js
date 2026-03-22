@@ -68,7 +68,7 @@ const GREETING_LIMIT = 150; // Max chars for greeting responses (Anti-Engagement
 const MIN_SENTENCE_LENGTH = 50; // Minimum chars to consider a valid sentence
 
 // Greeting shortcut response pools (indexed by personality)
-// Used by STEP 6.9 to return a deterministic greeting without calling GPT-4.
+// Used by STEP 6.9 to return a deterministic greeting without calling gpt-4o.
 const GREETING_RESPONSES = {
   eli: [
     'Hello. What can I help you with?',
@@ -1007,7 +1007,7 @@ export class Orchestrator {
       // protects cases like "Hi, what's my name?" where memory is genuinely required.
       // Without this bypass the userHasMemories check forces memory retrieval for "Hello",
       // which sets memoryContext.hasMemory=true and prevents the STEP 6.9 greeting shortcut
-      // from firing — causing an unnecessary GPT-4 call and downstream truncation.
+      // from firing — causing an unnecessary gpt-4o call and downstream truncation.
       const isPureGreeting =
         earlyClassification !== null &&
         earlyClassification !== undefined &&
@@ -1677,13 +1677,13 @@ export class Orchestrator {
         };
       }
 
-      // STEP 6.9: GREETING SHORTCUT — bypass GPT-4 for pure greetings
+      // STEP 6.9: GREETING SHORTCUT — bypass gpt-4o for pure greetings
       // Only fires when ALL conditions are met:
       // - classified as greeting with high confidence (≥0.85)
       // - no personal intent detected
       // - no memory context present
       // - no document or vault context
-      // If any condition fails, fall through to normal GPT-4 call.
+      // If any condition fails, fall through to normal gpt-4o call.
       if (
         earlyClassification?.classification === 'greeting' &&
         earlyClassification.confidence >= 0.85 &&
@@ -1696,7 +1696,7 @@ export class Orchestrator {
         const pool = GREETING_RESPONSES[personalitySelection.personality] ?? GREETING_RESPONSES.eli;
         const greetingResponse = pool[randomInt(0, pool.length)];
 
-        this.log(`[GREETING-SHORTCUT] Returning deterministic greeting (personality=${personalitySelection.personality}, confidence=${earlyClassification.confidence.toFixed(2)}) — GPT-4 bypassed`);
+        this.log(`[GREETING-SHORTCUT] Returning deterministic greeting (personality=${personalitySelection.personality}, confidence=${earlyClassification.confidence.toFixed(2)}) — gpt-4o bypassed`);
 
         const processingTime = Date.now() - startTime;
         return {
@@ -3752,7 +3752,7 @@ export class Orchestrator {
   #enforceTokenBudget(memory, documents, vault) {
     // Token budget for context sources
     // Large contexts (>6K tokens) auto-escalate to Claude (200K window)
-    // GPT-4 queries stay under 6K context to fit 8K window with 2K output buffer
+    // gpt-4o queries stay under 6K context to fit 8K window with 2K output buffer
     const BUDGET = {
       MEMORY: 2500,      // Bible spec: memory extraction targets up to 2,400 tokens
       DOCUMENTS: 3000,   // Bible spec: document handling supports up to 10K tokens
@@ -4198,7 +4198,7 @@ export class Orchestrator {
           return {
             needsConfirmation: true,
             reason: routingReason.join(', '),
-            message: `This query would benefit from Claude Sonnet 4.5 analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use gpt-4o (faster, ~$0.005-0.02)?`,
+            message: `This query would benefit from Claude Sonnet analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use gpt-4o (faster, ~$0.005-0.02)?`,
             estimatedCost: {
               claude: '$0.05-0.15',
               gpt4o: '$0.005-0.02'
@@ -4293,7 +4293,7 @@ export class Orchestrator {
         console.log(`[PHASE4] Injected external content: ${phase4Metadata.sources_used} sources, ${phase4Metadata.fetched_content.length} chars`);
       } else if (phase4Metadata.lookup_attempted && !phase4Metadata.external_lookup) {
         // ISSUE #885 FIX: When external lookup was attempted but no sources returned usable data,
-        // inject a disclosure so GPT-4 does not silently answer from training data without telling
+        // inject a disclosure so gpt-4o does not silently answer from training data without telling
         // the user. Silent fallthrough to confident training-data responses is not acceptable.
         externalContext = `\n\n[EXTERNAL LOOKUP ATTEMPTED — NO DATA RETRIEVED]\nAn attempt was made to retrieve current information for this query, but no external sources returned usable data.\nYou MUST disclose this in your response. Tell the user that you tried to pull current information but could not retrieve it right now, then provide what you know from training data and explicitly label it as potentially outdated.\nExample phrasing: "I tried to pull current information on [topic] but couldn't retrieve anything right now — here's what I know from my training data, which may not reflect the latest developments: ..."\n[END DISCLOSURE]\n\n`;
         console.log('[PHASE4] External lookup attempted but all sources failed — injecting failure disclosure');
@@ -4424,7 +4424,7 @@ export class Orchestrator {
         inputTokens = claudeResponse.usage.input_tokens;
         outputTokens = claudeResponse.usage.output_tokens;
       } else {
-        // Build messages array for GPT-4 with proper conversation history
+        // Build messages array for gpt-4o with proper conversation history
         const messages = [];
 
         if (!isVaultQuery) {
