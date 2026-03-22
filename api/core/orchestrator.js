@@ -54,6 +54,15 @@ import { enforceResponseContract } from "../core/intelligence/responseContractGa
 import { enforceReasoningEscalation } from "./intelligence/reasoningEscalationEnforcer.js";
 import { applyPrincipleBasedReasoning } from "./intelligence/principleBasedReasoning.js";
 import { classifyQueryComplexity } from "./intelligence/queryComplexityClassifier.js";
+import {
+  getDefaultAdapter,
+  getBestAdapterForCapabilities,
+  checkContractLock
+} from "./adapters/adapter-registry.js";
+import {
+  detectRequiredCapabilities,
+  calculateCapabilityGap
+} from "./intelligence/capability-gap-detector.js";
 // ========== LAYER 2 PRIMITIVES (Issue #746) ==========
 import {
   applyTemporalArithmeticFallback,
@@ -62,6 +71,12 @@ import {
 // ================================================
 
 // ==================== CONSTANTS ====================
+
+// Session-scoped Claude decline tracking.
+// When a user declines Claude escalation during a session, that preference
+// is honoured for the remainder of the session. The next session starts fresh.
+// This Map is keyed by sessionId and cleared when the server restarts.
+const _sessionClaudeDeclined = new Map();
 
 // Response Intelligence Configuration
 const GREETING_LIMIT = 150; // Max chars for greeting responses (Anti-Engagement)
@@ -2326,6 +2341,8 @@ export class Orchestrator {
         escalationReason: aiResponse.escalationReason || null,
         // Confidence Scoring Toggle — metadata field (null when showConfidence is false)
         confidence: personalityResponse.confidenceMetadata || null,
+        // Escalation indicator: true when an advanced model was used due to capability gap
+        escalated: aiResponse.escalated || false,
         // ISSUE #781 FIX: Add explicit context status for transparency
         sources: {
           memoryLoaded: !!context.memory,
@@ -4102,6 +4119,8 @@ export class Orchestrator {
     let attemptedModel = 'gpt-4o';
     let routingReason = [];
     let isSafetyCritical = false;
+    let capabilityGapEscalated = false;
+    let capabilityGapReason = null;
 
     try {
       // ========== CRITICAL FIX: Check vault/tokens BEFORE confidence ==========
@@ -4143,70 +4162,94 @@ export class Orchestrator {
         routingReason.push(`high_token_count:${context.totalTokens}`);
       }
 
-      // PRIORITY 3: Medium complexity → GPT-4o (faster, lower cost, comparable quality)
-      // Runs BEFORE the confidence check (PRIORITY 4) so that medium_complexity queries are
-      // not incorrectly escalated to Claude merely because confidence < 0.85.
-      // Does NOT apply when: high_stakes detected (P0), vault present (P1), token budget exceeded (P2).
+      // PRIORITY 3: Capability-Gap Driven Routing
+      //
+      // CONTRACT PRESERVATION: escalation only occurs when ALL of the following are true:
+      //   (a) contract lock passes (provider not locked, tool compat OK, output contract OK)
+      //   (b) the query has a detected capability gap against the default adapter
+      //   (c) a better, active adapter is available and configured
+      //
+      // Escalation is NOT confidence-driven. Confidence is a supporting signal only.
+      // Low confidence alone NEVER triggers escalation.
       if (!useClaude) {
-        const queryTier = context.queryClassification?.classification;
-        if (queryTier === 'medium_complexity') {
-          useGpt4o = true;
-          routingReason.push('medium_complexity:gpt-4o');
-          this.log(`[AI ROUTING] medium_complexity query → GPT-4o (faster, cost-efficient)`);
-        }
-      }
+        // CONTRACT LOCK GATE — check before any escalation attempt
+        const contractLock = checkContractLock(context);
 
-      // PRIORITY 4: Confidence and complexity → Claude
-      // Low confidence alone does NOT override an already-set GPT-4o routing decision —
-      // medium_complexity queries are well within GPT-4o capability.
-      // requiresExpertise and business_validation+high_complexity still escalate to Claude
-      // even when GPT-4o was selected above.
-      if (!useClaude) {
-        if ((!useGpt4o && confidence < 0.85) ||
-            analysis.requiresExpertise ||
-            (mode === "business_validation" && analysis.complexity > 0.7)) {
-          useClaude = true;
-          routingReason.push(`confidence:${confidence.toFixed(2)}`);
-          if (analysis.requiresExpertise) routingReason.push("requires_expertise");
-          if (mode === "business_validation" && analysis.complexity > 0.7) {
-            routingReason.push(`high_complexity:${analysis.complexity.toFixed(2)}`);
+        if (contractLock.locked) {
+          this.log(`[ROUTING] Escalation blocked by contract lock: ${contractLock.reason}`);
+        } else {
+          const defaultAdapter = getDefaultAdapter();
+
+          if (defaultAdapter) {
+            const requiredCapabilities = detectRequiredCapabilities(
+              message,
+              context.queryClassification?.classification,
+              phase4Metadata?.truth_type || null,
+              phase4Metadata?.high_stakes || null,
+              context.totalTokens || 0,
+              confidence,
+              analysis.requiresExpertise || false,
+              analysis.complexity || 0
+            );
+
+            const { hasGap, gaps } = calculateCapabilityGap(
+              defaultAdapter,
+              requiredCapabilities
+            );
+
+            if (hasGap) {
+              const betterAdapter = getBestAdapterForCapabilities(requiredCapabilities);
+
+              if (betterAdapter && betterAdapter.model !== defaultAdapter.model) {
+                useClaude = betterAdapter.provider === 'anthropic';
+                capabilityGapEscalated = true;
+                capabilityGapReason = Object.keys(gaps).join(', ');
+                routingReason.push(`capability_gap:${capabilityGapReason}`);
+                this.log(
+                  `[ROUTING] Capability gap detected: ${capabilityGapReason}. ` +
+                  `Escalating from ${defaultAdapter.model} to ${betterAdapter.model}`
+                );
+              }
+            }
           }
         }
+
+        // Business validation mode with high complexity: domain-specific override.
+        // Uses a lower threshold (0.7) than the generic detector (0.8) because
+        // business_validation queries benefit from advanced reasoning at moderate complexity.
+        // requiresExpertise is already handled inside detectRequiredCapabilities().
+        if (!useClaude &&
+            mode === "business_validation" && analysis.complexity > 0.7) {
+          useClaude = true;
+          routingReason.push(`high_complexity:${analysis.complexity.toFixed(2)}`);
+        }
       }
 
-      // ========== USER CONFIRMATION FOR CLAUDE (BIBLE REQUIREMENT - Section D) ==========
-      // "User confirmation required before Claude (except safety-critical)"
-      // CRITICAL FIX: Respect user's explicit choice when confirmation is provided
-
-      // ISSUE #790 FIX: Store initial routing decision before user preference check
-      // This allows us to detect payload-overflow escalation later and override user decline
+      // PRIORITY 4: Session-scoped Claude decline tracking.
+      // When a user declines Claude, that preference is stored for the session.
+      // The next session starts fresh (in-memory only — no DB persistence).
       const initialRouteDecision = useClaude;
       const initialRoutingReason = [...routingReason];
 
-      // If user explicitly said NO to Claude (claudeConfirmed: false), force GPT-4
-      // BUT: This can be overridden later if payload size requires Claude
-      if (context.claudeConfirmed === false) {
-        this.log(`[AI ROUTING] User declined Claude, initially forcing gpt-4o`);
-        useClaude = false;
-        routingReason = ['user_declined_claude'];
-      }
-      // If escalating to Claude for non-safety-critical reasons, notify user ONCE
-      else if (useClaude && !isSafetyCritical && !context.vault) {
-        // Return a special response asking for confirmation ONLY if not yet confirmed
-        const confirmationNeeded = context.claudeConfirmed !== true;
+      const sessionDeclinedClaude =
+        context.sessionId && _sessionClaudeDeclined.get(context.sessionId) === true;
 
-        if (confirmationNeeded) {
-          this.log(`[AI ROUTING] Claude escalation requires user confirmation (reasons: ${routingReason.join(', ')})`);
-          return {
-            needsConfirmation: true,
-            reason: routingReason.join(', '),
-            message: `This query would benefit from Claude Sonnet analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use gpt-4o (faster, ~$0.005-0.02)?`,
-            estimatedCost: {
-              claude: '$0.05-0.15',
-              gpt4o: '$0.005-0.02'
-            }
-          };
+      // Record a new per-request decline into the session store
+      if (context.claudeConfirmed === false) {
+        if (context.sessionId) {
+          _sessionClaudeDeclined.set(context.sessionId, true);
+          this.log(`[AI ROUTING] User declined Claude — stored for session ${context.sessionId}`);
         }
+      }
+
+      // Honour session-level or request-level decline unless safety-critical or token-forced
+      if ((context.claudeConfirmed === false || sessionDeclinedClaude) &&
+          !isSafetyCritical &&
+          context.totalTokens <= gpt4oMaxInput) {
+        this.log(`[AI ROUTING] Claude declined (session-scoped) — using gpt-4o`);
+        useClaude = false;
+        capabilityGapEscalated = false;
+        routingReason = ['user_declined_claude'];
       }
 
       // NOTE: Model selection will be finalized after payload size check
@@ -4249,6 +4292,8 @@ export class Orchestrator {
               outputCost: 0,
               totalCost: 0,
             },
+            escalated: false,
+            escalationReason: null,
           };
         }
 
@@ -4495,8 +4540,8 @@ export class Orchestrator {
         response: response,
         model: model,
         cost: cost,
-        escalated: useClaude,
-        escalationReason: useClaude ? (routingReason.join(', ') || null) : null,
+        escalated: capabilityGapEscalated || escalatedDueToPayloadSize,
+        escalationReason: capabilityGapReason || (escalatedDueToPayloadSize ? 'payload_size' : null),
       };
     } catch (error) {
       this.error("[AI] Routing failed", error);
