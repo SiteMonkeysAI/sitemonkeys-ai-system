@@ -9,9 +9,15 @@
  * @param {number}      sourcesUsed   - How many external sources confirmed the answer
  * @param {boolean}     lookupPerformed - Whether an external lookup was performed
  * @param {number|null} modelConfidence - Existing AI-reported confidence (0–1), used lightly
+ * @param {object|null} phase4Metadata  - Full Phase 4 metadata (optional, used for memory detection)
  * @returns {number} Confidence value clamped to [0.15, 0.97]
  */
-export function calculateConfidence(truthType, sourcesUsed, lookupPerformed, modelConfidence) {
+export function calculateConfidence(truthType, sourcesUsed, lookupPerformed, modelConfidence, phase4Metadata) {
+  // Memory-sourced answers score 0.95 — confirmed from personal records
+  if (isMemorySourcedAnswer(phase4Metadata, lookupPerformed)) {
+    return 0.95;
+  }
+
   // Base score by truth type
   let base = 0.5;
   if (truthType === 'PERMANENT') base = 0.97;
@@ -43,6 +49,18 @@ export function isLookupPerformed(phase4Metadata) {
 }
 
 /**
+ * Determine whether the answer came from persistent memory (not training knowledge).
+ * Memory-sourced answers should score higher and use a distinct reason text.
+ *
+ * @param {object|null} phase4Metadata  - Full Phase 4 metadata
+ * @param {boolean}     lookupPerformed - Whether an external lookup was performed
+ * @returns {boolean}
+ */
+function isMemorySourcedAnswer(phase4Metadata, lookupPerformed) {
+  return phase4Metadata?.memory_sourced === true && !lookupPerformed;
+}
+
+/**
  * Build the confidence metadata object returned in the API response.
  *
  * @param {object} phase4Metadata - Phase 4 metadata from context
@@ -55,8 +73,8 @@ export function buildConfidenceMetadata(phase4Metadata) {
   const truthType = p4.truth_type || null;
   const modelConfidence = p4.confidence || null;
 
-  const score = calculateConfidence(truthType, sourcesUsed, lookupPerformed, modelConfidence);
-  const reason = buildConfidenceReason(truthType, sourcesUsed, lookupPerformed, score);
+  const score = calculateConfidence(truthType, sourcesUsed, lookupPerformed, modelConfidence, p4);
+  const reason = buildConfidenceReason(truthType, sourcesUsed, lookupPerformed, score, p4);
 
   return {
     score: Math.round(score * 100),
@@ -71,9 +89,15 @@ export function buildConfidenceMetadata(phase4Metadata) {
  * @param {number}      sourcesUsed   - How many external sources confirmed the answer
  * @param {boolean}     lookupPerformed - Whether an external lookup was performed
  * @param {number}      score         - Calculated confidence score (0–1)
+ * @param {object|null} phase4Metadata  - Full Phase 4 metadata (optional, used for memory detection)
  * @returns {string} Plain-text reason (no markdown, no emoji)
  */
-export function buildConfidenceReason(truthType, sourcesUsed, lookupPerformed, score) {
+export function buildConfidenceReason(truthType, sourcesUsed, lookupPerformed, score, phase4Metadata) {
+  // Memory-sourced answers: answer came from personal records, not training knowledge
+  if (isMemorySourcedAnswer(phase4Metadata, lookupPerformed)) {
+    return 'confirmed from your personal records';
+  }
+
   if (score < 0.50) {
     return 'limited information available — recommend verification';
   }

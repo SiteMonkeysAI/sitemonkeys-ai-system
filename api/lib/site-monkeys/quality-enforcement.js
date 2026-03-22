@@ -18,7 +18,7 @@ const QUALITY_ENFORCEMENT = {
   // AI ARCHITECTURE FAILOVER CHAIN
   ai_architecture: {
     primary: "claude-3-sonnet",
-    secondary: "gpt-4",
+    secondary: "gpt-5.4-mini",
     tertiary: "mistral",
     emergency: "template_library",
   },

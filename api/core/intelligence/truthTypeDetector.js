@@ -50,7 +50,9 @@ const SEMI_STABLE_PATTERNS = [
 ];
 
 const PERMANENT_PATTERNS = [
-  /\b(what is|define|definition of|meaning of)\b/i,
+  /\b(what is|what are|define|definition of|meaning of)\b/i,
+  /\bwhat (is|are) the (name|names) of\b/i,
+  /\bwho (are|were) the (members|characters|turtles|founders)\b/i,
   /\b(history|historical|when was|when did)\b/i,
   /\b(theorem|principle|law of|theory of)\b/i,
   /\b(how does .* work|explain|describe)\b/i,
