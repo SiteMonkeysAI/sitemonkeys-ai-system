@@ -814,7 +814,7 @@ export class Orchestrator {
       documentContext = null,
       vaultEnabled = false,
       conversationHistory = [],
-      claudeConfirmed = false, // BIBLE FIX: User confirmation for Claude escalation
+      claudeConfirmed = null, // BIBLE FIX: User confirmation for Claude escalation
       showConfidence = false, // Confidence Scoring Toggle — default off
     } = requestData;
 

@@ -386,7 +386,7 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       vaultContext,
       vault_content,
       conversationHistory = [],
-      claude_confirmed = false, // BIBLE FIX: User confirmation for Claude escalation
+      claude_confirmed = null, // BIBLE FIX: User confirmation for Claude escalation
       showConfidence = false, // Confidence Scoring Toggle — default off
     } = req.body;
 
