@@ -759,7 +759,7 @@ describe('H. STR1 — Volume Stress Guards', () => {
     const storage = readRepoFile('api/memory/intelligent-storage.js');
     assert.ok(storage, 'Could not read intelligent-storage.js');
 
-    const tokenMatch = storage.match(/max_completion_tokens:\s*(\d+)/);
+    const tokenMatch = storage.match(/max_tokens:\s*(\d+)/);
     const tokenValue = tokenMatch ? parseInt(tokenMatch[1]) : 0;
 
     assert.ok(
@@ -1536,153 +1536,50 @@ describe('N. Issue 3 — Business Validation Must Not Fire on Personal Queries',
 });
 
 // ============================================================
-// SECTION P: INTELLIGENT MODEL ROUTING — GPT-5.x GUARDS
-// Ensures high_complexity queries route to gpt-5.4 and that
+// SECTION P: INTELLIGENT MODEL ROUTING — GPT-4o GUARDS
+// Ensures medium_complexity queries route to GPT-4o and that
 // high_stakes / vault / Claude escalation remain unchanged.
-// Replaces legacy GPT-4o guards (X-001 through X-008).
 // ============================================================
 
-describe('P. Intelligent Model Routing — GPT-5.x', () => {
+describe('P. Intelligent Model Routing — GPT-4o', () => {
 
-  it('X-001: No reference to "gpt-4" model string in orchestrator or cost-tracker', () => {
-    const orch = readRepoFile('api/core/orchestrator.js');
-    const costTrackerFile = readRepoFile('api/utils/cost-tracker.js');
-    assert.ok(orch, 'Could not read api/core/orchestrator.js');
-    assert.ok(costTrackerFile, 'Could not read api/utils/cost-tracker.js');
+  it('P-001: gpt-4o exists in MODEL_COSTS configuration in cost-tracker.js', () => {
+    const costTracker = readRepoFile('api/utils/cost-tracker.js');
+    assert.ok(costTracker, 'Could not read api/utils/cost-tracker.js');
 
-    // Match "gpt-4" as a standalone model name (not gpt-4o-mini etc.)
-    const gpt4Pattern = /"gpt-4"|'gpt-4'/;
     assert.ok(
-      !gpt4Pattern.test(orch),
-      'X-001 FAIL: "gpt-4" model string found in orchestrator.js. Must be replaced with gpt-5.4-mini or gpt-5.4.'
-    );
-    assert.ok(
-      !gpt4Pattern.test(costTrackerFile),
-      'X-001 FAIL: "gpt-4" model string found in cost-tracker.js. Must be replaced with gpt-5.4-mini or gpt-5.4.'
+      costTracker.includes('"gpt-4o"') || costTracker.includes("'gpt-4o'"),
+      'P-001 FAIL: "gpt-4o" is not present in api/utils/cost-tracker.js MODEL_COSTS. ' +
+      'GPT-4o cost tracking will fall back to incorrect pricing.'
     );
   });
 
-  it('X-002: No reference to "gpt-4o" model string in orchestrator or cost-tracker', () => {
+  it('P-002: medium_complexity routing logic references gpt-4o in orchestrator', () => {
     const orch = readRepoFile('api/core/orchestrator.js');
-    const costTrackerFile = readRepoFile('api/utils/cost-tracker.js');
-    assert.ok(orch, 'Could not read api/core/orchestrator.js');
-    assert.ok(costTrackerFile, 'Could not read api/utils/cost-tracker.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
 
-    // Match "gpt-4o" as a standalone model name (not gpt-4o-mini)
-    const gpt4oPattern = /"gpt-4o"|'gpt-4o'/;
-    assert.ok(
-      !gpt4oPattern.test(orch),
-      'X-002 FAIL: "gpt-4o" model string found in orchestrator.js. Must be replaced with gpt-5.4-mini or gpt-5.4.'
+    // The routing must check for medium_complexity classification AND associate it with gpt-4o
+    const hasMediumComplexityGpt4o = (
+      orch.includes('medium_complexity') &&
+      (orch.includes('"gpt-4o"') || orch.includes("'gpt-4o'") || orch.includes('useGpt4o'))
     );
+
     assert.ok(
-      !gpt4oPattern.test(costTrackerFile),
-      'X-002 FAIL: "gpt-4o" model string found in cost-tracker.js. Must be replaced with gpt-5.4-mini or gpt-5.4.'
+      hasMediumComplexityGpt4o,
+      'P-002 FAIL: orchestrator.js does not contain medium_complexity routing to gpt-4o. ' +
+      'medium_complexity queries will continue routing to gpt-4 instead of the faster, cheaper gpt-4o.'
     );
   });
 
-  it('X-003: Default model is gpt-5.4-mini in orchestrator', () => {
-    const orch = readRepoFile('api/core/orchestrator.js');
-    assert.ok(orch, 'Could not read api/core/orchestrator.js');
-
-    assert.ok(
-      orch.includes("'gpt-5.4-mini'") || orch.includes('"gpt-5.4-mini"'),
-      'X-003 FAIL: "gpt-5.4-mini" not found in orchestrator.js. Default model must be gpt-5.4-mini.'
-    );
-    assert.ok(
-      orch.includes("attemptedModel = 'gpt-5.4-mini'") || orch.includes('attemptedModel = "gpt-5.4-mini"'),
-      'X-003 FAIL: Default attemptedModel is not gpt-5.4-mini in orchestrator.js.'
-    );
-  });
-
-  it('X-004: High complexity routes to gpt-5.4 in orchestrator', () => {
-    const orch = readRepoFile('api/core/orchestrator.js');
-    assert.ok(orch, 'Could not read api/core/orchestrator.js');
-
-    const hasHighComplexity = orch.includes("queryTier === 'high_complexity'");
-    const hasGpt54 = orch.includes("'gpt-5.4'") || orch.includes('"gpt-5.4"');
-
-    assert.ok(
-      hasHighComplexity && hasGpt54,
-      'X-004 FAIL: orchestrator.js does not route high_complexity queries to gpt-5.4. ' +
-      'Complex analytical queries will not use the flagship model.'
-    );
-  });
-
-  it('X-005: Claude path unchanged — claude-sonnet-4-20250514 still used for escalation', () => {
-    const orch = readRepoFile('api/core/orchestrator.js');
-    assert.ok(orch, 'Could not read api/core/orchestrator.js');
-
-    assert.ok(
-      orch.includes('claude-sonnet-4-20250514') && orch.includes('useClaude'),
-      'X-005 FAIL: Claude escalation path is missing or changed in orchestrator.js. ' +
-      'High-stakes, vault, and overflow queries must still route to Claude.'
-    );
-  });
-
-  it('X-006: Cost rates updated correctly for gpt-5.4-mini and gpt-5.4', () => {
-    const orch = readRepoFile('api/core/orchestrator.js');
-    const costTrackerFile = readRepoFile('api/utils/cost-tracker.js');
-    assert.ok(orch, 'Could not read api/core/orchestrator.js');
-    assert.ok(costTrackerFile, 'Could not read api/utils/cost-tracker.js');
-
-    assert.ok(
-      orch.includes('0.00025'),
-      'X-006 FAIL: gpt-5.4-mini input rate (0.00025) not found in orchestrator.js #calculateCost.'
-    );
-    assert.ok(
-      orch.includes('0.00175'),
-      'X-006 FAIL: gpt-5.4 input rate (0.00175) not found in orchestrator.js #calculateCost.'
-    );
-    assert.ok(
-      costTrackerFile.includes('"gpt-5.4-mini"') || costTrackerFile.includes("'gpt-5.4-mini'"),
-      'X-006 FAIL: gpt-5.4-mini not found in cost-tracker.js MODEL_COSTS. Cost tracking will be incorrect.'
-    );
-    assert.ok(
-      costTrackerFile.includes('"gpt-5.4"') || costTrackerFile.includes("'gpt-5.4'"),
-      'X-006 FAIL: gpt-5.4 not found in cost-tracker.js MODEL_COSTS. Cost tracking will be incorrect.'
-    );
-  });
-
-  it('X-007: logprobs included in GPT API call with try/catch in orchestrator', () => {
-    const orch = readRepoFile('api/core/orchestrator.js');
-    assert.ok(orch, 'Could not read api/core/orchestrator.js');
-
-    assert.ok(
-      orch.includes('logprobs: true'),
-      'X-007 FAIL: logprobs: true not found in GPT API call in orchestrator.js. ' +
-      'Confidence scores will default to 62% instead of genuine model-derived values.'
-    );
-    assert.ok(
-      orch.includes('top_logprobs: 3'),
-      'X-007 FAIL: top_logprobs: 3 not found in GPT API call in orchestrator.js.'
-    );
-    assert.ok(
-      orch.includes('modelConfidenceFromLogprobs'),
-      'X-007 FAIL: modelConfidenceFromLogprobs variable missing from orchestrator.js.'
-    );
-  });
-
-  it('X-008: logprobs failure does not block response — silent catch with fallback', () => {
-    const orch = readRepoFile('api/core/orchestrator.js');
-    assert.ok(orch, 'Could not read api/core/orchestrator.js');
-
-    assert.ok(
-      orch.includes('modelConfidenceFromLogprobs = null') &&
-      orch.includes('[LOGPROBS]') &&
-      orch.includes('Math.exp(avg)'),
-      'X-008 FAIL: logprobs extraction is missing null fallback, [LOGPROBS] logging, or Math.exp confidence calculation. ' +
-      'A failed logprobs extraction must never block the response.'
-    );
-  });
-
-  it('P-003: high_stakes queries still route to Claude (highest priority)', () => {
+  it('P-003: high_stakes queries still route to Claude (GPT-4 minimum)', () => {
     const orch = readRepoFile('api/core/orchestrator.js');
     assert.ok(orch, 'Could not read orchestrator.js');
 
     // The high_stakes check (PRIORITY 0) must set useClaude = true AND appear
-    // before the high_complexity gpt-5.4 routing (PRIORITY 3) in the source file.
+    // before the medium_complexity GPT-4o routing (PRIORITY 4) in the source file.
+    // We use the actual conditional expression as the index marker (not a log string).
     const highStakesIdx = orch.indexOf('phase4Metadata?.high_stakes?.isHighStakes');
-    const highComplexityIdx = orch.indexOf("queryTier === 'high_complexity'");
+    const mediumComplexityIdx = orch.indexOf("queryTier === 'medium_complexity'");
 
     assert.ok(
       highStakesIdx !== -1,
@@ -1691,14 +1588,14 @@ describe('P. Intelligent Model Routing — GPT-5.x', () => {
     );
 
     assert.ok(
-      highComplexityIdx !== -1,
-      'P-003 FAIL: high_complexity gpt-5.4 routing block is missing from orchestrator.js.'
+      mediumComplexityIdx !== -1,
+      'P-003 FAIL: medium_complexity GPT-4o routing block is missing from orchestrator.js.'
     );
 
     assert.ok(
-      highStakesIdx < highComplexityIdx,
-      'P-003 FAIL: high_stakes escalation must appear BEFORE high_complexity gpt-5.4 routing. ' +
-      'High-stakes queries may incorrectly route to gpt-5.4 instead of Claude.'
+      highStakesIdx < mediumComplexityIdx,
+      'P-003 FAIL: high_stakes escalation must appear BEFORE medium_complexity GPT-4o routing. ' +
+      'High-stakes queries may incorrectly route to GPT-4o instead of Claude.'
     );
   });
 
@@ -1716,7 +1613,7 @@ describe('P. Intelligent Model Routing — GPT-5.x', () => {
     assert.ok(
       hasPayloadOverflowEscalation,
       'P-004 FAIL: Payload overflow escalation to Claude is missing in orchestrator.js. ' +
-      'Large payloads may crash gpt-5.4/gpt-5.4-mini instead of safely escalating to Claude.'
+      'Large payloads may crash GPT-4o/GPT-4 instead of safely escalating to Claude.'
     );
   });
 
@@ -2075,14 +1972,14 @@ describe('R. System Pipeline Audit — Area 4: High-Stakes Domain Detection', ()
 
     const highStakesIdx = orch.indexOf('phase4Metadata?.high_stakes?.isHighStakes');
     const vaultPriority1Idx = orch.indexOf('PRIORITY 1: Vault presence');
-    const highComplexityIdx = orch.indexOf("queryTier === 'high_complexity'");
+    const mediumComplexityIdx = orch.indexOf("queryTier === 'medium_complexity'");
 
     assert.ok(highStakesIdx !== -1, 'R-015 FAIL: PRIORITY 0 high_stakes check missing from orchestrator.');
     assert.ok(vaultPriority1Idx !== -1, 'R-015 FAIL: PRIORITY 1 vault check missing from orchestrator.');
     assert.ok(
-      highStakesIdx < vaultPriority1Idx && highStakesIdx < highComplexityIdx,
+      highStakesIdx < vaultPriority1Idx && highStakesIdx < mediumComplexityIdx,
       'R-015 FAIL: high_stakes escalation (PRIORITY 0) must appear BEFORE vault (PRIORITY 1) ' +
-      'and high_complexity routing in orchestrator.js. High-stakes queries may route to GPT instead of Claude.'
+      'and medium_complexity routing in orchestrator.js. High-stakes queries may route to GPT instead of Claude.'
     );
   });
 
