@@ -4184,10 +4184,10 @@ export class Orchestrator {
           return {
             needsConfirmation: true,
             reason: routingReason.join(', '),
-            message: `This query would benefit from Claude Sonnet 4.5 analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use GPT-5.4-mini (faster, $0.01-0.03)?`,
+            message: `This query would benefit from Claude Sonnet 4.5 analysis (${routingReason.join(', ')}). This will cost approximately $0.05-0.15. Would you like to proceed with Claude, or use GPT-5.4-mini (faster, ~$0.002-0.02)?`,
             estimatedCost: {
               claude: '$0.05-0.15',
-              gpt54Mini: '$0.01-0.03'
+              gpt54mini: '$0.002-0.02'
             }
           };
         }
