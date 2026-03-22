@@ -4470,7 +4470,7 @@ export class Orchestrator {
           top_logprobs: 3,
         };
 
-        const gptResponse = await openai.chat.completions.create(apiParams);
+        const gptResponse = await this.openai.chat.completions.create(apiParams);
 
         if (gptResponse.choices[0].finish_reason === 'length') {
           console.log('[WARNING] Response truncated — consider increasing max_completion_tokens');
