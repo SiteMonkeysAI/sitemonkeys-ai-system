@@ -145,7 +145,7 @@ export class EliFramework {
       // Confidence Scoring Toggle — calculate early so ALL return paths include it
       let confidenceMetadata = null;
       if (context?.showConfidence === true) {
-        confidenceMetadata = buildConfidenceMetadata(context?.phase4Metadata);
+        confidenceMetadata = buildConfidenceMetadata({ ...(context?.phase4Metadata || {}), query });
         this.logger.log(`[CONFIDENCE-TOGGLE] Calculated: ${confidenceMetadata.score}% — ${confidenceMetadata.reason}`);
       }
 
