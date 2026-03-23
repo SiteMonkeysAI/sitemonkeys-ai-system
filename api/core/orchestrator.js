@@ -1433,7 +1433,7 @@ export class Orchestrator {
                 this.log('[SEMANTIC-VERIFICATION] No entities from semantic analysis — using cleaned claim sentence as fallback');
                 verificationLookupQuery = claimSentence
                   .replace(/^(the|a|an)\s+/i, '')
-                  .replace(/\b(is|are|was|were)\s+\w+.*$/i, '')
+                  .replace(/\b(is|are|was|were)\s+[^\n]*$/i, '')
                   .trim();
               }
             }
@@ -1981,7 +1981,7 @@ export class Orchestrator {
         const summaryText = externalSummary || 'external sources';
 
         aiResponse.response = `Based on verified external data: ${summaryText}\n\n${aiResponse.response
-          .replace(/based on the memory[^.]*\./i, '')
+          .replace(/based on the memory context[^.]{0,200}\./i, '')
           .trim()}`;
 
         this.log('[CONTRACT] EXTERNAL_FIRST violation corrected — ' +
