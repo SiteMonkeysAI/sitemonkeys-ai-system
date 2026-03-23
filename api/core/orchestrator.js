@@ -1335,6 +1335,14 @@ export class Orchestrator {
         // "Apple's recent product announcements" trigger external lookup when classified SEMI_STABLE.
         const NEWS_TRIGGER_PATTERNS = /\b(what happened|what's happening|news|today|this morning|yesterday|current events|latest|breaking|update on|announcement|announced|recently announced)\b/i;
 
+        // Verification intent patterns — user is asking the system to verify/confirm a prior claim
+        const VERIFICATION_INTENT_PATTERNS = [
+          /\b(are you sure|double.?check|verify|fact.?check)\b/i,
+          /\b(check (current )?sources?|check that again)\b/i,
+          /\b(is that (right|correct|accurate))\b/i,
+          /\b(confirm that|look that up|check again)\b/i
+        ];
+
         // Geopolitical patterns - specific countries/conflicts
         const GEOPOLITICAL_PATTERNS = /\b(venezuela|ukraine|russia|china|iran|israel|gaza|palestine|war|attack|invasion|military|troops|sanctions|election|president|congress|senate)\b/i;
 
@@ -1393,6 +1401,25 @@ export class Orchestrator {
               (isCurrentEventQuery(m.content) || isFactualEntityQuery(m.content))
             );
 
+        // Verification intent detection — did the user ask to verify/confirm a prior claim?
+        const isVerificationIntent = VERIFICATION_INTENT_PATTERNS.some(p => p.test(message));
+
+        let verificationLookupQuery = null;
+
+        if (isVerificationIntent && conversationHistory) {
+          const lastAssistant = [...conversationHistory]
+            .reverse()
+            .find(m => m.role === 'assistant');
+
+          if (lastAssistant) {
+            const firstSentence = lastAssistant.content
+              .split(/[.!?]/)[0]?.trim();
+            if (firstSentence && firstSentence.length > 10) {
+              verificationLookupQuery = firstSentence;
+            }
+          }
+        }
+
         let shouldLookup =
           truthTypeResult.type === 'VOLATILE' ||
           (truthTypeResult.type === 'SEMI_STABLE' && matchesNewsPattern) ||
@@ -1404,7 +1431,8 @@ export class Orchestrator {
           // scientific facts are permanent and do not need external verification.
           (isFactualEntityLookupQuery && truthTypeResult.type !== 'PERMANENT') ||
           (isSemanticCurrentEventQuery && truthTypeResult.type !== 'PERMANENT') ||   // Issue #881: entity + action pattern
-          isVolatileFollowUp;              // Issue #881: follow-up inherits volatile context
+          isVolatileFollowUp ||              // Issue #881: follow-up inherits volatile context
+          (isVerificationIntent && verificationLookupQuery !== null); // Verification: user asked to check a prior claim
 
         // Possessive guard: queries about "our"/"my" things refer to internal context,
         // not external data. Override shouldLookup to prevent wasted external API calls.
@@ -1481,9 +1509,16 @@ export class Orchestrator {
           // ISSUE #826 FIX (Problem 6): Strip any [DOCUMENT CONTEXT] block that may have
           // been appended to the enriched message before passing to external API.
           // This prevents garbage Wikipedia/news queries containing document content.
-          const lookupQuery = enrichedMessage.replace(/\[DOCUMENT CONTEXT\][\s\S]*/i, '').trim();
-          if (lookupQuery !== enrichedMessage) {
+          // Verification intent override: when the user asked to verify a prior claim,
+          // use the extracted claim sentence instead of the (possibly short) user message.
+          const lookupQuery = (isVerificationIntent && verificationLookupQuery)
+            ? verificationLookupQuery
+            : enrichedMessage.replace(/\[DOCUMENT CONTEXT\][\s\S]*/i, '').trim();
+          if (!isVerificationIntent && lookupQuery !== enrichedMessage) {
             console.log('[ORCHESTRATOR] Stripped [DOCUMENT CONTEXT] block from lookup query');
+          }
+          if (isVerificationIntent && verificationLookupQuery) {
+            console.log('[ORCHESTRATOR] Verification intent: using claim from last assistant response as lookup query');
           }
 
           const lookupResult = await lookup(lookupQuery, {
