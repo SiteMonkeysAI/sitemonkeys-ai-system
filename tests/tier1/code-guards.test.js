@@ -3159,3 +3159,353 @@ describe('CC. Prompt Deduplication and Confidence Calculator Fixes', () => {
   });
 
 });
+
+// ============================================================
+// DD. Intelligent Session State Compression (Issue: Session Compression)
+// ============================================================
+
+describe('DD. Intelligent Session State Compression', () => {
+
+  // ─── File existence ─────────────────────────────────────────────────────────
+
+  const SESSION_EXTRACTOR_PATH = 'api/core/intelligence/session-state-extractor.js';
+
+  // ─── DD-001: flag off → slice(-5) preserved ──────────────────────────────
+
+  it('DD-001: SESSION_STATE_ENABLED=false uses exact .slice(-5) behavior', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('conversationHistory.slice(-5)'),
+      'DD-001 FAIL: conversationHistory.slice(-5) must remain as the false-branch fallback in orchestrator.js'
+    );
+  });
+
+  // ─── DD-002: flag on → new system activated ───────────────────────────────
+
+  it('DD-002: SESSION_STATE_ENABLED=true activates new system', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('SESSION_STATE_ENABLED') && orch.includes('buildSessionContext'),
+      'DD-002 FAIL: orchestrator.js must reference SESSION_STATE_ENABLED and buildSessionContext'
+    );
+  });
+
+  // ─── DD-003: snake_case accepted ─────────────────────────────────────────
+
+  it('DD-003: snake_case conversation_history accepted at server.js', () => {
+    const srv = readRepoFile('server.js');
+    assert.ok(srv, 'Could not read server.js');
+    assert.ok(
+      srv.includes('conversation_history'),
+      'DD-003 FAIL: server.js must destructure conversation_history (snake_case) from req.body'
+    );
+  });
+
+  // ─── DD-004: camelCase still accepted ────────────────────────────────────
+
+  it('DD-004: camelCase conversationHistory still accepted at server.js', () => {
+    const srv = readRepoFile('server.js');
+    assert.ok(srv, 'Could not read server.js');
+    assert.ok(
+      srv.includes('conversationHistory'),
+      'DD-004 FAIL: server.js must still accept conversationHistory (camelCase)'
+    );
+  });
+
+  // ─── DD-005: BUDGET.HISTORY exists ───────────────────────────────────────
+
+  it('DD-005: BUDGET.HISTORY = 2000 exists in BUDGET object', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('HISTORY: 2000') || orch.includes('HISTORY:2000'),
+      'DD-005 FAIL: BUDGET.HISTORY = 2000 must be defined in the BUDGET object in orchestrator.js'
+    );
+  });
+
+  // ─── DD-006 through DD-025: logic tests via direct import ────────────────
+
+  it('DD-006: shouldExtract returns false for simple factual query', async () => {
+    const { shouldExtract: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    const result = fn('what is 2 plus 2', state, [], 0);
+    assert.strictEqual(result, false, 'DD-006 FAIL: shouldExtract should return false for simple factual query with no signals');
+  });
+
+  it('DD-007: shouldExtract returns true when correction signal detected', async () => {
+    const { shouldExtract: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    const result = fn('actually I meant the other one', state, [], 0);
+    assert.strictEqual(result, true, 'DD-007 FAIL: shouldExtract should return true when correction signal present');
+  });
+
+  it('DD-008: shouldExtract returns true when named entity introduced', async () => {
+    const { shouldExtract: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    const result = fn('Sarah Johnson will handle this project', state, [], 0);
+    assert.strictEqual(result, true, 'DD-008 FAIL: shouldExtract should return true when new named entity detected');
+  });
+
+  it('DD-009: shouldExtract returns true when compression threshold exceeded', async () => {
+    const { shouldExtract: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    // Exceed token budget
+    const result = fn('hello', state, [], 2001);
+    assert.strictEqual(result, true, 'DD-009 FAIL: shouldExtract should return true when estimated tokens exceed BUDGET.HISTORY');
+  });
+
+  it('DD-010: mergeSessionState never fully replaces existing state', async () => {
+    const { mergeSessionState: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const existing = emptyFn();
+    existing.facts_established.push({ text: 'existing fact', status: 'confirmed' });
+    const extracted = emptyFn();
+    extracted.facts_established.push({ text: 'new fact', status: 'confirmed' });
+    const merged = fn(existing, extracted);
+    assert.ok(
+      merged.facts_established.some(f => f.text === 'existing fact'),
+      'DD-010 FAIL: mergeSessionState must preserve existing facts — full replacement is not allowed'
+    );
+    assert.ok(
+      merged.facts_established.some(f => f.text === 'new fact'),
+      'DD-010 FAIL: mergeSessionState must include extracted facts'
+    );
+  });
+
+  it('DD-011: superseded values excluded from context injection', async () => {
+    const { buildSessionContext: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    state.decisions_made.push({ text: 'old decision', status: 'superseded' });
+    state.decisions_made.push({ text: 'active decision', status: 'active' });
+    state.current_focus = { entity: 'TestEntity', objective: 'testing' };
+    const context = fn(state, [{ role: 'user', content: 'test' }]);
+    const contextStr = JSON.stringify(context);
+    assert.ok(
+      !contextStr.includes('old decision'),
+      'DD-011 FAIL: superseded decisions must not appear in context injection'
+    );
+  });
+
+  it('DD-012: raw window minimum is 2 exchanges always', async () => {
+    const { calculateRawWindowSize: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    // No pronouns, no dependencies — should return minimum 2
+    const size = fn([], state);
+    assert.ok(size >= 2, `DD-012 FAIL: raw window size must be at least 2, got ${size}`);
+  });
+
+  it('DD-013: raw window expands to 5 under high reference density', async () => {
+    const { calculateRawWindowSize: fn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    // 6+ pronouns should trigger window size 5
+    const exchanges = [
+      { role: 'user', content: 'it they this that he she him her them its their it they' }
+    ];
+    const state = { open_dependencies: [] };
+    const size = fn(exchanges, state);
+    assert.strictEqual(size, 5, `DD-013 FAIL: raw window should be 5 under high reference density, got ${size}`);
+  });
+
+  it('DD-014: current_focus falls back to most recent primary entity', async () => {
+    const { buildSessionContext: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    // No current_focus entity set, but a primary entity exists
+    state.current_focus = { entity: null, objective: null };
+    state.active_entities.push({ name: 'PrimaryProject', is_primary: true, last_mentioned: 1 });
+    const context = fn(state, [{ role: 'user', content: 'help' }]);
+    const contextStr = JSON.stringify(context);
+    assert.ok(
+      contextStr.includes('PrimaryProject'),
+      'DD-014 FAIL: current_focus should fall back to most recent primary entity'
+    );
+  });
+
+  it('DD-015: state corruption resets to empty — never crashes', async () => {
+    const { validateStateSchema: fn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    // Corrupted state (missing required keys)
+    let threw = false;
+    try {
+      fn({ some_garbage: true });
+    } catch {
+      threw = true;
+    }
+    assert.ok(threw, 'DD-015 FAIL: validateStateSchema must throw on invalid state so caller can detect corruption');
+    // But empty/null input should also throw (not silently pass)
+    let threwNull = false;
+    try {
+      fn(null);
+    } catch {
+      threwNull = true;
+    }
+    assert.ok(threwNull, 'DD-015 FAIL: validateStateSchema must throw on null input');
+  });
+
+  it('DD-016: extraction failure falls back to raw history — never blocks', async () => {
+    const srv = readRepoFile('server.js');
+    assert.ok(srv, 'Could not read server.js');
+    assert.ok(
+      srv.includes('[SESSION-STATE] Extraction failed'),
+      'DD-016 FAIL: server.js must log extraction failure and continue with raw history'
+    );
+  });
+
+  it('DD-017: assembly overflow drops low-priority state first', async () => {
+    const extractor = readRepoFile(SESSION_EXTRACTOR_PATH);
+    assert.ok(extractor, `Could not read ${SESSION_EXTRACTOR_PATH}`);
+    assert.ok(
+      extractor.includes('low-priority state dropped') || extractor.includes('lowPriority') && extractor.includes('BUDGET_HISTORY'),
+      'DD-017 FAIL: session-state-extractor.js must implement budget-based dropping of low-priority state'
+    );
+  });
+
+  it('DD-018: assembly overflow preserves raw window always', async () => {
+    const { buildSessionContext: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    const rawHistory = [
+      { role: 'user', content: 'first message' },
+      { role: 'assistant', content: 'first reply' },
+    ];
+    const context = fn(state, rawHistory);
+    // Raw window messages must always be present
+    assert.ok(
+      context.some(m => m.content === 'first message' || m.content === 'first reply'),
+      'DD-018 FAIL: raw window messages must always appear in the assembled context'
+    );
+  });
+
+  it('DD-019: decisions_made active entries protected from pruning', async () => {
+    const { enforceStateSizeLimits: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    // Fill beyond limit with active entries
+    for (let i = 0; i < 12; i++) {
+      state.decisions_made.push({ text: `decision ${i}`, status: 'active' });
+    }
+    const result = fn(state);
+    const activeCount = result.decisions_made.filter(d => d.status === 'active').length;
+    // Active decisions should be preserved up to the limit
+    assert.ok(
+      activeCount <= 10,
+      `DD-019 FAIL: decisions_made must not exceed limit of 10, got ${activeCount}`
+    );
+    assert.ok(
+      activeCount > 0,
+      'DD-019 FAIL: active decisions_made entries must be present after pruning'
+    );
+  });
+
+  it('DD-020: decisions_made superseded entries pruned when limit exceeded', async () => {
+    const { enforceStateSizeLimits: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    // Fill with superseded then active — superseded should be pruned first
+    for (let i = 0; i < 8; i++) {
+      state.decisions_made.push({ text: `superseded ${i}`, status: 'superseded' });
+    }
+    for (let i = 0; i < 5; i++) {
+      state.decisions_made.push({ text: `active ${i}`, status: 'active' });
+    }
+    const result = fn(state);
+    assert.ok(
+      result.decisions_made.length <= 10,
+      `DD-020 FAIL: decisions_made must be capped at 10, got ${result.decisions_made.length}`
+    );
+  });
+
+  it('DD-021: context assembly follows priority order', async () => {
+    const extractor = readRepoFile(SESSION_EXTRACTOR_PATH);
+    assert.ok(extractor, `Could not read ${SESSION_EXTRACTOR_PATH}`);
+    // Verify assembly sequence comments exist in source
+    assert.ok(
+      extractor.includes('highPriority') && extractor.includes('lowPriority') && extractor.includes('rawWindow'),
+      'DD-021 FAIL: session-state-extractor.js must implement high-priority, low-priority, and raw window assembly'
+    );
+  });
+
+  it('DD-022: high-priority state injected before retrieved memory', async () => {
+    const { buildSessionContext: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    state.current_focus = { entity: 'ImportantEntity', objective: 'critical task' };
+    state.unresolved_threads = [{ text: 'pending question' }];
+    const rawHistory = [{ role: 'user', content: 'message' }];
+    const context = fn(state, rawHistory);
+    // High-priority context item should be present
+    const highPriorityItem = context.find(m => m._priority === 'high');
+    assert.ok(highPriorityItem, 'DD-022 FAIL: high-priority session state must be injected into context');
+  });
+
+  it('DD-023: low-priority state skipped when budget exhausted', async () => {
+    const extractor = readRepoFile(SESSION_EXTRACTOR_PATH);
+    assert.ok(extractor, `Could not read ${SESSION_EXTRACTOR_PATH}`);
+    assert.ok(
+      extractor.includes('BUDGET_HISTORY') && extractor.includes('includeLowPriority'),
+      'DD-023 FAIL: session-state-extractor.js must check budget before including low-priority state'
+    );
+  });
+
+  it('DD-024: semanticCompressionReady requires all three conditions', async () => {
+    const extractor = readRepoFile(SESSION_EXTRACTOR_PATH);
+    assert.ok(extractor, `Could not read ${SESSION_EXTRACTOR_PATH}`);
+    // All three conditions from spec must appear
+    assert.ok(
+      extractor.includes('unresolved_threads') &&
+      extractor.includes('open_dependencies') &&
+      extractor.includes('calculateReferenceDensity'),
+      'DD-024 FAIL: shouldExtract must require all three conditions: no unresolved_threads, no open_dependencies, low reference density'
+    );
+  });
+
+  it('DD-025: state size enforced — no section exceeds defined limits', async () => {
+    const { enforceStateSizeLimits: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+    const state = emptyFn();
+    // Overfill multiple sections
+    for (let i = 0; i < 20; i++) state.risk_flags.push({ text: `risk ${i}` });
+    for (let i = 0; i < 20; i++) state.constraints.push({ text: `constraint ${i}` });
+    for (let i = 0; i < 20; i++) state.recent_references.push({ text: `ref ${i}` });
+    const result = fn(state);
+    assert.ok(result.risk_flags.length <= 8, `DD-025 FAIL: risk_flags must not exceed 8, got ${result.risk_flags.length}`);
+    assert.ok(result.constraints.length <= 10, `DD-025 FAIL: constraints must not exceed 10, got ${result.constraints.length}`);
+    assert.ok(result.recent_references.length <= 10, `DD-025 FAIL: recent_references must not exceed 10, got ${result.recent_references.length}`);
+  });
+
+  it('DD-026: shouldExtract returns true every 4 exchanges (periodic maintenance trigger)', async () => {
+    const { shouldExtract: fn, createEmptySessionState: emptyFn } = await import('../../api/core/intelligence/session-state-extractor.js');
+
+    // Use 4 open_dependencies so calculateRawWindowSize returns 5 (knownDependencies > 3).
+    // This means 4 raw exchanges won't overflow the window (4 > 5 is false),
+    // isolating the periodic trigger as the only active signal.
+    const deps = [
+      { text: 'dep1' }, { text: 'dep2' }, { text: 'dep3' }, { text: 'dep4' }
+    ];
+    const rawExchanges = [
+      { role: 'user', content: 'a' },
+      { role: 'assistant', content: 'b' },
+      { role: 'user', content: 'c' },
+      { role: 'assistant', content: 'd' },
+    ];
+
+    // exchange_count=4 with 4 raw exchanges → periodic trigger fires
+    const state4 = emptyFn();
+    state4.exchange_count = 4;
+    state4.unresolved_threads = [{ text: 'pending' }];
+    state4.open_dependencies = deps;
+    const result4 = fn('hello', state4, rawExchanges, 0);
+    assert.strictEqual(result4, true, 'DD-026 FAIL: shouldExtract must return true at exchange_count=4 with 4+ raw exchanges');
+
+    // exchange_count=3 (not a multiple of 4) → periodic trigger does NOT fire
+    const state3 = emptyFn();
+    state3.exchange_count = 3;
+    state3.unresolved_threads = [{ text: 'pending' }];
+    state3.open_dependencies = deps;
+    const result3 = fn('hello', state3, rawExchanges, 0);
+    assert.strictEqual(result3, false, 'DD-026 FAIL: shouldExtract must NOT fire periodic trigger at exchange_count=3 (not a multiple of 4)');
+
+    // exchange_count=8 → fires again
+    const state8 = emptyFn();
+    state8.exchange_count = 8;
+    state8.unresolved_threads = [{ text: 'pending' }];
+    state8.open_dependencies = deps;
+    const result8 = fn('hello', state8, rawExchanges, 0);
+    assert.strictEqual(result8, true, 'DD-026 FAIL: shouldExtract must return true at exchange_count=8 (multiple of 4)');
+  });
+
+});
+
