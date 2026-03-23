@@ -1415,7 +1415,27 @@ export class Orchestrator {
             const firstSentence = lastAssistant.content
               .split(/[.!?]/)[0]?.trim();
             if (firstSentence && firstSentence.length > 10) {
-              verificationLookupQuery = firstSentence;
+              const claimSentence = firstSentence;
+
+              // Use semantic analysis to extract topic entities from the claim,
+              // not string manipulation
+              const semanticContext = await this.#performSemanticAnalysis(
+                claimSentence, context
+              );
+
+              // Use extracted entities as lookup query if available,
+              // otherwise fall back to cleaned claim sentence
+              if (semanticContext?.entities?.length > 0) {
+                verificationLookupQuery = semanticContext.entities.join(' ');
+                this.log(`[SEMANTIC-VERIFICATION] Using ${semanticContext.entities.length} extracted entities as lookup query`);
+              } else {
+                // Fallback: strip leading articles and copula phrases from the claim sentence
+                this.log('[SEMANTIC-VERIFICATION] No entities from semantic analysis — using cleaned claim sentence as fallback');
+                verificationLookupQuery = claimSentence
+                  .replace(/^(the|a|an)\s+/i, '')
+                  .replace(/\b(is|are|was|were)\s+\w+.*$/i, '')
+                  .trim();
+              }
             }
           }
         }
@@ -1946,6 +1966,26 @@ export class Orchestrator {
           }
           this.log('[PRIMITIVE-RSS-CLAMP] Applied. Response corrected to disclose RSS-only source limitation.');
         }
+      }
+
+      // ========== FIX 1: EXTERNAL_FIRST RESPONSE CONTRACT VALIDATOR ==========
+      // After AI generation, verify that EXTERNAL_FIRST hierarchy is honoured.
+      // If the response leads with memory context instead of external data, correct it.
+      if (phase4Metadata?.hierarchy === 'EXTERNAL_FIRST' &&
+          phase4Metadata?.fetched_content &&
+          aiResponse.response.toLowerCase().startsWith('based on the memory')) {
+
+        // Contract violation: EXTERNAL_FIRST hierarchy but response led with memory context.
+        // Extract the actual external data summary and prepend it to correct the response.
+        const externalSummary = (phase4Metadata.fetched_content.split('\n')[0] || '').trim(); // First line of external data
+        const summaryText = externalSummary || 'external sources';
+
+        aiResponse.response = `Based on verified external data: ${summaryText}\n\n${aiResponse.response
+          .replace(/based on the memory[^.]*\./i, '')
+          .trim()}`;
+
+        this.log('[CONTRACT] EXTERNAL_FIRST violation corrected — ' +
+          'response redirected to lead with external data');
       }
 
       // ========== RUN ENFORCEMENT CHAIN (BEFORE PERSONALITY) ==========

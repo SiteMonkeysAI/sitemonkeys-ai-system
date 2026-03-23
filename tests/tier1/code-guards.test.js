@@ -3927,3 +3927,105 @@ describe('VI. Verification Intent Detection — External Lookup Triggering', () 
   });
 
 });
+
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FX. EXTERNAL_FIRST Contract Validator & Semantic Verification Query
+// Verifies FIX 1 (contract validator) and FIX 2 (semantic entity extraction)
+// added to orchestrator.js.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('FX. EXTERNAL_FIRST Contract Validator & Semantic Verification Query', () => {
+
+  it('FX-001: EXTERNAL_FIRST contract validator exists in orchestrator', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes("phase4Metadata?.hierarchy === 'EXTERNAL_FIRST'") ||
+      src.includes('phase4Metadata?.hierarchy === "EXTERNAL_FIRST"'),
+      'FX-001 FAIL: EXTERNAL_FIRST contract validator is missing from orchestrator.js. ' +
+      'The fix requires a post-generation check that validates the response hierarchy contract.'
+    );
+  });
+
+  it('FX-002: Validator fires when response starts with "based on the memory"', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes("startsWith('based on the memory')") ||
+      src.includes('startsWith("based on the memory")'),
+      'FX-002 FAIL: The contract validator does not check for "based on the memory" response prefix. ' +
+      'The fix requires this condition to detect when the response incorrectly leads with memory context.'
+    );
+  });
+
+  it('FX-003: Validator logs CONTRACT violation', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes('[CONTRACT]'),
+      'FX-003 FAIL: The contract validator does not log a [CONTRACT] violation message. ' +
+      'The fix requires a log line with "[CONTRACT]" prefix for Railway observability.'
+    );
+  });
+
+  it('FX-004: verificationLookupQuery uses semantic entities when available', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    assert.ok(src.indexOf('verificationLookupQuery') !== -1, 'FX-004 FAIL: verificationLookupQuery not found');
+
+    // The semantic analysis call and entity check exist in the verification extraction block
+    assert.ok(
+      src.includes('#performSemanticAnalysis('),
+      'FX-004 FAIL: verificationLookupQuery extraction does not call #performSemanticAnalysis. ' +
+      'The fix requires semantic entity extraction to be used for the lookup query when available.'
+    );
+    assert.ok(
+      src.includes('semanticContext?.entities?.length'),
+      'FX-004 FAIL: verificationLookupQuery does not check semanticContext?.entities?.length. ' +
+      'The fix requires entities to be used as the lookup query when the semantic analysis provides them.'
+    );
+  });
+
+  it('FX-005: verificationLookupQuery fallback strips leading articles', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    assert.ok(src.indexOf('verificationLookupQuery') !== -1, 'FX-005 FAIL: verificationLookupQuery not found');
+
+    // The replace call lives in the fallback branch — search the full source
+    assert.ok(
+      src.includes(".replace(/^(the|a|an)\\s+/i, '')"),
+      'FX-005 FAIL: verificationLookupQuery fallback does not strip leading articles. ' +
+      'The fix requires the fallback path to remove leading "the", "a", or "an" from the claim sentence.'
+    );
+  });
+
+  it('FX-006: Validator does NOT fire when response correctly leads with external data', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // The validator condition must be a conjunction — all three parts must be true for it to fire.
+    // Locate the contract validator block by finding the [CONTRACT] log line.
+    const contractLogIdx = src.indexOf('[CONTRACT]');
+    assert.ok(contractLogIdx !== -1, 'FX-006 FAIL: [CONTRACT] log line not found');
+
+    // Walk backwards to find the opening if-condition
+    const contractBlock = src.substring(Math.max(0, contractLogIdx - 1000), contractLogIdx + 200);
+    assert.ok(
+      contractBlock.includes("startsWith('based on the memory')") ||
+      contractBlock.includes('startsWith("based on the memory")'),
+      'FX-006 FAIL: The contract validator condition does not include the "based on the memory" ' +
+      'prefix check. Without this guard the validator would fire even when the response correctly ' +
+      'leads with external data.'
+    );
+    // Confirm the condition is guarded by fetched_content presence
+    assert.ok(
+      contractBlock.includes('phase4Metadata?.fetched_content'),
+      'FX-006 FAIL: The contract validator does not guard against firing when fetched_content is ' +
+      'absent. The check must include "phase4Metadata?.fetched_content" so it only triggers when ' +
+      'external data was actually retrieved.'
+    );
+  });
+
+});
