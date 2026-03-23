@@ -3993,9 +3993,9 @@ describe('FX. EXTERNAL_FIRST Contract Validator & Semantic Verification Query', 
 
     assert.ok(src.indexOf('verificationLookupQuery') !== -1, 'FX-005 FAIL: verificationLookupQuery not found');
 
-    // The replace call lives in the fallback branch — search the full source
+    // The fallback uses safeStripArticle (non-regex, ReDoS-safe) to strip leading articles
     assert.ok(
-      src.includes(".replace(/^(the|a|an)\\s+/i, '')"),
+      src.includes('safeStripArticle(') && src.includes("startsWith('the ')"),
       'FX-005 FAIL: verificationLookupQuery fallback does not strip leading articles. ' +
       'The fix requires the fallback path to remove leading "the", "a", or "an" from the claim sentence.'
     );

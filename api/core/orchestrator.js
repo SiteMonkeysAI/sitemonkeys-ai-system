@@ -108,6 +108,27 @@ const GEOPOLITICAL_TOPIC_PATTERN = /\b(war|conflict|military|sanctions|iran|russ
 const UNVERIFIED_GEOPOLITICAL_CONTENT_WARNING =
   '\n[CREDIBILITY WARNING: None of the sources retrieved for this geopolitical query match known reputable outlets (Reuters, AP, BBC, etc.). You MUST NOT present any claim from this data as established fact. Treat every headline as unverified and tell the user these headlines could not be corroborated by a reputable news source. Do NOT state claims from this data in declarative form — always attribute and hedge ("According to [source], which has not been independently verified, ..."). If the user asks about geopolitical events, advise them to check Reuters, AP, or BBC directly.]';
 
+// ==================== REDOS-SAFE STRING HELPERS ====================
+
+function safeStripArticle(str) {
+  const lower = str.toLowerCase();
+  if (lower.startsWith('the ')) return str.slice(4);
+  if (lower.startsWith('a ')) return str.slice(2);
+  if (lower.startsWith('an ')) return str.slice(3);
+  return str;
+}
+
+function safeStripCopula(str) {
+  const copulas = [' is ', ' are ', ' was ', ' were '];
+  for (const copula of copulas) {
+    const idx = str.indexOf(copula);
+    if (idx !== -1) {
+      return str.substring(0, idx).trim();
+    }
+  }
+  return str.trim();
+}
+
 // ==================== ORCHESTRATOR CLASS ====================
 
 export class Orchestrator {
@@ -1431,10 +1452,7 @@ export class Orchestrator {
               } else {
                 // Fallback: strip leading articles and copula phrases from the claim sentence
                 this.log('[SEMANTIC-VERIFICATION] No entities from semantic analysis — using cleaned claim sentence as fallback');
-                verificationLookupQuery = claimSentence
-                  .replace(/^(the|a|an)\s+/i, '')
-                  .replace(/\b(is|are|was|were)\s+[^\n]*$/i, '')
-                  .trim();
+                verificationLookupQuery = safeStripCopula(safeStripArticle(claimSentence));
               }
             }
           }
