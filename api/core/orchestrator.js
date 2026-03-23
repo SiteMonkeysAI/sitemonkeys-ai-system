@@ -1285,6 +1285,7 @@ export class Orchestrator {
         confidence: confidence,
         high_stakes: null,
         phase4_error: null,
+        query: message || '',
       };
 
       if (!willUseGreetingShortcut) {
