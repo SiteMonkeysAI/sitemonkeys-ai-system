@@ -3678,3 +3678,125 @@ describe('QE. Query Enrichment Fixes — Issue #2', () => {
 
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// EF. EXTERNAL_FIRST Hierarchy — Memory Deprioritization Fix
+// Verifies the fix for: when external lookup returns data and EXTERNAL_FIRST
+// hierarchy is active, memory context must not dominate the response.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('EF. EXTERNAL_FIRST Hierarchy — Memory Deprioritization Fix', () => {
+
+  it('EF-001: EXTERNAL_FIRST_MEMORY_OVERRIDE constant exists in orchestrator', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes('EXTERNAL_FIRST_MEMORY_OVERRIDE'),
+      'EF-001 FAIL: "EXTERNAL_FIRST_MEMORY_OVERRIDE" constant is missing from orchestrator.js. ' +
+      'The fix requires a named constant containing the hierarchy override instruction that tells ' +
+      'the AI to lead with external data instead of memory context.'
+    );
+  });
+
+  it('EF-002: hierarchy override note is appended to externalContext when EXTERNAL_FIRST is active', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Find the #routeToAI method and check the externalContext assembly block
+    const routeToAIIdx = src.indexOf('async #routeToAI(');
+    assert.ok(routeToAIIdx !== -1, 'EF-002 FAIL: "#routeToAI" method not found in orchestrator.js');
+
+    const methodBody = src.substring(routeToAIIdx, routeToAIIdx + 15000);
+
+    assert.ok(
+      methodBody.includes("phase4Metadata.hierarchy === 'EXTERNAL_FIRST'"),
+      'EF-002 FAIL: #routeToAI does not check hierarchy === "EXTERNAL_FIRST" when building externalContext. ' +
+      'The fix requires this guard so the memory override note is only appended for EXTERNAL_FIRST queries.'
+    );
+
+    assert.ok(
+      methodBody.includes('hierarchyOverrideNote'),
+      'EF-002 FAIL: "hierarchyOverrideNote" is missing from #routeToAI. ' +
+      'The fix requires this variable to be interpolated into the externalContext string ' +
+      'so the AI receives the hierarchy override instruction alongside the external data.'
+    );
+  });
+
+  it('EF-003: HIERARCHY RULE label is present in the override message', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes('HIERARCHY RULE'),
+      'EF-003 FAIL: The string "HIERARCHY RULE" is missing from orchestrator.js. ' +
+      'The override message must contain this label so it is clearly distinguishable ' +
+      'in prompts from other critical instructions.'
+    );
+    assert.ok(
+      src.includes('OVERRIDES any conflicting memory context') ||
+      src.includes('OVERRIDES'),
+      'EF-003 FAIL: The override message must state that external data OVERRIDES memory context. ' +
+      'This explicit instruction is required so the AI does not default to the stronger memory framing.'
+    );
+  });
+
+  it('EF-004: externalPrecedenceNote is computed in #buildContextString', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Use lastIndexOf to find the method DEFINITION, not call sites
+    const buildCtxIdx = src.lastIndexOf('#buildContextString(');
+    assert.ok(buildCtxIdx !== -1, 'EF-004 FAIL: "#buildContextString" method definition not found in orchestrator.js');
+
+    const methodBody = src.substring(buildCtxIdx, buildCtxIdx + 15000);
+
+    assert.ok(
+      methodBody.includes('externalPrecedenceNote'),
+      'EF-004 FAIL: "externalPrecedenceNote" is missing from #buildContextString. ' +
+      'The fix requires this variable to inject a memory-deprioritization note inside ' +
+      'the PERSISTENT MEMORY CONTEXT block when external data has been fetched.'
+    );
+
+    assert.ok(
+      methodBody.includes('context.external'),
+      'EF-004 FAIL: #buildContextString does not gate externalPrecedenceNote on "context.external". ' +
+      'The note must only appear when external data is present for this query, not unconditionally.'
+    );
+  });
+
+  it('EF-005: externalPrecedenceNote is interpolated into the memory context block', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Use lastIndexOf to find the method DEFINITION, not call sites
+    const buildCtxIdx = src.lastIndexOf('#buildContextString(');
+    assert.ok(buildCtxIdx !== -1, 'EF-005 FAIL: "#buildContextString" method definition not found in orchestrator.js');
+
+    const methodBody = src.substring(buildCtxIdx, buildCtxIdx + 15000);
+
+    // externalPrecedenceNote is defined just before the standard (non-vault) memory block.
+    // The template literal for that block includes the interpolation.
+    const noteDefIdx = methodBody.indexOf('externalPrecedenceNote');
+    assert.ok(noteDefIdx !== -1, 'EF-005 FAIL: "externalPrecedenceNote" not found inside #buildContextString at all');
+
+    // From the definition, capture the next ~2000 chars to find the interpolation
+    const noteRegion = methodBody.substring(noteDefIdx, noteDefIdx + 2000);
+
+    assert.ok(
+      noteRegion.includes('${externalPrecedenceNote}'),
+      'EF-005 FAIL: "externalPrecedenceNote" is defined but never interpolated (${externalPrecedenceNote}) ' +
+      'in the PERSISTENT MEMORY CONTEXT block. The note must be interpolated so the AI receives it ' +
+      'as part of the memory-use instructions when external data is present.'
+    );
+  });
+
+  it('EF-006: [PHASE4] EXTERNAL_FIRST log line exists for observability', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes('EXTERNAL_FIRST hierarchy active'),
+      'EF-006 FAIL: The console.log for "EXTERNAL_FIRST hierarchy active" is missing from orchestrator.js. ' +
+      'This log line is required for Railway deployment observability — operators must be able to ' +
+      'confirm the hierarchy override path is exercised without replaying full responses.'
+    );
+  });
+
+});
+

@@ -4532,7 +4532,19 @@ export class Orchestrator {
           console.log('[PHASE4] Geopolitical query with no reputable source — credibility warning injected');
         }
 
-        externalContext = `\n\n[VERIFIED EXTERNAL DATA — MANDATORY SOURCE]\nIMPORTANT: The following data was JUST retrieved from live external sources. You MUST use this data to answer the user's question. Do NOT say "I don't have real-time data" or "I can't access current information" — this data IS the real-time source. Base your answer on this data.${credibilityNote}\n\n${phase4Metadata.fetched_content}\n[END VERIFIED EXTERNAL DATA]\n\n`;
+        // When EXTERNAL_FIRST hierarchy is active, memory must not dominate the response.
+        // Append an explicit hierarchy override so the AI leads with external data.
+        const EXTERNAL_FIRST_MEMORY_OVERRIDE =
+          '\n⚠️ HIERARCHY RULE — EXTERNAL_FIRST ACTIVE: This is an objective factual query. The external data above OVERRIDES any conflicting memory context. Lead your response with this verified external information. Memory context is supplementary (personal facts, user preferences) and must NOT override verified current data from external sources.';
+        const hierarchyOverrideNote = (phase4Metadata.hierarchy === 'EXTERNAL_FIRST')
+          ? EXTERNAL_FIRST_MEMORY_OVERRIDE
+          : '';
+
+        externalContext = `\n\n[VERIFIED EXTERNAL DATA — MANDATORY SOURCE]\nIMPORTANT: The following data was JUST retrieved from live external sources. You MUST use this data to answer the user's question. Do NOT say "I don't have real-time data" or "I can't access current information" — this data IS the real-time source. Base your answer on this data.${credibilityNote}${hierarchyOverrideNote}\n\n${phase4Metadata.fetched_content}\n[END VERIFIED EXTERNAL DATA]\n\n`;
+
+        if (phase4Metadata.hierarchy === 'EXTERNAL_FIRST') {
+          console.log('[PHASE4] EXTERNAL_FIRST hierarchy active — memory override note injected into externalContext');
+        }
 
         // ISSUE #790 FIX: Add disclosure instruction if present
         if (phase4Metadata.disclosure) {
@@ -5309,6 +5321,13 @@ When using this memory context, a caring family member would naturally apply tem
         }
       });
 
+      // When external real-time data is also present, memory is supplementary only.
+      // Personal facts (name, preferences, user-shared context) remain relevant,
+      // but any factual claim covered by external data must defer to the external source.
+      const externalPrecedenceNote = context.external
+        ? `\n⚠️ PRIORITY: External real-time data was fetched for this query (see section above). For objective facts (current events, public figures, live data), the external data takes precedence over this memory. Use memory only for personal/user-specific context not covered by external sources.\n`
+        : '';
+
       contextStr += `
 ═══════════════════════════════════════════════════════════════
 🧠 PERSISTENT MEMORY CONTEXT - READ ALL ${memoryCount} ITEMS BEFORE RESPONDING
@@ -5320,7 +5339,7 @@ You have access to ${memoryCount} memories from previous conversations below.
 **YOU MUST USE THIS CONTEXT.** If the user asks about something they've previously
 shared, it is in this memory context. DO NOT say "I don't have that information"
 or "you haven't told me" when the information appears below.
-
+${externalPrecedenceNote}
 A caring family member REMEMBERS what you've shared. That is your role.
 
 ${memoryText}
