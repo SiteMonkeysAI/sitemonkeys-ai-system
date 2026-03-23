@@ -98,10 +98,6 @@ export function buildConfidenceReason(truthType, sourcesUsed, lookupPerformed, s
     return 'confirmed from your personal records';
   }
 
-  if (score < 0.60) {
-    return 'limited information — reasoning from available evidence';
-  }
-
   // Binary existence framing: "can/do/does/did/is/are..." questions with sufficient confidence
   const query = phase4Metadata?.query || '';
   if (
@@ -109,6 +105,10 @@ export function buildConfidenceReason(truthType, sourcesUsed, lookupPerformed, s
     score >= 0.60
   ) {
     return 'documented — confirmed it can occur';
+  }
+
+  if (score < 0.60) {
+    return 'limited information — reasoning from available evidence';
   }
 
   if (truthType === 'PERMANENT' && !lookupPerformed) {
