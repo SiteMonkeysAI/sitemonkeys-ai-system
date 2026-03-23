@@ -108,6 +108,27 @@ const GEOPOLITICAL_TOPIC_PATTERN = /\b(war|conflict|military|sanctions|iran|russ
 const UNVERIFIED_GEOPOLITICAL_CONTENT_WARNING =
   '\n[CREDIBILITY WARNING: None of the sources retrieved for this geopolitical query match known reputable outlets (Reuters, AP, BBC, etc.). You MUST NOT present any claim from this data as established fact. Treat every headline as unverified and tell the user these headlines could not be corroborated by a reputable news source. Do NOT state claims from this data in declarative form — always attribute and hedge ("According to [source], which has not been independently verified, ..."). If the user asks about geopolitical events, advise them to check Reuters, AP, or BBC directly.]';
 
+// ==================== REDOS-SAFE STRING HELPERS ====================
+
+function safeStripArticle(str) {
+  const lower = str.toLowerCase();
+  if (lower.startsWith('the ')) return str.slice(4);
+  if (lower.startsWith('a ')) return str.slice(2);
+  if (lower.startsWith('an ')) return str.slice(3);
+  return str;
+}
+
+function safeStripCopula(str) {
+  const copulas = [' is ', ' are ', ' was ', ' were '];
+  for (const copula of copulas) {
+    const idx = str.indexOf(copula);
+    if (idx !== -1) {
+      return str.substring(0, idx).trim();
+    }
+  }
+  return str.trim();
+}
+
 // ==================== ORCHESTRATOR CLASS ====================
 
 export class Orchestrator {
@@ -1415,7 +1436,24 @@ export class Orchestrator {
             const firstSentence = lastAssistant.content
               .split(/[.!?]/)[0]?.trim();
             if (firstSentence && firstSentence.length > 10) {
-              verificationLookupQuery = firstSentence;
+              const claimSentence = firstSentence;
+
+              // Use semantic analysis to extract topic entities from the claim,
+              // not string manipulation
+              const semanticContext = await this.#performSemanticAnalysis(
+                claimSentence, context
+              );
+
+              // Use extracted entities as lookup query if available,
+              // otherwise fall back to cleaned claim sentence
+              if (semanticContext?.entities?.length > 0) {
+                verificationLookupQuery = semanticContext.entities.join(' ');
+                this.log(`[SEMANTIC-VERIFICATION] Using ${semanticContext.entities.length} extracted entities as lookup query`);
+              } else {
+                // Fallback: strip leading articles and copula phrases from the claim sentence
+                this.log('[SEMANTIC-VERIFICATION] No entities from semantic analysis — using cleaned claim sentence as fallback');
+                verificationLookupQuery = safeStripCopula(safeStripArticle(claimSentence));
+              }
             }
           }
         }
@@ -1946,6 +1984,26 @@ export class Orchestrator {
           }
           this.log('[PRIMITIVE-RSS-CLAMP] Applied. Response corrected to disclose RSS-only source limitation.');
         }
+      }
+
+      // ========== FIX 1: EXTERNAL_FIRST RESPONSE CONTRACT VALIDATOR ==========
+      // After AI generation, verify that EXTERNAL_FIRST hierarchy is honoured.
+      // If the response leads with memory context instead of external data, correct it.
+      if (phase4Metadata?.hierarchy === 'EXTERNAL_FIRST' &&
+          phase4Metadata?.fetched_content &&
+          aiResponse.response.toLowerCase().startsWith('based on the memory')) {
+
+        // Contract violation: EXTERNAL_FIRST hierarchy but response led with memory context.
+        // Extract the actual external data summary and prepend it to correct the response.
+        const externalSummary = (phase4Metadata.fetched_content.split('\n')[0] || '').trim(); // First line of external data
+        const summaryText = externalSummary || 'external sources';
+
+        aiResponse.response = `Based on verified external data: ${summaryText}\n\n${aiResponse.response
+          .replace(/based on the memory context[^.]{0,200}\./i, '')
+          .trim()}`;
+
+        this.log('[CONTRACT] EXTERNAL_FIRST violation corrected — ' +
+          'response redirected to lead with external data');
       }
 
       // ========== RUN ENFORCEMENT CHAIN (BEFORE PERSONALITY) ==========
