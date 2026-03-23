@@ -2615,3 +2615,411 @@ describe('AA. Capability-Gap Routing System', () => {
   });
 
 });
+
+// ============================================================
+// BB. PIPELINE EFFICIENCY — GREETING FAST-PATH AND
+//     COMPRESSED SYSTEM PROMPT
+// Ensures greeting queries skip provably-unused processing and
+// simple queries use a smaller system prompt.
+// ============================================================
+
+describe('BB. Pipeline Efficiency — Greeting Fast-Path and Compressed Prompt', () => {
+
+  it('BB-001: greeting classification skips semantic analysis', () => {
+    // FIX 1: When willUseGreetingShortcut is true, #performSemanticAnalysis must NOT be
+    // called — a fallback analysis is used instead.  The guard must reference the
+    // willUseGreetingShortcut variable and skip the performSemanticAnalysis call.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('willUseGreetingShortcut'),
+      'BB-001 FAIL: willUseGreetingShortcut flag not found in orchestrator.js. ' +
+      'Greeting fast-path requires this flag to gate semantic analysis and principle reasoning.'
+    );
+
+    // The fast-path log message must be present in the semantic-analysis section
+    assert.ok(
+      orch.includes('Skipping semantic analysis'),
+      'BB-001 FAIL: "[GREETING-FAST-PATH] Skipping semantic analysis" log not found. ' +
+      'orchestrator.js must log when semantic analysis is skipped for greeting queries.'
+    );
+  });
+
+  it('BB-002: greeting classification skips principle-based reasoning', () => {
+    // FIX 1: applyPrincipleBasedReasoning must be inside a !willUseGreetingShortcut block.
+    // The result (reasoningGuidance) is injected into the system prompt, which the greeting
+    // shortcut never uses — running it wastes time and produces a discarded result.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('Skipping principle-based reasoning'),
+      'BB-002 FAIL: "Skipping principle-based reasoning" log not found in orchestrator.js. ' +
+      'applyPrincipleBasedReasoning must be skipped when willUseGreetingShortcut is true.'
+    );
+  });
+
+  it('BB-003: simple_factual and simple_short use compressed system prompt', () => {
+    // FIX 3: #routeToAI must check the query classification and select
+    // #buildCompressedSystemPrompt for greeting, simple_factual, and simple_short queries.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('buildCompressedSystemPrompt') &&
+      orch.includes("'simple_factual'") &&
+      orch.includes("'simple_short'"),
+      'BB-003 FAIL: #buildCompressedSystemPrompt not routed for simple_factual/simple_short. ' +
+      '#routeToAI must select the compressed prompt for simple query classifications.'
+    );
+
+    assert.ok(
+      orch.includes('useCompressedPrompt'),
+      'BB-003 FAIL: useCompressedPrompt decision variable not found in orchestrator.js.'
+    );
+  });
+
+  it('BB-004: complex_analytical uses full system prompt (not compressed)', () => {
+    // FIX 3: Only the simple classification types should use the compressed prompt.
+    // complex_analytical must go through #buildSystemPrompt to get full reasoning guidance.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The routing expression must include a ternary or conditional that calls
+    // #buildSystemPrompt on the else branch (non-simple queries).
+    assert.ok(
+      orch.includes('#buildSystemPrompt(') &&
+      orch.includes('#buildCompressedSystemPrompt('),
+      'BB-004 FAIL: Both #buildSystemPrompt and #buildCompressedSystemPrompt must exist. ' +
+      'complex_analytical queries must still use the full prompt.'
+    );
+  });
+
+  it('BB-005: compressed prompt contains core truth rules', () => {
+    // FIX 2: The compressed prompt must preserve "Truth > Helpfulness > Engagement"
+    // and the core identity rules — these are non-negotiable regardless of query type.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Check that #buildCompressedSystemPrompt contains the truth priority statement
+    const compressedIdx = orch.indexOf('buildCompressedSystemPrompt(mode, queryClassification');
+    assert.ok(compressedIdx !== -1, 'BB-005 FAIL: #buildCompressedSystemPrompt not found');
+
+    // The method body must contain "Truth > Helpfulness"
+    const methodSection = orch.substring(compressedIdx, compressedIdx + 5000);
+    assert.ok(
+      methodSection.includes('Truth > Helpfulness'),
+      'BB-005 FAIL: compressed prompt must contain core truth priority "Truth > Helpfulness". ' +
+      'Truth enforcement must never be removed regardless of query type.'
+    );
+  });
+
+  it('BB-006: compressed prompt contains no-fabrication rule', () => {
+    // FIX 2: The compressed prompt must retain the MEMORY FABRICATION prohibition.
+    // Even simple queries can involve memory context, so fabrication must remain forbidden.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const compressedIdx = orch.indexOf('buildCompressedSystemPrompt(mode, queryClassification');
+    assert.ok(compressedIdx !== -1, 'BB-006 FAIL: #buildCompressedSystemPrompt not found');
+
+    const methodSection = orch.substring(compressedIdx, compressedIdx + 5000);
+    assert.ok(
+      methodSection.includes('MEMORY FABRICATION'),
+      'BB-006 FAIL: compressed prompt must contain the MEMORY FABRICATION prohibition. ' +
+      'No-fabrication rule must be present even in the compressed prompt.'
+    );
+  });
+
+  it('BB-007: high stakes detection still runs on all query types (via manipulation guard)', () => {
+    // The manipulation guard runs BEFORE the greeting shortcut for ALL queries.
+    // manipulationGuard.validate must NOT be inside the willUseGreetingShortcut conditional.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const guardIdx = orch.indexOf('manipulationGuard.validate(');
+    const fastPathIdx = orch.indexOf('willUseGreetingShortcut');
+    const shortcutIdx = orch.indexOf('GREETING-SHORTCUT]');
+
+    assert.ok(guardIdx !== -1, 'BB-007 FAIL: manipulationGuard.validate not found');
+    assert.ok(fastPathIdx !== -1, 'BB-007 FAIL: willUseGreetingShortcut not found');
+    assert.ok(shortcutIdx !== -1, 'BB-007 FAIL: GREETING-SHORTCUT log not found');
+
+    // The manipulation guard must appear AFTER willUseGreetingShortcut is set
+    // but BEFORE the greeting shortcut fires (i.e., it runs unconditionally between them).
+    assert.ok(
+      guardIdx > fastPathIdx && guardIdx < shortcutIdx,
+      'BB-007 FAIL: manipulationGuard.validate must run after willUseGreetingShortcut is set ' +
+      'but before the greeting shortcut fires. High stakes / manipulation checks must be universal.'
+    );
+  });
+
+  it('BB-008: manipulation guard still runs on all query types', () => {
+    // Confirm manipulationGuard.validate call is not inside a willUseGreetingShortcut block.
+    // It is a universal safety gate that cannot be conditioned on query type.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('manipulationGuard.validate('),
+      'BB-008 FAIL: manipulationGuard.validate not found in orchestrator.js'
+    );
+
+    // The guard log message must be unconditional (not inside willUseGreetingShortcut block)
+    assert.ok(
+      orch.includes('MANIPULATION-GUARD] Checking for manipulation'),
+      'BB-008 FAIL: manipulation guard log message not found. ' +
+      'manipulationGuard must run on every request regardless of query classification.'
+    );
+  });
+
+  it('BB-009: compressed prompt is shorter than full prompt (token savings verified)', () => {
+    // FIX 2: #buildCompressedSystemPrompt must produce a shorter string than #buildSystemPrompt.
+    // Verify by checking that the compressed method omits major verbose sections.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const compressedStart = orch.indexOf('buildCompressedSystemPrompt(mode, queryClassification');
+    const fullStart = orch.indexOf('buildSystemPrompt(mode, _analysis');
+
+    assert.ok(compressedStart !== -1, 'BB-009 FAIL: #buildCompressedSystemPrompt not found');
+    assert.ok(fullStart !== -1, 'BB-009 FAIL: #buildSystemPrompt not found');
+
+    // The full prompt contains BOUNDED INFERENCE (verbose section); compressed must not.
+    const compressedSection = orch.substring(compressedStart, compressedStart + 8000);
+    const fullSection = orch.substring(fullStart, fullStart + 8000);
+
+    assert.ok(
+      fullSection.includes('BOUNDED INFERENCE') || fullSection.includes('INFERENCE GUIDELINES'),
+      'BB-009 FAIL: #buildSystemPrompt is missing BOUNDED INFERENCE block — used as baseline'
+    );
+
+    assert.ok(
+      !compressedSection.includes('BOUNDED INFERENCE') && !compressedSection.includes('INFERENCE GUIDELINES'),
+      'BB-009 FAIL: #buildCompressedSystemPrompt must NOT include the verbose BOUNDED INFERENCE ' +
+      'block. This block accounts for ~350 tokens and is unnecessary for simple queries.'
+    );
+  });
+
+  it('BB-010: answer quality preserved — compressed prompt retains identity and mode rules', () => {
+    // FIX 2: The compressed prompt must include all identity rules and mode-specific additions.
+    // Omitting these would change answer quality, which is not permitted.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const compressedIdx = orch.indexOf('buildCompressedSystemPrompt(mode, queryClassification');
+    assert.ok(compressedIdx !== -1, 'BB-010 FAIL: #buildCompressedSystemPrompt not found');
+
+    const methodSection = orch.substring(compressedIdx, compressedIdx + 8000);
+
+    // Must include Site Monkeys identity rule
+    assert.ok(
+      methodSection.includes('Site Monkeys AI system'),
+      'BB-010 FAIL: compressed prompt must include Site Monkeys identity rule'
+    );
+
+    // Must include mode-specific handling (business_validation and site_monkeys blocks)
+    assert.ok(
+      methodSection.includes('business_validation') && methodSection.includes('site_monkeys'),
+      'BB-010 FAIL: compressed prompt must include mode-specific rule blocks ' +
+      '(business_validation and site_monkeys). Mode rules affect answer quality and must be preserved.'
+    );
+  });
+
+});
+
+// ============================================================
+// SECTION BC: GREETING FAST-PATH CORRECTNESS
+// Permanently verifies the two safety invariants of the
+// willUseGreetingShortcut optimization:
+//
+//   1. Confidence < 0.85 falls through to full processing.
+//   2. willUseGreetingShortcut conditions are IDENTICAL to
+//      STEP 6.9 conditions — they must never drift apart.
+//
+// If the conditions ever diverge, a query could have processing
+// skipped (fast-path = true) but then NOT be handled by the
+// shortcut (STEP 6.9 = false), leaving the AI call with
+// fallback analysis and no Phase 4 data.
+// ============================================================
+
+describe('BC. Greeting Fast-Path Correctness', () => {
+
+  it('BC-001: confidence threshold of 0.85 appears in BOTH fast-path flag AND STEP 6.9', () => {
+    // INVARIANT: willUseGreetingShortcut and STEP 6.9 must use the same confidence gate.
+    // If one is changed and the other is not, a greeting with confidence in the gap
+    // (e.g., 0.80 < c < 0.85) would trigger one but not the other, causing:
+    //   - fast-path=true but shortcut doesn't fire → AI call gets fallback analysis
+    //   - OR shortcut fires but fast-path=false → wasted processing still ran
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Count how many times the 0.85 threshold appears in meaningful code context.
+    // Both the willUseGreetingShortcut assignment and the STEP 6.9 if-condition must include it.
+    const occurrences = (orch.match(/confidence\s*>=\s*0\.85/g) || []).length;
+
+    assert.ok(
+      occurrences >= 2,
+      `BC-001 FAIL: "confidence >= 0.85" found only ${occurrences} time(s) in orchestrator.js. ` +
+      'It must appear in BOTH willUseGreetingShortcut (fast-path gate) AND the STEP 6.9 ' +
+      'greeting shortcut. If the threshold differs between them, the fast-path can skip ' +
+      'processing for a query that STEP 6.9 will not actually handle.'
+    );
+  });
+
+  it('BC-002: willUseGreetingShortcut is evaluated AFTER memoryContext is available', () => {
+    // INVARIANT: willUseGreetingShortcut references memoryContext.hasMemory.
+    // memoryContext is only set after STEP 1 (memory retrieval). If the flag were evaluated
+    // before STEP 1, memoryContext would be undefined and the .hasMemory access would throw.
+    // Verify ordering: memoryContext assignment must appear before willUseGreetingShortcut.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const memoryContextAssignIdx = orch.indexOf('memoryContext = {');
+    const fastPathFlagIdx = orch.indexOf('willUseGreetingShortcut =');
+    const step69Idx = orch.indexOf('STEP 6.9: GREETING SHORTCUT');
+
+    assert.ok(memoryContextAssignIdx !== -1, 'BC-002 FAIL: memoryContext = { not found in orchestrator.js');
+    assert.ok(fastPathFlagIdx !== -1, 'BC-002 FAIL: willUseGreetingShortcut = not found in orchestrator.js');
+    assert.ok(step69Idx !== -1, 'BC-002 FAIL: STEP 6.9 comment not found in orchestrator.js');
+
+    assert.ok(
+      memoryContextAssignIdx < fastPathFlagIdx,
+      'BC-002 FAIL: willUseGreetingShortcut is evaluated BEFORE memoryContext is set. ' +
+      'memoryContext.hasMemory would be undefined, making the fast-path fire incorrectly ' +
+      'for queries where the user has stored memories.'
+    );
+
+    assert.ok(
+      fastPathFlagIdx < step69Idx,
+      'BC-002 FAIL: willUseGreetingShortcut must be evaluated BEFORE STEP 6.9 so the ' +
+      'processing skip happens at the right point in the pipeline.'
+    );
+  });
+
+  it('BC-003: !hasPersonalIntent guard appears in BOTH fast-path flag AND STEP 6.9', () => {
+    // INVARIANT: Both willUseGreetingShortcut and STEP 6.9 must gate on !hasPersonalIntent.
+    // This guard protects "Hi, what's my name?" — a greeting with personal intent that
+    // must run full processing (needs memory retrieval) and NOT fire the shortcut.
+    // If fast-path has this guard but STEP 6.9 doesn't (or vice versa), the two diverge.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const fastPathFlagIdx = orch.indexOf('willUseGreetingShortcut =');
+    const step69Idx = orch.indexOf('STEP 6.9: GREETING SHORTCUT');
+
+    assert.ok(fastPathFlagIdx !== -1, 'BC-003 FAIL: willUseGreetingShortcut = not found');
+    assert.ok(step69Idx !== -1, 'BC-003 FAIL: STEP 6.9 comment not found');
+
+    // Extract the fast-path block (up to ~200 chars from the flag assignment)
+    const fastPathBlock = orch.substring(fastPathFlagIdx, fastPathFlagIdx + 300);
+    // Extract the STEP 6.9 condition block (up to ~300 chars from the comment)
+    const step69Block = orch.substring(step69Idx, step69Idx + 650);
+
+    assert.ok(
+      fastPathBlock.includes('!hasPersonalIntent'),
+      'BC-003 FAIL: willUseGreetingShortcut block is missing !hasPersonalIntent guard. ' +
+      '"Hi, what\'s my name?" would be fast-pathed despite needing memory retrieval.'
+    );
+
+    assert.ok(
+      step69Block.includes('!hasPersonalIntent'),
+      'BC-003 FAIL: STEP 6.9 block is missing !hasPersonalIntent guard. ' +
+      'The shortcut would fire for personal-intent greetings, bypassing memory recall.'
+    );
+  });
+
+  it('BC-004: !memoryContext.hasMemory guard appears in BOTH fast-path flag AND STEP 6.9', () => {
+    // INVARIANT: Both gates must check that no memory context was retrieved.
+    // If memory was retrieved (user has stored info), the greeting shortcut must not fire —
+    // the AI call needs the memory context to give a personalised greeting.
+    // Divergence here would cause one gate to allow the shortcut when the other wouldn't.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const fastPathFlagIdx = orch.indexOf('willUseGreetingShortcut =');
+    const step69Idx = orch.indexOf('STEP 6.9: GREETING SHORTCUT');
+
+    const fastPathBlock = orch.substring(fastPathFlagIdx, fastPathFlagIdx + 300);
+    const step69Block = orch.substring(step69Idx, step69Idx + 650);
+
+    assert.ok(
+      fastPathBlock.includes('memoryContext.hasMemory'),
+      'BC-004 FAIL: willUseGreetingShortcut block is missing memoryContext.hasMemory check. ' +
+      'The fast-path would fire even when the user has retrieved memory context.'
+    );
+
+    assert.ok(
+      step69Block.includes('memoryContext.hasMemory'),
+      'BC-004 FAIL: STEP 6.9 block is missing memoryContext.hasMemory check. ' +
+      'The shortcut would fire even when memory context is present.'
+    );
+  });
+
+  it('BC-005: confidence < 0.85 disables fast-path — semantic analysis branch must still exist', () => {
+    // INVARIANT: The fast-path is conditional, not unconditional. When willUseGreetingShortcut
+    // is false (e.g., confidence < 0.85, hasPersonalIntent, hasMemory, docs, vault), the system
+    // MUST fall through to full processing (semantic analysis, Phase 4, reasoning, AI call).
+    // This guards against the else-branch being accidentally deleted.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The semantic analysis section must contain an else branch that runs #performSemanticAnalysis
+    // when willUseGreetingShortcut is false.
+    const hasFullProcessingFallthrough =
+      orch.includes('#performSemanticAnalysis(') &&
+      orch.includes('willUseGreetingShortcut') &&
+      // The else branch must appear after the fast-path check and call performSemanticAnalysis
+      orch.indexOf('#performSemanticAnalysis(') > orch.indexOf('willUseGreetingShortcut');
+
+    assert.ok(
+      hasFullProcessingFallthrough,
+      'BC-005 FAIL: Full processing fallthrough (#performSemanticAnalysis) not found after ' +
+      'willUseGreetingShortcut check. Queries with confidence < 0.85, personal intent, ' +
+      'memory context, documents, or vault MUST fall through to full semantic analysis.'
+    );
+
+    // Also confirm applyPrincipleBasedReasoning has a fallthrough path
+    assert.ok(
+      orch.includes('applyPrincipleBasedReasoning(') &&
+      orch.indexOf('applyPrincipleBasedReasoning(') > orch.indexOf('willUseGreetingShortcut'),
+      'BC-005 FAIL: applyPrincipleBasedReasoning fallthrough not found after willUseGreetingShortcut. ' +
+      'Principle-based reasoning must still run on all non-fast-pathed queries.'
+    );
+  });
+
+  it('BC-006: greeting classifier PURE_GREETINGS set only contains genuine greetings', () => {
+    // RISK CHECK: The deterministic shortcut in queryComplexityClassifier.js returns
+    // confidence: 0.95 for any word in PURE_GREETINGS. If a non-greeting word were
+    // accidentally added to this set (e.g., "help", "yes", "please"), it would score
+    // 0.95 and trigger the fast-path, returning a canned greeting response for a
+    // genuine question.
+    // This test reads the set and confirms it contains only recognisable greeting words.
+    const classifier = readRepoFile('api/core/intelligence/greetingUtils.js');
+    assert.ok(classifier, 'Could not read api/core/intelligence/greetingUtils.js');
+
+    // Extract the set contents by finding everything between 'new Set([' and ']);'
+    const setStart = classifier.indexOf("new Set([");
+    const setEnd = classifier.indexOf("]);", setStart);
+    assert.ok(setStart !== -1 && setEnd !== -1, 'BC-006 FAIL: PURE_GREETINGS Set not found in greetingUtils.js');
+
+    const setBody = classifier.substring(setStart, setEnd);
+
+    // Suspicious non-greeting words that must NOT appear in the set.
+    // 'ok' and 'okay' are intentionally included: "ok I understand" and "okay" are
+    // acknowledgments/confirmations, not greetings. Fast-pathing them would return a
+    // canned greeting response for mid-conversation acknowledgments, which is wrong.
+    const forbidden = ['help', 'yes', 'no', 'please', 'ok', 'okay', 'what', 'how', 'why', 'when', 'where'];
+    for (const word of forbidden) {
+      assert.ok(
+        !setBody.includes(`'${word}'`) && !setBody.includes(`"${word}"`),
+        `BC-006 FAIL: "${word}" found in PURE_GREETINGS set in greetingUtils.js. ` +
+        `"${word}" is not a pure greeting — adding it would cause any query starting with ` +
+        `"${word}" to be classified as greeting with confidence 0.95, fast-pathed, and ` +
+        `returned as a canned greeting response instead of being answered.`
+      );
+    }
+  });
+
+});
