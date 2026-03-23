@@ -3023,3 +3023,139 @@ describe('BC. Greeting Fast-Path Correctness', () => {
   });
 
 });
+
+// ============================================================
+// SECTION CC: Eli/Roxy Prompt Deduplication + Confidence Calculator
+// Verifies the shared template extraction and confidence reason fixes.
+// All file-scan tests are ESM-safe — no API calls, $0 cost.
+// ============================================================
+
+describe('CC. Prompt Deduplication and Confidence Calculator Fixes', () => {
+
+  // CC-001: Shared template function exists in ai-processors.js
+  it('CC-001: buildSharedAIInstructions function exists in ai-processors.js', () => {
+    const processors = readRepoFile('api/lib/ai-processors.js');
+    assert.ok(processors, 'CC-001 FAIL: api/lib/ai-processors.js is missing.');
+    assert.ok(
+      processors.includes('function buildSharedAIInstructions('),
+      'CC-001 FAIL: buildSharedAIInstructions function not found in ai-processors.js. ' +
+      'The shared template must be extracted to a single function to eliminate duplication.'
+    );
+  });
+
+  // CC-002: Eli prompt uses shared template (no longer contains raw duplicate block)
+  it('CC-002: generateEliResponse uses buildSharedAIInstructions (no raw duplicate block)', () => {
+    const processors = readRepoFile('api/lib/ai-processors.js');
+    assert.ok(processors, 'CC-002 FAIL: api/lib/ai-processors.js is missing.');
+
+    // The Eli generator must call buildSharedAIInstructions
+    const eliStart = processors.indexOf('async function generateEliResponse(');
+    assert.ok(eliStart !== -1, 'CC-002 FAIL: generateEliResponse function not found.');
+
+    const eliBody = processors.substring(eliStart, eliStart + 2000);
+    assert.ok(
+      eliBody.includes('buildSharedAIInstructions('),
+      'CC-002 FAIL: generateEliResponse does not call buildSharedAIInstructions. ' +
+      'The shared blocks must be de-duplicated by delegating to buildSharedAIInstructions.'
+    );
+  });
+
+  // CC-003: Roxy prompt uses shared template (no longer contains raw duplicate block)
+  it('CC-003: generateRoxyResponse uses buildSharedAIInstructions (no raw duplicate block)', () => {
+    const processors = readRepoFile('api/lib/ai-processors.js');
+    assert.ok(processors, 'CC-003 FAIL: api/lib/ai-processors.js is missing.');
+
+    // The Roxy generator must call buildSharedAIInstructions
+    const roxyStart = processors.indexOf('async function generateRoxyResponse(');
+    assert.ok(roxyStart !== -1, 'CC-003 FAIL: generateRoxyResponse function not found.');
+
+    const roxyBody = processors.substring(roxyStart, roxyStart + 2000);
+    assert.ok(
+      roxyBody.includes('buildSharedAIInstructions('),
+      'CC-003 FAIL: generateRoxyResponse does not call buildSharedAIInstructions. ' +
+      'The shared blocks must be de-duplicated by delegating to buildSharedAIInstructions.'
+    );
+  });
+
+  // CC-004: Binary existence query gets affirming reason when score is high
+  it('CC-004: buildConfidenceReason returns affirming reason for binary existence query with high score', async () => {
+    const { buildConfidenceReason } = await import('../../api/core/personalities/confidence_calculator.js');
+
+    // Binary existence query ("do hippos have twins?") with PERMANENT truth type → high score
+    const binaryReason = buildConfidenceReason(
+      'PERMANENT',
+      0,
+      false,
+      0.97,
+      { query: 'do hippos have twins?' }
+    );
+
+    // Non-binary query on same topic with same score
+    const nonBinaryReason = buildConfidenceReason(
+      'PERMANENT',
+      0,
+      false,
+      0.97,
+      { query: 'hippo reproduction facts' }
+    );
+
+    assert.strictEqual(
+      binaryReason,
+      'documented — confirmed it can occur',
+      `CC-004 FAIL: Binary existence query ("do hippos have twins?") with score=0.97 returned ` +
+      `"${binaryReason}" instead of "documented — confirmed it can occur".`
+    );
+
+    assert.strictEqual(
+      nonBinaryReason,
+      'established knowledge — well documented',
+      `CC-004 FAIL: Non-binary query ("hippo reproduction facts") with score=0.97 returned ` +
+      `"${nonBinaryReason}" instead of "established knowledge — well documented". ` +
+      'Binary framing should only affect queries starting with auxiliary verbs.'
+    );
+  });
+
+  // CC-005: Low confidence returns bounded reasoning signal text
+  it('CC-005: buildConfidenceReason returns bounded reasoning signal for score < 0.60', async () => {
+    const { buildConfidenceReason } = await import('../../api/core/personalities/confidence_calculator.js');
+
+    const reason = buildConfidenceReason(null, 0, false, 0.55, null);
+    assert.strictEqual(
+      reason,
+      'limited information — reasoning from available evidence',
+      `CC-005 FAIL: buildConfidenceReason with score=0.55 returned "${reason}". ` +
+      'Expected "limited information — reasoning from available evidence" for score < 0.60. ' +
+      'Low confidence should signal bounded reasoning, not just recommend verification.'
+    );
+  });
+
+  // CC-006: All existing confidence behaviors unchanged
+  it('CC-006: PERMANENT score=0.97 and memory reason are unchanged', async () => {
+    const { calculateConfidence, buildConfidenceReason } = await import('../../api/core/personalities/confidence_calculator.js');
+
+    // PERMANENT still scores 0.97
+    const permanentScore = calculateConfidence('PERMANENT', 0, false, null, null);
+    assert.strictEqual(
+      permanentScore,
+      0.97,
+      `CC-006 FAIL: calculateConfidence for PERMANENT returned ${permanentScore} — must stay 0.97.`
+    );
+
+    // Memory-sourced answer still returns personal records reason
+    const memoryReason = buildConfidenceReason('PERMANENT', 0, false, 0.97, { memory_sourced: true });
+    assert.strictEqual(
+      memoryReason,
+      'confirmed from your personal records',
+      `CC-006 FAIL: Memory-sourced reason changed to "${memoryReason}". Must stay "confirmed from your personal records".`
+    );
+
+    // SEMI_STABLE non-lookup reason unchanged
+    const semiStableReason = buildConfidenceReason('SEMI_STABLE', 0, false, 0.65, null);
+    assert.strictEqual(
+      semiStableReason,
+      'based on training knowledge — may not reflect latest',
+      `CC-006 FAIL: SEMI_STABLE non-lookup reason changed to "${semiStableReason}".`
+    );
+  });
+
+});
