@@ -45,6 +45,13 @@ import { runAllTests } from "./api/test-suite.js";
 import loadVaultHandler from "./api/load-vault.js";
 import { vaultLoader } from "./api/utilities/vault-loader.js";
 import { sessionManager } from "./api/lib/session-manager.js";
+import {
+  createEmptySessionState,
+  shouldExtract,
+  extractSessionState,
+  mergeSessionState,
+  validateStateSchema,
+} from "./api/core/intelligence/session-state-extractor.js";
 import debugRoutes from "./api/routes/debug.js";
 import memoryFullCheckRoutes from "./api/test/memory-full-check.js";
 import migrateSemanticHandler from "./api/routes/migrate-semantic.js";
@@ -386,6 +393,7 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       vaultContext,
       vault_content,
       conversationHistory = [],
+      conversation_history = [], // accept snake_case from frontend (bug fix)
       claude_confirmed = null, // BIBLE FIX: User confirmation for Claude escalation
       showConfidence = false, // Confidence Scoring Toggle — default off
     } = req.body;
@@ -470,8 +478,16 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       sessionManager.updateActivity(sessionId);
     }
 
+    // Session state for intelligent compression (SESSION_STATE_ENABLED)
+    const sessionStateEnabled = process.env.SESSION_STATE_ENABLED === 'true';
+    const sessionState = sessionStateEnabled && sessionId
+      ? (sessionManager.getSessionState(sessionId) || createEmptySessionState())
+      : null;
+
     // Get conversation history from session (Issue #391: Conversation Context Continuity)
-    let effectiveConversationHistory = conversationHistory;
+    // Normalize: prefer camelCase, fall back to snake_case (frontend sends conversation_history)
+    const normalizedHistory = conversationHistory.length > 0 ? conversationHistory : conversation_history;
+    let effectiveConversationHistory = normalizedHistory;
     if (sessionId) {
       const sessionHistory = sessionManager.getConversationHistory(sessionId);
       // Use session history if available, otherwise use provided history
@@ -538,6 +554,7 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       conversationHistory: effectiveConversationHistory,
       claudeConfirmed: claude_confirmed, // BIBLE FIX: Pass confirmation flag
       showConfidence, // Confidence Scoring Toggle
+      sessionState, // Intelligent session compression (SESSION_STATE_ENABLED)
     });
 
     // TRACE LOGGING - Step 4 & 5 & 6
@@ -567,6 +584,36 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       } catch (turnError) {
         console.error('[CHAT] Failed to store conversation turn:', turnError.message);
         // Non-fatal - continue processing
+      }
+    }
+
+    // Update session state after successful response (SESSION_STATE_ENABLED)
+    if (sessionStateEnabled && sessionId && result.success && result.response) {
+      try {
+        const rawHistory = sessionManager.getConversationHistory(sessionId);
+        const estimatedTokens = Math.ceil(rawHistory.reduce((s, m) => s + (m.content?.length || 0), 0) / 4);
+        // Always increment exchange_count so periodic trigger (every 4) stays accurate
+        const updatedExchangeCount = (sessionState?.exchange_count || 0) + 1;
+        if (shouldExtract(message, sessionState, rawHistory, estimatedTokens)) {
+          const extracted = await extractSessionState(message, result.response, sessionState);
+          const merged = mergeSessionState(sessionState, extracted);
+          merged.exchange_count = updatedExchangeCount;
+          sessionManager.updateSessionState(sessionId, merged);
+          console.log('[SESSION-STATE] State updated for session', sessionId);
+        } else {
+          // Even when extraction is skipped, persist the incremented exchange count
+          const minimal = { ...(sessionState || {}), exchange_count: updatedExchangeCount };
+          sessionManager.updateSessionState(sessionId, minimal);
+        }
+      } catch (stateError) {
+        // Extraction failure — fall back gracefully, never block
+        try {
+          validateStateSchema(sessionState);
+        } catch {
+          sessionManager.resetSessionState(sessionId);
+          console.warn('[SESSION-STATE] State corrupted — reset for session', sessionId);
+        }
+        console.warn('[SESSION-STATE] Extraction failed — using raw history:', stateError.message);
       }
     }
 

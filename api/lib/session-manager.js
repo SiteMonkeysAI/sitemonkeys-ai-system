@@ -16,6 +16,7 @@ class SessionManager {
     this.activeSessions = new Map();
     this.sessionContexts = new Map(); // User context buffers
     this.sessionCaches = new Map(); // Per-session caches
+    this.sessionStates = new Map(); // Session state objects (intelligent compression)
     
     // Standard logging: supports format strings
     this.log = (message, ...args) => {
@@ -192,6 +193,37 @@ class SessionManager {
   }
 
   /**
+   * Get session state object (intelligent compression)
+   */
+  getSessionState(sessionId) {
+    return this.sessionStates.get(sessionId) || null;
+  }
+
+  /**
+   * Update session state object (intelligent compression)
+   */
+  updateSessionState(sessionId, newState) {
+    try {
+      this.sessionStates.set(sessionId, newState);
+      this.log('Session state updated for %s', sessionId);
+    } catch (error) {
+      this.error('Failed to update session state for %s', sessionId, error);
+    }
+  }
+
+  /**
+   * Reset session state object (used on corruption / error recovery)
+   */
+  resetSessionState(sessionId) {
+    try {
+      this.sessionStates.delete(sessionId);
+      this.log('Session state reset for %s', sessionId);
+    } catch (error) {
+      this.error('Failed to reset session state for %s', sessionId, error);
+    }
+  }
+
+  /**
    * Get session cache
    */
   getCache(sessionId) {
@@ -275,6 +307,7 @@ class SessionManager {
       this.activeSessions.delete(sessionId);
       this.sessionContexts.delete(sessionId);
       this.sessionCaches.delete(sessionId);
+      this.sessionStates.delete(sessionId);
       
       this.log("Session %s cleanup complete", sessionId);
       return true;

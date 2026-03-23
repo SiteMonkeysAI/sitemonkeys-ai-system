@@ -68,6 +68,8 @@ import {
   applyTemporalArithmeticFallback,
   applyListCompletenessFallback,
 } from "../lib/ai-processors.js";
+// ========== SESSION STATE COMPRESSION ==========
+import { buildSessionContext } from "./intelligence/session-state-extractor.js";
 // ================================================
 
 // ==================== CONSTANTS ====================
@@ -831,6 +833,7 @@ export class Orchestrator {
       conversationHistory = [],
       claudeConfirmed = null, // BIBLE FIX: User confirmation for Claude escalation
       showConfidence = false, // Confidence Scoring Toggle — default off
+      sessionState = null, // Session state for intelligent compression (SESSION_STATE_ENABLED)
     } = requestData;
 
     const vaultContext = requestData.vaultContext || null;
@@ -1827,6 +1830,7 @@ export class Orchestrator {
         mode,
         conversationHistory,
         phase4Metadata,
+        sessionState,
       );
       performanceMarkers.aiCallEnd = Date.now(); // BIBLE FIX: Track AI call duration
 
@@ -3848,6 +3852,7 @@ export class Orchestrator {
       DOCUMENTS: 3000,   // Bible spec: document handling supports up to 10K tokens
       VAULT: 9000,       // Vault queries auto-route to Claude (has 200K window)
       TOTAL: 15000,      // Large contexts trigger Claude escalation at 6K threshold
+      HISTORY: 2000,     // Session history budget — enforced during context assembly
     };
 
     // Enforce memory budget (≤2,500 tokens)
@@ -4184,7 +4189,9 @@ export class Orchestrator {
     mode,
     conversationHistory,
     phase4Metadata = null,
+    sessionState = null,
   ) {
+    const SESSION_STATE_ENABLED = process.env.SESSION_STATE_ENABLED === 'true';
     let useClaude = false;
     let useGpt4o = false;
     let attemptedModel = 'gpt-4o';
@@ -4521,9 +4528,12 @@ export class Orchestrator {
         // Build messages array for Claude with proper conversation history
         const messages = [];
 
-        // Add recent conversation history (last 5 exchanges)
+        // Add recent conversation history (last 5 exchanges, or session context when enabled)
         if (conversationHistory.length > 0) {
-          conversationHistory.slice(-5).forEach((msg) => {
+          const historyContext = SESSION_STATE_ENABLED && sessionState
+            ? buildSessionContext(sessionState, conversationHistory)
+            : conversationHistory.slice(-5);
+          historyContext.forEach((msg) => {
             messages.push({
               role: msg.role === 'assistant' ? 'assistant' : 'user',
               content: msg.content
@@ -4568,9 +4578,12 @@ export class Orchestrator {
           messages.push({ role: "system", content: systemPrompt });
         }
 
-        // Add recent conversation history (last 5 exchanges)
+        // Add recent conversation history (last 5 exchanges, or session context when enabled)
         if (conversationHistory.length > 0) {
-          conversationHistory.slice(-5).forEach((msg) => {
+          const historyContext = SESSION_STATE_ENABLED && sessionState
+            ? buildSessionContext(sessionState, conversationHistory)
+            : conversationHistory.slice(-5);
+          historyContext.forEach((msg) => {
             messages.push({
               role: msg.role === 'assistant' ? 'assistant' : 'user',
               content: msg.content
