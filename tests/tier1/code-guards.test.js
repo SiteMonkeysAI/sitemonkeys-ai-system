@@ -2617,8 +2617,8 @@ describe('AA. Capability-Gap Routing System', () => {
 });
 
 // ============================================================
-// SECTION BB: PIPELINE EFFICIENCY — GREETING FAST-PATH AND
-//             COMPRESSED SYSTEM PROMPT
+// BB. PIPELINE EFFICIENCY — GREETING FAST-PATH AND
+//     COMPRESSED SYSTEM PROMPT
 // Ensures greeting queries skip provably-unused processing and
 // simple queries use a smaller system prompt.
 // ============================================================
@@ -3006,10 +3006,11 @@ describe('BC. Greeting Fast-Path Correctness', () => {
 
     const setBody = classifier.substring(setStart, setEnd);
 
-    // Suspicious non-greeting words that must NOT appear in the set
-    // Only include unambiguously non-greeting words. 'ok'/'okay' are excluded — they are
-    // borderline acknowledgments and their inclusion would make the test fragile.
-    const forbidden = ['help', 'yes', 'no', 'please', 'what', 'how', 'why', 'when', 'where'];
+    // Suspicious non-greeting words that must NOT appear in the set.
+    // 'ok' and 'okay' are intentionally included: "ok I understand" and "okay" are
+    // acknowledgments/confirmations, not greetings. Fast-pathing them would return a
+    // canned greeting response for mid-conversation acknowledgments, which is wrong.
+    const forbidden = ['help', 'yes', 'no', 'please', 'ok', 'okay', 'what', 'how', 'why', 'when', 'where'];
     for (const word of forbidden) {
       assert.ok(
         !setBody.includes(`'${word}'`) && !setBody.includes(`"${word}"`),
