@@ -3800,3 +3800,130 @@ describe('EF. EXTERNAL_FIRST Hierarchy — Memory Deprioritization Fix', () => {
 
 });
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VI. Verification Intent Detection — External Lookup Triggering
+// Verifies the fix that adds VERIFICATION_INTENT_PATTERNS, isVerificationIntent,
+// verificationLookupQuery, and the shouldLookup + lookupQuery changes.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('VI. Verification Intent Detection — External Lookup Triggering', () => {
+
+  it('VI-001: VERIFICATION_INTENT_PATTERNS constant exists in orchestrator', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes('VERIFICATION_INTENT_PATTERNS'),
+      'VI-001 FAIL: "VERIFICATION_INTENT_PATTERNS" constant is missing from orchestrator.js. ' +
+      'The fix requires a block-scoped constant near the other pattern arrays in the ' +
+      'external lookup trigger section.'
+    );
+  });
+
+  it('VI-002: VERIFICATION_INTENT_PATTERNS matches "are you sure"', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    const patternStart = src.indexOf('VERIFICATION_INTENT_PATTERNS');
+    assert.ok(patternStart !== -1, 'VI-002 FAIL: VERIFICATION_INTENT_PATTERNS not found');
+
+    const patternBlock = src.substring(patternStart, patternStart + 600);
+    assert.ok(
+      patternBlock.includes('are you sure'),
+      'VI-002 FAIL: VERIFICATION_INTENT_PATTERNS must include an "are you sure" pattern.'
+    );
+  });
+
+  it('VI-003: VERIFICATION_INTENT_PATTERNS matches "double check" / "double-check"', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    const patternStart = src.indexOf('VERIFICATION_INTENT_PATTERNS');
+    assert.ok(patternStart !== -1, 'VI-003 FAIL: VERIFICATION_INTENT_PATTERNS not found');
+
+    const patternBlock = src.substring(patternStart, patternStart + 600);
+    assert.ok(
+      patternBlock.includes('double') && patternBlock.includes('check'),
+      'VI-003 FAIL: VERIFICATION_INTENT_PATTERNS must include a "double-check" / "double check" pattern.'
+    );
+  });
+
+  it('VI-004: VERIFICATION_INTENT_PATTERNS matches "is that correct"', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    const patternStart = src.indexOf('VERIFICATION_INTENT_PATTERNS');
+    assert.ok(patternStart !== -1, 'VI-004 FAIL: VERIFICATION_INTENT_PATTERNS not found');
+
+    const patternBlock = src.substring(patternStart, patternStart + 600);
+    assert.ok(
+      patternBlock.includes('correct') || patternBlock.includes('right') || patternBlock.includes('accurate'),
+      'VI-004 FAIL: VERIFICATION_INTENT_PATTERNS must match "is that correct/right/accurate".'
+    );
+  });
+
+  it('VI-005: isVerificationIntent is computed from VERIFICATION_INTENT_PATTERNS in the lookup section', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // The block-scoped isVerificationIntent should be in the #routeToAI / lookup trigger section,
+    // which is different from the class method #isVerificationIntent.
+    assert.ok(
+      src.includes('isVerificationIntent') && src.includes('VERIFICATION_INTENT_PATTERNS'),
+      'VI-005 FAIL: "isVerificationIntent" computed from "VERIFICATION_INTENT_PATTERNS" is missing. ' +
+      'The lookup trigger section must compute this flag from the block-scoped pattern array.'
+    );
+  });
+
+  it('VI-006: verificationLookupQuery is extracted from last assistant response', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    assert.ok(
+      src.includes('verificationLookupQuery'),
+      'VI-006 FAIL: "verificationLookupQuery" variable is missing from orchestrator.js. ' +
+      'When verification intent is detected, the system must extract the first sentence ' +
+      'from the last assistant response to use as the lookup query.'
+    );
+
+    // Verify the extraction uses role === 'assistant'
+    const extractIdx = src.indexOf('verificationLookupQuery');
+    const extractRegion = src.substring(extractIdx, extractIdx + 500);
+    assert.ok(
+      extractRegion.includes("'assistant'") || extractRegion.includes('"assistant"'),
+      'VI-006 FAIL: "verificationLookupQuery" extraction must search for role === "assistant" ' +
+      'in the conversation history to find the last assistant response.'
+    );
+  });
+
+  it('VI-007: shouldLookup includes isVerificationIntent condition', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Find the shouldLookup declaration
+    const shouldLookupIdx = src.indexOf('let shouldLookup =');
+    assert.ok(shouldLookupIdx !== -1, 'VI-007 FAIL: "let shouldLookup =" not found in orchestrator.js');
+
+    // Use a generous window (2000 chars) to cover all conditions including the final one
+    const shouldLookupBlock = src.substring(shouldLookupIdx, shouldLookupIdx + 2000);
+    assert.ok(
+      shouldLookupBlock.includes('isVerificationIntent') && shouldLookupBlock.includes('verificationLookupQuery'),
+      'VI-007 FAIL: "shouldLookup" does not include the verification intent condition. ' +
+      'The fix requires: || (isVerificationIntent && verificationLookupQuery !== null)'
+    );
+  });
+
+  it('VI-008: lookupQuery uses verificationLookupQuery when verification intent is detected', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Find the lookupQuery const that feeds into the lookup() call
+    const lookupQueryIdx = src.indexOf('const lookupQuery = (isVerificationIntent');
+    assert.ok(
+      lookupQueryIdx !== -1,
+      'VI-008 FAIL: "const lookupQuery = (isVerificationIntent && verificationLookupQuery)" ' +
+      'pattern is missing from orchestrator.js. When verification intent is detected, ' +
+      'the lookup query must use the extracted claim rather than the enriched user message.'
+    );
+  });
+
+});
