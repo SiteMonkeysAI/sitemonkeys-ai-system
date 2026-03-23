@@ -106,7 +106,7 @@ export function buildConfidenceReason(truthType, sourcesUsed, lookupPerformed, s
   const query = phase4Metadata?.query || '';
   if (
     /^(can|could|do|does|did|is|are|was|were|has|have|had)\b/i.test(query) &&
-    score >= 0.75
+    score >= 0.60
   ) {
     return 'documented — confirmed it can occur';
   }
