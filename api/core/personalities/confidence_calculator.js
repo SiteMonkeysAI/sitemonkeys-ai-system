@@ -93,6 +93,7 @@ export function buildConfidenceMetadata(phase4Metadata) {
  * @returns {string} Plain-text reason (no markdown, no emoji)
  */
 export function buildConfidenceReason(truthType, sourcesUsed, lookupPerformed, score, phase4Metadata) {
+  console.log('[BINARY-DEBUG] query:', phase4Metadata?.query || 'EMPTY', 'score:', score, 'truthType:', truthType);
   // Memory-sourced answers: answer came from personal records, not training knowledge
   if (isMemorySourcedAnswer(phase4Metadata, lookupPerformed)) {
     return 'confirmed from your personal records';
