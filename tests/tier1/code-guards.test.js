@@ -3509,3 +3509,172 @@ describe('DD. Intelligent Session State Compression', () => {
 
 });
 
+// ============================================================
+// SECTION QE: Query Enrichment Fixes (Issue #2)
+// Static file scans verifying the three enrichment fixes:
+//   FIX 1 — Relevance gate prevents entity contamination
+//   FIX 2 — Last assistant response captured for verification
+//   FIX 3 — Verification intent detection and claim extraction
+// ============================================================
+
+describe('QE. Query Enrichment Fixes — Issue #2', () => {
+
+  it('QE-001: #hasOwnTopic method exists in orchestrator (relevance gate foundation)', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes('#hasOwnTopic'),
+      'QE-001 FAIL: "#hasOwnTopic" method is missing from orchestrator.js. ' +
+      'This method is required by the relevance gate (FIX 1) to detect whether the ' +
+      'current query has its own clear topic before injecting historical entities.'
+    );
+  });
+
+  it('QE-002: #isEntityRelevantToQuery method exists in orchestrator (relevance gate)', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes('#isEntityRelevantToQuery'),
+      'QE-002 FAIL: "#isEntityRelevantToQuery" method is missing from orchestrator.js. ' +
+      'FIX 1 requires this gate to prevent unrelated entities (e.g. "Apple AAPL") from ' +
+      'contaminating a standalone query about a different topic (e.g. "France capital").'
+    );
+  });
+
+  it('QE-003: VERIFICATION_PATTERNS static field exists in orchestrator (FIX 3)', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes('VERIFICATION_PATTERNS'),
+      'QE-003 FAIL: "VERIFICATION_PATTERNS" is missing from orchestrator.js. ' +
+      'FIX 3 requires a patterns array that matches "are you sure", "double-check", ' +
+      '"verify", "fact-check", "check current sources", etc.'
+    );
+  });
+
+  it('QE-004: #isVerificationIntent method exists in orchestrator (FIX 3)', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes('#isVerificationIntent'),
+      'QE-004 FAIL: "#isVerificationIntent" method is missing from orchestrator.js. ' +
+      'FIX 3 requires this method to detect whether the user is asking to verify a prior claim.'
+    );
+  });
+
+  it('QE-005: #extractClaimFromResponse method exists in orchestrator (FIX 3)', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      src.includes('#extractClaimFromResponse'),
+      'QE-005 FAIL: "#extractClaimFromResponse" method is missing from orchestrator.js. ' +
+      'FIX 3 requires this method to pull the factual claim from the last assistant ' +
+      'response so the external lookup searches for the CLAIM, not user message history.'
+    );
+  });
+
+  it('QE-006: #extractConversationTopics captures last assistant response (FIX 2)', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Find the #extractConversationTopics method body
+    const fnStart = src.indexOf('#extractConversationTopics');
+    const fnBodySample = src.substring(fnStart, fnStart + 2000);
+
+    assert.ok(
+      fnBodySample.includes("role === 'assistant'") || fnBodySample.includes('role === "assistant"'),
+      'QE-006 FAIL: "#extractConversationTopics" does not read assistant messages. ' +
+      'FIX 2 requires capturing the last assistant response so that when a verification ' +
+      'intent is detected, the claim can be extracted from what the AI previously said.'
+    );
+
+    assert.ok(
+      fnBodySample.includes('lastAssistantResponse'),
+      'QE-006 FAIL: "#extractConversationTopics" does not return "lastAssistantResponse". ' +
+      'FIX 2 requires this field in the returned object so "#enrichQueryWithConversationContext" ' +
+      'can pass it to "#extractClaimFromResponse".'
+    );
+  });
+
+  it('QE-007: #enrichQueryWithConversationContext checks verification intent before follow-up (FIX 3)', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Use lastIndexOf to find the method DEFINITION, not call sites
+    const fnStart = src.lastIndexOf('#enrichQueryWithConversationContext');
+    const fnBodySample = src.substring(fnStart, fnStart + 3000);
+
+    const verificationIdx = fnBodySample.indexOf('#isVerificationIntent');
+    const followUpIdx     = fnBodySample.indexOf('#detectFollowUp');
+
+    assert.ok(
+      verificationIdx !== -1,
+      'QE-007 FAIL: "#enrichQueryWithConversationContext" never calls "#isVerificationIntent". ' +
+      'FIX 3 requires checking for verification intent at the TOP of the enrichment function ' +
+      'so it short-circuits before normal entity injection logic.'
+    );
+
+    assert.ok(
+      verificationIdx < followUpIdx,
+      'QE-007 FAIL: verification intent check must appear BEFORE "#detectFollowUp" in ' +
+      '"#enrichQueryWithConversationContext". Verification path must bypass follow-up entity injection.'
+    );
+  });
+
+  it('QE-008: #enrichQueryWithConversationContext applies relevance gate to entities (FIX 1)', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Use lastIndexOf to find the method DEFINITION, not call sites
+    const fnStart = src.lastIndexOf('#enrichQueryWithConversationContext');
+    const fnBodySample = src.substring(fnStart, fnStart + 3000);
+
+    assert.ok(
+      fnBodySample.includes('#isEntityRelevantToQuery'),
+      'QE-008 FAIL: "#enrichQueryWithConversationContext" does not call "#isEntityRelevantToQuery". ' +
+      'FIX 1 requires filtering extracted entities through the relevance gate before building ' +
+      'the enriched query, preventing unrelated entities from contaminating standalone queries.'
+    );
+  });
+
+  it('QE-009: VERIFICATION_PATTERNS covers "are you sure", "double-check", and "check current sources"', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Find the static field / const that holds the patterns
+    const patternStart = src.indexOf('VERIFICATION_PATTERNS');
+    const patternBlock  = src.substring(patternStart, patternStart + 500);
+
+    assert.ok(
+      patternBlock.includes('are you sure'),
+      'QE-009 FAIL: VERIFICATION_PATTERNS must include an "are you sure" pattern.'
+    );
+    assert.ok(
+      patternBlock.includes('double') && patternBlock.includes('check'),
+      'QE-009 FAIL: VERIFICATION_PATTERNS must include a "double-check" / "double check" pattern.'
+    );
+    assert.ok(
+      patternBlock.includes('sources') || patternBlock.includes('source'),
+      'QE-009 FAIL: VERIFICATION_PATTERNS must include a "check current sources" / "check sources" pattern.'
+    );
+  });
+
+  it('QE-010: verificationIntent flag returned by enrichment when verification path taken', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // Search from the method DEFINITION (last occurrence) to avoid hitting call sites
+    const fnStart = src.lastIndexOf('#enrichQueryWithConversationContext');
+    const fnBodySample = src.substring(fnStart, fnStart + 3000);
+
+    assert.ok(
+      fnBodySample.includes('verificationIntent'),
+      'QE-010 FAIL: "#enrichQueryWithConversationContext" does not set "verificationIntent: true" ' +
+      'in the return object when the verification path is taken. ' +
+      'This flag lets the caller (orchestrator lookup branch) distinguish verification lookups ' +
+      'from ordinary follow-up enrichment.'
+    );
+  });
+
+});
+
