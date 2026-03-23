@@ -399,12 +399,15 @@ export const API_SOURCES = {
         // Extract country and position from query
         const ukMatch = query.match(/\b(UK|United Kingdom|Britain|British)\b.*?(prime minister|PM)/i);
         const usMatch = query.match(/\b(US|USA|United States|America|American)\b.*?(president)/i);
+        // Handle natural-language order: position-before-country (e.g. "Who is the president of the US")
+        const usMatchReverse = /\b(president|vice.president)\b.*?\b(US|USA|United States|America|American)\b/i;
+        const isUSPresident = !!usMatch || usMatchReverse.test(query);
         const germanyMatch = query.match(/\b(Germany|German)\b.*?(chancellor)/i);
         const franceMatch = query.match(/\b(France|French)\b.*?(president)/i);
 
         if (ukMatch) {
           return 'https://en.wikipedia.org/api/rest_v1/page/summary/Prime_Minister_of_the_United_Kingdom';
-        } else if (usMatch) {
+        } else if (isUSPresident) {
           return 'https://en.wikipedia.org/api/rest_v1/page/summary/President_of_the_United_States';
         } else if (germanyMatch) {
           return 'https://en.wikipedia.org/api/rest_v1/page/summary/Chancellor_of_Germany';
@@ -2090,9 +2093,15 @@ export async function performLookup(query, sources, truthType = null) {
         // ISSUE #877: Minimum content threshold — if source returns under 200 chars of usable
         // content, treat it as a failure and cascade to the next source rather than injecting
         // thin data into the prompt (e.g. DuckDuckGo null responses, GDELT title-only results).
+        // Structured financial API responses (e.g. Yahoo Finance) use a lower threshold because
+        // their valid responses can be ~50 chars of compact formatted data.
         const MIN_CONTENT_THRESHOLD = 200;
-        if (parsedData.length < MIN_CONTENT_THRESHOLD) {
-          console.log(`[externalLookupEngine] ${source.name} returned only ${parsedData.length} chars (below ${MIN_CONTENT_THRESHOLD} threshold), cascading to next source`);
+        const MIN_FINANCIAL_API_THRESHOLD = 30;
+        const isFinancialAPI = source.name?.toLowerCase().includes('yahoo finance') ||
+                               source.name?.toLowerCase().includes('yahoo');
+        const threshold = isFinancialAPI ? MIN_FINANCIAL_API_THRESHOLD : MIN_CONTENT_THRESHOLD;
+        if (parsedData.length < threshold) {
+          console.log(`[externalLookupEngine] ${source.name} returned only ${parsedData.length} chars (below ${threshold} threshold), cascading to next source`);
           sourcesUsed.push({
             name: source.name,
             type: source.type || 'unknown',
