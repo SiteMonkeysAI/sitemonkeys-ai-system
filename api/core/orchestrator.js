@@ -2707,13 +2707,83 @@ export class Orchestrator {
     return { isFollowUp, confidence, reasons };
   }
 
+  // FIX 3: Verification intent patterns (Issue #2)
+  // Matches "are you sure", "double-check", "verify", "fact-check", etc.
+  static #VERIFICATION_PATTERNS = [
+    /\b(are you sure|double.?check|verify|confirm)\b/i,
+    /\b(check (current )?sources?|check that|is that right)\b/i,
+    /\b(fact.?check|look that up|check again)\b/i
+  ];
+
   /**
-   * Extract topics and entities from conversation history
+   * Detect whether the user wants to verify/confirm a prior claim
+   * @private
+   */
+  #isVerificationIntent(message) {
+    return Orchestrator.#VERIFICATION_PATTERNS.some(p => p.test(message));
+  }
+
+  /**
+   * Check if a query has its own clear topic (proper nouns or >6 words)
+   * Used by the entity relevance gate (FIX 1)
+   * @private
+   */
+  #hasOwnTopic(query) {
+    // Query has proper nouns (capitalized word 3+ chars) or is long enough to stand alone.
+    // Queries longer than 6 words typically contain enough specificity to be self-contained
+    // without needing entity injection from prior conversation turns.
+    return /\b[A-Z][a-z]{2,}\b/.test(query) || query.split(' ').length > 6;
+  }
+
+  /**
+   * FIX 1: Relevance gate — only inject a historical entity if it is mentioned in the
+   * current query OR the query has no clear topic of its own.
+   * @private
+   */
+  #isEntityRelevantToQuery(entity, currentQuery) {
+    const queryLower = currentQuery.toLowerCase();
+    const entityLower = entity.toLowerCase();
+
+    // Direct mention — always relevant
+    if (queryLower.includes(entityLower)) return true;
+
+    // Current query has its own clear topic — don't contaminate it
+    if (this.#hasOwnTopic(currentQuery)) return false;
+
+    // Pure follow-up with no topic — inject entity for context
+    return true;
+  }
+
+  /**
+   * FIX 3: Extract the core factual claim from an assistant response.
+   * Returns the first substantive sentence (>10 chars), or null if unavailable.
+   * @private
+   */
+  #extractClaimFromResponse(assistantResponse) {
+    if (!assistantResponse) return null;
+    const text = typeof assistantResponse === 'string'
+      ? assistantResponse
+      : assistantResponse.content;
+    if (!text) return null;
+
+    const sentences = text
+      .split(/[.!?]/)
+      .map(s => s.trim())
+      // Keep only substantive sentences — fragments shorter than 10 characters
+      // (e.g. "OK", "Yes", "No") are unlikely to contain a verifiable claim.
+      .filter(s => s.length > 10);
+
+    return sentences[0] || null;
+  }
+
+  /**
+   * Extract topics and entities from conversation history.
+   * FIX 2: Also returns the most recent assistant response for claim extraction.
    * @private
    */
   #extractConversationTopics(conversationHistory, maxTurns = 3) {
     if (!conversationHistory || conversationHistory.length === 0) {
-      return { entities: [], keywords: [] };
+      return { entities: [], keywords: [], lastAssistantResponse: null };
     }
 
     const entities = new Set();
@@ -2745,17 +2815,45 @@ export class Orchestrator {
       topics.forEach(topic => keywords.add(topic.toLowerCase()));
     }
 
+    // FIX 2: Capture last assistant response so verification intent can extract the claim.
+    // Examine the last 4 turns (2 user + 2 assistant) — enough to find the most recent
+    // assistant reply without loading the entire conversation history into memory.
+    const recentHistory = conversationHistory.slice(-4);
+    const lastAssistantResponse = recentHistory
+      .filter(m => m.role === 'assistant')
+      .slice(-1)[0] || null;
+
     return {
       entities: Array.from(entities),
-      keywords: Array.from(keywords)
+      keywords: Array.from(keywords),
+      lastAssistantResponse
     };
   }
 
   /**
-   * Enrich query with conversation context for follow-up questions
+   * Enrich query with conversation context for follow-up questions.
+   * FIX 1: Entities are filtered through a relevance gate before injection.
+   * FIX 3: Verification intent ("are you sure?") extracts the claim from the
+   *         last assistant response instead of injecting prior entity history.
    * @private
    */
   #enrichQueryWithConversationContext(query, conversationHistory) {
+    // FIX 3: Verification intent — search for the CLAIM, not history entities
+    if (this.#isVerificationIntent(query)) {
+      const extracted = this.#extractConversationTopics(conversationHistory);
+      const claimToVerify = this.#extractClaimFromResponse(extracted.lastAssistantResponse);
+      if (claimToVerify) {
+        return {
+          enrichedQuery: claimToVerify,
+          originalQuery: query,
+          contextAdded: true,
+          contextUsed: ['verification_claim'],
+          verificationIntent: true
+        };
+      }
+      // No prior assistant response to extract from — fall through to normal flow
+    }
+
     const followUpDetection = this.#detectFollowUp(query, conversationHistory);
 
     if (!followUpDetection.isFollowUp) {
@@ -2768,11 +2866,20 @@ export class Orchestrator {
       return { enrichedQuery: query, originalQuery: query, contextAdded: false };
     }
 
-    // Build enriched query with top entities and keywords
+    // FIX 1: Apply relevance gate — only inject entities relevant to current query
+    const relevantEntities = extracted.entities.filter(
+      entity => this.#isEntityRelevantToQuery(entity, query)
+    );
+
+    // Build enriched query with relevant entities and keywords
     const contextParts = [
-      ...extracted.entities.slice(0, 3),
+      ...relevantEntities.slice(0, 3),
       ...extracted.keywords.slice(0, 2)
     ];
+
+    if (contextParts.length === 0) {
+      return { enrichedQuery: query, originalQuery: query, contextAdded: false };
+    }
 
     const enrichedQuery = `${contextParts.join(' ')} ${query}`.trim();
 
