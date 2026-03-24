@@ -4295,3 +4295,138 @@ describe('SC2. Stage 2 Semantic Classifier — Real Implementation', () => {
   });
 
 });
+
+// ============================================================
+// SECTION RG: RELEVANCE GATE — Memory Injection Filtering
+// Validates that the relevance gate filters are correctly
+// implemented in orchestrator.js (injection-only, post-cap).
+// ============================================================
+
+describe('RG. Relevance Gate — Memory Injection Filtering', () => {
+
+  const ORCH_PATH = 'api/core/orchestrator.js';
+
+  it('RG-001: RELEVANCE_INJECTION_THRESHOLD constant exists in orchestrator', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    assert.ok(
+      orch.includes('RELEVANCE_INJECTION_THRESHOLD'),
+      'RG-001 FAIL: RELEVANCE_INJECTION_THRESHOLD constant not found in orchestrator. ' +
+      'Memories below threshold will never be filtered — wasteful injection persists.'
+    );
+  });
+
+  it('RG-002: safety_boosted memories always bypass the relevance gate', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    // The gate must check m.safety_boosted and return true (bypass) before score check
+    assert.ok(
+      orch.includes('m.safety_boosted') && orch.includes('return true'),
+      'RG-002 FAIL: Safety-boosted memory bypass not found in relevance gate. ' +
+      'Safety-critical memories (allergies, medications) must always be injected.'
+    );
+  });
+
+  it('RG-003: RELEVANCE_INJECTION_THRESHOLD_PERSONAL constant exists with lower value', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    assert.ok(
+      orch.includes('RELEVANCE_INJECTION_THRESHOLD_PERSONAL'),
+      'RG-003 FAIL: RELEVANCE_INJECTION_THRESHOLD_PERSONAL constant not found. ' +
+      'Personal queries need a lower threshold (0.20) than standard queries (0.35).'
+    );
+    // Verify the personal threshold (0.20) is less than the standard (0.35)
+    const personalMatch = orch.match(/RELEVANCE_INJECTION_THRESHOLD_PERSONAL\s*=\s*([\d.]+)/);
+    const standardMatch = orch.match(/\bRELEVANCE_INJECTION_THRESHOLD\b(?!_)\s*=\s*([\d.]+)/);
+    assert.ok(personalMatch, 'RG-003 FAIL: Could not parse RELEVANCE_INJECTION_THRESHOLD_PERSONAL value.');
+    assert.ok(standardMatch, 'RG-003 FAIL: Could not parse RELEVANCE_INJECTION_THRESHOLD value.');
+    const personalVal = parseFloat(personalMatch[1]);
+    const standardVal = parseFloat(standardMatch[1]);
+    assert.ok(
+      personalVal < standardVal,
+      `RG-003 FAIL: Personal threshold (${personalVal}) must be less than standard threshold (${standardVal}).`
+    );
+  });
+
+  it('RG-004: personal query fallback preserves top memory when gate filters everything', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    // Fallback: if gate removes all memories and it's a personal query, keep the best one
+    assert.ok(
+      orch.includes('memoriesToFormat.length === 0 && isPersonalQuery'),
+      'RG-004 FAIL: Personal query fallback not found. When all memories are filtered ' +
+      'on a personal/memory query, the top-scoring memory must be preserved.'
+    );
+  });
+
+  it('RG-005: gate uses isPersonalQuery flag to select threshold', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    assert.ok(
+      orch.includes('isPersonalQuery'),
+      'RG-005 FAIL: isPersonalQuery flag not found in orchestrator. ' +
+      'The gate must use a lower threshold for personal/memory recall queries.'
+    );
+    // Threshold selection must branch on isPersonalQuery
+    assert.ok(
+      orch.includes('isPersonalQuery') &&
+      orch.includes('RELEVANCE_INJECTION_THRESHOLD_PERSONAL') &&
+      orch.includes('RELEVANCE_INJECTION_THRESHOLD'),
+      'RG-005 FAIL: Threshold branching on isPersonalQuery not found. ' +
+      'Standard and personal thresholds must be selected based on query type.'
+    );
+  });
+
+  it('RG-006: RELEVANCE-GATE log line is present in orchestrator', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    assert.ok(
+      orch.includes('[RELEVANCE-GATE]'),
+      'RG-006 FAIL: [RELEVANCE-GATE] log line not found in orchestrator. ' +
+      'Every non-greeting query that reaches memory injection must emit this log.'
+    );
+  });
+
+  it('RG-007: phase4Metadata.relevance_gate is populated after the gate', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    assert.ok(
+      orch.includes('phase4Metadata.relevance_gate'),
+      'RG-007 FAIL: phase4Metadata.relevance_gate assignment not found. ' +
+      'Gate telemetry must be stored in phase4Metadata for downstream use.'
+    );
+  });
+
+  it('RG-008: memories_filtered count field is present in relevance_gate assignment', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    assert.ok(
+      orch.includes('memories_filtered'),
+      'RG-008 FAIL: memories_filtered field not found in relevance gate telemetry. ' +
+      'The gate must record how many memories were filtered for observability.'
+    );
+  });
+
+  it('RG-009: hybrid_score > 1.0 falls back to raw similarity for threshold comparison', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    // The gate must handle boosted scores (> 1.0) by using raw similarity instead
+    assert.ok(
+      orch.includes('hybrid_score > 1.0') && orch.includes('m.similarity'),
+      'RG-009 FAIL: hybrid_score > 1.0 fallback to m.similarity not found. ' +
+      'Boosted scores inflate hybrid_score above 1.0; raw similarity must be used for threshold comparison.'
+    );
+  });
+
+  it('RG-010: relevance_gate is exposed in the API response phase4_metadata block', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    // Look for the relevance_gate field in the phase4_metadata object returned in the response
+    assert.ok(
+      orch.includes('relevance_gate: phase4Metadata.relevance_gate'),
+      'RG-010 FAIL: relevance_gate not found in API response phase4_metadata. ' +
+      'Gate telemetry must be returned in the API response for observability.'
+    );
+  });
+
+});
