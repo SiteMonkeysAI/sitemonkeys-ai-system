@@ -84,6 +84,15 @@ const _sessionClaudeDeclined = new Map();
 const GREETING_LIMIT = 150; // Max chars for greeting responses (Anti-Engagement)
 const MIN_SENTENCE_LENGTH = 50; // Minimum chars to consider a valid sentence
 
+// Relevance Gate: minimum score required to inject a memory into the prompt.
+// Applied AFTER retrieval and AFTER the MAX_MEMORIES_FINAL cap — injection-only.
+// Personal queries use a lower threshold because personal fact recall has
+// inherently lower similarity scores against the query embedding.
+// Safety-boosted memories bypass the gate entirely (see RELEVANCE_INJECTION_THRESHOLD_SAFETY).
+const RELEVANCE_INJECTION_THRESHOLD = 0.35;          // Standard queries
+const RELEVANCE_INJECTION_THRESHOLD_PERSONAL = 0.20; // Personal/memory recall queries
+const RELEVANCE_INJECTION_THRESHOLD_SAFETY = 0;      // Safety-critical memories always injected
+
 // Greeting shortcut response pools (indexed by personality)
 // Used by STEP 6.9 to return a deterministic greeting without calling gpt-4o.
 const GREETING_RESPONSES = {
@@ -2628,6 +2637,8 @@ export class Orchestrator {
               type: s.type,
               success: true
             })) || null,
+            // Relevance gate telemetry
+            relevance_gate: phase4Metadata.relevance_gate || null,
           },
 
           // PHASE 5: Enforcement Gate Results
@@ -3228,6 +3239,69 @@ export class Orchestrator {
           });
         }
         
+        // ───────────────────────────────────────────────────────────────
+        // RELEVANCE GATE — filter by similarity score before injection
+        // Operates on the already-capped set; does not change retrieval.
+        // ───────────────────────────────────────────────────────────────
+        const intentClass = phase4Metadata.intent_class;
+        // isPersonalQuery: any of the three signals is sufficient —
+        // intentClass is the primary classifier; source_class and
+        // earlyClassification.type are secondary corroborating signals.
+        const isPersonalQuery =
+          intentClass === 'PERSONAL_CONTEXTUAL' ||
+          phase4Metadata?.source_class === 'memory' ||
+          earlyClassification?.type === 'personal';
+
+        const relevanceThreshold = isPersonalQuery
+          ? RELEVANCE_INJECTION_THRESHOLD_PERSONAL
+          : RELEVANCE_INJECTION_THRESHOLD;
+
+        const memoriesBeforeGate = memoriesToFormat.length;
+        // Preserve the pre-gate array for the fallback sort below
+        const memoriesBeforeGateArray = memoriesToFormat;
+
+        memoriesToFormat = memoriesToFormat.filter(m => {
+          // Safety-critical memories always pass — non-negotiable
+          if (m.safety_boosted) return true;
+          // Boosted scores can exceed 1.0; when they do, use raw similarity
+          // so the threshold comparison stays on a consistent 0–1 scale.
+          // If similarity is also missing, treat score as 0 (do not inject).
+          const score = m.hybrid_score > 1.0
+            ? (m.similarity || 0)
+            : (m.hybrid_score || m.similarity || 0);
+          return score >= relevanceThreshold;
+        });
+
+        // Fallback: for personal/memory queries, always keep the single
+        // highest-scoring memory so the user's context is never fully lost
+        if (memoriesToFormat.length === 0 && isPersonalQuery) {
+          const best = memoriesBeforeGateArray
+            .slice()
+            .sort((a, b) => (b.hybrid_score || b.similarity || 0) -
+                            (a.hybrid_score || a.similarity || 0))[0];
+          if (best) memoriesToFormat = [best];
+        }
+
+        const memoriesAfterGate = memoriesToFormat.length;
+        const memoriesFiltered = memoriesBeforeGate - memoriesAfterGate;
+
+        console.log(
+          `[RELEVANCE-GATE] threshold=${relevanceThreshold} ` +
+          `before=${memoriesBeforeGate} after=${memoriesAfterGate} ` +
+          `filtered=${memoriesFiltered} ` +
+          `personal=${isPersonalQuery}`
+        );
+
+        // Store gate result in phase4Metadata for telemetry
+        phase4Metadata.relevance_gate = {
+          memories_before: memoriesBeforeGate,
+          memories_after: memoriesAfterGate,
+          memories_filtered: memoriesFiltered,
+          threshold_used: relevanceThreshold,
+          personal_query: isPersonalQuery,
+        };
+        // ───────────────────────────────────────────────────────────────
+
         const formattedMemories = memoriesToFormat
           .map((m) => {
             if (m.id) memoryIds.push(m.id);
