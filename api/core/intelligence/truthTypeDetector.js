@@ -630,41 +630,132 @@ export function detectHighStakesDomain(query) {
 
 /**
  * Stage 2: AI Classifier (only called if Stage 1 returns AMBIGUOUS)
- * Uses existing Confidence Engine (Innovation #14)
+ * Uses gpt-4o-mini to classify query intent and truth type semantically.
  * @param {string} query - The user's query
- * @param {object} _context - Additional context (mode, conversation history) (unused)
- * @returns {Promise<object>} { type: string, confidence: number, stage: 2, reasoning: string }
+ * @param {object} context - Additional context (analysis, memoryContext, conversationHistory, etc.)
+ * @returns {Promise<object>} { type: string, confidence: number, stage: 2, intent_class: string, lookup_recommended: boolean, reasoning: string }
  */
-export async function classifyAmbiguous(query, _context = {}) {
-  // This integrates with the existing Reasoning-Based Confidence Engine
-  // For now, return a structured response that can be filled in when integrated
-
+export async function classifyAmbiguous(query, context = {}) {
   console.log('[truthTypeDetector] Stage 2 classifier invoked for ambiguous query');
 
-  try {
-    // TODO: Integrate with existing confidence engine
-    // const confidenceEngine = await import('./confidenceEngine.js');
-    // const result = await confidenceEngine.classifyTruthType(query, context);
+  const fallback = {
+    type: TRUTH_TYPES.SEMI_STABLE,
+    confidence: 0.5,
+    stage: 2,
+    intent_class: 'GENUINE_AMBIGUOUS',
+    lookup_recommended: false,
+    reasoning: 'Stage 2 fallback — classifier unavailable'
+  };
 
-    // Placeholder: Default to SEMI_STABLE for ambiguous queries
-    // This is safer than VOLATILE (which should only be for explicit time-sensitive queries)
-    // SEMI_STABLE gives 24hr cache, balancing freshness with efficiency
+  try {
+    // Build context signals for the classifier
+    const intentSignal = context.analysis?.intent
+      ? `Query intent detected by semantic analysis: ${context.analysis.intent} (confidence: ${context.analysis.intentConfidence})`
+      : '';
+
+    const domainSignal = context.analysis?.domain
+      ? `Domain: ${context.analysis.domain}`
+      : '';
+
+    const complexitySignal = context.analysis?.complexity
+      ? `Complexity: ${context.analysis.complexity}`
+      : '';
+
+    const memorySignal = typeof context.memoryContext?.memoryCount === 'number' && context.memoryContext.memoryCount > 0
+      ? `User has ${context.memoryContext.memoryCount} stored memories — may be personal query`
+      : '';
+
+    const lastAssistant = context.conversationHistory
+      ?.findLast?.(m => m.role === 'assistant')?.content?.slice(0, 200) ||
+      context.conversationHistory
+        ?.filter(m => m.role === 'assistant')
+        ?.slice(-1)[0]?.content?.slice(0, 200) || '';
+
+    const conversationTopic = context.conversationHistory
+      ?.filter(m => m.role === 'user')
+      ?.slice(-3)
+      ?.map(m => m.content)
+      ?.join(' | ') || '';
+
+    const systemPrompt = `You are a query classifier. Classify the user query into exactly one intent class and determine truth type.
+
+INTENT CLASSES:
+- VERIFICATION: User is questioning or asking to verify a prior claim. Examples: "are you sure", "double check that", "is that right", "verify that"
+- BIOLOGICAL_NATURAL_FACT: Question about biology, nature, animals, science that has a stable documented answer. Examples: "can hippos have triplets", "do bears hibernate"
+- ANALYTICAL_FOLLOWUP: User is asking for analysis or comparison continuing a prior topic. Examples: "how does that compare", "what are the pros and cons", "which is better"
+- PERSONAL_CONTEXTUAL: Query requires user's personal context to answer. Examples: "which fits my budget", "what works for my situation", "which should I choose"
+- GENUINE_AMBIGUOUS: Truly unclear without more context
+
+TRUTH TYPES:
+- VOLATILE: Changes daily or faster (prices, breaking news, live events)
+- SEMI_STABLE: Changes monthly or slower (leadership, policies, specs)
+- PERMANENT: Does not change in human lifetime (scientific facts, history, math)
+
+LOOKUP RECOMMENDATION:
+- true: External data would materially improve the answer
+- false: Query can be answered from training knowledge or conversation context
+
+Respond with ONLY valid JSON. No other text:
+{
+  "intent_class": "VERIFICATION|BIOLOGICAL_NATURAL_FACT|ANALYTICAL_FOLLOWUP|PERSONAL_CONTEXTUAL|GENUINE_AMBIGUOUS",
+  "truth_type": "VOLATILE|SEMI_STABLE|PERMANENT",
+  "lookup_recommended": true|false,
+  "confidence_band": "high|medium|low",
+  "notes": "one short internal note max 15 words"
+}`;
+
+    const userPrompt = `Query: "${query}"
+${intentSignal}
+${domainSignal}
+${complexitySignal}
+${memorySignal}
+${lastAssistant ? `Last assistant response (first 200 chars): "${lastAssistant}"` : ''}
+${conversationTopic ? `Recent conversation topic: "${conversationTopic}"` : ''}`;
+
+    const { OpenAI } = await import('openai');
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      temperature: 0,
+      max_tokens: 80,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userPrompt }
+      ]
+    });
+
+    const raw = completion.choices[0]?.message?.content?.trim();
+    if (!raw) return fallback;
+
+    const parsed = JSON.parse(raw);
+
+    // Validate required fields
+    const validIntentClasses = ['VERIFICATION', 'BIOLOGICAL_NATURAL_FACT', 'ANALYTICAL_FOLLOWUP', 'PERSONAL_CONTEXTUAL', 'GENUINE_AMBIGUOUS'];
+    const validTruthTypes = ['VOLATILE', 'SEMI_STABLE', 'PERMANENT'];
+
+    if (!validIntentClasses.includes(parsed.intent_class)) return fallback;
+    if (!validTruthTypes.includes(parsed.truth_type)) return fallback;
+
+    // Map confidence band to numeric value
+    const confidenceMap = { high: 0.85, medium: 0.65, low: 0.45 };
+    const confidence = confidenceMap[parsed.confidence_band] || 0.5;
+
+    console.log(`[truthTypeDetector] Stage 2 classified: intent=${parsed.intent_class} truth_type=${parsed.truth_type} lookup=${parsed.lookup_recommended} confidence=${confidence}`);
+
     return {
-      type: TRUTH_TYPES.SEMI_STABLE,
-      confidence: 0.5,
+      type: TRUTH_TYPES[parsed.truth_type],
+      confidence,
       stage: 2,
-      reasoning: 'Stage 2 classifier defaulting to SEMI_STABLE (balanced default until AI classifier integrated)',
-      tokens_used: 0 // Will be populated when AI classifier is integrated
+      intent_class: parsed.intent_class,
+      lookup_recommended: parsed.lookup_recommended,
+      reasoning: parsed.notes || '',
+      tokens_used: completion.usage?.total_tokens || 0
     };
+
   } catch (error) {
-    console.error('[truthTypeDetector] Stage 2 classification failed:', error);
-    return {
-      type: TRUTH_TYPES.SEMI_STABLE,
-      confidence: 0.3,
-      stage: 2,
-      reasoning: 'Stage 2 failed, defaulting to SEMI_STABLE (safe fallback)',
-      error: error.message
-    };
+    console.error('[truthTypeDetector] Stage 2 classification failed:', error.message);
+    return fallback;
   }
 }
 

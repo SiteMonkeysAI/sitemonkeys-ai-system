@@ -4029,3 +4029,269 @@ describe('FX. EXTERNAL_FIRST Contract Validator & Semantic Verification Query', 
   });
 
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SC2. Stage 2 Semantic Classifier — Real gpt-4o-mini Implementation
+// Verifies that classifyAmbiguous is a real semantic classifier, not a stub,
+// and that context is wired from orchestrator through detectTruthType.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('SC2. Stage 2 Semantic Classifier — Real Implementation', () => {
+
+  it('SC2-001: classifyAmbiguous no longer contains hardcoded SEMI_STABLE 0.5 stub', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    // The old stub returned SEMI_STABLE with confidence 0.5 and a TODO comment
+    assert.ok(
+      !src.includes('Stage 2 classifier defaulting to SEMI_STABLE (balanced default until AI classifier integrated)'),
+      'SC2-001 FAIL: classifyAmbiguous still contains the old stub string. ' +
+      'The stub must be replaced with a real gpt-4o-mini classifier.'
+    );
+    assert.ok(
+      !src.includes('TODO: Integrate with existing confidence engine'),
+      'SC2-001 FAIL: classifyAmbiguous still contains the TODO comment from the stub. ' +
+      'The stub must be replaced with a real gpt-4o-mini classifier.'
+    );
+  });
+
+  it('SC2-002: classifyAmbiguous accepts and uses context parameter (not _context)', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    // The function signature must use `context` not `_context`
+    assert.ok(
+      src.includes('classifyAmbiguous(query, context = {})'),
+      'SC2-002 FAIL: classifyAmbiguous still uses "_context" (unused parameter). ' +
+      'The parameter must be renamed to "context" and used by the classifier.'
+    );
+  });
+
+  it('SC2-003: analysis.intent is wired from orchestrator into detectTruthType context', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    // The detectTruthType call must include the analysis object
+    const dtIdx = src.indexOf('detectTruthType(message,');
+    assert.ok(dtIdx !== -1, 'SC2-003 FAIL: detectTruthType(message, ...) call not found in orchestrator.js');
+
+    const callBlock = src.substring(dtIdx, dtIdx + 400);
+    assert.ok(
+      callBlock.includes('analysis,') || callBlock.includes('analysis:'),
+      'SC2-003 FAIL: "analysis" is not passed to detectTruthType in orchestrator.js. ' +
+      'The analysis object (intent/domain/complexity) must be wired into the context.'
+    );
+
+    // Also verify truthTypeDetector actually consumes context.analysis
+    const detectorSrc = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(
+      detectorSrc.includes('context.analysis?.intent') || detectorSrc.includes('context.analysis.intent'),
+      'SC2-003 FAIL: truthTypeDetector.js does not consume context.analysis?.intent in classifyAmbiguous. ' +
+      'The analysis.intent signal must be used to build the classifier prompt.'
+    );
+  });
+
+  it('SC2-004: classifyAmbiguous calls gpt-4o-mini for VERIFICATION-type queries', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    assert.ok(
+      src.includes("'gpt-4o-mini'") || src.includes('"gpt-4o-mini"'),
+      'SC2-004 FAIL: classifyAmbiguous does not reference gpt-4o-mini. ' +
+      'The classifier must use gpt-4o-mini to classify VERIFICATION and other intent types.'
+    );
+    assert.ok(
+      src.includes('VERIFICATION'),
+      'SC2-004 FAIL: classifyAmbiguous system prompt does not define the VERIFICATION intent class. ' +
+      'The classifier must be able to return VERIFICATION as intent_class.'
+    );
+  });
+
+  it('SC2-005: classifyAmbiguous system prompt includes BIOLOGICAL_NATURAL_FACT intent class', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    assert.ok(
+      src.includes('BIOLOGICAL_NATURAL_FACT'),
+      'SC2-005 FAIL: classifyAmbiguous does not define the BIOLOGICAL_NATURAL_FACT intent class. ' +
+      'The classifier must be able to return BIOLOGICAL_NATURAL_FACT for biology/science queries.'
+    );
+  });
+
+  it('SC2-006: classifyAmbiguous system prompt includes ANALYTICAL_FOLLOWUP intent class', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    assert.ok(
+      src.includes('ANALYTICAL_FOLLOWUP'),
+      'SC2-006 FAIL: classifyAmbiguous does not define the ANALYTICAL_FOLLOWUP intent class. ' +
+      'The classifier must be able to return ANALYTICAL_FOLLOWUP for analysis/comparison queries.'
+    );
+  });
+
+  it('SC2-007: classifyAmbiguous system prompt includes PERSONAL_CONTEXTUAL intent class', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    assert.ok(
+      src.includes('PERSONAL_CONTEXTUAL'),
+      'SC2-007 FAIL: classifyAmbiguous does not define the PERSONAL_CONTEXTUAL intent class. ' +
+      'The classifier must be able to return PERSONAL_CONTEXTUAL for queries needing personal context.'
+    );
+  });
+
+  it('SC2-008: classifyAmbiguous returns lookup_recommended field in result', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    assert.ok(
+      src.includes('lookup_recommended'),
+      'SC2-008 FAIL: classifyAmbiguous does not include "lookup_recommended" in its return value. ' +
+      'The classifier must return lookup_recommended to control external lookup triggering.'
+    );
+  });
+
+  it('SC2-009: classifyAmbiguous returns intent_class field in result', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    assert.ok(
+      src.includes('intent_class'),
+      'SC2-009 FAIL: classifyAmbiguous does not include "intent_class" in its return value. ' +
+      'The classifier must return intent_class for downstream use.'
+    );
+  });
+
+  it('SC2-010: classifyAmbiguous fallback returns SEMI_STABLE 0.5 when classifier fails', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    // The fallback object must have SEMI_STABLE and confidence 0.5
+    assert.ok(
+      src.includes('Stage 2 fallback — classifier unavailable') ||
+      src.includes("Stage 2 fallback"),
+      'SC2-010 FAIL: classifyAmbiguous fallback does not contain the expected fallback reasoning. ' +
+      'The fallback must gracefully return SEMI_STABLE 0.5 without blocking the response.'
+    );
+    // Confirm fallback still uses SEMI_STABLE
+    const fallbackIdx = src.indexOf('const fallback = {');
+    assert.ok(fallbackIdx !== -1, 'SC2-010 FAIL: "const fallback = {" not found in classifyAmbiguous');
+    const fallbackBlock = src.substring(fallbackIdx, fallbackIdx + 300);
+    assert.ok(
+      fallbackBlock.includes('TRUTH_TYPES.SEMI_STABLE'),
+      'SC2-010 FAIL: fallback does not use TRUTH_TYPES.SEMI_STABLE. ' +
+      'The fallback must default to SEMI_STABLE for safe degradation.'
+    );
+    assert.ok(
+      fallbackBlock.includes('confidence: 0.5'),
+      'SC2-010 FAIL: fallback does not set confidence: 0.5. ' +
+      'The fallback must return confidence 0.5 to match the original stub behavior.'
+    );
+  });
+
+  it('SC2-011: classifyAmbiguous catch block returns fallback (never throws)', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    // Find the classifyAmbiguous function body
+    const fnIdx = src.indexOf('export async function classifyAmbiguous(');
+    assert.ok(fnIdx !== -1, 'SC2-011 FAIL: classifyAmbiguous function not found');
+
+    const fnBody = src.substring(fnIdx, fnIdx + 6000);
+    assert.ok(
+      fnBody.includes('catch (error)') || fnBody.includes('catch(error)'),
+      'SC2-011 FAIL: classifyAmbiguous does not have a catch block. ' +
+      'The function must catch all errors and return the fallback to never block the response.'
+    );
+    // Confirm catch returns fallback not re-throws
+    const catchIdx = fnBody.indexOf('catch');
+    const catchBlock = fnBody.substring(catchIdx, catchIdx + 200);
+    assert.ok(
+      catchBlock.includes('return fallback'),
+      'SC2-011 FAIL: catch block does not return fallback. ' +
+      'The catch must return the fallback object, not re-throw the error.'
+    );
+  });
+
+  it('SC2-012: intent_class stored in phase4Metadata in orchestrator', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    assert.ok(
+      src.includes('phase4Metadata.intent_class') &&
+      (src.includes('truthTypeResult.intent_class') || src.includes('intent_class ||')),
+      'SC2-012 FAIL: "phase4Metadata.intent_class" is not assigned from truthTypeResult in orchestrator.js. ' +
+      'The intent_class from Stage 2 must be stored in phase4Metadata for downstream use.'
+    );
+  });
+
+  it('SC2-013: stage2LookupRecommended is wired into shouldLookup in orchestrator', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'Could not read api/core/orchestrator.js');
+
+    assert.ok(
+      src.includes('stage2LookupRecommended'),
+      'SC2-013 FAIL: "stage2LookupRecommended" is missing from orchestrator.js. ' +
+      'The lookup_recommended flag from Stage 2 must be wired into the shouldLookup condition.'
+    );
+    // Confirm it is part of the shouldLookup expression
+    const shouldLookupIdx = src.indexOf('let shouldLookup =');
+    assert.ok(shouldLookupIdx !== -1, 'SC2-013 FAIL: "let shouldLookup =" not found in orchestrator.js');
+    const shouldLookupBlock = src.substring(shouldLookupIdx, shouldLookupIdx + 1200);
+    assert.ok(
+      shouldLookupBlock.includes('stage2LookupRecommended'),
+      'SC2-013 FAIL: stage2LookupRecommended is not part of the shouldLookup expression. ' +
+      'It must be included as a condition so Stage 2 lookup recommendations are honored.'
+    );
+  });
+
+  it('SC2-014: gpt-4o-mini is used (not gpt-4o) in classifyAmbiguous', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    // Must use gpt-4o-mini specifically
+    assert.ok(
+      src.includes("'gpt-4o-mini'") || src.includes('"gpt-4o-mini"'),
+      'SC2-014 FAIL: classifyAmbiguous does not use gpt-4o-mini. ' +
+      'The Stage 2 classifier must use gpt-4o-mini for cost efficiency.'
+    );
+    // Must NOT use the more expensive gpt-4o (non-mini) as the model
+    const classifyFnIdx = src.indexOf('export async function classifyAmbiguous(');
+    const classifyFnBody = src.substring(classifyFnIdx, classifyFnIdx + 4000);
+    // Use regex to match "model: 'gpt-4o'" or model: "gpt-4o" with the closing quote immediately
+    // after "4o" (not "4o-mini"). This avoids falsely matching gpt-4o-mini.
+    assert.ok(
+      !/model:\s*['"]gpt-4o['"]/m.test(classifyFnBody),
+      'SC2-014 FAIL: classifyAmbiguous uses the full gpt-4o model instead of gpt-4o-mini. ' +
+      'Use gpt-4o-mini to keep Stage 2 classification cost low.'
+    );
+  });
+
+  it('SC2-015: max_tokens set to 80 or less in classifyAmbiguous', () => {
+    const src = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(src, 'Could not read api/core/intelligence/truthTypeDetector.js');
+
+    const classifyFnIdx = src.indexOf('export async function classifyAmbiguous(');
+    const classifyFnBody = src.substring(classifyFnIdx, classifyFnIdx + 4000);
+
+    // Must have max_tokens set
+    assert.ok(
+      classifyFnBody.includes('max_tokens'),
+      'SC2-015 FAIL: classifyAmbiguous does not set max_tokens. ' +
+      'The classifier must cap token output at 80 or less to minimize cost.'
+    );
+
+    // Extract the numeric value of max_tokens
+    const maxTokensMatch = classifyFnBody.match(/max_tokens\s*:\s*(\d+)/);
+    assert.ok(
+      maxTokensMatch,
+      'SC2-015 FAIL: Could not parse max_tokens value from classifyAmbiguous.'
+    );
+    const maxTokensValue = parseInt(maxTokensMatch[1], 10);
+    assert.ok(
+      maxTokensValue <= 80,
+      `SC2-015 FAIL: max_tokens is ${maxTokensValue}, must be 80 or less. ` +
+      'Keep Stage 2 token output minimal to reduce cost.'
+    );
+  });
+
+});
