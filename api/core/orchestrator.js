@@ -1334,10 +1334,15 @@ export class Orchestrator {
           conversationHistory,
           mode,
           vaultContext,
+          analysis,           // intent/domain/complexity signals for Stage 2
+          memoryContext,      // personal vs factual distinction for Stage 2
+          earlyClassification, // greeting/simple/complex for Stage 2
+          hasDocument: !!(effectiveDocumentData && effectiveDocumentData.tokens > 0) // doc loaded flag
         });
         phase4Metadata.truth_type = truthTypeResult.type;
         phase4Metadata.confidence = truthTypeResult.confidence || 0.8;
         phase4Metadata.high_stakes = truthTypeResult.high_stakes;
+        phase4Metadata.intent_class = truthTypeResult.intent_class || null;
 
         this.log(`[PHASE 4] Truth type: ${truthTypeResult.type}, confidence: ${phase4Metadata.confidence}`);
 
@@ -1458,6 +1463,8 @@ export class Orchestrator {
           }
         }
 
+        const stage2LookupRecommended = !!truthTypeResult.lookup_recommended;
+
         let shouldLookup =
           truthTypeResult.type === 'VOLATILE' ||
           (truthTypeResult.type === 'SEMI_STABLE' && matchesNewsPattern) ||
@@ -1470,7 +1477,8 @@ export class Orchestrator {
           (isFactualEntityLookupQuery && truthTypeResult.type !== 'PERMANENT') ||
           (isSemanticCurrentEventQuery && truthTypeResult.type !== 'PERMANENT') ||   // Issue #881: entity + action pattern
           isVolatileFollowUp ||              // Issue #881: follow-up inherits volatile context
-          (isVerificationIntent && verificationLookupQuery !== null); // Verification: user asked to check a prior claim
+          (isVerificationIntent && verificationLookupQuery !== null) || // Verification: user asked to check a prior claim
+          (truthTypeResult.stage === 2 && stage2LookupRecommended); // Stage 2 classifier recommends external lookup
 
         // Possessive guard: queries about "our"/"my" things refer to internal context,
         // not external data. Override shouldLookup to prevent wasted external API calls.
