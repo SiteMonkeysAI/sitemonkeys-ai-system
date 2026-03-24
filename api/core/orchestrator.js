@@ -1011,6 +1011,23 @@ export class Orchestrator {
         // Continue with memory retrieval on error (safe fallback)
       }
 
+      // STEP 0.75: Stage 1 truth type detection (zero token cost, synchronous)
+      // detectByPattern runs deterministically — no API call, no tokens consumed.
+      // The result is forwarded to #retrieveMemoryContext so its relevance gate can
+      // select the correct similarity threshold without calling detectByPattern a
+      // second time inside that method.
+      //
+      // WHY HERE and not inside #retrieveMemoryContext:
+      //   The problem statement (Issue analysis) established that Stage 2 (AI-based)
+      //   detectTruthType cannot be passed into #retrieveMemoryContext because it
+      //   runs in Phase 4 — AFTER memory retrieval — and relies on memoryContext
+      //   for the personal-vs-factual distinction.  Stage 1 (pattern-only) has no
+      //   such dependency, so it is the earliest point at which any truth-type
+      //   signal is available.  Making it explicit here also avoids a duplicate
+      //   detectByPattern call that previously happened silently inside the method.
+      const stage1TruthType = detectByPattern(message);
+      this.log(`[STAGE1-TRUTH] type=${stage1TruthType.type} confidence=${stage1TruthType.confidence} stage=${stage1TruthType.stage}`);
+
       // STEP 1: Conditionally retrieve memory context (up to 2,500 tokens)
       // Skip memory for pure greetings AND pure simple_factual queries (like "What is 2+2?")
       // CRITICAL FIX (Issue #579, INF3): Simple factual queries may need memory for temporal reasoning
@@ -1095,7 +1112,12 @@ export class Orchestrator {
         // memoryDuration stays 0 when skipped
       } else {
         performanceMarkers.memoryStart = Date.now();
-        memoryContext = await this.#retrieveMemoryContext(userId, message, { mode, earlyClassification });
+        memoryContext = await this.#retrieveMemoryContext(userId, message, {
+          mode,
+          earlyClassification,
+          stage1TruthType,          // Stage 1 pattern result (zero cost) for relevance gate threshold
+          hasDocument: !!(documentContext), // Resolves hasNewDocument TODO inside the method
+        });
         performanceMarkers.memoryEnd = Date.now();
 
         memoryDuration = performanceMarkers.memoryEnd - performanceMarkers.memoryStart;
@@ -3035,7 +3057,18 @@ export class Orchestrator {
   }
 
   async #retrieveMemoryContext(userId, message, options = {}) {
-    const { mode = 'truth-general', tokenBudget = 2000, previousMode = null } = options;
+    const {
+      mode = 'truth-general',
+      tokenBudget = 2000,
+      previousMode = null,
+      // Stage 1 truth type forwarded from processRequest (STEP 0.75).
+      // Avoids calling detectByPattern a second time inside this method.
+      // null when called from paths that don't pass it (safe fallback below).
+      stage1TruthType = null,
+      // Whether the current request includes an uploaded/pasted document.
+      // Used to resolve the hasNewDocument flag for stale-memory filtering.
+      hasDocument = false,
+    } = options;
 
     if (process.env.DEBUG_DIAGNOSTICS === 'true') {
       console.log('[CROSS-MODE-DIAG] ════════════════════════════════════════');
@@ -3161,8 +3194,18 @@ export class Orchestrator {
         // ISSUE #776 FIX 1: Filter out stale source-tagged memories when fresh data is available
         // When a NEW document is uploaded, exclude old document analysis memories
         // When fresh external data is fetched, exclude stale external data memories
-        const hasNewDocument = false; // TODO: options doesn't carry source flags
-        const hasFreshExternalData = false; // TODO: options doesn't carry source flags
+        //
+        // hasNewDocument: resolved from the hasDocument flag forwarded via options.
+        //   processRequest now passes hasDocument: !!(documentContext) at the call site.
+        const hasNewDocument = hasDocument;
+        //
+        // hasFreshExternalData: CANNOT be resolved here.
+        //   External lookup runs in Phase 4, which executes AFTER #retrieveMemoryContext
+        //   returns.  There is no way to know at this point whether an external fetch
+        //   will succeed.  The flag remains false; stale external-data memories are
+        //   therefore not pre-filtered.  A post-retrieval filtering step (outside this
+        //   method) would be required to address this — tracked as a future improvement.
+        const hasFreshExternalData = false;
 
         if (hasNewDocument || hasFreshExternalData) {
           const originalCount = memoriesToFormat.length;
@@ -3255,10 +3298,12 @@ export class Orchestrator {
         // transferred to phase4Metadata.relevance_gate in processRequest.
         // ───────────────────────────────────────────────────────────────
         //
-        // Detect truth type synchronously (no API call).
+        // Use the Stage 1 result forwarded from processRequest (STEP 0.75) to
+        // avoid a duplicate detectByPattern call.  Fall back to a fresh call when
+        // stage1TruthType was not provided (e.g. callers that bypass processRequest).
         // PERMANENT queries (factual/general knowledge) use a higher threshold
         // to prevent irrelevant personal memories from being injected.
-        const { type: detectedTruthType } = detectByPattern(message);
+        const { type: detectedTruthType } = stage1TruthType ?? detectByPattern(message);
 
         // isPersonalQuery: true when the user is asking about their own stored
         // data (e.g. "What are my allergies?", "What did I tell you about my diet?").
