@@ -4429,4 +4429,70 @@ describe('RG. Relevance Gate — Memory Injection Filtering', () => {
     );
   });
 
+  it('RG-011: RELEVANCE_INJECTION_THRESHOLD_PERMANENT constant exists with value 0.50', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    assert.ok(
+      orch.includes('RELEVANCE_INJECTION_THRESHOLD_PERMANENT'),
+      'RG-011 FAIL: RELEVANCE_INJECTION_THRESHOLD_PERMANENT constant not found. ' +
+      'PERMANENT truth-type queries need a higher threshold (0.50) to prevent ' +
+      'irrelevant personal memories from being injected on factual queries.'
+    );
+    // Verify the value is exactly 0.50
+    const permanentMatch = orch.match(/RELEVANCE_INJECTION_THRESHOLD_PERMANENT\s*=\s*([\d.]+)/);
+    assert.ok(permanentMatch, 'RG-011 FAIL: Could not parse RELEVANCE_INJECTION_THRESHOLD_PERMANENT value.');
+    const permanentVal = parseFloat(permanentMatch[1]);
+    assert.ok(
+      permanentVal === 0.50,
+      `RG-011 FAIL: RELEVANCE_INJECTION_THRESHOLD_PERMANENT is ${permanentVal}, must be exactly 0.50.`
+    );
+    // Verify the threshold selection logic includes PERMANENT branch
+    assert.ok(
+      orch.includes("detectedTruthType === 'PERMANENT'") &&
+      orch.includes('RELEVANCE_INJECTION_THRESHOLD_PERMANENT'),
+      'RG-011 FAIL: PERMANENT threshold branch not found in gate threshold selection logic. ' +
+      'The gate must select RELEVANCE_INJECTION_THRESHOLD_PERMANENT when truth_type is PERMANENT.'
+    );
+  });
+
+  it('RG-012: [RELEVANCE-GATE] log line fires outside phase4Metadata scope (no ReferenceError)', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Verify the log line is present
+    assert.ok(
+      orch.includes('[RELEVANCE-GATE]'),
+      'RG-012 FAIL: [RELEVANCE-GATE] log line not found in orchestrator. ' +
+      'Every query that reaches memory injection must emit this log.'
+    );
+
+    // Verify the gate does NOT reference phase4Metadata directly (was the cause of ReferenceError)
+    // The gate must use in-scope variables only: detectByPattern, options.earlyClassification, message
+    const gateStart = orch.indexOf('RELEVANCE GATE — filter by similarity score before injection');
+    // The gate section ends at the closing delimiter comment after the telemetry object
+    const gateDelimiterEnd = orch.indexOf('// ─────', gateStart + 100);
+    const gateSection = gateDelimiterEnd > gateStart
+      ? orch.slice(gateStart, gateDelimiterEnd + 80)
+      : orch.slice(gateStart, gateStart + 2000);
+    assert.ok(
+      !gateSection.includes('phase4Metadata.intent_class'),
+      'RG-012 FAIL: gate still references phase4Metadata.intent_class which is out of scope. ' +
+      'This causes a ReferenceError caught by try/catch, swallowing the log line.'
+    );
+
+    // Verify detectByPattern is used for truth type detection inside the gate
+    assert.ok(
+      orch.includes('detectByPattern(message)'),
+      'RG-012 FAIL: detectByPattern(message) not found in orchestrator. ' +
+      'The gate must use synchronous pattern detection for truth type (no phase4Metadata needed).'
+    );
+
+    // Verify gate result is returned from #retrieveMemoryContext for phase4Metadata assignment
+    assert.ok(
+      orch.includes('relevance_gate: relevanceGateResult'),
+      'RG-012 FAIL: relevance_gate not included in #retrieveMemoryContext return value. ' +
+      'The gate result must be returned so processRequest can assign it to phase4Metadata.'
+    );
+  });
+
 });

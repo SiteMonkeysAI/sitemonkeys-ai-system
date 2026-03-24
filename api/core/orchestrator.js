@@ -45,7 +45,7 @@ import { retrieveSemanticMemories } from "../services/semantic-retrieval.js";
 // ========== PII PROTECTION (Innovation #34) ==========
 import { sanitizePII } from "../memory/pii-sanitizer.js";
 // ========== PHASE 4/5/6/7 INTEGRATION ==========
-import { detectTruthType } from "../core/intelligence/truthTypeDetector.js";
+import { detectTruthType, detectByPattern } from "../core/intelligence/truthTypeDetector.js";
 import { route } from "../core/intelligence/hierarchyRouter.js";
 import { lookup, isFactualEntityQuery, isCurrentEventQuery, hasProperNouns, hasReputableSource } from "../core/intelligence/externalLookupEngine.js";
 import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
@@ -91,6 +91,7 @@ const MIN_SENTENCE_LENGTH = 50; // Minimum chars to consider a valid sentence
 // Safety-boosted memories bypass the gate entirely (see RELEVANCE_INJECTION_THRESHOLD_SAFETY).
 const RELEVANCE_INJECTION_THRESHOLD = 0.35;          // Standard queries
 const RELEVANCE_INJECTION_THRESHOLD_PERSONAL = 0.20; // Personal/memory recall queries
+const RELEVANCE_INJECTION_THRESHOLD_PERMANENT = 0.50; // PERMANENT truth-type (factual/general knowledge)
 const RELEVANCE_INJECTION_THRESHOLD_SAFETY = 0;      // Safety-critical memories always injected
 
 // Greeting shortcut response pools (indexed by personality)
@@ -1094,7 +1095,7 @@ export class Orchestrator {
         // memoryDuration stays 0 when skipped
       } else {
         performanceMarkers.memoryStart = Date.now();
-        memoryContext = await this.#retrieveMemoryContext(userId, message, { mode });
+        memoryContext = await this.#retrieveMemoryContext(userId, message, { mode, earlyClassification });
         performanceMarkers.memoryEnd = Date.now();
 
         memoryDuration = performanceMarkers.memoryEnd - performanceMarkers.memoryStart;
@@ -1319,6 +1320,8 @@ export class Orchestrator {
         high_stakes: null,
         phase4_error: null,
         query: message || '',
+        // Transfer relevance gate result from memory retrieval step (gate runs in #retrieveMemoryContext)
+        relevance_gate: memoryContext?.relevance_gate || null,
       };
 
       if (!willUseGreetingShortcut) {
@@ -3115,6 +3118,7 @@ export class Orchestrator {
       let memoryIds = [];
       let hasSafetyCritical = false;
       let memoriesToFormat = []; // FIX #667: Declare outside if block so it's accessible when returning
+      let relevanceGateResult = null;  // Populated inside the memories block; returned for phase4Metadata
 
       if (result.memories && result.memories.length > 0) {
         // ═══════════════════════════════════════════════════════════════
@@ -3242,19 +3246,37 @@ export class Orchestrator {
         // ───────────────────────────────────────────────────────────────
         // RELEVANCE GATE — filter by similarity score before injection
         // Operates on the already-capped set; does not change retrieval.
+        //
+        // NOTE: phase4Metadata is NOT in scope here (it is a local var in
+        // processRequest and #retrieveMemoryContext runs before phase4).
+        // Truth-type is detected synchronously via detectByPattern (zero cost).
+        // earlyClassification is forwarded from processRequest via options.
+        // The gate result is returned in the method's return value and
+        // transferred to phase4Metadata.relevance_gate in processRequest.
         // ───────────────────────────────────────────────────────────────
-        const intentClass = phase4Metadata.intent_class;
-        // isPersonalQuery: any of the three signals is sufficient —
-        // intentClass is the primary classifier; source_class and
-        // earlyClassification.type are secondary corroborating signals.
+        //
+        // Detect truth type synchronously (no API call).
+        // PERMANENT queries (factual/general knowledge) use a higher threshold
+        // to prevent irrelevant personal memories from being injected.
+        const { type: detectedTruthType } = detectByPattern(message);
+
+        // isPersonalQuery: true when the user is asking about their own stored
+        // data (e.g. "What are my allergies?", "What did I tell you about my diet?").
+        // Primary signal: possessive pronoun "my" in the message.
+        // Known limitation: broad patterns like "Is my understanding correct?" also
+        // match; in those cases the 0.20 threshold is acceptable (we prefer over-
+        // injection to under-injection for personal context).  The `earlyClassification`
+        // secondary signal is forwarded via options for future-compat with a more
+        // precise intent classifier.
         const isPersonalQuery =
-          intentClass === 'PERSONAL_CONTEXTUAL' ||
-          phase4Metadata?.source_class === 'memory' ||
-          earlyClassification?.type === 'personal';
+          /\bmy\b/i.test(message) ||
+          options.earlyClassification?.type === 'personal';
 
         const relevanceThreshold = isPersonalQuery
           ? RELEVANCE_INJECTION_THRESHOLD_PERSONAL
-          : RELEVANCE_INJECTION_THRESHOLD;
+          : detectedTruthType === 'PERMANENT'
+            ? RELEVANCE_INJECTION_THRESHOLD_PERMANENT
+            : RELEVANCE_INJECTION_THRESHOLD;
 
         const memoriesBeforeGate = memoriesToFormat.length;
         // Preserve the pre-gate array for the fallback sort below
@@ -3292,13 +3314,15 @@ export class Orchestrator {
           `personal=${isPersonalQuery}`
         );
 
-        // Store gate result in phase4Metadata for telemetry
-        phase4Metadata.relevance_gate = {
+        // Build gate telemetry — returned in the method result so that
+        // processRequest can assign it to phase4Metadata.relevance_gate.
+        relevanceGateResult = {
           memories_before: memoriesBeforeGate,
           memories_after: memoriesAfterGate,
           memories_filtered: memoriesFiltered,
           threshold_used: relevanceThreshold,
           personal_query: isPersonalQuery,
+          truth_type_detected: detectedTruthType,
         };
         // ───────────────────────────────────────────────────────────────
 
@@ -3363,6 +3387,7 @@ export class Orchestrator {
         hasMemory: tokenCount > 0,
         memory_ids: memoryIds,
         memory_objects: memoriesToFormat,  // FIX #659: Return actual memory objects for validators
+        relevance_gate: relevanceGateResult || null,  // Gate telemetry for phase4Metadata
       };
 
     } catch (error) {
