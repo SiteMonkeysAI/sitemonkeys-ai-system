@@ -1523,8 +1523,23 @@ export class Orchestrator {
 
         const stage2LookupRecommended = !!truthTypeResult.lookup_recommended;
 
-        let shouldLookup =
+        // Value gate — skip lookup when it won't materially improve the answer.
+        // High-stakes queries always bypass this gate regardless of truth type or confidence.
+        const lookupValueGate = !(
+          // Skip: simple factual query classified as PERMANENT
+          // Training data is sufficient — external lookup adds noise not value
+          (earlyClassification?.classification === 'simple_factual' &&
+           truthTypeResult.type === 'PERMANENT') ||
+          // Skip: high confidence PERMANENT non-high-stakes query
+          // System is already confident — lookup won't change the answer
+          (truthTypeResult.type === 'PERMANENT' &&
+           phase4Metadata?.confidence >= 0.85 &&
+           !(truthTypeResult.high_stakes?.isHighStakes))
+        );
+
+        let shouldLookup = lookupValueGate && (
           truthTypeResult.type === 'VOLATILE' ||
+          (truthTypeResult.stage === 2 && stage2LookupRecommended) || // Stage 2 classifier recommends external lookup
           (truthTypeResult.type === 'SEMI_STABLE' && matchesNewsPattern) ||
           (truthTypeResult.type === 'SEMI_STABLE' && hasExplicitFreshnessMarker) ||
           (truthTypeResult.high_stakes && truthTypeResult.high_stakes.isHighStakes) ||
@@ -1533,10 +1548,19 @@ export class Orchestrator {
           // do not trigger lookup via entity detection — capitals, historical facts, and settled
           // scientific facts are permanent and do not need external verification.
           (isFactualEntityLookupQuery && truthTypeResult.type !== 'PERMANENT') ||
-          (isSemanticCurrentEventQuery && truthTypeResult.type !== 'PERMANENT') ||   // Issue #881: entity + action pattern
-          isVolatileFollowUp ||              // Issue #881: follow-up inherits volatile context
-          (isVerificationIntent && verificationLookupQuery !== null) || // Verification: user asked to check a prior claim
-          (truthTypeResult.stage === 2 && stage2LookupRecommended); // Stage 2 classifier recommends external lookup
+          (isSemanticCurrentEventQuery && truthTypeResult.type !== 'PERMANENT') || // Issue #881: entity + action pattern
+          isVolatileFollowUp || // Issue #881: follow-up inherits volatile context
+          (isVerificationIntent && verificationLookupQuery !== null) // Verification: user asked to check a prior claim
+        );
+
+        console.log(
+          `[LOOKUP-GATE] shouldLookup=${shouldLookup} ` +
+          `lookupValueGate=${lookupValueGate} ` +
+          `truth_type=${truthTypeResult.type} ` +
+          `confidence=${phase4Metadata?.confidence} ` +
+          `classification=${earlyClassification?.classification} ` +
+          `high_stakes=${truthTypeResult.high_stakes?.isHighStakes}`
+        );
 
         // Possessive guard: queries about "our"/"my" things refer to internal context,
         // not external data. Override shouldLookup to prevent wasted external API calls.
@@ -2566,6 +2590,60 @@ export class Orchestrator {
       if (!targetMet) {
         this.log(`[PERFORMANCE] ⚠️ EXCEEDED TARGET by ${processingTime - targetDuration}ms`);
       }
+
+      // Cost observability — write to query_cost_log
+      // Non-blocking — fire and forget, never throws, never delays response
+      const _pool = this.pool;
+      const _userId = userId;
+      const _sessionId = sessionId;
+      const _earlyClassification = earlyClassification;
+      const _phase4Metadata = phase4Metadata;
+      const _memoryContext = memoryContext;
+      const _historyDepth = historyDepth;
+      const _mode = mode;
+      const _aiResponse = aiResponse;
+      setImmediate(async () => {
+        try {
+          if (_pool) {
+            await _pool.query(
+              `INSERT INTO query_cost_log (
+                user_id, session_id, query_type, truth_type,
+                complexity, intent_class, total_tokens,
+                prompt_tokens, completion_tokens, cost_usd,
+                memories_injected, memories_filtered,
+                lookup_fired, lookup_tokens, history_depth,
+                model, personality, mode
+              ) VALUES (
+                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
+                $11,$12,$13,$14,$15,$16,$17,$18
+              )`,
+              [
+                _userId || null,
+                _sessionId || null,
+                _earlyClassification?.classification || 'unknown',
+                _phase4Metadata?.truth_type || 'unknown',
+                _earlyClassification?.complexity || 'unknown',
+                _phase4Metadata?.intent_class || null,
+                _aiResponse?.cost?.totalTokens || 0,
+                _aiResponse?.cost?.inputTokens || 0,
+                _aiResponse?.cost?.outputTokens || 0,
+                _aiResponse?.cost?.totalCost || 0,
+                _memoryContext?.memory_ids?.length || 0,
+                _phase4Metadata?.relevance_gate?.memories_filtered || 0,
+                _phase4Metadata?.external_lookup || false,
+                _phase4Metadata?.external_tokens || 0,
+                _historyDepth || null,
+                _aiResponse?.model || null,
+                personalityResponse?.personality || null,
+                _mode || null
+              ]
+            );
+          }
+        } catch (err) {
+          // Never block response for observability write
+          console.error('[COST-LOG] Failed to write query cost log:', err.message);
+        }
+      });
 
       // STEP 11: Return complete response
       return {

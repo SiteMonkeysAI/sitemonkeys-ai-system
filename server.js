@@ -60,6 +60,7 @@ import testSemanticHandler from "./api/routes/test-semantic.js";
 import dbMigrationRouter, { addEmbeddingIndex } from "./api/admin/db-migration.js";
 import { handleCleanupRequest } from "./api/admin/cleanup.js";
 import { handleZombieCleanupRequest } from "./api/admin/cleanup-zombies.js";
+import { handleCostSummary, ensureCostLogTable } from "./api/admin/cost-observability.js";
 import rateLimit from "express-rate-limit";
 // ========== SEMANTIC INTEGRATION ==========
 import { storeWithSupersession, generateFactFingerprint } from "./api/services/supersession.js";
@@ -187,6 +188,11 @@ async function initializeMemorySystem() {
     // CRITICAL FIX: Expose persistentMemory as global.memorySystem
     global.memorySystem = persistentMemory;
     console.log("[SERVER] ✅ Memory system exposed as global.memorySystem");
+
+    // Ensure cost observability table exists (idempotent, never throws)
+    if (persistentMemory.pool) {
+      await ensureCostLogTable(persistentMemory.pool);
+    }
 
     // Initialize intelligence system
     await persistentMemory.intelligenceSystem.initialize();
@@ -1279,6 +1285,9 @@ const adminEmbeddingIndexRateLimiter = rateLimit({
   legacyHeaders: false,
 });
 app.post('/api/admin/add-embedding-index', adminEmbeddingIndexRateLimiter, addEmbeddingIndex);
+
+// Cost observability — aggregate breakdown by query type (internal use only)
+app.get('/api/admin/cost-summary', handleCostSummary);
 
 console.log("[SERVER] ✅ Routes configured");
 
