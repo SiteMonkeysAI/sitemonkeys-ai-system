@@ -2599,7 +2599,6 @@ export class Orchestrator {
       const _earlyClassification = earlyClassification;
       const _phase4Metadata = phase4Metadata;
       const _memoryContext = memoryContext;
-      const _historyDepth = historyDepth;
       const _mode = mode;
       const _aiResponse = aiResponse;
       setImmediate(async () => {
@@ -2632,7 +2631,7 @@ export class Orchestrator {
                 _phase4Metadata?.relevance_gate?.memories_filtered || 0,
                 _phase4Metadata?.external_lookup || false,
                 _phase4Metadata?.external_tokens || 0,
-                _historyDepth || null,
+                null,
                 _aiResponse?.model || null,
                 personalityResponse?.personality || null,
                 _mode || null
