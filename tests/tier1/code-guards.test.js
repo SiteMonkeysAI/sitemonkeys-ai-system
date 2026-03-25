@@ -4704,3 +4704,185 @@ describe('SI. Selective Context Injection — History Depth and Memory Fallback'
   });
 
 });
+
+// ---------------------------------------------------------------------------
+// LG. Lookup Value Gate
+// ---------------------------------------------------------------------------
+describe('LG. Lookup Value Gate', () => {
+  const ORCH_PATH = 'api/core/orchestrator.js';
+
+  it('LG-001: lookupValueGate is false when classification=simple_factual AND truth_type=PERMANENT', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Gate must check earlyClassification?.classification === 'simple_factual' AND truthTypeResult.type === 'PERMANENT'
+    assert.ok(
+      orch.includes("earlyClassification?.classification === 'simple_factual'") &&
+      orch.includes("truthTypeResult.type === 'PERMANENT'"),
+      'LG-001 FAIL: lookupValueGate does not check for simple_factual classification AND PERMANENT truth type.'
+    );
+  });
+
+  it('LG-002: lookupValueGate is false when truth_type=PERMANENT AND confidence >= 0.85 AND high_stakes=false', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Gate must check high confidence PERMANENT non-high-stakes condition
+    assert.ok(
+      orch.includes('phase4Metadata?.confidence >= 0.85') &&
+      orch.includes('truthTypeResult.high_stakes?.isHighStakes'),
+      'LG-002 FAIL: lookupValueGate does not check confidence >= 0.85 and high_stakes guard. ' +
+      'High confidence PERMANENT queries must skip lookup unless high stakes.'
+    );
+  });
+
+  it('LG-003: lookupValueGate does NOT block when high_stakes=true regardless of truth_type', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The gate must negate the high_stakes check — if high_stakes is true, gate allows lookup
+    const gateIdx = orch.indexOf('lookupValueGate');
+    assert.ok(gateIdx !== -1, 'LG-003 FAIL: lookupValueGate not found in orchestrator.js');
+
+    // Search up to 1000 chars to cover the full const definition and the closing paren
+    const gateBlock = orch.substring(gateIdx, gateIdx + 1000);
+    assert.ok(
+      gateBlock.includes('isHighStakes'),
+      'LG-003 FAIL: lookupValueGate gate block does not reference isHighStakes. ' +
+      'High stakes queries must always bypass the value gate.'
+    );
+  });
+
+  it('LG-004: lookupValueGate does NOT block VOLATILE queries', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // shouldLookup must still include VOLATILE as a direct trigger
+    const shouldLookupIdx = orch.indexOf('let shouldLookup = lookupValueGate');
+    assert.ok(shouldLookupIdx !== -1, 'LG-004 FAIL: shouldLookup does not use lookupValueGate. Missing gate integration.');
+
+    // Search up to 1500 chars to cover all conditions in the shouldLookup expression
+    const shouldLookupBlock = orch.substring(shouldLookupIdx, shouldLookupIdx + 1500);
+    assert.ok(
+      shouldLookupBlock.includes("truthTypeResult.type === 'VOLATILE'"),
+      'LG-004 FAIL: shouldLookup no longer contains VOLATILE condition. VOLATILE queries must always trigger lookup.'
+    );
+  });
+
+  it('LG-005: lookupValueGate does NOT block SEMI_STABLE + news pattern', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const shouldLookupIdx = orch.indexOf('let shouldLookup = lookupValueGate');
+    assert.ok(shouldLookupIdx !== -1, 'LG-005 FAIL: shouldLookup does not use lookupValueGate.');
+
+    // Search up to 1500 chars to cover all conditions in the shouldLookup expression
+    const shouldLookupBlock = orch.substring(shouldLookupIdx, shouldLookupIdx + 1500);
+    assert.ok(
+      shouldLookupBlock.includes("truthTypeResult.type === 'SEMI_STABLE'") &&
+      shouldLookupBlock.includes('matchesNewsPattern'),
+      'LG-005 FAIL: shouldLookup no longer contains SEMI_STABLE + matchesNewsPattern condition. ' +
+      'SEMI_STABLE news queries must always trigger lookup.'
+    );
+  });
+
+  it('LG-006: [LOOKUP-GATE] log line present with all required fields', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('[LOOKUP-GATE]') &&
+      orch.includes('shouldLookup=') &&
+      orch.includes('lookupValueGate=') &&
+      orch.includes('truth_type=') &&
+      orch.includes('confidence=') &&
+      orch.includes('classification=') &&
+      orch.includes('high_stakes='),
+      'LG-006 FAIL: [LOOKUP-GATE] log line is missing or does not include all required fields ' +
+      '(shouldLookup, lookupValueGate, truth_type, confidence, classification, high_stakes).'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CO. Cost Observability
+// ---------------------------------------------------------------------------
+describe('CO. Cost Observability by Query Type', () => {
+  const ORCH_PATH = 'api/core/orchestrator.js';
+  const SERVER_PATH = 'server.js';
+  const MIGRATION_PATH = 'api/admin/cost-observability.js';
+
+  it('CO-001: query_cost_log table creation SQL present in migration', () => {
+    const migration = readRepoFile(MIGRATION_PATH);
+    assert.ok(migration, 'CO-001 FAIL: api/admin/cost-observability.js not found');
+
+    assert.ok(
+      migration.includes('CREATE TABLE IF NOT EXISTS query_cost_log'),
+      'CO-001 FAIL: CREATE TABLE IF NOT EXISTS query_cost_log not found in cost-observability.js'
+    );
+  });
+
+  it('CO-002: INSERT statement contains all required fields', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const requiredFields = [
+      'user_id', 'session_id', 'query_type', 'truth_type',
+      'complexity', 'intent_class', 'total_tokens',
+      'prompt_tokens', 'completion_tokens', 'cost_usd',
+      'memories_injected', 'memories_filtered',
+      'lookup_fired', 'lookup_tokens', 'history_depth',
+      'model', 'personality', 'mode'
+    ];
+
+    const insertIdx = orch.indexOf('INSERT INTO query_cost_log');
+    assert.ok(insertIdx !== -1, 'CO-002 FAIL: INSERT INTO query_cost_log not found in orchestrator.js');
+
+    const insertBlock = orch.substring(insertIdx, insertIdx + 800);
+    for (const field of requiredFields) {
+      assert.ok(
+        insertBlock.includes(field),
+        `CO-002 FAIL: Required field "${field}" not found in INSERT INTO query_cost_log block`
+      );
+    }
+  });
+
+  it('CO-003: Write is wrapped in setImmediate (non-blocking confirmed)', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // setImmediate must wrap the INSERT
+    const setImmediateIdx = orch.indexOf('setImmediate(async () =>');
+    const insertIdx = orch.indexOf('INSERT INTO query_cost_log');
+    assert.ok(
+      setImmediateIdx !== -1,
+      'CO-003 FAIL: setImmediate(async () => not found in orchestrator.js. DB write must be non-blocking.'
+    );
+    assert.ok(
+      insertIdx !== -1 && insertIdx > setImmediateIdx,
+      'CO-003 FAIL: INSERT INTO query_cost_log must appear after setImmediate to confirm non-blocking write.'
+    );
+  });
+
+  it('CO-004: Write is wrapped in try/catch (never throws confirmed)', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The setImmediate block must contain try/catch and a COST-LOG error log
+    assert.ok(
+      orch.includes('[COST-LOG] Failed to write query cost log:'),
+      'CO-004 FAIL: [COST-LOG] error catch log not found in orchestrator.js. ' +
+      'The DB write must be wrapped in try/catch and log errors without throwing.'
+    );
+  });
+
+  it('CO-005: /api/admin/cost-summary endpoint exists', () => {
+    const server = readRepoFile(SERVER_PATH);
+    assert.ok(server, 'Could not read server.js');
+
+    assert.ok(
+      server.includes('/api/admin/cost-summary'),
+      'CO-005 FAIL: /api/admin/cost-summary route not found in server.js'
+    );
+  });
+});
