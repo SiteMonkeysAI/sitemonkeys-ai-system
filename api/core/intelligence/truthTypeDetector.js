@@ -40,7 +40,7 @@ const VOLATILE_PATTERNS = [
 ];
 
 const SEMI_STABLE_PATTERNS = [
-  /\b(who is the (current )?(ceo|president|chairman|director|head))\b/i,
+  /\b(who is the (current )?(ceo|president|prime minister|chancellor|secretary of state|secretary|governor|mayor|chairman|director|minister|senator|representative|speaker|ambassador|chief|cfo|cto|coo|commissioner|superintendent|head))\b/i,
   /\b(regulation|policy|law|statute|requirement|compliance)\b/i,
   /\b(tax rate|interest rate|fee|tariff)\b/i,
   /\b(fda|sec|irs|government) (approval|ruling|guidance)\b/i,
@@ -100,7 +100,12 @@ const PERMANENT_PATTERNS = [
   /\b\d+\s*[×x\*\+\-\/÷]\s*\d+\s*[=\?]/i,
 
   // File format definitions
-  /\bwhat is (a |an )?(zip|pdf|jpg|png|gif|mp3|mp4|csv|json|xml|html|css|javascript) file\b/i
+  /\bwhat is (a |an )?(zip|pdf|jpg|png|gif|mp3|mp4|csv|json|xml|html|css|javascript) file\b/i,
+
+  // Yes/No factual questions about stable biology, nature, science
+  // "Do bears hibernate?" "Can hippos have triplets?" "Do whales breathe air?"
+  // Self-contained questions with no unresolved pronouns = PERMANENT
+  /\b(do|does|can|are|is) (a |an |the )?\w+ (hibernate|migrate|fly|swim|reproduce|breathe|have|lay|eat|digest|sleep|grow|live|die|survive|evolve|exist|belong|contain|produce|require|need|use|make|build|create|form|cause|affect|help|hurt|kill|protect|defend|attack|communicate|hunt|travel|move|change|develop|function|work|operate)\b/i
 ];
 
 // High-stakes domains that trigger external lookup regardless of truth type
@@ -243,6 +248,21 @@ function isStableProcedural(query) {
   const proceduralPatterns = /\bhow (do|to|can|should) (i |you |we )?(make|cook|boil|bake|tie|fold|write|create|build|fix|clean|wash|open|close|start|stop|grow|plant|cut|slice|chop|spell|pronounce)\b/i;
   const notCurrentEvents = !/\b(today|now|current|latest|recent|this morning|yesterday|right now)\b/i.test(query);
   return proceduralPatterns.test(query) && notCurrentEvents;
+}
+
+/**
+ * Guard for biological yes/no factual pattern:
+ * Returns true if query contains unresolved pronouns (it/this/that/they/those)
+ * WITHOUT a clear subject noun — these should fall to AMBIGUOUS, not PERMANENT.
+ * "Can they have triplets" → unresolved pronoun (no animal subject) → not PERMANENT
+ * "Can hippos have triplets" → has subject → PERMANENT
+ * @param {string} query
+ * @returns {boolean}
+ */
+function hasUnresolvedPronoun(query) {
+  const pronouns = /\b(it|this|that|they|those|them|these)\b/i;
+  const hasSubject = /\b(bear|bears|hippo|hippos|whale|whales|dog|dogs|cat|cats|bird|birds|fish|lion|lions|tiger|tigers|elephant|elephants|giraffe|giraffes|rhino|rhinos|horse|horses|cow|cows|pig|pigs|sheep|wolf|wolves|fox|foxes|deer|rabbit|rabbits|snake|snakes|turtle|turtles|frog|frogs|eagle|eagles|hawk|hawks|owl|owls|shark|sharks|dolphin|dolphins|octopus|octopi|penguin|penguins|crocodile|crocodiles|alligator|alligators|gorilla|gorillas|chimpanzee|chimpanzees|zebra|zebras|kangaroo|kangaroos|koala|koalas|panda|pandas|leopard|leopards|cheetah|cheetahs|jaguar|jaguars|bison|buffalo|moose|elk|reindeer|caribou|camel|camels|llama|llamas|alpaca|alpacas)\b/i;
+  return pronouns.test(query) && !hasSubject.test(query);
 }
 
 /**
@@ -500,9 +520,36 @@ export function detectByPattern(query) {
     };
   }
 
+  // LEADERSHIP CURRENT-HOLDER DETECTION
+  // "Who is the current [role]" queries are SEMI_STABLE not VOLATILE
+  // Leadership positions change occasionally but not at real-time frequency
+  // This must run BEFORE generic VOLATILE detection catches "current"
+  const LEADERSHIP_PATTERNS = [
+    /\b(who is|who'?s) the (current )?( ?(president|prime minister|chancellor|secretary of state|secretary|governor|mayor|chairman|director|minister|senator|representative|speaker|ambassador|chief|head of|ceo|cfo|cto|coo|commissioner|superintendent))\b/i,
+    /\b(who is|who'?s) (currently )?(serving as|acting as|leading|running|in charge of)\b/i,
+    /\b(current|acting) (president|prime minister|chancellor|secretary|governor|mayor|chairman|director|minister|senator|representative|speaker|ambassador|chief|ceo|cfo|cto)\b/i
+  ];
+  const isLeadershipQuery = LEADERSHIP_PATTERNS.some(p => p.test(query));
+  if (isLeadershipQuery) {
+    console.log('[truthTypeDetector] Leadership current-holder query detected — classifying as SEMI_STABLE');
+    return {
+      type: TRUTH_TYPES.SEMI_STABLE,
+      confidence: 0.90,
+      stage: 1,
+      patterns_matched: [{ type: TRUTH_TYPES.SEMI_STABLE, pattern: 'leadership_current_holder' }],
+      conflict_detected: false,
+      reason: 'Current leadership/officeholder query — SEMI_STABLE, not real-time volatile'
+    };
+  }
+
   // Check PERMANENT patterns first (stable facts should win over volatility)
   for (const pattern of PERMANENT_PATTERNS) {
     if (pattern.test(normalizedQuery)) {
+      // Ambiguity guard for biological yes/no pattern: if unresolved pronouns present
+      // without a clear subject noun, do not classify as PERMANENT
+      if (hasUnresolvedPronoun(query)) {
+        continue;
+      }
       matchedPatterns.push({ type: TRUTH_TYPES.PERMANENT, pattern: pattern.toString() });
     }
   }

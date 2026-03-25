@@ -334,7 +334,75 @@ function determineClassification(
   // NEW: Determine data freshness requirement
   const dataFreshnessRequirement = determineDataFreshnessRequirement(query, truthType);
   const externalLookupRequired = (dataFreshnessRequirement === 'REAL_TIME' || dataFreshnessRequirement === 'CURRENT');
-  
+
+  // ==================== REALTIME PRE-CHECK ====================
+  // Deterministic pre-check for obvious real-time queries — fires before embedding similarity.
+  // Financial prices, live scores, today's news/weather all need current data regardless
+  // of how they score against concept anchors.
+  const REALTIME_PATTERNS = [
+    /\b(current price|price of|stock price|bitcoin|btc|ethereum|eth|crypto)\b/i,
+    /\b(today'?s? (news|headlines|weather|temperature))\b/i,
+    /\b(weather|forecast).{0,30}\b(today|tonight|right now)\b/i,
+    /\b(what'?s? happening|breaking news|right now|live (score|update))\b/i,
+    /\b(latest news|news today|what happened today)\b/i,
+    /\b(dow jones|nasdaq|s&p|market today|exchange rate)\b/i
+  ];
+  if (REALTIME_PATTERNS.some(p => p.test(query))) {
+    console.log('[QUERY_CLASSIFIER] ✅ Classified as: news_current_events (confidence: 0.90) — realtime pre-check pattern match');
+    return {
+      classification: 'news_current_events',
+      confidence: 0.90,
+      requiresScaffolding: false,
+      dataFreshnessRequirement: 'REAL_TIME',
+      externalLookupRequired: true,
+      responseApproach: {
+        type: 'direct',
+        reason: 'Real-time data query — requires current external lookup',
+        maxLength: 500,
+        shouldTriggerLookup: true,
+        skipAnalyticalFramework: true
+      },
+      similarities,
+      ambiguous: false
+    };
+  }
+
+  // ==================== DECISION-MAKING PRE-CHECK ====================
+  // Evaluative/comparison/suitability queries must classify as decision_making.
+  // These are structurally deterministic — don't rely on embedding similarity.
+  const DECISION_PATTERNS = [
+    /\b(which (of|one|is|are|would|should|fits|works|makes))\b/i,
+    /\b(should i|should we)\b/i,
+    /\b(fits my (budget|needs|situation|use case|lifestyle))\b/i,
+    /\b(worth it|is it worth|is this worth|are they worth)\b/i,
+    /\b(which is better|what'?s? better|which makes more sense)\b/i,
+    /\b(help me (choose|decide|pick|select))\b/i,
+    /\b(what (would you recommend|do you recommend|should i (choose|pick|get|do|buy)))\b/i,
+    /\b(between (these|those|them|the two|the options))\b/i,
+    /\b(pros and cons|trade[- ]?offs?)\b/i,
+    /\b(for my (situation|budget|needs|use case|lifestyle|family|business))\b/i
+  ];
+  const isDecisionQuery = DECISION_PATTERNS.some(p => p.test(query));
+  if (isDecisionQuery) {
+    console.log('[QUERY_CLASSIFIER] ✅ Classified as: decision_making (confidence: 0.80) — decision pre-check pattern match');
+    return {
+      classification: 'decision_making',
+      confidence: 0.80,
+      requiresScaffolding: true,
+      dataFreshnessRequirement: 'TIMELESS',
+      externalLookupRequired: false,
+      responseApproach: {
+        type: 'evaluative',
+        reason: 'Evaluative or comparison query requires decision-making framework',
+        maxLength: 800,
+        shouldTriggerLookup: false,
+        skipAnalyticalFramework: false
+      },
+      similarities,
+      ambiguous: false
+    };
+  }
+
   // High confidence threshold - only act on strong signals
   const HIGH_CONFIDENCE = 0.70;
   const MEDIUM_CONFIDENCE = 0.60;
@@ -506,6 +574,27 @@ function determineClassification(
         },
         similarities,
         ambiguous: true
+      };
+    }
+
+    // If truth type is VOLATILE, the query needs real-time data
+    // regardless of similarity score — classify as news_current_events
+    if (truthType === 'VOLATILE') {
+      return {
+        classification: 'news_current_events',
+        confidence: 0.75,
+        requiresScaffolding: false,
+        dataFreshnessRequirement: 'REAL_TIME',
+        externalLookupRequired: true,
+        responseApproach: {
+          type: 'direct',
+          reason: 'Volatile truth type requires current data',
+          maxLength: 500,
+          shouldTriggerLookup: true,
+          skipAnalyticalFramework: true
+        },
+        similarities,
+        ambiguous: false
       };
     }
 
