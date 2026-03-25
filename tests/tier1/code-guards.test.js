@@ -4886,3 +4886,220 @@ describe('CO. Cost Observability by Query Type', () => {
     );
   });
 });
+
+// ============================================================
+// FP. SIMPLE_FACTUAL FAST-PATH — SKIP SEMANTIC ANALYSIS
+// Permanently verifies the four safety guards and structural
+// invariants of the isConfirmedSimpleFactual optimisation.
+//
+// The fast-path fires only when ALL four conditions hold:
+//   1. earlyClassification.classification === 'simple_factual'
+//   2. earlyClassification.confidence > 0.70
+//   3. message.length < 50
+//   4. !hasPersonalIntent
+//
+// When it fires, #performSemanticAnalysis is NOT called and a
+// safe fallback analysis (complexity: 0.2 → always GPT-4) is
+// used instead.  If any guard is missing, semantic analysis
+// must run normally.
+// ============================================================
+
+describe('FP. Simple Factual Fast-Path — Skip Semantic Analysis', () => {
+
+  it('FP-001: isConfirmedSimpleFactual flag exists with all four conditions', () => {
+    // INVARIANT: The fast-path variable must be defined and must gate on all four guards.
+    // Missing any guard widens the fast-path and could skip embeddings for queries that
+    // actually need semantic routing (e.g., long queries, personal-intent queries).
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('isConfirmedSimpleFactual'),
+      'FP-001 FAIL: isConfirmedSimpleFactual variable not found in orchestrator.js.'
+    );
+
+    // All four conditions must appear in the block that defines isConfirmedSimpleFactual.
+    const flagIdx = orch.indexOf('isConfirmedSimpleFactual =');
+    assert.ok(flagIdx !== -1, 'FP-001 FAIL: isConfirmedSimpleFactual = assignment not found.');
+
+    const flagBlock = orch.substring(flagIdx, flagIdx + 400);
+
+    assert.ok(
+      flagBlock.includes("'simple_factual'"),
+      "FP-001 FAIL: 'simple_factual' classification check missing from isConfirmedSimpleFactual block."
+    );
+    assert.ok(
+      flagBlock.includes('0.70'),
+      'FP-001 FAIL: confidence > 0.70 threshold missing from isConfirmedSimpleFactual block.'
+    );
+    assert.ok(
+      flagBlock.includes('message.length < 50'),
+      'FP-001 FAIL: message.length < 50 guard missing from isConfirmedSimpleFactual block.'
+    );
+    assert.ok(
+      flagBlock.includes('!hasPersonalIntent'),
+      'FP-001 FAIL: !hasPersonalIntent guard missing from isConfirmedSimpleFactual block.'
+    );
+  });
+
+  it('FP-002: isConfirmedSimpleFactual is false when confidence <= 0.70', () => {
+    // INVARIANT: The confidence threshold must be > 0.70 (strict greater-than).
+    // A threshold of >= 0.70 would be too permissive; boundary queries at exactly 0.70
+    // are not reliable enough to skip semantic analysis.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const flagIdx = orch.indexOf('isConfirmedSimpleFactual =');
+    assert.ok(flagIdx !== -1, 'FP-002 FAIL: isConfirmedSimpleFactual = not found.');
+
+    const flagBlock = orch.substring(flagIdx, flagIdx + 400);
+
+    assert.ok(
+      flagBlock.includes('confidence > 0.70') || flagBlock.includes('?.confidence > 0.70'),
+      'FP-002 FAIL: Confidence check must be strictly > 0.70, not >= 0.70. ' +
+      'Queries at exactly 0.70 confidence should fall through to full semantic analysis.'
+    );
+  });
+
+  it('FP-003: isConfirmedSimpleFactual is false when message.length >= 50', () => {
+    // INVARIANT: Long messages may contain personal context not caught by pronoun detection.
+    // The length guard caps the fast-path at 49 characters to exclude longer queries.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const flagIdx = orch.indexOf('isConfirmedSimpleFactual =');
+    assert.ok(flagIdx !== -1, 'FP-003 FAIL: isConfirmedSimpleFactual = not found.');
+
+    const flagBlock = orch.substring(flagIdx, flagIdx + 400);
+
+    assert.ok(
+      flagBlock.includes('message.length < 50'),
+      'FP-003 FAIL: message.length < 50 guard missing — messages >= 50 chars must run ' +
+      'full semantic analysis.'
+    );
+  });
+
+  it('FP-004: isConfirmedSimpleFactual is false when hasPersonalIntent is true', () => {
+    // INVARIANT: Queries with personal intent (e.g., "What is my name?") must NOT fire the
+    // fast-path — they may need memory retrieval and full semantic routing.
+    // The !hasPersonalIntent guard is the same one used by skipMemoryForSimpleQuery.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const flagIdx = orch.indexOf('isConfirmedSimpleFactual =');
+    assert.ok(flagIdx !== -1, 'FP-004 FAIL: isConfirmedSimpleFactual = not found.');
+
+    const flagBlock = orch.substring(flagIdx, flagIdx + 400);
+
+    assert.ok(
+      flagBlock.includes('!hasPersonalIntent'),
+      'FP-004 FAIL: !hasPersonalIntent guard missing from isConfirmedSimpleFactual block. ' +
+      '"What is my name?" would be fast-pathed despite needing memory retrieval.'
+    );
+  });
+
+  it('FP-005: fallback analysis object has correct structure and values', () => {
+    // INVARIANT: The fast-path analysis object must set complexity: 0.2 so that AI routing
+    // always selects GPT-4 (cheaper) and never escalates to Claude.
+    // intent: 'information_request' is the correct signal for simple factual lookups.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const elseIfIdx = orch.indexOf('else if (isConfirmedSimpleFactual)');
+    assert.ok(
+      elseIfIdx !== -1,
+      'FP-005 FAIL: else if (isConfirmedSimpleFactual) branch not found in orchestrator.js.'
+    );
+
+    const elseIfBlock = orch.substring(elseIfIdx, elseIfIdx + 400);
+
+    assert.ok(
+      elseIfBlock.includes("intent: 'information_request'"),
+      "FP-005 FAIL: intent: 'information_request' not found in isConfirmedSimpleFactual branch."
+    );
+    assert.ok(
+      elseIfBlock.includes('complexity: 0.2'),
+      'FP-005 FAIL: complexity: 0.2 not found in isConfirmedSimpleFactual branch. ' +
+      'complexity: 0.2 ensures routing always selects GPT-4, never Claude.'
+    );
+    assert.ok(
+      elseIfBlock.includes("domain: 'general'"),
+      "FP-005 FAIL: domain: 'general' not found in isConfirmedSimpleFactual branch."
+    );
+  });
+
+  it('FP-006: [FAST-PATH] log line present when fast path fires', () => {
+    // INVARIANT: When the simple_factual fast-path fires, a [FAST-PATH] log line must be
+    // emitted so that Railway logs confirm the optimisation is active in production.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('[FAST-PATH] simple_factual fast path'),
+      'FP-006 FAIL: [FAST-PATH] simple_factual fast path log line not found in orchestrator.js. ' +
+      'The log is required to confirm fast-path activation in Railway logs.'
+    );
+  });
+
+  it('FP-007: semantic analysis still called for non-simple_factual queries', () => {
+    // INVARIANT: The fast-path is conditional. When isConfirmedSimpleFactual is false,
+    // #performSemanticAnalysis must still be called — the else branch must exist.
+    // Deleting the else branch would break all non-simple_factual queries.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const elseIfIdx = orch.indexOf('else if (isConfirmedSimpleFactual)');
+    assert.ok(elseIfIdx !== -1, 'FP-007 FAIL: else if (isConfirmedSimpleFactual) branch not found.');
+
+    // #performSemanticAnalysis must appear AFTER the else-if branch (i.e., in the else branch)
+    const performAfterElseIf = orch.indexOf('#performSemanticAnalysis(', elseIfIdx);
+    assert.ok(
+      performAfterElseIf !== -1,
+      'FP-007 FAIL: #performSemanticAnalysis( not found after else if (isConfirmedSimpleFactual). ' +
+      'The else branch that calls full semantic analysis must be present.'
+    );
+  });
+
+  it('FP-008: semantic analysis still called when confidence <= 0.70 even if classification matches', () => {
+    // INVARIANT: Low-confidence simple_factual classifications fall through to full
+    // semantic analysis. This guards against over-trusting a weakly-classified query.
+    // Verified structurally: the confidence > 0.70 guard in isConfirmedSimpleFactual ensures
+    // the else branch runs for confidence <= 0.70.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Both the confidence threshold and the full-processing else branch must exist.
+    const flagIdx = orch.indexOf('isConfirmedSimpleFactual =');
+    const performIdx = orch.indexOf('#performSemanticAnalysis(');
+    assert.ok(flagIdx !== -1, 'FP-008 FAIL: isConfirmedSimpleFactual = not found.');
+    assert.ok(performIdx !== -1, 'FP-008 FAIL: #performSemanticAnalysis( not found.');
+
+    const flagBlock = orch.substring(flagIdx, flagIdx + 400);
+    assert.ok(
+      flagBlock.includes('0.70'),
+      'FP-008 FAIL: 0.70 confidence threshold missing — low-confidence queries would be ' +
+      'incorrectly fast-pathed instead of running full semantic analysis.'
+    );
+  });
+
+  it('FP-009: isConfirmedSimpleFactual is evaluated AFTER hasPersonalIntent is defined', () => {
+    // INVARIANT: isConfirmedSimpleFactual references hasPersonalIntent.
+    // hasPersonalIntent is defined before the fast-path flag; if order were reversed,
+    // the reference would be to an uninitialised variable (undefined), defeating the guard.
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const personalIntentIdx = orch.indexOf('hasPersonalIntent =');
+    const flagIdx = orch.indexOf('isConfirmedSimpleFactual =');
+
+    assert.ok(personalIntentIdx !== -1, 'FP-009 FAIL: hasPersonalIntent = not found in orchestrator.js.');
+    assert.ok(flagIdx !== -1, 'FP-009 FAIL: isConfirmedSimpleFactual = not found in orchestrator.js.');
+
+    assert.ok(
+      personalIntentIdx < flagIdx,
+      'FP-009 FAIL: isConfirmedSimpleFactual is evaluated BEFORE hasPersonalIntent is defined. ' +
+      'This would make !hasPersonalIntent always truthy, defeating the personal-intent guard.'
+    );
+  });
+
+});

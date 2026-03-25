@@ -1318,12 +1318,42 @@ export class Orchestrator {
         this.log('[GREETING-FAST-PATH] Conditions met — skipping semantic analysis, Phase 4, and principle reasoning (results provably discarded by greeting shortcut at STEP 6.9)');
       }
 
+      // SIMPLE_FACTUAL FAST-PATH: Skip semantic analysis embeddings for confirmed simple
+      // factual queries — intent/domain/complexity signals are not needed, and the safe
+      // fallback values always route to GPT-4 (cheaper), never to Claude.
+      // Safety guards: classification must be simple_factual, confidence > 0.70,
+      // message < 50 chars, and no personal intent (existing memory-skip guards reused).
+      const isConfirmedSimpleFactual = (
+        earlyClassification?.classification === 'simple_factual' &&
+        earlyClassification?.confidence > 0.70 &&
+        message.length < 50 &&
+        !hasPersonalIntent
+      );
+      if (isConfirmedSimpleFactual) {
+        this.log(
+          '[FAST-PATH] simple_factual fast path — ' +
+          'skipping semantic analysis embeddings, ' +
+          'using fallback analysis'
+        );
+      }
+
       // STEP 5: Perform semantic analysis
       // GREETING FAST-PATH: skipped — result is provably discarded by STEP 6.9 shortcut.
+      // SIMPLE_FACTUAL FAST-PATH: skipped — embeddings not needed for simple factual queries.
       let analysis;
       if (willUseGreetingShortcut) {
         this.log('[GREETING-FAST-PATH] Skipping semantic analysis');
         analysis = this.#generateFallbackAnalysis(message, context);
+      } else if (isConfirmedSimpleFactual) {
+        // Use safe fallback values that route to GPT-4 (cheaper), never Claude.
+        // complexity: 0.2 always routes to GPT-4 — correct and cheaper for simple factual queries.
+        analysis = {
+          intent: 'information_request',
+          intentConfidence: 0.90,
+          domain: 'general',
+          domainConfidence: 0.90,
+          complexity: 0.2,
+        };
       } else {
         const analysisStartTime = Date.now();
         analysis = await this.#performSemanticAnalysis(
