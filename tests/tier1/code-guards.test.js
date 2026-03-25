@@ -4496,3 +4496,188 @@ describe('RG. Relevance Gate — Memory Injection Filtering', () => {
   });
 
 });
+
+describe('SI. Selective Context Injection — History Depth and Memory Fallback', () => {
+  const ORCH_PATH = 'api/core/orchestrator.js';
+
+  it('SI-001: simple_factual classification uses depth 2', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // getConversationDepth must return 2 for simple_factual
+    assert.ok(
+      orch.includes("classification === 'simple_factual'") &&
+      orch.includes('return 2'),
+      'SI-001 FAIL: getConversationDepth does not return 2 for simple_factual classification. ' +
+      'Simple factual queries only need minimal conversation history (2 turns).'
+    );
+  });
+
+  it('SI-002: PERMANENT truth_type uses depth 2', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // getConversationDepth must return 2 for PERMANENT truth type
+    assert.ok(
+      orch.includes("phase4TruthType === 'PERMANENT'") &&
+      orch.includes('return 2'),
+      'SI-002 FAIL: getConversationDepth does not return 2 for PERMANENT truth type. ' +
+      'PERMANENT factual queries do not require long conversation history.'
+    );
+  });
+
+  it('SI-003: complex_analytical (default) uses depth 5', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Default path must return 5
+    assert.ok(
+      orch.includes('return 5'),
+      'SI-003 FAIL: getConversationDepth does not return 5 as the default depth. ' +
+      'Complex and analytical queries must receive the full 5-turn history.'
+    );
+  });
+
+  it('SI-004: SEMI_STABLE uses depth 5 (not 2)', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Extract function body robustly: find the function start, then locate the matching closing brace
+    const fnStart = orch.indexOf('function getConversationDepth(');
+    assert.ok(fnStart !== -1, 'SI-004 FAIL: getConversationDepth function not found.');
+
+    // Walk forward from function start to find the balanced closing brace
+    let depth = 0;
+    let fnEnd = fnStart;
+    for (let i = fnStart; i < orch.length; i++) {
+      if (orch[i] === '{') depth++;
+      else if (orch[i] === '}') {
+        depth--;
+        if (depth === 0) { fnEnd = i + 1; break; }
+      }
+    }
+    const depthFn = orch.slice(fnStart, fnEnd);
+
+    // SEMI_STABLE must NOT appear in the function — it is not a depth-2 case
+    assert.ok(
+      !depthFn.includes("SEMI_STABLE"),
+      'SI-004 FAIL: SEMI_STABLE is listed inside getConversationDepth. ' +
+      'SEMI_STABLE queries require full history (depth 5) and must not appear in the function.'
+    );
+
+    // Positive assertion: depth 5 must be the default return (covers SEMI_STABLE)
+    assert.ok(
+      depthFn.includes('return 5'),
+      'SI-004 FAIL: getConversationDepth does not have a "return 5" default. ' +
+      'SEMI_STABLE queries must fall through to the depth-5 default.'
+    );
+  });
+
+  it('SI-005: VOLATILE uses depth 5 (not 2)', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    const fnStart = orch.indexOf('function getConversationDepth(');
+    assert.ok(fnStart !== -1, 'SI-005 FAIL: getConversationDepth function not found.');
+
+    let depth = 0;
+    let fnEnd = fnStart;
+    for (let i = fnStart; i < orch.length; i++) {
+      if (orch[i] === '{') depth++;
+      else if (orch[i] === '}') {
+        depth--;
+        if (depth === 0) { fnEnd = i + 1; break; }
+      }
+    }
+    const depthFn = orch.slice(fnStart, fnEnd);
+
+    // VOLATILE must NOT appear in the function — it is not a depth-2 case
+    assert.ok(
+      !depthFn.includes("VOLATILE"),
+      'SI-005 FAIL: VOLATILE is listed inside getConversationDepth. ' +
+      'VOLATILE queries require full history (depth 5) and must not appear in the function.'
+    );
+
+    // Positive assertion: depth 5 must be the default return (covers VOLATILE)
+    assert.ok(
+      depthFn.includes('return 5'),
+      'SI-005 FAIL: getConversationDepth does not have a "return 5" default. ' +
+      'VOLATILE queries must fall through to the depth-5 default.'
+    );
+  });
+
+  it('SI-006: [HISTORY-DEPTH] log line appears with required fields', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('[HISTORY-DEPTH]') &&
+      orch.includes('classification=') &&
+      orch.includes('truth_type=') &&
+      orch.includes('depth=') &&
+      orch.includes('history_turns=') &&
+      orch.includes('trimmed_to='),
+      'SI-006 FAIL: [HISTORY-DEPTH] log line is missing or does not include all required fields ' +
+      '(classification, truth_type, depth, history_turns, trimmed_to).'
+    );
+  });
+
+  it('SI-007: Memory fallback suppressed when stage1TruthType is PERMANENT', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The isPermanentFactual guard must exist and wrap the fallback injection
+    assert.ok(
+      orch.includes("isPermanentFactual") &&
+      orch.includes("stage1TruthType === 'PERMANENT'"),
+      'SI-007 FAIL: isPermanentFactual guard is missing from #buildContextString. ' +
+      'The memory fallback string must be suppressed for PERMANENT queries.'
+    );
+
+    // The fallback must be inside a !isPermanentFactual condition
+    assert.ok(
+      orch.includes('!isPermanentFactual'),
+      'SI-007 FAIL: Memory fallback is not guarded by !isPermanentFactual. ' +
+      'PERMANENT queries must not receive the "first conversation" fallback text.'
+    );
+  });
+
+  it('SI-008: context.stage1TruthType is set before #buildContextString is called', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('context.stage1TruthType = phase4Metadata?.truth_type'),
+      'SI-008 FAIL: context.stage1TruthType is not assigned before #buildContextString is called. ' +
+      'The truth type must be on the context object so #buildContextString can access it.'
+    );
+  });
+
+  it('SI-009: trimmedHistory is used in both Claude and GPT-4 paths', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // trimmedHistory must appear in the historyContext ternary for both paths
+    const trimmedOccurrences = (orch.match(/: trimmedHistory/g) || []).length;
+    assert.ok(
+      trimmedOccurrences >= 2,
+      `SI-009 FAIL: trimmedHistory is only used in ${trimmedOccurrences} AI path(s) but must appear in both ` +
+      'Claude escalation path and GPT-4 path. Both paths must receive the same depth logic.'
+    );
+  });
+
+  it('SI-010: getConversationDepth is a module-level function (not inside #routeToAI)', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Function must be defined outside the class (before "export class Orchestrator")
+    const classIdx = orch.indexOf('export class Orchestrator');
+    const fnIdx = orch.indexOf('function getConversationDepth(');
+    assert.ok(
+      fnIdx !== -1 && fnIdx < classIdx,
+      'SI-010 FAIL: getConversationDepth is not found as a module-level function before the Orchestrator class. ' +
+      'It must be defined at module scope so it can be tested and reused independently.'
+    );
+  });
+
+});
