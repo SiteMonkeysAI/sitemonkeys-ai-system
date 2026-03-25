@@ -61,6 +61,7 @@ import dbMigrationRouter, { addEmbeddingIndex } from "./api/admin/db-migration.j
 import { handleCleanupRequest } from "./api/admin/cleanup.js";
 import { handleZombieCleanupRequest } from "./api/admin/cleanup-zombies.js";
 import { handleCostSummary, ensureCostLogTable } from "./api/admin/cost-observability.js";
+import { handleClassifierTest } from "./api/routes/classifier-test.js";
 import rateLimit from "express-rate-limit";
 // ========== SEMANTIC INTEGRATION ==========
 import { storeWithSupersession, generateFactFingerprint } from "./api/services/supersession.js";
@@ -1288,6 +1289,9 @@ app.post('/api/admin/add-embedding-index', adminEmbeddingIndexRateLimiter, addEm
 
 // Cost observability — aggregate breakdown by query type (internal use only)
 app.get('/api/admin/cost-summary', handleCostSummary);
+
+// Classifier validation test endpoint — lightweight, no AI generation
+app.post('/api/admin/classifier-test', handleClassifierTest);
 
 console.log("[SERVER] ✅ Routes configured");
 
