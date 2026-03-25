@@ -1793,6 +1793,23 @@ export class Orchestrator {
         this.log('[GREETING-FAST-PATH] Skipping Phase 4 (truth type detection + external lookup)');
       } // end if (!willUseGreetingShortcut) — Phase 4
 
+      // DOCUMENT SOURCE CLASSIFICATION
+      // Set source_class to 'document' when document is the primary source.
+      // This activates the boundedReasoningGate escape hatch at line 304
+      // which prevents the "I don't have verified current data" disclaimer
+      // from firing on document queries where the system has the actual source material.
+      if (effectiveDocumentData && context.documents) {
+        phase4Metadata.source_class = 'document';
+        // Document boost: when answer comes from uploaded document,
+        // confidence should be high — the source is authoritative and present
+        phase4Metadata.confidence = Math.min(0.92, phase4Metadata.confidence + 0.25);
+        console.log(
+          '[SOURCE-CLASS] Document source detected — ' +
+          `setting source_class=document, ` +
+          `boosting confidence to ${phase4Metadata.confidence.toFixed(2)}`
+        );
+      }
+
       // STEP 6.4: QUERY COMPLEXITY CLASSIFICATION (uses Phase 4 metadata)
       // Use genuine semantic intelligence to determine response approach.
       // NOTE: The query embedding is cached by the classifier (embeddingCache) so no duplicate

@@ -5103,3 +5103,171 @@ describe('FP. Simple Factual Fast-Path — Skip Semantic Analysis', () => {
   });
 
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOC. Document Source Classification — Escape Hatch Activation
+// Verifies that source_class is set to 'document' when a document is loaded,
+// confidence is boosted, and the boundedReasoningGate escape hatch fires.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('DOC. Document Source Classification — Escape Hatch Activation', () => {
+  const ORCH_PATH = 'api/core/orchestrator.js';
+  const GATE_PATH = 'api/core/intelligence/boundedReasoningGate.js';
+
+  it('DOC-001: source_class set to document when effectiveDocumentData present and context.documents populated', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes("phase4Metadata.source_class = 'document'"),
+      "DOC-001 FAIL: phase4Metadata.source_class = 'document' not found in orchestrator.js. " +
+      'The document escape hatch requires source_class to be set to document when a document is loaded.'
+    );
+
+    assert.ok(
+      orch.includes('effectiveDocumentData && context.documents'),
+      'DOC-001 FAIL: effectiveDocumentData && context.documents condition not found. ' +
+      'The assignment must be guarded by both effectiveDocumentData and context.documents.'
+    );
+  });
+
+  it('DOC-002: source_class assignment block appears after Phase 4 external lookup section', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The document source_class assignment must come AFTER the external lookup
+    // (which sets source_class to 'external') so documents take precedence when
+    // no external lookup fired.
+    // Note: external uses double-quotes and document uses single-quotes in source —
+    // these search strings must match the actual code exactly.
+    const externalIdx = orch.indexOf('phase4Metadata.source_class = "external"');
+    const documentIdx = orch.indexOf("phase4Metadata.source_class = 'document'");
+    const boundedIdx = orch.indexOf('enforceBoundedReasoning(');
+
+    assert.ok(externalIdx !== -1, 'DOC-002 FAIL: external source_class assignment not found.');
+    assert.ok(documentIdx !== -1, 'DOC-002 FAIL: document source_class assignment not found.');
+    assert.ok(boundedIdx !== -1, 'DOC-002 FAIL: enforceBoundedReasoning call not found.');
+
+    assert.ok(
+      externalIdx < documentIdx,
+      'DOC-002 FAIL: document source_class assignment must appear AFTER the external source_class assignment.'
+    );
+
+    assert.ok(
+      documentIdx < boundedIdx,
+      'DOC-002 FAIL: document source_class assignment must appear BEFORE enforceBoundedReasoning is called.'
+    );
+  });
+
+  it('DOC-003: source_class external assignment still present for external lookup path', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes("phase4Metadata.source_class = \"external\""),
+      'DOC-003 FAIL: external source_class assignment not found. ' +
+      'The external lookup path must still set source_class to external when lookup succeeds.'
+    );
+  });
+
+  it('DOC-004: confidence boosted by 0.25 when document loaded', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('phase4Metadata.confidence + 0.25'),
+      'DOC-004 FAIL: confidence + 0.25 boost not found in orchestrator.js. ' +
+      'Document queries must have confidence boosted by 0.25.'
+    );
+  });
+
+  it('DOC-005: confidence capped at 0.92 for document queries', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('Math.min(0.92,'),
+      'DOC-005 FAIL: Math.min(0.92, ...) cap not found in orchestrator.js. ' +
+      'Document confidence boost must be capped at 0.92.'
+    );
+  });
+
+  it('DOC-006: confidence boost is inside the effectiveDocumentData && context.documents guard', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Find the document guard block and verify the confidence boost is inside it
+    const guardIdx = orch.indexOf('effectiveDocumentData && context.documents');
+    assert.ok(guardIdx !== -1, 'DOC-006 FAIL: effectiveDocumentData && context.documents guard not found.');
+
+    const boostIdx = orch.indexOf('Math.min(0.92,');
+    assert.ok(boostIdx !== -1, 'DOC-006 FAIL: Math.min(0.92, ...) boost not found.');
+
+    // The boost must appear after the guard (inside the if block)
+    assert.ok(
+      boostIdx > guardIdx,
+      'DOC-006 FAIL: confidence boost appears before the document guard. ' +
+      'The boost must be inside the if (effectiveDocumentData && context.documents) block.'
+    );
+
+    // The boost must appear before the closing of the block — check it's near the guard.
+    // The document classification block is ~400 chars; 800 gives a safe margin.
+    const DOCUMENT_BLOCK_MAX_CHARS = 800;
+    const blockSnippet = orch.substring(guardIdx, guardIdx + DOCUMENT_BLOCK_MAX_CHARS);
+    assert.ok(
+      blockSnippet.includes('Math.min(0.92,'),
+      'DOC-006 FAIL: confidence boost is not inside the document guard block. ' +
+      'The boost must only apply when a document is loaded.'
+    );
+  });
+
+  it('DOC-007: [SOURCE-CLASS] log line present when document source detected', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('[SOURCE-CLASS] Document source detected'),
+      'DOC-007 FAIL: [SOURCE-CLASS] Document source detected log line not found in orchestrator.js. ' +
+      'The log is required to confirm document source classification in Railway logs.'
+    );
+  });
+
+  it('DOC-008: boundedReasoningGate escape hatch checks source_class === document', () => {
+    const gate = readRepoFile(GATE_PATH);
+    assert.ok(gate, 'Could not read boundedReasoningGate.js');
+
+    assert.ok(
+      gate.includes("phase4Metadata.source_class === 'document'"),
+      "DOC-008 FAIL: source_class === 'document' escape hatch not found in boundedReasoningGate.js. " +
+      'The gate must check for document source_class to skip the bounded reasoning disclosure.'
+    );
+  });
+
+  it('DOC-009: document source_class assignment is guarded by the Phase 4 block structure', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The document classification block must exist between Phase 4 end and bounded reasoning
+    const phase4EndMarker = "end if (!willUseGreetingShortcut) — Phase 4";
+    const documentAssignment = "phase4Metadata.source_class = 'document'";
+    const boundedStart = 'PHASE 6: BOUNDED REASONING ENFORCEMENT';
+
+    const phase4EndIdx = orch.indexOf(phase4EndMarker);
+    const docAssignIdx = orch.indexOf(documentAssignment);
+    const boundedIdx = orch.indexOf(boundedStart);
+
+    assert.ok(phase4EndIdx !== -1, 'DOC-009 FAIL: Phase 4 end marker not found in orchestrator.js.');
+    assert.ok(docAssignIdx !== -1, 'DOC-009 FAIL: document source_class assignment not found.');
+    assert.ok(boundedIdx !== -1, 'DOC-009 FAIL: PHASE 6 bounded reasoning marker not found.');
+
+    assert.ok(
+      phase4EndIdx < docAssignIdx,
+      'DOC-009 FAIL: document assignment must appear AFTER Phase 4 ends.'
+    );
+
+    assert.ok(
+      docAssignIdx < boundedIdx,
+      'DOC-009 FAIL: document assignment must appear BEFORE Phase 6 bounded reasoning.'
+    );
+  });
+
+});
