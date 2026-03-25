@@ -62,7 +62,7 @@ export async function handleClassifierTest(req, res) {
       confidence = typeof classResult.confidence === 'number' ? classResult.confidence : null;
 
     } catch (err) {
-      console.error(`[CLASSIFIER-TEST] Error on ${id}:`, err.message);
+      console.error('[CLASSIFIER-TEST] Error on %s:', id, err.message);
       failure_reason = `classifier_error: ${err.message}`;
     }
 
