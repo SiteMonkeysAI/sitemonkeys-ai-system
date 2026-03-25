@@ -2049,12 +2049,16 @@ describe('R. System Pipeline Audit — Area 5: Session Context (Multi-Turn Histo
     );
   });
 
-  it('R-020: conversation history is sliced to last 5 exchanges before AI calls', () => {
+  it('R-020: conversation history is bounded before AI calls', () => {
     const orch = readRepoFile('api/core/orchestrator.js');
     assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    // History is now bounded via getConversationDepth() → conversationHistory.slice(-historyDepth).
+    // Depth is query-aware (1/2/5 turns) but always bounded — unbounded history is never passed.
     assert.ok(
-      orch.includes('conversationHistory.slice(-5)'),
-      'R-020 FAIL: "conversationHistory.slice(-5)" is missing from orchestrator.js. ' +
+      orch.includes('getConversationDepth(') &&
+      orch.includes('conversationHistory.slice(-historyDepth)'),
+      'R-020 FAIL: query-aware history bounding via getConversationDepth / ' +
+      'conversationHistory.slice(-historyDepth) is missing from orchestrator.js. ' +
       'The full conversation history (unbounded) will be passed to AI models, ' +
       'causing context window overflow on long conversations.'
     );
@@ -3172,12 +3176,17 @@ describe('DD. Intelligent Session State Compression', () => {
 
   // ─── DD-001: flag off → slice(-5) preserved ──────────────────────────────
 
-  it('DD-001: SESSION_STATE_ENABLED=false uses exact .slice(-5) behavior', () => {
+  it('DD-001: SESSION_STATE_ENABLED=false uses bounded history (trimmedHistory fallback)', () => {
     const orch = readRepoFile('api/core/orchestrator.js');
     assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    // History is bounded via getConversationDepth → conversationHistory.slice(-historyDepth).
+    // trimmedHistory is the false-branch fallback when SESSION_STATE_ENABLED=false,
+    // replacing the old hard-coded slice(-5) with a query-aware bound (max 5 turns).
     assert.ok(
-      orch.includes('conversationHistory.slice(-5)'),
-      'DD-001 FAIL: conversationHistory.slice(-5) must remain as the false-branch fallback in orchestrator.js'
+      orch.includes('trimmedHistory') &&
+      orch.includes('conversationHistory.slice(-historyDepth)'),
+      'DD-001 FAIL: trimmedHistory (the bounded false-branch fallback) is missing from orchestrator.js. ' +
+      'SESSION_STATE_ENABLED=false must use bounded history via getConversationDepth.'
     );
   });
 
@@ -4500,6 +4509,21 @@ describe('RG. Relevance Gate — Memory Injection Filtering', () => {
 describe('SI. Selective Context Injection — History Depth and Memory Fallback', () => {
   const ORCH_PATH = 'api/core/orchestrator.js';
 
+  /** Extract the full body of a named function from a JS source string. */
+  function extractFunctionBody(src, functionName) {
+    const fnStart = src.indexOf(`function ${functionName}(`);
+    if (fnStart === -1) return null;
+    let depth = 0;
+    for (let i = fnStart; i < src.length; i++) {
+      if (src[i] === '{') depth++;
+      else if (src[i] === '}') {
+        depth--;
+        if (depth === 0) return src.slice(fnStart, i + 1);
+      }
+    }
+    return null;
+  }
+
   it('SI-001: simple_factual classification uses depth 2', () => {
     const orch = readRepoFile(ORCH_PATH);
     assert.ok(orch, 'Could not read orchestrator.js');
@@ -4542,21 +4566,8 @@ describe('SI. Selective Context Injection — History Depth and Memory Fallback'
     const orch = readRepoFile(ORCH_PATH);
     assert.ok(orch, 'Could not read orchestrator.js');
 
-    // Extract function body robustly: find the function start, then locate the matching closing brace
-    const fnStart = orch.indexOf('function getConversationDepth(');
-    assert.ok(fnStart !== -1, 'SI-004 FAIL: getConversationDepth function not found.');
-
-    // Walk forward from function start to find the balanced closing brace
-    let depth = 0;
-    let fnEnd = fnStart;
-    for (let i = fnStart; i < orch.length; i++) {
-      if (orch[i] === '{') depth++;
-      else if (orch[i] === '}') {
-        depth--;
-        if (depth === 0) { fnEnd = i + 1; break; }
-      }
-    }
-    const depthFn = orch.slice(fnStart, fnEnd);
+    const depthFn = extractFunctionBody(orch, 'getConversationDepth');
+    assert.ok(depthFn, 'SI-004 FAIL: getConversationDepth function not found.');
 
     // SEMI_STABLE must NOT appear in the function — it is not a depth-2 case
     assert.ok(
@@ -4577,19 +4588,8 @@ describe('SI. Selective Context Injection — History Depth and Memory Fallback'
     const orch = readRepoFile(ORCH_PATH);
     assert.ok(orch, 'Could not read orchestrator.js');
 
-    const fnStart = orch.indexOf('function getConversationDepth(');
-    assert.ok(fnStart !== -1, 'SI-005 FAIL: getConversationDepth function not found.');
-
-    let depth = 0;
-    let fnEnd = fnStart;
-    for (let i = fnStart; i < orch.length; i++) {
-      if (orch[i] === '{') depth++;
-      else if (orch[i] === '}') {
-        depth--;
-        if (depth === 0) { fnEnd = i + 1; break; }
-      }
-    }
-    const depthFn = orch.slice(fnStart, fnEnd);
+    const depthFn = extractFunctionBody(orch, 'getConversationDepth');
+    assert.ok(depthFn, 'SI-005 FAIL: getConversationDepth function not found.');
 
     // VOLATILE must NOT appear in the function — it is not a depth-2 case
     assert.ok(
@@ -4677,6 +4677,29 @@ describe('SI. Selective Context Injection — History Depth and Memory Fallback'
       fnIdx !== -1 && fnIdx < classIdx,
       'SI-010 FAIL: getConversationDepth is not found as a module-level function before the Orchestrator class. ' +
       'It must be defined at module scope so it can be tested and reused independently.'
+    );
+  });
+
+  it('SI-011: preflight estimation uses trimmedHistory not conversationHistory.slice(-5)', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // The preflight must NOT use the old hard-coded slice(-5) for its token estimate,
+    // since that over-estimates for simple_factual/PERMANENT queries and can trigger
+    // false Claude escalation for borderline payloads, and produces incorrect log breakdowns.
+    assert.ok(
+      !orch.includes('conversationHistory.slice(-5)'),
+      'SI-011 FAIL: conversationHistory.slice(-5) still exists in orchestrator.js. ' +
+      'The preflight estimation must use trimmedHistory so the estimate matches tokens actually injected.'
+    );
+
+    // trimmedHistory must be defined before it is used in the estimate
+    const trimmedHistoryDefIdx = orch.indexOf('const trimmedHistory = conversationHistory.slice(-historyDepth)');
+    const estimateIdx = orch.indexOf('trimmedHistory.reduce(');
+    assert.ok(
+      trimmedHistoryDefIdx !== -1 && estimateIdx !== -1 && trimmedHistoryDefIdx < estimateIdx,
+      'SI-011 FAIL: trimmedHistory is not defined before it is used in estimatedHistoryTokens. ' +
+      'historyDepth/trimmedHistory must be computed before the preflight estimation block.'
     );
   });
 

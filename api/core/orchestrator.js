@@ -4836,13 +4836,30 @@ export class Orchestrator {
       }
 
       // ISSUE #787 FIX: Calculate full payload estimate for proper escalation routing
-      // Estimate total input tokens INCLUDING system prompt, external data, message, and history
+      // Estimate total input tokens INCLUDING system prompt, external data, message, and history.
+      // Uses trimmedHistory (query-aware depth) so the estimate matches tokens actually injected.
+      // Query-aware conversation history depth (SI change 1)
+      // Simple factual and PERMANENT queries only need 1-2 prior turns for coherence.
+      // All other queries keep the full 5-turn window.
+      const historyDepth = getConversationDepth(
+        context.earlyClassification,
+        phase4Metadata?.truth_type
+      );
+      const trimmedHistory = conversationHistory.slice(-historyDepth);
+      this.log(
+        `[HISTORY-DEPTH] classification=${context.earlyClassification?.classification} ` +
+        `truth_type=${phase4Metadata?.truth_type} ` +
+        `depth=${historyDepth} ` +
+        `history_turns=${conversationHistory.length} ` +
+        `trimmed_to=${trimmedHistory.length}`
+      );
+
       const estimatedSystemPromptTokens = Math.ceil(systemPrompt.length / 4);
       const estimatedContextTokens = Math.ceil(contextString.length / 4);
       const estimatedExternalTokens = Math.ceil(externalContext.length / 4);
       const estimatedMessageTokens = Math.ceil(message.length / 4);
       const estimatedHistoryTokens = Math.ceil(
-        conversationHistory.slice(-5).reduce((sum, msg) => sum + msg.content.length, 0) / 4
+        trimmedHistory.reduce((sum, msg) => sum + msg.content.length, 0) / 4
       );
       const estimatedTotalInputTokens =
         estimatedSystemPromptTokens +
@@ -4914,22 +4931,6 @@ export class Orchestrator {
           mode === "site_monkeys");
 
       let response, inputTokens, outputTokens;
-
-      // Query-aware conversation history depth (SI change 1)
-      // Simple factual and PERMANENT queries only need 1-2 prior turns for coherence.
-      // All other queries keep the full 5-turn window.
-      const historyDepth = getConversationDepth(
-        context.earlyClassification,
-        phase4Metadata?.truth_type
-      );
-      const trimmedHistory = conversationHistory.slice(-historyDepth);
-      this.log(
-        `[HISTORY-DEPTH] classification=${context.earlyClassification?.classification} ` +
-        `truth_type=${phase4Metadata?.truth_type} ` +
-        `depth=${historyDepth} ` +
-        `history_turns=${conversationHistory.length} ` +
-        `trimmed_to=${trimmedHistory.length}`
-      );
 
       if (useClaude) {
         // Build messages array for Claude with proper conversation history
