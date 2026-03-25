@@ -5270,4 +5270,35 @@ describe('DOC. Document Source Classification — Escape Hatch Activation', () =
     );
   });
 
+  it('DOC-010: calculateConfidence uses boosted phase4Metadata.confidence directly for document source_class', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+
+    // Simulate document query: orchestrator boosted confidence to 0.85, source_class = 'document'
+    const boostedConfidence = 0.85;
+    const p4 = { source_class: 'document', confidence: boostedConfidence };
+    const score = calculateConfidence(null, 0, false, boostedConfidence, p4);
+
+    assert.ok(
+      Math.abs(score - boostedConfidence) < 0.001,
+      `DOC-010 FAIL: calculateConfidence returned ${score} for document source_class — ` +
+      `expected the boosted value ${boostedConfidence} to be used directly. ` +
+      'The 20% secondary-signal weighting must NOT be applied to document-sourced confidence.'
+    );
+  });
+
+  it('DOC-011: buildConfidenceMetadata returns boosted score for document source_class', async () => {
+    const { buildConfidenceMetadata } = await import('../../api/core/personalities/confidence_calculator.js');
+
+    const boostedConfidence = 0.85;
+    const result = buildConfidenceMetadata({ source_class: 'document', confidence: boostedConfidence });
+
+    assert.strictEqual(
+      result.score,
+      Math.round(boostedConfidence * 100),
+      `DOC-011 FAIL: buildConfidenceMetadata score=${result.score} — ` +
+      `expected ${Math.round(boostedConfidence * 100)} for document source_class. ` +
+      'The UI must display the orchestrator-boosted confidence, not a diluted secondary-signal value.'
+    );
+  });
+
 });

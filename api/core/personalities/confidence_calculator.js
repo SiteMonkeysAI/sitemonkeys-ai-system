@@ -18,6 +18,12 @@ export function calculateConfidence(truthType, sourcesUsed, lookupPerformed, mod
     return 0.95;
   }
 
+  // Document-sourced answers: orchestrator already applied the correct boost (+0.25, capped at 0.92).
+  // Use that value directly — treating it as a 20% secondary signal would discard the boost.
+  if (phase4Metadata?.source_class === 'document' && modelConfidence != null && !isNaN(modelConfidence)) {
+    return Math.min(0.92, Math.max(0.15, modelConfidence));
+  }
+
   // Base score by truth type
   let base = 0.5;
   if (truthType === 'PERMANENT') base = 0.97;
@@ -96,6 +102,11 @@ export function buildConfidenceReason(truthType, sourcesUsed, lookupPerformed, s
   // Memory-sourced answers: answer came from personal records, not training knowledge
   if (isMemorySourcedAnswer(phase4Metadata, lookupPerformed)) {
     return 'confirmed from your personal records';
+  }
+
+  // Document-sourced answers: confidence comes from the uploaded document
+  if (phase4Metadata?.source_class === 'document') {
+    return 'sourced from uploaded document — high confidence';
   }
 
   // Binary existence framing: "can/do/does/did/is/are..." questions with sufficient confidence
