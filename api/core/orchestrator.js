@@ -139,6 +139,30 @@ function safeStripCopula(str) {
   return str.trim();
 }
 
+// ==================== CONTEXT INJECTION HELPERS ====================
+
+/**
+ * Returns how many conversation turns to include based on query type.
+ * Simple/factual queries need minimal history; complex queries need full context.
+ *
+ * @param {object|null} earlyClassification - Result from classifyQueryComplexity (STEP 0.5)
+ * @param {string|null} phase4TruthType - Truth type from Phase 4 detection
+ * @returns {number} Number of turns to slice from conversation history
+ */
+function getConversationDepth(earlyClassification, phase4TruthType) {
+  // Greeting — already handled by fast path, but defensive
+  if (earlyClassification?.classification === 'greeting') return 1;
+
+  // Simple factual or PERMANENT truth type — minimal history needed
+  if (
+    earlyClassification?.classification === 'simple_factual' ||
+    phase4TruthType === 'PERMANENT'
+  ) return 2;
+
+  // Everything else — full 5 turns
+  return 5;
+}
+
 // ==================== ORCHESTRATOR CLASS ====================
 
 export class Orchestrator {
@@ -4738,6 +4762,9 @@ export class Orchestrator {
         this.log(`[COST] Remaining budget: $${costCheck.remaining.toFixed(4)}`);
       }
 
+      // Expose truth type on context so #buildContextString can suppress irrelevant fallbacks
+      context.stage1TruthType = phase4Metadata?.truth_type || null;
+
       const contextString = this.#buildContextString(context, mode);
 
       // Log if external context is being used
@@ -4809,13 +4836,30 @@ export class Orchestrator {
       }
 
       // ISSUE #787 FIX: Calculate full payload estimate for proper escalation routing
-      // Estimate total input tokens INCLUDING system prompt, external data, message, and history
+      // Estimate total input tokens INCLUDING system prompt, external data, message, and history.
+      // Uses trimmedHistory (query-aware depth) so the estimate matches tokens actually injected.
+      // Query-aware conversation history depth (SI change 1)
+      // Simple factual and PERMANENT queries only need 1-2 prior turns for coherence.
+      // All other queries keep the full 5-turn window.
+      const historyDepth = getConversationDepth(
+        context.earlyClassification,
+        phase4Metadata?.truth_type
+      );
+      const trimmedHistory = conversationHistory.slice(-historyDepth);
+      this.log(
+        `[HISTORY-DEPTH] classification=${context.earlyClassification?.classification} ` +
+        `truth_type=${phase4Metadata?.truth_type} ` +
+        `depth=${historyDepth} ` +
+        `history_turns=${conversationHistory.length} ` +
+        `trimmed_to=${trimmedHistory.length}`
+      );
+
       const estimatedSystemPromptTokens = Math.ceil(systemPrompt.length / 4);
       const estimatedContextTokens = Math.ceil(contextString.length / 4);
       const estimatedExternalTokens = Math.ceil(externalContext.length / 4);
       const estimatedMessageTokens = Math.ceil(message.length / 4);
       const estimatedHistoryTokens = Math.ceil(
-        conversationHistory.slice(-5).reduce((sum, msg) => sum + msg.content.length, 0) / 4
+        trimmedHistory.reduce((sum, msg) => sum + msg.content.length, 0) / 4
       );
       const estimatedTotalInputTokens =
         estimatedSystemPromptTokens +
@@ -4896,7 +4940,7 @@ export class Orchestrator {
         if (conversationHistory.length > 0) {
           const historyContext = SESSION_STATE_ENABLED && sessionState
             ? buildSessionContext(sessionState, conversationHistory)
-            : conversationHistory.slice(-5);
+            : trimmedHistory;
           historyContext.forEach((msg) => {
             messages.push({
               role: msg.role === 'assistant' ? 'assistant' : 'user',
@@ -4946,7 +4990,7 @@ export class Orchestrator {
         if (conversationHistory.length > 0) {
           const historyContext = SESSION_STATE_ENABLED && sessionState
             ? buildSessionContext(sessionState, conversationHistory)
-            : conversationHistory.slice(-5);
+            : trimmedHistory;
           historyContext.forEach((msg) => {
             messages.push({
               role: msg.role === 'assistant' ? 'assistant' : 'user',
@@ -5623,7 +5667,13 @@ If you're asking about something you've told me before, I should be able to find
 
 `;
       } else {
-        contextStr += `\n\n**📝 MEMORY STATUS:** This appears to be our first conversation, or no relevant previous context was found. I'll provide the best response based on your current query.\n`;
+        // Only inject memory fallback for queries that benefit from personal context signals.
+        // PERMANENT factual queries (definitions, history, science) don't depend on conversation
+        // history or personal context, so the fallback is noise — suppress it.
+        const isPermanentFactual = context.stage1TruthType === 'PERMANENT';
+        if (!isPermanentFactual) {
+          contextStr += `\n\n**📝 MEMORY STATUS:** This appears to be our first conversation, or no relevant previous context was found. I'll provide the best response based on your current query.\n`;
+        }
       }
     } else {
       console.log(
