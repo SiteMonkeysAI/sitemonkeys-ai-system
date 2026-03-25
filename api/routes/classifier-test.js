@@ -58,7 +58,8 @@ export async function handleClassifierTest(req, res) {
 
       actual_classification = classResult.classification;
       actual_truth_type = patternResult.type;
-      actual_lookup = classResult.externalLookupRequired === true;
+      actual_lookup = (patternResult.type === 'VOLATILE' || patternResult.type === 'SEMI_STABLE') &&
+                     patternResult.skipExternalLookup !== true;
       confidence = typeof classResult.confidence === 'number' ? classResult.confidence : null;
 
     } catch (err) {
