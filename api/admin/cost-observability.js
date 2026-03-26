@@ -37,6 +37,7 @@ export async function createCostLogTable(pool) {
       model VARCHAR(100),
       personality VARCHAR(50),
       mode VARCHAR(50),
+      max_memory_score DECIMAL(5,3) DEFAULT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);

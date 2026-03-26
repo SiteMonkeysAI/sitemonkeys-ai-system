@@ -286,7 +286,7 @@ describe('RC. Response Cache — ttlCacheManager', () => {
   });
 
   // Shared helper: mirrors the memoriesBlockCache logic from orchestrator
-  const CACHE_MEMORY_THRESHOLD = 0.75;
+  const CACHE_MEMORY_THRESHOLD = 0.80;
   function computeMemoriesBlockCache({ hasMemory, memory_count, highest_similarity_score }) {
     return (
       hasMemory &&
@@ -296,27 +296,27 @@ describe('RC. Response Cache — ttlCacheManager', () => {
   }
 
   // RC-015 ----------------------------------------------------------------
-  it('RC-015: Cache eligible when memories present but highest score < 0.75', () => {
-    // Memories are present but score is below the 0.75 cache threshold
+  it('RC-015: Cache eligible when memories present but highest score < 0.80', () => {
+    // Memories are present but score is below the 0.80 cache threshold
     const memoriesBlockCache = computeMemoriesBlockCache({
       hasMemory: true,
       memory_count: 4,
-      highest_similarity_score: 0.62, // below 0.75
+      highest_similarity_score: 0.62, // below 0.80
     });
 
-    assert.strictEqual(memoriesBlockCache, false, 'Memories below 0.75 should NOT block cache');
+    assert.strictEqual(memoriesBlockCache, false, 'Memories below 0.80 should NOT block cache');
   });
 
   // RC-016 ----------------------------------------------------------------
-  it('RC-016: Cache blocked when memories present with score >= 0.75', () => {
-    // Memories are present with a score at or above the 0.75 cache threshold
+  it('RC-016: Cache blocked when memories present with score >= 0.80', () => {
+    // Memories are present with a score at or above the 0.80 cache threshold
     const memoriesBlockCache = computeMemoriesBlockCache({
       hasMemory: true,
       memory_count: 2,
-      highest_similarity_score: 0.82, // at or above 0.75
+      highest_similarity_score: 0.82, // at or above 0.80
     });
 
-    assert.strictEqual(memoriesBlockCache, true, 'Memories at or above 0.75 SHOULD block cache');
+    assert.strictEqual(memoriesBlockCache, true, 'Memories at or above 0.80 SHOULD block cache');
   });
 
   // RC-017 ----------------------------------------------------------------
