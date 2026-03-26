@@ -345,7 +345,28 @@ function determineClassification(
     /\b(weather|forecast).{0,30}\b(today|tonight|right now)\b/i,
     /\b(what'?s? happening|breaking news|right now|live (score|update))\b/i,
     /\b(latest news|news today|what happened today)\b/i,
-    /\b(dow jones|nasdaq|s&p|market today|exchange rate)\b/i
+    /\b(dow jones|nasdaq|s&p|market today|exchange rate)\b/i,
+
+    // Market and financial movement queries
+    /\b(stock market|market|nasdaq|dow|s&p).{0,20}(up|down|today|now|right now)\b/i,
+    /\b(is|are).{0,15}(up|down|rising|falling|dropping|surging).{0,15}today\b/i,
+
+    // Trial, investigation, political event status
+    /\b(latest|what.{0,10}happening).{0,20}(trial|investigation|hearing|case|charges)\b/i,
+    /\b(trump|biden|political).{0,20}(trial|charges|investigation|verdict|ruling)\b/i,
+
+    // Weather and temperature
+    /\b(current|today.{0,5}) ?(temperature|weather|forecast|conditions)\b/i,
+    /\bhow (hot|cold|warm|cool) is it (today|right now|currently)\b/i,
+
+    // Conflict and geopolitical status
+    /\b(latest|current|what.{0,10}happening).{0,20}(war|conflict|invasion|attack|crisis)\b/i,
+    /\b(latest|recent) developments? in\b/i,
+    /\bwhat.{0,10}(status|situation).{0,20}(war|conflict|crisis|ukraine|gaza|iran)\b/i,
+
+    // Today's news explicitly
+    /\btoday.{0,10}(top|headlines|news|stories)\b/i,
+    /\bwhat.{0,10}(headlines|news|stories).{0,10}today\b/i,
   ];
   if (REALTIME_PATTERNS.some(p => p.test(query))) {
     console.log('[QUERY_CLASSIFIER] ✅ Classified as: news_current_events (confidence: 0.90) — realtime pre-check pattern match');
