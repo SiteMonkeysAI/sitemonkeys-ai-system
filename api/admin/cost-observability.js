@@ -110,10 +110,27 @@ export async function handleCostSummary(req, res) {
       ORDER BY avg_tokens DESC
     `);
 
+    const modelBreakdown = await pool.query(`
+      SELECT
+        model,
+        COUNT(*) as query_count,
+        ROUND(COUNT(*)::decimal / SUM(COUNT(*)) OVER() * 100, 1) as pct_of_total,
+        ROUND(AVG(total_tokens)::decimal, 0) as avg_tokens,
+        ROUND(AVG(cost_usd)::decimal, 6) as avg_cost_usd,
+        ROUND(SUM(cost_usd)::decimal, 4) as total_cost_usd,
+        SUM(CASE WHEN lookup_fired THEN 1 ELSE 0 END) as lookup_count
+      FROM query_cost_log
+      WHERE created_at > NOW() - INTERVAL '7 days'
+        AND model IS NOT NULL
+      GROUP BY model
+      ORDER BY total_cost_usd DESC
+    `);
+
     return res.json({
       success: true,
       period: '7 days',
       rows: result.rows,
+      model_breakdown: modelBreakdown.rows,
       generated_at: new Date().toISOString(),
     });
   } catch (err) {

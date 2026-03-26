@@ -4885,6 +4885,88 @@ describe('CO. Cost Observability by Query Type', () => {
       'CO-005 FAIL: /api/admin/cost-summary route not found in server.js'
     );
   });
+
+  it('CO-006: cost-summary response includes model_breakdown array', () => {
+    const migration = readRepoFile(MIGRATION_PATH);
+    assert.ok(migration, 'Could not read api/admin/cost-observability.js');
+
+    assert.ok(
+      migration.includes('model_breakdown'),
+      'CO-006 FAIL: model_breakdown not found in cost-observability.js response'
+    );
+    assert.ok(
+      migration.includes('modelBreakdown.rows'),
+      'CO-006 FAIL: modelBreakdown.rows not assigned in cost-summary response'
+    );
+  });
+
+  it('CO-007: model_breakdown query selects required fields', () => {
+    const migration = readRepoFile(MIGRATION_PATH);
+    assert.ok(migration, 'Could not read api/admin/cost-observability.js');
+
+    const requiredFields = [
+      'model',
+      'pct_of_total',
+      'avg_tokens',
+      'avg_cost_usd',
+      'total_cost_usd',
+      'lookup_count',
+    ];
+
+    const breakdownIdx = migration.indexOf('modelBreakdown');
+    assert.ok(breakdownIdx !== -1, 'CO-007 FAIL: modelBreakdown query not found in cost-observability.js');
+
+    const queryBlock = migration.substring(breakdownIdx, breakdownIdx + 800);
+    for (const field of requiredFields) {
+      assert.ok(
+        queryBlock.includes(field),
+        `CO-007 FAIL: Required field "${field}" not found in model_breakdown query`
+      );
+    }
+  });
+
+  it('CO-008: history_depth INSERT uses historyDepth variable not null', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+
+    // Verify _historyDepth is captured from aiResponse
+    assert.ok(
+      orch.includes('_historyDepth'),
+      'CO-008 FAIL: _historyDepth variable not found in orchestrator.js'
+    );
+
+    // Verify _historyDepth is used in the INSERT params (not a bare null)
+    const insertIdx = orch.indexOf('INSERT INTO query_cost_log');
+    assert.ok(insertIdx !== -1, 'CO-008 FAIL: INSERT INTO query_cost_log not found');
+    const insertBlock = orch.substring(insertIdx, insertIdx + 1500);
+    assert.ok(
+      insertBlock.includes('_historyDepth'),
+      'CO-008 FAIL: _historyDepth not used in INSERT params block'
+    );
+
+    // Verify historyDepth is returned from #routeToAI
+    assert.ok(
+      orch.includes('historyDepth: historyDepth'),
+      'CO-008 FAIL: historyDepth not included in #routeToAI return object'
+    );
+  });
+
+  it('CO-009: existing CO tests structural gate — all CO checks remain present', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    const migration = readRepoFile(MIGRATION_PATH);
+    const server = readRepoFile(SERVER_PATH);
+
+    // CO-001
+    assert.ok(migration.includes('CREATE TABLE IF NOT EXISTS query_cost_log'), 'CO-009: CO-001 check broken');
+    // CO-002
+    assert.ok(orch.includes('INSERT INTO query_cost_log'), 'CO-009: CO-002 check broken');
+    // CO-003
+    assert.ok(orch.includes('setImmediate(async () =>'), 'CO-009: CO-003 check broken');
+    // CO-004
+    assert.ok(orch.includes('[COST-LOG] Failed to write query cost log:'), 'CO-009: CO-004 check broken');
+    // CO-005
+    assert.ok(server.includes('/api/admin/cost-summary'), 'CO-009: CO-005 check broken');
+  });
 });
 
 // ============================================================
