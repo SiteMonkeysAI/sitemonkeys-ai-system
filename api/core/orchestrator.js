@@ -2553,6 +2553,30 @@ export class Orchestrator {
               responseIntelligence.reason = `simple_factual_truncated`;
               this.log(`✂️ Simple query truncated: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
             }
+            // decision_making and news_current_events have maxLength but no prior enforcement
+            else if (
+              classification.classification === 'decision_making' ||
+              classification.classification === 'news_current_events'
+            ) {
+              // Truncate at last sentence boundary within maxLength
+              let truncated = personalityResponse.response.substring(0, maxLength);
+              const lastPeriod = truncated.lastIndexOf('.');
+              const lastQuestion = truncated.lastIndexOf('?');
+              const lastExclaim = truncated.lastIndexOf('!');
+              const lastSentence = Math.max(lastPeriod, lastQuestion, lastExclaim);
+
+              if (lastSentence > MIN_SENTENCE_LENGTH) {
+                personalityResponse.response = personalityResponse.response.substring(0, lastSentence + 1);
+              } else {
+                const lastSpace = truncated.lastIndexOf(' ');
+                personalityResponse.response =
+                  (lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated).trim() + '...';
+              }
+              responseIntelligence.applied = true;
+              responseIntelligence.finalLength = personalityResponse.response.length;
+              responseIntelligence.reason = `${classification.classification}_maxlength`;
+              this.log(`✂️ ${classification.classification} truncated at sentence boundary: ${responseIntelligence.originalLength} → ${responseIntelligence.finalLength} chars`);
+            }
           }
 
           // Also check for format constraints in the message
@@ -2588,11 +2612,23 @@ export class Orchestrator {
             }
           }
 
-          // Remove engagement bait from simple queries (greetings, simple factual)
+          // Remove engagement bait from ALL query types (greetings, simple factual,
+          // medium/complex, decision_making, news_current_events, etc.)
           // Patterns like "Let me know if...", "Feel free to...", "Happy to help with..."
-          if (classification.classification === 'greeting' ||
-              classification.classification === 'simple_factual' ||
-              classification.classification === 'simple_short') {
+          {
+            // Preamble patterns — strip from start of response
+            const preamblePatterns = [
+              /^(great question!?\s*)/i,
+              /^(that'?s a great question!?\s*)/i,
+              /^(absolutely!?\s*)/i,
+              /^(of course!?\s*)/i,
+              /^(certainly!?\s*)/i,
+              /^(sure!?\s*)/i,
+              /^(let me explain[.:]\s*)/i,
+              /^(let me break (this|that) down[.:]\s*)/i,
+              /^(here'?s what you need to know[.:]\s*)/i,
+              /^(glad you asked[!.]\s*)/i,
+            ];
 
             const engagementBaitPatterns = [
               /let me know if you (need|want|would like|have)/gi,
@@ -2613,8 +2649,20 @@ export class Orchestrator {
             ];
 
             let cleanedResponse = personalityResponse.response;
+            const originalLength = cleanedResponse.length;
             let engagementBaitRemoved = false;
 
+            // Strip preamble first (start-of-response patterns)
+            for (const pattern of preamblePatterns) {
+              const before = cleanedResponse;
+              cleanedResponse = cleanedResponse.replace(pattern, '');
+              if (cleanedResponse !== before) {
+                engagementBaitRemoved = true;
+                this.log(`✂️ Removed preamble bait from start of response`);
+              }
+            }
+
+            // Then strip trailing engagement bait patterns
             for (const pattern of engagementBaitPatterns) {
               const matches = cleanedResponse.match(pattern);
               if (matches) {
@@ -2638,7 +2686,12 @@ export class Orchestrator {
               personalityResponse.response = cleanedResponse;
               responseIntelligence.applied = true;
               responseIntelligence.finalLength = cleanedResponse.length;
-              responseIntelligence.reason = (responseIntelligence.reason || 'simple_query') + '+engagement_bait_removed';
+              responseIntelligence.reason = (responseIntelligence.reason || classification.classification) + '+engagement_bait_removed';
+              console.log(
+                `[ENGAGEMENT-BAIT] Removed from ${classification.classification} response ` +
+                `original_length=${originalLength} ` +
+                `cleaned_length=${cleanedResponse.length}`
+              );
             }
           }
         }
@@ -6103,6 +6156,14 @@ This is a straightforward factual question. Provide a DIRECT, CONCISE answer.
 - Maximum response length: ${maxLength} characters
 - If it's a calculation, just give the answer
 `;
+      } else if (queryClassification.classification === 'medium_complexity') {
+        prompt += `\nResponse length: Aim for 2-4 paragraphs. Be complete but not exhaustive.`;
+      } else if (queryClassification.classification === 'complex_analytical') {
+        prompt += `\nResponse length: Structured response appropriate to depth needed. Avoid padding.`;
+      } else if (queryClassification.classification === 'decision_making') {
+        prompt += `\nResponse length: Focus on the decision. 2-3 key points maximum. Be direct.`;
+      } else if (queryClassification.classification === 'news_current_events') {
+        prompt += `\nResponse length: Lead with the key fact. Supporting context in 1-2 sentences.`;
       }
     }
 
