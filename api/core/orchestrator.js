@@ -2042,9 +2042,9 @@ export class Orchestrator {
       // memories exist in the DB; memoryContext.hasMemory is only true when
       // relevant memories were actually retrieved and injected for this query.
       // Cache requires higher similarity bar than injection (0.50).
-      // Memories scoring below 0.75 against the query are not genuinely
+      // Memories scoring below 0.80 against the query are not genuinely
       // relevant to the answer and should not block caching.
-      const CACHE_MEMORY_THRESHOLD = 0.75;
+      const CACHE_MEMORY_THRESHOLD = 0.80; // raised from 0.75 — safer margin
       const memoriesBlockCache = (
         memoryContext.hasMemory &&
         memoryContext.memory_count > 0 &&
@@ -2731,10 +2731,10 @@ export class Orchestrator {
                 prompt_tokens, completion_tokens, cost_usd,
                 memories_injected, memories_filtered,
                 lookup_fired, lookup_tokens, history_depth,
-                model, personality, mode
+                model, personality, mode, max_memory_score
               ) VALUES (
                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                $11,$12,$13,$14,$15,$16,$17,$18
+                $11,$12,$13,$14,$15,$16,$17,$18,$19
               )`,
               [
                 _userId || null,
@@ -2754,7 +2754,8 @@ export class Orchestrator {
                 null,
                 _aiResponse?.model || null,
                 personalityResponse?.personality || null,
-                _mode || null
+                _mode || null,
+                _memoryContext?.highest_similarity_score || null,  // max_memory_score
               ]
             );
           }
