@@ -367,6 +367,15 @@ function determineClassification(
     // Today's news explicitly
     /\btoday.{0,10}(top|headlines|news|stories)\b/i,
     /\bwhat.{0,10}(headlines|news|stories).{0,10}today\b/i,
+
+    // FIX 3A: "What is happening with the Fed today" — "what is happening" not caught by "what's happening"
+    /\b(what.{0,15}happening).{0,30}today\b/i,
+    /\b(what.{0,10}happening with)\b/i,
+
+    // FIX 3C: Today's headlines — "todays top headlines" (no apostrophe) → VOLATILE
+    // Needed because "todays" doesn't match \btoday\b word boundary in VOLATILE_PATTERNS
+    /\b(today.{0,5}(top |latest |breaking )?(headlines?|news|stories))\b/i,
+    /\b(top headlines?|breaking news|latest headlines?)\b/i,
   ];
   if (REALTIME_PATTERNS.some(p => p.test(query))) {
     console.log('[QUERY_CLASSIFIER] ✅ Classified as: news_current_events (confidence: 0.90) — realtime pre-check pattern match');

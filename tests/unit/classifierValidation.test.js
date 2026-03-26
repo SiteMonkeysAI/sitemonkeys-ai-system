@@ -475,3 +475,128 @@ describe('CF-024 through CF-033: Expanded POLICY_PATTERNS and REALTIME_PATTERNS'
   });
 
 });
+
+// ---------------------------------------------------------------------------
+// CF-034 through CF-041: Historical/Authorship PERMANENT, War/Conflict VOLATILE Override,
+// News Classification Gaps
+// ---------------------------------------------------------------------------
+
+describe('CF-034 through CF-041: Historical/Authorship PERMANENT + War/Conflict VOLATILE + Headlines', () => {
+
+  // --- FIX 1: PERMANENT patterns for historical/authorship/astronomical ---
+
+  it('CF-034: "Who wrote Hamlet?" → PERMANENT', () => {
+    const result = detectByPattern('Who wrote Hamlet?');
+    assert.strictEqual(result.type, 'PERMANENT', `Expected PERMANENT, got ${result.type}`);
+  });
+
+  it('CF-035: "What year did World War 2 end?" → PERMANENT', () => {
+    const result = detectByPattern('What year did World War 2 end?');
+    assert.strictEqual(result.type, 'PERMANENT', `Expected PERMANENT, got ${result.type}`);
+  });
+
+  it('CF-036: "How many planets in solar system?" → PERMANENT', () => {
+    const result = detectByPattern('How many planets in solar system?');
+    assert.strictEqual(result.type, 'PERMANENT', `Expected PERMANENT, got ${result.type}`);
+  });
+
+  it('CF-037: "What causes rainbows?" → PERMANENT', () => {
+    const result = detectByPattern('What causes rainbows?');
+    assert.strictEqual(result.type, 'PERMANENT', `Expected PERMANENT, got ${result.type}`);
+  });
+
+  it('CF-034b: truthTypeDetector.js contains authorship PERMANENT pattern', () => {
+    const src = readFile(TRUTH_DETECTOR_PATH);
+    assert.ok(src, 'truthTypeDetector.js could not be read');
+    assert.ok(
+      src.includes('wrote|authored|created|invented|discovered|painted|composed'),
+      'truthTypeDetector.js must include authorship pattern in PERMANENT_PATTERNS'
+    );
+  });
+
+  it('CF-036b: truthTypeDetector.js contains astronomical count PERMANENT pattern', () => {
+    const src = readFile(TRUTH_DETECTOR_PATH);
+    assert.ok(src, 'truthTypeDetector.js could not be read');
+    assert.ok(
+      src.includes('planets?|moons?|stars?|galaxies|elements?'),
+      'truthTypeDetector.js must include astronomical count pattern in PERMANENT_PATTERNS'
+    );
+  });
+
+  // --- FIX 2: War/conflict exclusion from SEMI_STABLE policy patterns ---
+
+  it('CF-038: "current status of war in Ukraine" → VOLATILE not SEMI_STABLE', () => {
+    const result = detectByPattern('current status of war in Ukraine');
+    assert.strictEqual(result.type, 'VOLATILE', `Expected VOLATILE, got ${result.type}`);
+  });
+
+  it('CF-039: "latest developments in Gaza" → VOLATILE not SEMI_STABLE', () => {
+    const result = detectByPattern('latest developments in Gaza');
+    assert.strictEqual(result.type, 'VOLATILE', `Expected VOLATILE, got ${result.type}`);
+  });
+
+  it('CF-038b: truthTypeDetector.js contains CONFLICT_EXCLUSION guard', () => {
+    const src = readFile(TRUTH_DETECTOR_PATH);
+    assert.ok(src, 'truthTypeDetector.js could not be read');
+    assert.ok(
+      src.includes('CONFLICT_EXCLUSION'),
+      'truthTypeDetector.js must contain CONFLICT_EXCLUSION to prevent war/conflict queries from being SEMI_STABLE'
+    );
+  });
+
+  // --- FIX 3A: "What is happening with X today" → news_current_events ---
+
+  it('CF-040: "What is happening with the Fed today" → VOLATILE (routes to news_current_events)', () => {
+    const result = detectByPattern('What is happening with the Fed today');
+    assert.strictEqual(result.type, 'VOLATILE', `Expected VOLATILE, got ${result.type}`);
+  });
+
+  it('CF-040b: queryComplexityClassifier.js REALTIME_PATTERNS captures "what is happening" queries', () => {
+    const src = readFile(CLASSIFIER_PATH);
+    assert.ok(src, 'queryComplexityClassifier.js could not be read');
+    assert.ok(
+      src.includes('what.{0,15}happening'),
+      'queryComplexityClassifier.js REALTIME_PATTERNS must include what-is-happening pattern'
+    );
+  });
+
+  // --- FIX 3C: Today's headlines always VOLATILE ---
+
+  it("CF-041: \"today's top headlines\" → VOLATILE", () => {
+    const result = detectByPattern("today's top headlines");
+    assert.strictEqual(result.type, 'VOLATILE', `Expected VOLATILE, got ${result.type}`);
+  });
+
+  it('CF-041b: "todays top headlines" (no apostrophe) → VOLATILE', () => {
+    const result = detectByPattern('todays top headlines');
+    assert.strictEqual(result.type, 'VOLATILE', `Expected VOLATILE, got ${result.type}`);
+  });
+
+  it('CF-041c: queryComplexityClassifier.js REALTIME_PATTERNS captures "top headlines" queries', () => {
+    const src = readFile(CLASSIFIER_PATH);
+    assert.ok(src, 'queryComplexityClassifier.js could not be read');
+    assert.ok(
+      src.includes('top headlines'),
+      'queryComplexityClassifier.js REALTIME_PATTERNS must include top headlines pattern'
+    );
+  });
+
+  // --- CF-042: Existing policy SEMI_STABLE tests still pass (regression guard) ---
+
+  it('CF-042: "current interest rates" still → SEMI_STABLE (no regression)', () => {
+    const result = detectByPattern('current interest rates');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-042: "current travel restrictions" still → SEMI_STABLE (no regression)', () => {
+    const result = detectByPattern('current travel restrictions');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-042: "current mortgage rate" → SEMI_STABLE (policy cycle, not daily)', () => {
+    const result = detectByPattern('What is the current mortgage rate?');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+});
+

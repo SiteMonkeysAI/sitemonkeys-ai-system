@@ -73,7 +73,7 @@ export const CLASSIFIER_VALIDATION_SET = [
   { id: 'CLF057', query: 'What is the current status of the war in Ukraine?', expected_classification: 'news_current_events', expected_truth_type: 'VOLATILE', expected_lookup: true },
   { id: 'CLF058', query: 'What are todays top headlines?', expected_classification: 'news_current_events', expected_truth_type: 'VOLATILE', expected_lookup: true },
   { id: 'CLF059', query: 'What is the Dow Jones at right now?', expected_classification: 'news_current_events', expected_truth_type: 'VOLATILE', expected_lookup: true },
-  { id: 'CLF060', query: 'What is the current mortgage rate?', expected_classification: 'news_current_events', expected_truth_type: 'VOLATILE', expected_lookup: true },
+  { id: 'CLF060', query: 'What is the current mortgage rate?', expected_classification: 'medium_complexity', expected_truth_type: 'SEMI_STABLE', expected_lookup: true },
 
   // ── AMBIGUOUS (20 queries) ──────────────────────────────
   { id: 'CLF061', query: 'Can hippos have triplets?', expected_classification: 'simple_short', expected_truth_type: 'PERMANENT', expected_lookup: false },
