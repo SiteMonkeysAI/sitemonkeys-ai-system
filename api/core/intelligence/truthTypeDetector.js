@@ -36,7 +36,11 @@ const VOLATILE_PATTERNS = [
   /\bhow much (is|does|are) .* (cost|worth)\b/i,
   /\bwhat (is|are|'?s) .{0,60} worth\b/i,   // "what is 50 lbs of gold worth", "what's 2 kg of silver worth"
   // Event markers (not entity names) - these indicate current/breaking events
-  /\b(attack|election|war|invasion|military|conflict|strike|bombing|sanctions|diplomatic|crisis|coup|protest|riot)\b/i
+  /\b(attack|election|war|invasion|military|conflict|strike|bombing|sanctions|diplomatic|crisis|coup|protest|riot)\b/i,
+  // Today's headlines/news — "todays top headlines", "today's breaking news"
+  // Needed because "todays" (no apostrophe) doesn't match \btoday\b word boundary
+  /\b(today.{0,5}(top |latest |breaking )?(headlines?|news|stories))\b/i,
+  /\b(top headlines?|breaking news|latest headlines?)\b/i,
 ];
 
 const SEMI_STABLE_PATTERNS = [
@@ -105,7 +109,17 @@ const PERMANENT_PATTERNS = [
   // Yes/No factual questions about stable biology, nature, science
   // "Do bears hibernate?" "Can hippos have triplets?" "Do whales breathe air?"
   // Self-contained questions with no unresolved pronouns = PERMANENT
-  /\b(do|does|can|are|is) (a |an |the )?\w+ (hibernate|migrate|fly|swim|reproduce|breathe|have|lay|eat|digest|sleep|grow|live|die|survive|evolve|exist|belong|contain|produce|require|need|use|make|build|create|form|cause|affect|help|hurt|kill|protect|defend|attack|communicate|hunt|travel|move|change|develop|function|work|operate)\b/i
+  /\b(do|does|can|are|is) (a |an |the )?\w+ (hibernate|migrate|fly|swim|reproduce|breathe|have|lay|eat|digest|sleep|grow|live|die|survive|evolve|exist|belong|contain|produce|require|need|use|make|build|create|form|cause|affect|help|hurt|kill|protect|defend|attack|communicate|hunt|travel|move|change|develop|function|work|operate)\b/i,
+
+  // Historical authorship and creation — "Who wrote Hamlet?" "Who invented the telephone?"
+  /\b(who) (wrote|authored|created|invented|discovered|painted|composed|directed|designed|founded|built|made|developed) \w/i,
+
+  // Astronomical and scientific count facts — "How many planets are in the solar system?"
+  /\b(how many) (planets?|moons?|stars?|galaxies|elements?|bones?|chromosomes?|continents?|oceans?|senses?) (are |is |in |of )?(the |a |an )?(solar system|universe|human body|periodic table|earth|world)\b/i,
+
+  // Natural phenomena causation — "What causes rainbows?" "Why does it snow?"
+  /\bwhat causes? \w/i,
+  /\b(what causes?|why (do|does|is|are)) .{1,30} (happen|form|occur|appear|exist|work|function)\b/i,
 ];
 
 // High-stakes domains that trigger external lookup regardless of truth type
@@ -401,10 +415,17 @@ export function detectByPattern(query) {
   // does NOT suppress an external lookup that the user clearly wants. The query subject
   // (geopolitics, markets, current events) must take priority over sentence structure.
   // Previously (Issue #807 Fix 3) this ran after CONVERSATIONAL; the ordering is now corrected.
+  // FIX 2: Active conflict/war/crisis queries are VOLATILE, not SEMI_STABLE.
+  // "current status of war in Ukraine", "latest developments in Gaza" change in real-time.
+  // Applied to both FRESHNESS_OVERRIDE and the policy block below.
+  const CONFLICT_EXCLUSION = /\b(war|conflict|invasion|attack|fighting|battle|military operation|crisis|hostilities|ceasefire|bombing|strike)\b/i;
+
   const FRESHNESS_OVERRIDE_PATTERNS = [
     /most up[- ]to[- ]date/i,
     /recent (information|news|updates|developments|events)/i,
-    /latest (information|news|updates|developments|events)/i,
+    // FIX 2: "latest developments" removed from this pattern — "latest developments in Gaza"
+    // should be VOLATILE, not SEMI_STABLE. "latest" alone triggers VOLATILE_PATTERNS below.
+    /latest (information|news|updates|events)/i,
     /current (situation|status|state|events|developments)/i,
     /most recent (news|information|updates|events|developments)/i,
     /what'?s happening (with|in|about)/i,
@@ -432,6 +453,11 @@ export function detectByPattern(query) {
     // Possessive + freshness marker = internal context query
     // Do not treat as external lookup candidate
     // Fall through to conversational/personal detection
+    hasFreshnessMarker = false;
+  }
+  // FIX 2: Active conflict/war queries must not be SEMI_STABLE — they are VOLATILE
+  // "current status of war in Ukraine" → VOLATILE, not SEMI_STABLE
+  if (hasFreshnessMarker && CONFLICT_EXCLUSION.test(query)) {
     hasFreshnessMarker = false;
   }
   if (hasFreshnessMarker) {
@@ -508,6 +534,26 @@ export function detectByPattern(query) {
   // BEFORE PERMANENT patterns (to prevent "what is [entity] [action gerund]" misclassification).
   // Examples caught: "Did Saudi Arabia make a commitment", "What is Schumer demanding from Trump",
   //                  "Did the Coast Guard have anything really big happen"
+  //
+  // FIX 1: HISTORICAL/AUTHORSHIP early-return guard runs BEFORE hasNamedEntityActionPattern.
+  // "What year did World War 2 end?" has a proper noun ("World") and "did ... end" which matches
+  // the entity-action Pattern 1, returning SEMI_STABLE. These are timeless historical facts —
+  // they must be classified PERMANENT regardless of entity-action structure.
+  const HISTORICAL_YEAR_PATTERNS = [
+    /\b(what year|when) (did|was|were) .{1,40} (end|start|begin|happen|occur|born|die|sign|found|discover|invent|create|build|write|publish|release|launch)\b/i,
+  ];
+  if (HISTORICAL_YEAR_PATTERNS.some(p => p.test(query))) {
+    console.log('[truthTypeDetector] Historical year/event pattern detected — classifying as PERMANENT');
+    return {
+      type: TRUTH_TYPES.PERMANENT,
+      confidence: 0.92,
+      stage: 1,
+      patterns_matched: [{ type: TRUTH_TYPES.PERMANENT, pattern: 'historical_authorship_permanent' }],
+      conflict_detected: false,
+      reason: 'Historical event year question — PERMANENT, timeless fact'
+    };
+  }
+
   if (hasNamedEntityActionPattern(query)) {
     console.log('[truthTypeDetector] Named entity + action pattern detected — classifying as SEMI_STABLE (entity action current event)');
     return {
@@ -576,7 +622,10 @@ export function detectByPattern(query) {
     /\b(current|latest) (corporate|capital gains|income) tax\b/i,
   ];
   const isPolicyQuery = POLICY_PATTERNS.some(p => p.test(query));
-  if (isPolicyQuery) {
+  // FIX 2: Active conflict/war/crisis queries must not be classified as SEMI_STABLE policy queries.
+  // "current status of war in Ukraine" would otherwise match FRESHNESS_OVERRIDE above (already
+  // excluded), but this guard also blocks any policy pattern that might match a war/conflict query.
+  if (!CONFLICT_EXCLUSION.test(query) && isPolicyQuery) {
     console.log('[truthTypeDetector] Policy/regulation/rates query detected — classifying as SEMI_STABLE');
     return {
       type: TRUTH_TYPES.SEMI_STABLE,
