@@ -542,6 +542,33 @@ export function detectByPattern(query) {
     };
   }
 
+  // POLICY/REGULATION/RATES DETECTION
+  // These change occasionally but are not real-time volatile
+  // "current interest rates" "current travel restrictions"
+  // "current OSHA requirements" "current tax rate"
+  // Must run BEFORE generic VOLATILE detection catches "current"
+  const POLICY_PATTERNS = [
+    /\b(current|latest) (interest rates?|mortgage rates?|tax rates?|corporate tax)\b/i,
+    /\b(current|latest) (travel restrictions?|visa requirements?|entry requirements?)\b/i,
+    /\b(current|latest) (osha|fda|epa|cdc|irs)\b.{0,30}\b(requirements?|guidelines?|regulations?|rules?|standards?)\b/i,
+    /\b(current|latest) (covid|vaccine|health) (requirements?|guidelines?|restrictions?|protocols?)\b/i,
+    /\b(current|latest) (minimum wage|medicaid|medicare|social security) (threshold|rate|limit|eligibility)\b/i,
+    /\b(what (is|are) the current (version|release)) of\b/i,
+    /\b(is .* still (available|offer(?:ed|ing)|supported|active))\b/i
+  ];
+  const isPolicyQuery = POLICY_PATTERNS.some(p => p.test(query));
+  if (isPolicyQuery) {
+    console.log('[truthTypeDetector] Policy/regulation/rates query detected — classifying as SEMI_STABLE');
+    return {
+      type: TRUTH_TYPES.SEMI_STABLE,
+      confidence: 0.85,
+      stage: 1,
+      patterns_matched: [{ type: TRUTH_TYPES.SEMI_STABLE, pattern: 'policy_regulation_current' }],
+      conflict_detected: false,
+      reason: 'Policy/regulation/rates query — SEMI_STABLE, changes occasionally but not real-time'
+    };
+  }
+
   // Check PERMANENT patterns first (stable facts should win over volatility)
   for (const pattern of PERMANENT_PATTERNS) {
     if (pattern.test(normalizedQuery)) {
