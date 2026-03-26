@@ -2721,6 +2721,7 @@ export class Orchestrator {
       const _memoryContext = memoryContext;
       const _mode = mode;
       const _aiResponse = aiResponse;
+      const _historyDepth = aiResponse?.historyDepth ?? null;
       setImmediate(async () => {
         try {
           if (_pool) {
@@ -2751,7 +2752,7 @@ export class Orchestrator {
                 _phase4Metadata?.relevance_gate?.memories_filtered || 0,
                 _phase4Metadata?.external_lookup || false,
                 _phase4Metadata?.external_tokens || 0,
-                null,
+                _historyDepth,
                 _aiResponse?.model || null,
                 personalityResponse?.personality || null,
                 _mode || null,
@@ -5290,6 +5291,7 @@ export class Orchestrator {
         cost: cost,
         escalated: capabilityGapEscalated || escalatedDueToPayloadSize,
         escalationReason: capabilityGapReason || (escalatedDueToPayloadSize ? 'payload_size' : null),
+        historyDepth: historyDepth,
       };
     } catch (error) {
       this.error("[AI] Routing failed", error);
