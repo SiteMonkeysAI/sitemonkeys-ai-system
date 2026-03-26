@@ -2394,14 +2394,14 @@ describe('V. Confidence Scoring — Memory Source Detection and PERMANENT Patter
     );
   });
 
-  // V-006: PERMANENT facts still score 97%
-  it('V-006: calculateConfidence still returns 0.97 for PERMANENT without memory flag', async () => {
+  // V-006: PERMANENT facts still score 90%
+  it('V-006: calculateConfidence still returns 0.90 for PERMANENT without memory flag', async () => {
     const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
     const score = calculateConfidence('PERMANENT', 0, false, null, null);
     assert.strictEqual(
       score,
-      0.97,
-      `V-006 FAIL: calculateConfidence returned ${score} for PERMANENT — expected 0.97.`
+      0.90,
+      `V-006 FAIL: calculateConfidence returned ${score} for PERMANENT — expected 0.90.`
     );
   });
 
@@ -3134,19 +3134,19 @@ describe('CC. Prompt Deduplication and Confidence Calculator Fixes', () => {
   });
 
   // CC-006: All existing confidence behaviors unchanged
-  it('CC-006: PERMANENT score=0.97 and memory reason are unchanged', async () => {
+  it('CC-006: PERMANENT score=0.90 and memory reason are unchanged', async () => {
     const { calculateConfidence, buildConfidenceReason } = await import('../../api/core/personalities/confidence_calculator.js');
 
-    // PERMANENT still scores 0.97
+    // PERMANENT still scores 0.90
     const permanentScore = calculateConfidence('PERMANENT', 0, false, null, null);
     assert.strictEqual(
       permanentScore,
-      0.97,
-      `CC-006 FAIL: calculateConfidence for PERMANENT returned ${permanentScore} — must stay 0.97.`
+      0.90,
+      `CC-006 FAIL: calculateConfidence for PERMANENT returned ${permanentScore} — must be 0.90.`
     );
 
     // Memory-sourced answer still returns personal records reason
-    const memoryReason = buildConfidenceReason('PERMANENT', 0, false, 0.97, { memory_sourced: true });
+    const memoryReason = buildConfidenceReason('PERMANENT', 0, false, 0.90, { memory_sourced: true });
     assert.strictEqual(
       memoryReason,
       'confirmed from your personal records',
@@ -3154,7 +3154,7 @@ describe('CC. Prompt Deduplication and Confidence Calculator Fixes', () => {
     );
 
     // SEMI_STABLE non-lookup reason unchanged
-    const semiStableReason = buildConfidenceReason('SEMI_STABLE', 0, false, 0.65, null);
+    const semiStableReason = buildConfidenceReason('SEMI_STABLE', 0, false, 0.70, null);
     assert.strictEqual(
       semiStableReason,
       'based on training knowledge — may not reflect latest',
@@ -5585,6 +5585,185 @@ describe('OP. Output Precision — Engagement Bait Extension + Preamble + Length
     assert.ok(
       orchSrcOP.includes('original_length=') && orchSrcOP.includes('cleaned_length='),
       'OP-016 FAIL: [ENGAGEMENT-BAIT] log fields must still be present (regression check)'
+    );
+  });
+
+});
+
+// ============================================================
+// CA. Confidence Calibration — Fix Misleading Scores
+// Verifies the four targeted calibration fixes:
+//   FIX 1: PERMANENT base 0.97 → 0.90
+//   FIX 2: VOLATILE lookup bonuses doubled (0.15/0.10/0.05 → 0.30/0.20/0.10)
+//   FIX 3: SEMI_STABLE base 0.65 → 0.70
+//   FIX 4: 90/10 blend for PERMANENT and SEMI_STABLE, 80/20 for VOLATILE
+// ============================================================
+
+describe('CA. Confidence Calibration — Fix Misleading Scores', () => {
+
+  // CA-001: PERMANENT base is 0.90
+  it('CA-001: calculateConfidence returns 0.90 for PERMANENT with no lookup and no modelConfidence', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    const score = calculateConfidence('PERMANENT', 0, false, null, null);
+    assert.strictEqual(
+      score,
+      0.90,
+      `CA-001 FAIL: PERMANENT base is ${score} — expected 0.90. FIX 1 not applied.`
+    );
+  });
+
+  // CA-002: VOLATILE + 3 sources bonus is 0.30 not 0.15
+  it('CA-002: VOLATILE + 3 sources adds 0.30 (not 0.15) to base', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    // VOLATILE base = 0.45, no modelConfidence — bonus only variable
+    const score3 = calculateConfidence('VOLATILE', 3, true, null, null);
+    assert.strictEqual(
+      score3,
+      0.75,
+      `CA-002 FAIL: VOLATILE + 3 sources returned ${score3} — expected 0.75 (0.45 + 0.30). FIX 2 not applied.`
+    );
+  });
+
+  // CA-003: VOLATILE + 2 sources bonus is 0.20 not 0.10
+  it('CA-003: VOLATILE + 2 sources adds 0.20 (not 0.10) to base', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    const score2 = calculateConfidence('VOLATILE', 2, true, null, null);
+    assert.strictEqual(
+      score2,
+      0.65,
+      `CA-003 FAIL: VOLATILE + 2 sources returned ${score2} — expected 0.65 (0.45 + 0.20). FIX 2 not applied.`
+    );
+  });
+
+  // CA-004: VOLATILE + 1 source bonus is 0.10 not 0.05
+  it('CA-004: VOLATILE + 1 source adds 0.10 (not 0.05) to base', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    const score1 = calculateConfidence('VOLATILE', 1, true, null, null);
+    assert.strictEqual(
+      score1,
+      0.55,
+      `CA-004 FAIL: VOLATILE + 1 source returned ${score1} — expected 0.55 (0.45 + 0.10). FIX 2 not applied.`
+    );
+  });
+
+  // CA-005: SEMI_STABLE base is 0.70
+  it('CA-005: calculateConfidence returns 0.70 for SEMI_STABLE with no lookup and no modelConfidence', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    const score = calculateConfidence('SEMI_STABLE', 0, false, null, null);
+    assert.strictEqual(
+      score,
+      0.70,
+      `CA-005 FAIL: SEMI_STABLE base is ${score} — expected 0.70. FIX 3 not applied.`
+    );
+  });
+
+  // CA-006: PERMANENT uses 90/10 blend
+  it('CA-006: PERMANENT uses 90/10 blend when modelConfidence is provided', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    // base=0.90, modelConfidence=0.50 → 0.90*0.90 + 0.50*0.10 = 0.81 + 0.05 = 0.86
+    const score = calculateConfidence('PERMANENT', 0, false, 0.50, null);
+    const expected = 0.90 * 0.90 + 0.50 * 0.10;
+    assert.ok(
+      Math.abs(score - expected) < 0.001,
+      `CA-006 FAIL: PERMANENT 90/10 blend with modelConfidence=0.50 returned ${score} — expected ~${expected}. FIX 4 not applied.`
+    );
+  });
+
+  // CA-007: SEMI_STABLE uses 90/10 blend
+  it('CA-007: SEMI_STABLE uses 90/10 blend when modelConfidence is provided', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    // base=0.70, modelConfidence=0.50 → 0.70*0.90 + 0.50*0.10 = 0.63 + 0.05 = 0.68
+    const score = calculateConfidence('SEMI_STABLE', 0, false, 0.50, null);
+    const expected = 0.70 * 0.90 + 0.50 * 0.10;
+    assert.ok(
+      Math.abs(score - expected) < 0.001,
+      `CA-007 FAIL: SEMI_STABLE 90/10 blend with modelConfidence=0.50 returned ${score} — expected ~${expected}. FIX 4 not applied.`
+    );
+  });
+
+  // CA-008: VOLATILE uses 80/20 blend (unchanged)
+  it('CA-008: VOLATILE still uses 80/20 blend when modelConfidence is provided', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    // base=0.45, modelConfidence=0.50 → 0.45*0.80 + 0.50*0.20 = 0.36 + 0.10 = 0.46
+    const score = calculateConfidence('VOLATILE', 0, false, 0.50, null);
+    const expected = 0.45 * 0.80 + 0.50 * 0.20;
+    assert.ok(
+      Math.abs(score - expected) < 0.001,
+      `CA-008 FAIL: VOLATILE 80/20 blend with modelConfidence=0.50 returned ${score} — expected ~${expected}.`
+    );
+  });
+
+  // CA-009: VOLATILE + 3 sources produces score above 0.60 (no "limited information" when data found)
+  it('CA-009: VOLATILE + 3 sources produces score > 0.60 so "limited information" does not fire', async () => {
+    const { calculateConfidence, buildConfidenceReason } = await import('../../api/core/personalities/confidence_calculator.js');
+    const score = calculateConfidence('VOLATILE', 3, true, null, null);
+    assert.ok(
+      score > 0.60,
+      `CA-009 FAIL: VOLATILE + 3 sources returned ${score} — expected > 0.60. ` +
+      '"limited information" must not fire when we actually have current data from 3 sources.'
+    );
+    // Also verify "limited information" reason does NOT fire at this score
+    const reason = buildConfidenceReason('VOLATILE', 3, true, score, null);
+    assert.ok(
+      !reason.includes('limited information'),
+      `CA-009 FAIL: buildConfidenceReason returned "${reason}" for VOLATILE + 3 sources. ` +
+      '"limited information" must not appear when current data was successfully retrieved.'
+    );
+  });
+
+  // CA-010: Document source early return still works correctly
+  it('CA-010: document source early return still clamps to [0.15, 0.92] and bypasses truth-type logic', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    const score = calculateConfidence('PERMANENT', 0, false, 0.88, { source_class: 'document' });
+    assert.strictEqual(
+      score,
+      0.88,
+      `CA-010 FAIL: document source early return returned ${score} — expected 0.88 (pass-through of modelConfidence).`
+    );
+    // Verify cap at 0.92
+    const scoreCapped = calculateConfidence('PERMANENT', 0, false, 0.99, { source_class: 'document' });
+    assert.strictEqual(
+      scoreCapped,
+      0.92,
+      `CA-010 FAIL: document source cap returned ${scoreCapped} — expected 0.92 (capped at 0.92).`
+    );
+  });
+
+  // CA-011: Memory sourced override still returns 0.95
+  it('CA-011: memory_sourced override still returns 0.95 regardless of truth type', async () => {
+    const { calculateConfidence } = await import('../../api/core/personalities/confidence_calculator.js');
+    const score = calculateConfidence('PERMANENT', 0, false, null, { memory_sourced: true });
+    assert.strictEqual(
+      score,
+      0.95,
+      `CA-011 FAIL: memory_sourced override returned ${score} — must stay 0.95.`
+    );
+  });
+
+  // CA-012: Score clamp [0.15, 0.97] and "limited information" threshold at 0.60 are unchanged
+  it('CA-012: score clamp boundaries and limited-information threshold unchanged', async () => {
+    const { calculateConfidence, buildConfidenceReason } = await import('../../api/core/personalities/confidence_calculator.js');
+
+    // Upper clamp: even if internal sum would exceed 0.97, result is capped
+    const highScore = calculateConfidence('PERMANENT', 3, true, 0.99, null);
+    assert.ok(
+      highScore <= 0.97,
+      `CA-012 FAIL: upper clamp broken — calculateConfidence returned ${highScore} which exceeds 0.97.`
+    );
+
+    // Lower clamp: null truth type with no lookup stays above 0.15
+    const lowScore = calculateConfidence(null, 0, false, 0.10, null);
+    assert.ok(
+      lowScore >= 0.15,
+      `CA-012 FAIL: lower clamp broken — calculateConfidence returned ${lowScore} which is below 0.15.`
+    );
+
+    // "limited information" threshold still fires below 0.60
+    const reason = buildConfidenceReason(null, 0, false, 0.55, null);
+    assert.strictEqual(
+      reason,
+      'limited information — reasoning from available evidence',
+      `CA-012 FAIL: limited-information threshold changed — score=0.55 returned "${reason}".`
     );
   });
 

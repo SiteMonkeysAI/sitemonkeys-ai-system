@@ -26,18 +26,21 @@ export function calculateConfidence(truthType, sourcesUsed, lookupPerformed, mod
 
   // Base score by truth type
   let base = 0.5;
-  if (truthType === 'PERMANENT') base = 0.97;
-  else if (truthType === 'SEMI_STABLE') base = 0.65;
+  if (truthType === 'PERMANENT') base = 0.90;
+  else if (truthType === 'SEMI_STABLE') base = 0.70;
   else if (truthType === 'VOLATILE') base = 0.45;
 
-  // Source confirmation boost
-  if (lookupPerformed && sourcesUsed >= 3) base += 0.15;
-  else if (lookupPerformed && sourcesUsed === 2) base += 0.10;
-  else if (lookupPerformed && sourcesUsed === 1) base += 0.05;
+  // Source confirmation boost — meaningful bonus when lookup actually retrieved current data
+  if (lookupPerformed && sourcesUsed >= 3) base += 0.30;
+  else if (lookupPerformed && sourcesUsed === 2) base += 0.20;
+  else if (lookupPerformed && sourcesUsed === 1) base += 0.10;
 
-  // Model confidence as a secondary signal (20% weight maximum)
+  // Model confidence as a secondary signal — truth_type dominates for reliable classifications
   if (modelConfidence != null && !isNaN(modelConfidence)) {
-    base = (base * 0.80) + (modelConfidence * 0.20);
+    const stableBlend = (truthType === 'PERMANENT' || truthType === 'SEMI_STABLE');
+    base = stableBlend
+      ? (base * 0.90) + (modelConfidence * 0.10)
+      : (base * 0.80) + (modelConfidence * 0.20);
   }
 
   return Math.min(0.97, Math.max(0.15, base));
