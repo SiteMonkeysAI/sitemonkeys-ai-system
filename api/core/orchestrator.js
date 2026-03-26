@@ -2041,14 +2041,32 @@ export class Orchestrator {
       // context.memory is a formatted text string that is truthy whenever ANY
       // memories exist in the DB; memoryContext.hasMemory is only true when
       // relevant memories were actually retrieved and injected for this query.
+      // Cache requires higher similarity bar than injection (0.50).
+      // Memories scoring below 0.75 against the query are not genuinely
+      // relevant to the answer and should not block caching.
+      const CACHE_MEMORY_THRESHOLD = 0.75;
+      const memoriesBlockCache = (
+        memoryContext.hasMemory &&
+        memoryContext.memory_count > 0 &&
+        (memoryContext.highest_similarity_score ?? 1.0) >= CACHE_MEMORY_THRESHOLD
+      );
+
       const isCacheEligible = (
         phase4Metadata.truth_type === 'PERMANENT' &&
-        !memoryContext.hasMemory &&           // no relevant memories injected
+        !memoriesBlockCache &&                // no genuinely query-relevant memories
         !effectiveDocumentData &&             // no document loaded
         !context.vault &&                     // no vault
         !phase4Metadata.high_stakes?.isHighStakes && // not high stakes
         (!conversationHistory || conversationHistory.length === 0) && // no prior context
         !hasPersonalIntent                    // no personal query signals
+      );
+
+      console.log(
+        `[CACHE-ELIGIBLE] truth_type=${phase4Metadata.truth_type} ` +
+        `hasMemory=${memoryContext.hasMemory} ` +
+        `highestScore=${memoryContext.highest_similarity_score?.toFixed(3)} ` +
+        `memoriesBlockCache=${memoriesBlockCache} ` +
+        `eligible=${isCacheEligible}`
       );
 
       if (isCacheEligible) {
@@ -3668,6 +3686,13 @@ export class Orchestrator {
         memory_ids: memoryIds,
         memory_objects: memoriesToFormat,  // FIX #659: Return actual memory objects for validators
         relevance_gate: relevanceGateResult || null,  // Gate telemetry for phase4Metadata
+        highest_similarity_score: memoriesToFormat.length > 0
+          ? memoriesToFormat.reduce((max, m) => {
+              const score = m.hybrid_score || m.similarity || 0;
+              return score > max ? score : max;
+            }, 0)
+          : 0,
+        memory_count: memoriesToFormat.length,
       };
 
     } catch (error) {
