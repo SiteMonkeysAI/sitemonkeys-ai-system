@@ -554,7 +554,26 @@ export function detectByPattern(query) {
     /\b(current|latest) (covid|vaccine|health) (requirements?|guidelines?|restrictions?|protocols?)\b/i,
     /\b(current|latest) (minimum wage|medicaid|medicare|social security) (threshold|rate|limit|eligibility)\b/i,
     /\b(what (is|are) the current (version|release)) of\b/i,
-    /\b(is .* still (available|offer(?:ed|ing)|supported|active))\b/i
+    /\b(is .* still (available|offer(?:ed|ing)|supported|active))\b/i,
+
+    // Version/software queries — change when released, not real-time
+    /\b(latest|current|newest) (version|release) of\b/i,
+    /\b(latest|current) (macos|windows|android|ios|iphone|python|node|react|chrome|firefox) (version|release|update)\b/i,
+    /\bwhat (version|release) (is|of) (current|latest|newest)\b/i,
+
+    // Health/vaccine requirements — change with policy not daily
+    /\b(current|latest) (covid|coronavirus|vaccine|vaccination).{0,20}(requirements?|guidelines?|protocols?|rules?|restrictions?)\b/i,
+
+    // Government benefit thresholds — change annually not daily
+    /\b(current|latest) (?:federal |state |national |local )?(minimum wage|medicaid|medicare|snap|ssi|ssdi)\b/i,
+
+    // Business hours and local service availability
+    /\b(current|latest) hours? (for|of) (the )?\w+\b/i,
+    /\bwhat (are|is) the (hours?|schedule) (for|of)\b/i,
+
+    // Financial rates that change on policy cycles not daily
+    /\b(current|latest) (federal|prime|discount|mortgage|refinance) rate\b/i,
+    /\b(current|latest) (corporate|capital gains|income) tax\b/i,
   ];
   const isPolicyQuery = POLICY_PATTERNS.some(p => p.test(query));
   if (isPolicyQuery) {

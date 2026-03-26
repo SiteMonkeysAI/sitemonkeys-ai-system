@@ -375,3 +375,103 @@ describe('CF-017 through CF-022: Policy/regulation SEMI_STABLE + decision_making
   });
 
 });
+
+// ---------------------------------------------------------------------------
+// CF-024 through CF-033: Expanded POLICY_PATTERNS + REALTIME_PATTERNS (Issue 2)
+// ---------------------------------------------------------------------------
+
+const CLASSIFIER_PATH = join(REPO_ROOT, 'api', 'core', 'intelligence', 'queryComplexityClassifier.js');
+
+describe('CF-024 through CF-033: Expanded POLICY_PATTERNS and REALTIME_PATTERNS', () => {
+
+  // --- SEMI_STABLE runtime tests via detectByPattern ---
+
+  it('CF-024: "current federal minimum wage" → SEMI_STABLE', () => {
+    const result = detectByPattern('current federal minimum wage');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-025: "current COVID vaccine requirements" → SEMI_STABLE', () => {
+    const result = detectByPattern('current COVID vaccine requirements');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-026: "latest macOS version" → SEMI_STABLE', () => {
+    const result = detectByPattern('latest macOS version');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-027: "current hours for the DMV" → SEMI_STABLE', () => {
+    const result = detectByPattern('current hours for the DMV');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-028: "latest Python version features" → SEMI_STABLE', () => {
+    const result = detectByPattern('latest Python version features');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  // --- news_current_events / VOLATILE runtime + structural tests ---
+
+  it('CF-029: "Is the stock market up today" → VOLATILE (routes to news_current_events)', () => {
+    const result = detectByPattern('Is the stock market up today');
+    assert.strictEqual(result.type, 'VOLATILE', `Expected VOLATILE, got ${result.type}`);
+  });
+
+  it('CF-029: queryComplexityClassifier.js REALTIME_PATTERNS captures stock market movement queries', () => {
+    const src = readFile(CLASSIFIER_PATH);
+    assert.ok(src, 'queryComplexityClassifier.js could not be read');
+    assert.ok(
+      src.includes('stock market'),
+      'queryComplexityClassifier.js REALTIME_PATTERNS must include stock market pattern'
+    );
+  });
+
+  it('CF-030: "What is happening with the Fed today" → VOLATILE (routes to news_current_events)', () => {
+    const result = detectByPattern('What is happening with the Fed today');
+    assert.strictEqual(result.type, 'VOLATILE', `Expected VOLATILE, got ${result.type}`);
+  });
+
+  it('CF-031: "What is the current temperature in New York" → VOLATILE (REALTIME pattern)', () => {
+    const result = detectByPattern('What is the current temperature in New York');
+    assert.strictEqual(result.type, 'VOLATILE', `Expected VOLATILE, got ${result.type}`);
+  });
+
+  it('CF-031: queryComplexityClassifier.js REALTIME_PATTERNS captures temperature/weather queries', () => {
+    const src = readFile(CLASSIFIER_PATH);
+    assert.ok(src, 'queryComplexityClassifier.js could not be read');
+    assert.ok(
+      src.includes('temperature|weather|forecast|conditions'),
+      'queryComplexityClassifier.js REALTIME_PATTERNS must include temperature/weather pattern'
+    );
+  });
+
+  it('CF-032: queryComplexityClassifier.js REALTIME_PATTERNS captures "latest developments in" queries', () => {
+    const src = readFile(CLASSIFIER_PATH);
+    assert.ok(src, 'queryComplexityClassifier.js could not be read');
+    assert.ok(
+      src.includes('developments? in'),
+      'queryComplexityClassifier.js REALTIME_PATTERNS must include latest developments pattern'
+    );
+  });
+
+  it('CF-033: LEADERSHIP_PATTERNS and POLICY_PATTERNS structural integrity preserved (no regressions)', () => {
+    const src = readFile(TRUTH_DETECTOR_PATH);
+    assert.ok(src, 'truthTypeDetector.js could not be read');
+    assert.ok(
+      src.includes('LEADERSHIP_PATTERNS') && src.includes('leadership_current_holder'),
+      'LEADERSHIP_PATTERNS block must remain present and unchanged'
+    );
+    assert.ok(
+      src.includes('POLICY_PATTERNS') && src.includes('policy_regulation_current'),
+      'POLICY_PATTERNS block must remain present'
+    );
+    const leadershipIdx = src.indexOf('LEADERSHIP_PATTERNS');
+    const policyIdx = src.indexOf('POLICY_PATTERNS');
+    assert.ok(
+      leadershipIdx < policyIdx,
+      'LEADERSHIP_PATTERNS must still appear before POLICY_PATTERNS in the source file'
+    );
+  });
+
+});
