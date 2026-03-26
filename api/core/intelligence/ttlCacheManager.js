@@ -13,6 +13,10 @@ import { TRUTH_TYPES, TTL_CONFIG } from './truthTypeDetector.js';
 // In-memory cache (can be migrated to PostgreSQL later)
 const cache = new Map();
 
+// Response cache for PERMANENT queries (full AI response caching)
+const responseCache = new Map();
+const RESPONSE_CACHE_TTL = TTL_CONFIG.PERMANENT; // 30 days
+
 // Cache statistics for telemetry
 const cacheStats = {
   hits: 0,
@@ -290,6 +294,61 @@ export function getStats() {
   };
 }
 
+// ==================== RESPONSE CACHE (Full AI Response) ====================
+
+/**
+ * Build a cache key for a full response entry
+ * @param {string} message - The user's message
+ * @param {string} mode - The active mode
+ * @returns {string} Cache key
+ */
+export function buildResponseCacheKey(message, mode) {
+  const fingerprint = semanticFingerprint(message);
+  return `response:${mode}:${fingerprint}`;
+}
+
+/**
+ * Retrieve a cached full AI response
+ * @param {string} message - The user's message
+ * @param {string} mode - The active mode
+ * @returns {object|null} Cached response or null if not found / expired
+ */
+export function getCachedResponse(message, mode) {
+  const key = buildResponseCacheKey(message, mode);
+  const entry = responseCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.cachedAt > RESPONSE_CACHE_TTL) {
+    responseCache.delete(key);
+    return null;
+  }
+  return entry.response;
+}
+
+/**
+ * Store a full AI response in the response cache
+ * @param {string} message - The user's message
+ * @param {string} mode - The active mode
+ * @param {object} response - The response object to cache
+ */
+export function setCachedResponse(message, mode, response) {
+  const key = buildResponseCacheKey(message, mode);
+  responseCache.set(key, {
+    response,
+    cachedAt: Date.now()
+  });
+}
+
+/**
+ * Get response cache statistics
+ * @returns {object} Size and keys of the response cache
+ */
+export function getResponseCacheStats() {
+  return {
+    size: responseCache.size,
+    keys: [...responseCache.keys()]
+  };
+}
+
 /**
  * Test endpoint handler for /api/test-semantic?action=cache
  * @param {string} action - Action to perform (get, set, stats, clear)
@@ -382,5 +441,9 @@ export default {
   clearExpired,
   clearAll,
   getStats,
-  testCache
+  testCache,
+  buildResponseCacheKey,
+  getCachedResponse,
+  setCachedResponse,
+  getResponseCacheStats
 };
