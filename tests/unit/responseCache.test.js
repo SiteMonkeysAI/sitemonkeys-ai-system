@@ -244,4 +244,45 @@ describe('RC. Response Cache — ttlCacheManager', () => {
     assert.ok(src.includes('export function getResponseCacheStats'), 'Missing export: getResponseCacheStats');
   });
 
+  // RC-013 ----------------------------------------------------------------
+  it('RC-013: isCacheEligible uses memoryContext.hasMemory (not context.memory) in orchestrator source', () => {
+    const src = readFile(ORCHESTRATOR_PATH);
+    assert.ok(src, 'orchestrator.js must exist');
+    // Must use memoryContext.hasMemory so users with irrelevant stored memories
+    // can still benefit from the cache for PERMANENT factual queries.
+    assert.ok(
+      src.includes('!memoryContext.hasMemory'),
+      'RC-013 FAIL: isCacheEligible must use "!memoryContext.hasMemory" instead of "!context.memory". ' +
+      'context.memory is truthy whenever ANY user memories exist; memoryContext.hasMemory is only ' +
+      'true when relevant memories were actually injected for this specific query.'
+    );
+    // Must NOT use context.memory as the memory guard in isCacheEligible
+    // (it may still appear elsewhere in the file for other purposes)
+    const cacheBlock = src.slice(
+      src.indexOf('RESPONSE CACHE — check before expensive'),
+      src.indexOf('performanceMarkers.aiCallStart')
+    );
+    assert.ok(
+      !cacheBlock.includes('!context.memory'),
+      'RC-013 FAIL: isCacheEligible block must not use "!context.memory" as the memory guard.'
+    );
+  });
+
+  // RC-014 ----------------------------------------------------------------
+  it('RC-014: Cache hit return block nests token_usage inside metadata (not top-level)', () => {
+    const src = readFile(ORCHESTRATOR_PATH);
+    assert.ok(src, 'orchestrator.js must exist');
+    // Extract the cache hit return block between "cache_hit: true" and the
+    // closing of that return statement.  We verify metadata wraps token_usage.
+    const cacheHitIdx = src.indexOf('cache_hit: true');
+    assert.ok(cacheHitIdx !== -1, 'Could not locate "cache_hit: true" in orchestrator.js');
+    // Look for the pattern: metadata block appears before token_usage in the cache hit return
+    const segment = src.slice(cacheHitIdx, cacheHitIdx + 600);
+    assert.ok(
+      segment.includes('metadata:') && segment.indexOf('metadata:') < segment.indexOf('token_usage:'),
+      'RC-014 FAIL: Cache hit return must nest token_usage inside a metadata block, ' +
+      'matching the path used by non-cached responses (response.metadata.token_usage).'
+    );
+  });
+
 });
