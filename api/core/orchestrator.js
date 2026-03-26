@@ -2041,6 +2041,24 @@ export class Orchestrator {
       // context.memory is a formatted text string that is truthy whenever ANY
       // memories exist in the DB; memoryContext.hasMemory is only true when
       // relevant memories were actually retrieved and injected for this query.
+      console.log('[CACHE-DEBUG]', {
+        truth_type: phase4Metadata?.truth_type,
+        hasMemory: memoryContext?.hasMemory,
+        hasDocument: !!effectiveDocumentData,
+        hasVault: !!context?.vault,
+        isHighStakes: phase4Metadata?.high_stakes?.isHighStakes,
+        historyLength: conversationHistory?.length,
+        hasPersonalIntent: hasPersonalIntent,
+        isCacheEligible: (
+          phase4Metadata?.truth_type === 'PERMANENT' &&
+          !memoryContext?.hasMemory &&
+          !effectiveDocumentData &&
+          !context?.vault &&
+          !phase4Metadata?.high_stakes?.isHighStakes &&
+          (!conversationHistory || conversationHistory.length === 0) &&
+          !hasPersonalIntent
+        )
+      });
       const isCacheEligible = (
         phase4Metadata.truth_type === 'PERMANENT' &&
         !memoryContext.hasMemory &&           // no relevant memories injected
