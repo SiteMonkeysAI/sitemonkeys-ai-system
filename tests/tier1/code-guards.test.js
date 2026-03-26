@@ -5384,3 +5384,133 @@ describe('DOC. Document Source Classification — Escape Hatch Activation', () =
   });
 
 });
+
+// ---------------------------------------------------------------------------
+// OP-001 through OP-010: Output Precision — Engagement Bait + Preamble + Length
+// ---------------------------------------------------------------------------
+
+const ORCH_PATH_OP = join(REPO_ROOT, 'api', 'core', 'orchestrator.js');
+
+describe('OP. Output Precision — Engagement Bait Extension + Preamble + Length Guidance', () => {
+
+  const orchSrcOP = readRepoFile('api/core/orchestrator.js');
+
+  it('OP-001: Engagement bait removal no longer gated to greeting/simple_factual/simple_short only', () => {
+    // The old classification gate should not exist
+    assert.ok(
+      !orchSrcOP.includes(
+        "classification.classification === 'greeting' ||\n              classification.classification === 'simple_factual' ||\n              classification.classification === 'simple_short'"
+      ),
+      'OP-001 FAIL: Old classification gate still present — engagement bait removal must run for ALL query types'
+    );
+    // The patterns block must still exist (engagement bait patterns not removed)
+    assert.ok(
+      orchSrcOP.includes('engagementBaitPatterns'),
+      'OP-001 FAIL: engagementBaitPatterns must still be present in orchestrator.js'
+    );
+  });
+
+  it('OP-002: Engagement bait removal runs for medium_complexity (no classification gate)', () => {
+    // Confirm there is no if-guard restricting to simple types before engagementBaitPatterns
+    const baitIdx = orchSrcOP.indexOf('engagementBaitPatterns');
+    const beforeBait = orchSrcOP.substring(Math.max(0, baitIdx - 600), baitIdx);
+    assert.ok(
+      !beforeBait.includes("classification === 'medium_complexity'") ||
+      beforeBait.includes('preamblePatterns'),
+      'OP-002 FAIL: engagementBaitPatterns must not be restricted to exclude medium_complexity'
+    );
+  });
+
+  it('OP-003: Engagement bait removal runs for decision_making (no classification gate)', () => {
+    const baitIdx = orchSrcOP.indexOf('engagementBaitPatterns');
+    assert.ok(baitIdx !== -1, 'OP-003 FAIL: engagementBaitPatterns not found in orchestrator.js');
+    // Confirm the block is not wrapped in a greeting/simple check immediately before
+    const precedingChunk = orchSrcOP.substring(Math.max(0, baitIdx - 400), baitIdx);
+    assert.ok(
+      !precedingChunk.match(/if\s*\(\s*classification\.classification\s*===\s*'greeting'/),
+      'OP-003 FAIL: engagementBaitPatterns is still gated behind a greeting/simple check'
+    );
+  });
+
+  it('OP-004: Preamble pattern "great question" present in orchestrator.js', () => {
+    assert.ok(
+      orchSrcOP.includes('great question'),
+      'OP-004 FAIL: preamble pattern for "great question" must be present in orchestrator.js'
+    );
+    assert.ok(
+      orchSrcOP.includes('preamblePatterns'),
+      'OP-004 FAIL: preamblePatterns array must be defined in orchestrator.js'
+    );
+  });
+
+  it('OP-005: Preamble pattern "absolutely" present in orchestrator.js', () => {
+    assert.ok(
+      orchSrcOP.includes('absolutely'),
+      'OP-005 FAIL: preamble pattern for "absolutely" must be present in orchestrator.js'
+    );
+  });
+
+  it('OP-006: [ENGAGEMENT-BAIT] log line present when bait removed', () => {
+    assert.ok(
+      orchSrcOP.includes('[ENGAGEMENT-BAIT]'),
+      'OP-006 FAIL: [ENGAGEMENT-BAIT] log line must be present in orchestrator.js'
+    );
+    assert.ok(
+      orchSrcOP.includes('original_length=') && orchSrcOP.includes('cleaned_length='),
+      'OP-006 FAIL: [ENGAGEMENT-BAIT] log must include original_length and cleaned_length'
+    );
+  });
+
+  it('OP-007: System prompt contains length guidance for medium_complexity', () => {
+    assert.ok(
+      orchSrcOP.includes("queryClassification.classification === 'medium_complexity'"),
+      'OP-007 FAIL: #buildSystemPrompt must add length guidance for medium_complexity'
+    );
+    assert.ok(
+      orchSrcOP.includes('Aim for 2-4 paragraphs'),
+      'OP-007 FAIL: medium_complexity length guidance text must be present'
+    );
+  });
+
+  it('OP-008: System prompt contains length guidance for decision_making', () => {
+    assert.ok(
+      orchSrcOP.includes("queryClassification.classification === 'decision_making'"),
+      'OP-008 FAIL: #buildSystemPrompt must add length guidance for decision_making'
+    );
+    assert.ok(
+      orchSrcOP.includes('Focus on the decision'),
+      'OP-008 FAIL: decision_making length guidance text must be present'
+    );
+  });
+
+  it('OP-009: decision_making maxLength enforcement present in Phase 7.5', () => {
+    // Phase 7.5 must have a block handling decision_making and news_current_events maxLength
+    assert.ok(
+      orchSrcOP.includes("classification.classification === 'decision_making'") ||
+      orchSrcOP.includes("classification === 'decision_making'"),
+      'OP-009 FAIL: Phase 7.5 must reference decision_making classification for maxLength enforcement'
+    );
+    assert.ok(
+      orchSrcOP.includes("classification.classification === 'news_current_events'") ||
+      orchSrcOP.includes("classification === 'news_current_events'"),
+      'OP-009 FAIL: Phase 7.5 must reference news_current_events classification for maxLength enforcement'
+    );
+    // The enforcement block must include a reason string with _maxlength
+    assert.ok(
+      orchSrcOP.includes('_maxlength'),
+      'OP-009 FAIL: maxLength enforcement reason must use a _maxlength suffix in the reason string'
+    );
+  });
+
+  it('OP-010: Preamble patterns applied before trailing bait patterns', () => {
+    const preambleIdx = orchSrcOP.indexOf('preamblePatterns');
+    const baitIdx = orchSrcOP.indexOf('engagementBaitPatterns');
+    assert.ok(preambleIdx !== -1, 'OP-010 FAIL: preamblePatterns not found');
+    assert.ok(baitIdx !== -1, 'OP-010 FAIL: engagementBaitPatterns not found');
+    assert.ok(
+      preambleIdx < baitIdx,
+      'OP-010 FAIL: preamblePatterns must be defined and applied BEFORE engagementBaitPatterns'
+    );
+  });
+
+});
