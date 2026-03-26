@@ -5768,3 +5768,109 @@ describe('CA. Confidence Calibration — Fix Misleading Scores', () => {
   });
 
 });
+
+
+// ============================================================
+// MQ. Memory Quality — Block Storage of Empty Extraction Results
+// Verifies that extraction failure messages (e.g. "No essential facts")
+// are never written to persistent_memories.
+// ============================================================
+
+describe('MQ. Memory Quality — Block Storage of Empty Extraction Results', () => {
+
+  // MQ-001: "No essential facts" is blocked
+  it('MQ-001: Storage blocked when content matches "No essential facts"', async () => {
+    const { isEmptyExtractionResult } = await import('../../api/memory/empty-extraction-guard.js');
+    assert.strictEqual(
+      isEmptyExtractionResult('No essential facts to extract'),
+      true,
+      'MQ-001 FAIL: "No essential facts to extract" should be blocked as an empty extraction result'
+    );
+  });
+
+  // MQ-002: "No relevant facts" is blocked
+  it('MQ-002: Storage blocked when content matches "No relevant facts"', async () => {
+    const { isEmptyExtractionResult } = await import('../../api/memory/empty-extraction-guard.js');
+    assert.strictEqual(
+      isEmptyExtractionResult('No relevant facts to extract'),
+      true,
+      'MQ-002 FAIL: "No relevant facts to extract" should be blocked as an empty extraction result'
+    );
+  });
+
+  // MQ-003: "No extractable facts" is blocked
+  it('MQ-003: Storage blocked when content matches "No extractable facts"', async () => {
+    const { isEmptyExtractionResult } = await import('../../api/memory/empty-extraction-guard.js');
+    assert.strictEqual(
+      isEmptyExtractionResult('No extractable facts found'),
+      true,
+      'MQ-003 FAIL: "No extractable facts found" should be blocked as an empty extraction result'
+    );
+  });
+
+  // MQ-004: [MEMORY-QUALITY] log line is present in the implementation
+  it('MQ-004: [MEMORY-QUALITY] log line present when storage blocked', () => {
+    const src = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(src, 'MQ-004 FAIL: api/memory/intelligent-storage.js not found');
+    assert.ok(
+      src.includes('[MEMORY-QUALITY] Blocked empty extraction'),
+      'MQ-004 FAIL: [MEMORY-QUALITY] Blocked empty extraction log line missing from intelligent-storage.js'
+    );
+  });
+
+  // MQ-005: Real content is NOT blocked
+  it('MQ-005: Real content still stores correctly — not blocked', async () => {
+    const { isEmptyExtractionResult } = await import('../../api/memory/empty-extraction-guard.js');
+    assert.strictEqual(
+      isEmptyExtractionResult('Name: Alice (user, person)'),
+      false,
+      'MQ-005 FAIL: "Name: Alice (user, person)" must NOT be blocked — it is a real user fact'
+    );
+    assert.strictEqual(
+      isEmptyExtractionResult('Job: Senior Engineer at Acme Corp'),
+      false,
+      'MQ-005 FAIL: "Job: Senior Engineer at Acme Corp" must NOT be blocked — it is a real user fact'
+    );
+  });
+
+  // MQ-006: Return value is { stored: false, reason: 'empty_extraction' }
+  it('MQ-006: Return value is { stored: false, reason: "empty_extraction" } when blocked', () => {
+    const src = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(src, 'MQ-006 FAIL: api/memory/intelligent-storage.js not found');
+    assert.ok(
+      src.includes("stored: false") && src.includes("reason: 'empty_extraction'"),
+      'MQ-006 FAIL: storeCompressedMemory must return { stored: false, reason: \'empty_extraction\' } when empty extraction is detected'
+    );
+  });
+
+  // MQ-007: EMPTY_EXTRACTION_PATTERNS exported and covers all required patterns
+  it('MQ-007: EMPTY_EXTRACTION_PATTERNS covers all required patterns', async () => {
+    const { EMPTY_EXTRACTION_PATTERNS, isEmptyExtractionResult } = await import('../../api/memory/empty-extraction-guard.js');
+    assert.ok(Array.isArray(EMPTY_EXTRACTION_PATTERNS), 'MQ-007 FAIL: EMPTY_EXTRACTION_PATTERNS must be an exported array');
+
+    const required = [
+      'No essential facts to extract',
+      'No relevant facts to extract',
+      'No specific facts provided',
+      'No extractable facts found',
+      'No user facts',
+      'No facts to extract',
+      '(no facts to extract)',
+      '(no extractable facts)',
+      'No relevant user facts',
+      'No specific identifiers',
+      'No essential facts provided',
+      'No relevant facts extracted',
+      'No facts extracted',
+    ];
+
+    for (const phrase of required) {
+      assert.strictEqual(
+        isEmptyExtractionResult(phrase),
+        true,
+        `MQ-007 FAIL: "${phrase}" must be blocked by EMPTY_EXTRACTION_PATTERNS`
+      );
+    }
+  });
+
+});

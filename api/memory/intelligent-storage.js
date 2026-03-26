@@ -9,6 +9,8 @@ import { logMemoryOperation } from '../routes/debug.js';
 import { embedMemoryNonBlocking } from '../services/embedding-service.js';
 import { generateFactFingerprint, storeWithSupersession } from '../services/supersession.js';
 import { SemanticAnalyzer } from '../core/intelligence/semantic_analyzer.js';
+import { isEmptyExtractionResult } from './empty-extraction-guard.js';
+export { EMPTY_EXTRACTION_PATTERNS, isEmptyExtractionResult } from './empty-extraction-guard.js';
 
 // Initialize semantic analyzer for importance scoring
 const semanticAnalyzer = new SemanticAnalyzer();
@@ -2426,6 +2428,19 @@ Facts (preserve user terminology + add synonyms):`;
       }
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
         console.log('[SESSION-DIAG] Storing for userId:', userId);
+      }
+
+      // MEMORY-QUALITY GUARD: Block storage of extraction failure messages.
+      // These are NOT user facts — they are failed extraction results that previously
+      // consumed the entire 2,000-token memory budget, crowding out real memories.
+      // Must run BEFORE any database write.
+      if (isEmptyExtractionResult(facts)) {
+        console.log(
+          `[MEMORY-QUALITY] Blocked empty extraction — ` +
+          `not storing failure message as memory. ` +
+          `original_phrase: "${facts.substring(0, 50)}"`
+        );
+        return { stored: false, reason: 'empty_extraction' };
       }
 
       // GUARD: Refuse to store empty or meaningless content at database layer
