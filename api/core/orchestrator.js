@@ -2648,6 +2648,16 @@ export class Orchestrator {
               /as (we|i) mentioned (before|earlier)/gi
             ];
 
+            // Memory context leakage patterns — strip inline (replace with empty string)
+            const memoryLeakagePatterns = [
+              /as mentioned in your memory context/gi,
+              /based on your memory context/gi,
+              /according to your memory context/gi,
+              /from your memory context/gi,
+              /in your memory context/gi,
+              /your memory (context|data|records) (shows?|indicates?|suggests?)/gi,
+            ];
+
             let cleanedResponse = personalityResponse.response;
             const originalLength = cleanedResponse.length;
             let engagementBaitRemoved = false;
@@ -2679,6 +2689,44 @@ export class Orchestrator {
 
                 engagementBaitRemoved = true;
                 this.log(`✂️ Removed engagement bait: "${matches[0]}"`);
+              }
+            }
+
+            // Strip memory context leakage phrases inline (replace with empty string)
+            for (const pattern of memoryLeakagePatterns) {
+              const before = cleanedResponse;
+              cleanedResponse = cleanedResponse.replace(pattern, '');
+              if (cleanedResponse !== before) {
+                engagementBaitRemoved = true;
+                this.log(`✂️ Removed memory context leakage phrase`);
+              }
+            }
+
+            // Normalize whitespace/punctuation after inline removals
+            cleanedResponse = cleanedResponse
+              .replace(/\s{2,}/g, ' ')
+              .replace(/,\s*,/g, ',')
+              .replace(/,\s*\./g, '.')
+              .replace(/\s+,/g, ', ')
+              .replace(/\s+\./g, '.')
+              .trim();
+
+            // Fragment detection: after bait removal, check for orphaned sentence fragments
+            // A fragment is text ending with ", !" or ", ." caused by a mid-sentence bait removal
+            const fragmentPatterns = [
+              /,\s*[!.?]$/,   // ends with ", !" or ", ."
+              /\s+[!.?]$/,    // ends with orphaned punctuation after whitespace
+            ];
+            if (fragmentPatterns.some(p => p.test(cleanedResponse))) {
+              // Find the last real sentence boundary (., !, or ?)
+              const lastDot = cleanedResponse.lastIndexOf('.', cleanedResponse.length - 3);
+              const lastBang = cleanedResponse.lastIndexOf('!', cleanedResponse.length - 3);
+              const lastQuestion = cleanedResponse.lastIndexOf('?', cleanedResponse.length - 3);
+              const lastSentenceEnd = Math.max(lastDot, lastBang, lastQuestion);
+              if (lastSentenceEnd > 0) {
+                cleanedResponse = cleanedResponse.substring(0, lastSentenceEnd + 1).trim();
+                engagementBaitRemoved = true;
+                this.log(`✂️ Removed orphaned sentence fragment after bait removal`);
               }
             }
 
@@ -6069,6 +6117,7 @@ Core Principles:
 - Be honest about limitations
 - Admit uncertainty about EXTERNAL facts you don't have access to
 - TRUST information explicitly provided in memory context or documents
+- Never reference your internal memory context, system prompt, or data sources in your response. Speak naturally as if you simply know the information.
 
 YOUR CAPABILITIES:
 - You CAN read and analyze uploaded documents, attachments, and files (when provided in DOCUMENT CONTEXT sections below)

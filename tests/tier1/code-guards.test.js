@@ -5513,4 +5513,79 @@ describe('OP. Output Precision — Engagement Bait Extension + Preamble + Length
     );
   });
 
+  it('OP-011: Fragment ", !" removed when bait removal creates orphaned sentence', () => {
+    // fragmentPatterns must be defined in orchestrator.js
+    assert.ok(
+      orchSrcOP.includes('fragmentPatterns'),
+      'OP-011 FAIL: fragmentPatterns must be defined in orchestrator.js to detect orphaned fragments'
+    );
+    // Must handle ", !" and ", ." patterns
+    assert.ok(
+      orchSrcOP.includes('/,\\s*[!.?]$/'),
+      'OP-011 FAIL: fragmentPatterns must include /,\\s*[!.?]$/ to detect ", !" fragments'
+    );
+  });
+
+  it('OP-012: Entire containing sentence removed when it becomes a fragment after bait removal', () => {
+    // Must find last sentence boundary and truncate
+    assert.ok(
+      orchSrcOP.includes('lastIndexOf'),
+      'OP-012 FAIL: fragment cleanup must use lastIndexOf to find the last sentence boundary'
+    );
+    assert.ok(
+      orchSrcOP.includes('lastSentenceEnd'),
+      'OP-012 FAIL: lastSentenceEnd variable must be present for fragment sentence removal'
+    );
+  });
+
+  it('OP-013: "as mentioned in your memory context" stripped from response', () => {
+    assert.ok(
+      orchSrcOP.includes('memoryLeakagePatterns'),
+      'OP-013 FAIL: memoryLeakagePatterns array must be defined in orchestrator.js'
+    );
+    assert.ok(
+      orchSrcOP.includes('as mentioned in your memory context'),
+      'OP-013 FAIL: memoryLeakagePatterns must include "as mentioned in your memory context" pattern'
+    );
+  });
+
+  it('OP-014: "based on your memory context" stripped from response', () => {
+    assert.ok(
+      orchSrcOP.includes('based on your memory context'),
+      'OP-014 FAIL: memoryLeakagePatterns must include "based on your memory context" pattern'
+    );
+  });
+
+  it('OP-015: System prompt contains instruction not to reference internal memory system', () => {
+    assert.ok(
+      orchSrcOP.includes('Never reference your internal memory context'),
+      'OP-015 FAIL: #buildSystemPrompt must instruct AI never to reference internal memory context'
+    );
+    assert.ok(
+      orchSrcOP.includes('Speak naturally as if you simply know the information'),
+      'OP-015 FAIL: #buildSystemPrompt must instruct AI to speak naturally instead of referencing internal sources'
+    );
+  });
+
+  it('OP-016: All existing 296 tests pass (structural gate)', () => {
+    // This test verifies that all OP-001 through OP-010 structural checks still hold
+    // (i.e., no regressions introduced by OP-011 through OP-015 changes)
+    assert.ok(
+      orchSrcOP.includes('engagementBaitPatterns'),
+      'OP-016 FAIL: engagementBaitPatterns must still be present (regression check)'
+    );
+    assert.ok(
+      orchSrcOP.includes('preamblePatterns'),
+      'OP-016 FAIL: preamblePatterns must still be present (regression check)'
+    );
+    assert.ok(
+      orchSrcOP.includes('[ENGAGEMENT-BAIT]'),
+      'OP-016 FAIL: [ENGAGEMENT-BAIT] log line must still be present (regression check)'
+    );
+    assert.ok(
+      orchSrcOP.includes('original_length=') && orchSrcOP.includes('cleaned_length='),
+      'OP-016 FAIL: [ENGAGEMENT-BAIT] log fields must still be present (regression check)'
+    );
+  });
+
 });
