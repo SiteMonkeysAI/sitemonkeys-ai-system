@@ -2652,6 +2652,7 @@ export class Orchestrator {
             const memoryLeakagePatterns = [
               /as mentioned in your memory context/gi,
               /based on your memory context/gi,
+              /based on the memory context/gi,
               /according to your memory context/gi,
               /from your memory context/gi,
               /in your memory context/gi,
