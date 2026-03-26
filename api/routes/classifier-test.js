@@ -58,8 +58,12 @@ export async function handleClassifierTest(req, res) {
 
       actual_classification = classResult.classification;
       actual_truth_type = patternResult.type;
-      actual_lookup = (patternResult.type === 'VOLATILE' || patternResult.type === 'SEMI_STABLE') &&
-                     patternResult.skipExternalLookup !== true;
+      // Decision-making queries (and any classifier that explicitly sets externalLookupRequired: false)
+      // must not trigger lookup regardless of truth type.
+      actual_lookup = classResult.externalLookupRequired === false
+        ? false
+        : (patternResult.type === 'VOLATILE' || patternResult.type === 'SEMI_STABLE') &&
+          patternResult.skipExternalLookup !== true;
       confidence = typeof classResult.confidence === 'number' ? classResult.confidence : null;
 
     } catch (err) {

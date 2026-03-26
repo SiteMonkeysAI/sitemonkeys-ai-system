@@ -271,3 +271,107 @@ describe('CV-007: All required fields present in each validation set entry', () 
   });
 
 });
+
+// ---------------------------------------------------------------------------
+// CF-017 through CF-022: Policy/regulation SEMI_STABLE fix + decision_making lookup=false
+// ---------------------------------------------------------------------------
+
+const TRUTH_DETECTOR_PATH = join(REPO_ROOT, 'api', 'core', 'intelligence', 'truthTypeDetector.js');
+
+// Import detectByPattern directly to test actual runtime behavior, not a duplicate pattern copy
+const { detectByPattern } = await import(TRUTH_DETECTOR_PATH);
+
+describe('CF-017 through CF-022: Policy/regulation SEMI_STABLE + decision_making lookup=false', () => {
+
+  it('CF-017: POLICY_PATTERNS block present in truthTypeDetector.js', () => {
+    const src = readFile(TRUTH_DETECTOR_PATH);
+    assert.ok(src, 'truthTypeDetector.js could not be read');
+    assert.ok(
+      src.includes('POLICY_PATTERNS') && src.includes('policy_regulation_current'),
+      'truthTypeDetector.js must contain POLICY_PATTERNS block with policy_regulation_current label'
+    );
+  });
+
+  it('CF-017: "current interest rates" → SEMI_STABLE', () => {
+    const result = detectByPattern('current interest rates');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-018: "current travel restrictions" → SEMI_STABLE', () => {
+    const result = detectByPattern('current travel restrictions');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-019: "current OSHA requirements" → SEMI_STABLE', () => {
+    const result = detectByPattern('current OSHA requirements');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-019: "What are the current OSHA safety requirements?" → SEMI_STABLE', () => {
+    const result = detectByPattern('What are the current OSHA safety requirements?');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-020: "current tax rate for corporations" → SEMI_STABLE', () => {
+    const result = detectByPattern('current tax rate for corporations');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-021: "Is Netflix still offering a free trial" → SEMI_STABLE', () => {
+    const result = detectByPattern('Is Netflix still offering a free trial');
+    assert.strictEqual(result.type, 'SEMI_STABLE', `Expected SEMI_STABLE, got ${result.type}`);
+  });
+
+  it('CF-022: classifier-test.js uses classResult.externalLookupRequired for lookup computation', () => {
+    const src = readFile(ENDPOINT_PATH);
+    assert.ok(src, 'classifier-test.js could not be read');
+    assert.ok(
+      src.includes('classResult.externalLookupRequired === false'),
+      'classifier-test.js must check classResult.externalLookupRequired === false to suppress lookup for decision_making queries'
+    );
+  });
+
+  it('CF-022: decision_making pre-check in queryComplexityClassifier.js sets externalLookupRequired: false', () => {
+    const classifierPath = join(REPO_ROOT, 'api', 'core', 'intelligence', 'queryComplexityClassifier.js');
+    const src = readFile(classifierPath);
+    assert.ok(src, 'queryComplexityClassifier.js could not be read');
+    // Verify that in the DECISION_PATTERNS block, externalLookupRequired is explicitly false
+    assert.ok(
+      src.includes('DECISION_PATTERNS') && src.includes('externalLookupRequired: false'),
+      'queryComplexityClassifier.js DECISION_PATTERNS block must set externalLookupRequired: false'
+    );
+  });
+
+  it('CF-022: decision_making pre-check in queryComplexityClassifier.js sets shouldTriggerLookup: false', () => {
+    const classifierPath = join(REPO_ROOT, 'api', 'core', 'intelligence', 'queryComplexityClassifier.js');
+    const src = readFile(classifierPath);
+    assert.ok(src, 'queryComplexityClassifier.js could not be read');
+    assert.ok(
+      src.includes('shouldTriggerLookup: false'),
+      'queryComplexityClassifier.js DECISION_PATTERNS block must set shouldTriggerLookup: false'
+    );
+  });
+
+  it('CF-023: LEADERSHIP_PATTERNS early return is still present and unchanged', () => {
+    const src = readFile(TRUTH_DETECTOR_PATH);
+    assert.ok(src, 'truthTypeDetector.js could not be read');
+    assert.ok(
+      src.includes('LEADERSHIP_PATTERNS') && src.includes('leadership_current_holder'),
+      'truthTypeDetector.js must still contain LEADERSHIP_PATTERNS block with leadership_current_holder label'
+    );
+  });
+
+  it('CF-023: POLICY_PATTERNS early return runs after LEADERSHIP check (code order)', () => {
+    const src = readFile(TRUTH_DETECTOR_PATH);
+    assert.ok(src, 'truthTypeDetector.js could not be read');
+    const leadershipIdx = src.indexOf('LEADERSHIP_PATTERNS');
+    const policyIdx     = src.indexOf('POLICY_PATTERNS');
+    assert.ok(leadershipIdx !== -1, 'LEADERSHIP_PATTERNS must be present');
+    assert.ok(policyIdx !== -1, 'POLICY_PATTERNS must be present');
+    assert.ok(
+      leadershipIdx < policyIdx,
+      'LEADERSHIP_PATTERNS must appear before POLICY_PATTERNS in the source file'
+    );
+  });
+
+});
