@@ -65,6 +65,10 @@ export async function createCostLogTable(pool) {
 export async function ensureCostLogTable(pool) {
   try {
     await createCostLogTable(pool);
+    await pool.query(`
+      ALTER TABLE query_cost_log
+      ADD COLUMN IF NOT EXISTS max_memory_score DECIMAL(5,3) DEFAULT NULL
+    `);
     console.log('[COST-LOG] query_cost_log table and indexes ready');
   } catch (err) {
     console.error('[COST-LOG] Failed to create query_cost_log table:', err.message);
