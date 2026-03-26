@@ -285,4 +285,78 @@ describe('RC. Response Cache — ttlCacheManager', () => {
     );
   });
 
+  // Shared helper: mirrors the memoriesBlockCache logic from orchestrator
+  const CACHE_MEMORY_THRESHOLD = 0.75;
+  function computeMemoriesBlockCache({ hasMemory, memory_count, highest_similarity_score }) {
+    return (
+      hasMemory &&
+      memory_count > 0 &&
+      (highest_similarity_score ?? 1.0) >= CACHE_MEMORY_THRESHOLD
+    );
+  }
+
+  // RC-015 ----------------------------------------------------------------
+  it('RC-015: Cache eligible when memories present but highest score < 0.75', () => {
+    // Memories are present but score is below the 0.75 cache threshold
+    const memoriesBlockCache = computeMemoriesBlockCache({
+      hasMemory: true,
+      memory_count: 4,
+      highest_similarity_score: 0.62, // below 0.75
+    });
+
+    assert.strictEqual(memoriesBlockCache, false, 'Memories below 0.75 should NOT block cache');
+  });
+
+  // RC-016 ----------------------------------------------------------------
+  it('RC-016: Cache blocked when memories present with score >= 0.75', () => {
+    // Memories are present with a score at or above the 0.75 cache threshold
+    const memoriesBlockCache = computeMemoriesBlockCache({
+      hasMemory: true,
+      memory_count: 2,
+      highest_similarity_score: 0.82, // at or above 0.75
+    });
+
+    assert.strictEqual(memoriesBlockCache, true, 'Memories at or above 0.75 SHOULD block cache');
+  });
+
+  // RC-017 ----------------------------------------------------------------
+  it('RC-017: [CACHE-ELIGIBLE] log line present with all required fields in orchestrator source', () => {
+    const src = readFile(ORCHESTRATOR_PATH);
+    assert.ok(src, 'orchestrator.js must exist');
+    assert.ok(
+      src.includes('[CACHE-ELIGIBLE]'),
+      'RC-017 FAIL: Missing [CACHE-ELIGIBLE] log line in orchestrator.js'
+    );
+    assert.ok(
+      src.includes('hasMemory='),
+      'RC-017 FAIL: [CACHE-ELIGIBLE] log must include hasMemory= field'
+    );
+    assert.ok(
+      src.includes('highestScore='),
+      'RC-017 FAIL: [CACHE-ELIGIBLE] log must include highestScore= field'
+    );
+    assert.ok(
+      src.includes('memoriesBlockCache='),
+      'RC-017 FAIL: [CACHE-ELIGIBLE] log must include memoriesBlockCache= field'
+    );
+    assert.ok(
+      src.includes('eligible='),
+      'RC-017 FAIL: [CACHE-ELIGIBLE] log must include eligible= field'
+    );
+  });
+
+  // RC-018 ----------------------------------------------------------------
+  it('RC-018: highest_similarity_score present on #retrieveMemoryContext return object', () => {
+    const src = readFile(ORCHESTRATOR_PATH);
+    assert.ok(src, 'orchestrator.js must exist');
+    assert.ok(
+      src.includes('highest_similarity_score:'),
+      'RC-018 FAIL: highest_similarity_score must be returned from #retrieveMemoryContext'
+    );
+    assert.ok(
+      src.includes('memory_count:'),
+      'RC-018 FAIL: memory_count must be returned from #retrieveMemoryContext'
+    );
+  });
+
 });
