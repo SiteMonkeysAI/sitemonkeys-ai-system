@@ -2034,10 +2034,16 @@ export class Orchestrator {
       context.earlyClassification = earlyClassification;
 
       // RESPONSE CACHE — check before expensive AI generation
-      // Only cache PERMANENT queries with no user-specific context
+      // Only cache PERMANENT queries with no user-specific context.
+      // Use memoryContext.hasMemory (not context.memory) so that users who have
+      // stored memories but asked a purely factual query — where no relevant
+      // memories were retrieved — can still benefit from the cache.
+      // context.memory is a formatted text string that is truthy whenever ANY
+      // memories exist in the DB; memoryContext.hasMemory is only true when
+      // relevant memories were actually retrieved and injected for this query.
       const isCacheEligible = (
         phase4Metadata.truth_type === 'PERMANENT' &&
-        !context.memory &&                    // no user memories
+        !memoryContext.hasMemory &&           // no relevant memories injected
         !effectiveDocumentData &&             // no document loaded
         !context.vault &&                     // no vault
         !phase4Metadata.high_stakes?.isHighStakes && // not high stakes
@@ -2058,20 +2064,23 @@ export class Orchestrator {
             ...cachedResponse,
             cache_hit: true,
             cached_at: new Date().toISOString(),
-            token_usage: {
-              prompt_tokens: 0,
-              completion_tokens: 0,
-              total_tokens: 0,
-              cost_usd: 0,
-              cost_display: '$0.0000'
-            },
-            cost: {
-              inputTokens: 0,
-              outputTokens: 0,
-              totalTokens: 0,
-              inputCost: 0,
-              outputCost: 0,
-              totalCost: 0
+            metadata: {
+              ...(cachedResponse.metadata || {}),
+              token_usage: {
+                prompt_tokens: 0,
+                completion_tokens: 0,
+                total_tokens: 0,
+                cost_usd: 0,
+                cost_display: '$0.0000'
+              },
+              cost: {
+                inputTokens: 0,
+                outputTokens: 0,
+                totalTokens: 0,
+                inputCost: 0,
+                outputCost: 0,
+                totalCost: 0
+              }
             }
           };
         }
