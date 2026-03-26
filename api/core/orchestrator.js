@@ -2650,12 +2650,12 @@ export class Orchestrator {
 
             // Memory context leakage patterns — strip inline (replace with empty string)
             const memoryLeakagePatterns = [
-              /,?\s*as mentioned in your memory context[,.]?\s*/gi,
-              /,?\s*based on your memory context[,.]?\s*/gi,
-              /,?\s*according to your memory context[,.]?\s*/gi,
-              /,?\s*from your memory context[,.]?\s*/gi,
-              /,?\s*in your memory context[,.]?\s*/gi,
-              /,?\s*your memory (context|data|records) (shows?|indicates?|suggests?)[,.]?\s*/gi,
+              /as mentioned in your memory context/gi,
+              /based on your memory context/gi,
+              /according to your memory context/gi,
+              /from your memory context/gi,
+              /in your memory context/gi,
+              /your memory (context|data|records) (shows?|indicates?|suggests?)/gi,
             ];
 
             let cleanedResponse = personalityResponse.response;
@@ -2701,6 +2701,15 @@ export class Orchestrator {
                 this.log(`✂️ Removed memory context leakage phrase`);
               }
             }
+
+            // Normalize whitespace/punctuation after inline removals
+            cleanedResponse = cleanedResponse
+              .replace(/\s{2,}/g, ' ')
+              .replace(/,\s*,/g, ',')
+              .replace(/,\s*\./g, '.')
+              .replace(/\s+,/g, ', ')
+              .replace(/\s+\./g, '.')
+              .trim();
 
             // Fragment detection: after bait removal, check for orphaned sentence fragments
             // A fragment is text ending with ", !" or ", ." caused by a mid-sentence bait removal
