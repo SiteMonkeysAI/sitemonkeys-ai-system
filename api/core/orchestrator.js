@@ -54,6 +54,7 @@ import { enforceResponseContract } from "../core/intelligence/responseContractGa
 import { enforceReasoningEscalation } from "./intelligence/reasoningEscalationEnforcer.js";
 import { applyPrincipleBasedReasoning } from "./intelligence/principleBasedReasoning.js";
 import { classifyQueryComplexity } from "./intelligence/queryComplexityClassifier.js";
+import { getCachedResponse, setCachedResponse } from "../core/intelligence/ttlCacheManager.js";
 import {
   getDefaultAdapter,
   getBestAdapterForCapabilities,
@@ -2031,6 +2032,51 @@ export class Orchestrator {
       // STEP 7: Route to appropriate AI
       // Add earlyClassification to context for system prompt (Issue #444 fix)
       context.earlyClassification = earlyClassification;
+
+      // RESPONSE CACHE — check before expensive AI generation
+      // Only cache PERMANENT queries with no user-specific context
+      const isCacheEligible = (
+        phase4Metadata.truth_type === 'PERMANENT' &&
+        !context.memory &&                    // no user memories
+        !effectiveDocumentData &&             // no document loaded
+        !context.vault &&                     // no vault
+        !phase4Metadata.high_stakes?.isHighStakes && // not high stakes
+        (!conversationHistory || conversationHistory.length === 0) && // no prior context
+        !hasPersonalIntent                    // no personal query signals
+      );
+
+      if (isCacheEligible) {
+        const cachedResponse = getCachedResponse(message, mode);
+        if (cachedResponse) {
+          console.log(
+            `[RESPONSE-CACHE] Cache hit — ` +
+            `truth_type=PERMANENT ` +
+            `mode=${mode} ` +
+            `savings=~$0.04`
+          );
+          return {
+            ...cachedResponse,
+            cache_hit: true,
+            cached_at: new Date().toISOString(),
+            token_usage: {
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: 0,
+              cost_usd: 0,
+              cost_display: '$0.0000'
+            },
+            cost: {
+              inputTokens: 0,
+              outputTokens: 0,
+              totalTokens: 0,
+              inputCost: 0,
+              outputCost: 0,
+              totalCost: 0
+            }
+          };
+        }
+      }
+
       performanceMarkers.aiCallStart = Date.now(); // BIBLE FIX: Track AI call duration
       const aiResponse = await this.#routeToAI(
         message,
@@ -2690,6 +2736,38 @@ export class Orchestrator {
           console.error('[COST-LOG] Failed to write query cost log:', err.message);
         }
       });
+
+      // Store in response cache if eligible
+      // Cache POST-enforcement response — fully processed through all phases
+      if (isCacheEligible && personalityResponse?.response) {
+        setCachedResponse(message, mode, {
+          success: true,
+          response: personalityResponse.response,
+          model: aiResponse.model,
+          confidence: confidence,
+          personalityApplied: personalityResponse.personality,
+          phase4_metadata: {
+            truth_type: phase4Metadata.truth_type,
+            source_class: phase4Metadata.source_class,
+            confidence: phase4Metadata.confidence,
+            external_lookup: false,
+            lookup_attempted: false
+          },
+          phase5_enforcement: {
+            enforcement_passed: true
+          },
+          phase6_bounded_reasoning: {
+            required: false,
+            disclosure_added: false
+          }
+        });
+        console.log(
+          `[RESPONSE-CACHE] Stored — ` +
+          `truth_type=PERMANENT ` +
+          `mode=${mode} ` +
+          `ttl=30days`
+        );
+      }
 
       // STEP 11: Return complete response
       return {
