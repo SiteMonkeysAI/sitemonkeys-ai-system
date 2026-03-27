@@ -195,6 +195,7 @@ export class RoxyFramework {
         enhancedResponse = this.#enhanceWithEmotionalSupport(
           enhancedResponse,
           emotional,
+          context,
         );
         modificationsCount++;
         this.logger.log("Added emotional support");
@@ -568,12 +569,15 @@ export class RoxyFramework {
 
   // ==================== ENHANCEMENT METHODS ====================
 
-  #enhanceWithEmotionalSupport(response, emotional) {
+  #enhanceWithEmotionalSupport(response, emotional, context) {
     if (!emotional.needsSupport) return response;
 
     let support = "\n\n";
 
-    if (emotional.needsReassurance) {
+    // DOCTRINE: Never add emotional comfort closing to life-safety emergencies
+    // When someone describes stroke, cardiac, or other life-threatening symptoms
+    // urgency is the correct response — not reassurance that their uncertainty makes sense
+    if (emotional.needsReassurance && !context?.phase4Metadata?.high_stakes?.isHighStakes) {
       support +=
         "**I want you to know:** This situation feels complex because it genuinely is complex. Your uncertainty makes sense - it means you're thinking carefully about something that matters.\n\n";
     }
