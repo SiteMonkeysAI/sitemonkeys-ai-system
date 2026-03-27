@@ -1620,6 +1620,55 @@ Facts (preserve user terminology + add synonyms):`;
       // Strategy: Match sequences where each word starts with capital OR is a number
       const brandNamePattern = /\b(?:[A-Z][a-zA-Z]*|[a-z]*[A-Z][a-zA-Z]*)(?:\s+(?:[A-Z][a-zA-Z]*|\d+))+\b/g;
 
+      // FIX #566-STR1 FALSE-POSITIVE: Common English phrases that are NOT brand names.
+      // These start with a capital letter (e.g. at sentence start) but are not proper nouns.
+      const BRAND_NAME_EXCLUSIONS = [
+        /^if i$/i,
+        /^if the$/i,
+        /^if you$/i,
+        /^if we$/i,
+        /^the /i,
+        /^a /i,
+        /^an /i,
+        /^and /i,
+        /^or /i,
+        /^but /i,
+        /^so /i,
+        /^as /i,
+        /^at /i,
+        /^in /i,
+        /^on /i,
+        /^to /i,
+        /^for /i,
+        /^of /i,
+        /^with /i,
+        /^from /i,
+        /^by /i,
+        /^it /i,
+        /^is /i,
+        /^are /i,
+        /^was /i,
+        /^were /i,
+        /^be /i,
+        /^been /i,
+        /^have /i,
+        /^has /i,
+        /^had /i,
+        /^do /i,
+        /^does /i,
+        /^did /i,
+        /^will /i,
+        /^would /i,
+        /^could /i,
+        /^should /i,
+        /^may /i,
+        /^might /i,
+        /^shall /i,
+        /^can /i,
+        /^ai$/i,
+        /^a i$/i,
+      ];
+
       const inputAmounts = userMsg.match(amountPattern) || [];
       const factsAmounts = facts.match(amountPattern) || [];
 
@@ -1629,7 +1678,10 @@ Facts (preserve user terminology + add synonyms):`;
       const inputDurations = userMsg.match(durationPattern) || [];
       const factsDurations = facts.match(durationPattern) || [];
       
-      const inputBrandNames = userMsg.match(brandNamePattern) || [];
+      const rawInputBrandNames = userMsg.match(brandNamePattern) || [];
+      const inputBrandNames = rawInputBrandNames.filter(
+        brand => !BRAND_NAME_EXCLUSIONS.some(pattern => pattern.test(brand.trim()))
+      );
       const factsBrandNames = facts.match(brandNamePattern) || [];
 
       let missingNumbers = [];

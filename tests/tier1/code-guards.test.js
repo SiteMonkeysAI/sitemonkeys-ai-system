@@ -5874,3 +5874,101 @@ describe('MQ. Memory Quality — Block Storage of Empty Extraction Results', () 
   });
 
 });
+
+// ============================================================
+// BX. Brand Extractor False Positive Guard
+// Ensures common English phrases are not flagged as brand names,
+// while real brand names (Tesla, Apple, Google) are still detected.
+// ============================================================
+
+describe('BX. Brand Extractor — False Positive Guard', () => {
+
+  it('BX-001: "If I" is NOT detected as a brand name', () => {
+    const src = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(src, 'BX-001 FAIL: api/memory/intelligent-storage.js not found');
+    assert.ok(
+      src.includes('BRAND_NAME_EXCLUSIONS'),
+      'BX-001 FAIL: BRAND_NAME_EXCLUSIONS array must exist in intelligent-storage.js to filter common English phrases'
+    );
+    assert.ok(
+      src.includes('/^if i$/i'),
+      'BX-001 FAIL: BRAND_NAME_EXCLUSIONS must include /^if i$/i to prevent "If I" from being treated as a brand'
+    );
+  });
+
+  it('BX-002: "A I" / standalone "AI" is NOT detected as a brand name', () => {
+    const src = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(src, 'BX-002 FAIL: api/memory/intelligent-storage.js not found');
+    assert.ok(
+      src.includes('/^ai$/i') || src.includes('/^a i$/i'),
+      'BX-002 FAIL: BRAND_NAME_EXCLUSIONS must include /^ai$/i or /^a i$/i to prevent standalone "AI" / "A I" from being treated as a brand'
+    );
+  });
+
+  it('BX-003: Real brand names (Tesla, Apple, Google) are still detected', () => {
+    const src = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(src, 'BX-003 FAIL: api/memory/intelligent-storage.js not found');
+    // The brandNamePattern regex must still exist for real brand detection
+    assert.ok(
+      src.includes('brandNamePattern'),
+      'BX-003 FAIL: brandNamePattern must still be defined in intelligent-storage.js for real brand detection'
+    );
+    // The exclusion filter must only apply to the detected list, not remove the pattern itself
+    assert.ok(
+      src.includes('BRAND_NAME_EXCLUSIONS.some(pattern => pattern.test(brand.trim()))'),
+      'BX-003 FAIL: Filter must use BRAND_NAME_EXCLUSIONS to exclude only matched phrases, keeping real brand names intact'
+    );
+  });
+
+});
+
+// ============================================================
+// ML. Memory Reference Leakage — Extended Patterns
+// Ensures new memory-reference phrases are stripped from
+// AI responses (ML-005, ML-006) and existing tests still pass
+// (ML-007 structural gate).
+// ============================================================
+
+describe('ML. Memory Reference Leakage — Extended Patterns', () => {
+
+  it('ML-005: "as noted in our previous discussions" stripped from response', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'ML-005 FAIL: api/core/orchestrator.js not found');
+    assert.ok(
+      src.includes('as noted in our previous discussion'),
+      'ML-005 FAIL: memoryLeakagePatterns must include a pattern matching "as noted in our previous discussions"'
+    );
+  });
+
+  it('ML-006: "as we discussed" stripped from response', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'ML-006 FAIL: api/core/orchestrator.js not found');
+    assert.ok(
+      src.includes('as we (discussed|talked about|mentioned)') ||
+      src.includes('as we discussed'),
+      'ML-006 FAIL: memoryLeakagePatterns must include a pattern matching "as we discussed"'
+    );
+  });
+
+  it('ML-007: All existing memory leakage patterns still present (regression gate)', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'ML-007 FAIL: api/core/orchestrator.js not found');
+    assert.ok(
+      src.includes('memoryLeakagePatterns'),
+      'ML-007 FAIL: memoryLeakagePatterns array must still be defined in orchestrator.js'
+    );
+    assert.ok(
+      src.includes('as mentioned in your memory context'),
+      'ML-007 FAIL: existing pattern "as mentioned in your memory context" must still be present'
+    );
+    assert.ok(
+      src.includes('based on your memory context'),
+      'ML-007 FAIL: existing pattern "based on your memory context" must still be present'
+    );
+    assert.ok(
+      src.includes('according to your memory context'),
+      'ML-007 FAIL: existing pattern "according to your memory context" must still be present'
+    );
+  });
+
+});
