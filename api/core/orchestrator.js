@@ -1693,6 +1693,7 @@ export class Orchestrator {
           const lookupResult = await lookup(lookupQuery, {
             internalConfidence: phase4Metadata.confidence,
             truthType: truthTypeResult.type,
+            isCommodityQuantityQuery: isCommodityQuantityQuery,
           });
 
           // Add enrichment info to metadata
