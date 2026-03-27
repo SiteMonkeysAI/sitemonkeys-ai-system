@@ -1,12 +1,14 @@
 /**
  * External Lookup Engine — URL builder and threshold guards
- * 
+ *
  * EL-001 through EL-006: Wikipedia political-leader URL builder
  * and Yahoo Finance content-threshold behaviour.
- * 
+ * EL-007 through EL-012: metals.live platinum/palladium support and
+ * GoldAPI extract weight-calculation coverage.
+ *
  * Uses code-scanning only (readFileSync) so no transitive network
  * dependencies are triggered during the test run.
- * 
+ *
  * Run with: node --test tests/unit/externalLookup.test.js
  */
 
@@ -173,6 +175,123 @@ describe('External Lookup Engine — source file contains required patterns', ()
     assert.ok(
       src.includes("includes('yahoo finance')") || src.includes('includes("yahoo finance")'),
       'Expected yahoo finance check in isFinancialAPI detection'
+    );
+  });
+
+});
+
+// ---------------------------------------------------------------------------
+// Helpers for metals.live and GoldAPI weight-calc inline logic tests
+// ---------------------------------------------------------------------------
+
+// Mirror the metals.live metalType detection logic from externalLookupEngine.js
+function detectMetalType(query) {
+  const lowerQuery = query.toLowerCase();
+  if (/\bgold\b/.test(lowerQuery)) return 'gold';
+  if (/\bsilver\b/.test(lowerQuery)) return 'silver';
+  if (/\bplatinum\b/.test(lowerQuery)) return 'platinum';
+  if (/\bpalladium\b/.test(lowerQuery)) return 'palladium';
+  return null;
+}
+
+// Mirror the weight detection logic shared by both sources
+const TROY_OZ_CONVERSIONS = {
+  'lb': 14.5833, 'lbs': 14.5833, 'pound': 14.5833, 'pounds': 14.5833,
+  'kg': 32.1507,
+  'gram': 0.0321507, 'grams': 0.0321507,
+  'oz': 0.911458, 'ounce': 0.911458, 'ounces': 0.911458,
+  'troy oz': 1, 'troy ounce': 1, 'troy ounces': 1,
+};
+
+function detectWeightQuery(query) {
+  const lowerQ = query.toLowerCase();
+  const hasValueIntent = /\b(worth|value|cost|price|total|how much)\b/i.test(lowerQ);
+  if (!hasValueIntent) return null;
+  const weightPattern = /(\d+(?:\.\d+)?)\s*(pound|lb|lbs|kilogram|kilo|kg|gram|grams|troy\s+oz(?:ces?)?|troy\s+ounce|ounce|oz)/i;
+  const wMatch = lowerQ.match(weightPattern);
+  if (!wMatch) return null;
+  const qty = parseFloat(wMatch[1]);
+  const unitRaw = wMatch[2].replace(/\s+/g, ' ').toLowerCase().trim();
+  const convFactor = TROY_OZ_CONVERSIONS[unitRaw] || TROY_OZ_CONVERSIONS[unitRaw.replace(/s$/, '')];
+  if (!convFactor || qty <= 0) return null;
+  return { qty, unitRaw, troyOz: qty * convFactor };
+}
+
+describe('External Lookup Engine — metals.live platinum/palladium support', () => {
+
+  it('EL-007: metals.live metalType detection returns "platinum" for platinum queries', () => {
+    assert.strictEqual(detectMetalType('What is the price of platinum today?'), 'platinum');
+    assert.strictEqual(detectMetalType('platinum spot price'), 'platinum');
+    assert.strictEqual(detectMetalType('If I have 227 pounds of platinum at today\'s price what\'s it worth'), 'platinum');
+  });
+
+  it('EL-008: metals.live metalType detection returns "palladium" for palladium queries', () => {
+    assert.strictEqual(detectMetalType('palladium price today'), 'palladium');
+    assert.strictEqual(detectMetalType('What is palladium worth per ounce?'), 'palladium');
+  });
+
+  it('EL-009: metals.live metalType detection still works correctly for gold and silver', () => {
+    assert.strictEqual(detectMetalType('gold price today'), 'gold');
+    assert.strictEqual(detectMetalType('silver spot price'), 'silver');
+  });
+
+  it('EL-010: metals.live metalType detection returns null for unsupported metals', () => {
+    assert.strictEqual(detectMetalType('copper price today'), null);
+    assert.strictEqual(detectMetalType('what is oil worth'), null);
+    assert.strictEqual(detectMetalType('natural gas price'), null);
+  });
+
+  it('EL-011: metals.live source code includes platinum and palladium detection branches', () => {
+    const src = readFileSync(ENGINE_PATH, 'utf8');
+    assert.ok(
+      src.includes("'platinum'") || src.includes('"platinum"'),
+      'Expected platinum string in engine source'
+    );
+    assert.ok(
+      src.includes("'palladium'") || src.includes('"palladium"'),
+      'Expected palladium string in engine source'
+    );
+    // Verify the metals.live fetchData includes both branches
+    assert.ok(
+      src.includes("metalType = 'platinum'"),
+      'Expected metals.live metalType = \'platinum\' assignment in engine source'
+    );
+    assert.ok(
+      src.includes("metalType = 'palladium'"),
+      'Expected metals.live metalType = \'palladium\' assignment in engine source'
+    );
+  });
+
+});
+
+describe('External Lookup Engine — GoldAPI weight-calculation in extract', () => {
+
+  it('EL-012: Weight detection fires for "227 pounds of platinum" with value intent', () => {
+    const result = detectWeightQuery('If I have 227 pounds of platinum at today\'s price what\'s it worth');
+    assert.ok(result !== null, 'Expected weight info to be detected');
+    assert.strictEqual(result.qty, 227);
+    assert.ok(result.unitRaw === 'pounds' || result.unitRaw === 'pound', `Expected "pounds" unit, got "${result.unitRaw}"`);
+    // 227 lbs × 14.5833 troy oz/lb ≈ 3310.41 troy oz
+    assert.ok(Math.abs(result.troyOz - 3310.41) < 0.1, `Expected ~3310.41 troy oz, got ${result.troyOz.toFixed(2)}`);
+  });
+
+  it('EL-013: Weight detection does NOT fire when there is no value intent', () => {
+    // "I have 10 pounds of platinum" has no "worth/price/cost/value" — pure quantity, not a price query
+    const result = detectWeightQuery('I have 10 pounds of platinum');
+    assert.strictEqual(result, null, 'Expected null — no value intent in query');
+  });
+
+  it('EL-014: GoldAPI extract source includes query parameter and weight-calculation branch', () => {
+    const src = readFileSync(ENGINE_PATH, 'utf8');
+    // The extract function must accept a second `query` argument
+    assert.ok(
+      src.includes('extract: (json, query) =>'),
+      'Expected GoldAPI extract to accept (json, query) parameters'
+    );
+    // The weight-calculation log line must be present
+    assert.ok(
+      src.includes('GoldAPI weight calc:'),
+      'Expected [externalLookupEngine] GoldAPI weight calc: log in engine source'
     );
   });
 
