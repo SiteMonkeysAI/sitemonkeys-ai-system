@@ -62,6 +62,7 @@ import { handleCleanupRequest } from "./api/admin/cleanup.js";
 import { handleZombieCleanupRequest } from "./api/admin/cleanup-zombies.js";
 import { handleCostSummary, ensureCostLogTable } from "./api/admin/cost-observability.js";
 import { handleClassifierTest } from "./api/routes/classifier-test.js";
+import { handleDeleteMemories } from "./api/admin/delete-memories.js";
 import rateLimit from "express-rate-limit";
 // ========== SEMANTIC INTEGRATION ==========
 import { storeWithSupersession, generateFactFingerprint } from "./api/services/supersession.js";
@@ -1292,6 +1293,9 @@ app.get('/api/admin/cost-summary', handleCostSummary);
 
 // Classifier validation test endpoint — lightweight, no AI generation
 app.post('/api/admin/classifier-test', handleClassifierTest);
+
+// Admin endpoint to delete specific memories by ID (requires user_id + memory_ids)
+app.delete('/api/admin/memories', handleDeleteMemories);
 
 console.log("[SERVER] ✅ Routes configured");
 
