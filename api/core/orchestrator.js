@@ -2748,6 +2748,31 @@ export class Orchestrator {
               }
             }
 
+            // Orphaned beginning detection: after bait removal, check for sentence beginnings
+            // that have had their completion removed (e.g. "If you have ." left behind)
+            const ORPHANED_BEGINNING_PATTERNS = [
+              /\bif you have\s*[.,]?\s*$/i,
+              /\bif you (need|want|would like|have any)\s*[.,]?\s*$/i,
+              /\bplease (feel free|don't hesitate)\s*[.,]?\s*$/i,
+              /\bfeel free\s*[.,]?\s*$/i,
+              /\bdon't hesitate\s*[.,]?\s*$/i,
+              /\bi('?m| am) here\s*[.,]?\s*$/i,
+              /\bif (there'?s|there is) anything\s*[.,]?\s*$/i,
+            ];
+            if (ORPHANED_BEGINNING_PATTERNS.some(p => p.test(cleanedResponse))) {
+              // Remove the last sentence entirely
+              const lastSentenceEnd = Math.max(
+                cleanedResponse.lastIndexOf('.', cleanedResponse.length - 3),
+                cleanedResponse.lastIndexOf('!', cleanedResponse.length - 3),
+                cleanedResponse.lastIndexOf('?', cleanedResponse.length - 3)
+              );
+              if (lastSentenceEnd > 0) {
+                cleanedResponse = cleanedResponse.substring(0, lastSentenceEnd + 1).trim();
+                engagementBaitRemoved = true;
+                this.log(`✂️ Removed orphaned sentence beginning after bait removal`);
+              }
+            }
+
             if (engagementBaitRemoved && cleanedResponse.length > 0) {
               personalityResponse.response = cleanedResponse;
               responseIntelligence.applied = true;

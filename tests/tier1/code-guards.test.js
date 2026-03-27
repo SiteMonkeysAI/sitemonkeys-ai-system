@@ -5972,3 +5972,99 @@ describe('ML. Memory Reference Leakage — Extended Patterns', () => {
   });
 
 });
+
+// ============================================================
+// DR. Doctrine Regression — Emergency Emotional Closing,
+//     Fragment Detection, Medical Emergency Routing
+// ============================================================
+
+describe('DR. Doctrine Regression — Emergency Emotional/Fragment/Medical Routing', () => {
+
+  it('DR-001: high_stakes:MEDICAL query does NOT get emotional reassurance closing', () => {
+    const src = readRepoFile('api/core/personalities/roxy_framework.js');
+    assert.ok(src, 'DR-001 FAIL: api/core/personalities/roxy_framework.js not found');
+    // The guard must check for high_stakes before adding reassurance
+    assert.ok(
+      src.includes('context?.phase4Metadata?.high_stakes?.isHighStakes'),
+      'DR-001 FAIL: #enhanceWithEmotionalSupport must check context?.phase4Metadata?.high_stakes?.isHighStakes before adding reassurance closing'
+    );
+    // The reassurance block must be wrapped in the high-stakes guard
+    assert.ok(
+      src.includes('!context?.phase4Metadata?.high_stakes?.isHighStakes'),
+      'DR-001 FAIL: Reassurance closing must be suppressed when high_stakes.isHighStakes is true'
+    );
+  });
+
+  it('DR-002: Non-high-stakes anxious query DOES get emotional reassurance closing from Roxy', () => {
+    const src = readRepoFile('api/core/personalities/roxy_framework.js');
+    assert.ok(src, 'DR-002 FAIL: api/core/personalities/roxy_framework.js not found');
+    // The reassurance text must still exist in the file (for non-high-stakes queries)
+    assert.ok(
+      src.includes('Your uncertainty makes sense'),
+      'DR-002 FAIL: Reassurance text "Your uncertainty makes sense" must still exist for non-high-stakes queries'
+    );
+    // needsReassurance condition must still be present
+    assert.ok(
+      src.includes('needsReassurance'),
+      'DR-002 FAIL: needsReassurance flag must still be evaluated in #enhanceWithEmotionalSupport'
+    );
+  });
+
+  it('DR-003: "If you have ." fragment detected and removed by ORPHANED_BEGINNING_PATTERNS', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'DR-003 FAIL: api/core/orchestrator.js not found');
+    assert.ok(
+      src.includes('ORPHANED_BEGINNING_PATTERNS'),
+      'DR-003 FAIL: ORPHANED_BEGINNING_PATTERNS must be defined in orchestrator.js'
+    );
+    assert.ok(
+      src.includes('/\\bif you have\\s*[.,]?\\s*$/i'),
+      'DR-003 FAIL: ORPHANED_BEGINNING_PATTERNS must include /\\bif you have\\s*[.,]?\\s*$/i to catch "If you have ." fragments'
+    );
+  });
+
+  it('DR-004: "If you have any questions" type fragment removed', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'DR-004 FAIL: api/core/orchestrator.js not found');
+    assert.ok(
+      src.includes('if you (need|want|would like|have any)'),
+      'DR-004 FAIL: ORPHANED_BEGINNING_PATTERNS must include a pattern matching "if you (need|want|would like|have any)"'
+    );
+    // The ORPHANED_BEGINNING_PATTERNS block must use lastIndexOf for cleanup
+    const orphanedIdx = src.indexOf('ORPHANED_BEGINNING_PATTERNS');
+    const afterOrphaned = src.substring(orphanedIdx, orphanedIdx + 1000);
+    assert.ok(
+      afterOrphaned.includes('lastIndexOf'),
+      'DR-004 FAIL: ORPHANED_BEGINNING_PATTERNS cleanup block must use lastIndexOf to find the last sentence boundary'
+    );
+  });
+
+  it('DR-005: high_stakes:MEDICAL routes to Eli not Roxy', () => {
+    const src = readRepoFile('api/core/personalities/personality_selector.js');
+    assert.ok(src, 'DR-005 FAIL: api/core/personalities/personality_selector.js not found');
+    assert.ok(
+      src.includes("phase4Metadata?.high_stakes?.domains?.includes('MEDICAL')"),
+      "DR-005 FAIL: personality_selector.js must include override for phase4Metadata.high_stakes.domains including 'MEDICAL'"
+    );
+    assert.ok(
+      src.includes("high_stakes:MEDICAL"),
+      "DR-005 FAIL: high_stakes:MEDICAL override must be present in personality_selector.js"
+    );
+  });
+
+  it('DR-006: Non-high-stakes emotional query still routes to Roxy', () => {
+    const src = readRepoFile('api/core/personalities/personality_selector.js');
+    assert.ok(src, 'DR-006 FAIL: api/core/personalities/personality_selector.js not found');
+    // Normal selection logic must still exist
+    assert.ok(
+      src.includes('eliConfidence > roxyConfidence'),
+      'DR-006 FAIL: Normal personality selection logic (eliConfidence > roxyConfidence) must still exist'
+    );
+    // The MEDICAL override must only fire when domains includes MEDICAL (conditional)
+    assert.ok(
+      src.includes("domains?.includes('MEDICAL')"),
+      "DR-006 FAIL: Override must be conditional on domains including 'MEDICAL' so non-medical queries still use normal routing"
+    );
+  });
+
+});

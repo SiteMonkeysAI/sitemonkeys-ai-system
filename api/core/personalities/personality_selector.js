@@ -12,7 +12,7 @@ export class PersonalitySelector {
     };
   }
 
-  selectPersonality(analysis, mode, _context) {
+  selectPersonality(analysis, mode, context) {
     try {
       this.logger.log("Selecting personality based on analysis...");
 
@@ -101,6 +101,23 @@ export class PersonalitySelector {
       const selectedPersonality =
         eliConfidence > roxyConfidence ? "eli" : "roxy";
       const selectedConfidence = Math.max(eliConfidence, roxyConfidence);
+
+      // DOCTRINE: Life-threatening medical emergencies always route to Eli
+      // Eli's analytical direct style is appropriate for emergencies
+      // Roxy's emotional framing can undermine urgency in life-safety situations
+      const phase4Metadata = context?.phase4Metadata;
+      if (
+        phase4Metadata?.high_stakes?.isHighStakes &&
+        phase4Metadata?.high_stakes?.domains?.includes('MEDICAL')
+      ) {
+        this.logger.log(`high_stakes:MEDICAL — overriding to Eli for directness`);
+        return {
+          personality: 'eli',
+          confidence: 1.0,
+          override: true,
+          reason: 'high_stakes:MEDICAL — Eli selected for directness',
+        };
+      }
 
       this.logger.log(
         `Selected ${selectedPersonality} (Eli: ${score.eli}, Roxy: ${score.roxy})`,
