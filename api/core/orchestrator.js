@@ -2657,6 +2657,12 @@ export class Orchestrator {
               /from your memory context/gi,
               /in your memory context/gi,
               /your memory (context|data|records) (shows?|indicates?|suggests?)/gi,
+              /as noted in our previous discussions?/gi,
+              /as we (discussed|talked about|mentioned)/gi,
+              /in our previous (conversation|discussion|chat|session)/gi,
+              /from our (earlier|previous|last) (conversation|discussion|chat)/gi,
+              /you (mentioned|told me|said) (earlier|before|previously)/gi,
+              /based on (what|our) (you've|we've) (shared|discussed)/gi,
             ];
 
             let cleanedResponse = personalityResponse.response;
