@@ -164,6 +164,31 @@ function getConversationDepth(earlyClassification, phase4TruthType) {
   return 5;
 }
 
+// ==================== MAX TOKENS HELPER ====================
+
+/**
+ * Returns the appropriate max_tokens value for AI API calls based on query
+ * complexity and whether the query is high-stakes. High-stakes and complex
+ * queries need more output tokens to avoid truncation mid-response.
+ *
+ * @param {object|null} earlyClassification - Result from classifyQueryComplexity
+ * @param {object|null} phase4Metadata - Phase 4 truth-type metadata (may contain high_stakes)
+ * @returns {number} max_tokens value for the AI call
+ */
+function getMaxTokens(earlyClassification, phase4Metadata) {
+  // High stakes queries need room for complete safety-critical responses
+  if (phase4Metadata?.high_stakes?.isHighStakes) return 4000;
+
+  // Complex analytical queries need room for thorough analysis
+  if (earlyClassification?.classification === 'complex_analytical') return 3000;
+
+  // Decision making queries need room for complete comparison
+  if (earlyClassification?.classification === 'decision_making') return 3000;
+
+  // Standard queries
+  return 2000;
+}
+
 // ==================== ORCHESTRATOR CLASS ====================
 
 export class Orchestrator {
@@ -5313,6 +5338,7 @@ export class Orchestrator {
           mode === "site_monkeys");
 
       let response, inputTokens, outputTokens;
+      const maxTokens = getMaxTokens(context.earlyClassification, phase4Metadata);
 
       if (useClaude) {
         // Build messages array for Claude with proper conversation history
@@ -5353,7 +5379,7 @@ export class Orchestrator {
 
         const claudeResponse = await this.anthropic.messages.create({
           model: "claude-sonnet-4-20250514",
-          max_tokens: 2000,
+          max_tokens: maxTokens,
           messages: messages,
         });
 
@@ -5405,7 +5431,7 @@ export class Orchestrator {
           model: model,
           messages: messages,
           temperature: 0.7,
-          max_tokens: 2000,
+          max_tokens: maxTokens,
         });
 
         response = gptResponse.choices[0].message.content;

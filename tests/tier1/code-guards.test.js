@@ -6299,3 +6299,86 @@ describe('FE. Frontend Personality Label — Reads from API Response', () => {
   });
 
 });
+
+// ============================================================
+// SECTION MT: DYNAMIC MAX_TOKENS — Response Truncation Fix
+// Verifies that high-stakes and complex queries get larger
+// max_tokens budgets so responses are not truncated mid-sentence.
+// ============================================================
+
+describe('MT. Dynamic max_tokens — Response Truncation Fix', () => {
+
+  const orch = readRepoFile('api/core/orchestrator.js');
+
+  it('MT-001: high_stakes query returns max_tokens 4000 from getMaxTokens', () => {
+    assert.ok(orch, 'MT-001 FAIL: api/core/orchestrator.js not found');
+    // The function body must contain the 4000 value for high_stakes
+    const fnStart = orch.indexOf('function getMaxTokens(');
+    assert.ok(fnStart !== -1, 'MT-001 FAIL: getMaxTokens not found');
+    const fnEnd = orch.indexOf('\n}', fnStart);
+    const fnBody = orch.slice(fnStart, fnEnd + 2);
+    assert.ok(
+      fnBody.includes('isHighStakes') && fnBody.includes('4000'),
+      'MT-001 FAIL: getMaxTokens must return 4000 when phase4Metadata.high_stakes.isHighStakes is true. ' +
+      'High-stakes queries (medical, legal, safety) need room for complete responses.'
+    );
+  });
+
+  it('MT-002: complex_analytical query returns max_tokens 3000 from getMaxTokens', () => {
+    assert.ok(orch, 'MT-002 FAIL: api/core/orchestrator.js not found');
+    const fnStart = orch.indexOf('function getMaxTokens(');
+    assert.ok(fnStart !== -1, 'MT-002 FAIL: getMaxTokens not found');
+    const fnEnd = orch.indexOf('\n}', fnStart);
+    const fnBody = orch.slice(fnStart, fnEnd + 2);
+    assert.ok(
+      fnBody.includes('complex_analytical') && fnBody.includes('3000'),
+      'MT-002 FAIL: getMaxTokens must return 3000 for complex_analytical classification.'
+    );
+  });
+
+  it('MT-003: decision_making query returns max_tokens 3000 from getMaxTokens', () => {
+    assert.ok(orch, 'MT-003 FAIL: api/core/orchestrator.js not found');
+    const fnStart = orch.indexOf('function getMaxTokens(');
+    assert.ok(fnStart !== -1, 'MT-003 FAIL: getMaxTokens not found');
+    const fnEnd = orch.indexOf('\n}', fnStart);
+    const fnBody = orch.slice(fnStart, fnEnd + 2);
+    assert.ok(
+      fnBody.includes('decision_making') && fnBody.includes('3000'),
+      'MT-003 FAIL: getMaxTokens must return 3000 for decision_making classification.'
+    );
+  });
+
+  it('MT-004: standard query default is max_tokens 2000', () => {
+    assert.ok(orch, 'MT-004 FAIL: api/core/orchestrator.js not found');
+    const fnStart = orch.indexOf('function getMaxTokens(');
+    assert.ok(fnStart !== -1, 'MT-004 FAIL: getMaxTokens not found');
+    const fnEnd = orch.indexOf('\n}', fnStart);
+    const fnBody = orch.slice(fnStart, fnEnd + 2);
+    assert.ok(
+      fnBody.includes('return 2000'),
+      'MT-004 FAIL: getMaxTokens must return 2000 as the default for standard queries. ' +
+      'Greeting and simple queries must not increase token budget.'
+    );
+  });
+
+  it('MT-005: getMaxTokens function is defined in orchestrator.js', () => {
+    assert.ok(orch, 'MT-005 FAIL: api/core/orchestrator.js not found');
+    assert.ok(
+      orch.includes('function getMaxTokens('),
+      'MT-005 FAIL: getMaxTokens function not found in orchestrator.js. ' +
+      'The function must be defined to provide dynamic max_tokens for AI calls.'
+    );
+  });
+
+  it('MT-006: Both Claude and GPT-4o calls use dynamic maxTokens variable', () => {
+    assert.ok(orch, 'MT-006 FAIL: api/core/orchestrator.js not found');
+    // Count occurrences of max_tokens: maxTokens in the AI routing section
+    const matches = (orch.match(/max_tokens:\s*maxTokens/g) || []).length;
+    assert.ok(
+      matches >= 2,
+      `MT-006 FAIL: Expected max_tokens: maxTokens in both Claude and GPT-4o calls, found ${matches} occurrence(s). ` +
+      'Both AI API calls must use the dynamic maxTokens variable to prevent response truncation.'
+    );
+  });
+
+});
