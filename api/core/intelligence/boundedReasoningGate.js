@@ -280,6 +280,19 @@ function requiresBoundedReasoning(phase4Metadata, queryText = '') {
     return { required: false, reason: 'Permanent fact - no uncertainty disclosure needed' };
   }
 
+  // Medical emergency → no disclaimer
+  // Medical protocols (call 911, CPR, recovery position) are permanent
+  // established knowledge — not time-sensitive data.
+  // The disclaimer undermines urgency at a critical safety moment.
+  // Only suppress when NOT explicitly VOLATILE — if the system classified
+  // the query as needing real-time data AND it's medical, keep the disclaimer.
+  if (
+    phase4Metadata.high_stakes?.domains?.includes('MEDICAL') &&
+    phase4Metadata.truth_type !== 'VOLATILE'
+  ) {
+    return { required: false, reason: 'Medical emergency — established protocol, not time-sensitive data' };
+  }
+
   // Speculative future queries always need bounded reasoning
   if (queryText && SPECULATIVE_PATTERNS.test(queryText)) {
     return {
