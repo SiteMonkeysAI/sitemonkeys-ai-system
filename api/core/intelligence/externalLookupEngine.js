@@ -301,7 +301,7 @@ export const API_SOURCES = {
         'x-access-token': process.env.GOLDAPI_KEY || '',
         'Content-Type': 'application/json'
       }),
-      extract: (json) => {
+      extract: (json, query) => {
         if (!json || !json.price) return null;
         const METAL_NAMES = { XAU: 'Gold', XAG: 'Silver', XPT: 'Platinum', XPD: 'Palladium' };
         const metalName = METAL_NAMES[json.metal] || json.metal || 'Metal';
@@ -311,11 +311,45 @@ export const API_SOURCES = {
         const changePct = json.chp != null ? ` (${json.chp >= 0 ? '+' : ''}${json.chp.toFixed(2)}%)` : '';
         const ask = json.ask ? ` Ask: $${json.ask.toFixed(2)}/oz.` : '';
         const bid = json.bid ? ` Bid: $${json.bid.toFixed(2)}/oz.` : '';
-        return `${metalName} spot price: $${price.toFixed(2)}/troy oz${priceGram}.${change}${changePct}.${ask}${bid} Live precious metals price from GoldAPI.io (authenticated). 1 troy oz = 31.1035 grams. ${metalName} is traded globally as a commodity and safe-haven asset. Prices updated continuously during market hours (Mon–Fri).`;
+        const spotLine = `${metalName} spot price: $${price.toFixed(2)}/troy oz${priceGram}.${change}${changePct}.${ask}${bid} Live precious metals price from GoldAPI.io (authenticated). 1 troy oz = 31.1035 grams. ${metalName} is traded globally as a commodity and safe-haven asset. Prices updated continuously during market hours (Mon–Fri).`;
+
+        // Weight-based calculation: if query includes a quantity + unit, compute total value
+        if (query) {
+          const lowerQ = query.toLowerCase();
+          const hasValueIntent = /\b(worth|value|cost|price|total|how much)\b/i.test(lowerQ);
+          if (hasValueIntent) {
+            const TROY_OZ_CONVERSIONS = {
+              'lb': 14.5833, 'lbs': 14.5833, 'pound': 14.5833, 'pounds': 14.5833,
+              'kg': 32.1507, 'kilogram': 32.1507, 'kilograms': 32.1507, 'kilo': 32.1507, 'kilos': 32.1507,
+              'gram': 0.0321507, 'grams': 0.0321507,
+              'oz': 0.911458, 'ounce': 0.911458, 'ounces': 0.911458,
+              'troy oz': 1, 'troy ounce': 1, 'troy ounces': 1, 'toz': 1
+            };
+            const weightPattern = /(\d+(?:\.\d+)?)\s*(pound|lb|lbs|kilogram|kilo|kg|gram|grams|troy\s+oz(?:ces?)?|troy\s+ounce|ounce|oz)/i;
+            const wMatch = lowerQ.match(weightPattern);
+            if (wMatch) {
+              const qty = parseFloat(wMatch[1]);
+              const unitRaw = wMatch[2].replace(/\s+/g, ' ').toLowerCase().trim();
+              const convFactor = TROY_OZ_CONVERSIONS[unitRaw] || TROY_OZ_CONVERSIONS[unitRaw.replace(/s$/, '')];
+              if (convFactor && qty > 0) {
+                const troyOz = qty * convFactor;
+                const totalValue = troyOz * price;
+                const troyOzFormatted = troyOz.toFixed(2);
+                const priceFormatted = price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                const totalFormatted = totalValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+                console.log(`[externalLookupEngine] GoldAPI weight calc: ${qty} ${unitRaw} ${metalName} = ${troyOzFormatted} troy oz × $${priceFormatted} = $${totalFormatted}`);
+                return `${metalName} weight calculation: ${qty} ${unitRaw} = ${troyOzFormatted} troy oz × $${priceFormatted}/troy oz = $${totalFormatted} USD total value. ${spotLine}`;
+              }
+            }
+          }
+        }
+
+        return spotLine;
       }
     },
     // ISSUE #908 FIX 2: metals.live free fallback (no API key required, <30k req/month free)
-    // Supports gold and silver. Also handles weight-based price queries with unit conversion.
+    // Supports gold, silver, platinum, and palladium. Also handles weight-based price queries
+    // with unit conversion.
     // Conversion constants: 1 lb = 14.5833 troy oz, 1 kg = 32.1507 troy oz,
     //   1 gram = 0.0321507 troy oz, 1 avoirdupois oz = 0.911458 troy oz
     {
@@ -324,11 +358,13 @@ export const API_SOURCES = {
       fetchData: async (query, abortSignal) => {
         const lowerQuery = query.toLowerCase();
 
-        // Detect metal type — metals.live supports gold and silver
+        // Detect metal type — metals.live supports gold, silver, platinum, and palladium
         let metalType = null;
         if (/\bgold\b/.test(lowerQuery)) metalType = 'gold';
         else if (/\bsilver\b/.test(lowerQuery)) metalType = 'silver';
-        else return null; // metals.live only covers gold and silver
+        else if (/\bplatinum\b/.test(lowerQuery)) metalType = 'platinum';
+        else if (/\bpalladium\b/.test(lowerQuery)) metalType = 'palladium';
+        else return null;
 
         // ISSUE #908 FIX 4: Detect weight-based query (semantic + pattern)
         // Patterns: "50 lbs of gold", "2 kg of silver", "10 ounces of platinum", etc.
@@ -1714,8 +1750,9 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
     }
 
     // ISSUE #908 FIX 2: Always add metals.live (free tier, no API key required, <30k req/month)
-    // Covers gold and silver. Cascades here if GoldAPI fails, rate-limits, or key is not set.
-    // Also handles weight-based queries (e.g. "50 lbs of gold worth") with unit conversion.
+    // Covers gold, silver, platinum, and palladium. Cascades here if GoldAPI fails, rate-limits,
+    // or key is not set. Also handles weight-based queries (e.g. "50 lbs of platinum worth")
+    // with unit conversion.
     commoditySources.push(API_SOURCES.COMMODITIES[2]);
 
     // FALLBACK: Add Google News RSS for commodity price queries
