@@ -6067,4 +6067,85 @@ describe('DR. Doctrine Regression — Emergency Emotional/Fragment/Medical Routi
     );
   });
 
+  it('DR-008: "dog has cancer" flags high_stakes:MEDICAL', () => {
+    const detector = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(detector, 'DR-008 FAIL: api/core/intelligence/truthTypeDetector.js not found');
+    assert.ok(
+      detector.includes('cancer'),
+      'DR-008 FAIL: HIGH_STAKES_DOMAINS.MEDICAL must include "cancer" pattern so "My dog has cancer" triggers MEDICAL high-stakes'
+    );
+  });
+
+  it('DR-009: "tumor" flags high_stakes:MEDICAL', () => {
+    const detector = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(detector, 'DR-009 FAIL: api/core/intelligence/truthTypeDetector.js not found');
+    assert.ok(
+      detector.includes('tumor'),
+      'DR-009 FAIL: HIGH_STAKES_DOMAINS.MEDICAL must include "tumor" pattern so queries containing "tumor" trigger MEDICAL high-stakes'
+    );
+  });
+
+  it('DR-010: cancer pattern in MEDICAL triggers MEDICAL override → Eli', () => {
+    const detector = readRepoFile('api/core/intelligence/truthTypeDetector.js');
+    assert.ok(detector, 'DR-010 FAIL: api/core/intelligence/truthTypeDetector.js not found');
+    // Verify cancer pattern is inside the MEDICAL block by tracking bracket depth
+    const medicalBlockStart = detector.indexOf('MEDICAL: [');
+    assert.ok(medicalBlockStart !== -1, 'DR-010 FAIL: Could not locate MEDICAL block in HIGH_STAKES_DOMAINS');
+    let depth = 0;
+    let medicalBlockEnd = -1;
+    for (let i = medicalBlockStart; i < detector.length; i++) {
+      if (detector[i] === '[') depth++;
+      else if (detector[i] === ']') {
+        depth--;
+        if (depth === 0) { medicalBlockEnd = i; break; }
+      }
+    }
+    assert.ok(medicalBlockEnd !== -1, 'DR-010 FAIL: Could not find closing bracket of MEDICAL block');
+    const medicalBlock = detector.slice(medicalBlockStart, medicalBlockEnd + 1);
+    assert.ok(
+      medicalBlock.includes('cancer'),
+      'DR-010 FAIL: "cancer" must be inside the MEDICAL block of HIGH_STAKES_DOMAINS so it triggers the MEDICAL override → Eli'
+    );
+  });
+
+  it('DR-011: [SELECTOR] override log line present when MEDICAL fires', () => {
+    const src = readRepoFile('api/core/personalities/personality_selector.js');
+    assert.ok(src, 'DR-011 FAIL: api/core/personalities/personality_selector.js not found');
+    assert.ok(
+      src.includes('high_stakes:MEDICAL override firing → Eli'),
+      'DR-011 FAIL: personality_selector.js must log "high_stakes:MEDICAL override firing → Eli" when the MEDICAL override fires. ' +
+      'This log line is required for Railway log verification after deploy.'
+    );
+  });
+
+  it('DR-012: Required patterns from DR-001 through DR-006 still present', () => {
+    const selector = readRepoFile('api/core/personalities/personality_selector.js');
+    assert.ok(selector, 'DR-012 FAIL: api/core/personalities/personality_selector.js not found');
+    const roxy = readRepoFile('api/core/personalities/roxy_framework.js');
+    assert.ok(roxy, 'DR-012 FAIL: api/core/personalities/roxy_framework.js not found');
+    const orchestrator = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orchestrator, 'DR-012 FAIL: api/core/orchestrator.js not found');
+
+    // DR-001/002 guards: Roxy emotional suppression for high-stakes still present
+    assert.ok(
+      roxy.includes('high_stakes'),
+      'DR-012 FAIL: roxy_framework.js must still check high_stakes to suppress emotional reassurance closing'
+    );
+    // DR-003/004 guards: ORPHANED_BEGINNING_PATTERNS still present in orchestrator
+    assert.ok(
+      orchestrator.includes('ORPHANED_BEGINNING_PATTERNS'),
+      'DR-012 FAIL: orchestrator.js must still define ORPHANED_BEGINNING_PATTERNS'
+    );
+    // DR-005 guard: MEDICAL override still present
+    assert.ok(
+      selector.includes("domains?.includes('MEDICAL')"),
+      "DR-012 FAIL: personality_selector.js must still include high_stakes MEDICAL override"
+    );
+    // DR-006 guard: Normal routing still present
+    assert.ok(
+      selector.includes('eliConfidence > roxyConfidence'),
+      'DR-012 FAIL: Normal personality selection logic must still exist'
+    );
+  });
+
 });
