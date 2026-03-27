@@ -1738,7 +1738,8 @@ export function isLookupRequired(query, truthTypeResult, internalConfidence = 0.
  * @param {object} highStakesResult - Result from detectHighStakesDomain
  * @returns {array} Array of source objects (empty if no reliable source)
  */
-export function selectSourcesForQuery(query, truthType, highStakesResult) {
+export function selectSourcesForQuery(query, truthType, highStakesResult, options = {}) {
+  const { isCommodityQuantityQuery = false } = options;
   const lowerQuery = query.toLowerCase();
 
   // Currency exchange rates - use Exchange Rates API
@@ -1799,7 +1800,8 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   //   (e.g. "I'm sorry it was 91 pounds of gold same question but with that mistake fixed")
   if ((lowerQuery.match(/gold|silver|platinum|palladium|copper|oil|gas|commodity|commodities/) &&
       lowerQuery.match(/price|cost|value|worth|ounce|barrel/i)) ||
-      requiresCurrentMarketPrice(query)) {
+      requiresCurrentMarketPrice(query) ||
+      isCommodityQuantityQuery) {
     console.log('[externalLookupEngine] Commodity price query detected - using COMMODITIES sources with news fallback');
 
     // Build sources array: commodity APIs first, news RSS as fallback
@@ -2464,7 +2466,7 @@ export function gracefulDegradation(query, lookupResult, internalAnswer = null) 
 /**
  * Main entry point: Execute external lookup with full pipeline
  * @param {string} query - The user's query
- * @param {object} options - Options { internalConfidence, internalAnswer, forceRefresh }
+ * @param {object} options - Options { internalConfidence, internalAnswer, forceRefresh, isCommodityQuantityQuery }
  * @returns {Promise<object>} Complete lookup result with telemetry
  */
 export async function lookup(query, options = {}) {
@@ -2472,7 +2474,8 @@ export async function lookup(query, options = {}) {
   const {
     internalConfidence = 0.5,
     internalAnswer = null,
-    forceRefresh = false
+    forceRefresh = false,
+    isCommodityQuantityQuery = false
   } = options;
 
   // Input sanitization - Prevent ReDoS and injection
@@ -2501,7 +2504,7 @@ export async function lookup(query, options = {}) {
   // Check if lookup is required
   const lookupCheck = isLookupRequired(query, truthTypeResult, internalConfidence);
 
-  if (!lookupCheck.required && !forceRefresh) {
+  if (!lookupCheck.required && !forceRefresh && !isCommodityQuantityQuery) {
     console.log(`[externalLookupEngine] Lookup not required: ${lookupCheck.reasons.length === 0 ? 'no triggers matched' : 'skipped'}`);
     return {
       success: true,
@@ -2514,7 +2517,7 @@ export async function lookup(query, options = {}) {
   }
 
   // Select appropriate sources using new query-to-source matching
-  const sources = selectSourcesForQuery(query, truthTypeResult.type, truthTypeResult.high_stakes);
+  const sources = selectSourcesForQuery(query, truthTypeResult.type, truthTypeResult.high_stakes, { isCommodityQuantityQuery });
 
   // Handle no reliable source available
   if (sources.length === 0) {

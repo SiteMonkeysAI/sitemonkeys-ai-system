@@ -345,6 +345,55 @@ describe('External Lookup Engine — commodity quantity answer-requirement detec
     );
   });
 
+  it('EL-020: "I\'m sorry it was 91 pounds of gold" routes to COMMODITIES sources (code-scan)', () => {
+    const src = readFileSync(ENGINE_PATH, 'utf8');
+    // selectSourcesForQuery must accept an options object with isCommodityQuantityQuery
+    assert.ok(
+      src.includes('isCommodityQuantityQuery = false'),
+      'EL-020 FAIL: selectSourcesForQuery must destructure isCommodityQuantityQuery from options with a false default'
+    );
+    // The commodity routing condition must include isCommodityQuantityQuery
+    assert.ok(
+      src.includes('isCommodityQuantityQuery)'),
+      'EL-020 FAIL: selectSourcesForQuery commodity routing condition must include isCommodityQuantityQuery'
+    );
+  });
+
+  it('EL-021: isCommodityQuantityQuery=true forces COMMODITIES source selection in selectSourcesForQuery (code-scan)', () => {
+    const src = readFileSync(ENGINE_PATH, 'utf8');
+    // lookup() must destructure isCommodityQuantityQuery from its options
+    assert.ok(
+      src.includes('isCommodityQuantityQuery = false'),
+      'EL-021 FAIL: lookup() must destructure isCommodityQuantityQuery = false from options'
+    );
+    // lookup() must pass isCommodityQuantityQuery to selectSourcesForQuery
+    assert.ok(
+      src.includes('selectSourcesForQuery(') && src.includes('isCommodityQuantityQuery }'),
+      'EL-021 FAIL: lookup() must pass isCommodityQuantityQuery to selectSourcesForQuery'
+    );
+    // lookup() must not short-circuit when isCommodityQuantityQuery is true
+    assert.ok(
+      src.includes('!isCommodityQuantityQuery'),
+      'EL-021 FAIL: lookup() must bypass isLookupRequired gate when isCommodityQuantityQuery is true'
+    );
+  });
+
+  it('EL-022: Signal 1 query "I\'m sorry it was 91 pounds of gold" satisfies commodity routing conditions', () => {
+    const MARKET_COMMODITY = /\b(gold|silver|platinum|palladium|copper|zinc|nickel|oil|crude|natural\s+gas|bitcoin|btc|ethereum|eth|ether)\b/i;
+    const COMMODITY_WEIGHT = /\b\d+(?:\.\d+)?\s*(pounds?|lbs?|ounces?|oz|troy\s+oz(?:ces?)?|troy\s+ounces?|grams?|kilograms?|kg|tonnes?|tons?|barrels?)\b/i;
+    const query = "I'm sorry it was 91 pounds of gold";
+    // Signal 1 must fire (commodity + weight present in query)
+    assert.ok(
+      MARKET_COMMODITY.test(query) && COMMODITY_WEIGHT.test(query),
+      'EL-022 FAIL: "I\'m sorry it was 91 pounds of gold" must match both commodity and weight patterns (Signal 1)'
+    );
+    // requiresCurrentMarketPrice local mirror must return true for this query
+    assert.ok(
+      requiresCurrentMarketPrice(query),
+      'EL-022 FAIL: requiresCurrentMarketPrice must return true for "I\'m sorry it was 91 pounds of gold"'
+    );
+  });
+
 });
 
 describe('External Lookup Engine — GoldAPI weight-calculation in extract', () => {
