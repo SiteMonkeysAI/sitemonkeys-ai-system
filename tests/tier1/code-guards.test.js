@@ -6382,3 +6382,97 @@ describe('MT. Dynamic max_tokens — Response Truncation Fix', () => {
   });
 
 });
+
+// ============================================================
+// SECTION ME: MEDICAL EMERGENCY EARLY RETURN
+// Verifies that medical emergency queries bypass Stage 2 and
+// are deterministically classified as PERMANENT.
+// Background: Stage 2 classifier was returning VOLATILE /
+// PERSONAL_CONTEXTUAL for "unconscious for 20 minutes" queries.
+// The fix adds a MEDICAL_EMERGENCY_PATTERNS early return in
+// detectTruthType before Stage 2 is invoked.
+// ============================================================
+
+describe('ME. Medical Emergency Early Return — Stage 2 Bypass', () => {
+
+  const DETECTOR_PATH = 'api/core/intelligence/truthTypeDetector.js';
+  const detector = readRepoFile(DETECTOR_PATH);
+
+  it('ME-001: MEDICAL_EMERGENCY_PATTERNS constant exists and includes "unconscious" pattern', () => {
+    assert.ok(detector, `ME-001 FAIL: ${DETECTOR_PATH} not found`);
+    assert.ok(
+      detector.includes('MEDICAL_EMERGENCY_PATTERNS'),
+      'ME-001 FAIL: MEDICAL_EMERGENCY_PATTERNS constant not found in truthTypeDetector.js. ' +
+      '"unconscious for 20 minutes" queries must be caught by this pattern array.'
+    );
+    assert.ok(
+      detector.includes('unconscious'),
+      'ME-001 FAIL: MEDICAL_EMERGENCY_PATTERNS must include "unconscious" to catch ' +
+      '"My father...has been unconscious for 20 minutes" type queries.'
+    );
+  });
+
+  it('ME-002: MEDICAL_EMERGENCY_PATTERNS includes "not breathing" pattern', () => {
+    assert.ok(detector, `ME-002 FAIL: ${DETECTOR_PATH} not found`);
+    assert.ok(
+      detector.includes('not breathing'),
+      'ME-002 FAIL: MEDICAL_EMERGENCY_PATTERNS must include "not breathing" pattern. ' +
+      '"not breathing what do I do" must return PERMANENT not VOLATILE.'
+    );
+  });
+
+  it('ME-003: MEDICAL_EMERGENCY_PATTERNS includes "heart attack" pattern', () => {
+    assert.ok(detector, `ME-003 FAIL: ${DETECTOR_PATH} not found`);
+    assert.ok(
+      detector.includes('heart attack'),
+      'ME-003 FAIL: MEDICAL_EMERGENCY_PATTERNS must include "heart attack" pattern. ' +
+      '"heart attack what should I do" must return PERMANENT not VOLATILE.'
+    );
+  });
+
+  it('ME-004: VOLATILE_PATTERNS still exist — non-emergency medical queries remain VOLATILE', () => {
+    assert.ok(detector, `ME-004 FAIL: ${DETECTOR_PATH} not found`);
+    assert.ok(
+      detector.includes('VOLATILE_PATTERNS'),
+      'ME-004 FAIL: VOLATILE_PATTERNS must still exist in truthTypeDetector.js. ' +
+      '"current COVID hospital criteria" and similar queries must remain VOLATILE.'
+    );
+  });
+
+  it('ME-005: Medical emergency early return is placed BEFORE classifyAmbiguous call in detectTruthType', () => {
+    assert.ok(detector, `ME-005 FAIL: ${DETECTOR_PATH} not found`);
+    const fnStart = detector.indexOf('export async function detectTruthType(');
+    assert.ok(fnStart !== -1, 'ME-005 FAIL: detectTruthType function not found');
+
+    const medicalReturnIdx   = detector.indexOf('MEDICAL_EMERGENCY_PATTERNS', fnStart);
+    const stage2CallIdx      = detector.indexOf('classifyAmbiguous(query', fnStart);
+
+    assert.ok(medicalReturnIdx !== -1, 'ME-005 FAIL: MEDICAL_EMERGENCY_PATTERNS not found inside detectTruthType');
+    assert.ok(stage2CallIdx    !== -1, 'ME-005 FAIL: classifyAmbiguous call not found inside detectTruthType');
+    assert.ok(
+      medicalReturnIdx < stage2CallIdx,
+      'ME-005 FAIL: Medical emergency early return must appear BEFORE the classifyAmbiguous(query...) call ' +
+      'in detectTruthType. Stage 2 must not be invoked for medical emergency queries.'
+    );
+  });
+
+  it('ME-006: Medical emergency early return uses PERMANENT truth type', () => {
+    assert.ok(detector, `ME-006 FAIL: ${DETECTOR_PATH} not found`);
+    const fnStart = detector.indexOf('export async function detectTruthType(');
+    assert.ok(fnStart !== -1, 'ME-006 FAIL: detectTruthType function not found');
+
+    // Find the medical emergency block and verify it returns PERMANENT
+    const medicalBlockStart = detector.indexOf('MEDICAL_EMERGENCY_PATTERNS', fnStart);
+    assert.ok(medicalBlockStart !== -1, 'ME-006 FAIL: MEDICAL_EMERGENCY_PATTERNS block not found in detectTruthType');
+
+    // The isMedicalEmergency block should return TRUTH_TYPES.PERMANENT
+    // Use a 1200-char window to cover the full pattern array + conditional block
+    const blockRegion = detector.slice(medicalBlockStart, medicalBlockStart + 1200);
+    assert.ok(
+      blockRegion.includes('TRUTH_TYPES.PERMANENT') || blockRegion.includes("'PERMANENT'"),
+      'ME-006 FAIL: Medical emergency early return must classify as PERMANENT. ' +
+      'Emergency protocols (call 911, CPR steps) are permanent established knowledge, not real-time data.'
+    );
+  });
+
+});
