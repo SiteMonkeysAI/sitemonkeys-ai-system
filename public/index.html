@@ -2121,8 +2121,12 @@
             .replace(/\[ASSUMPTIONS:.*?\]/g, "")
             .trim();
 
-          // Determine who speaks
-          const isEli = aiToggle;
+          // Determine who speaks — read from backend, fall back to aiToggle
+          const personalityUsed = data?.metadata?.personalityApplied ||
+                                  data?.confidence?.personality ||
+                                  (aiToggle ? 'eli' : 'roxy'); // fallback only
+          aiToggle = !aiToggle; // keep for fallback only
+          const isEli = personalityUsed?.toLowerCase() === 'eli';
           const who = isEli ? "Eli" : "Roxy";
           const avatar = isEli ? "boy-mascot.png" : "girl-mascot.png";
 
@@ -2168,9 +2172,6 @@
           conversationHistory.push({ role: "user", content: userMessage });
           conversationHistory.push({ role: "assistant", content: reply });
           manageConversationHistory();
-
-          // Toggle for next message
-          aiToggle = !aiToggle;
         } catch (error) {
           console.error("❌ Claude confirmation request failed:", error);
           
@@ -2343,8 +2344,12 @@
             .replace(/\[ASSUMPTIONS:.*?\]/g, "")
             .trim();
 
-          // Determine who speaks
-          const isEli = aiToggle;
+          // Determine who speaks — read from backend, fall back to aiToggle
+          const personalityUsed = data?.metadata?.personalityApplied ||
+                                  data?.confidence?.personality ||
+                                  (aiToggle ? 'eli' : 'roxy'); // fallback only
+          aiToggle = !aiToggle; // keep for fallback only
+          const isEli = personalityUsed?.toLowerCase() === 'eli';
           const who = isEli ? "Eli" : "Roxy";
           const avatar = isEli ? "boy-mascot.png" : "girl-mascot.png";
 
@@ -2390,9 +2395,6 @@
           conversationHistory.push({ role: "user", content: text });
           conversationHistory.push({ role: "assistant", content: reply });
           manageConversationHistory();
-
-          // Toggle for next message
-          aiToggle = !aiToggle;
 
           // Enhanced: Log vault status for debugging
           if (data.vault_status) {
