@@ -929,7 +929,38 @@ export async function detectTruthType(query, context = {}) {
       detection_time_ms: Date.now() - startTime
     };
   }
-  
+
+  // MEDICAL EMERGENCY EARLY RETURN
+  // Queries describing medical emergencies require immediate action based on
+  // permanent established protocols — not real-time data.
+  // Must return PERMANENT before Stage 2 can misclassify as VOLATILE/PERSONAL_CONTEXTUAL.
+  const MEDICAL_EMERGENCY_PATTERNS = [
+    /\b(unconscious|unresponsive|not breathing|stopped breathing|choking|seizure|convulsion|convulsing)\b/i,
+    /\b(heart attack|stroke|cardiac arrest|chest pain).{0,30}\b(what|should|do|help|now)\b/i,
+    /\b(overdose|poisoning|anaphylaxis|allergic reaction).{0,20}\b(what|should|do|help)\b/i,
+    /\b(bleeding|blood).{0,20}\b(won'?t stop|heavily|everywhere)\b/i,
+    /\b(emergency|urgent|immediately|right now).{0,30}\b(what|should|do|help)\b/i,
+  ];
+
+  const isMedicalEmergency = MEDICAL_EMERGENCY_PATTERNS.some(p => p.test(query))
+    && highStakesResult.domains.includes('MEDICAL');
+
+  if (isMedicalEmergency) {
+    console.log('[truthTypeDetector] Medical emergency pattern detected — classifying as PERMANENT (established protocols, not real-time data)');
+    return {
+      success: true,
+      type: TRUTH_TYPES.PERMANENT,
+      confidence: 0.95,
+      stage: 1,
+      patterns_matched: [{ type: 'PERMANENT', pattern: 'medical_emergency_protocol' }],
+      high_stakes: highStakesResult,
+      conflict_detected: false,
+      ttl_ms: TTL_CONFIG[TRUTH_TYPES.PERMANENT],
+      detection_time_ms: Date.now() - startTime,
+      reason: 'Medical emergency — established protocols are permanent knowledge not real-time data'
+    };
+  }
+
   // Stage 2: AI classification for ambiguous queries
   const aiResult = await classifyAmbiguous(query, context);
   
