@@ -110,7 +110,7 @@ export class PersonalitySelector {
         phase4Metadata?.high_stakes?.isHighStakes &&
         phase4Metadata?.high_stakes?.domains?.includes('MEDICAL')
       ) {
-        this.logger.log(`high_stakes:MEDICAL — overriding to Eli for directness`);
+        this.logger.log('high_stakes:MEDICAL override firing → Eli');
         return {
           personality: 'eli',
           confidence: 1.0,

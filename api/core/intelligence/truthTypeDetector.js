@@ -166,7 +166,10 @@ export const HIGH_STAKES_DOMAINS = {
     // Substance combination safety
     /\bis it safe to (mix|combine|take|drink|use)\b/i,
     /\b(alcohol|drinking).*(with|and).*(medication|antibiotics|medicine|pills|drugs)\b/i,
-    /\bcan i (take|mix|combine|drink).*(with|and|while)\b/i
+    /\bcan i (take|mix|combine|drink).*(with|and|while)\b/i,
+
+    // Cancer and oncology terms
+    /\b(cancer|tumor|tumour|oncology|oncologist|malignant|malignancy|carcinoma|lymphoma|leukemia|melanoma|chemotherapy|radiation therapy|biopsy|metastasis|metastatic)\b/i,
   ],
   LEGAL: [
     /\b(legal|law|lawsuit|court|attorney|lawyer)\b/i,
