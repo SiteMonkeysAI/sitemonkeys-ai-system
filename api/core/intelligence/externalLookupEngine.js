@@ -1516,6 +1516,72 @@ export function hasReputableSource(fetchedContent) {
   return REPUTABLE_SOURCES.test(fetchedContent);
 }
 
+// ---------------------------------------------------------------------------
+// Answer-requirement detection: does answering this correctly need a live
+// market price?  This is triggered by the semantic content of what is being
+// asked, not by surface phrasing.  Two signals fire it:
+//
+//  Signal 1 – current message contains a quantity + a commodity with a
+//              live market price (any phrasing, correction or direct).
+//              "91 pounds of gold", "I meant 50 kg of silver", "sorry it
+//              was 227 lbs of platinum" all contain both signals and will
+//              correctly route to the commodity lookup path.
+//
+//  Signal 2 – current message is a follow-up reference ("same question",
+//              "same calculation", "but fix that" …) AND a recent user
+//              message already contained a commodity quantity.  This covers
+//              conversational continuations without re-stating the commodity.
+// ---------------------------------------------------------------------------
+
+/** Commodities whose price is determined by live market feeds */
+const MARKET_COMMODITY_PATTERN = /\b(gold|silver|platinum|palladium|copper|zinc|nickel|oil|crude|natural\s+gas|bitcoin|btc|ethereum|eth|ether)\b/i;
+
+/** Any measurable quantity attached to a commodity (weight, volume, count) */
+const COMMODITY_WEIGHT_PATTERN = /\b\d+(?:\.\d+)?\s*(pounds?|lbs?|ounces?|oz|troy\s+oz(?:ces?)?|troy\s+ounces?|grams?|kilograms?|kg|tonnes?|tons?|barrels?)\b/i;
+
+/** Phrases that signal the current message is continuing a prior calculation */
+const MARKET_FOLLOWUP_PATTERN = /\b(same (question|calculation|thing|query|problem)|fix(ed)? (that|it|the mistake?)|with that (mistake |correction |fix )?fixed|instead|but with|correct(ion)? that|adjust(ed)? (that|it))\b/i;
+
+/**
+ * Determine if answering the query correctly requires a current market price.
+ * Detection is based on what the ANSWER needs, not how the question is phrased.
+ *
+ * @param {string} query - The user's current message
+ * @param {Array}  conversationHistory - Optional prior turns [{role, content}]
+ * @returns {boolean} True when a live market price is required to answer correctly
+ */
+export function requiresCurrentMarketPrice(query, conversationHistory = []) {
+  if (typeof query !== 'string') return false;
+
+  // Signal 1: current message contains a quantity of a market-priced commodity.
+  // Fires regardless of question phrasing — works for direct queries, corrections,
+  // apologies, and any other conversational framing.
+  if (MARKET_COMMODITY_PATTERN.test(query) && COMMODITY_WEIGHT_PATTERN.test(query)) {
+    console.log('[externalLookupEngine] requiresCurrentMarketPrice: commodity+quantity detected in current message');
+    return true;
+  }
+
+  // Signal 2: the current message is a follow-up reference AND a recent user
+  // turn contained a commodity quantity.  Covers "same question but fix that"
+  // style continuations without repeating the commodity name.
+  if (MARKET_FOLLOWUP_PATTERN.test(query) && Array.isArray(conversationHistory)) {
+    const priorUserMessages = conversationHistory
+      .filter(m => m.role === 'user')
+      .slice(-5);
+    const priorHasCommodityQty = priorUserMessages.some(m =>
+      typeof m.content === 'string' &&
+      MARKET_COMMODITY_PATTERN.test(m.content) &&
+      COMMODITY_WEIGHT_PATTERN.test(m.content)
+    );
+    if (priorHasCommodityQty) {
+      console.log('[externalLookupEngine] requiresCurrentMarketPrice: follow-up to prior commodity+quantity message');
+      return true;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Determine if external lookup is required
  * @param {string} query - The user's query
@@ -1728,8 +1794,12 @@ export function selectSourcesForQuery(query, truthType, highStakesResult) {
   // Commodity prices - use metals/commodity API with news fallback
   // ISSUE #776 FIX 3: Add Google News RSS as fallback when commodity APIs fail
   // ISSUE #804 REVIEW FIX: Added 'gas' to cover "natural gas" queries
-  if (lowerQuery.match(/gold|silver|platinum|palladium|copper|oil|gas|commodity|commodities/) &&
-      lowerQuery.match(/price|cost|value|worth|ounce|barrel/i)) {
+  // ANSWER-REQUIREMENT FIX: requiresCurrentMarketPrice catches corrections and follow-ups
+  //   that contain a commodity quantity even without explicit price-request language
+  //   (e.g. "I'm sorry it was 91 pounds of gold same question but with that mistake fixed")
+  if ((lowerQuery.match(/gold|silver|platinum|palladium|copper|oil|gas|commodity|commodities/) &&
+      lowerQuery.match(/price|cost|value|worth|ounce|barrel/i)) ||
+      requiresCurrentMarketPrice(query)) {
     console.log('[externalLookupEngine] Commodity price query detected - using COMMODITIES sources with news fallback');
 
     // Build sources array: commodity APIs first, news RSS as fallback

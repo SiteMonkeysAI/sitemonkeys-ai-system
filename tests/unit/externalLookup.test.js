@@ -264,6 +264,89 @@ describe('External Lookup Engine — metals.live platinum/palladium support', ()
 
 });
 
+// ---------------------------------------------------------------------------
+// Helpers for commodity-quantity answer-requirement detection (EL-015..019)
+// Mirror the MARKET_COMMODITY_PATTERN / COMMODITY_WEIGHT_PATTERN /
+// MARKET_FOLLOWUP_PATTERN logic from externalLookupEngine.js so the tests
+// run without importing the full module.  This mirrors the same inline-regex
+// pattern used by the existing EL-007..EL-014 helpers above (see file header:
+// "inline regex tests that mirror the exact logic in the engine so we verify
+// the correct patterns without importing the full module").
+// EL-018 (code-scan) verifies the engine exports and wires up the real function.
+// ---------------------------------------------------------------------------
+
+const MARKET_COMMODITY_PATTERN = /\b(gold|silver|platinum|palladium|copper|zinc|nickel|oil|crude|natural\s+gas|bitcoin|btc|ethereum|eth|ether)\b/i;
+const COMMODITY_WEIGHT_PATTERN  = /\b\d+(?:\.\d+)?\s*(pounds?|lbs?|ounces?|oz|troy\s+oz(?:ces?)?|troy\s+ounces?|grams?|kilograms?|kg|tonnes?|tons?|barrels?)\b/i;
+const MARKET_FOLLOWUP_PATTERN   = /\b(same (question|calculation|thing|query|problem)|fix(ed)? (that|it|the mistake?)|with that (mistake |correction |fix )?fixed|instead|but with|correct(ion)? that|adjust(ed)? (that|it))\b/i;
+
+function requiresCurrentMarketPrice(query, conversationHistory = []) {
+  if (typeof query !== 'string') return false;
+  if (MARKET_COMMODITY_PATTERN.test(query) && COMMODITY_WEIGHT_PATTERN.test(query)) return true;
+  if (MARKET_FOLLOWUP_PATTERN.test(query) && Array.isArray(conversationHistory)) {
+    const prior = conversationHistory.filter(m => m.role === 'user').slice(-5);
+    return prior.some(m =>
+      typeof m.content === 'string' &&
+      MARKET_COMMODITY_PATTERN.test(m.content) &&
+      COMMODITY_WEIGHT_PATTERN.test(m.content)
+    );
+  }
+  return false;
+}
+
+describe('External Lookup Engine — commodity quantity answer-requirement detection', () => {
+
+  it('EL-015: "I meant 91 pounds of gold" triggers commodity lookup (Signal 1: qty+commodity)', () => {
+    assert.ok(
+      requiresCurrentMarketPrice('I meant 91 pounds of gold'),
+      'EL-015 FAIL: "I meant 91 pounds of gold" must trigger commodity lookup'
+    );
+  });
+
+  it('EL-016: "I\'m sorry it was 91 pounds of gold same question but with that mistake fixed" triggers lookup', () => {
+    const query = "I'm sorry it was 91 pounds of gold same question but with that mistake fixed";
+    assert.ok(
+      requiresCurrentMarketPrice(query),
+      'EL-016 FAIL: correction query with commodity quantity must trigger commodity lookup'
+    );
+  });
+
+  it('EL-017: "actually it was 146 lbs of silver" triggers lookup', () => {
+    assert.ok(
+      requiresCurrentMarketPrice('actually it was 146 lbs of silver'),
+      'EL-017 FAIL: "actually it was 146 lbs of silver" must trigger commodity lookup'
+    );
+  });
+
+  it('EL-018: selectSourcesForQuery routes correction queries to COMMODITIES sources (code-scan)', () => {
+    const src = readFileSync(ENGINE_PATH, 'utf8');
+    // The engine must reference requiresCurrentMarketPrice in selectSourcesForQuery
+    assert.ok(
+      src.includes('requiresCurrentMarketPrice(query)'),
+      'EL-018 FAIL: selectSourcesForQuery must call requiresCurrentMarketPrice(query) to route correction queries to commodity sources'
+    );
+    // The function must be exported
+    assert.ok(
+      src.includes('export function requiresCurrentMarketPrice'),
+      'EL-018 FAIL: requiresCurrentMarketPrice must be exported from externalLookupEngine.js'
+    );
+  });
+
+  it('EL-019: Signal 2 — follow-up "same question" fires when prior message had commodity quantity', () => {
+    const history = [
+      { role: 'user', content: 'If I have 227 lbs of platinum what is it worth today' },
+      { role: 'assistant', content: 'At today\'s price that would be ...' }
+    ];
+    const followUpQuery = 'I\'m sorry it was 91 pounds of gold same question but with that mistake fixed';
+    // Signal 1 fires here too (gold + pounds), but also verify Signal 2 independently
+    const followUpOnly = 'same question but with that mistake fixed';
+    assert.ok(
+      requiresCurrentMarketPrice(followUpOnly, history),
+      'EL-019 FAIL: "same question but with that mistake fixed" must trigger lookup when prior message had commodity+quantity'
+    );
+  });
+
+});
+
 describe('External Lookup Engine — GoldAPI weight-calculation in extract', () => {
 
   it('EL-012: Weight detection fires for "227 pounds of platinum" with value intent', () => {
