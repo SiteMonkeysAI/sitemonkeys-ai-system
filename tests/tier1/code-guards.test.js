@@ -6088,11 +6088,20 @@ describe('DR. Doctrine Regression — Emergency Emotional/Fragment/Medical Routi
   it('DR-010: cancer pattern in MEDICAL triggers MEDICAL override → Eli', () => {
     const detector = readRepoFile('api/core/intelligence/truthTypeDetector.js');
     assert.ok(detector, 'DR-010 FAIL: api/core/intelligence/truthTypeDetector.js not found');
-    // Verify cancer pattern is inside the MEDICAL block (not another domain)
+    // Verify cancer pattern is inside the MEDICAL block by tracking bracket depth
     const medicalBlockStart = detector.indexOf('MEDICAL: [');
-    const medicalBlockEnd = detector.indexOf('],', medicalBlockStart);
     assert.ok(medicalBlockStart !== -1, 'DR-010 FAIL: Could not locate MEDICAL block in HIGH_STAKES_DOMAINS');
-    const medicalBlock = detector.slice(medicalBlockStart, medicalBlockEnd);
+    let depth = 0;
+    let medicalBlockEnd = -1;
+    for (let i = medicalBlockStart; i < detector.length; i++) {
+      if (detector[i] === '[') depth++;
+      else if (detector[i] === ']') {
+        depth--;
+        if (depth === 0) { medicalBlockEnd = i; break; }
+      }
+    }
+    assert.ok(medicalBlockEnd !== -1, 'DR-010 FAIL: Could not find closing bracket of MEDICAL block');
+    const medicalBlock = detector.slice(medicalBlockStart, medicalBlockEnd + 1);
     assert.ok(
       medicalBlock.includes('cancer'),
       'DR-010 FAIL: "cancer" must be inside the MEDICAL block of HIGH_STAKES_DOMAINS so it triggers the MEDICAL override → Eli'
@@ -6109,7 +6118,7 @@ describe('DR. Doctrine Regression — Emergency Emotional/Fragment/Medical Routi
     );
   });
 
-  it('DR-012: All existing DR tests still pass — DR-001 through DR-006 patterns present', () => {
+  it('DR-012: Required patterns from DR-001 through DR-006 still present', () => {
     const selector = readRepoFile('api/core/personalities/personality_selector.js');
     assert.ok(selector, 'DR-012 FAIL: api/core/personalities/personality_selector.js not found');
     const roxy = readRepoFile('api/core/personalities/roxy_framework.js');
