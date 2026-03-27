@@ -6150,6 +6150,106 @@ describe('DR. Doctrine Regression — Emergency Emotional/Fragment/Medical Routi
 
 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// BR. Bounded Reasoning — Medical Emergency Disclaimer Suppression
+// Verifies that high_stakes:MEDICAL non-volatile queries suppress the
+// bounded reasoning disclaimer so emergency responses begin with action steps.
+// ─────────────────────────────────────────────────────────────────────────────
+describe('BR. Bounded Reasoning — Medical Emergency Disclaimer Suppression', () => {
+  const GATE_PATH = 'api/core/intelligence/boundedReasoningGate.js';
+
+  it('BR-001: high_stakes:MEDICAL + truth_type NOT VOLATILE → suppression check present in gate', () => {
+    const gate = readRepoFile(GATE_PATH);
+    assert.ok(gate, 'Could not read boundedReasoningGate.js');
+
+    // The suppression must check domains.includes('MEDICAL')
+    assert.ok(
+      gate.includes("phase4Metadata.high_stakes?.domains?.includes('MEDICAL')"),
+      "BR-001 FAIL: boundedReasoningGate.js must check phase4Metadata.high_stakes?.domains?.includes('MEDICAL') " +
+      'to suppress the disclaimer for medical emergency queries.'
+    );
+
+    // The suppression must guard against VOLATILE (keep disclaimer for volatile medical)
+    assert.ok(
+      gate.includes("phase4Metadata.truth_type !== 'VOLATILE'"),
+      "BR-001 FAIL: boundedReasoningGate.js must guard the MEDICAL suppression with truth_type !== 'VOLATILE' " +
+      'so that volatile medical queries (e.g. current COVID admission criteria) still receive the disclaimer.'
+    );
+  });
+
+  it('BR-002: high_stakes:MEDICAL + truth_type VOLATILE → suppression does NOT short-circuit (VOLATILE guard)', () => {
+    const gate = readRepoFile(GATE_PATH);
+    assert.ok(gate, 'Could not read boundedReasoningGate.js');
+
+    // The VOLATILE guard must be a !== check (not === which would invert the logic)
+    assert.ok(
+      gate.includes("truth_type !== 'VOLATILE'"),
+      "BR-002 FAIL: The VOLATILE guard must use !== 'VOLATILE' so VOLATILE medical queries still get the disclaimer."
+    );
+  });
+
+  it('BR-003: FINANCIAL high-stakes path still fires (medical suppression is scoped to MEDICAL only)', () => {
+    const gate = readRepoFile(GATE_PATH);
+    assert.ok(gate, 'Could not read boundedReasoningGate.js');
+
+    // The high_stakes general trigger must still exist for FINANCIAL / LEGAL domains
+    assert.ok(
+      gate.includes('phase4Metadata.high_stakes?.isHighStakes && !phase4Metadata.verified_at'),
+      "BR-003 FAIL: The general high_stakes trigger must remain intact in boundedReasoningGate.js so " +
+      'FINANCIAL and other high-stakes queries still receive the disclaimer.'
+    );
+  });
+
+  it('BR-004: LEGAL high-stakes path still fires (general high_stakes trigger unchanged)', () => {
+    const gate = readRepoFile(GATE_PATH);
+    assert.ok(gate, 'Could not read boundedReasoningGate.js');
+
+    // Same general trigger covers LEGAL — just verify it's still present
+    assert.ok(
+      gate.includes("reason: 'High-stakes claim without external verification'"),
+      "BR-004 FAIL: The 'High-stakes claim without external verification' reason string must remain in " +
+      'boundedReasoningGate.js so LEGAL and other high-stakes queries still receive the disclaimer.'
+    );
+  });
+
+  it('BR-005: PERMANENT truth_type still suppressed as before (existing behaviour unchanged)', () => {
+    const gate = readRepoFile(GATE_PATH);
+    assert.ok(gate, 'Could not read boundedReasoningGate.js');
+
+    assert.ok(
+      gate.includes("phase4Metadata.truth_type === 'PERMANENT'"),
+      "BR-005 FAIL: PERMANENT truth_type suppression must still be present in boundedReasoningGate.js."
+    );
+    assert.ok(
+      gate.includes("reason: 'Permanent fact - no uncertainty disclosure needed'"),
+      "BR-005 FAIL: The 'Permanent fact - no uncertainty disclosure needed' reason string must remain intact."
+    );
+  });
+
+  it('BR-006: Medical suppression block appears AFTER PERMANENT check and BEFORE speculative check', () => {
+    const gate = readRepoFile(GATE_PATH);
+    assert.ok(gate, 'Could not read boundedReasoningGate.js');
+
+    const permanentIdx = gate.indexOf("reason: 'Permanent fact - no uncertainty disclosure needed'");
+    const medicalIdx   = gate.indexOf("phase4Metadata.high_stakes?.domains?.includes('MEDICAL')");
+    const speculativeIdx = gate.indexOf('SPECULATIVE_PATTERNS.test(queryText)');
+
+    assert.ok(permanentIdx  !== -1, 'BR-006 FAIL: PERMANENT suppression not found.');
+    assert.ok(medicalIdx    !== -1, 'BR-006 FAIL: MEDICAL suppression not found.');
+    assert.ok(speculativeIdx !== -1, 'BR-006 FAIL: Speculative check not found.');
+
+    assert.ok(
+      permanentIdx < medicalIdx,
+      'BR-006 FAIL: MEDICAL suppression must appear AFTER the PERMANENT suppression.'
+    );
+    assert.ok(
+      medicalIdx < speculativeIdx,
+      'BR-006 FAIL: MEDICAL suppression must appear BEFORE the speculative check.'
+    );
+  });
+
+});
+
 // ============================================================
 // SECTION FE: FRONTEND PERSONALITY LABEL — API RESPONSE READ
 // Verifies that public/index.html reads personality from the
