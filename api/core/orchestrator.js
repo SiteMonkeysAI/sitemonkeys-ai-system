@@ -47,7 +47,7 @@ import { sanitizePII } from "../memory/pii-sanitizer.js";
 // ========== PHASE 4/5/6/7 INTEGRATION ==========
 import { detectTruthType, detectByPattern } from "../core/intelligence/truthTypeDetector.js";
 import { route } from "../core/intelligence/hierarchyRouter.js";
-import { lookup, isFactualEntityQuery, isCurrentEventQuery, hasProperNouns, hasReputableSource } from "../core/intelligence/externalLookupEngine.js";
+import { lookup, isFactualEntityQuery, isCurrentEventQuery, hasProperNouns, hasReputableSource, requiresCurrentMarketPrice } from "../core/intelligence/externalLookupEngine.js";
 import { enforceAll } from "../core/intelligence/doctrineEnforcer.js";
 import { enforceBoundedReasoning } from "../core/intelligence/boundedReasoningGate.js";
 import { enforceResponseContract } from "../core/intelligence/responseContractGate.js";
@@ -1082,6 +1082,12 @@ export class Orchestrator {
          message.match(/\b(bitcoin|btc|ethereum|etherium|eth|ether|crypto|cryptocurrency)\b/i))
       );
 
+      // Answer-requirement detection: does answering this query correctly require a current
+      // market price?  Fires when the query (or recent conversation) contains a quantity of a
+      // market-priced commodity — regardless of how the question is phrased.  This covers
+      // corrections ("I'm sorry it was 91 pounds of gold"), follow-ups, and direct queries alike.
+      const isCommodityQuantityQuery = requiresCurrentMarketPrice(message, conversationHistory);
+
       const skipMemoryForSimpleQuery = earlyClassification && (
         (earlyClassification.classification === 'greeting' && message.length < 50) ||
         (earlyClassification.classification === 'simple_factual' &&
@@ -1090,8 +1096,10 @@ export class Orchestrator {
          !hasPersonalIntent)  // Use enhanced personal-intent detection
       );
 
-      // ISSUE #790 FIX: Skip memory for external market queries
-      const skipMemoryForMarketQuery = isMarketQuery;
+      // ISSUE #790 FIX: Skip memory for external market queries.
+      // Also skip for commodity quantity queries (corrections, follow-ups, direct) that
+      // require live market price data — memory context would only add noise.
+      const skipMemoryForMarketQuery = isMarketQuery || isCommodityQuantityQuery;
 
       // A pure greeting with no personal intent never needs memory context regardless of
       // whether the user has stored memories.  The !hasPersonalIntent guard already
@@ -1581,7 +1589,8 @@ export class Orchestrator {
           (isFactualEntityLookupQuery && truthTypeResult.type !== 'PERMANENT') ||
           (isSemanticCurrentEventQuery && truthTypeResult.type !== 'PERMANENT') || // Issue #881: entity + action pattern
           isVolatileFollowUp || // Issue #881: follow-up inherits volatile context
-          (isVerificationIntent && verificationLookupQuery !== null) // Verification: user asked to check a prior claim
+          (isVerificationIntent && verificationLookupQuery !== null) || // Verification: user asked to check a prior claim
+          isCommodityQuantityQuery // Commodity quantity detected: live price required to answer correctly
         );
 
         console.log(
@@ -1615,6 +1624,7 @@ export class Orchestrator {
           isFactualEntityLookupQuery: isFactualEntityLookupQuery,
           isSemanticCurrentEventQuery: isSemanticCurrentEventQuery,
           isVolatileFollowUp: isVolatileFollowUp,
+          isCommodityQuantityQuery: isCommodityQuantityQuery,
           willAttemptLookup: shouldLookup
         });
 
