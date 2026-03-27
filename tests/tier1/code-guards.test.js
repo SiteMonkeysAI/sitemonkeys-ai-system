@@ -6149,3 +6149,53 @@ describe('DR. Doctrine Regression — Emergency Emotional/Fragment/Medical Routi
   });
 
 });
+
+// ============================================================
+// SECTION FE: FRONTEND PERSONALITY LABEL — API RESPONSE READ
+// Verifies that public/index.html reads personality from the
+// backend response (metadata.personalityApplied) rather than
+// blindly alternating via aiToggle.
+// ============================================================
+
+describe('FE. Frontend Personality Label — Reads from API Response', () => {
+
+  const indexHtml = readRepoFile('public/index.html') || '';
+
+  it('FE-001: Personality label reads from metadata.personalityApplied when present', () => {
+    assert.ok(
+      indexHtml.includes('data?.metadata?.personalityApplied'),
+      'FE-001 FAIL: index.html must read personality from data?.metadata?.personalityApplied'
+    );
+  });
+
+  it('FE-002: Falls back to aiToggle when metadata.personalityApplied is missing or null', () => {
+    assert.ok(
+      indexHtml.includes("(aiToggle ? 'eli' : 'roxy')"),
+      "FE-002 FAIL: index.html must fall back to (aiToggle ? 'eli' : 'roxy') when metadata is absent"
+    );
+  });
+
+  it('FE-003: Both chat handler locations updated — personalityApplied appears at least twice', () => {
+    const matches = (indexHtml.match(/data\?\.metadata\?\.personalityApplied/g) || []).length;
+    assert.ok(
+      matches >= 2,
+      `FE-003 FAIL: Expected personalityApplied in at least 2 handler locations, found ${matches}`
+    );
+  });
+
+  it('FE-004: Eli label logic uses lowercase comparison against personalityUsed', () => {
+    assert.ok(
+      indexHtml.includes("personalityUsed?.toLowerCase() === 'eli'"),
+      "FE-004 FAIL: index.html must use personalityUsed?.toLowerCase() === 'eli' to determine Eli"
+    );
+  });
+
+  it('FE-005: Roxy label is derived from isEli being false (not personalityUsed === roxy direct)', () => {
+    // The pattern `const who = isEli ? "Eli" : "Roxy"` covers Roxy via negation
+    assert.ok(
+      indexHtml.includes('"Roxy"'),
+      'FE-005 FAIL: index.html must still render "Roxy" label for non-Eli personality'
+    );
+  });
+
+});
