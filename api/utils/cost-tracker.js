@@ -42,6 +42,12 @@ class CostTracker {
     return COST_CEILINGS[mode] || COST_CEILINGS.truth_general;
   }
 
+  isApproachingCeiling(sessionId, mode) {
+    const ceiling = COST_CEILINGS[mode] || COST_CEILINGS.truth_general;
+    const current = this.getSessionCost(sessionId);
+    return current >= (ceiling * 0.75);
+  }
+
   wouldExceedCeiling(sessionId, estimatedCost, mode) {
     const currentCost = this.getSessionCost(sessionId);
     const ceiling = this.getCostCeiling(mode);
