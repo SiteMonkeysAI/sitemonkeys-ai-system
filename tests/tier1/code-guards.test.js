@@ -3925,13 +3925,23 @@ describe('VI. Verification Intent Detection — External Lookup Triggering', () 
     const src = readRepoFile('api/core/orchestrator.js');
     assert.ok(src, 'Could not read api/core/orchestrator.js');
 
-    // Find the lookupQuery const that feeds into the lookup() call
-    const lookupQueryIdx = src.indexOf('const lookupQuery = (isVerificationIntent');
+    // Find the lookupQuery const that feeds into the lookup() call.
+    // The expression may start with a commodity guard (isCommodityQuantityQuery) or directly
+    // with the verification check — either way verificationLookupQuery must appear in it.
+    const lookupQueryIdx = src.indexOf('const lookupQuery =');
     assert.ok(
       lookupQueryIdx !== -1,
-      'VI-008 FAIL: "const lookupQuery = (isVerificationIntent && verificationLookupQuery)" ' +
-      'pattern is missing from orchestrator.js. When verification intent is detected, ' +
-      'the lookup query must use the extracted claim rather than the enriched user message.'
+      'VI-008 FAIL: "const lookupQuery =" is missing from orchestrator.js. ' +
+      'When verification intent is detected, the lookup query must use the extracted claim ' +
+      'rather than the enriched user message.'
+    );
+    // Verify verificationLookupQuery is referenced in the same block
+    const blockRegion = src.slice(lookupQueryIdx, lookupQueryIdx + 600);
+    assert.ok(
+      blockRegion.includes('isVerificationIntent') && blockRegion.includes('verificationLookupQuery'),
+      'VI-008 FAIL: lookupQuery block must reference both isVerificationIntent and verificationLookupQuery. ' +
+      'When verification intent is detected, the lookup query must use the extracted claim ' +
+      'rather than the enriched user message.'
     );
   });
 
@@ -6472,6 +6482,141 @@ describe('ME. Medical Emergency Early Return — Stage 2 Bypass', () => {
       blockRegion.includes('TRUTH_TYPES.PERMANENT') || blockRegion.includes("'PERMANENT'"),
       'ME-006 FAIL: Medical emergency early return must classify as PERMANENT. ' +
       'Emergency protocols (call 911, CPR steps) are permanent established knowledge, not real-time data.'
+    );
+  });
+
+});
+
+// ============================================================
+// VL. Vault Loading Mode Guard — Item 17 Fix 1
+// Vault must never be loaded for truth_general mode
+// ============================================================
+describe('VL. Vault Loading Mode Guard — truth_general must not load vault', () => {
+
+  it('VL-001: truth_general mode does not attempt vault load even when vaultContext is provided', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'VL-001 FAIL: Could not read api/core/orchestrator.js');
+    // The vault loading logic must require mode === "site_monkeys" even when vaultContext is supplied
+    // Old (broken): let vaultData = vaultContext ? await this.#loadVaultContext(vaultContext) : ...
+    // New (fixed):  let vaultData = vaultContext && mode === "site_monkeys" ? ...
+    assert.ok(
+      orch.includes('vaultContext && mode === "site_monkeys"'),
+      'VL-001 FAIL: Vault loading must be gated on both vaultContext AND mode === "site_monkeys". ' +
+      'Without the mode check, vault is loaded for truth_general requests that pass vaultContext.'
+    );
+  });
+
+  it('VL-002: site_monkeys mode still loads vault correctly (both vault paths present)', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'VL-002 FAIL: Could not read api/core/orchestrator.js');
+    // First path: explicit vaultContext with site_monkeys guard
+    assert.ok(
+      orch.includes('vaultContext && mode === "site_monkeys"'),
+      'VL-002 FAIL: First vault path (explicit vaultContext) must also be guarded by mode === "site_monkeys"'
+    );
+    // Second path: auto-load for site_monkeys + vaultEnabled
+    assert.ok(
+      orch.includes('mode === "site_monkeys" && vaultEnabled'),
+      'VL-002 FAIL: Second vault path (auto-load when vaultEnabled) must remain guarded by mode === "site_monkeys"'
+    );
+  });
+
+});
+
+// ============================================================
+// MC. Memory Quality — Complaint & Meta-Commentary Filter
+// Item 17 Fix 2: Complaints about AI behaviour are not user facts
+// ============================================================
+describe('MC. Memory Quality — Complaint and Meta-Commentary Filter', () => {
+
+  it('MC-001: "You\'re not using real time" blocked as meta-commentary (code-scan)', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'MC-001 FAIL: Could not read api/memory/intelligent-storage.js');
+    assert.ok(
+      storage.includes('complaintAndMetaCommentaryPatterns'),
+      'MC-001 FAIL: complaintAndMetaCommentaryPatterns array must exist in intelligent-storage.js'
+    );
+    assert.ok(
+      storage.includes('complaint_or_meta_commentary'),
+      'MC-001 FAIL: return reason "complaint_or_meta_commentary" must exist in intelligent-storage.js'
+    );
+  });
+
+  it('MC-002: "Why are you doing this" blocked as AI-directed question (pattern present)', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'MC-002 FAIL: Could not read api/memory/intelligent-storage.js');
+    // The pattern for "why are/do/don't/won't/can't/aren't/doesn't/didn't you" must be present
+    assert.ok(
+      storage.includes("/^why (?:are|aren'?t|do|don'?t|doesn'?t|didn'?t|won'?t|can'?t) you\\b/i"),
+      'MC-002 FAIL: Pattern for "why are/do/don\'t you" AI-directed questions must be in complaintAndMetaCommentaryPatterns'
+    );
+  });
+
+  it('MC-003: "Your memory is wrong" blocked as meta-commentary (pattern present)', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'MC-003 FAIL: Could not read api/memory/intelligent-storage.js');
+    // The pattern for "your memory/system/response is/was/isn't..." must be present
+    assert.ok(
+      storage.includes("/\\byour (?:memory|system|response|answer) (?:is|was|isn'?t|wasn'?t|doesn'?t|don'?t)\\b/i"),
+      'MC-003 FAIL: Pattern for "your memory/system is/was wrong" must be in complaintAndMetaCommentaryPatterns'
+    );
+  });
+
+  it('MC-004: complaint filter runs after metaSystemPatterns and before generalInfoPatterns (ordering)', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'MC-004 FAIL: Could not read api/memory/intelligent-storage.js');
+    const metaIdx = storage.indexOf('metaSystemPatterns');
+    const complaintIdx = storage.indexOf('complaintAndMetaCommentaryPatterns');
+    const generalIdx = storage.indexOf('generalInfoPatterns');
+    assert.ok(metaIdx !== -1, 'MC-004 FAIL: metaSystemPatterns not found');
+    assert.ok(complaintIdx !== -1, 'MC-004 FAIL: complaintAndMetaCommentaryPatterns not found');
+    assert.ok(generalIdx !== -1, 'MC-004 FAIL: generalInfoPatterns not found');
+    assert.ok(
+      metaIdx < complaintIdx && complaintIdx < generalIdx,
+      'MC-004 FAIL: complaintAndMetaCommentaryPatterns must appear after metaSystemPatterns ' +
+      'and before generalInfoPatterns in detectNonUserQuery'
+    );
+  });
+
+});
+
+// ============================================================
+// CQ. Commodity Query Simplification — Item 17 Fix 3
+// Commodity queries must extract a clean "commodity price" term
+// instead of passing the full verbose message to external lookup
+// ============================================================
+describe('CQ. Commodity Query Simplification — Item 17 Fix 3', () => {
+
+  it('CQ-001: extractCommoditySearchQuery function exists in orchestrator.js', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'CQ-001 FAIL: Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('extractCommoditySearchQuery'),
+      'CQ-001 FAIL: extractCommoditySearchQuery function must be defined in orchestrator.js'
+    );
+    // Must return commodity + " price" for known commodities
+    assert.ok(
+      orch.includes('`${commodityMatch[1]} price`'),
+      'CQ-001 FAIL: extractCommoditySearchQuery must return `${commodityMatch[1]} price` for matched commodities'
+    );
+  });
+
+  it('CQ-002: isCommodityQuantityQuery uses extractCommoditySearchQuery for lookup query', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'CQ-002 FAIL: Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('isCommodityQuantityQuery') &&
+      orch.includes('extractCommoditySearchQuery(enrichedMessage)'),
+      'CQ-002 FAIL: When isCommodityQuantityQuery is true, lookupQuery must be built via extractCommoditySearchQuery(enrichedMessage)'
+    );
+  });
+
+  it('CQ-003: non-commodity queries still strip [DOCUMENT CONTEXT] block (original behaviour preserved)', () => {
+    const orch = readRepoFile('api/core/orchestrator.js');
+    assert.ok(orch, 'CQ-003 FAIL: Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('enrichedMessage.replace(/\\[DOCUMENT CONTEXT\\][\\s\\S]*/i, \'\').trim()'),
+      'CQ-003 FAIL: Non-commodity, non-verification path must still strip [DOCUMENT CONTEXT] block from lookupQuery'
     );
   });
 

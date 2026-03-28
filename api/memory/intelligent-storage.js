@@ -380,6 +380,30 @@ export class IntelligentMemoryStorage {
       }
     }
 
+    // Complaints and meta-commentary about AI behavior
+    // These are not personal facts about the user
+    const complaintAndMetaCommentaryPatterns = [
+      // AI-directed complaints
+      /\byou'?re (?:not |always |keep )\w+ing\b/i,
+      /\byou (?:said|told me|claimed|keep|always|never|won'?t|didn'?t)\b/i,
+      /\byour (?:memory|system|response|answer) (?:is|was|isn'?t|wasn'?t|doesn'?t|don'?t)\b/i,
+      /\byou'?re (?:wrong|broken|not working|not using|ignoring)\b/i,
+      // Questions directed at AI behavior
+      /^why (?:are|aren'?t|do|don'?t|doesn'?t|didn'?t|won'?t|can'?t) you\b/i,
+      /^why (?:is|isn'?t) (?:your|the system|the memory)\b/i,
+      // Meta-commentary framed as statements
+      /\byou have access to\b.{0,30}\bwhy\b/i,
+      /\byou (?:already|should) know\b/i,
+    ];
+
+    const isComplaintOrMetaCommentary = complaintAndMetaCommentaryPatterns
+      .some(p => p.test(content));
+
+    if (isComplaintOrMetaCommentary) {
+      this.log('[MEMORY-QUALITY] Blocked complaint/meta-commentary — not a personal fact');
+      return { shouldSkip: true, reason: 'complaint_or_meta_commentary' };
+    }
+
     // General information queries without personal context
     const generalInfoPatterns = [
       /^(?:what|who|when|where|why|how) (?:is|are|was|were|did|does|do)/i,  // "What is Bitcoin?"
