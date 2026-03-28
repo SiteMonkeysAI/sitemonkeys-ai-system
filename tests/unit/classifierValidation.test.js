@@ -600,3 +600,152 @@ describe('CF-034 through CF-041: Historical/Authorship PERMANENT + War/Conflict 
 
 });
 
+// ---------------------------------------------------------------------------
+// CF-044 through CF-049: 80-Query Validation Set — 3 Fixed Pattern Gaps
+//
+// These tests document the 5 consistent failures identified at 93.8% pass rate
+// (75/80 queries passing) when running POST /api/admin/classifier-test.
+//
+// Failure distribution from failures_by_type:
+//   PERMANENT:   3 failures
+//   SEMI_STABLE: 1 failure
+//   VOLATILE:    1 failure
+//
+// Root cause analysis:
+//   CLF017 (PERMANENT)  — detectByPattern regex for astronomical count couldn't match
+//                         compound prepositions "are in" (only handled "are" OR "in").
+//                         Fixable pattern gap. Fixed in this PR.
+//   CLF027 (SEMI_STABLE) — "What are the FDA guidelines on sugar intake?" matched the
+//                          PERMANENT "what are" pattern before SEMI_STABLE FDA pattern.
+//                          POLICY_PATTERNS required "current/latest" prefix; standalone
+//                          agency + "guidelines" wasn't covered. Fixable pattern gap.
+//                          Fixed in this PR.
+//   CLF043 (VOLATILE)   — "What is the latest news on Ukraine?" was intercepted by
+//                          FRESHNESS_OVERRIDE_PATTERNS (`latest (information|news|...)`)
+//                          and returned SEMI_STABLE before VOLATILE detection ran.
+//                          "Latest news" carries inherent real-time intent — same root
+//                          cause as the earlier "latest developments" fix for Gaza.
+//                          Fixable pattern gap. Fixed in this PR.
+//   CLF015 (PERMANENT)  — "Who wrote Hamlet?" (17 chars): expected `simple_factual`
+//                          classification but with all-zero embedding fallback the
+//                          length < 30 branch returns `simple_short`. Genuine
+//                          classifier limitation — depends on embedding confidence
+//                          exceeding MEDIUM_CONFIDENCE (0.60) for simple_factual anchor.
+//   CLF012 (PERMANENT)  — "What year did World War 2 end?" (30 chars): expected
+//                          `simple_factual` classification but queryLength = 30 is NOT
+//                          < 30 so the short-query branch doesn't fire. Classification
+//                          relies solely on embedding similarity to the simple_factual
+//                          anchor. Genuine classifier limitation.
+//
+// Note: CLF015 and CLF012 are NOT tested here because they require live OpenAI
+// embeddings to reproduce. Their pass/fail depends on the cosine similarity score
+// against the simple_factual concept anchor — determinism requires the production API.
+// ---------------------------------------------------------------------------
+
+describe('CF-044 through CF-049: Fixed 80-query validation set pattern gaps', () => {
+
+  // ── FIX: CLF017 — "How many planets are in the solar system?" was AMBIGUOUS ──
+
+  it('CF-044: "How many planets are in the solar system?" → PERMANENT (was AMBIGUOUS — compound preposition bug)', () => {
+    const result = detectByPattern('How many planets are in the solar system?');
+    assert.strictEqual(result.type, 'PERMANENT',
+      `CLF017 regression: expected PERMANENT, got ${result.type}. ` +
+      'Astronomical count pattern must handle compound preposition "are in".'
+    );
+  });
+
+  it('CF-044b: astronomical count pattern handles "are in" without breaking plain "in" form', () => {
+    const withAreIn  = detectByPattern('How many planets are in the solar system?');
+    const withJustIn = detectByPattern('How many planets in solar system?');
+    assert.strictEqual(withAreIn.type,  'PERMANENT', `"are in" form should be PERMANENT, got ${withAreIn.type}`);
+    assert.strictEqual(withJustIn.type, 'PERMANENT', `plain "in" form should still be PERMANENT, got ${withJustIn.type}`);
+  });
+
+  it('CF-044c: truthTypeDetector.js astronomical pattern uses non-capturing groups for compound preposition', () => {
+    const src = readFile(TRUTH_DETECTOR_PATH);
+    assert.ok(src, 'truthTypeDetector.js could not be read');
+    // New pattern uses (?:are |is )? followed by (?:in |of )? to handle "are in"
+    assert.ok(
+      src.includes('(?:are |is )?(?:in |of )?'),
+      'truthTypeDetector.js astronomical count pattern must use non-capturing optional groups to handle "are in the solar system"'
+    );
+  });
+
+  // ── FIX: CLF027 — "What are the FDA guidelines on sugar intake?" was PERMANENT ──
+
+  it('CF-045: "What are the FDA guidelines on sugar intake?" → SEMI_STABLE (was PERMANENT — missing agency pattern)', () => {
+    const result = detectByPattern('What are the FDA guidelines on sugar intake?');
+    assert.strictEqual(result.type, 'SEMI_STABLE',
+      `CLF027 regression: expected SEMI_STABLE, got ${result.type}. ` +
+      'Regulatory agency + guidelines must be classified as SEMI_STABLE, not PERMANENT.'
+    );
+  });
+
+  it('CF-045b: other agency guideline variations also → SEMI_STABLE', () => {
+    const queries = [
+      'What are the FDA guidelines on food labeling?',
+      'What are the OSHA guidelines for construction sites?',
+      'What are the EPA guidelines on emissions?',
+    ];
+    for (const q of queries) {
+      const result = detectByPattern(q);
+      assert.strictEqual(result.type, 'SEMI_STABLE',
+        `"${q}" should be SEMI_STABLE (agency guideline), got ${result.type}`
+      );
+    }
+  });
+
+  it('CF-045c: truthTypeDetector.js POLICY_PATTERNS includes agency guideline pattern without requiring temporal prefix', () => {
+    const src = readFile(TRUTH_DETECTOR_PATH);
+    assert.ok(src, 'truthTypeDetector.js could not be read');
+    assert.ok(
+      src.includes('fda|epa|cdc|osha|irs|sec') && src.includes('guidelines?'),
+      'truthTypeDetector.js POLICY_PATTERNS must contain agency guideline pattern (fda|epa|...) + guidelines?'
+    );
+  });
+
+  // ── FIX: CLF043 — "What is the latest news on Ukraine?" was SEMI_STABLE ──
+
+  it('CF-046: "What is the latest news on Ukraine?" → VOLATILE (was SEMI_STABLE — news intercepted by FRESHNESS_OVERRIDE)', () => {
+    const result = detectByPattern('What is the latest news on Ukraine?');
+    assert.strictEqual(result.type, 'VOLATILE',
+      `CLF043 regression: expected VOLATILE, got ${result.type}. ` +
+      '"latest news" carries real-time intent and must not be classified as SEMI_STABLE.'
+    );
+  });
+
+  it('CF-046b: other "latest news" variants also → VOLATILE', () => {
+    const queries = [
+      'What is the latest news about the election?',
+      'What is the latest news on the economy?',
+    ];
+    for (const q of queries) {
+      const result = detectByPattern(q);
+      assert.strictEqual(result.type, 'VOLATILE',
+        `"${q}" should be VOLATILE (latest news = real-time), got ${result.type}`
+      );
+    }
+  });
+
+  it('CF-046c: "latest news" removed from FRESHNESS_OVERRIDE_PATTERNS in truthTypeDetector.js', () => {
+    const src = readFile(TRUTH_DETECTOR_PATH);
+    assert.ok(src, 'truthTypeDetector.js could not be read');
+    // The old pattern was: /latest (information|news|updates|events)/i
+    // New pattern must NOT include "news" in this freshness override
+    assert.ok(
+      !src.includes('latest (information|news|'),
+      'truthTypeDetector.js FRESHNESS_OVERRIDE_PATTERNS must not intercept "latest news" — ' +
+      'it must fall through to VOLATILE_PATTERNS instead'
+    );
+  });
+
+  it('CF-046d: "latest information", "latest updates", and "latest events" remain SEMI_STABLE (no regression)', () => {
+    const infoResult    = detectByPattern('What is the latest information on the regulations?');
+    const updatesResult = detectByPattern('What are the latest updates on the policy?');
+    const eventsResult  = detectByPattern('What are the latest events in the industry?');
+    assert.strictEqual(infoResult.type,    'SEMI_STABLE', `"latest information" should still be SEMI_STABLE, got ${infoResult.type}`);
+    assert.strictEqual(updatesResult.type, 'SEMI_STABLE', `"latest updates" should still be SEMI_STABLE, got ${updatesResult.type}`);
+    assert.strictEqual(eventsResult.type,  'SEMI_STABLE', `"latest events" should still be SEMI_STABLE, got ${eventsResult.type}`);
+  });
+
+});
