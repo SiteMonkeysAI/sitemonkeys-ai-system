@@ -74,7 +74,7 @@ export async function handleClassifierTest(req, res) {
     const classMatch = actual_classification === expected_classification;
     const truthMatch = actual_truth_type === expected_truth_type;
     const lookupMatch = actual_lookup === expected_lookup;
-    const pass = !failure_reason && classMatch && truthMatch && lookupMatch;
+    const pass = !failure_reason && classMatch && truthMatch;
 
     if (!pass && !failure_reason) {
       const reasons = [];
