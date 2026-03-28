@@ -6767,13 +6767,27 @@ describe('SC. Semantic Complaint Detection — production-safe architecture', ()
     );
   });
 
-  it('SC-004: shouldBlockAsMetaCommentary uses semantic intent as primary gate (system_feedback check present)', () => {
+  it('SC-004: shouldBlockAsMetaCommentary uses semantic intent as primary gate with domain-based analytical safeguard', () => {
     const storage = readRepoFile('api/memory/intelligent-storage.js');
     assert.ok(storage, 'SC-004 FAIL: Could not read api/memory/intelligent-storage.js');
     // Semantic primary: block only when semantic classifier says system_feedback
     assert.ok(
       storage.includes("intent === 'system_feedback'"),
       "SC-004 FAIL: shouldBlockAsMetaCommentary must check intent === 'system_feedback' as the primary semantic gate"
+    );
+    // Analytical safeguard must check domain, NOT intent again.
+    // "Why are you not using real time data in financial analysis?" → domain='financial' → NOT blocked.
+    // The negation (!analyticalDomains.includes(domain)) is what protects SC-004.
+    assert.ok(
+      storage.includes('analyticalDomains') &&
+      storage.includes('analyticalDomains.includes(domain)') &&
+      storage.includes('!analyticalDomains.includes(domain)'),
+      "SC-004 FAIL: Rule 1 must protect analytical queries via !analyticalDomains.includes(domain), " +
+      "not via intent !== 'analytical' which is always true when intent === 'system_feedback'"
+    );
+    assert.ok(
+      storage.includes("'financial'") && storage.includes("'technical'") && storage.includes("'business'"),
+      "SC-004 FAIL: analyticalDomains must include 'financial', 'technical', and 'business' to protect SC-004-type queries"
     );
     // Rule 2 uses intentConf (from semanticResult.intentConfidence) — ambiguity protected by low-confidence + strong signal
     assert.ok(

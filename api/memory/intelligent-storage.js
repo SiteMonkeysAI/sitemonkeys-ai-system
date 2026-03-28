@@ -480,6 +480,12 @@ export class IntelligentMemoryStorage {
         /\byou have access to\b.{0,30}\bwhy\b/i,
       ];
 
+      // Domains with substantive analytical content — queries in these domains must not be
+      // blocked even when intent classifies as system_feedback (SC-004 safeguard).
+      // "Why are you not using real time data in financial analysis?" → domain='financial' → allowed.
+      // "Why are you not using real time data?" → domain='system_meta'|'general' → blocked.
+      const analyticalDomains = ['financial', 'technical', 'business', 'health', 'creative'];
+
       // Strong match: pattern anchored at start OR two or more patterns match
       const matchingPatterns = systemComplaintPatterns.filter(p => p.test(content));
       const startsWithComplaintPattern = systemComplaintPatterns.some(
@@ -491,9 +497,8 @@ export class IntelligentMemoryStorage {
         // Allow storage when personal facts are present — never block user facts
         if (!noPersonalFacts) return false;
 
-        // Rule 1: Semantic primary — system_feedback intent detected
-        // (intent cannot simultaneously be 'system_feedback' and 'analytical')
-        if (intent === 'system_feedback' && intent !== 'analytical') {
+        // Rule 1: Semantic primary — system_feedback intent with no substantive content domain.
+        if (intent === 'system_feedback' && !analyticalDomains.includes(domain)) {
           return true;
         }
 
