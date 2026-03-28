@@ -196,6 +196,15 @@ export class SemanticAnalyzer {
   async analyzeSemantics(query, context = {}) {
     const startTime = Date.now();
 
+    // LAZY INIT: initialize() pre-computes category embeddings that #classifyIntent and
+    // #classifyDomain require.  The module-level SemanticAnalyzer instance in
+    // intelligent-storage.js is created outside of any server startup path that calls
+    // initialize() explicitly, so we must self-initialize here on first use.
+    if (!this.intentEmbeddings || !this.domainEmbeddings) {
+      this.logger.log("Embeddings not pre-loaded - running lazy initialization before analysis");
+      await this.initialize();
+    }
+
     try {
       this.logger.log(`Analyzing: "${query.substring(0, 50)}..."`);
 
@@ -390,6 +399,11 @@ export class SemanticAnalyzer {
 
   async #classifyIntent(queryEmbedding) {
     try {
+      // NULL GUARD: intentEmbeddings is null when initialize() has not been called yet
+      if (!this.intentEmbeddings) {
+        this.logger.error("Intent embeddings not initialized - returning fallback (call initialize() first)");
+        return { intent: "question", confidence: 0.5 };
+      }
       const intentCategories = {
         question: this.intentEmbeddings.question,
         command: this.intentEmbeddings.command,
@@ -434,6 +448,11 @@ export class SemanticAnalyzer {
 
   async #classifyDomain(queryEmbedding) {
     try {
+      // NULL GUARD: domainEmbeddings is null when initialize() has not been called yet
+      if (!this.domainEmbeddings) {
+        this.logger.error("Domain embeddings not initialized - returning fallback (call initialize() first)");
+        return { domain: "general", confidence: 0.5 };
+      }
       const domainCategories = {
         business: this.domainEmbeddings.business,
         technical: this.domainEmbeddings.technical,
