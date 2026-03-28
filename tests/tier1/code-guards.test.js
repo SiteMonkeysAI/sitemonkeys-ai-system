@@ -6581,6 +6581,56 @@ describe('MC. Memory Quality — Complaint and Meta-Commentary Filter', () => {
 });
 
 // ============================================================
+// SA. Semantic Analyzer — Null Guard Fixes
+// intentEmbeddings / domainEmbeddings are null before initialize()
+// is called; classifyIntent and classifyDomain must guard against
+// this so the outer try/catch in detectNonUserQuery never fires.
+// ============================================================
+describe('SA. Semantic Analyzer — Null Guard Fixes', () => {
+
+  it('SA-001: #classifyIntent has null guard for intentEmbeddings before accessing .question', () => {
+    const analyzer = readRepoFile('api/core/intelligence/semantic_analyzer.js');
+    assert.ok(analyzer, 'SA-001 FAIL: Could not read api/core/intelligence/semantic_analyzer.js');
+    assert.ok(
+      analyzer.includes('!this.intentEmbeddings'),
+      'SA-001 FAIL: #classifyIntent must contain null guard "!this.intentEmbeddings" before accessing intentEmbeddings.question'
+    );
+  });
+
+  it('SA-002: #classifyDomain has null guard for domainEmbeddings before accessing .business', () => {
+    const analyzer = readRepoFile('api/core/intelligence/semantic_analyzer.js');
+    assert.ok(analyzer, 'SA-002 FAIL: Could not read api/core/intelligence/semantic_analyzer.js');
+    assert.ok(
+      analyzer.includes('!this.domainEmbeddings'),
+      'SA-002 FAIL: #classifyDomain must contain null guard "!this.domainEmbeddings" before accessing domainEmbeddings.business'
+    );
+  });
+
+  it('SA-003: detectNonUserQuery validates semanticResult object before accessing properties', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'SA-003 FAIL: Could not read api/memory/intelligent-storage.js');
+    assert.ok(
+      storage.includes('!semanticResult || typeof semanticResult !== \'object\''),
+      'SA-003 FAIL: detectNonUserQuery must validate semanticResult with null/type check before accessing its properties'
+    );
+  });
+
+  it('SA-004: detectNonUserQuery accesses semanticResult properties directly (not via optional chain) after the null guard', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'SA-004 FAIL: Could not read api/memory/intelligent-storage.js');
+    // After the null guard the code must use direct property access, not optional chaining
+    assert.ok(
+      storage.includes('semanticResult.personalContext') &&
+      storage.includes('semanticResult.domain') &&
+      storage.includes('semanticResult.intent') &&
+      storage.includes('semanticResult.emotionalTone'),
+      'SA-004 FAIL: After the null guard, detectNonUserQuery must access semanticResult properties directly'
+    );
+  });
+
+});
+
+// ============================================================
 // CQ. Commodity Query Simplification — Item 17 Fix 3
 // Commodity queries must extract a clean "commodity price" term
 // instead of passing the full verbose message to external lookup

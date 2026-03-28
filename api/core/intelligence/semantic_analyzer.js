@@ -390,6 +390,11 @@ export class SemanticAnalyzer {
 
   async #classifyIntent(queryEmbedding) {
     try {
+      // NULL GUARD: intentEmbeddings is null when initialize() has not been called yet
+      if (!this.intentEmbeddings) {
+        this.logger.error("Intent embeddings not initialized - returning fallback (call initialize() first)");
+        return { intent: "question", confidence: 0.5 };
+      }
       const intentCategories = {
         question: this.intentEmbeddings.question,
         command: this.intentEmbeddings.command,
@@ -434,6 +439,11 @@ export class SemanticAnalyzer {
 
   async #classifyDomain(queryEmbedding) {
     try {
+      // NULL GUARD: domainEmbeddings is null when initialize() has not been called yet
+      if (!this.domainEmbeddings) {
+        this.logger.error("Domain embeddings not initialized - returning fallback (call initialize() first)");
+        return { domain: "general", confidence: 0.5 };
+      }
       const domainCategories = {
         business: this.domainEmbeddings.business,
         technical: this.domainEmbeddings.technical,

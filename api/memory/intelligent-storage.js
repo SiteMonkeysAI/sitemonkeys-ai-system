@@ -455,10 +455,16 @@ export class IntelligentMemoryStorage {
         },
       );
 
-      const personalContext = Boolean(semanticResult?.personalContext);
-      const domain = semanticResult?.domain || 'general';
-      const intent = semanticResult?.intent || 'discussion';
-      const emotionalTone = (semanticResult?.emotionalTone || '').toLowerCase();
+      // NULL GUARD: validate semanticResult before accessing any properties
+      if (!semanticResult || typeof semanticResult !== 'object') {
+        this.log('[MEMORY-QUALITY][SEMANTIC] Semantic result invalid or null, skipping semantic detection');
+        return { shouldSkip: false, reason: null };
+      }
+
+      const personalContext = Boolean(semanticResult.personalContext);
+      const domain = semanticResult.domain || 'general';
+      const intent = semanticResult.intent || 'discussion';
+      const emotionalTone = (semanticResult.emotionalTone || '').toLowerCase();
 
       const systemSubjectIndicators =
         /\b(you|your|the system|ai|assistant|memory|responses?)\b/i.test(content);
