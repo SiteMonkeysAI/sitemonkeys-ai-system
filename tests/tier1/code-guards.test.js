@@ -6583,8 +6583,9 @@ describe('MC. Memory Quality — Complaint and Meta-Commentary Filter', () => {
 // ============================================================
 // SA. Semantic Analyzer — Null Guard Fixes
 // intentEmbeddings / domainEmbeddings are null before initialize()
-// is called; classifyIntent and classifyDomain must guard against
-// this so the outer try/catch in detectNonUserQuery never fires.
+// is called; analyzeSemantics must lazy-init so real embeddings are
+// loaded on first use, and classifyIntent/classifyDomain guard
+// against the null case as a safety net.
 // ============================================================
 describe('SA. Semantic Analyzer — Null Guard Fixes', () => {
 
@@ -6625,6 +6626,20 @@ describe('SA. Semantic Analyzer — Null Guard Fixes', () => {
       storage.includes('semanticResult.intent') &&
       storage.includes('semanticResult.emotionalTone'),
       'SA-004 FAIL: After the null guard, detectNonUserQuery must access semanticResult properties directly'
+    );
+  });
+
+  it('SA-005: analyzeSemantics has lazy-init guard that calls initialize() when embeddings are not pre-loaded', () => {
+    const analyzer = readRepoFile('api/core/intelligence/semantic_analyzer.js');
+    assert.ok(analyzer, 'SA-005 FAIL: Could not read api/core/intelligence/semantic_analyzer.js');
+    // The lazy-init block must check both embedding maps and call initialize()
+    assert.ok(
+      analyzer.includes('!this.intentEmbeddings || !this.domainEmbeddings'),
+      'SA-005 FAIL: analyzeSemantics must check "!this.intentEmbeddings || !this.domainEmbeddings" for lazy init'
+    );
+    assert.ok(
+      analyzer.includes('await this.initialize()'),
+      'SA-005 FAIL: analyzeSemantics must call "await this.initialize()" when embeddings are not loaded'
     );
   });
 

@@ -196,6 +196,15 @@ export class SemanticAnalyzer {
   async analyzeSemantics(query, context = {}) {
     const startTime = Date.now();
 
+    // LAZY INIT: initialize() pre-computes category embeddings that #classifyIntent and
+    // #classifyDomain require.  The module-level SemanticAnalyzer instance in
+    // intelligent-storage.js is created outside of any server startup path that calls
+    // initialize() explicitly, so we must self-initialize here on first use.
+    if (!this.intentEmbeddings || !this.domainEmbeddings) {
+      this.logger.log("Embeddings not pre-loaded - running lazy initialization before analysis");
+      await this.initialize();
+    }
+
     try {
       this.logger.log(`Analyzing: "${query.substring(0, 50)}..."`);
 
