@@ -19,10 +19,24 @@ import {
 export default async function loadVaultHandler(req, res) {
   const refresh = req.query.refresh === "true" || req.body.refresh === true;
   const manual = req.query.manual === "true" || req.body.manual === true;
+  const mode = req.query.mode || req.body?.mode || null;
 
   console.log(
-    `[LOAD-VAULT] Request received - refresh: ${refresh}, manual: ${manual}`,
+    `[LOAD-VAULT] Request received - refresh: ${refresh}, manual: ${manual}, mode: ${mode || 'unspecified'}`,
   );
+
+  // Mode guard: vault KV fetch is restricted to site_monkeys mode
+  if (mode && mode !== 'site_monkeys') {
+    console.log(`[LOAD-VAULT] Skipping vault KV fetch — mode "${mode}" is not site_monkeys`);
+    return res.json({
+      success: false,
+      reason: 'vault_restricted_to_site_monkeys_mode',
+      vault_content: '',
+      folders_loaded: [],
+      total_files: 0,
+      vault_status: 'skipped',
+    });
+  }
 
   try {
     let vaultData = null;

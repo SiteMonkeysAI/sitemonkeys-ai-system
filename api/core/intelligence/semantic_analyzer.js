@@ -62,6 +62,8 @@ export class SemanticAnalyzer {
           "I feel frustrated. I'm excited about this. This worries me.",
         information_sharing:
           "I want to tell you about this. Here's what happened. This is important to know.",
+        system_feedback:
+          "I want to report a problem with you, your response was wrong, you made an error, why are you not doing this correctly",
       };
 
       // Domain representative phrases
@@ -82,6 +84,8 @@ export class SemanticAnalyzer {
           "artistic projects, creative writing, design work, creative problem solving, artistic expression, music, art, design",
         general:
           "everyday questions, general knowledge, casual conversation, various topics, common inquiries, weather, news, current events, factual information",
+        system_meta:
+          "AI system behavior, system limitations, assistant understanding, complaint about assistant response, feedback about AI performance",
       };
 
       // Configurable timeout (default 20 seconds, can be overridden via environment variable)
@@ -412,6 +416,7 @@ export class SemanticAnalyzer {
         decision_making: this.intentEmbeddings.decision_making,
         emotional_expression: this.intentEmbeddings.emotional_expression,
         information_sharing: this.intentEmbeddings.information_sharing,
+        system_feedback: this.intentEmbeddings.system_feedback,
       };
 
       let maxSimilarity = -1;
@@ -461,6 +466,7 @@ export class SemanticAnalyzer {
         financial: this.domainEmbeddings.financial,
         creative: this.domainEmbeddings.creative,
         general: this.domainEmbeddings.general,
+        system_meta: this.domainEmbeddings.system_meta,
       };
 
       let maxSimilarity = -1;

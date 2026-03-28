@@ -6686,3 +6686,137 @@ describe('CQ. Commodity Query Simplification — Item 17 Fix 3', () => {
   });
 
 });
+
+// ============================================================
+// SM. Semantic Analyzer — system_feedback and system_meta
+// FIX 1: Add system_feedback intent + system_meta domain so the
+// semantic path can detect AI-directed complaints directly.
+// ============================================================
+describe('SM. Semantic Analyzer — system_feedback intent and system_meta domain', () => {
+
+  it('SM-001: system_feedback intent present in semantic analyzer', () => {
+    const analyzer = readRepoFile('api/core/intelligence/semantic_analyzer.js');
+    assert.ok(analyzer, 'SM-001 FAIL: Could not read api/core/intelligence/semantic_analyzer.js');
+    assert.ok(
+      analyzer.includes('system_feedback'),
+      'SM-001 FAIL: "system_feedback" intent key must be present in semantic_analyzer.js intentPhrases and intentCategories'
+    );
+    assert.ok(
+      analyzer.includes('I want to report a problem with you') ||
+      analyzer.includes('your response was wrong') ||
+      analyzer.includes('why are you not doing this correctly'),
+      'SM-001 FAIL: system_feedback representative phrase must be present in intentPhrases in semantic_analyzer.js'
+    );
+  });
+
+  it('SM-002: system_meta domain present in semantic analyzer', () => {
+    const analyzer = readRepoFile('api/core/intelligence/semantic_analyzer.js');
+    assert.ok(analyzer, 'SM-002 FAIL: Could not read api/core/intelligence/semantic_analyzer.js');
+    assert.ok(
+      analyzer.includes('system_meta'),
+      'SM-002 FAIL: "system_meta" domain key must be present in semantic_analyzer.js domainPhrases and domainCategories'
+    );
+    assert.ok(
+      analyzer.includes('AI system behavior') ||
+      analyzer.includes('complaint about assistant response') ||
+      analyzer.includes('feedback about AI performance'),
+      'SM-002 FAIL: system_meta representative phrase must be present in domainPhrases in semantic_analyzer.js'
+    );
+  });
+
+});
+
+// ============================================================
+// SC. Semantic Complaint Detection — production-safe architecture
+// FIX 2: Semantic decides (system_feedback), regex assists.
+// Ambiguity is protected: personal facts always allow storage.
+// ============================================================
+describe('SC. Semantic Complaint Detection — production-safe architecture', () => {
+
+  it('SC-001: systemComplaintPatterns covers "Why are you not using real time data" (start-of-query anchor present)', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'SC-001 FAIL: Could not read api/memory/intelligent-storage.js');
+    assert.ok(
+      storage.includes('systemComplaintPatterns'),
+      'SC-001 FAIL: systemComplaintPatterns array must exist in shouldBlockAsMetaCommentary section'
+    );
+    // Pattern anchored at start for "why are/do/don't/won't/can't/aren't you"
+    assert.ok(
+      storage.includes("/^why (are|do|don'?t|won'?t|can'?t|aren'?t) you\\b/i"),
+      'SC-001 FAIL: systemComplaintPatterns must include start-anchored "^why (are|do|...) you" pattern to catch SC-001 query'
+    );
+  });
+
+  it('SC-002: systemComplaintPatterns covers "You\'re not using real time" (you\'re pattern present)', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'SC-002 FAIL: Could not read api/memory/intelligent-storage.js');
+    // Pattern for "you're not/always/keep ...ing"
+    assert.ok(
+      storage.includes("/\\byou'?re (not |always |keep )\\w+ing\\b/i"),
+      "SC-002 FAIL: systemComplaintPatterns must include \"you're (not|always|keep) ...ing\" pattern to catch SC-002 query"
+    );
+  });
+
+  it('SC-003: personal-fact queries are protected (noPersonalFacts guard present in shouldBlockAsMetaCommentary)', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'SC-003 FAIL: Could not read api/memory/intelligent-storage.js');
+    // The shouldBlockAsMetaCommentary function must return false when personal facts are detected
+    assert.ok(
+      storage.includes('if (!noPersonalFacts) return false;'),
+      'SC-003 FAIL: shouldBlockAsMetaCommentary must guard with "if (!noPersonalFacts) return false;" to protect personal facts like SC-003'
+    );
+  });
+
+  it('SC-004: shouldBlockAsMetaCommentary uses semantic intent as primary gate with domain-based analytical safeguard', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'SC-004 FAIL: Could not read api/memory/intelligent-storage.js');
+    // Semantic primary: block only when semantic classifier says system_feedback
+    assert.ok(
+      storage.includes("intent === 'system_feedback'"),
+      "SC-004 FAIL: shouldBlockAsMetaCommentary must check intent === 'system_feedback' as the primary semantic gate"
+    );
+    // Analytical safeguard must check domain, NOT intent again.
+    // "Why are you not using real time data in financial analysis?" → domain='financial' → NOT blocked.
+    // The negation (!analyticalDomains.includes(domain)) is what protects SC-004.
+    assert.ok(
+      storage.includes('analyticalDomains') &&
+      storage.includes('analyticalDomains.includes(domain)') &&
+      storage.includes('!analyticalDomains.includes(domain)'),
+      "SC-004 FAIL: Rule 1 must protect analytical queries via !analyticalDomains.includes(domain), " +
+      "not via intent !== 'analytical' which is always true when intent === 'system_feedback'"
+    );
+    assert.ok(
+      storage.includes("'financial'") && storage.includes("'technical'") && storage.includes("'business'"),
+      "SC-004 FAIL: analyticalDomains must include 'financial', 'technical', and 'business' to protect SC-004-type queries"
+    );
+    // Rule 2 uses intentConf (from semanticResult.intentConfidence) — ambiguity protected by low-confidence + strong signal
+    assert.ok(
+      storage.includes('semanticResult.intentConfidence') && storage.includes('intentConf'),
+      'SC-004 FAIL: Rule 2 must read intentConf from semanticResult.intentConfidence so that high-confidence analytical queries like SC-004 are not falsely blocked'
+    );
+  });
+
+});
+
+// ============================================================
+// VK. Vault KV Mode Guard
+// FIX 3: Vault KV fetch must be skipped when not in site_monkeys mode.
+// ============================================================
+describe('VK. Vault KV Mode Guard — KV fetch skipped outside site_monkeys mode', () => {
+
+  it('VK-001: Vault KV skipped when not site_monkeys mode (mode guard present in load-vault.js)', () => {
+    const loadVault = readRepoFile('api/load-vault.js');
+    assert.ok(loadVault, 'VK-001 FAIL: Could not read api/load-vault.js');
+    // Must extract mode from request
+    assert.ok(
+      loadVault.includes("req.query.mode") || loadVault.includes("req.body?.mode") || loadVault.includes("req.body.mode"),
+      'VK-001 FAIL: api/load-vault.js must read mode from request (req.query.mode or req.body.mode)'
+    );
+    // Must guard KV fetch against non-site_monkeys mode
+    assert.ok(
+      loadVault.includes("mode !== 'site_monkeys'") || loadVault.includes('mode !== "site_monkeys"'),
+      "VK-001 FAIL: api/load-vault.js must contain mode !== 'site_monkeys' guard before vault KV fetch"
+    );
+  });
+
+});

@@ -200,20 +200,25 @@ async function initializeMemorySystem() {
     await persistentMemory.intelligenceSystem.initialize();
     console.log("[SERVER] ✅ Intelligence system initialized");
 
-    // Initialize vault loader
-    console.log("[SERVER] 🍌 Initializing vault loader...");
-    try {
-      await vaultLoader.initialize();
-      const vaultStats = vaultLoader.getStats();
-      console.log(
-        `[SERVER] ✅ Vault loader initialized: ${vaultStats.coreTokens} core tokens, ${vaultStats.indexedFiles} files indexed`,
-      );
-    } catch (vaultError) {
-      console.error(
-        "[SERVER] ⚠️ Vault loader initialization failed:",
-        vaultError.message,
-      );
-      console.log("[SERVER] System will continue without vault preload");
+    // Initialize vault loader — only when site_monkeys mode is configured
+    const siteMonkeysConfigured = process.env.VAULT_ENABLED === 'true' || process.env.SITE_MONKEYS_VAULT_ENABLED === 'true';
+    console.log(`[SERVER] 🍌 Vault loader init — site_monkeys configured: ${siteMonkeysConfigured}`);
+    if (siteMonkeysConfigured) {
+      try {
+        await vaultLoader.initialize();
+        const vaultStats = vaultLoader.getStats();
+        console.log(
+          `[SERVER] ✅ Vault loader initialized: ${vaultStats.coreTokens} core tokens, ${vaultStats.indexedFiles} files indexed`,
+        );
+      } catch (vaultError) {
+        console.error(
+          "[SERVER] ⚠️ Vault loader initialization failed:",
+          vaultError.message,
+        );
+        console.log("[SERVER] System will continue without vault preload");
+      }
+    } else {
+      console.log("[SERVER] ⏭️ Vault loader skipped — set VAULT_ENABLED=true to enable site_monkeys vault preload");
     }
 
     // Verify memory system is working
