@@ -6820,3 +6820,84 @@ describe('VK. Vault KV Mode Guard — KV fetch skipped outside site_monkeys mode
   });
 
 });
+
+// ============================================================
+// TR. Trivial Message Pre-filter
+// Skip trivial messages before any API calls
+// ============================================================
+describe('TR. Trivial Message Pre-filter — detectTrivialMessage and storeWithIntelligence guard', () => {
+
+  it('TR-001: detectTrivialMessage method exists in intelligent-storage.js', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'TR-001 FAIL: Could not read api/memory/intelligent-storage.js');
+    assert.ok(
+      storage.includes('detectTrivialMessage('),
+      'TR-001 FAIL: detectTrivialMessage method must exist in IntelligentMemoryStorage'
+    );
+  });
+
+  it('TR-002: detectTrivialMessage skips short messages (too_short reason)', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'TR-002 FAIL: Could not read api/memory/intelligent-storage.js');
+    assert.ok(
+      storage.includes("reason: 'too_short'"),
+      "TR-002 FAIL: detectTrivialMessage must return reason: 'too_short' for messages under the minimum length"
+    );
+    assert.ok(
+      storage.includes('MIN_STORABLE_MESSAGE_LENGTH') && storage.includes('trimmed.length < MIN_STORABLE_MESSAGE_LENGTH'),
+      'TR-002 FAIL: detectTrivialMessage must use MIN_STORABLE_MESSAGE_LENGTH constant for the length check'
+    );
+  });
+
+  it('TR-003: detectTrivialMessage has TRIVIAL_MESSAGE_PATTERNS covering greetings and acknowledgements', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'TR-003 FAIL: Could not read api/memory/intelligent-storage.js');
+    assert.ok(
+      storage.includes('TRIVIAL_MESSAGE_PATTERNS'),
+      'TR-003 FAIL: patterns must be defined in the module-level TRIVIAL_MESSAGE_PATTERNS constant'
+    );
+    assert.ok(
+      storage.includes('hi|hello|hey'),
+      "TR-003 FAIL: TRIVIAL_MESSAGE_PATTERNS must cover basic greetings (hi|hello|hey)"
+    );
+    assert.ok(
+      storage.includes('ok|okay|sure'),
+      "TR-003 FAIL: TRIVIAL_MESSAGE_PATTERNS must cover acknowledgements (ok|okay|sure)"
+    );
+    assert.ok(
+      storage.includes('sounds good|makes sense'),
+      "TR-003 FAIL: TRIVIAL_MESSAGE_PATTERNS must cover positive acknowledgements (sounds good|makes sense)"
+    );
+    assert.ok(
+      storage.includes("reason: 'trivial_greeting'"),
+      "TR-003 FAIL: detectTrivialMessage must return reason: 'trivial_greeting' for trivial pattern matches"
+    );
+  });
+
+  it('TR-004: storeWithIntelligence calls detectTrivialMessage BEFORE detectNonUserQuery', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'TR-004 FAIL: Could not read api/memory/intelligent-storage.js');
+    const trivialIdx = storage.indexOf('detectTrivialMessage(userMessage)');
+    const nonUserIdx = storage.indexOf('detectNonUserQuery(userMessage)');
+    assert.ok(trivialIdx !== -1, 'TR-004 FAIL: storeWithIntelligence must call detectTrivialMessage(userMessage)');
+    assert.ok(nonUserIdx !== -1, 'TR-004 FAIL: storeWithIntelligence must call detectNonUserQuery(userMessage)');
+    assert.ok(
+      trivialIdx < nonUserIdx,
+      'TR-004 FAIL: detectTrivialMessage must be called BEFORE detectNonUserQuery in storeWithIntelligence'
+    );
+  });
+
+  it('TR-005: trivial message guard returns action skipped with reason trivial_message', () => {
+    const storage = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(storage, 'TR-005 FAIL: Could not read api/memory/intelligent-storage.js');
+    assert.ok(
+      storage.includes("reason: 'trivial_message'"),
+      "TR-005 FAIL: storeWithIntelligence must return { action: 'skipped', reason: 'trivial_message' } for trivial messages"
+    );
+    assert.ok(
+      storage.includes('[MEMORY-QUALITY] Skipping trivial message'),
+      "TR-005 FAIL: storeWithIntelligence must log '[MEMORY-QUALITY] Skipping trivial message' when skipping"
+    );
+  });
+
+});

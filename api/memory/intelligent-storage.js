@@ -67,6 +67,24 @@ const SYSTEM_COMPONENT_NAMES = [
 ];
 
 /**
+ * Minimum character length for a message to be worth analysing for storable facts.
+ * Messages shorter than this (e.g. "hi", "ok", "no") are skipped before any API calls.
+ */
+const MIN_STORABLE_MESSAGE_LENGTH = 15;
+
+/**
+ * Patterns that match trivial conversational turns (greetings, one-word replies, sign-offs)
+ * that contain no personal facts worth storing in long-term memory.
+ * Defined at module level to avoid re-allocation on every call.
+ */
+const TRIVIAL_MESSAGE_PATTERNS = [
+  /^(hi|hello|hey|howdy|greetings|good morning|good afternoon|good evening)[\s!.?]*$/i,
+  /^(ok|okay|sure|yes|no|nope|yep|yeah|got it|understood|thanks|thank you|ty|thx)[\s!.?]*$/i,
+  /^(sounds good|makes sense|perfect|great|awesome|cool|nice|good|fine|alright)[\s!.?]*$/i,
+  /^(bye|goodbye|see you|talk later|ttyl|gotta go)[\s!.?]*$/i,
+];
+
+/**
  * Intelligent Memory Storage System
  * Compresses verbose conversations and prevents duplicate storage
  */
@@ -313,6 +331,27 @@ export class IntelligentMemoryStorage {
       console.log('[SEMANTIC-FINGERPRINT] ❌ No fingerprint detected in facts');
     }
     return { fingerprint: null, confidence: 0, method: 'no_match' };
+  }
+
+  /**
+   * Pre-filter: Detect trivial messages (greetings, one-word replies, etc.)
+   * that contain no personal facts worth storing.
+   * Runs BEFORE detectNonUserQuery to avoid any API calls for these messages.
+   * @param {string} content - User message to check
+   * @returns {object} - { shouldSkip: boolean, reason: string }
+   */
+  detectTrivialMessage(content) {
+    if (!content || typeof content !== 'string') {
+      return { shouldSkip: false };
+    }
+    const trimmed = content.trim();
+    if (trimmed.length < MIN_STORABLE_MESSAGE_LENGTH) {
+      return { shouldSkip: true, reason: 'too_short' };
+    }
+    if (TRIVIAL_MESSAGE_PATTERNS.some(p => p.test(trimmed))) {
+      return { shouldSkip: true, reason: 'trivial_greeting' };
+    }
+    return { shouldSkip: false };
   }
 
   /**
@@ -1177,6 +1216,13 @@ export class IntelligentMemoryStorage {
 
         console.log('[INTELLIGENT-STORAGE] ✅ Explicit memory stored verbatim');
         return result;
+      }
+
+      // Pre-filter: skip trivial messages (greetings, one-word replies) before any API calls
+      const isTrivialMessage = this.detectTrivialMessage(userMessage);
+      if (isTrivialMessage.shouldSkip) {
+        console.log('[MEMORY-QUALITY] Skipping trivial message — no facts to store');
+        return { action: 'skipped', reason: 'trivial_message' };
       }
 
       // PROBLEM 3 FIX: Filter out non-user-specific queries
