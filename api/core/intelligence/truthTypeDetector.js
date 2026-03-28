@@ -47,7 +47,10 @@ const SEMI_STABLE_PATTERNS = [
   /\b(who is the (current )?(ceo|president|prime minister|chancellor|secretary of state|secretary|governor|mayor|chairman|director|minister|senator|representative|speaker|ambassador|chief|cfo|cto|coo|commissioner|superintendent|head))\b/i,
   /\b(regulation|policy|law|statute|requirement|compliance)\b/i,
   /\b(tax rate|interest rate|fee|tariff)\b/i,
-  /\b(fda|sec|irs|government) (approval|ruling|guidance)\b/i,
+  // NOTE: The policy-patterns early-return block (which runs BEFORE PERMANENT_PATTERNS) now
+  // handles most agency-guideline queries.  This entry remains as a fallback for queries that
+  // reach the post-PERMANENT pattern loop without a temporal prefix ("current"/"latest").
+  /\b(fda|epa|cdc|osha|irs|sec|usda|hhs|government) (approval|ruling|guidance|guidelines?|regulation|requirements?)\b/i,
   /\b(product spec|specification|version)\b/i,
   /\b(hours|schedule|availability|open|closed)\b/i,
   /\bis .* (still|currently) (available|supported|active)\b/i
@@ -115,7 +118,9 @@ const PERMANENT_PATTERNS = [
   /\b(who) (wrote|authored|created|invented|discovered|painted|composed|directed|designed|founded|built|made|developed) \w/i,
 
   // Astronomical and scientific count facts — "How many planets are in the solar system?"
-  /\b(how many) (planets?|moons?|stars?|galaxies|elements?|bones?|chromosomes?|continents?|oceans?|senses?) (are |is |in |of )?(the |a |an )?(solar system|universe|human body|periodic table|earth|world)\b/i,
+  // FIX CLF017: pattern now handles compound prepositions like "are in" by splitting into
+  // two optional groups: (are|is) then (in|of), so "are in the solar system" is matched.
+  /\b(how many) (planets?|moons?|stars?|galaxies|elements?|bones?|chromosomes?|continents?|oceans?|senses?) (?:are |is )?(?:in |of )?(the |a |an )?(solar system|universe|human body|periodic table|earth|world)\b/i,
 
   // Natural phenomena causation — "What causes rainbows?" "Why does it snow?"
   /\bwhat causes? \w/i,
@@ -426,9 +431,10 @@ export function detectByPattern(query) {
   const FRESHNESS_OVERRIDE_PATTERNS = [
     /most up[- ]to[- ]date/i,
     /recent (information|news|updates|developments|events)/i,
-    // FIX 2: "latest developments" removed from this pattern — "latest developments in Gaza"
-    // should be VOLATILE, not SEMI_STABLE. "latest" alone triggers VOLATILE_PATTERNS below.
-    /latest (information|news|updates|events)/i,
+    // FIX CLF043: "latest news" removed — "latest news on Ukraine" should be VOLATILE, not
+    // SEMI_STABLE. Per FIX 2 precedent ("latest developments" was removed for Gaza). "news"
+    // queries carry inherent real-time intent and must fall through to VOLATILE_PATTERNS.
+    /latest (information|updates|events)/i,
     /current (situation|status|state|events|developments)/i,
     /most recent (news|information|updates|events|developments)/i,
     /what'?s happening (with|in|about)/i,
@@ -623,6 +629,11 @@ export function detectByPattern(query) {
     // Financial rates that change on policy cycles not daily
     /\b(current|latest) (federal|prime|discount|mortgage|refinance) rate\b/i,
     /\b(current|latest) (corporate|capital gains|income) tax\b/i,
+
+    // FIX CLF027: Regulatory agency guidance/guidelines — SEMI_STABLE even without "current/latest"
+    // "What are the FDA guidelines on sugar intake?" has no temporal marker but is clearly policy.
+    // Runs BEFORE PERMANENT_PATTERNS so "what are" doesn't misfire as a permanent fact.
+    /\b(fda|epa|cdc|osha|irs|sec|usda|hhs) (approval|ruling|guidance|guidelines?|regulation|requirements?|rules?)\b/i,
   ];
   const isPolicyQuery = POLICY_PATTERNS.some(p => p.test(query));
   // FIX 2: Active conflict/war/crisis queries must not be classified as SEMI_STABLE policy queries.
