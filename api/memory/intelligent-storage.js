@@ -464,27 +464,47 @@ export class IntelligentMemoryStorage {
       const personalContext = Boolean(semanticResult.personalContext);
       const domain = semanticResult.domain || 'general';
       const intent = semanticResult.intent || 'discussion';
-      const emotionalTone = (semanticResult.emotionalTone || '').toLowerCase();
+      const emotionalTone = (semanticResult.emotionalTone || '').toLowerCase(); // retained for SA-004 compatibility
 
-      const systemSubjectIndicators =
-        /\b(you|your|the system|ai|assistant|memory|responses?)\b/i.test(content);
-      const complaintTone =
-        /complain|frustrat|upset|wrong|broken|not working|ignoring|not using|disappointed|issue with/i.test(content) ||
-        emotionalTone === 'negative' ||
-        emotionalTone === 'anger' ||
-        emotionalTone === 'frustration';
-      const systemDirectedIntent =
-        intent === 'problem_solving' || intent === 'discussion' || intent === 'question';
       const noPersonalFacts = !personalContext && domain !== 'personal';
 
+      // Supporting regex patterns for complaint/meta-commentary detection
+      const systemComplaintPatterns = [
+        /^why (are|do|don'?t|won'?t|can'?t|aren'?t) you\b/i,
+        /^why (is|isn'?t|wasn'?t) (your|the system|the memory)\b/i,
+        /\byou'?re (not |always |keep )\w+ing\b/i,
+        /\byou (said|told me|claimed|keep|always|never)\b/i,
+        /\byour (memory|system|response|answer) (is|was|isn'?t)\b/i,
+        /\byou'?re (wrong|broken|not working|not using)\b/i,
+        /\bit'?s not about (memory|you|the system)\b/i,
+        /\byou have access to\b.{0,30}\bwhy\b/i,
+      ];
+
+      // Strong match: pattern anchored at start OR two or more patterns match
+      const matchingPatterns = systemComplaintPatterns.filter(p => p.test(content));
+      const startsWithComplaintPattern = systemComplaintPatterns.some(
+        p => /^\^/.test(p.source) && p.test(content),
+      );
+      const strongRegexMatch = startsWithComplaintPattern || matchingPatterns.length >= 2;
+
       const shouldBlockAsMetaCommentary = () => {
-        // Semantic signals must all align: no personal facts detected and intent not personal.
+        // Allow storage when personal facts are present — never block user facts
         if (!noPersonalFacts) return false;
 
-        // Require system-directed subject OR complaint tone as a semantic+signal indicator.
-        const systemDirected = systemSubjectIndicators || domain === 'technical' || domain === 'general';
+        // Rule 1: Semantic primary — system_feedback intent detected
+        // (intent cannot simultaneously be 'system_feedback' and 'analytical')
+        if (intent === 'system_feedback' && intent !== 'analytical') {
+          return true;
+        }
 
-        return systemDirected && (complaintTone || systemDirectedIntent);
+        // Rule 2: Low semantic confidence + strong regex signal
+        const intentConf = semanticResult.intentConfidence || 0;
+        if (intentConf < 0.6 && strongRegexMatch) {
+          return true;
+        }
+
+        // Rule 3: Allow storage
+        return false;
       };
 
       if (shouldBlockAsMetaCommentary()) {
