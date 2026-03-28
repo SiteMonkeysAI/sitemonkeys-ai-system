@@ -321,7 +321,7 @@ export class IntelligentMemoryStorage {
    * @param {string} content - User message to check
    * @returns {object} - { shouldSkip: boolean, reason: string }
    */
-  detectNonUserQuery(content) {
+  async detectNonUserQuery(content) {
     if (!content || typeof content !== 'string') {
       return { shouldSkip: false, reason: null };
     }
@@ -380,6 +380,30 @@ export class IntelligentMemoryStorage {
       }
     }
 
+    // Complaints and meta-commentary about AI behavior
+    // These are not personal facts about the user
+    const complaintAndMetaCommentaryPatterns = [
+      // AI-directed complaints
+      /\byou'?re (?:not |always |keep )\w+ing\b/i,
+      /\byou (?:said|told me|claimed|keep|always|never|won'?t|didn'?t)\b/i,
+      /\byour (?:memory|system|response|answer) (?:is|was|isn'?t|wasn'?t|doesn'?t|don'?t)\b/i,
+      /\byou'?re (?:wrong|broken|not working|not using|ignoring)\b/i,
+      // Questions directed at AI behavior
+      /^why (?:are|aren'?t|do|don'?t|doesn'?t|didn'?t|won'?t|can'?t) you\b/i,
+      /^why (?:is|isn'?t) (?:your|the system|the memory)\b/i,
+      // Meta-commentary framed as statements
+      /\byou have access to\b.{0,30}\bwhy\b/i,
+      /\byou (?:already|should) know\b/i,
+    ];
+
+    const isComplaintOrMetaCommentary = complaintAndMetaCommentaryPatterns
+      .some(p => p.test(content));
+
+    if (isComplaintOrMetaCommentary) {
+      this.log('[MEMORY-QUALITY] Blocked complaint/meta-commentary — not a personal fact');
+      return { shouldSkip: true, reason: 'complaint_or_meta_commentary' };
+    }
+
     // General information queries without personal context
     const generalInfoPatterns = [
       /^(?:what|who|when|where|why|how) (?:is|are|was|were|did|does|do)/i,  // "What is Bitcoin?"
@@ -418,6 +442,51 @@ export class IntelligentMemoryStorage {
           return { shouldSkip: true, reason: 'external_interrogative_query_no_personal_context' };
         }
       }
+    }
+
+    // Semantic fallback: detect system-directed complaints/meta-commentary with no personal facts
+    // Uses semantic analyzer to avoid brittle rule growth; prefilter above handles obvious cases.
+    try {
+      const semanticResult = await semanticAnalyzer.analyzeSemantics(
+        content,
+        {
+          availableMemory: false,
+          context: 'memory_storage_filter',
+        },
+      );
+
+      const personalContext = Boolean(semanticResult?.personalContext);
+      const domain = semanticResult?.domain || 'general';
+      const intent = semanticResult?.intent || 'discussion';
+      const emotionalTone = (semanticResult?.emotionalTone || '').toLowerCase();
+
+      const systemSubjectIndicators =
+        /\b(you|your|the system|ai|assistant|memory|responses?)\b/i.test(content);
+      const complaintTone =
+        /complain|frustrat|upset|wrong|broken|not working|ignoring|not using|disappointed|issue with/i.test(content) ||
+        emotionalTone === 'negative' ||
+        emotionalTone === 'anger' ||
+        emotionalTone === 'frustration';
+      const systemDirectedIntent =
+        intent === 'problem_solving' || intent === 'discussion' || intent === 'question';
+      const noPersonalFacts = !personalContext && domain !== 'personal';
+
+      const shouldBlockAsMetaCommentary = () => {
+        // Semantic signals must all align: no personal facts detected and intent not personal.
+        if (!noPersonalFacts) return false;
+
+        // Require system-directed subject OR complaint tone as a semantic+signal indicator.
+        const systemDirected = systemSubjectIndicators || domain === 'technical' || domain === 'general';
+
+        return systemDirected && (complaintTone || systemDirectedIntent);
+      };
+
+      if (shouldBlockAsMetaCommentary()) {
+        this.log('[MEMORY-QUALITY][SEMANTIC] Blocked complaint/meta-commentary (semantic, no personal facts detected)');
+        return { shouldSkip: true, reason: 'complaint_or_meta_commentary_semantic' };
+      }
+    } catch (error) {
+      this.log('[MEMORY-QUALITY][SEMANTIC] Semantic complaint detection failed, continuing with storage');
     }
 
     return { shouldSkip: false, reason: null };
@@ -1081,7 +1150,7 @@ export class IntelligentMemoryStorage {
 
       // PROBLEM 3 FIX: Filter out non-user-specific queries
       // Storage should only keep information ABOUT the user, not general world information
-      const isNonUserQuery = this.detectNonUserQuery(userMessage);
+      const isNonUserQuery = await this.detectNonUserQuery(userMessage);
       if (isNonUserQuery.shouldSkip) {
         console.log(`[INTELLIGENT-STORAGE] ⏭️ Skipping storage - ${isNonUserQuery.reason}`);
         return { action: 'skipped', reason: isNonUserQuery.reason };
@@ -1255,7 +1324,7 @@ export class IntelligentMemoryStorage {
         // rather than storing the question as a memory. This fixes "What's the most up to date
         // information from the news Greenland..." being stored as a memory entry.
         const rawIsQuestion = this.detectQuestion(userMessage);
-        const rawIsNonUserQuery = this.detectNonUserQuery(userMessage);
+        const rawIsNonUserQuery = await this.detectNonUserQuery(userMessage);
 
         if (rawIsQuestion || rawIsNonUserQuery.shouldSkip) {
           console.log('[INTELLIGENT-STORAGE] ⏭️ Skipping storage — extraction failed and raw message is a question/general query (not a storable fact)');

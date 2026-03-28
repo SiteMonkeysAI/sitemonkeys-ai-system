@@ -189,6 +189,19 @@ function getMaxTokens(earlyClassification, phase4Metadata) {
   return 2000;
 }
 
+// Extract a clean "commodity price" search query for commodity quantity calculations.
+// Prevents passing the full verbose message (e.g. "If I have 227 pounds of platinum
+// at today's price what's it worth") to the external lookup API.
+function extractCommoditySearchQuery(message) {
+  const commodityMatch = message.match(
+    /\b(gold|silver|platinum|palladium|copper|oil|bitcoin|ethereum|crypto)\b/i
+  );
+  if (commodityMatch) {
+    return `${commodityMatch[1]} price`;
+  }
+  return message;
+}
+
 // ==================== ORCHESTRATOR CLASS ====================
 
 export class Orchestrator {
@@ -1234,7 +1247,8 @@ export class Orchestrator {
       }
 
       // STEP 3: Load vault (if Site Monkeys mode and enabled)
-      let vaultData = vaultContext
+      // FIX: mode check required even when vaultContext provided — vault never loads for truth_general
+      let vaultData = vaultContext && mode === "site_monkeys"
         ? await this.#loadVaultContext(vaultContext)
         : mode === "site_monkeys" && vaultEnabled
           ? await this.#loadVaultContext(userId, sessionId)
@@ -1705,11 +1719,19 @@ export class Orchestrator {
           // This prevents garbage Wikipedia/news queries containing document content.
           // Verification intent override: when the user asked to verify a prior claim,
           // use the extracted claim sentence instead of the (possibly short) user message.
-          const lookupQuery = (isVerificationIntent && verificationLookupQuery)
-            ? verificationLookupQuery
-            : enrichedMessage.replace(/\[DOCUMENT CONTEXT\][\s\S]*/i, '').trim();
-          if (!isVerificationIntent && lookupQuery !== enrichedMessage) {
+          // FIX: Commodity quantity queries extract a clean "commodity price" search term
+          // instead of using the full verbose message (e.g. "If I have 227 pounds of platinum
+          // at today's price what's it worth" → "platinum price").
+          const lookupQuery = isCommodityQuantityQuery
+            ? extractCommoditySearchQuery(enrichedMessage)
+            : (isVerificationIntent && verificationLookupQuery)
+              ? verificationLookupQuery
+              : enrichedMessage.replace(/\[DOCUMENT CONTEXT\][\s\S]*/i, '').trim();
+          if (!isVerificationIntent && !isCommodityQuantityQuery && lookupQuery !== enrichedMessage) {
             console.log('[ORCHESTRATOR] Stripped [DOCUMENT CONTEXT] block from lookup query');
+          }
+          if (isCommodityQuantityQuery) {
+            console.log(`[ORCHESTRATOR] Commodity query simplified to: "${lookupQuery}"`);
           }
           if (isVerificationIntent && verificationLookupQuery) {
             console.log('[ORCHESTRATOR] Verification intent: using claim from last assistant response as lookup query');
