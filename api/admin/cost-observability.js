@@ -38,6 +38,8 @@ export async function createCostLogTable(pool) {
       personality VARCHAR(50),
       mode VARCHAR(50),
       max_memory_score DECIMAL(5,3) DEFAULT NULL,
+      lookup_disabled_by_cost BOOLEAN DEFAULT FALSE,
+      history_reduced_by_cost BOOLEAN DEFAULT FALSE,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
@@ -68,6 +70,14 @@ export async function ensureCostLogTable(pool) {
     await pool.query(`
       ALTER TABLE query_cost_log
       ADD COLUMN IF NOT EXISTS max_memory_score DECIMAL(5,3) DEFAULT NULL
+    `);
+    await pool.query(`
+      ALTER TABLE query_cost_log
+      ADD COLUMN IF NOT EXISTS lookup_disabled_by_cost BOOLEAN DEFAULT FALSE
+    `);
+    await pool.query(`
+      ALTER TABLE query_cost_log
+      ADD COLUMN IF NOT EXISTS history_reduced_by_cost BOOLEAN DEFAULT FALSE
     `);
     console.log('[COST-LOG] query_cost_log table and indexes ready');
   } catch (err) {

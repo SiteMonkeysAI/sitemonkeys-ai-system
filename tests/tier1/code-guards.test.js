@@ -6901,3 +6901,161 @@ describe('TR. Trivial Message Pre-filter — detectTrivialMessage and storeWithI
   });
 
 });
+
+// ============================================================
+// CP. Cost Protection — Adaptive Degradation (Item 18)
+// Verifies cost-aware lookup gate and history depth reduction
+// ============================================================
+describe('CP. Cost Protection — Adaptive Degradation', () => {
+  const ORCH_PATH = 'api/core/orchestrator.js';
+  const COST_TRACKER_PATH = 'api/utils/cost-tracker.js';
+  const MIGRATION_PATH = 'api/admin/cost-observability.js';
+
+  it('CP-001: isApproachingCeiling method exists in cost-tracker.js and returns true at 75% of ceiling', () => {
+    const tracker = readRepoFile(COST_TRACKER_PATH);
+    assert.ok(tracker, 'CP-001 FAIL: Could not read api/utils/cost-tracker.js');
+
+    assert.ok(
+      tracker.includes('isApproachingCeiling('),
+      'CP-001 FAIL: isApproachingCeiling method not found in cost-tracker.js'
+    );
+
+    assert.ok(
+      tracker.includes('0.75') || tracker.includes('* 0.75'),
+      'CP-001 FAIL: isApproachingCeiling must use 0.75 (75%) as the threshold'
+    );
+
+    assert.ok(
+      tracker.includes('getSessionCost(sessionId)') || tracker.includes('this.getSessionCost('),
+      'CP-001 FAIL: isApproachingCeiling must use getSessionCost to retrieve current session cost'
+    );
+
+    assert.ok(
+      tracker.includes('COST_CEILINGS[mode]') || tracker.includes('COST_CEILINGS['),
+      'CP-001 FAIL: isApproachingCeiling must reference COST_CEILINGS for the ceiling value'
+    );
+  });
+
+  it('CP-002: External lookup disabled when approaching ceiling — gate present in orchestrator.js', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'CP-002 FAIL: Could not read api/core/orchestrator.js');
+
+    assert.ok(
+      orch.includes('isApproachingCeiling('),
+      'CP-002 FAIL: isApproachingCeiling not called in orchestrator.js'
+    );
+
+    assert.ok(
+      orch.includes('shouldLookup = false') &&
+      orch.includes('isApproachingCeiling('),
+      'CP-002 FAIL: orchestrator.js must set shouldLookup = false when approaching ceiling'
+    );
+
+    assert.ok(
+      orch.includes('[COST-PROTECTION]') &&
+      orch.includes('External lookup disabled'),
+      "CP-002 FAIL: orchestrator.js must log '[COST-PROTECTION] External lookup disabled' when gate fires"
+    );
+
+    assert.ok(
+      orch.includes('lookup_disabled_by_cost = true'),
+      'CP-002 FAIL: orchestrator.js must set phase4Metadata.lookup_disabled_by_cost = true when gate fires'
+    );
+  });
+
+  it('CP-003: History depth reduced to 2 when approaching ceiling', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'CP-003 FAIL: Could not read api/core/orchestrator.js');
+
+    assert.ok(
+      orch.includes('isApproachingCeiling = false') ||
+      orch.includes('isApproachingCeiling=false'),
+      'CP-003 FAIL: getConversationDepth must accept isApproachingCeiling parameter with default false'
+    );
+
+    assert.ok(
+      orch.includes('getConversationDepth(') &&
+      orch.includes('approachingCeiling'),
+      'CP-003 FAIL: orchestrator.js must compute approachingCeiling and pass it to getConversationDepth'
+    );
+
+    assert.ok(
+      orch.includes('[COST-PROTECTION]') &&
+      orch.includes('History depth reduced'),
+      "CP-003 FAIL: orchestrator.js must log '[COST-PROTECTION] History depth reduced' when degradation fires"
+    );
+
+    assert.ok(
+      orch.includes('history_reduced_by_cost = true'),
+      'CP-003 FAIL: orchestrator.js must set phase4Metadata.history_reduced_by_cost = true when depth is reduced'
+    );
+  });
+
+  it('CP-004: Normal behavior preserved when below 75% ceiling — isApproachingCeiling default is false', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'CP-004 FAIL: Could not read api/core/orchestrator.js');
+
+    assert.ok(
+      orch.includes('isApproachingCeiling = false'),
+      'CP-004 FAIL: getConversationDepth must default isApproachingCeiling to false — normal behavior must be unchanged'
+    );
+
+    // Gate uses a pre-computed variable for efficiency — check that isApproachingCeiling
+    // is called and the result conditions shouldLookup
+    assert.ok(
+      orch.includes('costTracker.isApproachingCeiling(') &&
+      (orch.includes('if (shouldLookup && isCostCeilingApproaching') ||
+       orch.includes('if (shouldLookup && costTracker.isApproachingCeiling(')),
+      'CP-004 FAIL: lookup gate must be conditional — only disable lookup when approaching ceiling'
+    );
+
+    const tracker = readRepoFile(COST_TRACKER_PATH);
+    assert.ok(tracker, 'CP-004 FAIL: Could not read api/utils/cost-tracker.js');
+
+    assert.ok(
+      tracker.includes('wouldExceedCeiling('),
+      'CP-004 FAIL: Existing wouldExceedCeiling hard stop method must remain in cost-tracker.js'
+    );
+  });
+
+  it('CP-005: lookup_disabled_by_cost and history_reduced_by_cost fields present in query_cost_log schema', () => {
+    const migration = readRepoFile(MIGRATION_PATH);
+    assert.ok(migration, 'CP-005 FAIL: Could not read api/admin/cost-observability.js');
+
+    assert.ok(
+      migration.includes('lookup_disabled_by_cost'),
+      'CP-005 FAIL: lookup_disabled_by_cost column not found in query_cost_log schema (cost-observability.js)'
+    );
+
+    assert.ok(
+      migration.includes('history_reduced_by_cost'),
+      'CP-005 FAIL: history_reduced_by_cost column not found in query_cost_log schema (cost-observability.js)'
+    );
+
+    assert.ok(
+      migration.includes('ADD COLUMN IF NOT EXISTS lookup_disabled_by_cost'),
+      'CP-005 FAIL: ensureCostLogTable must include ALTER TABLE migration for lookup_disabled_by_cost'
+    );
+    assert.ok(
+      migration.includes('ADD COLUMN IF NOT EXISTS history_reduced_by_cost'),
+      'CP-005 FAIL: ensureCostLogTable must include ALTER TABLE migration for history_reduced_by_cost'
+    );
+
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'CP-005 FAIL: Could not read api/core/orchestrator.js');
+
+    const insertIdx = orch.indexOf('INSERT INTO query_cost_log');
+    assert.ok(insertIdx !== -1, 'CP-005 FAIL: INSERT INTO query_cost_log not found in orchestrator.js');
+
+    const insertBlock = orch.substring(insertIdx, insertIdx + 1000);
+    assert.ok(
+      insertBlock.includes('lookup_disabled_by_cost'),
+      'CP-005 FAIL: lookup_disabled_by_cost not found in INSERT INTO query_cost_log in orchestrator.js'
+    );
+    assert.ok(
+      insertBlock.includes('history_reduced_by_cost'),
+      'CP-005 FAIL: history_reduced_by_cost not found in INSERT INTO query_cost_log in orchestrator.js'
+    );
+  });
+
+});

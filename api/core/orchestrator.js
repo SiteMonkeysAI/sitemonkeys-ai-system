@@ -150,7 +150,7 @@ function safeStripCopula(str) {
  * @param {string|null} phase4TruthType - Truth type from Phase 4 detection
  * @returns {number} Number of turns to slice from conversation history
  */
-function getConversationDepth(earlyClassification, phase4TruthType) {
+function getConversationDepth(earlyClassification, phase4TruthType, isApproachingCeiling = false) {
   // Greeting — already handled by fast path, but defensive
   if (earlyClassification?.classification === 'greeting') return 1;
 
@@ -159,6 +159,11 @@ function getConversationDepth(earlyClassification, phase4TruthType) {
     earlyClassification?.classification === 'simple_factual' ||
     phase4TruthType === 'PERMANENT'
   ) return 2;
+
+  // Cost-aware adaptive degradation: reduce history when approaching session ceiling
+  if (isApproachingCeiling) {
+    return 2;
+  }
 
   // Everything else — full 5 turns
   return 5;
@@ -1648,6 +1653,17 @@ export class Orchestrator {
           shouldLookup = false;
         }
 
+        // Cost-aware lookup gate: disable external lookup when approaching session ceiling
+        // Degradation tier 1 — biggest cost savings, response still useful from training + memory
+        // Compute once here and store in phase4Metadata for reuse in #routeToAI (history depth)
+        const isCostCeilingApproaching = costTracker.isApproachingCeiling(sessionId, mode);
+        phase4Metadata.approaching_ceiling = isCostCeilingApproaching;
+        if (shouldLookup && isCostCeilingApproaching) {
+          shouldLookup = false;
+          phase4Metadata.lookup_disabled_by_cost = true;
+          this.log('[COST-PROTECTION] External lookup disabled — approaching session ceiling');
+        }
+
         // Debug logging for lookup decision
         console.log('[ORCHESTRATOR] Lookup decision:', {
           message: message.substring(0, 100),
@@ -2923,10 +2939,12 @@ export class Orchestrator {
                 prompt_tokens, completion_tokens, cost_usd,
                 memories_injected, memories_filtered,
                 lookup_fired, lookup_tokens, history_depth,
-                model, personality, mode, max_memory_score
+                model, personality, mode, max_memory_score,
+                lookup_disabled_by_cost, history_reduced_by_cost
               ) VALUES (
                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                $11,$12,$13,$14,$15,$16,$17,$18,$19
+                $11,$12,$13,$14,$15,$16,$17,$18,$19,
+                $20,$21
               )`,
               [
                 _userId || null,
@@ -2948,6 +2966,8 @@ export class Orchestrator {
                 personalityResponse?.personality || null,
                 _mode || null,
                 _memoryContext?.highest_similarity_score || null,  // max_memory_score
+                _phase4Metadata?.lookup_disabled_by_cost || false,
+                _phase4Metadata?.history_reduced_by_cost || false,
               ]
             );
           }
@@ -5270,10 +5290,21 @@ export class Orchestrator {
       // Query-aware conversation history depth (SI change 1)
       // Simple factual and PERMANENT queries only need 1-2 prior turns for coherence.
       // All other queries keep the full 5-turn window.
+      // Reuse approaching_ceiling computed in processRequest (avoids redundant session cost lookup)
+      const approachingCeiling = phase4Metadata?.approaching_ceiling ??
+        costTracker.isApproachingCeiling(context.sessionId, mode);
+      const baseHistoryDepth = getConversationDepth(context.earlyClassification, phase4Metadata?.truth_type, false);
       const historyDepth = getConversationDepth(
         context.earlyClassification,
-        phase4Metadata?.truth_type
+        phase4Metadata?.truth_type,
+        approachingCeiling
       );
+      // Track cost-driven history reduction by comparing with and without the cost flag
+      const historyReducedByCost = historyDepth < baseHistoryDepth;
+      if (historyReducedByCost) {
+        phase4Metadata.history_reduced_by_cost = true;
+        this.log('[COST-PROTECTION] History depth reduced to 2 — approaching session ceiling');
+      }
       const trimmedHistory = conversationHistory.slice(-historyDepth);
       this.log(
         `[HISTORY-DEPTH] classification=${context.earlyClassification?.classification} ` +
