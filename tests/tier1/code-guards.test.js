@@ -4845,7 +4845,8 @@ describe('CO. Cost Observability by Query Type', () => {
       'model', 'personality', 'mode'
     ];
 
-    const insertIdx = orch.indexOf('INSERT INTO query_cost_log');
+    // Use lastIndexOf to find the main comprehensive INSERT (not the lightweight savings entries).
+    const insertIdx = orch.lastIndexOf('INSERT INTO query_cost_log');
     assert.ok(insertIdx !== -1, 'CO-002 FAIL: INSERT INTO query_cost_log not found in orchestrator.js');
 
     const insertBlock = orch.substring(insertIdx, insertIdx + 800);
@@ -4946,7 +4947,8 @@ describe('CO. Cost Observability by Query Type', () => {
     );
 
     // Verify _historyDepth is used in the INSERT params (not a bare null)
-    const insertIdx = orch.indexOf('INSERT INTO query_cost_log');
+    // Use lastIndexOf to find the main comprehensive INSERT (not the lightweight savings entries).
+    const insertIdx = orch.lastIndexOf('INSERT INTO query_cost_log');
     assert.ok(insertIdx !== -1, 'CO-008 FAIL: INSERT INTO query_cost_log not found');
     const insertBlock = orch.substring(insertIdx, insertIdx + 1500);
     assert.ok(
@@ -4976,6 +4978,86 @@ describe('CO. Cost Observability by Query Type', () => {
     assert.ok(orch.includes('[COST-LOG] Failed to write query cost log:'), 'CO-009: CO-004 check broken');
     // CO-005
     assert.ok(server.includes('/api/admin/cost-summary'), 'CO-009: CO-005 check broken');
+  });
+
+  it('CO-010: tokens_saved column present in query_cost_log schema and ALTER TABLE migration', () => {
+    const migration = readRepoFile(MIGRATION_PATH);
+    assert.ok(migration, 'CO-010 FAIL: api/admin/cost-observability.js not found');
+
+    assert.ok(
+      migration.includes('tokens_saved'),
+      'CO-010 FAIL: tokens_saved column not found in cost-observability.js. ' +
+      'The column must appear in both the CREATE TABLE schema and the ALTER TABLE migration.'
+    );
+    assert.ok(
+      migration.includes('ADD COLUMN IF NOT EXISTS tokens_saved'),
+      'CO-010 FAIL: ALTER TABLE ... ADD COLUMN IF NOT EXISTS tokens_saved not found in ensureCostLogTable(). ' +
+      'The idempotent migration must add the column on existing databases.'
+    );
+  });
+
+  it('CO-011: cache_hit savings entry written to query_cost_log on cache hit', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'CO-011 FAIL: Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes("'cache_hit'"),
+      "CO-011 FAIL: query_type 'cache_hit' not found in orchestrator.js. " +
+      'A lightweight INSERT must be written when a cached response is returned.'
+    );
+    assert.ok(
+      orch.includes("'cache'"),
+      "CO-011 FAIL: model 'cache' not found in orchestrator.js. " +
+      "The cache_hit cost log entry must set model='cache'."
+    );
+    assert.ok(
+      orch.includes('[COST-LOG] Failed to write cache_hit cost log:'),
+      'CO-011 FAIL: [COST-LOG] cache_hit error log not found. ' +
+      'The cache_hit INSERT must be wrapped in try/catch with a [COST-LOG] error log.'
+    );
+  });
+
+  it('CO-012: greeting savings entry written to query_cost_log on greeting shortcut', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'CO-012 FAIL: Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('[COST-LOG] Failed to write greeting savings cost log:'),
+      'CO-012 FAIL: greeting savings error log not found in orchestrator.js. ' +
+      'An INSERT into query_cost_log must be written when the greeting shortcut fires, ' +
+      'wrapped in try/catch with a [COST-LOG] error log.'
+    );
+    assert.ok(
+      orch.includes("'greeting-shortcut'"),
+      "CO-012 FAIL: model 'greeting-shortcut' not found in the INSERT section of orchestrator.js. " +
+      "The greeting savings log entry must set model='greeting-shortcut'."
+    );
+  });
+
+  it('CO-013: trivial_block savings entry written to query_cost_log on trivial message', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'CO-013 FAIL: Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes("'trivial_block'"),
+      "CO-013 FAIL: query_type 'trivial_block' not found in orchestrator.js. " +
+      'A lightweight INSERT must be written when a trivial message is detected.'
+    );
+    assert.ok(
+      orch.includes("'trivial-filter'"),
+      "CO-013 FAIL: model 'trivial-filter' not found in orchestrator.js. " +
+      "The trivial_block cost log entry must set model='trivial-filter'."
+    );
+    assert.ok(
+      orch.includes('[COST-LOG] Failed to write trivial_block cost log:'),
+      'CO-013 FAIL: trivial_block error log not found in orchestrator.js. ' +
+      'The trivial_block INSERT must be wrapped in try/catch with a [COST-LOG] error log.'
+    );
+    assert.ok(
+      orch.includes('TRIVIAL_BLOCK_PATTERNS'),
+      'CO-013 FAIL: TRIVIAL_BLOCK_PATTERNS constant not found in orchestrator.js. ' +
+      'Trivial detection must use a named pattern array for readability and testability.'
+    );
   });
 });
 
@@ -7044,7 +7126,8 @@ describe('CP. Cost Protection — Adaptive Degradation', () => {
     const orch = readRepoFile(ORCH_PATH);
     assert.ok(orch, 'CP-005 FAIL: Could not read api/core/orchestrator.js');
 
-    const insertIdx = orch.indexOf('INSERT INTO query_cost_log');
+    // Use lastIndexOf to find the main comprehensive INSERT (not the lightweight savings entries).
+    const insertIdx = orch.lastIndexOf('INSERT INTO query_cost_log');
     assert.ok(insertIdx !== -1, 'CP-005 FAIL: INSERT INTO query_cost_log not found in orchestrator.js');
 
     const insertBlock = orch.substring(insertIdx, insertIdx + 1000);
