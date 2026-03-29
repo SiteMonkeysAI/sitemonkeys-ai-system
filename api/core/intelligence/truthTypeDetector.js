@@ -43,6 +43,13 @@ const VOLATILE_PATTERNS = [
   /\b(top headlines?|breaking news|latest headlines?)\b/i,
 ];
 
+// Business analysis signals — presence indicates "current/latest" is used as context,
+// not as a real-time data request. When ONLY Pattern 0 (freshness words) triggers VOLATILE
+// and these signals are present, route to Stage 2 for intelligent classification.
+const BUSINESS_ANALYSIS_SIGNALS = [
+  /\b(burn rates?|runway|arr|mrr|arpu|ltv|cac|churn|nrr|ebitda|gross margin|net margin|operating margin|revenue|profitability|headcount|quota|attainment|pipeline|forecast|acquisition|valuation|equity|funding|raise|round|cap table)\b/i,
+];
+
 const SEMI_STABLE_PATTERNS = [
   /\b(who is the (current )?(ceo|president|prime minister|chancellor|secretary of state|secretary|governor|mayor|chairman|director|minister|senator|representative|speaker|ambassador|chief|cfo|cto|coo|commissioner|superintendent|head))\b/i,
   /\b(regulation|policy|law|statute|requirement|compliance)\b/i,
@@ -675,6 +682,26 @@ export function detectByPattern(query) {
     if (pattern.test(normalizedQuery)) {
       matchedPatterns.push({ type: TRUTH_TYPES.SEMI_STABLE, pattern: pattern.toString() });
     }
+  }
+
+  // BUSINESS CONTEXT OVERRIDE: If ONLY Pattern 0 (freshness words: current/latest/today/now)
+  // triggered VOLATILE and the query contains business analysis signals, return AMBIGUOUS so
+  // Stage 2 can correctly classify it as SEMI_STABLE.
+  // "Current burn rate" is business context — not a real-time data query like "current Bitcoin price".
+  const volatileMatchedPatterns = matchedPatterns.filter(m => m.type === TRUTH_TYPES.VOLATILE);
+  const pattern0String = VOLATILE_PATTERNS[0].toString();
+  const onlyPattern0TriggeredVolatile =
+    volatileMatchedPatterns.length > 0 &&
+    volatileMatchedPatterns.every(m => m.pattern === pattern0String);
+  if (onlyPattern0TriggeredVolatile && BUSINESS_ANALYSIS_SIGNALS.some(p => p.test(query))) {
+    console.log('[truthTypeDetector] Business analysis context with freshness word — routing to Stage 2 (AMBIGUOUS)');
+    return {
+      type: TRUTH_TYPES.AMBIGUOUS,
+      confidence: 0,
+      stage: 1,
+      patterns_matched: matchedPatterns,
+      reason: 'business_context_override'
+    };
   }
 
   // No patterns matched = ambiguous
