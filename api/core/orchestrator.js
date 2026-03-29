@@ -110,6 +110,29 @@ const GREETING_RESPONSES = {
   ],
 };
 
+// Trivial message patterns — acknowledgements, affirmations, and farewells that carry
+// no informational content.  Greetings (hi/hello) are intentionally excluded here
+// because those are handled by the STEP 6.9 greeting shortcut with personality-aware
+// responses.  Messages matching any of these patterns return a lightweight canned reply
+// without calling any API, saving ~500 tokens per request (conservative estimate based
+// on a typical embedding call + minimal GPT-4o prompt/completion for a short query).
+// The patterns use full-string anchors (^ and $) so "ok, but what about X?" does NOT
+// match.  The character class [\s!.?]{0,5} limits trailing punctuation to prevent
+// degenerate input from causing excessive backtracking.
+const MAX_TRIVIAL_MESSAGE_LENGTH = 60; // Absolute safety cap before pattern check
+const TRIVIAL_BLOCK_PATTERNS = [
+  /^(ok|okay|sure|yes|no|nope|yep|yeah|got it|understood|thanks|thank you|ty|thx)[\s!.?]{0,5}$/i,
+  /^(sounds good|makes sense|perfect|great|awesome|cool|nice|good|fine|alright)[\s!.?]{0,5}$/i,
+  /^(bye|goodbye|see you|talk later|ttyl|gotta go)[\s!.?]{0,5}$/i,
+];
+
+// Canned responses for trivial-block messages.
+const TRIVIAL_RESPONSES = [
+  "Got it! Let me know if there's anything I can help you with.",
+  "Sure thing! Feel free to ask me anything.",
+  "Happy to help! What would you like to explore?",
+];
+
 // Geopolitical topic pattern — used to detect when credibility warnings should be applied
 // to external lookup results that lack reputable source corroboration.
 const GEOPOLITICAL_TOPIC_PATTERN = /\b(war|conflict|military|sanctions|iran|russia|china|ukraine|north\s*korea|geopolit|diplomacy|treaty|invasion|missile|troops)\b/i;
@@ -949,6 +972,64 @@ export class Orchestrator {
         aiCallEnd: 0,
         totalEnd: 0
       };
+
+      // ========== STEP 0.1: TRIVIAL MESSAGE BLOCK ==========
+      // Pure pattern-match check that fires before any API calls.
+      // Handles acknowledgements, affirmations, and farewells that carry no
+      // informational content (e.g. "thanks", "ok", "bye").
+      // Greetings (hi/hello) are excluded — those receive personality-aware responses
+      // via the STEP 6.9 greeting shortcut.
+      // Estimated savings per blocked message: ~500 tokens (no embedding, no LLM call).
+      if (message.length <= MAX_TRIVIAL_MESSAGE_LENGTH && TRIVIAL_BLOCK_PATTERNS.some(p => p.test(message.trim()))) {
+        this.log('[TRIVIAL-BLOCK] Trivial message detected — returning canned response, all API calls bypassed');
+        const trivialResponse = TRIVIAL_RESPONSES[randomInt(0, TRIVIAL_RESPONSES.length)];
+        const _trivialPool = this.pool;
+        const _trivialUserId = userId;
+        const _trivialSessionId = sessionId;
+        const _trivialMode = mode;
+        setImmediate(async () => {
+          try {
+            if (_trivialPool) {
+              await _trivialPool.query(
+                `INSERT INTO query_cost_log (
+                  user_id, session_id, query_type, total_tokens,
+                  prompt_tokens, completion_tokens, cost_usd,
+                  model, mode, tokens_saved
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+                [_trivialUserId || null, _trivialSessionId || null, 'trivial_block', 0, 0, 0, 0, 'trivial-filter', _trivialMode || null, 500]
+              );
+            }
+          } catch (err) {
+            console.error('[COST-LOG] Failed to write trivial_block cost log:', err.message);
+          }
+        });
+        return {
+          success: true,
+          response: trivialResponse,
+          metadata: {
+            mode,
+            model: 'trivial-filter',
+            trivialBlock: true,
+            classification: 'trivial',
+            timestamp: new Date().toISOString(),
+            processingTime: Date.now() - startTime,
+            cost: { totalCost: 0, inputTokens: 0, outputTokens: 0 },
+            token_usage: {
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: 0,
+              cost_usd: 0,
+              cost_display: '$0.0000'
+            }
+          },
+          sources: {
+            hasDocuments: false,
+            hasExternal: false,
+            hasVault: false,
+            hasMemory: false
+          }
+        };
+      }
 
       // STEP 0.4: MEMORY VISIBILITY REQUEST DETECTION (UX-046)
       // Detect if user is asking to see their stored memories
@@ -2073,6 +2154,27 @@ export class Orchestrator {
         this.log(`[GREETING-SHORTCUT] Returning deterministic greeting (personality=${personalitySelection.personality}, confidence=${earlyClassification.confidence.toFixed(2)}) — gpt-4o bypassed`);
 
         const processingTime = Date.now() - startTime;
+        const _greetPool = this.pool;
+        const _greetUserId = userId;
+        const _greetSessionId = sessionId;
+        const _greetMode = mode;
+        const _greetPersonality = personalitySelection.personality;
+        setImmediate(async () => {
+          try {
+            if (_greetPool) {
+              await _greetPool.query(
+                `INSERT INTO query_cost_log (
+                  user_id, session_id, query_type, total_tokens,
+                  prompt_tokens, completion_tokens, cost_usd,
+                  model, personality, mode, tokens_saved
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                [_greetUserId || null, _greetSessionId || null, 'greeting', 0, 0, 0, 0, 'greeting-shortcut', _greetPersonality || null, _greetMode || null, 500]
+              );
+            }
+          } catch (err) {
+            console.error('[COST-LOG] Failed to write greeting savings cost log:', err.message);
+          }
+        });
         return {
           success: true,
           response: greetingResponse,
@@ -2152,6 +2254,26 @@ export class Orchestrator {
             `mode=${mode} ` +
             `savings=~$0.04`
           );
+          const _cachePool = this.pool;
+          const _cacheUserId = userId;
+          const _cacheSessionId = sessionId;
+          const _cacheMode = mode;
+          setImmediate(async () => {
+            try {
+              if (_cachePool) {
+                await _cachePool.query(
+                  `INSERT INTO query_cost_log (
+                    user_id, session_id, query_type, truth_type, total_tokens,
+                    prompt_tokens, completion_tokens, cost_usd,
+                    model, mode, tokens_saved
+                  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                  [_cacheUserId || null, _cacheSessionId || null, 'cache_hit', 'PERMANENT', 0, 0, 0, 0, 'cache', _cacheMode || null, 800]
+                );
+              }
+            } catch (err) {
+              console.error('[COST-LOG] Failed to write cache_hit cost log:', err.message);
+            }
+          });
           return {
             ...cachedResponse,
             cache_hit: true,
