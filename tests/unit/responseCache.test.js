@@ -435,8 +435,8 @@ describe('RC. Response Cache — ttlCacheManager', () => {
   });
 
   // RC-022 (ME-009) --------------------------------------------------------
-  it('RC-022: Personal intent blocks cache regardless of truth_type', () => {
-    const eligible = isCacheEligible({
+  it('RC-022: Personal intent blocks PERMANENT cache but not SEMI_STABLE (user-scoped)', () => {
+    const permanentEligible = isCacheEligible({
       truth_type: 'PERMANENT',
       memory: null,
       effectiveDocumentData: null,
@@ -447,7 +447,20 @@ describe('RC. Response Cache — ttlCacheManager', () => {
       intent_class: 'simple_factual',
       query: 'What is my gross margin?',
     });
-    assert.strictEqual(eligible, false, 'Personal intent must block cache');
+    assert.strictEqual(permanentEligible, false, 'Personal intent must block global PERMANENT cache key');
+
+    const semiStableEligible = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: true,
+      intent_class: 'simple_factual',
+      query: 'What is our burn rate?',
+    });
+    assert.strictEqual(semiStableEligible, true, 'Personal intent should NOT block SEMI_STABLE (user-scoped) cache key');
   });
 
   // RC-023 (ME-008 variant) ------------------------------------------------
