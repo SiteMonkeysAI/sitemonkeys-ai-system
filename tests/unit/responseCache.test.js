@@ -69,14 +69,22 @@ function setCachedResponse(message, mode, response) {
 }
 
 // Simulate isCacheEligible logic from orchestrator
-function isCacheEligible({ truth_type, memory, effectiveDocumentData, vault, high_stakes, conversationHistory, hasPersonalIntent }) {
+// FIX 2: Removed conversationHistory.length === 0 requirement.
+// Added intent_class guard and referential phrasing guard.
+function isCacheEligible({ truth_type, memory, effectiveDocumentData, vault, high_stakes, hasPersonalIntent, intent_class, query }) {
+  const isFactualClass =
+    intent_class === null || intent_class === undefined ||
+    ['factual', 'simple_factual', 'simple_short'].includes(intent_class);
+  const REFERENTIAL_PHRASING = /\b(that one|the second one|the other one|explain that differently|what about the other|what does that mean)\b/i;
+  const hasReferentialPhrasing = query ? REFERENTIAL_PHRASING.test(query) : false;
   return (
     truth_type === 'PERMANENT' &&
+    isFactualClass &&
+    !hasReferentialPhrasing &&
     !memory &&
     !effectiveDocumentData &&
     !vault &&
     !high_stakes?.isHighStakes &&
-    (!conversationHistory || conversationHistory.length === 0) &&
     !hasPersonalIntent
   );
 }
@@ -141,7 +149,10 @@ describe('RC. Response Cache — ttlCacheManager', () => {
   });
 
   // RC-005 ----------------------------------------------------------------
-  it('RC-005: isCacheEligible returns false when conversationHistory.length > 0', () => {
+  it('RC-005: isCacheEligible returns TRUE when conversationHistory.length > 0 (FIX 2)', () => {
+    // FIX 2: PERMANENT facts are the same whether message 1 or message 50.
+    // The cache no longer requires an empty conversation history.
+    // Repeat factual queries within a session now benefit from the cache.
     const eligible = isCacheEligible({
       truth_type: 'PERMANENT',
       memory: null,
@@ -151,7 +162,7 @@ describe('RC. Response Cache — ttlCacheManager', () => {
       conversationHistory: [{ role: 'user', content: 'prior message' }],
       hasPersonalIntent: false
     });
-    assert.strictEqual(eligible, false);
+    assert.strictEqual(eligible, true, 'PERMANENT factual query must be cache-eligible even with conversation history');
   });
 
   // RC-006 ----------------------------------------------------------------
@@ -357,6 +368,111 @@ describe('RC. Response Cache — ttlCacheManager', () => {
       src.includes('memory_count:'),
       'RC-018 FAIL: memory_count must be returned from #retrieveMemoryContext'
     );
+  });
+
+  // RC-019 (ME-006) --------------------------------------------------------
+  it('RC-019: PERMANENT factual query is cache-eligible in mid-session (history length > 0)', () => {
+    // FIX 2: Remove the conversationHistory.length === 0 requirement.
+    // "What is gross margin?" has the same answer in every session context.
+    const eligible = isCacheEligible({
+      truth_type: 'PERMANENT',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [
+        { role: 'user', content: 'Hello' },
+        { role: 'assistant', content: 'Hi there!' },
+      ],
+      hasPersonalIntent: false,
+      intent_class: 'simple_factual',
+      query: 'What is gross margin?',
+    });
+    assert.strictEqual(eligible, true, 'PERMANENT factual query must be cache-eligible mid-session');
+  });
+
+  // RC-020 (ME-007) --------------------------------------------------------
+  it('RC-020: VOLATILE query is never cache-eligible regardless of history', () => {
+    const eligible = isCacheEligible({
+      truth_type: 'VOLATILE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'simple_factual',
+      query: 'What is the current Bitcoin price?',
+    });
+    assert.strictEqual(eligible, false, 'VOLATILE query must never be cache-eligible');
+  });
+
+  // RC-021 (ME-008) --------------------------------------------------------
+  it('RC-021: Referential phrasing blocks cache even for PERMANENT truth_type', () => {
+    // "Can you explain that differently?" has truth_type PERMANENT but is
+    // context-dependent — it must never hit a generic cached answer.
+    const eligible = isCacheEligible({
+      truth_type: 'PERMANENT',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'simple_factual',
+      query: 'Can you explain that differently?',
+    });
+    assert.strictEqual(eligible, false, 'Referential phrasing must block cache');
+  });
+
+  // RC-022 (ME-009) --------------------------------------------------------
+  it('RC-022: Personal intent blocks cache regardless of truth_type', () => {
+    const eligible = isCacheEligible({
+      truth_type: 'PERMANENT',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: true,
+      intent_class: 'simple_factual',
+      query: 'What is my gross margin?',
+    });
+    assert.strictEqual(eligible, false, 'Personal intent must block cache');
+  });
+
+  // RC-023 (ME-008 variant) ------------------------------------------------
+  it('RC-023: "that one" referential phrasing blocks cache', () => {
+    const eligible = isCacheEligible({
+      truth_type: 'PERMANENT',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [{ role: 'user', content: 'What are the planets?' }],
+      hasPersonalIntent: false,
+      intent_class: 'simple_short',
+      query: 'Tell me more about that one',
+    });
+    assert.strictEqual(eligible, false, '"that one" referential phrasing must block cache');
+  });
+
+  // RC-024 (FIX 2 intent class guard) -------------------------------------
+  it('RC-024: Non-factual intent class blocks cache even for PERMANENT truth_type', () => {
+    // A complex_analytical query classified as PERMANENT should not be cached —
+    // the intent class guard prevents accidental caching of context-dependent queries.
+    const eligible = isCacheEligible({
+      truth_type: 'PERMANENT',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'complex_analytical',
+      query: 'Explain the geopolitical history of the Roman Empire',
+    });
+    assert.strictEqual(eligible, false, 'Non-factual intent class must block cache');
   });
 
 });

@@ -1212,12 +1212,29 @@ export class Orchestrator {
       // corrections ("I'm sorry it was 91 pounds of gold"), follow-ups, and direct queries alike.
       const isCommodityQuantityQuery = requiresCurrentMarketPrice(message, conversationHistory);
 
+      // CHANGE A (Issue: Fix memory bloat on simple queries):
+      // Session/personal reference detection for memory skip gate.
+      // Retrieval is skipped for simple query types UNLESS the user is asking about their
+      // own stored data (first-person pronouns) OR referencing earlier conversation context
+      // (session-reference language).  Broader second/third-person pronouns ("your", "they")
+      // are intentionally excluded — they do not indicate the user needs stored memories.
+      //
+      // Examples:
+      //   "What is gross margin?"          → hasSessionOrPersonalRef=false → skip retrieval
+      //   "What did we decide earlier?"    → "we" + "earlier"              → retrieve
+      //   "Remind me what I said about X" → "me" + "I"                    → retrieve
+      const hasSessionOrPersonalRef =
+        /\b(my|our|I|me|we|mine|ours)\b/.test(message) ||
+        /\b(earlier|before|discussed|told you|remind me|we decided|last time|yesterday|that one|the other one|which one|what did we|what did I)\b/i.test(message);
+
+      // CHANGE A: Skip memory retrieval for simple query types when no personal or session
+      // reference context is present.  Adds simple_short to the skip list and replaces the
+      // previous userHasMemories safety check with the more precise hasSessionOrPersonalRef
+      // gate.  Pure greetings ("Hello") automatically skip because they contain no
+      // first-person pronouns or session-reference language.
       const skipMemoryForSimpleQuery = earlyClassification && (
-        (earlyClassification.classification === 'greeting' && message.length < 50) ||
-        (earlyClassification.classification === 'simple_factual' &&
-         earlyClassification.confidence > 0.70 &&
-         message.length < 50 &&
-         !hasPersonalIntent)  // Use enhanced personal-intent detection
+        ['greeting', 'simple_factual', 'simple_short'].includes(earlyClassification.classification) &&
+        !hasSessionOrPersonalRef
       );
 
       // ISSUE #790 FIX: Skip memory for external market queries.
@@ -1225,39 +1242,24 @@ export class Orchestrator {
       // require live market price data — memory context would only add noise.
       const skipMemoryForMarketQuery = isMarketQuery || isCommodityQuantityQuery;
 
-      // A pure greeting with no personal intent never needs memory context regardless of
-      // whether the user has stored memories.  The !hasPersonalIntent guard already
-      // protects cases like "Hi, what's my name?" where memory is genuinely required.
-      // Without this bypass the userHasMemories check forces memory retrieval for "Hello",
-      // which sets memoryContext.hasMemory=true and prevents the STEP 6.9 greeting shortcut
-      // from firing — causing an unnecessary gpt-4o call and downstream truncation.
+      // isPureGreeting is retained for observability/logging only.
+      // hasSessionOrPersonalRef now serves as the precise gate for all simple query types,
+      // including greetings — making the separate isPureGreeting bypass unnecessary.
       const isPureGreeting =
         earlyClassification !== null &&
         earlyClassification !== undefined &&
         earlyClassification.classification === 'greeting' &&
-        !hasPersonalIntent &&
-        message.length < 50;
-
-      // Issue #612 Refinement 2: Additional safety check
-      // Even if we think we can skip, check if user has memories first.
-      // Exception: pure greetings bypass this check entirely (see isPureGreeting above).
-      let userHasMemories = false;
-      if (skipMemoryForSimpleQuery && !isPureGreeting) {
-        userHasMemories = await this.#hasUserMemories(userId);
-        if (userHasMemories) {
-          this.log(`[MEMORY] ⚠️  User has existing memories - will NOT skip retrieval even for simple query`);
-        }
-      }
+        !hasSessionOrPersonalRef;
 
       // Define memoryDuration at higher scope (Issue #446 fix)
       let memoryDuration = 0;
 
-      // ISSUE #790 FIX: Skip memory for external market queries OR simple queries
-      if ((skipMemoryForSimpleQuery && (!userHasMemories || isPureGreeting)) || skipMemoryForMarketQuery) {
+      // Skip memory for simple queries with no personal/session context, or for market queries.
+      if (skipMemoryForSimpleQuery || skipMemoryForMarketQuery) {
         if (skipMemoryForMarketQuery) {
           this.log(`[MEMORY-GATE] intent=market_query memory_injected_tokens=0 reason=external_market_data_query`);
         } else {
-          this.log(`[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)}) - user needs direct answer, not biography`);
+          this.log(`[MEMORY] ⏭️  Skipping memory retrieval for ${earlyClassification.classification} (confidence: ${earlyClassification.confidence.toFixed(2)}) — no personal or session reference in query`);
         }
         memoryContext = {
           hasMemory: false,
@@ -2227,13 +2229,39 @@ export class Orchestrator {
         (memoryContext.highest_similarity_score ?? 1.0) >= CACHE_MEMORY_THRESHOLD
       );
 
+      // FIX 2: PERMANENT facts are the same answer whether message 1 or message 50.
+      // The prior history-length guard has been removed; repeat factual queries within
+      // the same session now benefit from the cache.  Two new guards replace it:
+      //
+      //   1. Intent class guard — only cache simple/factual classifications so that
+      //      context-dependent queries that happen to be PERMANENT ("what does that mean?")
+      //      are never served a generic cached answer.
+      //
+      //   2. Referential phrasing guard — blocks queries containing unresolved pronouns
+      //      or comparative language that implicitly reference prior conversation context
+      //      ("that one", "the second one", "can you explain that differently?").
+      //
+      // VOLATILE queries still never cache (truth_type === 'PERMANENT' gate).
+      // SEMI_STABLE 24hr TTL is unchanged.
+      const REFERENTIAL_PHRASING_PATTERN = /\b(that one|the second one|the other one|explain that differently|what about the other|what does that mean)\b/i;
+      const hasReferentialPhrasing = REFERENTIAL_PHRASING_PATTERN.test(message);
+
+      // Intent class guard: only cache queries classified as factual/simple by the
+      // early classifier.  Null earlyClassification (error) is treated as non-factual
+      // to prevent accidental caching of unclassified queries.
+      const isFactualIntentClass =
+        earlyClassification !== null &&
+        earlyClassification !== undefined &&
+        ['factual', 'simple_factual', 'simple_short'].includes(earlyClassification.classification);
+
       const isCacheEligible = (
         phase4Metadata.truth_type === 'PERMANENT' &&
+        isFactualIntentClass &&               // simple/factual intent only
+        !hasReferentialPhrasing &&            // no context-dependent phrasing
         !memoriesBlockCache &&                // no genuinely query-relevant memories
         !effectiveDocumentData &&             // no document loaded
         !context.vault &&                     // no vault
         !phase4Metadata.high_stakes?.isHighStakes && // not high stakes
-        (!conversationHistory || conversationHistory.length === 0) && // no prior context
         !hasPersonalIntent                    // no personal query signals
       );
 
@@ -5348,7 +5376,11 @@ export class Orchestrator {
       // ISSUE #566/#570: Pass memory context flag to enable semantic intelligence requirements
       // FIX 3: Route to compressed system prompt for simple queries to reduce token usage.
       // Compressed prompt preserves all truth rules; removes verbose uncertainty/refusal blocks.
-      const hasMemoryContext = context.memory;
+      // CHANGE C: Use the relevance-based hasMemory flag (set after the relevance gate
+      // inside #retrieveMemoryContext) rather than a truthy string check on context.memory.
+      // memoryContext.hasMemory is only true when memories were retrieved AND had non-zero
+      // token count after filtering — i.e., they actually passed the relevance gate.
+      const hasMemoryContext = memoryContext.hasMemory;
       const queryClass = context.earlyClassification?.classification || context.queryClassification?.classification;
       const useCompressedPrompt = ['greeting', 'simple_factual', 'simple_short'].includes(queryClass);
       const systemPrompt = useCompressedPrompt
