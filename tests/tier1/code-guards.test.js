@@ -7383,8 +7383,10 @@ describe('EFF. Memory Efficiency + Cache Eligibility Guards', () => {
       'EFF-009 FAIL: personal intent must block PERMANENT (global-scope) cache keys via !(isPermanent && hasPersonalIntent). ' +
       'Global cache must not serve personal queries across users.'
     );
+    const hasUnscopedPersonalBlock =
+      /!hasPersonalIntent\s*&&/.test(cacheBlock) || /&&\s*!hasPersonalIntent/.test(cacheBlock);
     assert.ok(
-      !cacheBlock.includes('!hasPersonalIntent &&'),
+      !hasUnscopedPersonalBlock,
       'EFF-009 FAIL: personal intent guard must not blanket-block SEMI_STABLE caches. ' +
       'SEMI_STABLE keys are user-scoped and should remain eligible.'
     );
