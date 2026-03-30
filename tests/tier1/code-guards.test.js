@@ -7541,22 +7541,25 @@ describe('NOLOOKUP. No-lookup Boilerplate Removal — Personal Query Injection',
 
   const orch = readRepoFile('api/core/orchestrator.js');
 
-  it('NOLOOKUP-001: INTERNAL CONTEXT QUERY boilerplate is not present in orchestrator.js', () => {
+  it('NOLOOKUP-001: Old INTERNAL CONTEXT boilerplate removed and replaced with short disclosure hook', () => {
     assert.ok(orch, 'NOLOOKUP-001 FAIL: api/core/orchestrator.js not found');
     assert.ok(
       !orch.includes('INTERNAL CONTEXT QUERY — NO EXTERNAL LOOKUP PERFORMED'),
-      'NOLOOKUP-001 FAIL: The "INTERNAL CONTEXT QUERY — NO EXTERNAL LOOKUP PERFORMED" boilerplate ' +
-      'is still present in orchestrator.js. This block injects ~115 tokens on every personal query ' +
-      'telling the AI it did not perform a lookup — the AI does not need to be told this. Remove it.'
+      'NOLOOKUP-001 FAIL: The legacy ~115-token "INTERNAL CONTEXT QUERY — NO EXTERNAL LOOKUP PERFORMED" block must be removed.'
+    );
+    assert.ok(
+      orch.includes('[NO LOOKUP - PERSONAL CONTEXT]'),
+      'NOLOOKUP-001 FAIL: Short no-lookup disclosure hook "[NO LOOKUP - PERSONAL CONTEXT]" not found. ' +
+      'A ~30-token disclosure should be injected only when personal + freshness markers are present.'
     );
   });
 
-  it('NOLOOKUP-002: no-external-lookup-note console.log is removed', () => {
+  it('NOLOOKUP-002: New log line documents when disclosure is injected or skipped', () => {
     assert.ok(orch, 'NOLOOKUP-002 FAIL: api/core/orchestrator.js not found');
     assert.ok(
-      !orch.includes('no-external-lookup note'),
-      'NOLOOKUP-002 FAIL: The "[PHASE4] Internal context query — injecting no-external-lookup note" ' +
-      'log line is still present. Remove it along with the boilerplate injection.'
+      orch.includes('Personal freshness query — short no-lookup disclosure injected') &&
+      orch.includes('No lookup attempted — disclosure skipped'),
+      'NOLOOKUP-002 FAIL: Expected telemetry log lines for injected/ skipped no-lookup disclosure were not found.'
     );
   });
 

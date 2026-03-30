@@ -5403,6 +5403,7 @@ export class Orchestrator {
       // token count after filtering — i.e., they actually passed the relevance gate.
       const hasMemoryContext = memoryContext.hasMemory ?? false;
       const queryClass = context.earlyClassification?.classification || context.queryClassification?.classification;
+      this.log(`[EFFICIENCY] memory_doctrine_applied=${hasMemoryContext} prompt=${['greeting', 'simple_factual', 'simple_short'].includes(queryClass) ? 'compressed' : 'full'}`);
       const useCompressedPrompt = ['greeting', 'simple_factual', 'simple_short'].includes(queryClass);
       const systemPrompt = useCompressedPrompt
         ? this.#buildCompressedSystemPrompt(mode, context.earlyClassification || context.queryClassification, hasMemoryContext)
@@ -5454,6 +5455,16 @@ export class Orchestrator {
         // the user. Silent fallthrough to confident training-data responses is not acceptable.
         externalContext = `\n\n[EXTERNAL LOOKUP ATTEMPTED — NO DATA RETRIEVED]\nAn attempt was made to retrieve current information for this query, but no external sources returned usable data.\nYou MUST disclose this in your response. Tell the user that you tried to pull current information but could not retrieve it right now, then provide what you know from training data and explicitly label it as potentially outdated.\nExample phrasing: "I tried to pull current information on [topic] but couldn't retrieve anything right now — here's what I know from my training data, which may not reflect the latest developments: ..."\n[END DISCLOSURE]\n\n`;
         console.log('[PHASE4] External lookup attempted but all sources failed — injecting failure disclosure');
+      } else if (!phase4Metadata.lookup_attempted) {
+        const isPersonalQuery = /\b(our|my)\b/i.test(message);
+        const hasFreshnessMarker =
+          /\b(current|latest|today|tonight|this (week|month|year)|right now|live|price|prices|rate|rates)\b/i.test(message);
+        if (isPersonalQuery && hasFreshnessMarker) {
+          externalContext = `\n\n[NO LOOKUP - PERSONAL CONTEXT]\nCurrent data requested but lookup skipped due to personal/organizational context. Answer from internal context only.\n\n`;
+          console.log('[PHASE4] Personal freshness query — short no-lookup disclosure injected');
+        } else {
+          console.log('[PHASE4] No lookup attempted — disclosure skipped (no freshness marker or not personal)');
+        }
       }
 
       // ISSUE #787 FIX: Calculate full payload estimate for proper escalation routing
@@ -5471,6 +5482,7 @@ export class Orchestrator {
         phase4Metadata?.truth_type,
         approachingCeiling
       );
+      const sessionStateUsed = SESSION_STATE_ENABLED && sessionState;
       // Track cost-driven history reduction by comparing with and without the cost flag
       const historyReducedByCost = historyDepth < baseHistoryDepth;
       if (historyReducedByCost) {
@@ -5478,6 +5490,7 @@ export class Orchestrator {
         this.log('[COST-PROTECTION] History depth reduced to 2 — approaching session ceiling');
       }
       const trimmedHistory = conversationHistory.slice(-historyDepth);
+      this.log(`[EFFICIENCY] history_depth=${historyDepth} base_depth=${baseHistoryDepth} session_state_used=${sessionStateUsed}`);
       this.log(
         `[HISTORY-DEPTH] classification=${context.earlyClassification?.classification} ` +
         `truth_type=${phase4Metadata?.truth_type} ` +
@@ -5539,6 +5552,8 @@ export class Orchestrator {
         phase4Metadata?.truth_type === 'PERMANENT' &&
         !phase4Metadata?.high_stakes?.isHighStakes;
 
+      this.log(`[EFFICIENCY] mini_routing_eligible=${useMinModel} mini_routing_enabled=${MINI_MODEL_ENABLED} classification=${context.earlyClassification?.classification} truth_type=${phase4Metadata?.truth_type} high_stakes=${!!phase4Metadata?.high_stakes?.isHighStakes}`);
+
       const model = useClaude
         ? "claude-sonnet-4-20250514"
         : useMinModel
@@ -5575,6 +5590,7 @@ export class Orchestrator {
 
       let response, inputTokens, outputTokens;
       const maxTokens = getMaxTokens(context.earlyClassification, phase4Metadata);
+      this.log(`[EFFICIENCY] max_tokens_selected=${maxTokens} classification=${context.earlyClassification?.classification} high_stakes=${!!phase4Metadata?.high_stakes?.isHighStakes}`);
 
       if (useClaude) {
         // Build messages array for Claude with proper conversation history
