@@ -7328,3 +7328,307 @@ describe('EFF. Memory Efficiency + Cache Eligibility Guards', () => {
   });
 
 });
+
+// ============================================================
+// SECTION DYN: DYNAMIC MAX_TOKENS — Extended Classification
+// Verifies that getMaxTokens() returns the correct budget
+// for all supported classification types.
+// ============================================================
+
+describe('DYN. Dynamic max_tokens — Extended Classification Coverage', () => {
+
+  const orch = readRepoFile('api/core/orchestrator.js');
+
+  function getMaxTokensFnBody(src) {
+    const fnStart = src.indexOf('function getMaxTokens(');
+    if (fnStart === -1) return '';
+    const fnEnd = src.indexOf('\n}', fnStart);
+    return src.slice(fnStart, fnEnd + 2);
+  }
+
+  it('DYN-001: simple_factual classification returns max_tokens 400', () => {
+    assert.ok(orch, 'DYN-001 FAIL: api/core/orchestrator.js not found');
+    const fnBody = getMaxTokensFnBody(orch);
+    assert.ok(fnBody, 'DYN-001 FAIL: getMaxTokens function not found');
+    assert.ok(
+      fnBody.includes("'simple_factual'") && fnBody.includes('400'),
+      'DYN-001 FAIL: getMaxTokens must return 400 for simple_factual classification. ' +
+      'Simple factual queries need at most one sentence — a 2000-token budget wastes reserved context.'
+    );
+  });
+
+  it('DYN-002: complex_analytical classification returns max_tokens 3000 (unchanged)', () => {
+    assert.ok(orch, 'DYN-002 FAIL: api/core/orchestrator.js not found');
+    const fnBody = getMaxTokensFnBody(orch);
+    assert.ok(fnBody, 'DYN-002 FAIL: getMaxTokens function not found');
+    assert.ok(
+      fnBody.includes("'complex_analytical'") && fnBody.includes('3000'),
+      'DYN-002 FAIL: getMaxTokens must return 3000 for complex_analytical. ' +
+      'Complex analytical queries need thorough response space.'
+    );
+  });
+
+  it('DYN-003: high_stakes query returns max_tokens 4000 (unchanged)', () => {
+    assert.ok(orch, 'DYN-003 FAIL: api/core/orchestrator.js not found');
+    const fnBody = getMaxTokensFnBody(orch);
+    assert.ok(fnBody, 'DYN-003 FAIL: getMaxTokens function not found');
+    assert.ok(
+      fnBody.includes('isHighStakes') && fnBody.includes('4000'),
+      'DYN-003 FAIL: getMaxTokens must return 4000 for high_stakes queries. ' +
+      'Medical, legal, and safety-critical queries must never be truncated.'
+    );
+  });
+
+  it('DYN-004: simple_short classification returns max_tokens 400', () => {
+    assert.ok(orch, 'DYN-004 FAIL: api/core/orchestrator.js not found');
+    const fnBody = getMaxTokensFnBody(orch);
+    assert.ok(fnBody, 'DYN-004 FAIL: getMaxTokens function not found');
+    assert.ok(
+      fnBody.includes("'simple_short'") && fnBody.includes('400'),
+      'DYN-004 FAIL: getMaxTokens must return 400 for simple_short classification. ' +
+      'Short direct answers do not need a 2000-token budget.'
+    );
+  });
+
+  it('DYN-005: greeting classification returns max_tokens 150', () => {
+    assert.ok(orch, 'DYN-005 FAIL: api/core/orchestrator.js not found');
+    const fnBody = getMaxTokensFnBody(orch);
+    assert.ok(fnBody, 'DYN-005 FAIL: getMaxTokens function not found');
+    assert.ok(
+      fnBody.includes("'greeting'") && fnBody.includes('150'),
+      'DYN-005 FAIL: getMaxTokens must return 150 for greeting classification. ' +
+      'A one-line greeting response needs at most 150 tokens.'
+    );
+  });
+
+  it('DYN-006: medium_complexity classification returns max_tokens 1500', () => {
+    assert.ok(orch, 'DYN-006 FAIL: api/core/orchestrator.js not found');
+    const fnBody = getMaxTokensFnBody(orch);
+    assert.ok(fnBody, 'DYN-006 FAIL: getMaxTokens function not found');
+    assert.ok(
+      fnBody.includes("'medium_complexity'") && fnBody.includes('1500'),
+      'DYN-006 FAIL: getMaxTokens must return 1500 for medium_complexity. ' +
+      'Medium complexity queries need a moderate output budget, not the full 2000.'
+    );
+  });
+
+  it('DYN-007: news_current_events classification returns max_tokens 1500', () => {
+    assert.ok(orch, 'DYN-007 FAIL: api/core/orchestrator.js not found');
+    const fnBody = getMaxTokensFnBody(orch);
+    assert.ok(fnBody, 'DYN-007 FAIL: getMaxTokens function not found');
+    assert.ok(
+      fnBody.includes("'news_current_events'") && fnBody.includes('1500'),
+      'DYN-007 FAIL: getMaxTokens must return 1500 for news_current_events. ' +
+      'News queries should lead with the key fact — 1500 tokens is sufficient.'
+    );
+  });
+
+  it('DYN-008: default (unclassified) query still returns max_tokens 2000', () => {
+    assert.ok(orch, 'DYN-008 FAIL: api/core/orchestrator.js not found');
+    const fnBody = getMaxTokensFnBody(orch);
+    assert.ok(fnBody, 'DYN-008 FAIL: getMaxTokens function not found');
+    assert.ok(
+      fnBody.includes('return 2000'),
+      'DYN-008 FAIL: getMaxTokens must return 2000 as the safe default. ' +
+      'Queries that cannot be classified should not have output truncated below the original limit.'
+    );
+  });
+
+});
+
+// ============================================================
+// SECTION MEM: MEMORY DOCTRINE GATING — Full Prompt
+// Verifies that #buildSystemPrompt gates memory fabrication
+// guards behind hasMemoryContext, matching the behaviour of
+// #buildCompressedSystemPrompt.
+// Saves ~501 tokens per full-prompt query with no relevant
+// memory context.
+// ============================================================
+
+describe('MEM. Memory Doctrine Gating — Full System Prompt', () => {
+
+  const orch = readRepoFile('api/core/orchestrator.js');
+
+  it('MEM-010: Full prompt memory fabrication guards are gated on hasMemoryContext', () => {
+    assert.ok(orch, 'MEM-010 FAIL: api/core/orchestrator.js not found');
+
+    // Locate #buildSystemPrompt (full prompt, not compressed)
+    const fnStart = orch.indexOf('#buildSystemPrompt(mode,');
+    assert.ok(fnStart !== -1, 'MEM-010 FAIL: #buildSystemPrompt not found in orchestrator.js');
+
+    // Find the MEMORY FABRICATION block within the full prompt builder
+    const fabricationIdx = orch.indexOf('MEMORY FABRICATION IS A CATEGORY 1 TRUST VIOLATION', fnStart);
+    assert.ok(fabricationIdx !== -1, 'MEM-010 FAIL: MEMORY FABRICATION guard not found in #buildSystemPrompt');
+
+    // Walk back from the guard to find the nearest `if (hasMemoryContext)` condition
+    const preceding = orch.slice(fnStart, fabricationIdx);
+    const lastIfIdx = preceding.lastIndexOf('if (hasMemoryContext)');
+    assert.ok(
+      lastIfIdx !== -1,
+      'MEM-010 FAIL: The MEMORY FABRICATION guard block in #buildSystemPrompt is not wrapped ' +
+      'with `if (hasMemoryContext)`. This injects ~501 tokens of memory guards even when no ' +
+      'memory context is present. Wrap the block with the same condition used in ' +
+      '#buildCompressedSystemPrompt.'
+    );
+
+    // Verify the if-block opens before the guard text (no other closing brace intervenes)
+    const betweenIfAndGuard = preceding.slice(lastIfIdx);
+    const openBraces = (betweenIfAndGuard.match(/\{/g) || []).length;
+    const closeBraces = (betweenIfAndGuard.match(/\}/g) || []).length;
+    assert.ok(
+      openBraces > closeBraces,
+      'MEM-010 FAIL: The `if (hasMemoryContext)` block appears to close before the ' +
+      'MEMORY FABRICATION guard. Ensure the guard text is inside the conditional block.'
+    );
+  });
+
+});
+
+// ============================================================
+// SECTION HIST: HISTORY DEPTH — simple_short Reduction
+// Verifies that simple_short queries receive depth 2, same as
+// simple_factual.  Short direct answers do not need 5 turns of
+// conversation history.
+// ============================================================
+
+describe('HIST. History Depth Reduction — simple_short', () => {
+
+  const orch = readRepoFile('api/core/orchestrator.js');
+
+  it('HIST-010: simple_short classification uses history depth 2 not 5', () => {
+    assert.ok(orch, 'HIST-010 FAIL: api/core/orchestrator.js not found');
+
+    const classIdx = orch.indexOf('export class Orchestrator');
+    const fnIdx = orch.indexOf('function getConversationDepth(');
+    assert.ok(fnIdx !== -1 && fnIdx < classIdx, 'HIST-010 FAIL: getConversationDepth not found as module-level function');
+
+    const fnEnd = orch.indexOf('\n}', fnIdx);
+    const fnBody = orch.slice(fnIdx, fnEnd + 2);
+    assert.ok(
+      fnBody.includes("'simple_short'") && fnBody.includes('return 2'),
+      'HIST-010 FAIL: getConversationDepth does not return 2 for simple_short. ' +
+      'simple_short queries only need minimal conversation history (2 turns), ' +
+      'same as simple_factual.'
+    );
+  });
+
+  it('HIST-011: simple_short depth reduction is inside getConversationDepth', () => {
+    assert.ok(orch, 'HIST-011 FAIL: api/core/orchestrator.js not found');
+
+    const classIdx = orch.indexOf('export class Orchestrator');
+    const fnIdx = orch.indexOf('function getConversationDepth(');
+    assert.ok(fnIdx !== -1 && fnIdx < classIdx, 'HIST-011 FAIL: getConversationDepth not found as module-level function');
+
+    const fnEnd = orch.indexOf('\n}', fnIdx);
+    const fnBody = orch.slice(fnIdx, fnEnd + 2);
+    assert.ok(
+      fnBody.includes("'simple_short'"),
+      'HIST-011 FAIL: simple_short is not referenced inside getConversationDepth function body. ' +
+      'The depth-2 rule must be inside this function, not a separate code path.'
+    );
+  });
+
+});
+
+// ============================================================
+// SECTION NOLOOKUP: NO-LOOKUP BOILERPLATE REMOVAL
+// Verifies that the ~115-token "no external lookup performed"
+// disclosure is NOT injected for personal queries.
+// The AI does not need to be told it did not do something.
+// ============================================================
+
+describe('NOLOOKUP. No-lookup Boilerplate Removal — Personal Query Injection', () => {
+
+  const orch = readRepoFile('api/core/orchestrator.js');
+
+  it('NOLOOKUP-001: Old INTERNAL CONTEXT boilerplate removed and replaced with short disclosure hook', () => {
+    assert.ok(orch, 'NOLOOKUP-001 FAIL: api/core/orchestrator.js not found');
+    assert.ok(
+      !orch.includes('INTERNAL CONTEXT QUERY — NO EXTERNAL LOOKUP PERFORMED'),
+      'NOLOOKUP-001 FAIL: The legacy ~115-token "INTERNAL CONTEXT QUERY — NO EXTERNAL LOOKUP PERFORMED" block must be removed.'
+    );
+    assert.ok(
+      orch.includes('[NO LOOKUP - PERSONAL CONTEXT]'),
+      'NOLOOKUP-001 FAIL: Short no-lookup disclosure hook "[NO LOOKUP - PERSONAL CONTEXT]" not found. ' +
+      'A ~30-token disclosure should be injected only when personal + freshness markers are present.'
+    );
+  });
+
+  it('NOLOOKUP-002: New log line documents when disclosure is injected or skipped', () => {
+    assert.ok(orch, 'NOLOOKUP-002 FAIL: api/core/orchestrator.js not found');
+    assert.ok(
+      orch.includes('Personal freshness query — short no-lookup disclosure injected') &&
+      orch.includes('No lookup attempted — disclosure skipped'),
+      'NOLOOKUP-002 FAIL: Expected telemetry log lines for injected/ skipped no-lookup disclosure were not found.'
+    );
+  });
+
+});
+
+// ============================================================
+// SECTION MINI: GPT-4o-mini ROUTING FOUNDATION
+// Verifies that the routing infrastructure for gpt-4o-mini
+// exists but defaults to disabled via MINI_MODEL_ENABLED=false.
+// ============================================================
+
+describe('MINI. GPT-4o-mini Routing Foundation', () => {
+
+  const orch = readRepoFile('api/core/orchestrator.js');
+
+  it('MINI-001: MINI_MODEL_ENABLED=false — default routes to gpt-4o not gpt-4o-mini', () => {
+    assert.ok(orch, 'MINI-001 FAIL: api/core/orchestrator.js not found');
+    assert.ok(
+      orch.includes('MINI_MODEL_ENABLED = false'),
+      'MINI-001 FAIL: MINI_MODEL_ENABLED constant not found or not defaulting to false. ' +
+      'The flag must default to false so gpt-4o remains the default GPT path.'
+    );
+  });
+
+  it('MINI-002: useMinModel infrastructure is present in orchestrator.js', () => {
+    assert.ok(orch, 'MINI-002 FAIL: api/core/orchestrator.js not found');
+    assert.ok(
+      orch.includes('useMinModel') &&
+      orch.includes('MINI_MODEL_ENABLED') &&
+      orch.includes('gpt-4o-mini'),
+      'MINI-002 FAIL: useMinModel routing infrastructure not found. ' +
+      'orchestrator.js must define useMinModel and reference "gpt-4o-mini" in the model selection block.'
+    );
+  });
+
+  it('MINI-003: useMinModel is false when MINI_MODEL_ENABLED is false', () => {
+    assert.ok(orch, 'MINI-003 FAIL: api/core/orchestrator.js not found');
+    // Verify that MINI_MODEL_ENABLED is part of the useMinModel guard
+    assert.ok(
+      orch.includes('MINI_MODEL_ENABLED') &&
+      orch.includes('useMinModel'),
+      'MINI-003 FAIL: MINI_MODEL_ENABLED must be part of the useMinModel condition. ' +
+      'When the flag is false, all GPT queries must route to gpt-4o.'
+    );
+  });
+
+  it('MINI-004: high_stakes guard prevents mini routing even when flag enabled', () => {
+    assert.ok(orch, 'MINI-004 FAIL: api/core/orchestrator.js not found');
+    // The useMinModel expression must include a high_stakes guard
+    const miniStart = orch.indexOf('useMinModel');
+    assert.ok(miniStart !== -1, 'MINI-004 FAIL: useMinModel not found in orchestrator.js');
+    const miniBlock = orch.slice(miniStart, miniStart + 400);
+    assert.ok(
+      miniBlock.includes('isHighStakes') || miniBlock.includes('high_stakes'),
+      'MINI-004 FAIL: useMinModel must include a !isHighStakes guard. ' +
+      'High-stakes queries must always use the full gpt-4o or Claude model.'
+    );
+  });
+
+  it('MINI-005: Claude escalation takes priority over mini routing', () => {
+    assert.ok(orch, 'MINI-005 FAIL: api/core/orchestrator.js not found');
+    const miniStart = orch.indexOf('useMinModel');
+    assert.ok(miniStart !== -1, 'MINI-005 FAIL: useMinModel not found in orchestrator.js');
+    const miniBlock = orch.slice(miniStart, miniStart + 400);
+    assert.ok(
+      miniBlock.includes('!useClaude'),
+      'MINI-005 FAIL: useMinModel must include !useClaude guard. ' +
+      'Claude escalation must always take priority over mini routing.'
+    );
+  });
+
+});
