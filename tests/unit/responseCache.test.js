@@ -45,47 +45,56 @@ function semanticFingerprint(query) {
 }
 
 const PERMANENT_TTL = 30 * 24 * 60 * 60 * 1000; // 30 days in ms
+const SEMI_STABLE_TTL = 24 * 60 * 60 * 1000;    // 24 hours in ms
 
 const _responseCache = new Map();
 
-function buildResponseCacheKey(message, mode) {
-  return `response:${mode}:${semanticFingerprint(message)}`;
+function buildResponseCacheKey(message, mode, userId, truthType) {
+  const scope = truthType === 'SEMI_STABLE'
+    ? `${userId || 'anonymous'}:${mode}`
+    : mode;
+  return `response:${scope}:${semanticFingerprint(message)}`;
 }
 
-function getCachedResponse(message, mode) {
-  const key = buildResponseCacheKey(message, mode);
+function getCachedResponse(message, mode, userId, truthType) {
+  const key = buildResponseCacheKey(message, mode, userId, truthType);
   const entry = _responseCache.get(key);
   if (!entry) return null;
-  if (Date.now() - entry.cachedAt > PERMANENT_TTL) {
+  const ttl = truthType === 'SEMI_STABLE' ? SEMI_STABLE_TTL : PERMANENT_TTL;
+  if (Date.now() - entry.cachedAt > ttl) {
     _responseCache.delete(key);
     return null;
   }
   return entry.response;
 }
 
-function setCachedResponse(message, mode, response) {
-  const key = buildResponseCacheKey(message, mode);
+function setCachedResponse(message, mode, response, userId, truthType) {
+  const key = buildResponseCacheKey(message, mode, userId, truthType);
   _responseCache.set(key, { response, cachedAt: Date.now() });
 }
 
 // Simulate isCacheEligible logic from orchestrator
-// FIX 2: Removed conversationHistory.length === 0 requirement.
-// Added intent_class guard and referential phrasing guard.
+// SEMI_STABLE support added: caches with user-scoped keys (24hr TTL).
+// hasPersonalIntent only blocks PERMANENT (global key) — SEMI_STABLE keys are
+// user-scoped so personal intent is safe.
 function isCacheEligible({ truth_type, memory, effectiveDocumentData, vault, high_stakes, hasPersonalIntent, intent_class, query }) {
+  const isSemiStable = truth_type === 'SEMI_STABLE';
+  const isPermanent = truth_type === 'PERMANENT';
+  const isCacheable = isPermanent || isSemiStable;
   const isFactualClass =
     intent_class === null || intent_class === undefined ||
     ['factual', 'simple_factual', 'simple_short'].includes(intent_class);
   const REFERENTIAL_PHRASING = /\b(that one|the second one|the other one|explain that differently|what about the other|what does that mean)\b/i;
   const hasReferentialPhrasing = query ? REFERENTIAL_PHRASING.test(query) : false;
   return (
-    truth_type === 'PERMANENT' &&
+    isCacheable &&
     isFactualClass &&
     !hasReferentialPhrasing &&
     !memory &&
     !effectiveDocumentData &&
     !vault &&
     !high_stakes?.isHighStakes &&
-    !hasPersonalIntent
+    !(isPermanent && hasPersonalIntent)  // personal intent only blocks global PERMANENT keys
   );
 }
 
@@ -426,8 +435,8 @@ describe('RC. Response Cache — ttlCacheManager', () => {
   });
 
   // RC-022 (ME-009) --------------------------------------------------------
-  it('RC-022: Personal intent blocks cache regardless of truth_type', () => {
-    const eligible = isCacheEligible({
+  it('RC-022: Personal intent blocks PERMANENT cache but not SEMI_STABLE (user-scoped)', () => {
+    const permanentEligible = isCacheEligible({
       truth_type: 'PERMANENT',
       memory: null,
       effectiveDocumentData: null,
@@ -438,7 +447,20 @@ describe('RC. Response Cache — ttlCacheManager', () => {
       intent_class: 'simple_factual',
       query: 'What is my gross margin?',
     });
-    assert.strictEqual(eligible, false, 'Personal intent must block cache');
+    assert.strictEqual(permanentEligible, false, 'Personal intent must block global PERMANENT cache key');
+
+    const semiStableEligible = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: true,
+      intent_class: 'simple_factual',
+      query: 'What is our burn rate?',
+    });
+    assert.strictEqual(semiStableEligible, true, 'Personal intent should NOT block SEMI_STABLE (user-scoped) cache key');
   });
 
   // RC-023 (ME-008 variant) ------------------------------------------------
@@ -473,6 +495,221 @@ describe('RC. Response Cache — ttlCacheManager', () => {
       query: 'Explain the geopolitical history of the Roman Empire',
     });
     assert.strictEqual(eligible, false, 'Non-factual intent class must block cache');
+  });
+
+  // SC-001 ----------------------------------------------------------------
+  it('SC-001: SEMI_STABLE query is cache-eligible and stores with 24hr TTL', () => {
+    const eligible = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'simple_factual',
+      query: 'What is the current corporate tax rate in the US?',
+    });
+    assert.strictEqual(eligible, true, 'SEMI_STABLE query must be cache-eligible');
+
+    const msg    = 'What is the current corporate tax rate in the US?';
+    const userId = 'user-abc';
+    const mode   = 'truth';
+    setCachedResponse(msg, mode, { success: true, response: '21%' }, userId, 'SEMI_STABLE');
+    const result = getCachedResponse(msg, mode, userId, 'SEMI_STABLE');
+    assert.ok(result, 'Expected cached entry after setCachedResponse');
+    assert.strictEqual(result.response, '21%', 'Cached response must match stored value');
+  });
+
+  // SC-002 ----------------------------------------------------------------
+  it('SC-002: SEMI_STABLE query returns cache hit on second ask', () => {
+    const msg    = 'What is the minimum wage in California?';
+    const userId = 'user-xyz';
+    const mode   = 'truth';
+    const stored = { success: true, response: '$16/hr' };
+
+    setCachedResponse(msg, mode, stored, userId, 'SEMI_STABLE');
+
+    const first  = getCachedResponse(msg, mode, userId, 'SEMI_STABLE');
+    const second = getCachedResponse(msg, mode, userId, 'SEMI_STABLE');
+    assert.ok(first,  'First retrieval must hit cache');
+    assert.ok(second, 'Second retrieval must hit cache');
+    assert.deepStrictEqual(first,  stored, 'First hit must match stored value');
+    assert.deepStrictEqual(second, stored, 'Second hit must match stored value');
+  });
+
+  // SC-003 ----------------------------------------------------------------
+  it('SC-003: SEMI_STABLE cache key includes user_id — User A query does not serve User B', () => {
+    const msg    = 'What are the VAT rates in Europe?';
+    const mode   = 'truth';
+    const userA  = 'user-A';
+    const userB  = 'user-B';
+    const stored = { success: true, response: 'Varies by country' };
+
+    setCachedResponse(msg, mode, stored, userA, 'SEMI_STABLE');
+
+    const hitForA = getCachedResponse(msg, mode, userA, 'SEMI_STABLE');
+    const hitForB = getCachedResponse(msg, mode, userB, 'SEMI_STABLE');
+
+    assert.ok(hitForA,                   'User A must get a cache hit for their own entry');
+    assert.strictEqual(hitForB, null,    "User B must NOT get a cache hit for User A's entry");
+  });
+
+  // SC-004 ----------------------------------------------------------------
+  it('SC-004: PERMANENT cache key does NOT include user_id — global cache preserved', () => {
+    const msg    = 'What is the speed of light?';
+    const mode   = 'truth';
+    const userA  = 'user-A';
+    const userB  = 'user-B';
+    const stored = { success: true, response: '299,792,458 m/s' };
+
+    setCachedResponse(msg, mode, stored, userA, 'PERMANENT');
+
+    const hitForA = getCachedResponse(msg, mode, userA, 'PERMANENT');
+    const hitForB = getCachedResponse(msg, mode, userB, 'PERMANENT');
+
+    assert.ok(hitForA, 'User A must get a cache hit for a PERMANENT entry');
+    assert.ok(hitForB, 'User B must ALSO get a cache hit — PERMANENT keys are global');
+    assert.deepStrictEqual(hitForA, stored);
+    assert.deepStrictEqual(hitForB, stored);
+  });
+
+  // SC-005 ----------------------------------------------------------------
+  it('SC-005: SEMI_STABLE cache expires after 24 hours, not 30 days', () => {
+    const msg       = 'What is the prime rate?';
+    const userId    = 'user-exp';
+    const mode      = 'truth';
+    const stored    = { success: true, response: '8.5%' };
+    const expiredAt = Date.now() - (25 * 60 * 60 * 1000); // 25 hours ago
+
+    // Insert a SEMI_STABLE entry that is 25 hours old (expired)
+    const semiKey = buildResponseCacheKey(msg, mode, userId, 'SEMI_STABLE');
+    _responseCache.set(semiKey, { response: stored, cachedAt: expiredAt });
+    const semiResult = getCachedResponse(msg, mode, userId, 'SEMI_STABLE');
+    assert.strictEqual(semiResult, null, 'SEMI_STABLE entry older than 24hr must be expired');
+
+    // Same age does NOT expire a PERMANENT entry (30-day TTL)
+    const permKey = buildResponseCacheKey(msg, mode, userId, 'PERMANENT');
+    _responseCache.set(permKey, { response: stored, cachedAt: expiredAt });
+    const permResult = getCachedResponse(msg, mode, userId, 'PERMANENT');
+    assert.ok(permResult, 'PERMANENT entry 25hr old must NOT be expired');
+  });
+
+  // SC-006 ----------------------------------------------------------------
+  it('SC-006: VOLATILE query is never cache-eligible regardless of other conditions', () => {
+    const eligible = isCacheEligible({
+      truth_type: 'VOLATILE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'simple_factual',
+      query: 'What is the current stock price of Apple?',
+    });
+    assert.strictEqual(eligible, false, 'VOLATILE query must never be cache-eligible');
+  });
+
+  // SC-007 ----------------------------------------------------------------
+  it('SC-007: High stakes query never caches even if SEMI_STABLE', () => {
+    const eligible = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: { isHighStakes: true },
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'simple_factual',
+      query: 'What is the legal liability for a data breach?',
+    });
+    assert.strictEqual(eligible, false, 'High-stakes SEMI_STABLE query must never be cache-eligible');
+  });
+
+  // SC-008 ----------------------------------------------------------------
+  it('SC-008: PERMANENT query caches on second ask in same session (conversationHistory.length > 0)', () => {
+    // Confirms the conversation history blocker has been removed from isCacheEligible.
+    // Validate via source scan — the orchestrator isCacheEligible block must not
+    // reference conversationHistory.length as a gate condition.
+    const src = readFile(ORCHESTRATOR_PATH);
+    assert.ok(src, 'orchestrator.js must exist');
+    const cacheBlock = src.slice(
+      src.indexOf('RESPONSE CACHE — check before expensive'),
+      src.indexOf('performanceMarkers.aiCallStart')
+    );
+    assert.ok(
+      !cacheBlock.includes('conversationHistory.length'),
+      'SC-008 FAIL: isCacheEligible block must not gate on conversationHistory.length — ' +
+      'repeat factual queries within a session must benefit from the cache.'
+    );
+    // Also confirm the inline logic returns true with a non-empty history
+    const eligible = isCacheEligible({
+      truth_type: 'PERMANENT',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      hasPersonalIntent: false,
+      intent_class: 'simple_factual',
+      query: 'What is the boiling point of water?',
+    });
+    assert.strictEqual(eligible, true, 'PERMANENT query must be cache-eligible mid-session (history blocker removed)');
+  });
+
+  // SC-009 ----------------------------------------------------------------
+  it('SC-009: SEMI_STABLE query with personal intent caches correctly (user-scoped key)', () => {
+    // "our burn rate" has personal intent but SEMI_STABLE truth_type.
+    // Since SEMI_STABLE keys are user-scoped, personal intent is safe and must not block.
+    const eligible = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: true,
+      intent_class: 'simple_factual',
+      query: 'What is our burn rate benchmark for SaaS startups?',
+    });
+    assert.strictEqual(eligible, true, 'SEMI_STABLE personal-intent query must be cache-eligible (user-scoped)');
+
+    // Verify the cache key actually contains the userId
+    const key = buildResponseCacheKey(
+      'What is our burn rate benchmark for SaaS startups?',
+      'truth',
+      'user-123',
+      'SEMI_STABLE'
+    );
+    assert.ok(key.includes('user-123'), 'SEMI_STABLE key must contain the userId');
+  });
+
+  // SC-010 ----------------------------------------------------------------
+  it('SC-010: Document-loaded query never caches regardless of truth_type', () => {
+    const eligiblePermanent = isCacheEligible({
+      truth_type: 'PERMANENT',
+      memory: null,
+      effectiveDocumentData: { tokens: 1200 },
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'simple_factual',
+      query: 'What is the boiling point of water?',
+    });
+    const eligibleSemiStable = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: null,
+      effectiveDocumentData: { tokens: 800 },
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'simple_factual',
+      query: 'What is the minimum wage?',
+    });
+    assert.strictEqual(eligiblePermanent,  false, 'Document-loaded PERMANENT query must never cache');
+    assert.strictEqual(eligibleSemiStable, false, 'Document-loaded SEMI_STABLE query must never cache');
   });
 
 });

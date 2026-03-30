@@ -2273,15 +2273,19 @@ export class Orchestrator {
         earlyClassification !== undefined &&
         ['factual', 'simple_factual', 'simple_short'].includes(earlyClassification.classification);
 
+      const isSemiStable = phase4Metadata.truth_type === 'SEMI_STABLE';
+      const isPermanent = phase4Metadata.truth_type === 'PERMANENT';
+      const isCacheable = isPermanent || isSemiStable;
+
       const isCacheEligible = (
-        phase4Metadata.truth_type === 'PERMANENT' &&
+        isCacheable &&
         isFactualIntentClass &&               // simple/factual intent only
         !hasReferentialPhrasing &&            // no context-dependent phrasing
         !memoriesBlockCache &&                // no genuinely query-relevant memories
         !effectiveDocumentData &&             // no document loaded
         !context.vault &&                     // no vault
         !phase4Metadata.high_stakes?.isHighStakes && // not high stakes
-        !hasPersonalIntent                    // no personal query signals
+        !(isPermanent && hasPersonalIntent)   // personal intent only blocks global PERMANENT keys
       );
 
       console.log(
@@ -2293,11 +2297,11 @@ export class Orchestrator {
       );
 
       if (isCacheEligible) {
-        const cachedResponse = getCachedResponse(message, mode);
+        const cachedResponse = getCachedResponse(message, mode, userId, phase4Metadata.truth_type);
         if (cachedResponse) {
           console.log(
             `[RESPONSE-CACHE] Cache hit — ` +
-            `truth_type=PERMANENT ` +
+            `truth_type=${phase4Metadata.truth_type} ` +
             `mode=${mode} ` +
             `savings=~$0.04`
           );
@@ -2305,6 +2309,7 @@ export class Orchestrator {
           const _cacheUserId = userId;
           const _cacheSessionId = sessionId;
           const _cacheMode = mode;
+          const _cacheTruthType = phase4Metadata.truth_type;
           setImmediate(async () => {
             try {
               if (_cachePool) {
@@ -2314,7 +2319,7 @@ export class Orchestrator {
                     prompt_tokens, completion_tokens, cost_usd,
                     model, mode, tokens_saved
                   ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-                  [_cacheUserId || null, _cacheSessionId || null, 'cache_hit', 'PERMANENT', 0, 0, 0, 0, 'cache', _cacheMode || null, 800]
+                  [_cacheUserId || null, _cacheSessionId || null, 'cache_hit', _cacheTruthType, 0, 0, 0, 0, 'cache', _cacheMode || null, 800]
                 );
               }
             } catch (err) {
@@ -3150,6 +3155,8 @@ export class Orchestrator {
       // Store in response cache if eligible
       // Cache POST-enforcement response — fully processed through all phases
       if (isCacheEligible && personalityResponse?.response) {
+        const _cacheTruthType = phase4Metadata.truth_type;
+        const _cacheTtlLabel = _cacheTruthType === 'SEMI_STABLE' ? '24hr' : '30days';
         setCachedResponse(message, mode, {
           success: true,
           response: personalityResponse.response,
@@ -3170,12 +3177,12 @@ export class Orchestrator {
             required: false,
             disclosure_added: false
           }
-        });
+        }, userId, _cacheTruthType);
         console.log(
           `[RESPONSE-CACHE] Stored — ` +
-          `truth_type=PERMANENT ` +
+          `truth_type=${_cacheTruthType} ` +
           `mode=${mode} ` +
-          `ttl=30days`
+          `ttl=${_cacheTtlLabel}`
         );
       }
 

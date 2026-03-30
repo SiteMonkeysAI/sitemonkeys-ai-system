@@ -7371,17 +7371,24 @@ describe('EFF. Memory Efficiency + Cache Eligibility Guards', () => {
     );
   });
 
-  // EFF-009 (ME-009): personal intent still blocks cache
-  it('EFF-009: isCacheEligible still includes !hasPersonalIntent guard', () => {
+  // EFF-009 (ME-009): personal intent blocks PERMANENT (global) cache but not SEMI_STABLE (user-scoped)
+  it('EFF-009: personal intent guard only blocks PERMANENT cache', () => {
     assert.ok(orch, 'Could not read api/core/orchestrator.js');
     const cacheBlock = orch.slice(
       orch.indexOf('RESPONSE CACHE — check before expensive'),
       orch.indexOf('performanceMarkers.aiCallStart')
     );
     assert.ok(
-      cacheBlock.includes('!hasPersonalIntent'),
-      'EFF-009 FAIL: isCacheEligible must still include !hasPersonalIntent guard. ' +
-      'Personal queries must never be cached regardless of truth_type.'
+      cacheBlock.includes('!(isPermanent && hasPersonalIntent)'),
+      'EFF-009 FAIL: personal intent must block PERMANENT (global-scope) cache keys via !(isPermanent && hasPersonalIntent). ' +
+      'Global cache must not serve personal queries across users.'
+    );
+    const hasUnscopedPersonalBlock =
+      /!hasPersonalIntent\s*&&/.test(cacheBlock) || /&&\s*!hasPersonalIntent/.test(cacheBlock);
+    assert.ok(
+      !hasUnscopedPersonalBlock,
+      'EFF-009 FAIL: personal intent guard must not blanket-block SEMI_STABLE caches. ' +
+      'SEMI_STABLE keys are user-scoped and should remain eligible.'
     );
   });
 

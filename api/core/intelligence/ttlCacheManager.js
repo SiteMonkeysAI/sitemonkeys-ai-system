@@ -297,27 +297,38 @@ export function getStats() {
 // ==================== RESPONSE CACHE (Full AI Response) ====================
 
 /**
- * Build a cache key for a full response entry
+ * Build a cache key for a full response entry.
+ * SEMI_STABLE entries are scoped per user so User A's business analysis
+ * never serves User B.  PERMANENT entries remain global (same answer for
+ * all users).
  * @param {string} message - The user's message
  * @param {string} mode - The active mode
+ * @param {string} [userId] - User ID (required for SEMI_STABLE scoping)
+ * @param {string} [truthType] - PERMANENT | SEMI_STABLE
  * @returns {string} Cache key
  */
-export function buildResponseCacheKey(message, mode) {
+export function buildResponseCacheKey(message, mode, userId, truthType) {
   const fingerprint = semanticFingerprint(message);
-  return `response:${mode}:${fingerprint}`;
+  const scope = truthType === 'SEMI_STABLE'
+    ? `${userId || 'anonymous'}:${mode}`
+    : mode;
+  return `response:${scope}:${fingerprint}`;
 }
 
 /**
  * Retrieve a cached full AI response
  * @param {string} message - The user's message
  * @param {string} mode - The active mode
+ * @param {string} [userId] - User ID (required for SEMI_STABLE scoping)
+ * @param {string} [truthType] - PERMANENT | SEMI_STABLE
  * @returns {object|null} Cached response or null if not found / expired
  */
-export function getCachedResponse(message, mode) {
-  const key = buildResponseCacheKey(message, mode);
+export function getCachedResponse(message, mode, userId, truthType) {
+  const key = buildResponseCacheKey(message, mode, userId, truthType);
   const entry = responseCache.get(key);
   if (!entry) return null;
-  if (Date.now() - entry.cachedAt > RESPONSE_CACHE_TTL) {
+  const ttl = truthType === 'SEMI_STABLE' ? TTL_CONFIG.SEMI_STABLE : TTL_CONFIG.PERMANENT;
+  if (Date.now() - entry.cachedAt > ttl) {
     responseCache.delete(key);
     return null;
   }
@@ -329,9 +340,11 @@ export function getCachedResponse(message, mode) {
  * @param {string} message - The user's message
  * @param {string} mode - The active mode
  * @param {object} response - The response object to cache
+ * @param {string} [userId] - User ID (required for SEMI_STABLE scoping)
+ * @param {string} [truthType] - PERMANENT | SEMI_STABLE
  */
-export function setCachedResponse(message, mode, response) {
-  const key = buildResponseCacheKey(message, mode);
+export function setCachedResponse(message, mode, response, userId, truthType) {
+  const key = buildResponseCacheKey(message, mode, userId, truthType);
   responseCache.set(key, {
     response,
     cachedAt: Date.now()
