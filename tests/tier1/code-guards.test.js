@@ -1064,63 +1064,75 @@ describe('K. News Source Credibility Guards', () => {
 
 describe('L. Greeting Shortcut Guards', () => {
 
-  it('L-001: isPureGreeting bypasses userHasMemories check so shortcut fires in all modes', () => {
-    // ROOT CAUSE (Issue): In Business Validation mode, a user with stored memories caused
-    // userHasMemories=true which set memoryContext.hasMemory=true which blocked the
-    // STEP 6.9 greeting shortcut, routing "Hello" to GPT-4 at $0.04+ cost.
-    // FIX: A pure greeting (no personal intent) must skip memory regardless of userHasMemories.
+  it('L-001: hasSessionOrPersonalRef gate ensures pure greetings skip memory retrieval', () => {
+    // ROOT CAUSE (Issue): "Hello" in Business Validation mode (user with stored memories)
+    // previously forced memory retrieval because userHasMemories=true overrode the skip.
+    // FIX (Change A): hasSessionOrPersonalRef detects only first-person pronouns and
+    // session-reference language.  Pure greetings like "Hello" contain neither, so they
+    // always skip retrieval regardless of stored memories.
     const orchestrator = readRepoFile('api/core/orchestrator.js');
     assert.ok(orchestrator, 'Could not read api/core/orchestrator.js');
 
-    // The isPureGreeting flag must exist and reference both the classification and hasPersonalIntent
-    const hasIsPureGreeting =
-      orchestrator.includes('isPureGreeting') &&
-      orchestrator.includes("classification === 'greeting'") &&
-      orchestrator.includes('!hasPersonalIntent');
+    // hasSessionOrPersonalRef must exist and gate skipMemoryForSimpleQuery
+    const hasSessionRefGate =
+      orchestrator.includes('hasSessionOrPersonalRef') &&
+      orchestrator.includes('!hasSessionOrPersonalRef') &&
+      orchestrator.includes('skipMemoryForSimpleQuery');
 
     assert.ok(
-      hasIsPureGreeting,
-      'L-001 FAIL: isPureGreeting guard is missing from orchestrator.js. ' +
-      'Without it, "Hello" in Business Validation mode (user with memories) bypasses ' +
-      'the greeting shortcut and hits GPT-4, costing ~$0.04 per greeting.'
+      hasSessionRefGate,
+      'L-001 FAIL: hasSessionOrPersonalRef gate is missing from orchestrator.js. ' +
+      'Without it, "Hello" in Business Validation mode (user with memories) may retrieve ' +
+      'memory context, blocking the STEP 6.9 greeting shortcut and hitting GPT-4.'
     );
   });
 
-  it('L-002: isPureGreeting gates the userHasMemories database call', () => {
-    // The DB query this.#hasUserMemories() must NOT be called for pure greetings —
-    // it is both unnecessary (result unused) and a latency source.
+  it('L-002: session/personal-ref detection includes first-person pronouns and session words', () => {
+    // hasSessionOrPersonalRef must detect first-person pronouns (my, our, I, me, we, mine, ours)
+    // and session-reference language (earlier, we decided, remind me, etc.).
+    // This ensures "What did we decide earlier?" and "Remind me what I said" trigger retrieval
+    // while "What is gross margin?" and "Hello" correctly skip it.
     const orchestrator = readRepoFile('api/core/orchestrator.js');
     assert.ok(orchestrator, 'Could not read api/core/orchestrator.js');
 
-    // The check `skipMemoryForSimpleQuery && !isPureGreeting` (or equivalent) must guard
-    // the hasUserMemories call so pure greetings skip it entirely.
-    const gatesMemoryCall =
-      orchestrator.includes('skipMemoryForSimpleQuery && !isPureGreeting') ||
-      (orchestrator.includes('!isPureGreeting') && orchestrator.includes('#hasUserMemories'));
+    // Must include first-person pronouns in the detection
+    const hasFirstPersonPronouns =
+      orchestrator.includes('my|our|I|me|we|mine|ours') ||
+      (orchestrator.includes('hasSessionOrPersonalRef') && orchestrator.includes('\\bmy\\b'));
+
+    // Must include at least one session-reference word
+    const hasSessionWords =
+      orchestrator.includes('earlier') &&
+      orchestrator.includes('we decided') &&
+      orchestrator.includes('remind me');
 
     assert.ok(
-      gatesMemoryCall,
-      'L-002 FAIL: The isPureGreeting guard does not gate the #hasUserMemories DB call. ' +
-      'Pure greetings will still trigger an unnecessary database query before the shortcut check.'
+      hasFirstPersonPronouns && hasSessionWords,
+      'L-002 FAIL: hasSessionOrPersonalRef does not include required first-person pronouns ' +
+      'or session-reference words. Queries like "What did we decide earlier?" will not trigger ' +
+      'memory retrieval.'
     );
   });
 
-  it('L-003: greeting shortcut memory skip condition includes isPureGreeting', () => {
-    // The condition that skips memory retrieval must allow pure greetings to bypass
-    // even when userHasMemories is true.
+  it('L-003: skipMemoryForSimpleQuery covers greeting, simple_factual, and simple_short', () => {
+    // All three simple classifications must skip memory retrieval when no personal or
+    // session reference is present.  Previously only greeting and simple_factual were covered.
+    // Adding simple_short prevents short queries like "What does pH mean?" from retrieving
+    // all stored user memories unnecessarily.
     const orchestrator = readRepoFile('api/core/orchestrator.js');
     assert.ok(orchestrator, 'Could not read api/core/orchestrator.js');
 
-    // Expected pattern: (!userHasMemories || isPureGreeting)
-    const hasCorrectCondition =
-      orchestrator.includes('!userHasMemories || isPureGreeting') ||
-      orchestrator.includes('isPureGreeting || !userHasMemories');
+    const hasAllThreeClasses =
+      orchestrator.includes("'simple_short'") &&
+      orchestrator.includes("'simple_factual'") &&
+      orchestrator.includes("'greeting'") &&
+      orchestrator.includes('skipMemoryForSimpleQuery');
 
     assert.ok(
-      hasCorrectCondition,
-      'L-003 FAIL: The memory-skip condition does not include isPureGreeting. ' +
-      'A user with stored memories sending "Hello" will still retrieve memory context, ' +
-      'setting memoryContext.hasMemory=true and blocking the STEP 6.9 shortcut.'
+      hasAllThreeClasses,
+      'L-003 FAIL: skipMemoryForSimpleQuery does not include all three simple classifications ' +
+      "(greeting, simple_factual, simple_short). Short queries will retrieve stored memories " +
+      'unnecessarily.'
     );
   });
 
@@ -7138,6 +7150,180 @@ describe('CP. Cost Protection — Adaptive Degradation', () => {
     assert.ok(
       insertBlock.includes('history_reduced_by_cost'),
       'CP-005 FAIL: history_reduced_by_cost not found in INSERT INTO query_cost_log in orchestrator.js'
+    );
+  });
+
+});
+
+// ============================================================
+// EFF. Memory Efficiency + Cache Eligibility Guards
+// Guards the fixes for Issue: Fix two critical efficiency defects
+//   FIX 1: Memory bloat on simple queries (Changes A, B, C)
+//   FIX 2: Cache eligibility too restrictive (removes history gate)
+//
+// Problem: "What is gross margin?" costs 2,388 tokens (should be ~513).
+//          Cache only fires on the literal first message of a session.
+//
+// Corresponds to issue test plan ME-001 through ME-009.
+// ============================================================
+
+describe('EFF. Memory Efficiency + Cache Eligibility Guards', () => {
+
+  const orch = readRepoFile('api/core/orchestrator.js');
+
+  // EFF-001 (ME-001): simple_short added to the memory-skip list
+  it('EFF-001: skipMemoryForSimpleQuery covers greeting, simple_factual, AND simple_short', () => {
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    // All three classifications must appear together in the skipMemoryForSimpleQuery check.
+    // Previously only greeting and simple_factual were covered, causing short queries
+    // like "What does pH mean?" to retrieve all stored user memories.
+    assert.ok(
+      orch.includes("['greeting', 'simple_factual', 'simple_short'].includes(earlyClassification.classification)") ||
+      (orch.includes("'simple_short'") && orch.includes("'simple_factual'") && orch.includes("'greeting'") && orch.includes('skipMemoryForSimpleQuery')),
+      'EFF-001 FAIL: skipMemoryForSimpleQuery must list simple_short, simple_factual, and greeting. ' +
+      'Simple-short queries will retrieve stored memories unnecessarily.'
+    );
+  });
+
+  // EFF-002 (ME-002): hasSessionOrPersonalRef is the gate (not the removed userHasMemories)
+  it('EFF-002: hasSessionOrPersonalRef gates skipMemoryForSimpleQuery', () => {
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    // The complete regex pattern for first-person pronouns must be present and linked to the gate.
+    assert.ok(
+      orch.includes('hasSessionOrPersonalRef') &&
+      orch.includes('!hasSessionOrPersonalRef') &&
+      orch.includes('skipMemoryForSimpleQuery') &&
+      orch.includes('my|our|I|me|we|mine|ours'),
+      'EFF-002 FAIL: hasSessionOrPersonalRef must exist with first-person pronouns and gate ' +
+      'skipMemoryForSimpleQuery. Without this gate, users with stored memories will retrieve ' +
+      'them even for pure factual queries like "What is gross margin?"'
+    );
+  });
+
+  // EFF-003 (ME-003): session-reference language triggers retrieval for "What did we decide earlier?"
+  it('EFF-003: session-reference words are included in hasSessionOrPersonalRef detection', () => {
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    // The session-reference pattern must include "earlier", "we decided", and "remind me"
+    // so that queries like "What did we decide earlier?" trigger memory retrieval.
+    assert.ok(
+      orch.includes('earlier') &&
+      orch.includes('we decided') &&
+      orch.includes('remind me') &&
+      orch.includes('hasSessionOrPersonalRef'),
+      'EFF-003 FAIL: hasSessionOrPersonalRef must include session-reference words (earlier, ' +
+      '"we decided", "remind me"). Queries like "What did we decide earlier?" will not ' +
+      'trigger memory retrieval.'
+    );
+  });
+
+  // EFF-004 (ME-004): personal first-person pronouns trigger retrieval for "Remind me what I said"
+  it('EFF-004: first-person pronouns (my, I, me, we, our) included in hasSessionOrPersonalRef', () => {
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    // The personal-pronoun regex in hasSessionOrPersonalRef must cover my, our, I, me, we,
+    // mine, ours — not broader second/third-person pronouns like "your" or "they".
+    // Check for the complete regex pattern used in the pronouns branch.
+    assert.ok(
+      orch.includes('my|our|I|me|we|mine|ours') &&
+      orch.includes('hasSessionOrPersonalRef'),
+      'EFF-004 FAIL: hasSessionOrPersonalRef must include first-person pronouns (my, me, we). ' +
+      '"Remind me what I said about the Cisco proposal" will not trigger memory retrieval.'
+    );
+  });
+
+  // EFF-005 (ME-005/ME-006): conversationHistory.length === 0 is NOT in isCacheEligible
+  it('EFF-005: isCacheEligible does not require empty conversationHistory', () => {
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    // Extract the cache eligibility block to verify the condition was removed.
+    const cacheBlock = orch.slice(
+      orch.indexOf('RESPONSE CACHE — check before expensive'),
+      orch.indexOf('performanceMarkers.aiCallStart')
+    );
+    assert.ok(
+      !cacheBlock.includes('conversationHistory.length === 0') &&
+      !cacheBlock.includes('conversationHistory.length == 0'),
+      'EFF-005 FAIL: isCacheEligible must not require conversationHistory.length === 0. ' +
+      'Repeat factual questions within a session ("What is gross margin?" asked twice) ' +
+      'will never hit the cache.'
+    );
+  });
+
+  // EFF-006 (ME-006): intent class guard added to isCacheEligible
+  it('EFF-006: isCacheEligible includes isFactualIntentClass guard', () => {
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('isFactualIntentClass'),
+      'EFF-006 FAIL: isCacheEligible must include isFactualIntentClass guard. ' +
+      'Without it, context-dependent PERMANENT queries ("What does that mean?") may be ' +
+      'served a generic cached answer.'
+    );
+  });
+
+  // EFF-007 (ME-007): VOLATILE queries never cache (truth_type === PERMANENT gate still present)
+  it('EFF-007: isCacheEligible still requires truth_type === PERMANENT', () => {
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    const cacheBlock = orch.slice(
+      orch.indexOf('RESPONSE CACHE — check before expensive'),
+      orch.indexOf('performanceMarkers.aiCallStart')
+    );
+    assert.ok(
+      cacheBlock.includes("truth_type === 'PERMANENT'"),
+      'EFF-007 FAIL: isCacheEligible must still require truth_type === PERMANENT. ' +
+      'VOLATILE queries (prices, weather) must never be cached.'
+    );
+  });
+
+  // EFF-008 (ME-008): referential phrasing guard blocks context-dependent queries from cache
+  it('EFF-008: isCacheEligible includes referential phrasing guard', () => {
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('hasReferentialPhrasing') &&
+      orch.includes('REFERENTIAL_PHRASING_PATTERN'),
+      'EFF-008 FAIL: isCacheEligible must include a referential phrasing guard. ' +
+      '"Can you explain that differently?" must not hit a generic PERMANENT cache.'
+    );
+    // Verify the referential pattern covers the key phrases from the issue.
+    // Use direct includes checks against the full orchestrator source.
+    assert.ok(
+      orch.includes('that one') &&
+      orch.includes('explain that differently') &&
+      orch.includes('the second one'),
+      'EFF-008 FAIL: REFERENTIAL_PHRASING_PATTERN must include "that one", ' +
+      '"explain that differently", and "the second one" to guard against context-dependent cache hits.'
+    );
+  });
+
+  // EFF-009 (ME-009): personal intent still blocks cache
+  it('EFF-009: isCacheEligible still includes !hasPersonalIntent guard', () => {
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    const cacheBlock = orch.slice(
+      orch.indexOf('RESPONSE CACHE — check before expensive'),
+      orch.indexOf('performanceMarkers.aiCallStart')
+    );
+    assert.ok(
+      cacheBlock.includes('!hasPersonalIntent'),
+      'EFF-009 FAIL: isCacheEligible must still include !hasPersonalIntent guard. ' +
+      'Personal queries must never be cached regardless of truth_type.'
+    );
+  });
+
+  // EFF-010 (Change C): hasMemoryContext uses memoryContext.hasMemory not context.memory
+  it('EFF-010: hasMemoryContext uses memoryContext.hasMemory (not truthy string context.memory)', () => {
+    assert.ok(orch, 'Could not read api/core/orchestrator.js');
+    assert.ok(
+      orch.includes('hasMemoryContext = memoryContext.hasMemory'),
+      'EFF-010 FAIL: hasMemoryContext must be set from memoryContext.hasMemory, not from ' +
+      'context.memory (a truthy string check). The string is only accurate when memories ' +
+      'survive the relevance gate and token budget — the boolean flag is authoritative.'
+    );
+    // Must NOT use the old string truthiness check for the hasMemoryContext variable
+    const orchLines = orch.split('\n');
+    const hasOldCheck = orchLines.some(l =>
+      l.includes('hasMemoryContext = context.memory') && !l.trimStart().startsWith('//')
+    );
+    assert.ok(
+      !hasOldCheck,
+      'EFF-010 FAIL: The old "hasMemoryContext = context.memory" truthy-string assignment ' +
+      'must be removed. Use memoryContext.hasMemory instead.'
     );
   });
 
