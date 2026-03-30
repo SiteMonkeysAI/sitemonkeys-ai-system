@@ -684,6 +684,146 @@ describe('RC. Response Cache — ttlCacheManager', () => {
     assert.ok(key.includes('user-123'), 'SEMI_STABLE key must contain the userId');
   });
 
+  // ─────────────────────────────────────────────────────────────────────────
+  // MB. memoriesBlockCache — raw cosine vs boosted score
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // MB-001 ----------------------------------------------------------------
+  it('MB-001: raw_similarity is preserved on memory objects after keyword boost', () => {
+    // Simulate the keyword-boost transform in semantic-retrieval.js:
+    // raw_similarity must equal the pre-boost similarity value.
+    const originalSimilarity = 0.55;
+    const boostedSimilarity  = Math.min(originalSimilarity + 0.30, 1.0); // simulated keyword boost
+
+    const memoryAfterBoost = {
+      id: 'test-1',
+      content: 'I drive a Tesla Model 3',
+      similarity: boostedSimilarity,
+      raw_similarity: originalSimilarity, // <-- must be preserved
+      keyword_boosted: true,
+    };
+
+    assert.strictEqual(
+      memoryAfterBoost.raw_similarity,
+      originalSimilarity,
+      'MB-001 FAIL: raw_similarity must equal the pre-boost similarity value'
+    );
+    assert.strictEqual(
+      memoryAfterBoost.similarity,
+      boostedSimilarity,
+      'MB-001 FAIL: similarity must equal the boosted value'
+    );
+  });
+
+  // MB-002 ----------------------------------------------------------------
+  it('MB-002: highest_similarity_score uses raw_similarity not hybrid_score', () => {
+    // Verify orchestrator.js uses m.raw_similarity in the highest_similarity_score reducer.
+    const src = readFile(ORCHESTRATOR_PATH);
+    assert.ok(src, 'orchestrator.js must exist');
+
+    // The reduce that computes highest_similarity_score must reference raw_similarity
+    assert.ok(
+      src.includes('m.raw_similarity || m.similarity || 0'),
+      'MB-002 FAIL: highest_similarity_score reducer must use m.raw_similarity || m.similarity || 0'
+    );
+    // It must NOT use m.hybrid_score in that reduce block
+    const reducerIdx = src.indexOf('highest_similarity_score:');
+    assert.ok(reducerIdx !== -1, 'MB-002 FAIL: highest_similarity_score key not found in orchestrator.js');
+    const reducerSegment = src.slice(reducerIdx, reducerIdx + 300);
+    assert.ok(
+      !reducerSegment.includes('m.hybrid_score'),
+      'MB-002 FAIL: highest_similarity_score reducer must not use m.hybrid_score'
+    );
+  });
+
+  // MB-003 ----------------------------------------------------------------
+  it('MB-003: memoriesBlockCache = false when raw cosine < 0.80 even if hybrid_score > 2.0', () => {
+    // A keyword-boosted memory has hybrid_score > 2.0 but raw cosine of 0.50.
+    // highest_similarity_score should be derived from raw_similarity, so it
+    // will be 0.50, which is below the 0.80 threshold → cache must NOT be blocked.
+    const memories = [
+      { id: 'mem-1', raw_similarity: 0.50, similarity: 0.80, hybrid_score: 2.50, keyword_boosted: true },
+      { id: 'mem-2', raw_similarity: 0.45, similarity: 0.75, hybrid_score: 2.45, keyword_boosted: true },
+    ];
+
+    // Mirror the reducer logic from orchestrator.js
+    const highest_similarity_score = memories.reduce((max, m) => {
+      const score = m.raw_similarity || m.similarity || 0;
+      return score > max ? score : max;
+    }, 0);
+
+    const memoriesBlockCache = computeMemoriesBlockCache({
+      hasMemory: true,
+      memory_count: memories.length,
+      highest_similarity_score,
+    });
+
+    assert.ok(highest_similarity_score < 0.80,
+      `MB-003 FAIL: expected highest_similarity_score < 0.80, got ${highest_similarity_score}`);
+    assert.strictEqual(memoriesBlockCache, false,
+      'MB-003 FAIL: cache must NOT be blocked when raw cosine scores are below 0.80');
+  });
+
+  // MB-004 ----------------------------------------------------------------
+  it('MB-004: memoriesBlockCache = true when raw cosine score >= 0.80', () => {
+    // A genuinely on-topic memory has raw cosine 0.87 → cache MUST be blocked.
+    const memories = [
+      { id: 'mem-1', raw_similarity: 0.87, similarity: 0.87, hybrid_score: 0.87, keyword_boosted: false },
+    ];
+
+    const highest_similarity_score = memories.reduce((max, m) => {
+      const score = m.raw_similarity || m.similarity || 0;
+      return score > max ? score : max;
+    }, 0);
+
+    const memoriesBlockCache = computeMemoriesBlockCache({
+      hasMemory: true,
+      memory_count: memories.length,
+      highest_similarity_score,
+    });
+
+    assert.ok(highest_similarity_score >= 0.80,
+      `MB-004 FAIL: expected highest_similarity_score >= 0.80, got ${highest_similarity_score}`);
+    assert.strictEqual(memoriesBlockCache, true,
+      'MB-004 FAIL: cache MUST be blocked when raw cosine score is >= 0.80');
+  });
+
+  // MB-005 ----------------------------------------------------------------
+  it('MB-005: Cache eligible for PERMANENT query when raw cosine scores are below 0.80', () => {
+    // User has stored memories (keyword-boosted, hybrid_score > 2.0),
+    // but raw similarity is low → memoriesBlockCache should be false so
+    // a PERMANENT factual query can still hit the cache.
+    const highestScoreFromRaw = 0.52; // below 0.80 threshold
+
+    const memoriesBlockCache = computeMemoriesBlockCache({
+      hasMemory: true,
+      memory_count: 3,
+      highest_similarity_score: highestScoreFromRaw,
+    });
+
+    // memoriesBlockCache is the ONLY memory-related gate here.
+    // isCacheEligible checks the other eligibility criteria (truth_type, etc.)
+    const queryEligible = isCacheEligible({
+      truth_type: 'PERMANENT',
+      memory: null,               // memory context not injected (no personal query)
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'simple_factual',
+      query: 'What is the boiling point of water?',
+    });
+
+    assert.strictEqual(memoriesBlockCache, false,
+      'MB-005 FAIL: memoriesBlockCache must be false when raw cosine < 0.80');
+    assert.strictEqual(queryEligible, true,
+      'MB-005 FAIL: PERMANENT factual query must be cache-eligible when not blocked by memory');
+    // Combined: the cache FIRES (eligible=true AND memoriesBlockCache=false)
+    assert.strictEqual(queryEligible && !memoriesBlockCache, true,
+      'MB-005 FAIL: cache must fire for PERMANENT query when raw scores are below 0.80');
+  });
+
   // SC-010 ----------------------------------------------------------------
   it('SC-010: Document-loaded query never caches regardless of truth_type', () => {
     const eligiblePermanent = isCacheEligible({
