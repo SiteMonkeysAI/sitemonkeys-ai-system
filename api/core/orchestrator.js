@@ -85,6 +85,12 @@ const _sessionClaudeDeclined = new Map();
 const GREETING_LIMIT = 150; // Max chars for greeting responses (Anti-Engagement)
 const MIN_SENTENCE_LENGTH = 50; // Minimum chars to consider a valid sentence
 
+// GPT-4o-mini routing foundation.
+// When true, simple_factual and simple_short PERMANENT non-high-stakes queries
+// are routed to gpt-4o-mini instead of gpt-4o.
+// Defaults to false so the infrastructure can be benchmarked before activation.
+const MINI_MODEL_ENABLED = false;
+
 // Relevance Gate: minimum score required to inject a memory into the prompt.
 // Applied AFTER retrieval and AFTER the MAX_MEMORIES_FINAL cap — injection-only.
 // Personal queries use a lower threshold because personal fact recall has
@@ -177,9 +183,10 @@ function getConversationDepth(earlyClassification, phase4TruthType, isApproachin
   // Greeting — already handled by fast path, but defensive
   if (earlyClassification?.classification === 'greeting') return 1;
 
-  // Simple factual or PERMANENT truth type — minimal history needed
+  // Simple factual, simple short, or PERMANENT truth type — minimal history needed
   if (
     earlyClassification?.classification === 'simple_factual' ||
+    earlyClassification?.classification === 'simple_short' ||
     phase4TruthType === 'PERMANENT'
   ) return 2;
 
@@ -213,7 +220,18 @@ function getMaxTokens(earlyClassification, phase4Metadata) {
   // Decision making queries need room for complete comparison
   if (earlyClassification?.classification === 'decision_making') return 3000;
 
-  // Standard queries
+  // Medium complexity and current events — moderate output budget
+  if (earlyClassification?.classification === 'medium_complexity') return 1500;
+  if (earlyClassification?.classification === 'news_current_events') return 1500;
+
+  // Simple queries — short answers, small token budget
+  if (earlyClassification?.classification === 'simple_factual') return 400;
+  if (earlyClassification?.classification === 'simple_short') return 400;
+
+  // Greetings — one-line response
+  if (earlyClassification?.classification === 'greeting') return 150;
+
+  // Safe default for unclassified or standard queries
   return 2000;
 }
 
@@ -5185,6 +5203,7 @@ export class Orchestrator {
       const MODEL_LIMITS = {
         'gpt-4': { maxContext: 8192, reservedOutput: 2000 },
         'gpt-4o': { maxContext: 128000, reservedOutput: 4000 },
+        'gpt-4o-mini': { maxContext: 128000, reservedOutput: 4000 },
         'claude-sonnet-4-20250514': { maxContext: 200000, reservedOutput: 4000 }
       };
       const gpt4MaxInput = MODEL_LIMITS['gpt-4'].maxContext - MODEL_LIMITS['gpt-4'].reservedOutput;
@@ -5435,9 +5454,6 @@ export class Orchestrator {
         // the user. Silent fallthrough to confident training-data responses is not acceptable.
         externalContext = `\n\n[EXTERNAL LOOKUP ATTEMPTED — NO DATA RETRIEVED]\nAn attempt was made to retrieve current information for this query, but no external sources returned usable data.\nYou MUST disclose this in your response. Tell the user that you tried to pull current information but could not retrieve it right now, then provide what you know from training data and explicitly label it as potentially outdated.\nExample phrasing: "I tried to pull current information on [topic] but couldn't retrieve anything right now — here's what I know from my training data, which may not reflect the latest developments: ..."\n[END DISCLOSURE]\n\n`;
         console.log('[PHASE4] External lookup attempted but all sources failed — injecting failure disclosure');
-      } else if (!phase4Metadata.lookup_attempted && /\b(our|my)\b/i.test(message)) {
-        externalContext = `\n\n[INTERNAL CONTEXT QUERY — NO EXTERNAL LOOKUP PERFORMED]\nThis query refers to internal or personal context. External data retrieval was NOT attempted and is NOT relevant here. Answer directly from available memory context and internal knowledge. Do NOT say "I attempted to retrieve", "I tried to pull current information", or any language implying a failed external lookup — none was attempted.\n[END INTERNAL CONTEXT NOTE]\n\n`;
-        console.log('[PHASE4] Internal context query — injecting no-external-lookup note');
       }
 
       // ISSUE #787 FIX: Calculate full payload estimate for proper escalation routing
@@ -5516,9 +5532,20 @@ export class Orchestrator {
       }
 
       // Update model selection after potential escalation
-      const model = useClaude ? "claude-sonnet-4-20250514" : "gpt-4o";
+      const useMinModel =
+        !useClaude &&
+        MINI_MODEL_ENABLED &&
+        ['simple_factual', 'simple_short'].includes(context.earlyClassification?.classification) &&
+        phase4Metadata?.truth_type === 'PERMANENT' &&
+        !phase4Metadata?.high_stakes?.isHighStakes;
+
+      const model = useClaude
+        ? "claude-sonnet-4-20250514"
+        : useMinModel
+          ? "gpt-4o-mini"
+          : "gpt-4o";
       attemptedModel = model;
-      const modelConfigKey = useClaude ? 'claude-sonnet-4-20250514' : 'gpt-4o';
+      const modelConfigKey = useClaude ? 'claude-sonnet-4-20250514' : (useMinModel ? 'gpt-4o-mini' : 'gpt-4o');
       const modelConfig = MODEL_LIMITS[modelConfigKey];
       const modelLimit = modelConfig.maxContext - modelConfig.reservedOutput;
 
