@@ -2231,7 +2231,7 @@ export class Orchestrator {
       context.earlyClassification = earlyClassification;
 
       // RESPONSE CACHE — check before expensive AI generation
-      // Only cache PERMANENT queries with no user-specific context.
+      // Cache PERMANENT (global, 30-day TTL) and SEMI_STABLE (user-scoped, 24hr TTL) queries.
       // Use memoryContext.hasMemory (not context.memory) so that users who have
       // stored memories but asked a purely factual query — where no relevant
       // memories were retrieved — can still benefit from the cache.
@@ -2260,7 +2260,7 @@ export class Orchestrator {
       //      or comparative language that implicitly reference prior conversation context
       //      ("that one", "the second one", "can you explain that differently?").
       //
-      // VOLATILE queries still never cache (truth_type === 'PERMANENT' gate).
+      // VOLATILE queries still never cache (isCacheable gate — only PERMANENT and SEMI_STABLE pass).
       // SEMI_STABLE 24hr TTL is unchanged.
       const REFERENTIAL_PHRASING_PATTERN = /\b(that one|the second one|the other one|explain that differently|what about the other|what does that mean)\b/i;
       const hasReferentialPhrasing = REFERENTIAL_PHRASING_PATTERN.test(message);
