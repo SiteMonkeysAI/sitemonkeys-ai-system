@@ -2338,6 +2338,7 @@ export class Orchestrator {
         conversationHistory,
         phase4Metadata,
         sessionState,
+        memoryContext,
       );
       performanceMarkers.aiCallEnd = Date.now(); // BIBLE FIX: Track AI call duration
 
@@ -5165,6 +5166,7 @@ export class Orchestrator {
     conversationHistory,
     phase4Metadata = null,
     sessionState = null,
+    memoryContext = { hasMemory: false },
   ) {
     const SESSION_STATE_ENABLED = process.env.SESSION_STATE_ENABLED === 'true';
     let useClaude = false;
@@ -5380,7 +5382,7 @@ export class Orchestrator {
       // inside #retrieveMemoryContext) rather than a truthy string check on context.memory.
       // memoryContext.hasMemory is only true when memories were retrieved AND had non-zero
       // token count after filtering — i.e., they actually passed the relevance gate.
-      const hasMemoryContext = memoryContext.hasMemory;
+      const hasMemoryContext = memoryContext.hasMemory ?? false;
       const queryClass = context.earlyClassification?.classification || context.queryClassification?.classification;
       const useCompressedPrompt = ['greeting', 'simple_factual', 'simple_short'].includes(queryClass);
       const systemPrompt = useCompressedPrompt
