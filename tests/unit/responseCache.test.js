@@ -688,6 +688,14 @@ describe('RC. Response Cache — ttlCacheManager', () => {
   // MB. memoriesBlockCache — raw cosine vs boosted score
   // ─────────────────────────────────────────────────────────────────────────
 
+  // Shared helper: mirrors the highest_similarity_score reducer from orchestrator.js
+  function computeHighestRawSimilarity(memories) {
+    return memories.reduce((max, m) => {
+      const score = m.raw_similarity || m.similarity || 0;
+      return score > max ? score : max;
+    }, 0);
+  }
+
   // MB-001 ----------------------------------------------------------------
   it('MB-001: raw_similarity is preserved on memory objects after keyword boost', () => {
     // Simulate the keyword-boost transform in semantic-retrieval.js:
@@ -729,7 +737,7 @@ describe('RC. Response Cache — ttlCacheManager', () => {
     // It must NOT use m.hybrid_score in that reduce block
     const reducerIdx = src.indexOf('highest_similarity_score:');
     assert.ok(reducerIdx !== -1, 'MB-002 FAIL: highest_similarity_score key not found in orchestrator.js');
-    const reducerSegment = src.slice(reducerIdx, reducerIdx + 300);
+    const reducerSegment = src.slice(reducerIdx, reducerIdx + 500);
     assert.ok(
       !reducerSegment.includes('m.hybrid_score'),
       'MB-002 FAIL: highest_similarity_score reducer must not use m.hybrid_score'
@@ -746,11 +754,7 @@ describe('RC. Response Cache — ttlCacheManager', () => {
       { id: 'mem-2', raw_similarity: 0.45, similarity: 0.75, hybrid_score: 2.45, keyword_boosted: true },
     ];
 
-    // Mirror the reducer logic from orchestrator.js
-    const highest_similarity_score = memories.reduce((max, m) => {
-      const score = m.raw_similarity || m.similarity || 0;
-      return score > max ? score : max;
-    }, 0);
+    const highest_similarity_score = computeHighestRawSimilarity(memories);
 
     const memoriesBlockCache = computeMemoriesBlockCache({
       hasMemory: true,
@@ -771,10 +775,7 @@ describe('RC. Response Cache — ttlCacheManager', () => {
       { id: 'mem-1', raw_similarity: 0.87, similarity: 0.87, hybrid_score: 0.87, keyword_boosted: false },
     ];
 
-    const highest_similarity_score = memories.reduce((max, m) => {
-      const score = m.raw_similarity || m.similarity || 0;
-      return score > max ? score : max;
-    }, 0);
+    const highest_similarity_score = computeHighestRawSimilarity(memories);
 
     const memoriesBlockCache = computeMemoriesBlockCache({
       hasMemory: true,
