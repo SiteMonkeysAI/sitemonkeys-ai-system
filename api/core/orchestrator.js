@@ -4084,7 +4084,7 @@ export class Orchestrator {
         relevance_gate: relevanceGateResult || null,  // Gate telemetry for phase4Metadata
         highest_similarity_score: memoriesToFormat.length > 0
           ? memoriesToFormat.reduce((max, m) => {
-              const score = m.hybrid_score || m.similarity || 0;
+              const score = m.raw_similarity || m.similarity || 0;
               return score > max ? score : max;
             }, 0)
           : 0,

@@ -1883,6 +1883,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
         return {
           ...memory,
+          raw_similarity: memory.similarity,
           similarity: boostedScore,
           keyword_boosted: true,
           keyword_match_ratio: matchRatio,
