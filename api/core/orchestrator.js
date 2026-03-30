@@ -99,6 +99,7 @@ const MINI_MODEL_ENABLED = false;
 const RELEVANCE_INJECTION_THRESHOLD = 0.35;          // Standard queries
 const RELEVANCE_INJECTION_THRESHOLD_PERSONAL = 0.20; // Personal/memory recall queries
 const RELEVANCE_INJECTION_THRESHOLD_PERMANENT = 0.50; // PERMANENT truth-type (factual/general knowledge)
+const RELEVANCE_INJECTION_THRESHOLD_SIMPLE = 0.65;   // simple_factual/simple_short + PERMANENT (domain-noise filter)
 const RELEVANCE_INJECTION_THRESHOLD_SAFETY = 0;      // Safety-critical memories always injected
 
 // Greeting shortcut response pools (indexed by personality)
@@ -3952,11 +3953,17 @@ export class Orchestrator {
           /\bmy\b/i.test(message) ||
           options.earlyClassification?.type === 'personal';
 
+        const isSimpleClassification =
+          ['simple_factual', 'simple_short']
+            .includes(options.earlyClassification?.classification);
+
         const relevanceThreshold = isPersonalQuery
           ? RELEVANCE_INJECTION_THRESHOLD_PERSONAL
-          : detectedTruthType === 'PERMANENT'
-            ? RELEVANCE_INJECTION_THRESHOLD_PERMANENT
-            : RELEVANCE_INJECTION_THRESHOLD;
+          : (detectedTruthType === 'PERMANENT' && isSimpleClassification)
+            ? RELEVANCE_INJECTION_THRESHOLD_SIMPLE
+            : detectedTruthType === 'PERMANENT'
+              ? RELEVANCE_INJECTION_THRESHOLD_PERMANENT
+              : RELEVANCE_INJECTION_THRESHOLD;
 
         const memoriesBeforeGate = memoriesToFormat.length;
         // Preserve the pre-gate array for the fallback sort below

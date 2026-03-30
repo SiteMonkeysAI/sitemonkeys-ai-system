@@ -4486,6 +4486,85 @@ describe('RG. Relevance Gate — Memory Injection Filtering', () => {
     );
   });
 
+  it('RT-001: RELEVANCE_INJECTION_THRESHOLD_SIMPLE constant exists with value 0.65', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    assert.ok(
+      orch.includes('RELEVANCE_INJECTION_THRESHOLD_SIMPLE'),
+      'RT-001 FAIL: RELEVANCE_INJECTION_THRESHOLD_SIMPLE constant not found. ' +
+      'simple_factual/simple_short + PERMANENT queries need a 0.65 threshold to filter domain-noise memories.'
+    );
+    const simpleMatch = orch.match(/RELEVANCE_INJECTION_THRESHOLD_SIMPLE\s*=\s*([\d.]+)/);
+    assert.ok(simpleMatch, 'RT-001 FAIL: Could not parse RELEVANCE_INJECTION_THRESHOLD_SIMPLE value.');
+    const simpleVal = parseFloat(simpleMatch[1]);
+    assert.strictEqual(
+      simpleVal,
+      0.65,
+      `RT-001 FAIL: RELEVANCE_INJECTION_THRESHOLD_SIMPLE is ${simpleVal}, must be exactly 0.65.`
+    );
+    // Verify threshold selection uses the simple threshold for PERMANENT + simple classification
+    assert.ok(
+      orch.includes('RELEVANCE_INJECTION_THRESHOLD_SIMPLE'),
+      'RT-001 FAIL: RELEVANCE_INJECTION_THRESHOLD_SIMPLE not referenced in threshold selection logic.'
+    );
+  });
+
+  it('RT-002: simple_factual + personal intent still uses personal threshold (personal overrides)', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    // isPersonalQuery must be checked BEFORE isSimpleClassification in the threshold selection
+    const thresholdBlock = (() => {
+      const start = orch.indexOf('isPersonalQuery\n') !== -1
+        ? orch.indexOf('isPersonalQuery\n')
+        : orch.indexOf('const relevanceThreshold = isPersonalQuery');
+      return orch.slice(start, start + 500);
+    })();
+    assert.ok(
+      orch.includes('isPersonalQuery') &&
+      orch.indexOf('RELEVANCE_INJECTION_THRESHOLD_PERSONAL') < orch.indexOf('RELEVANCE_INJECTION_THRESHOLD_SIMPLE'),
+      'RT-002 FAIL: Personal threshold must be selected before simple-classification threshold. ' +
+      'Personal queries (contains "my") must always use 0.20 regardless of classification.'
+    );
+  });
+
+  it('RT-003: medium_complexity + PERMANENT uses 0.50 threshold (only simple queries get 0.65)', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    // The isSimpleClassification check must be ANDed with PERMANENT, not standalone
+    assert.ok(
+      orch.includes("detectedTruthType === 'PERMANENT' && isSimpleClassification"),
+      'RT-003 FAIL: isSimpleClassification must be AND-ed with PERMANENT check. ' +
+      'medium_complexity + PERMANENT should still use 0.50 (RELEVANCE_INJECTION_THRESHOLD_PERMANENT).'
+    );
+  });
+
+  it('RT-004: simple_short + PERMANENT threshold selection uses isSimpleClassification', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    assert.ok(
+      orch.includes("'simple_short'") && orch.includes('isSimpleClassification'),
+      'RT-004 FAIL: simple_short not included in isSimpleClassification check. ' +
+      'Both simple_factual and simple_short must trigger the 0.65 threshold for PERMANENT queries.'
+    );
+  });
+
+  it('RT-005: all existing threshold constants are unchanged', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'Could not read orchestrator.js');
+    const standardMatch = orch.match(/\bRELEVANCE_INJECTION_THRESHOLD\b(?!_)\s*=\s*([\d.]+)/);
+    const personalMatch = orch.match(/RELEVANCE_INJECTION_THRESHOLD_PERSONAL\s*=\s*([\d.]+)/);
+    const permanentMatch = orch.match(/RELEVANCE_INJECTION_THRESHOLD_PERMANENT\s*=\s*([\d.]+)/);
+    const safetyMatch = orch.match(/RELEVANCE_INJECTION_THRESHOLD_SAFETY\s*=\s*([\d.]+)/);
+    assert.ok(standardMatch && parseFloat(standardMatch[1]) === 0.35,
+      `RT-005 FAIL: Standard threshold must remain 0.35, got ${standardMatch?.[1]}`);
+    assert.ok(personalMatch && parseFloat(personalMatch[1]) === 0.20,
+      `RT-005 FAIL: Personal threshold must remain 0.20, got ${personalMatch?.[1]}`);
+    assert.ok(permanentMatch && parseFloat(permanentMatch[1]) === 0.50,
+      `RT-005 FAIL: PERMANENT threshold must remain 0.50, got ${permanentMatch?.[1]}`);
+    assert.ok(safetyMatch && parseFloat(safetyMatch[1]) === 0,
+      `RT-005 FAIL: Safety threshold must remain 0, got ${safetyMatch?.[1]}`);
+  });
+
   it('RG-012: [RELEVANCE-GATE] log line fires outside phase4Metadata scope (no ReferenceError)', () => {
     const orch = readRepoFile(ORCH_PATH);
     assert.ok(orch, 'Could not read orchestrator.js');
