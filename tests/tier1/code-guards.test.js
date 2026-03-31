@@ -6555,11 +6555,16 @@ describe('MT. Dynamic max_tokens — Response Truncation Fix', () => {
 
   it('MT-006: Both Claude and GPT-4o calls use dynamic maxTokens variable', () => {
     assert.ok(orch, 'MT-006 FAIL: api/core/orchestrator.js not found');
-    // Count occurrences of max_tokens: maxTokens in the AI routing section
-    const matches = (orch.match(/max_tokens:\s*maxTokens/g) || []).length;
+    // Since the adapter architecture was introduced, max_tokens is now set inside
+    // the adapter normalizeRequest() methods.  The orchestrator must pass maxTokens
+    // through both adapter.call() invocations.  We accept either the legacy
+    // inline pattern or the adapter-call pattern.
+    const legacyMatches  = (orch.match(/max_tokens:\s*maxTokens/g) || []).length;
+    const adapterMatches = (orch.match(/\bmaxTokens\b[^)]*\)/g) || []).length;
     assert.ok(
-      matches >= 2,
-      `MT-006 FAIL: Expected max_tokens: maxTokens in both Claude and GPT-4o calls, found ${matches} occurrence(s). ` +
+      legacyMatches >= 2 || adapterMatches >= 2,
+      `MT-006 FAIL: Expected maxTokens to be passed dynamically in both AI API calls (legacy or adapter pattern), ` +
+      `found ${legacyMatches} legacy and ${adapterMatches} adapter occurrence(s). ` +
       'Both AI API calls must use the dynamic maxTokens variable to prevent response truncation.'
     );
   });

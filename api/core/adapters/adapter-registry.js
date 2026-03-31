@@ -12,6 +12,80 @@
 // Capability tiers use coarse values — not decimal scores.
 // Decimal precision requires real evaluations and will be added after evals.
 
+import { OpenAIAdapter }    from './OpenAIAdapter.js';
+import { AnthropicAdapter } from './AnthropicAdapter.js';
+
+// ---------------------------------------------------------------------------
+// Adapter instance store — populated by registerAdapters()
+// ---------------------------------------------------------------------------
+
+/** @type {Map<string, import('./BaseAdapter.js').BaseAdapter>} */
+const _adapterInstances = new Map();
+
+/**
+ * Register live adapter instances backed by real SDK clients.
+ * Call this once during orchestrator initialisation.
+ *
+ * @param {{ openaiClient: object, anthropicClient: object }} clients
+ */
+export function registerAdapters({ openaiClient, anthropicClient }) {
+  if (openaiClient) {
+    _adapterInstances.set('openai-gpt4o',      new OpenAIAdapter(openaiClient, 'gpt-4o'));
+    _adapterInstances.set('openai-gpt4o-mini', new OpenAIAdapter(openaiClient, 'gpt-4o-mini'));
+  }
+  if (anthropicClient) {
+    _adapterInstances.set('anthropic-claude-sonnet', new AnthropicAdapter(anthropicClient));
+  }
+}
+
+/**
+ * Returns the live adapter instance for a registry key, or null.
+ *
+ * @param {string} key
+ * @returns {import('./BaseAdapter.js').BaseAdapter|null}
+ */
+export function getAdapterInstance(key) {
+  return _adapterInstances.get(key) ?? null;
+}
+
+/**
+ * Returns the best registered adapter instance for the given task type.
+ *
+ * Routing logic:
+ *   1. Filter registered adapters by minimum task score threshold (0.70)
+ *      for the required task type.
+ *   2. Sort by cost ascending (input + output per-1k average).
+ *   3. Return cheapest capable adapter.
+ *   4. Fall back to the gpt-4o adapter if no adapter meets requirements.
+ *
+ * @param {{ taskType?: string }} requirements
+ * @returns {import('./BaseAdapter.js').BaseAdapter}
+ */
+export function getAdapter(requirements = {}) {
+  const { taskType } = requirements;
+  const MIN_SCORE = 0.70;
+
+  const candidates = Array.from(_adapterInstances.values()).filter(adapter => {
+    if (!taskType) return true;
+    const score = adapter.capabilities?.taskScores?.[taskType];
+    return score === undefined || score >= MIN_SCORE;
+  });
+
+  if (candidates.length === 0) {
+    // Hard fall-back: return the gpt-4o adapter if registered
+    return _adapterInstances.get('openai-gpt4o') ?? null;
+  }
+
+  // Sort cheapest first (average of input + output per-1k token cost)
+  candidates.sort((a, b) => {
+    const costA = (a.costPer1kTokens.input + a.costPer1kTokens.output) / 2;
+    const costB = (b.costPer1kTokens.input + b.costPer1kTokens.output) / 2;
+    return costA - costB;
+  });
+
+  return candidates[0];
+}
+
 const ADAPTER_REGISTRY = {
 
   'openai-gpt4o': {
