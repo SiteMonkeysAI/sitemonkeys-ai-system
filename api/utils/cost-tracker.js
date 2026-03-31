@@ -21,6 +21,10 @@ const MODEL_COSTS = {
     input: 0.003 / 1000,
     output: 0.015 / 1000,
   },
+  "gpt-4o-mini": {
+    input: 0.00015 / 1000,
+    output: 0.0006 / 1000,
+  },
   "text-embedding-3-small": {
     input: 0.00002 / 1000,
     output: 0,

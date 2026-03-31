@@ -7661,12 +7661,12 @@ describe('MINI. GPT-4o-mini Routing Foundation', () => {
 
   const orch = readRepoFile('api/core/orchestrator.js');
 
-  it('MINI-001: MINI_MODEL_ENABLED=false — default routes to gpt-4o not gpt-4o-mini', () => {
+  it('MINI-001: MINI_MODEL_ENABLED reads from env and defaults to false', () => {
     assert.ok(orch, 'MINI-001 FAIL: api/core/orchestrator.js not found');
     assert.ok(
-      orch.includes('MINI_MODEL_ENABLED = false'),
-      'MINI-001 FAIL: MINI_MODEL_ENABLED constant not found or not defaulting to false. ' +
-      'The flag must default to false so gpt-4o remains the default GPT path.'
+      orch.includes("process.env.MINI_MODEL_ENABLED === 'true'"),
+      'MINI-001 FAIL: MINI_MODEL_ENABLED must read from process.env.MINI_MODEL_ENABLED. ' +
+      'The flag must default to false (when env var is absent) so gpt-4o remains the default GPT path.'
     );
   });
 
