@@ -92,7 +92,8 @@ export async function ensureCostLogTable(pool) {
 
 /**
  * GET /api/admin/cost-summary
- * Returns aggregate cost breakdown by query type for the last 7 days.
+ * Returns aggregate cost breakdown by query type for the last 7 days,
+ * plus a daily_totals array covering the last 30 days for history charts.
  * Requires x-admin-key header matching ADMIN_KEY env variable.
  */
 export async function handleCostSummary(req, res) {
@@ -145,11 +146,23 @@ export async function handleCostSummary(req, res) {
       ORDER BY total_cost_usd DESC
     `);
 
+    const dailyTotals = await pool.query(`
+      SELECT
+        DATE(created_at) as day,
+        COUNT(*) as query_count,
+        ROUND(SUM(cost_usd)::decimal, 6) as total_cost_usd
+      FROM query_cost_log
+      WHERE created_at > NOW() - INTERVAL '30 days'
+      GROUP BY DATE(created_at)
+      ORDER BY day ASC
+    `);
+
     return res.json({
       success: true,
       period: '7 days',
       rows: result.rows,
       model_breakdown: modelBreakdown.rows,
+      daily_totals: dailyTotals.rows,
       generated_at: new Date().toISOString(),
     });
   } catch (err) {
