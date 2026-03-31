@@ -1592,10 +1592,6 @@
         applySavingsDisplay(saved, pct);
       }
 
-      // Read admin key from the savings-modal data attribute (set server-side or by the founder via DevTools)
-      // The attribute defaults to empty; the monthly history bar chart is silently hidden when no key is present.
-      const ADMIN_KEY = document.getElementById('savings-modal')?.dataset?.adminKey || '';
-
       function renderDonutChart() {
         const saved = Math.max(0, sessionStandardCost - sessionActualCost);
         const actual = Math.max(0, sessionActualCost);
@@ -1662,13 +1658,15 @@
       async function fetchAndRenderMonthlyHistory() {
         const container = document.getElementById('dash-monthly-chart');
         if (!container) return;
-        if (!ADMIN_KEY) {
-          container.innerHTML = '<span style="font-size:10px; color:#444;">Admin key required for history</span>';
+        // Read admin key lazily at call time so the savings-modal element is guaranteed to exist
+        const adminKey = document.getElementById('savings-modal')?.dataset?.adminKey || '';
+        if (!adminKey) {
+          container.innerHTML = '<span style="font-size:10px; color:#888; font-style:italic;">Monthly history available — contact your administrator</span>';
           return;
         }
         try {
           const resp = await fetch('/api/admin/cost-summary', {
-            headers: { 'x-admin-key': ADMIN_KEY }
+            headers: { 'x-admin-key': adminKey }
           });
           if (!resp.ok) {
             container.innerHTML = '<span style="font-size:10px; color:#444;">History unavailable</span>';
@@ -1698,14 +1696,15 @@
       }
 
       function openSavingsDashboard() {
-        renderQueryList();
-        fetchAndRenderMonthlyHistory();
         const modal = document.getElementById('savings-modal');
         if (modal) {
           modal.style.display = 'flex';
           const closeBtn = modal.querySelector('button');
           if (closeBtn) closeBtn.focus();
         }
+        renderQueryList();
+        renderDonutChart();
+        fetchAndRenderMonthlyHistory();
       }
 
       function closeSavingsDashboard() {
@@ -2889,7 +2888,7 @@
         </div>
         <div style="font-size:11px; color:#666; margin-bottom:8px; text-transform:uppercase; letter-spacing:1px;">Recent Queries</div>
         <div id="dash-query-list" style="font-size:12px;"></div>
-        <div style="font-size:10px; color:#444; margin-top:12px; text-align:center;">Baseline: $0.019/query at standard GPT-4o rates</div>
+        <div style="font-size:10px; color:#444; margin-top:12px; text-align:center;">Standard rate baseline</div>
       </div>
     </div>
 
