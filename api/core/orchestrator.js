@@ -89,7 +89,7 @@ const MIN_SENTENCE_LENGTH = 50; // Minimum chars to consider a valid sentence
 // When true, simple_factual and simple_short PERMANENT non-high-stakes queries
 // are routed to gpt-4o-mini instead of gpt-4o.
 // Defaults to false so the infrastructure can be benchmarked before activation.
-const MINI_MODEL_ENABLED = false;
+const MINI_MODEL_ENABLED = process.env.MINI_MODEL_ENABLED === 'true';
 
 // Relevance Gate: minimum score required to inject a memory into the prompt.
 // Applied AFTER retrieval and AFTER the MAX_MEMORIES_FINAL cap — injection-only.
