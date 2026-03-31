@@ -7652,6 +7652,109 @@ describe('NOLOOKUP. No-lookup Boilerplate Removal — Personal Query Injection',
 });
 
 // ============================================================
+// SECTION MR: MEMORY RETRIEVAL GATE + RELEVANCE THRESHOLD
+// Verifies GAP 1 (userHasMemories bypass removed) and
+// GAP 2 (simple-query relevance threshold differentiation).
+// ============================================================
+
+describe('MR. Memory Retrieval Gate and Relevance Threshold', () => {
+
+  const orch = readRepoFile('api/core/orchestrator.js');
+
+  // MR-001: Simple query skips retrieval when no personal/session ref present.
+  // "What is EBITDA?" from a user with 50 stored memories must skip retrieval.
+  // The old userHasMemories bypass must not exist in the gate expression.
+  it('MR-001: Simple query with no personal/session ref skips retrieval — no userHasMemories override', () => {
+    assert.ok(orch, 'MR-001 FAIL: api/core/orchestrator.js not found');
+    // skipMemoryForSimpleQuery must exist and be gated by !hasSessionOrPersonalRef
+    assert.ok(
+      orch.includes('skipMemoryForSimpleQuery') &&
+      orch.includes('!hasSessionOrPersonalRef'),
+      'MR-001 FAIL: skipMemoryForSimpleQuery must exist and be gated by !hasSessionOrPersonalRef. ' +
+      '"What is EBITDA?" from a user with 50 stored memories must skip retrieval entirely.'
+    );
+    // userHasMemories must NOT appear inside the skipMemoryForSimpleQuery assignment
+    const skipBlock = (() => {
+      const idx = orch.indexOf('skipMemoryForSimpleQuery');
+      return idx !== -1 ? orch.slice(idx, idx + 300) : '';
+    })();
+    assert.ok(
+      !skipBlock.includes('userHasMemories'),
+      'MR-001 FAIL: userHasMemories bypass must not be present in the skipMemoryForSimpleQuery ' +
+      'assignment. Removing it is the core fix — userHasMemories overrides the skip for any user ' +
+      'with stored memories, defeating the entire purpose of the gate.'
+    );
+  });
+
+  // MR-002: "What is my burn rate?" retrieves memories because "my" is a personal pronoun.
+  it('MR-002: Personal pronoun "my" triggers hasSessionOrPersonalRef — memories retrieved', () => {
+    assert.ok(orch, 'MR-002 FAIL: api/core/orchestrator.js not found');
+    // hasSessionOrPersonalRef must include "my" in its pronoun regex
+    assert.ok(
+      orch.includes('hasSessionOrPersonalRef') &&
+      orch.includes('my|our|I|me|we|mine|ours'),
+      'MR-002 FAIL: hasSessionOrPersonalRef must match first-person pronoun "my". ' +
+      '"What is my burn rate?" must NOT skip retrieval — personal context requires stored memories.'
+    );
+  });
+
+  // MR-003: "What did we discuss earlier?" retrieves memories via session-reference words.
+  it('MR-003: Session-reference words ("earlier", "discussed") trigger hasSessionOrPersonalRef', () => {
+    assert.ok(orch, 'MR-003 FAIL: api/core/orchestrator.js not found');
+    // hasSessionOrPersonalRef must include session-reference language
+    assert.ok(
+      orch.includes('hasSessionOrPersonalRef') &&
+      orch.includes('earlier') &&
+      orch.includes('discussed'),
+      'MR-003 FAIL: hasSessionOrPersonalRef must match session-reference words "earlier" and ' +
+      '"discussed". "What did we discuss earlier?" must trigger memory retrieval.'
+    );
+  });
+
+  // MR-004: simple_factual + PERMANENT truth-type must use the 0.65 threshold.
+  // Domain-noise memories (scoring 0.50-0.62) must be filtered for definitional queries.
+  it('MR-004: simple_factual + PERMANENT truth-type uses RELEVANCE_INJECTION_THRESHOLD_SIMPLE (0.65)', () => {
+    assert.ok(orch, 'MR-004 FAIL: api/core/orchestrator.js not found');
+    // RELEVANCE_INJECTION_THRESHOLD_SIMPLE must exist and be set to 0.65
+    const simpleMatch = orch.match(/RELEVANCE_INJECTION_THRESHOLD_SIMPLE\s*=\s*([\d.]+)/);
+    assert.ok(simpleMatch, 'MR-004 FAIL: RELEVANCE_INJECTION_THRESHOLD_SIMPLE constant not found.');
+    assert.strictEqual(
+      parseFloat(simpleMatch[1]),
+      0.65,
+      `MR-004 FAIL: RELEVANCE_INJECTION_THRESHOLD_SIMPLE is ${simpleMatch?.[1]}, must be 0.65. ` +
+      'Domain-noise memories (0.50-0.62) must be filtered for "What is net revenue retention?"'
+    );
+    // The threshold selection must AND the PERMANENT check with isSimpleClassification
+    assert.ok(
+      orch.includes("detectedTruthType === 'PERMANENT' && isSimpleClassification") &&
+      orch.includes('RELEVANCE_INJECTION_THRESHOLD_SIMPLE'),
+      'MR-004 FAIL: Threshold selection must use RELEVANCE_INJECTION_THRESHOLD_SIMPLE when ' +
+      'PERMANENT AND isSimpleClassification. simple_factual + PERMANENT must reach 0.65 branch.'
+    );
+  });
+
+  // MR-005: medium_complexity + PERMANENT still uses 0.50 — 0.65 must not apply.
+  it('MR-005: medium_complexity + PERMANENT uses RELEVANCE_INJECTION_THRESHOLD_PERMANENT (0.50)', () => {
+    assert.ok(orch, 'MR-005 FAIL: api/core/orchestrator.js not found');
+    // isSimpleClassification must be AND-ed with PERMANENT so non-simple queries keep 0.50
+    assert.ok(
+      orch.includes("detectedTruthType === 'PERMANENT' && isSimpleClassification") &&
+      orch.includes('RELEVANCE_INJECTION_THRESHOLD_PERMANENT'),
+      'MR-005 FAIL: isSimpleClassification must be AND-ed with the PERMANENT check. ' +
+      'medium_complexity + PERMANENT must still use 0.50 (RELEVANCE_INJECTION_THRESHOLD_PERMANENT).'
+    );
+    const permanentMatch = orch.match(/RELEVANCE_INJECTION_THRESHOLD_PERMANENT\s*=\s*([\d.]+)/);
+    assert.ok(permanentMatch, 'MR-005 FAIL: RELEVANCE_INJECTION_THRESHOLD_PERMANENT constant not found.');
+    assert.strictEqual(
+      parseFloat(permanentMatch[1]),
+      0.50,
+      `MR-005 FAIL: RELEVANCE_INJECTION_THRESHOLD_PERMANENT is ${permanentMatch?.[1]}, must remain 0.50.`
+    );
+  });
+
+});
+
+// ============================================================
 // SECTION MINI: GPT-4o-mini ROUTING FOUNDATION
 // Verifies that the routing infrastructure for gpt-4o-mini
 // exists but defaults to disabled via MINI_MODEL_ENABLED=false.
