@@ -5615,6 +5615,10 @@ export class Orchestrator {
       const maxTokens = getMaxTokens(context.earlyClassification, phase4Metadata);
       this.log(`[EFFICIENCY] max_tokens_selected=${maxTokens} classification=${context.earlyClassification?.classification} high_stakes=${!!phase4Metadata?.high_stakes?.isHighStakes}`);
 
+      // Vault queries embed system instructions inside the user message, so no
+      // separate system prompt is passed to the adapter.
+      const effectiveSystemPrompt = isVaultQuery ? '' : systemPrompt;
+
       if (useClaude) {
         // Build messages array for Claude with proper conversation history
         const messages = [];
@@ -5654,7 +5658,7 @@ export class Orchestrator {
 
         const anthropicAdapter = getAdapterInstance('anthropic-claude-sonnet');
         const claudeResult = await anthropicAdapter.call({
-          systemPrompt: isVaultQuery ? '' : systemPrompt,
+          systemPrompt: effectiveSystemPrompt,
           messages,
           maxTokens,
         });
@@ -5704,7 +5708,7 @@ export class Orchestrator {
         const gptAdapterKey = useMinModel ? 'openai-gpt4o-mini' : 'openai-gpt4o';
         const openaiAdapter = getAdapterInstance(gptAdapterKey);
         const gptResult = await openaiAdapter.call({
-          systemPrompt: isVaultQuery ? '' : systemPrompt,
+          systemPrompt: effectiveSystemPrompt,
           messages,
           maxTokens,
           temperature: 0.7,

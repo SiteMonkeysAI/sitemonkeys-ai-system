@@ -24,7 +24,7 @@ const _adapterInstances = new Map();
 
 /**
  * Register live adapter instances backed by real SDK clients.
- * Call this once during orchestrator initialisation.
+ * Call this once during orchestrator initialization.
  *
  * @param {{ openaiClient: object, anthropicClient: object }} clients
  */
