@@ -58,7 +58,10 @@ import { getCachedResponse, setCachedResponse } from "../core/intelligence/ttlCa
 import {
   getDefaultAdapter,
   getBestAdapterForCapabilities,
-  checkContractLock
+  checkContractLock,
+  registerAdapters,
+  getAdapter,
+  getAdapterInstance,
 } from "./adapters/adapter-registry.js";
 import {
   detectRequiredCapabilities,
@@ -271,6 +274,12 @@ export class Orchestrator {
     });
     this.anthropic = new Anthropic({
       apiKey: process.env.ANTHROPIC_API_KEY,
+    });
+
+    // Register adapter instances for model-agnostic routing
+    registerAdapters({
+      openaiClient:    this.openai,
+      anthropicClient: this.anthropic,
     });
 
     // Database pool for semantic retrieval (set during initialization)
@@ -5606,6 +5615,10 @@ export class Orchestrator {
       const maxTokens = getMaxTokens(context.earlyClassification, phase4Metadata);
       this.log(`[EFFICIENCY] max_tokens_selected=${maxTokens} classification=${context.earlyClassification?.classification} high_stakes=${!!phase4Metadata?.high_stakes?.isHighStakes}`);
 
+      // Vault queries embed system instructions inside the user message, so no
+      // separate system prompt is passed to the adapter.
+      const effectiveSystemPrompt = isVaultQuery ? '' : systemPrompt;
+
       if (useClaude) {
         // Build messages array for Claude with proper conversation history
         const messages = [];
@@ -5639,26 +5652,25 @@ export class Orchestrator {
         } else {
           messages.push({
             role: "user",
-            content: `${systemPrompt}\n\n${externalContext}${contextString}\n\nUser query: ${message}`
+            content: `${externalContext}${contextString}\n\nUser query: ${message}`
           });
         }
 
-        const claudeResponse = await this.anthropic.messages.create({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: maxTokens,
-          messages: messages,
+        const anthropicAdapter = getAdapterInstance('anthropic-claude-sonnet');
+        const claudeResult = await anthropicAdapter.call({
+          systemPrompt: effectiveSystemPrompt,
+          messages,
+          maxTokens,
         });
 
-        response = claudeResponse.content[0].text;
-        inputTokens = claudeResponse.usage.input_tokens;
-        outputTokens = claudeResponse.usage.output_tokens;
+        response = claudeResult.content;
+        inputTokens = claudeResult.usage.inputTokens;
+        outputTokens = claudeResult.usage.outputTokens;
       } else {
         // Build messages array for gpt-4o with proper conversation history
         const messages = [];
 
-        if (!isVaultQuery) {
-          messages.push({ role: "system", content: systemPrompt });
-        }
+        // System message is handled by the adapter via normalizeRequest
 
         // Add recent conversation history (last 5 exchanges, or session context when enabled)
         if (conversationHistory.length > 0) {
@@ -5693,16 +5705,18 @@ export class Orchestrator {
           });
         }
 
-        const gptResponse = await this.openai.chat.completions.create({
-          model: model,
-          messages: messages,
+        const gptAdapterKey = useMinModel ? 'openai-gpt4o-mini' : 'openai-gpt4o';
+        const openaiAdapter = getAdapterInstance(gptAdapterKey);
+        const gptResult = await openaiAdapter.call({
+          systemPrompt: effectiveSystemPrompt,
+          messages,
+          maxTokens,
           temperature: 0.7,
-          max_tokens: maxTokens,
         });
 
-        response = gptResponse.choices[0].message.content;
-        inputTokens = gptResponse.usage.prompt_tokens;
-        outputTokens = gptResponse.usage.completion_tokens;
+        response = gptResult.content;
+        inputTokens = gptResult.usage.inputTokens;
+        outputTokens = gptResult.usage.outputTokens;
       }
 
       const cost = this.#calculateCost(model, inputTokens, outputTokens);
