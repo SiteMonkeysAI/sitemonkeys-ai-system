@@ -1388,6 +1388,7 @@
             <div><span style="color: #00ff00">✅</span> VAULT READY</div>
             <div>🔢 <span id="token-count">Ready</span> TOKENS</div>
             <div>💰 EST. COST: <span id="cost-estimate">$0.00</span></div>
+            <div id="savings-display" style="display:none; cursor:pointer; color:#00ff00;" onclick="openSavingsDashboard()" onkeypress="if(event.key==='Enter'||event.key===' ')openSavingsDashboard()" tabindex="0" role="button" aria-label="Open savings dashboard">💚 SAVED: <span id="savings-amount">$0.0000</span> <span id="savings-pct">(0%)</span></div>
             <div>📁 <span id="vault-folders">Cached</span> FOLDERS LOADED</div>
             <button
               id="refresh-vault-btn"
@@ -1501,6 +1502,118 @@
       let isProcessingRequest = false;
       let refreshDebounceTimer = null;
 
+      // Savings tracking
+      const STANDARD_QUERY_COST_USD = 0.019;
+      const MAX_QUERY_LOG_ENTRIES = 20;
+      const OPT_TOKEN_THRESHOLD = 1000;
+      let sessionActualCost = 0;
+      let sessionStandardCost = 0;
+      let queryLog = [];
+
+      function escapeHtml(str) {
+        return String(str)
+          .replace(/&/g, '&amp;')
+          .replace(/</g, '&lt;')
+          .replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;');
+      }
+
+      function getOptType(metadata) {
+        const tokens = metadata?.token_usage?.total_tokens || 0;
+        const model = metadata?.model_used || '';
+        if (model === 'trivial-filter' || model === 'greeting-shortcut') return 'filtered';
+        if (tokens === 0) return 'instant';
+        if (tokens < OPT_TOKEN_THRESHOLD) return 'optimized';
+        return 'standard';
+      }
+
+      function badgeColor(type) {
+        const map = { optimized: '#0a3d2e', instant: '#0a1f3d', filtered: '#1a2e0a', standard: '#1a1a1a' };
+        return map[type] || '#1a1a1a';
+      }
+
+      function badgeText(type) {
+        const map = { optimized: '#00cc66', instant: '#4488ff', filtered: '#66aa33', standard: '#666666' };
+        return map[type] || '#666666';
+      }
+
+      function updateSavingsDisplay(metadata, userMsg) {
+        const actual = metadata?.token_usage?.cost_usd || 0;
+        const tokens = metadata?.token_usage?.total_tokens || 0;
+        const standardCost = STANDARD_QUERY_COST_USD;
+
+        sessionActualCost += actual;
+        sessionStandardCost += standardCost;
+
+        const saved = sessionStandardCost - sessionActualCost;
+        const pct = sessionStandardCost > 0
+          ? Math.round((saved / sessionStandardCost) * 100)
+          : 0;
+
+        const type = getOptType(metadata);
+        queryLog.unshift({
+          type,
+          preview: (userMsg || '').substring(0, 45),
+          tokens,
+          actual,
+          saved: standardCost - actual
+        });
+        if (queryLog.length > MAX_QUERY_LOG_ENTRIES) queryLog.pop();
+
+        if (saved > 0) {
+          const savingsEl = document.getElementById('savings-display');
+          const amountEl = document.getElementById('savings-amount');
+          const pctEl = document.getElementById('savings-pct');
+          if (amountEl) amountEl.textContent = '$' + saved.toFixed(4);
+          if (pctEl) pctEl.textContent = '(' + pct + '%)';
+          if (savingsEl) savingsEl.style.display = 'block';
+        }
+      }
+
+      function renderQueryList() {
+        const list = document.getElementById('dash-query-list');
+        if (!list) return;
+        list.innerHTML = queryLog.map(q => `
+          <div style="display:grid; grid-template-columns:72px 1fr 60px 60px; gap:8px; padding:6px 0; border-bottom:1px solid #222; align-items:center; font-size:12px;">
+            <span style="background:${badgeColor(q.type)}; color:${badgeText(q.type)}; padding:2px 6px; border-radius:4px; font-size:9px; font-weight:500; text-align:center;">${escapeHtml(q.type)}</span>
+            <span style="color:#aaa; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${escapeHtml(q.preview)}${q.preview.length >= 45 ? '…' : ''}</span>
+            <span style="color:#666; text-align:right;">${q.tokens}t</span>
+            <span style="color:#00aa33; text-align:right; font-weight:500;">${q.saved > 0 ? '+$' + q.saved.toFixed(4) : '—'}</span>
+          </div>
+        `).join('');
+
+        const saved = sessionStandardCost - sessionActualCost;
+        const pct = sessionStandardCost > 0 ? Math.round((saved / sessionStandardCost) * 100) : 0;
+        const totalSavedEl = document.getElementById('dash-total-saved');
+        const queryCountEl = document.getElementById('dash-query-count');
+        const efficiencyEl = document.getElementById('dash-efficiency');
+        if (totalSavedEl) totalSavedEl.textContent = '$' + Math.max(0, saved).toFixed(4);
+        if (queryCountEl) queryCountEl.textContent = queryLog.length;
+        if (efficiencyEl) efficiencyEl.textContent = pct + '%';
+      }
+
+      function openSavingsDashboard() {
+        renderQueryList();
+        const modal = document.getElementById('savings-modal');
+        if (modal) {
+          modal.style.display = 'flex';
+          const closeBtn = modal.querySelector('button');
+          if (closeBtn) closeBtn.focus();
+        }
+      }
+
+      function closeSavingsDashboard() {
+        const modal = document.getElementById('savings-modal');
+        if (modal) modal.style.display = 'none';
+      }
+
+      document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+          const modal = document.getElementById('savings-modal');
+          if (modal && modal.style.display === 'flex') closeSavingsDashboard();
+        }
+      });
+
       // USER ID PERSISTENCE - Generate or retrieve persistent user ID
       // NOTE: This implementation is also in public/js/app.js (kept in sync)
       function getUserId() {
@@ -1540,6 +1653,13 @@
       function switchMode(mode) {
         currentMode = mode;
         console.log(`🔄 Switched to mode: ${mode}`);
+
+        // Reset savings session on mode change
+        sessionActualCost = 0;
+        sessionStandardCost = 0;
+        queryLog = [];
+        const savingsEl = document.getElementById('savings-display');
+        if (savingsEl) savingsEl.style.display = 'none';
 
         // Update button states
         document.querySelectorAll(".mode-btn").forEach((btn) => {
@@ -2108,6 +2228,7 @@
               costEl.style.color = "#00ff41";
             }
           }
+          updateSavingsDisplay(data.metadata, userMessage);
 
           // Clean the AI response
           let cleanReply = reply
@@ -2328,6 +2449,7 @@
               console.log("[COST] Updated display:", costEl.textContent);
             }
           }
+          updateSavingsDisplay(data.metadata, text);
           // Clean the AI response - remove ALL system fingerprints
           let cleanReply = reply
             .replace(/^\*?\*?(Eli|Roxy):\*?\*?\s*/i, "")
@@ -2598,6 +2720,33 @@
           <a href="#" class="auth-link" id="create-account-link">Create Account</a>
         </div>
         <div class="panel-brand">Site Monkeys AI</div>
+      </div>
+    </div>
+
+    <!-- Savings Dashboard Modal -->
+    <div id="savings-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:10000; align-items:center; justify-content:center;" onclick="if(event.target===this)closeSavingsDashboard()" role="dialog" aria-modal="true" aria-label="Savings Dashboard">
+      <div style="background:#111; border:1px solid #333; border-radius:12px; width:90%; max-width:540px; max-height:80vh; overflow-y:auto; padding:20px; color:#eee; font-family:monospace;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+          <span style="font-size:16px; font-weight:bold; color:#00ff00;">💚 Savings Dashboard</span>
+          <button onclick="closeSavingsDashboard()" aria-label="Close savings dashboard" style="background:none; border:none; color:#aaa; font-size:20px; cursor:pointer; line-height:1;">&times;</button>
+        </div>
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin-bottom:16px;">
+          <div style="background:#0a3d2e; border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">Total Saved</div>
+            <div id="dash-total-saved" style="font-size:18px; color:#00ff00; font-weight:bold;">$0.0000</div>
+          </div>
+          <div style="background:#0a1f3d; border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">Queries</div>
+            <div id="dash-query-count" style="font-size:18px; color:#4488ff; font-weight:bold;">0</div>
+          </div>
+          <div style="background:#1a2e0a; border-radius:8px; padding:12px; text-align:center;">
+            <div style="font-size:9px; color:#888; text-transform:uppercase; letter-spacing:1px; margin-bottom:4px;">Efficiency</div>
+            <div id="dash-efficiency" style="font-size:18px; color:#66aa33; font-weight:bold;">0%</div>
+          </div>
+        </div>
+        <div style="font-size:11px; color:#666; margin-bottom:8px; text-transform:uppercase; letter-spacing:1px;">Recent Queries</div>
+        <div id="dash-query-list" style="font-size:12px;"></div>
+        <div style="font-size:10px; color:#444; margin-top:12px; text-align:center;">Baseline: $0.019/query at standard GPT-4o rates</div>
       </div>
     </div>
 
