@@ -1502,8 +1502,13 @@
       let isProcessingRequest = false;
       let refreshDebounceTimer = null;
 
-      // Savings tracking
-      const STANDARD_QUERY_COST_USD = 0.019;
+      // Savings tracking — per-type baselines reflect what an unoptimized system costs
+      const BASELINES = {
+        filtered:  0.008,
+        instant:   0.019,
+        optimized: 0.019,
+        standard:  0.032
+      };
       const MAX_QUERY_LOG_ENTRIES = 20;
       const OPT_TOKEN_THRESHOLD = 1000;
       let sessionActualCost = 0;
@@ -1540,7 +1545,9 @@
       function updateSavingsDisplay(metadata, userMsg) {
         const actual = metadata?.token_usage?.cost_usd || 0;
         const tokens = metadata?.token_usage?.total_tokens || 0;
-        const standardCost = STANDARD_QUERY_COST_USD;
+
+        const type = getOptType(metadata);
+        const standardCost = BASELINES[type] ?? BASELINES.standard;
 
         sessionActualCost += actual;
         sessionStandardCost += standardCost;
@@ -1550,7 +1557,6 @@
           ? Math.round((saved / sessionStandardCost) * 100)
           : 0;
 
-        const type = getOptType(metadata);
         queryLog.unshift({
           type,
           preview: (userMsg || '').substring(0, 45),
@@ -1560,14 +1566,32 @@
         });
         if (queryLog.length > MAX_QUERY_LOG_ENTRIES) queryLog.pop();
 
-        if (saved > 0) {
-          const savingsEl = document.getElementById('savings-display');
-          const amountEl = document.getElementById('savings-amount');
-          const pctEl = document.getElementById('savings-pct');
-          if (amountEl) amountEl.textContent = '$' + saved.toFixed(4);
-          if (pctEl) pctEl.textContent = '(' + pct + '%)';
-          if (savingsEl) savingsEl.style.display = 'block';
+        // Show savings whenever at least one non-standard (optimized/filtered/instant) query has run
+        const hasOptimizedQuery = queryLog.some(q => q.type !== 'standard');
+        if (hasOptimizedQuery) {
+          applySavingsDisplay(saved, pct);
         }
+      }
+
+      // Apply savings amount/pct and show the savings-display element
+      function applySavingsDisplay(saved, pct) {
+        const savingsEl = document.getElementById('savings-display');
+        const amountEl = document.getElementById('savings-amount');
+        const pctEl = document.getElementById('savings-pct');
+        if (amountEl) amountEl.textContent = '$' + Math.max(0, saved).toFixed(4);
+        if (pctEl) pctEl.textContent = '(' + Math.max(0, pct) + '%)';
+        if (savingsEl) savingsEl.style.display = 'block';
+      }
+
+      // Re-apply savings display state after vault-info innerHTML is replaced
+      function restoreSavingsDisplay() {
+        const hasOptimizedQuery = queryLog.some(q => q.type !== 'standard');
+        if (!hasOptimizedQuery) return;
+        const saved = sessionStandardCost - sessionActualCost;
+        const pct = sessionStandardCost > 0
+          ? Math.round((saved / sessionStandardCost) * 100)
+          : 0;
+        applySavingsDisplay(saved, pct);
       }
 
       function renderQueryList() {
@@ -2023,8 +2047,10 @@
         <div><span style="color:#00FF00;">✅</span> VAULT READY (CACHED)</div>
         <div>🔢 <span id="token-count">${vaultTokens}</span> TOKENS</div>
         <div>💰 EST. COST: <span id="cost-estimate">$${(vaultTokens * 0.003 / 1000).toFixed(4)}</span></div>
+        <div id="savings-display" style="display:none; cursor:pointer; color:#00ff00;" onclick="openSavingsDashboard()" onkeypress="if(event.key==='Enter'||event.key===' ')openSavingsDashboard()" tabindex="0" role="button" aria-label="Open savings dashboard">💚 SAVED: <span id="savings-amount">$0.0000</span> <span id="savings-pct">(0%)</span></div>
         <div>📁 <span id="vault-folders">${data.folders_loaded.length}</span> FOLDERS LOADED</div>
         <button id="refresh-vault-btn" onclick="debouncedRefreshVault()" style="background: #FFD811; color: #373534; border: 1px solid #fff; border-radius: 8px; padding: 8px 12px; font-size: 0.8em; font-weight: bold; cursor: pointer; margin-top: 8px; width: 100%; transition: all 0.2s ease;" onmouseover="this.style.background='#ffe96a'" onmouseout="this.style.background='#FFD811'">🔄 Refresh Vault</button>`;
+            restoreSavingsDisplay();
             
             // Store vault for later use
             window.currentVaultContent = data.vault_content || "";
@@ -2038,8 +2064,10 @@
         <div><span style="color:#FFA500;">⚠️</span> VAULT NEEDS REFRESH</div>
         <div>🔢 <span id="token-count">No Data</span> TOKENS</div>
         <div>💰 EST. COST: <span id="cost-estimate">$0.00</span></div>
+        <div id="savings-display" style="display:none; cursor:pointer; color:#00ff00;" onclick="openSavingsDashboard()" onkeypress="if(event.key==='Enter'||event.key===' ')openSavingsDashboard()" tabindex="0" role="button" aria-label="Open savings dashboard">💚 SAVED: <span id="savings-amount">$0.0000</span> <span id="savings-pct">(0%)</span></div>
         <div>📁 <span id="vault-folders">0</span> FOLDERS LOADED</div>
         <button id="refresh-vault-btn" onclick="debouncedRefreshVault()" style="background: #FF6B6B; color: white; border: 1px solid #fff; border-radius: 8px; padding: 8px 12px; font-size: 0.8em; font-weight: bold; cursor: pointer; margin-top: 8px; width: 100%; transition: all 0.2s ease;" onmouseover="this.style.background='#ff8a8a'" onmouseout="this.style.background='#FF6B6B'">🔄 REFRESH VAULT NOW</button>`;
+            restoreSavingsDisplay();
           }
         } catch (error) {
           console.error("❌ Vault status check failed:", error);
@@ -2095,8 +2123,10 @@
         <div><span style="color:#00FF00;">✅</span> VAULT REFRESHED</div>
         <div>🔢 <span id="token-count">${vaultTokens}</span> TOKENS</div>
         <div>💰 EST. COST: <span id="cost-estimate">$${(vaultTokens * 0.003 / 1000).toFixed(4)}</span></div>
+        <div id="savings-display" style="display:none; cursor:pointer; color:#00ff00;" onclick="openSavingsDashboard()" onkeypress="if(event.key==='Enter'||event.key===' ')openSavingsDashboard()" tabindex="0" role="button" aria-label="Open savings dashboard">💚 SAVED: <span id="savings-amount">$0.0000</span> <span id="savings-pct">(0%)</span></div>
         <div>📁 <span id="vault-folders">${data.folders_loaded?.length || 0}</span> FOLDERS LOADED</div>
         <button id="refresh-vault-btn" onclick="debouncedRefreshVault()" style="background: #FFD811; color: #373534; border: 1px solid #fff; border-radius: 8px; padding: 8px 12px; font-size: 0.8em; font-weight: bold; cursor: pointer; margin-top: 8px; width: 100%; transition: all 0.2s ease;" onmouseover="this.style.background='#ffe96a'" onmouseout="this.style.background='#FFD811'">🔄 Refresh Vault</button>`;
+            restoreSavingsDisplay();
           } else {
             button.innerHTML = "❌ Refresh Failed";
             button.disabled = false;
