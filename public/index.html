@@ -1566,9 +1566,8 @@
         });
         if (queryLog.length > MAX_QUERY_LOG_ENTRIES) queryLog.pop();
 
-        // Show savings whenever at least one non-standard (optimized/filtered/instant) query has run
-        const hasOptimizedQuery = queryLog.some(q => q.type !== 'standard');
-        if (hasOptimizedQuery) {
+        // Show savings whenever the session has saved any money
+        if (saved > 0) {
           applySavingsDisplay(saved, pct);
         }
       }
@@ -1585,9 +1584,8 @@
 
       // Re-apply savings display state after vault-info innerHTML is replaced
       function restoreSavingsDisplay() {
-        const hasOptimizedQuery = queryLog.some(q => q.type !== 'standard');
-        if (!hasOptimizedQuery) return;
         const saved = sessionStandardCost - sessionActualCost;
+        if (saved <= 0) return;
         const pct = sessionStandardCost > 0
           ? Math.round((saved / sessionStandardCost) * 100)
           : 0;
