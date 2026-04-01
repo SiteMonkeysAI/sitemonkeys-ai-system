@@ -5750,7 +5750,7 @@ export class Orchestrator {
           });
         }
 
-        const gptAdapterKey = useMinModel ? 'openai-gpt4o-mini' : 'openai-gpt4o';
+        const gptAdapterKey = model === 'gpt-4o-mini' ? 'openai-gpt4o-mini' : 'openai-gpt4o';
         const openaiAdapter = getAdapterInstance(gptAdapterKey);
         const gptResult = await openaiAdapter.call({
           systemPrompt: effectiveSystemPrompt,
