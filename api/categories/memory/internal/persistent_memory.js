@@ -384,7 +384,21 @@ class PersistentMemoryOrchestrator {
         `Storing conversation for user: ${sanitizedUserId}, message length: ${userMessage?.length || 0}, response length: ${aiResponse?.length || 0}`,
       );
 
-      // Combine user message and AI response
+      // GAP 2 FIX: Apply minimum quality gates before any heavy processing
+      if (userMessage && typeof userMessage === 'string') {
+        const trimmedMsg = userMessage.trim();
+        // Skip trivial messages (too short or greeting-only)
+        if (trimmedMsg.length < 15 || /^(hi|hey|hello|ok|okay|yes|no|sure|thanks|thank you|bye|goodbye|lol|haha|cool|nice|great|k|yep|nope|yup)\.?$/i.test(trimmedMsg)) {
+          console.log('[MEMORY-QUALITY] storeMemory: Skipping trivial message — no facts to store');
+          return { action: 'skipped', reason: 'trivial_message' };
+        }
+        // Skip questions (retrieval requests, not storage statements)
+        if (trimmedMsg.endsWith('?') || /^(what'?s?|where'?s?|when|why|who'?s?|how'?s?|which|can (i|you|we)|could (i|you|we)|do (i|you|we)|does |did (i|you|we)|is (there|this|that)|are (there|these|those)|was |were |should (i|we)|would (you|it)|will (you|it))\s/i.test(trimmedMsg)) {
+          console.log('[MEMORY-QUALITY] storeMemory: Skipping question — retrieval request, not storage');
+          return { action: 'skipped', reason: 'question_no_facts_to_store' };
+        }
+      }
+
       const conversationContent = `User: ${userMessage}\nAssistant: ${aiResponse}`;
       console.log('[TRACE-STORE] A4. Combined content length:', conversationContent.length);
 
