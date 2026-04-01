@@ -52,6 +52,17 @@ class CostTracker {
     return current >= (ceiling * 0.75);
   }
 
+  getDegradationTier(sessionId, mode) {
+    const ceiling = this.getCostCeiling(mode);
+    const current = this.getSessionCost(sessionId);
+    const ratio = ceiling > 0 ? current / ceiling : 0;
+
+    if (ratio >= 0.95) return 'hard_stop';
+    if (ratio >= 0.80) return 'minimal';
+    if (ratio >= 0.60) return 'efficiency';
+    return 'normal';
+  }
+
   wouldExceedCeiling(sessionId, estimatedCost, mode) {
     const currentCost = this.getSessionCost(sessionId);
     const ceiling = this.getCostCeiling(mode);

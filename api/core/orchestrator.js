@@ -1802,15 +1802,35 @@ export class Orchestrator {
           shouldLookup = false;
         }
 
-        // Cost-aware lookup gate: disable external lookup when approaching session ceiling
-        // Degradation tier 1 — biggest cost savings, response still useful from training + memory
-        // Compute once here and store in phase4Metadata for reuse in #routeToAI (history depth)
+        // Adaptive degradation tier: compute tier once and store for reuse throughout pipeline.
+        // Efficiency (60-80%): disables external lookup.
+        // Minimal (80-95%): disables lookup, reduces history, forces compressed prompt + gpt-4o-mini.
+        // Hard stop (95%+): returns ceiling fallback (handled in #routeToAI).
+        const degradationTier = costTracker.getDegradationTier(sessionId, mode);
+        phase4Metadata.degradation_tier = degradationTier;
+
+        // Cost-aware lookup gate: disable external lookup when approaching session ceiling.
+        // The legacy isApproachingCeiling check (75%) is retained for CP-test compatibility
+        // (CP-002, CP-004 grep for the exact call pattern). The tier check below extends
+        // coverage to the 60-75% efficiency band that the legacy 75% threshold misses.
         const isCostCeilingApproaching = costTracker.isApproachingCeiling(sessionId, mode);
         phase4Metadata.approaching_ceiling = isCostCeilingApproaching;
         if (shouldLookup && isCostCeilingApproaching) {
           shouldLookup = false;
           phase4Metadata.lookup_disabled_by_cost = true;
           this.log('[COST-PROTECTION] External lookup disabled — approaching session ceiling');
+        }
+        // Efficiency tier (60%+): catches the 60-75% band not covered by isApproachingCeiling.
+        if (shouldLookup && degradationTier !== 'normal') {
+          shouldLookup = false;
+          phase4Metadata.lookup_disabled_by_cost = true;
+          this.log('[COST-PROTECTION] External lookup disabled — approaching session ceiling');
+        }
+        if (degradationTier !== 'normal') {
+          const _dgCeiling = costTracker.getCostCeiling(mode);
+          const _dgCurrent = costTracker.getSessionCost(sessionId);
+          const _dgRatio = _dgCeiling > 0 ? _dgCurrent / _dgCeiling : 0;
+          this.log(`[COST-DEGRADATION] tier=${degradationTier} ratio=${_dgRatio.toFixed(2)} ceiling=$${_dgCeiling.toFixed(2)}`);
         }
 
         // Debug logging for lookup decision
@@ -5403,6 +5423,33 @@ export class Orchestrator {
         `[AI ROUTING] Initial routing: ${initialModel} (reasons: ${routingReason.join(", ") || "default"})`,
       );
 
+      // ========== DEGRADATION TIER: HARD STOP AT 95% ==========
+      // Fires for ALL models when session cost reaches 95% of ceiling.
+      // The legacy 100% check below is Claude-only and remains as a safety net.
+      if (context.sessionId) {
+        const _hardStopTier = phase4Metadata?.degradation_tier ??
+          costTracker.getDegradationTier(context.sessionId, mode);
+        if (_hardStopTier === 'hard_stop') {
+          const _hsCeiling = costTracker.getCostCeiling(mode);
+          const _hsCurrent = costTracker.getSessionCost(context.sessionId);
+          const _hsRatio = _hsCeiling > 0 ? _hsCurrent / _hsCeiling : 0;
+          this.log(`[COST-DEGRADATION] tier=hard_stop ratio=${_hsRatio.toFixed(2)} ceiling=$${_hsCeiling.toFixed(2)}`);
+          const fallbackResult = await handleCostCeiling({
+            query: message,
+            context: context,
+            reason: 'cost_ceiling_exceeded',
+            currentCost: _hsCurrent,
+          });
+          return {
+            response: fallbackResult.response,
+            model: 'cost_fallback',
+            cost: { inputTokens: 0, outputTokens: 0, totalTokens: 0, inputCost: 0, outputCost: 0, totalCost: 0 },
+            escalated: false,
+            escalationReason: null,
+          };
+        }
+      }
+
       // ========== COST CEILING CHECK ==========
       if (useClaude && context.sessionId) {
         const estimatedCost = costTracker.estimateClaudeCost(message, context);
@@ -5465,7 +5512,8 @@ export class Orchestrator {
       const hasMemoryContext = memoryContext.hasMemory ?? false;
       const queryClass = context.earlyClassification?.classification || context.queryClassification?.classification;
       this.log(`[EFFICIENCY] memory_doctrine_applied=${hasMemoryContext} prompt=${['greeting', 'simple_factual', 'simple_short'].includes(queryClass) ? 'compressed' : 'full'}`);
-      const useCompressedPrompt = ['greeting', 'simple_factual', 'simple_short'].includes(queryClass);
+      const useCompressedPrompt = ['greeting', 'simple_factual', 'simple_short'].includes(queryClass)
+        || phase4Metadata?.degradation_tier === 'minimal';
       const systemPrompt = useCompressedPrompt
         ? this.#buildCompressedSystemPrompt(mode, context.earlyClassification || context.queryClassification, hasMemoryContext)
         : this.#buildSystemPrompt(mode, analysis, context.reasoningGuidance, context.earlyClassification, hasMemoryContext);
@@ -5534,9 +5582,14 @@ export class Orchestrator {
       // Query-aware conversation history depth (SI change 1)
       // Simple factual and PERMANENT queries only need 1-2 prior turns for coherence.
       // All other queries keep the full 5-turn window.
-      // Reuse approaching_ceiling computed in processRequest (avoids redundant session cost lookup)
-      const approachingCeiling = phase4Metadata?.approaching_ceiling ??
-        costTracker.isApproachingCeiling(context.sessionId, mode);
+      // Reuse degradation_tier computed in processRequest.  Minimal tier (80-95%) and
+      // hard_stop (95%+) both trigger history reduction to 2 turns.  The legacy
+      // isApproachingCeiling (75%) fallback is retained for calls where phase4Metadata
+      // is unavailable, keeping the behaviour safe if the tier was not yet computed.
+      const _tierForHistory = phase4Metadata?.degradation_tier ??
+        costTracker.getDegradationTier(context.sessionId, mode);
+      const approachingCeiling = _tierForHistory === 'minimal' || _tierForHistory === 'hard_stop' ||
+        (phase4Metadata?.approaching_ceiling ?? costTracker.isApproachingCeiling(context.sessionId, mode));
       const baseHistoryDepth = getConversationDepth(context.earlyClassification, phase4Metadata?.truth_type, false);
       const historyDepth = getConversationDepth(
         context.earlyClassification,
@@ -5626,6 +5679,15 @@ export class Orchestrator {
       }
 
       this.log(`[EFFICIENCY] capability_routing=true task_type=${requiredTaskType} min_score=${minimumScore} mini_routing_enabled=${MINI_MODEL_ENABLED} selected_model=${selectedModel} classification=${classification} high_stakes=${highStakes}`);
+
+      // Minimal tier: force gpt-4o-mini for all non-high-stakes, non-Claude queries.
+      // This intentionally overrides capability routing — at 80%+ of ceiling the primary
+      // goal is cost preservation, not maximum capability.  High-stakes queries are
+      // always exempt and must never be downgraded to mini.
+      if (phase4Metadata?.degradation_tier === 'minimal' && !highStakes && !useClaude) {
+        selectedModel = 'gpt-4o-mini';
+        this.log(`[COST-DEGRADATION] tier=minimal — routing to gpt-4o-mini (non-high-stakes)`);
+      }
 
       const model = selectedModel;
       attemptedModel = model;
