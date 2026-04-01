@@ -99,6 +99,10 @@ export async function ensureCostLogTable(pool) {
       ALTER TABLE query_cost_log
       ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0
     `);
+    await pool.query(`
+      ALTER TABLE query_cost_log
+      ADD COLUMN IF NOT EXISTS org_id INTEGER DEFAULT 1
+    `);
     console.log('[COST-LOG] query_cost_log table and indexes ready');
   } catch (err) {
     console.error('[COST-LOG] Failed to create query_cost_log table:', err.message);
@@ -115,15 +119,34 @@ export async function handleCostSummary(req, res) {
   const adminKey =
     req.headers['x-admin-key'] ||
     req.headers['authorization']?.replace('Bearer ', '');
-  if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
+  if (!adminKey) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
+
+  const isMasterAdmin = adminKey === process.env.ADMIN_KEY;
 
   try {
     const pool = global.memorySystem?.pool;
     if (!pool) {
       return res.status(503).json({ error: 'Database pool not available' });
     }
+
+    // Resolve org scope: master admin sees all; org admin key sees only their org
+    let orgId = null;
+    if (!isMasterAdmin) {
+      const orgResult = await pool.query(
+        'SELECT id FROM organizations WHERE admin_key = $1 AND is_active = true',
+        [adminKey]
+      );
+      if (orgResult.rows.length === 0) {
+        return res.status(403).json({ error: 'Unauthorized' });
+      }
+      orgId = orgResult.rows[0].id;
+    }
+
+    // Build optional org filter — parameterized to prevent injection
+    const orgParams = orgId ? [orgId] : [];
+    const orgPlaceholder = orgId ? ' AND org_id = $1' : '';
 
     // Returns cost breakdown by query type for efficiency proof
     const result = await pool.query(`
@@ -140,10 +163,10 @@ export async function handleCostSummary(req, res) {
         MIN(created_at) as first_query,
         MAX(created_at) as last_query
       FROM query_cost_log
-      WHERE created_at > NOW() - INTERVAL '7 days'
+      WHERE created_at > NOW() - INTERVAL '7 days'${orgPlaceholder}
       GROUP BY query_type, truth_type
       ORDER BY avg_tokens DESC
-    `);
+    `, orgParams);
 
     const modelBreakdown = await pool.query(`
       SELECT
@@ -156,10 +179,10 @@ export async function handleCostSummary(req, res) {
         SUM(CASE WHEN lookup_fired THEN 1 ELSE 0 END) as lookup_count
       FROM query_cost_log
       WHERE created_at > NOW() - INTERVAL '7 days'
-        AND model IS NOT NULL
+        AND model IS NOT NULL${orgPlaceholder}
       GROUP BY model
       ORDER BY total_cost_usd DESC
-    `);
+    `, orgParams);
 
     const dailyTotals = await pool.query(`
       SELECT
@@ -167,10 +190,10 @@ export async function handleCostSummary(req, res) {
         COUNT(*) as query_count,
         ROUND(SUM(cost_usd)::decimal, 6) as total_cost_usd
       FROM query_cost_log
-      WHERE created_at > NOW() - INTERVAL '30 days'
+      WHERE created_at > NOW() - INTERVAL '30 days'${orgPlaceholder}
       GROUP BY DATE(created_at)
       ORDER BY day ASC
-    `);
+    `, orgParams);
 
     // Fallback and degradation counts (7 days)
     const fallbackStats = await pool.query(`
@@ -178,8 +201,8 @@ export async function handleCostSummary(req, res) {
         COUNT(*) FILTER (WHERE query_type = 'emergency_fallback') AS fallback_count,
         COUNT(*) FILTER (WHERE degradation_tier IS NOT NULL AND degradation_tier != 'normal') AS degradation_count
       FROM query_cost_log
-      WHERE created_at > NOW() - INTERVAL '7 days'
-    `);
+      WHERE created_at > NOW() - INTERVAL '7 days'${orgPlaceholder}
+    `, orgParams);
 
     // Long-session aggregates (7 days)
     const longSessions = await pool.query(`
@@ -193,11 +216,11 @@ export async function handleCostSummary(req, res) {
         BOOL_OR(lookup_disabled_by_cost) as approached_ceiling
       FROM query_cost_log
       WHERE created_at > NOW() - INTERVAL '7 days'
-        AND session_id IS NOT NULL
+        AND session_id IS NOT NULL${orgPlaceholder}
       GROUP BY session_id
       HAVING COUNT(*) > 10 OR SUM(cost_usd) > 0.50
       ORDER BY SUM(cost_usd) DESC
-    `);
+    `, orgParams);
 
     const fbRow = fallbackStats.rows[0] || {};
 
