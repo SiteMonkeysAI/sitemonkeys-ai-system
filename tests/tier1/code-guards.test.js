@@ -4936,11 +4936,14 @@ describe('CO. Cost Observability by Query Type', () => {
       'model', 'personality', 'mode'
     ];
 
-    // Use lastIndexOf to find the main comprehensive INSERT (not the lightweight savings entries).
-    const insertIdx = orch.lastIndexOf('INSERT INTO query_cost_log');
+    // Find the main comprehensive INSERT by searching for the unique 'memories_injected' field
+    // (lightweight fallback/savings entries do not include this field).
+    const markerIdx = orch.indexOf('memories_injected');
+    assert.ok(markerIdx !== -1, 'CO-002 FAIL: memories_injected not found in orchestrator.js');
+    const insertIdx = orch.lastIndexOf('INSERT INTO query_cost_log', markerIdx);
     assert.ok(insertIdx !== -1, 'CO-002 FAIL: INSERT INTO query_cost_log not found in orchestrator.js');
 
-    const insertBlock = orch.substring(insertIdx, insertIdx + 800);
+    const insertBlock = orch.substring(insertIdx, insertIdx + 1000);
     for (const field of requiredFields) {
       assert.ok(
         insertBlock.includes(field),
@@ -5038,8 +5041,10 @@ describe('CO. Cost Observability by Query Type', () => {
     );
 
     // Verify _historyDepth is used in the INSERT params (not a bare null)
-    // Use lastIndexOf to find the main comprehensive INSERT (not the lightweight savings entries).
-    const insertIdx = orch.lastIndexOf('INSERT INTO query_cost_log');
+    // Find the main comprehensive INSERT by searching for the unique 'memories_injected' field.
+    const markerIdx = orch.indexOf('memories_injected');
+    assert.ok(markerIdx !== -1, 'CO-008 FAIL: memories_injected not found in orchestrator.js');
+    const insertIdx = orch.lastIndexOf('INSERT INTO query_cost_log', markerIdx);
     assert.ok(insertIdx !== -1, 'CO-008 FAIL: INSERT INTO query_cost_log not found');
     const insertBlock = orch.substring(insertIdx, insertIdx + 1500);
     assert.ok(
@@ -7217,11 +7222,13 @@ describe('CP. Cost Protection — Adaptive Degradation', () => {
     const orch = readRepoFile(ORCH_PATH);
     assert.ok(orch, 'CP-005 FAIL: Could not read api/core/orchestrator.js');
 
-    // Use lastIndexOf to find the main comprehensive INSERT (not the lightweight savings entries).
-    const insertIdx = orch.lastIndexOf('INSERT INTO query_cost_log');
+    // Find the main comprehensive INSERT by searching for the unique 'memories_injected' field.
+    const markerIdx = orch.indexOf('memories_injected');
+    assert.ok(markerIdx !== -1, 'CP-005 FAIL: memories_injected not found in orchestrator.js');
+    const insertIdx = orch.lastIndexOf('INSERT INTO query_cost_log', markerIdx);
     assert.ok(insertIdx !== -1, 'CP-005 FAIL: INSERT INTO query_cost_log not found in orchestrator.js');
 
-    const insertBlock = orch.substring(insertIdx, insertIdx + 1000);
+    const insertBlock = orch.substring(insertIdx, insertIdx + 1200);
     assert.ok(
       insertBlock.includes('lookup_disabled_by_cost'),
       'CP-005 FAIL: lookup_disabled_by_cost not found in INSERT INTO query_cost_log in orchestrator.js'
@@ -7232,6 +7239,118 @@ describe('CP. Cost Protection — Adaptive Degradation', () => {
     );
   });
 
+});
+
+// ============================================================
+// OBS. Mature Observability — Fallback Rates & Long-Session Cost
+// Tracks emergency fallback events, degradation tiers, and
+// long-session cost behavior in query_cost_log and cost summary.
+// ============================================================
+describe('OBS. Mature Observability — Fallback & Degradation Tracking', () => {
+  const ORCH_PATH = 'api/core/orchestrator.js';
+  const MIGRATION_PATH = 'api/admin/cost-observability.js';
+
+  it('OBS-001: emergency_fallback events appear in cost log with correct query_type', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'OBS-001 FAIL: Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes("'emergency_fallback'"),
+      "OBS-001 FAIL: query_type 'emergency_fallback' not found in orchestrator.js. " +
+      'An INSERT must be written when emergency fallback fires.'
+    );
+    assert.ok(
+      orch.includes("'fallback'"),
+      "OBS-001 FAIL: model 'fallback' not found in orchestrator.js. " +
+      "The emergency_fallback cost log entry must set model='fallback'."
+    );
+    assert.ok(
+      orch.includes('[COST-LOG] Failed to write emergency_fallback cost log:'),
+      'OBS-001 FAIL: emergency_fallback error log not found. ' +
+      'The INSERT must be wrapped in try/catch with a [COST-LOG] error log.'
+    );
+  });
+
+  it('OBS-002: degradation_tier column exists in query_cost_log schema and migration', () => {
+    const migration = readRepoFile(MIGRATION_PATH);
+    assert.ok(migration, 'OBS-002 FAIL: Could not read api/admin/cost-observability.js');
+
+    assert.ok(
+      migration.includes('degradation_tier'),
+      'OBS-002 FAIL: degradation_tier column not found in cost-observability.js schema'
+    );
+    assert.ok(
+      migration.includes("ADD COLUMN IF NOT EXISTS degradation_tier"),
+      'OBS-002 FAIL: ALTER TABLE migration for degradation_tier not found in ensureCostLogTable()'
+    );
+  });
+
+  it('OBS-003: cost summary includes fallback_count field', () => {
+    const migration = readRepoFile(MIGRATION_PATH);
+    assert.ok(migration, 'OBS-003 FAIL: Could not read api/admin/cost-observability.js');
+
+    assert.ok(
+      migration.includes('fallback_count'),
+      'OBS-003 FAIL: fallback_count not found in cost-observability.js response'
+    );
+    assert.ok(
+      migration.includes("emergency_fallback"),
+      "OBS-003 FAIL: emergency_fallback filter not found in cost summary query"
+    );
+  });
+
+  it('OBS-004: cost summary includes degradation_count field', () => {
+    const migration = readRepoFile(MIGRATION_PATH);
+    assert.ok(migration, 'OBS-004 FAIL: Could not read api/admin/cost-observability.js');
+
+    assert.ok(
+      migration.includes('degradation_count'),
+      'OBS-004 FAIL: degradation_count not found in cost-observability.js response'
+    );
+  });
+
+  it('OBS-005: session summary tracks peak_degradation_tier', () => {
+    const migration = readRepoFile(MIGRATION_PATH);
+    assert.ok(migration, 'OBS-005 FAIL: Could not read api/admin/cost-observability.js');
+
+    assert.ok(
+      migration.includes('long_sessions'),
+      'OBS-005 FAIL: long_sessions not found in cost-observability.js response'
+    );
+    assert.ok(
+      migration.includes('peak_degradation_tier'),
+      'OBS-005 FAIL: peak_degradation_tier not found in long_sessions query'
+    );
+    assert.ok(
+      migration.includes('approached_ceiling'),
+      'OBS-005 FAIL: approached_ceiling not found in long_sessions query'
+    );
+  });
+
+  it('OBS-006: degradation tier computed and logged in orchestrator.js', () => {
+    const orch = readRepoFile(ORCH_PATH);
+    assert.ok(orch, 'OBS-006 FAIL: Could not read orchestrator.js');
+
+    assert.ok(
+      orch.includes('[COST-DEGRADATION]'),
+      "OBS-006 FAIL: [COST-DEGRADATION] log not found in orchestrator.js"
+    );
+    assert.ok(
+      orch.includes('degraded_minimal') && orch.includes('degraded_efficiency'),
+      'OBS-006 FAIL: degradation tier values (degraded_minimal, degraded_efficiency) not found in orchestrator.js'
+    );
+
+    // Verify degradation_tier is in the main INSERT
+    const markerIdx = orch.indexOf('memories_injected');
+    assert.ok(markerIdx !== -1, 'OBS-006 FAIL: memories_injected not found');
+    const insertIdx = orch.lastIndexOf('INSERT INTO query_cost_log', markerIdx);
+    assert.ok(insertIdx !== -1, 'OBS-006 FAIL: INSERT INTO query_cost_log not found');
+    const insertBlock = orch.substring(insertIdx, insertIdx + 1200);
+    assert.ok(
+      insertBlock.includes('degradation_tier'),
+      'OBS-006 FAIL: degradation_tier not found in main INSERT INTO query_cost_log'
+    );
+  });
 });
 
 // ============================================================

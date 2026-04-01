@@ -3093,6 +3093,21 @@ export class Orchestrator {
         this.log(`[PERFORMANCE] ⚠️ EXCEEDED TARGET by ${processingTime - targetDuration}ms`);
       }
 
+      // Compute degradation tier for observability
+      const _lookupDisabled = phase4Metadata?.lookup_disabled_by_cost || false;
+      const _historyReduced = phase4Metadata?.history_reduced_by_cost || false;
+      const _degradationTier = _historyReduced ? 'degraded_minimal'
+        : _lookupDisabled ? 'degraded_efficiency'
+        : 'normal';
+      if (_degradationTier !== 'normal') {
+        const _ceiling = costTracker.getCostCeiling(mode);
+        const _sessionCost = costTracker.getSessionCost(sessionId);
+        const _ratio = _ceiling > 0 ? _sessionCost / _ceiling : 0;
+        this.log(
+          `[COST-DEGRADATION] tier=${_degradationTier} ratio=${_ratio.toFixed(2)} ceiling=$${_ceiling.toFixed(2)}`
+        );
+      }
+
       // Cost observability — write to query_cost_log
       // Non-blocking — fire and forget, never throws, never delays response
       const _pool = this.pool;
@@ -3104,6 +3119,7 @@ export class Orchestrator {
       const _mode = mode;
       const _aiResponse = aiResponse;
       const _historyDepth = aiResponse?.historyDepth ?? null;
+      const _computedDegradationTier = _degradationTier;
       setImmediate(async () => {
         try {
           if (_pool) {
@@ -3115,11 +3131,12 @@ export class Orchestrator {
                 memories_injected, memories_filtered,
                 lookup_fired, lookup_tokens, history_depth,
                 model, personality, mode, max_memory_score,
-                lookup_disabled_by_cost, history_reduced_by_cost
+                lookup_disabled_by_cost, history_reduced_by_cost,
+                degradation_tier
               ) VALUES (
                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
                 $11,$12,$13,$14,$15,$16,$17,$18,$19,
-                $20,$21
+                $20,$21,$22
               )`,
               [
                 _userId || null,
@@ -3143,6 +3160,7 @@ export class Orchestrator {
                 _memoryContext?.highest_similarity_score || null,  // max_memory_score
                 _phase4Metadata?.lookup_disabled_by_cost || false,
                 _phase4Metadata?.history_reduced_by_cost || false,
+                _computedDegradationTier,
               ]
             );
           }
@@ -3426,6 +3444,38 @@ export class Orchestrator {
     } catch (error) {
       this.error(`Request failed: ${error.message}`, error);
       this.#trackPerformance(startTime, false, true);
+
+      // Log emergency fallback event to query_cost_log for observability
+      const _fallbackPool = this.pool;
+      const _fallbackUserId = requestData.userId || null;
+      const _fallbackSessionId = requestData.sessionId || null;
+      const _fallbackMode = requestData.mode || null;
+      const _fallbackReason = error?.message || 'unknown';
+      setImmediate(async () => {
+        try {
+          if (_fallbackPool) {
+            await _fallbackPool.query(
+              `INSERT INTO query_cost_log (
+                user_id, session_id, query_type, model, cost_usd,
+                total_tokens, mode, degradation_tier, fallback_reason
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+              [
+                _fallbackUserId,
+                _fallbackSessionId,
+                'emergency_fallback',
+                'fallback',
+                0,
+                0,
+                _fallbackMode,
+                'emergency',
+                _fallbackReason,
+              ]
+            );
+          }
+        } catch (err) {
+          console.error('[COST-LOG] Failed to write emergency_fallback cost log:', err.message);
+        }
+      });
 
       return await this.#handleEmergencyFallback(error, requestData);
     }
