@@ -1108,7 +1108,7 @@ Respond with practical business analysis, always considering survival implicatio
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
         ...history.slice(-5),
@@ -1179,7 +1179,7 @@ Provide honest, accurate analysis with clear confidence indicators. REASON from 
 
   try {
     const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
         ...history.slice(-5),
