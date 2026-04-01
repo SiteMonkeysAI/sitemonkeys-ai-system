@@ -35,6 +35,7 @@ export function registerAdapters({ openaiClient, anthropicClient }) {
   }
   if (anthropicClient) {
     _adapterInstances.set('anthropic-claude-sonnet', new AnthropicAdapter(anthropicClient));
+    _adapterInstances.set('anthropic-claude-haiku',  new AnthropicAdapter(anthropicClient, 'claude-haiku-4-5-20251001'));
   }
 }
 
@@ -120,6 +121,22 @@ const ADAPTER_REGISTRY = {
       hallucination_control: 'high'
     },
     tier: 'advanced'
+  },
+
+  'anthropic-claude-haiku': {
+    provider: 'anthropic',
+    model: 'claude-haiku-4-5-20251001',
+    api: 'anthropic-messages',
+    primary: false,
+    active: () => !!process.env.ANTHROPIC_API_KEY,
+    capabilities: {
+      reasoning_tier: 'standard',
+      tool_reliable: true,
+      structured_output: true,
+      long_context: 'high',           // 200K window
+      hallucination_control: 'standard'
+    },
+    tier: 'standard'
   }
 
   // Future adapters added here:

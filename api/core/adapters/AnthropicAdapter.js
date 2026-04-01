@@ -4,25 +4,44 @@
 
 import { BaseAdapter } from './BaseAdapter.js';
 
+// Per-model configuration lookup — avoids fragile string pattern matching.
+const ANTHROPIC_MODEL_CONFIG = {
+  'claude-sonnet-4-20250514': {
+    costPer1kTokens: { input: 0.003, output: 0.015 },
+    taskScores: {
+      simple_factual:    0.95,
+      complex_reasoning: 0.98,
+      creative:          0.97,
+      summarization:     0.97,
+      high_stakes:       0.98,
+    },
+  },
+  'claude-haiku-4-5-20251001': {
+    costPer1kTokens: { input: 0.0008, output: 0.004 },
+    taskScores: {
+      simple_factual:    0.85,
+      complex_reasoning: 0.75,
+      creative:          0.80,
+      summarization:     0.85,
+      high_stakes:       0.65,
+    },
+  },
+};
+
+// Fallback for models not yet in the lookup table — use sonnet defaults.
+const DEFAULT_MODEL_CONFIG = ANTHROPIC_MODEL_CONFIG['claude-sonnet-4-20250514'];
+
 export class AnthropicAdapter extends BaseAdapter {
-  constructor(anthropicClient) {
+  constructor(anthropicClient, modelId = 'claude-sonnet-4-20250514') {
+    const modelConfig = ANTHROPIC_MODEL_CONFIG[modelId] ?? DEFAULT_MODEL_CONFIG;
     super({
       providerId: 'anthropic',
-      modelId: 'claude-sonnet-4-20250514',
+      modelId,
       capabilities: {
         maxContextTokens: 200000,
-        taskScores: {
-          simple_factual:    0.95,
-          complex_reasoning: 0.98,
-          creative:          0.97,
-          summarization:     0.97,
-          high_stakes:       0.98,
-        },
+        taskScores: modelConfig.taskScores,
       },
-      costPer1kTokens: {
-        input:  0.003,
-        output: 0.015,
-      },
+      costPer1kTokens: modelConfig.costPer1kTokens,
     });
     this.client = anthropicClient;
   }
