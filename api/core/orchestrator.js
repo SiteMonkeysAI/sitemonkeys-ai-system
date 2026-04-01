@@ -253,7 +253,11 @@ function getRequiredTaskType(classification, highStakes) {
     'decision_making':      'complex_reasoning',
     'business_validation':  'complex_reasoning',
   };
-  return taskMap[classification] || 'complex_reasoning';
+  const taskType = taskMap[classification];
+  if (!taskType && classification) {
+    console.warn(`[CAPABILITY-ROUTING] Unknown classification "${classification}" — defaulting to complex_reasoning (safe but costly)`);
+  }
+  return taskType || 'complex_reasoning';
 }
 
 // Returns the minimum capability score an adapter must meet for the given task type.
@@ -261,12 +265,16 @@ function getRequiredTaskType(classification, highStakes) {
 // low-capability models.
 function getMinimumScore(taskType) {
   const thresholds = {
-    'simple_factual':   0.70,
-    'summarization':    0.70,
+    'simple_factual':    0.70,
+    'summarization':     0.70,
     'complex_reasoning': 0.88,
-    'high_stakes':      0.95,
+    'high_stakes':       0.95,
   };
-  return thresholds[taskType] ?? 0.85;
+  const score = thresholds[taskType];
+  if (score === undefined) {
+    console.warn(`[CAPABILITY-ROUTING] Unknown task type "${taskType}" — using default minimum score 0.85`);
+  }
+  return score ?? 0.85;
 }
 
 // Extract a clean "commodity price" search query for commodity quantity calculations.
