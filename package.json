@@ -37,7 +37,7 @@
     "test:memory": "node scripts/memory-regression-test.js",
     "migrate:cap-scores": "node scripts/run-sql-migration.js cap_non_health_relevance_scores.sql",
     "lint": "eslint .",
-    "test": "node --test tests/tier1/code-guards.test.js tests/unit/responseCache.test.js tests/unit/businessContextClassifier.test.js tests/unit/adapters.test.js tests/unit/failover.test.js"
+    "test": "node --test tests/tier1/code-guards.test.js tests/unit/responseCache.test.js tests/unit/businessContextClassifier.test.js tests/unit/adapters.test.js tests/unit/failover.test.js tests/unit/costTracker.test.js"
   },
   "engines": {
     "node": ">=18.0.0"
