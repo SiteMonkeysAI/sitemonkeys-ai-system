@@ -4,7 +4,7 @@
 import {
   callClaudeAPI,
   callGPT4API,
-  callMistralAPI,
+  callClaudeHaikuAPI,
 } from "./ai-architecture.js";
 
 const QUALITY_ENFORCEMENT = {
@@ -17,9 +17,9 @@ const QUALITY_ENFORCEMENT = {
 
   // AI ARCHITECTURE FAILOVER CHAIN
   ai_architecture: {
-    primary: "claude-3-sonnet",
-    secondary: "gpt-4",
-    tertiary: "mistral",
+    primary: "claude-sonnet-4",
+    secondary: "gpt-4o",
+    tertiary: "claude-haiku",
     emergency: "template_library",
   },
 
@@ -117,18 +117,18 @@ async function processWithFailover(prompt, customerTier, maxAttempts = 3) {
         }
       }
 
-      // Tertiary: Mistral emergency backup
+      // Tertiary: Claude Haiku emergency backup
       if (attempts === 2) {
-        const mistralResult = await callMistralAPI(prompt);
+        const haikuResult = await callClaudeHaikuAPI(prompt);
         const quality = await validateAIOutput(
-          mistralResult,
+          haikuResult,
           customerTier,
           "general",
         );
 
         if (quality.score >= 0.8) {
           // Lower threshold for emergency
-          return { result: mistralResult, source: "mistral", quality: quality };
+          return { result: haikuResult, source: "claude-haiku", quality: quality };
         }
       }
 

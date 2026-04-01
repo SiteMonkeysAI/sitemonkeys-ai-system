@@ -1,12 +1,14 @@
-/* global fetch, AbortSignal */
+/* global AbortSignal */
 
 // SITE MONKEYS AI ARCHITECTURE
 // Triple-AI Failover System with Quality Gates
 
+import { getAdapterInstance } from '../../core/adapters/adapter-registry.js';
+
 const AI_ARCHITECTURE = {
   // PRIMARY AI CONFIGURATION
   primary: {
-    model: "claude-3-sonnet-20240229",
+    model: "claude-sonnet-4-20250514",
     provider: "anthropic",
     max_tokens: 1000,
     temperature: 0.7,
@@ -15,7 +17,7 @@ const AI_ARCHITECTURE = {
 
   // SECONDARY FALLBACK
   secondary: {
-    model: "gpt-4",
+    model: "gpt-4o",
     provider: "openai",
     max_tokens: 1000,
     temperature: 0.7,
@@ -24,8 +26,8 @@ const AI_ARCHITECTURE = {
 
   // TERTIARY EMERGENCY BACKUP
   tertiary: {
-    model: "mistral-large",
-    provider: "mistral",
+    model: "claude-haiku-4-5-20251001",
+    provider: "anthropic",
     max_tokens: 1000,
     temperature: 0.7,
     timeout: 20000, // 20 seconds
@@ -76,45 +78,45 @@ async function processAIRequest(prompt, customerTier, contentType = "general") {
       }
     }
 
-    // Secondary: GPT-4 Fallback
+    // Secondary: GPT-4o Fallback
     if (attempts === 1) {
       try {
-        console.log("🔄 Falling back to GPT-4...");
+        console.log("🔄 Falling back to GPT-4o...");
         const result = await callGPT4API(prompt, customerTier);
 
         if (result.success) {
-          console.log(`✅ GPT-4 succeeded in ${Date.now() - startTime}ms`);
+          console.log(`✅ GPT-4o succeeded in ${Date.now() - startTime}ms`);
           return {
             result: result.content,
-            source: "gpt4",
+            source: "gpt4o",
             attempts: attempts + 1,
             processingTime: Date.now() - startTime,
             success: true,
           };
         }
       } catch (error) {
-        console.warn(`⚠️ GPT-4 failed: ${error.message}`);
+        console.warn(`⚠️ GPT-4o failed: ${error.message}`);
       }
     }
 
-    // Tertiary: Mistral Emergency Backup
+    // Tertiary: Claude Haiku Emergency Backup
     if (attempts === 2) {
       try {
-        console.log("🚨 Emergency fallback to Mistral...");
-        const result = await callMistralAPI(prompt, customerTier);
+        console.log("🚨 Emergency fallback to Claude Haiku...");
+        const result = await callClaudeHaikuAPI(prompt, customerTier);
 
         if (result.success) {
-          console.log(`✅ Mistral succeeded in ${Date.now() - startTime}ms`);
+          console.log(`✅ Claude Haiku succeeded in ${Date.now() - startTime}ms`);
           return {
             result: result.content,
-            source: "mistral",
+            source: "claude-haiku",
             attempts: attempts + 1,
             processingTime: Date.now() - startTime,
             success: true,
           };
         }
       } catch (error) {
-        console.warn(`⚠️ Mistral failed: ${error.message}`);
+        console.warn(`⚠️ Claude Haiku failed: ${error.message}`);
       }
     }
 
@@ -146,38 +148,29 @@ async function processAIRequest(prompt, customerTier, contentType = "general") {
 // CLAUDE API INTERFACE
 async function callClaudeAPI(prompt, _customerTier) {
   const config = AI_ARCHITECTURE.primary;
+  const adapter = getAdapterInstance('anthropic-claude-sonnet');
+
+  if (!adapter) {
+    return { success: false, error: 'Anthropic adapter not available' };
+  }
 
   try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "x-api-key": process.env.ANTHROPIC_API_KEY,
-        "Content-Type": "application/json",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: config.model,
-        max_tokens: config.max_tokens,
-        temperature: config.temperature,
-        messages: [{ role: "user", content: prompt }],
-      }),
-      signal: AbortSignal.timeout(config.timeout),
+    const callPromise = adapter.call({
+      messages:    [{ role: 'user', content: prompt }],
+      maxTokens:   config.max_tokens,
+      temperature: config.temperature,
     });
 
-    if (!response.ok) {
-      throw new Error(`Claude API error: ${response.status}`);
-    }
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), config.timeout)
+    );
 
-    const data = await response.json();
-
-    if (!data.content || !data.content[0] || !data.content[0].text) {
-      throw new Error("Claude API returned invalid response structure");
-    }
+    const result = await Promise.race([callPromise, timeoutPromise]);
 
     return {
       success: true,
-      content: data.content[0].text,
-      usage: data.usage,
+      content: result.content,
+      usage:   result.usage,
     };
   } catch (error) {
     return {
@@ -187,40 +180,32 @@ async function callClaudeAPI(prompt, _customerTier) {
   }
 }
 
-// GPT-4 API INTERFACE
+// GPT-4o API INTERFACE
 async function callGPT4API(prompt, _customerTier) {
   const config = AI_ARCHITECTURE.secondary;
+  const adapter = getAdapterInstance('openai-gpt4o');
+
+  if (!adapter) {
+    return { success: false, error: 'OpenAI adapter not available' };
+  }
 
   try {
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer " + process.env.OPENAI_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: config.model,
-        max_tokens: config.max_tokens,
-        temperature: config.temperature,
-        messages: [{ role: "user", content: prompt }],
-      }),
-      signal: AbortSignal.timeout(config.timeout),
+    const callPromise = adapter.call({
+      messages:    [{ role: 'user', content: prompt }],
+      maxTokens:   config.max_tokens,
+      temperature: config.temperature,
     });
 
-    if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
-    }
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), config.timeout)
+    );
 
-    const data = await response.json();
-
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      throw new Error("OpenAI API returned invalid response structure");
-    }
+    const result = await Promise.race([callPromise, timeoutPromise]);
 
     return {
       success: true,
-      content: data.choices[0].message.content,
-      usage: data.usage,
+      content: result.content,
+      usage:   result.usage,
     };
   } catch (error) {
     return {
@@ -230,40 +215,32 @@ async function callGPT4API(prompt, _customerTier) {
   }
 }
 
-// MISTRAL API INTERFACE
-async function callMistralAPI(prompt, _customerTier) {
+// CLAUDE HAIKU API INTERFACE (tertiary emergency backup)
+async function callClaudeHaikuAPI(prompt, _customerTier) {
   const config = AI_ARCHITECTURE.tertiary;
+  const adapter = getAdapterInstance('anthropic-claude-haiku');
+
+  if (!adapter) {
+    return { success: false, error: 'Anthropic Haiku adapter not available' };
+  }
 
   try {
-    const response = await fetch("https://api.mistral.ai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: "Bearer " + process.env.MISTRAL_API_KEY,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: config.model,
-        max_tokens: config.max_tokens,
-        temperature: config.temperature,
-        messages: [{ role: "user", content: prompt }],
-      }),
-      signal: AbortSignal.timeout(config.timeout),
+    const callPromise = adapter.call({
+      messages:    [{ role: 'user', content: prompt }],
+      maxTokens:   config.max_tokens,
+      temperature: config.temperature,
     });
 
-    if (!response.ok) {
-      throw new Error(`Mistral API error: ${response.status}`);
-    }
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), config.timeout)
+    );
 
-    const data = await response.json();
-
-    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-      throw new Error("Mistral API returned invalid response structure");
-    }
+    const result = await Promise.race([callPromise, timeoutPromise]);
 
     return {
       success: true,
-      content: data.choices[0].message.content,
-      usage: data.usage || {},
+      content: result.content,
+      usage:   result.usage,
     };
   } catch (error) {
     return {
@@ -314,8 +291,8 @@ async function getTemplateResponse(contentType, customerTier) {
 async function checkAIServicesHealth() {
   const healthStatus = {
     claude: false,
-    gpt4: false,
-    mistral: false,
+    gpt4o: false,
+    claude_haiku: false,
     timestamp: Date.now(),
   };
 
@@ -328,17 +305,17 @@ async function checkAIServicesHealth() {
   }
 
   try {
-    const gpt4Test = await callGPT4API("Health check", "boost");
-    healthStatus.gpt4 = gpt4Test.success;
+    const gpt4oTest = await callGPT4API("Health check", "boost");
+    healthStatus.gpt4o = gpt4oTest.success;
   } catch (error) {
-    console.warn("GPT-4 health check failed:", error.message);
+    console.warn("GPT-4o health check failed:", error.message);
   }
 
   try {
-    const mistralTest = await callMistralAPI("Health check", "boost");
-    healthStatus.mistral = mistralTest.success;
+    const haikuTest = await callClaudeHaikuAPI("Health check", "boost");
+    healthStatus.claude_haiku = haikuTest.success;
   } catch (error) {
-    console.warn("Mistral health check failed:", error.message);
+    console.warn("Claude Haiku health check failed:", error.message);
   }
 
   return healthStatus;
@@ -349,7 +326,7 @@ export {
   processAIRequest,
   callClaudeAPI,
   callGPT4API,
-  callMistralAPI,
+  callClaudeHaikuAPI,
   getTemplateResponse,
   checkAIServicesHealth,
 };
