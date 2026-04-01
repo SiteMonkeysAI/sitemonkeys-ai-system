@@ -728,6 +728,8 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
               message,
               taggedResponse,
               category,
+              mode || 'truth-general',
+              result.metadata?.queryClassification?.classification || null,
             );
 
             intelligentStorage.cleanup();

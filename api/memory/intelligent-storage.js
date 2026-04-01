@@ -85,6 +85,17 @@ const TRIVIAL_MESSAGE_PATTERNS = [
 ];
 
 /**
+ * Query classification types that represent analytical or external-data queries rather
+ * than personal user facts.  Storage is skipped for these types.
+ */
+const ANALYTICAL_QUERY_TYPES = [
+  'complex_analytical',
+  'decision_making',
+  'business_validation',
+  'news_current_events',
+];
+
+/**
  * Intelligent Memory Storage System
  * Compresses verbose conversations and prevents duplicate storage
  */
@@ -1128,9 +1139,10 @@ export class IntelligentMemoryStorage {
    * @param {string} aiResponse - AI's response
    * @param {string} category - Memory category
    * @param {string} mode - Mode (truth-general, business-validation, site-monkeys)
+   * @param {string|null} queryClassification - Query classification type from orchestrator
    * @returns {Promise<object>} - Storage result with action taken
    */
-  async storeWithIntelligence(userId, userMessage, aiResponse, category, mode = 'truth-general') {
+  async storeWithIntelligence(userId, userMessage, aiResponse, category, mode = 'truth-general', queryClassification = null) {
     try {
       // TRACE LOGGING - Intelligent storage entry
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
@@ -1152,6 +1164,12 @@ export class IntelligentMemoryStorage {
       }
 
       console.log('[INTELLIGENT-STORAGE] 🧠 Processing conversation for intelligent storage');
+
+      // GAP 1 FIX: Skip storage for analytical queries — these are not personal user facts
+      if (queryClassification && ANALYTICAL_QUERY_TYPES.includes(queryClassification)) {
+        console.log(`[INTELLIGENT-STORAGE] ⏭️ Skipping storage — analytical query type: ${queryClassification}`);
+        return { action: 'skipped', reason: 'analytical_query_not_personal' };
+      }
 
       // FIX #633: Detect ordinal facts for B3 validator
       const ordinalInfo = this.detectOrdinalFact(userMessage);
@@ -2898,7 +2916,8 @@ Facts (preserve user terminology + add synonyms):`;
         compressed: true,
         dedup_checked: true,
         storage_version: 'intelligent_v1',
-        original_user_phrase: originalUserSnippet  // Store for fallback retrieval matching
+        original_user_phrase: originalUserSnippet,  // Store for fallback retrieval matching
+        source: metadata?.source || 'user',          // GAP 3 FIX: tag memory source for future cleanup
       };
 
       // FIX #673: Verify anchors are in the object that will be stored
