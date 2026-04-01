@@ -61,6 +61,13 @@ import dbMigrationRouter, { addEmbeddingIndex } from "./api/admin/db-migration.j
 import { handleCleanupRequest } from "./api/admin/cleanup.js";
 import { handleZombieCleanupRequest } from "./api/admin/cleanup-zombies.js";
 import { handleCostSummary, ensureCostLogTable } from "./api/admin/cost-observability.js";
+import {
+  ensureOrganizationTables,
+  resolveOrgId,
+  handleCreateOrg,
+  handleListOrgs,
+  handleGetOrg,
+} from "./api/admin/organizations.js";
 import { handleClassifierTest } from "./api/routes/classifier-test.js";
 import { handleDeleteMemories } from "./api/admin/delete-memories.js";
 import rateLimit from "express-rate-limit";
@@ -194,6 +201,7 @@ async function initializeMemorySystem() {
     // Ensure cost observability table exists (idempotent, never throws)
     if (persistentMemory.pool) {
       await ensureCostLogTable(persistentMemory.pool);
+      await ensureOrganizationTables(persistentMemory.pool);
     }
 
     // Initialize intelligence system
@@ -555,6 +563,13 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       });
     }
 
+    // Resolve org_id from request headers (multi-tenant isolation)
+    // 1. x-org-id header → parse as integer
+    // 2. x-admin-key header → look up org by admin_key in DB
+    // 3. Default: org_id = 1 (SiteMonkeys)
+    const orgPool = global.memorySystem?.pool || null;
+    const orgId = await resolveOrgId(req.headers, orgPool);
+
     // Process request through orchestrator
     const result = await orchestrator.processRequest({
       message,
@@ -568,6 +583,7 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
       claudeConfirmed: claude_confirmed, // BIBLE FIX: Pass confirmation flag
       showConfidence, // Confidence Scoring Toggle
       sessionState, // Intelligent session compression (SESSION_STATE_ENABLED)
+      orgId, // Multi-tenant org isolation
     });
 
     // TRACE LOGGING - Step 4 & 5 & 6
@@ -1303,6 +1319,11 @@ app.post('/api/admin/classifier-test', handleClassifierTest);
 
 // Admin endpoint to delete specific memories by ID (requires user_id + memory_ids)
 app.delete('/api/admin/memories', handleDeleteMemories);
+
+// Multi-tenant organization management
+app.post('/api/admin/organizations', handleCreateOrg);
+app.get('/api/admin/organizations', handleListOrgs);
+app.get('/api/admin/organizations/:slug', handleGetOrg);
 
 console.log("[SERVER] ✅ Routes configured");
 

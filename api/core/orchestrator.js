@@ -1022,6 +1022,7 @@ export class Orchestrator {
       claudeConfirmed = null, // BIBLE FIX: User confirmation for Claude escalation
       showConfidence = false, // Confidence Scoring Toggle — default off
       sessionState = null, // Session state for intelligent compression (SESSION_STATE_ENABLED)
+      orgId = 1, // Multi-tenant org isolation — default to SiteMonkeys
     } = requestData;
 
     const vaultContext = requestData.vaultContext || null;
@@ -1053,6 +1054,7 @@ export class Orchestrator {
         const _trivialUserId = userId;
         const _trivialSessionId = sessionId;
         const _trivialMode = mode;
+        const _trivialOrgId = orgId;
         setImmediate(async () => {
           try {
             if (_trivialPool) {
@@ -1060,9 +1062,9 @@ export class Orchestrator {
                 `INSERT INTO query_cost_log (
                   user_id, session_id, query_type, total_tokens,
                   prompt_tokens, completion_tokens, cost_usd,
-                  model, mode, tokens_saved
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-                [_trivialUserId || null, _trivialSessionId || null, 'trivial_block', 0, 0, 0, 0, 'trivial-filter', _trivialMode || null, 500]
+                  model, mode, tokens_saved, org_id
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+                [_trivialUserId || null, _trivialSessionId || null, 'trivial_block', 0, 0, 0, 0, 'trivial-filter', _trivialMode || null, 500, _trivialOrgId || 1]
               );
             }
           } catch (err) {
@@ -2247,6 +2249,7 @@ export class Orchestrator {
         const _greetSessionId = sessionId;
         const _greetMode = mode;
         const _greetPersonality = personalitySelection.personality;
+        const _greetOrgId = orgId;
         setImmediate(async () => {
           try {
             if (_greetPool) {
@@ -2254,9 +2257,9 @@ export class Orchestrator {
                 `INSERT INTO query_cost_log (
                   user_id, session_id, query_type, total_tokens,
                   prompt_tokens, completion_tokens, cost_usd,
-                  model, personality, mode, tokens_saved
-                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-                [_greetUserId || null, _greetSessionId || null, 'greeting', 0, 0, 0, 0, 'greeting-shortcut', _greetPersonality || null, _greetMode || null, 500]
+                  model, personality, mode, tokens_saved, org_id
+                ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                [_greetUserId || null, _greetSessionId || null, 'greeting', 0, 0, 0, 0, 'greeting-shortcut', _greetPersonality || null, _greetMode || null, 500, _greetOrgId || 1]
               );
             }
           } catch (err) {
@@ -2377,6 +2380,7 @@ export class Orchestrator {
           const _cacheSessionId = sessionId;
           const _cacheMode = mode;
           const _cacheTruthType = phase4Metadata.truth_type;
+          const _cacheOrgId = orgId;
           setImmediate(async () => {
             try {
               if (_cachePool) {
@@ -2384,9 +2388,9 @@ export class Orchestrator {
                   `INSERT INTO query_cost_log (
                     user_id, session_id, query_type, truth_type, total_tokens,
                     prompt_tokens, completion_tokens, cost_usd,
-                    model, mode, tokens_saved
-                  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-                  [_cacheUserId || null, _cacheSessionId || null, 'cache_hit', _cacheTruthType, 0, 0, 0, 0, 'cache', _cacheMode || null, 800]
+                    model, mode, tokens_saved, org_id
+                  ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+                  [_cacheUserId || null, _cacheSessionId || null, 'cache_hit', _cacheTruthType, 0, 0, 0, 0, 'cache', _cacheMode || null, 800, _cacheOrgId || 1]
                 );
               }
             } catch (err) {
@@ -3188,6 +3192,7 @@ export class Orchestrator {
       const _historyDepth = aiResponse?.historyDepth ?? null;
       const _retryCount = aiResponse?.retryCount ?? 0;
       const _computedDegradationTier = _degradationTier;
+      const _orgId = orgId;
       setImmediate(async () => {
         try {
           if (_pool) {
@@ -3200,11 +3205,11 @@ export class Orchestrator {
                 lookup_fired, lookup_tokens, history_depth,
                 model, personality, mode, max_memory_score,
                 lookup_disabled_by_cost, history_reduced_by_cost,
-                degradation_tier, retry_count
+                degradation_tier, retry_count, org_id
               ) VALUES (
                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
                 $11,$12,$13,$14,$15,$16,$17,$18,$19,
-                $20,$21,$22,$23
+                $20,$21,$22,$23,$24
               )`,
               [
                 _userId || null,
@@ -3230,6 +3235,7 @@ export class Orchestrator {
                 _phase4Metadata?.history_reduced_by_cost || false,
                 _computedDegradationTier,
                 _retryCount,
+                _orgId || 1,
               ]
             );
           }
@@ -3520,14 +3526,15 @@ export class Orchestrator {
       const _fallbackSessionId = requestData.sessionId || null;
       const _fallbackMode = requestData.mode || null;
       const _fallbackReason = error?.message || 'unknown';
+      const _fallbackOrgId = requestData.orgId || 1;
       setImmediate(async () => {
         try {
           if (_fallbackPool) {
             await _fallbackPool.query(
               `INSERT INTO query_cost_log (
                 user_id, session_id, query_type, model, cost_usd,
-                total_tokens, mode, degradation_tier, fallback_reason
-              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+                total_tokens, mode, degradation_tier, fallback_reason, org_id
+              ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
               [
                 _fallbackUserId,
                 _fallbackSessionId,
@@ -3538,6 +3545,7 @@ export class Orchestrator {
                 _fallbackMode,
                 'emergency',
                 _fallbackReason,
+                _fallbackOrgId,
               ]
             );
           }
