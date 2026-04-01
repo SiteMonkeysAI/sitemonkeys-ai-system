@@ -189,8 +189,8 @@ export const HIGH_STAKES_DOMAINS = {
     /\b(rights|illegal|criminal|civil)\b/i
   ],
   FINANCIAL: [
-    /\b(invest|investment|stock|bond|portfolio)\b/i,
-    /\b(tax|irs|deduction|credit|filing)\b/i,
+    /\b(investment portfolio|stock portfolio|bond portfolio)\b/i,
+    /\b(tax liability|tax filing|irs filing|tax deduction)\b/i,
     /\b(loan|mortgage|interest rate|credit score)\b/i
   ],
   SAFETY: [
@@ -200,7 +200,7 @@ export const HIGH_STAKES_DOMAINS = {
     /\b(warning|hazard|danger|emergency)\b/i,
     /\b(product recall|safety recall|recall notice|recall alert)\b/i,
     /\b(toxic|poisonous|flammable|explosive)\b/i,
-    /\b(safety|risk|accident|injury)\b/i
+    /\b(life-threatening|overdose|poison|electrocution|hazardous material)\b/i
   ]
 };
 
