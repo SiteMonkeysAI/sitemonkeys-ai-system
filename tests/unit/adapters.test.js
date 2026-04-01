@@ -422,3 +422,170 @@ describe('AD-009: Adapter file structure guards', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// CR-001: news_current_events routes to cheapest summarization-capable adapter
+//         (gpt-4o-mini) when MINI_MODEL_ENABLED=true
+// ---------------------------------------------------------------------------
+
+describe('CR-001: news_current_events — cheapest summarization-capable adapter', () => {
+  beforeEach(() => {
+    registerAdapters({
+      openaiClient:    makeMockOpenAIClient(),
+      anthropicClient: makeMockAnthropicClient(),
+    });
+  });
+
+  it('CR-001a: summarization task with 0.70 threshold selects gpt-4o-mini (cheapest capable OpenAI)', () => {
+    // news_current_events → taskType='summarization', minimumScore=0.70
+    // Excluding anthropic simulates useClaude=false path in orchestrator
+    const adapter = getAdapter({ taskType: 'summarization', minimumScore: 0.70, excludeProviders: ['anthropic'] });
+    assert.ok(adapter, 'adapter must be non-null');
+    assert.strictEqual(adapter.modelId, 'gpt-4o-mini');
+  });
+
+  it('CR-001b: gpt-4o-mini summarization score meets 0.70 threshold', () => {
+    const miniAdapter = new OpenAIAdapter(makeMockOpenAIClient(), 'gpt-4o-mini');
+    const score = miniAdapter.capabilities.taskScores.summarization;
+    assert.ok(score >= 0.70, `gpt-4o-mini summarization score ${score} must be >= 0.70`);
+  });
+
+  it('CR-001c: gpt-4o-mini is cheaper than gpt-4o (registry cost sort)', () => {
+    const miniAdapter = new OpenAIAdapter(makeMockOpenAIClient(), 'gpt-4o-mini');
+    const fullAdapter = new OpenAIAdapter(makeMockOpenAIClient(), 'gpt-4o');
+    const miniCost = (miniAdapter.costPer1kTokens.input + miniAdapter.costPer1kTokens.output) / 2;
+    const fullCost = (fullAdapter.costPer1kTokens.input + fullAdapter.costPer1kTokens.output) / 2;
+    assert.ok(miniCost < fullCost, 'gpt-4o-mini must be cheaper than gpt-4o');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CR-002: complex_analytical routes to gpt-4o — not gpt-4o-mini
+//         because mini scores 0.75 < 0.88 threshold for complex_reasoning
+// ---------------------------------------------------------------------------
+
+describe('CR-002: complex_analytical — adapter with complex_reasoning score >= 0.88', () => {
+  beforeEach(() => {
+    registerAdapters({
+      openaiClient:    makeMockOpenAIClient(),
+      anthropicClient: makeMockAnthropicClient(),
+    });
+  });
+
+  it('CR-002a: complex_reasoning task with 0.88 threshold excludes gpt-4o-mini', () => {
+    const miniAdapter = new OpenAIAdapter(makeMockOpenAIClient(), 'gpt-4o-mini');
+    const score = miniAdapter.capabilities.taskScores.complex_reasoning;
+    assert.ok(score < 0.88, `gpt-4o-mini score ${score} must be below 0.88 threshold`);
+  });
+
+  it('CR-002b: complex_reasoning task with 0.88 threshold returns gpt-4o (lowest eligible OpenAI)', () => {
+    const adapter = getAdapter({ taskType: 'complex_reasoning', minimumScore: 0.88, excludeProviders: ['anthropic'] });
+    assert.ok(adapter, 'adapter must be non-null');
+    assert.strictEqual(adapter.modelId, 'gpt-4o');
+  });
+
+  it('CR-002c: gpt-4o complex_reasoning score meets 0.88 threshold', () => {
+    const fullAdapter = new OpenAIAdapter(makeMockOpenAIClient(), 'gpt-4o');
+    const score = fullAdapter.capabilities.taskScores.complex_reasoning;
+    assert.ok(score >= 0.88, `gpt-4o complex_reasoning score ${score} must be >= 0.88`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CR-003: high_stakes routes to adapter with score >= 0.95
+//         (claude-sonnet is the only registered adapter meeting this threshold)
+// ---------------------------------------------------------------------------
+
+describe('CR-003: high_stakes — adapter with score >= 0.95', () => {
+  beforeEach(() => {
+    registerAdapters({
+      openaiClient:    makeMockOpenAIClient(),
+      anthropicClient: makeMockAnthropicClient(),
+    });
+  });
+
+  it('CR-003a: high_stakes task with 0.95 threshold returns claude-sonnet', () => {
+    // No excludeProviders — high_stakes routing allows Anthropic (useClaude=true path)
+    const adapter = getAdapter({ taskType: 'high_stakes', minimumScore: 0.95 });
+    assert.ok(adapter, 'adapter must be non-null');
+    assert.strictEqual(adapter.modelId, 'claude-sonnet-4-20250514');
+  });
+
+  it('CR-003b: gpt-4o does not meet 0.95 threshold for high_stakes', () => {
+    const fullAdapter = new OpenAIAdapter(makeMockOpenAIClient(), 'gpt-4o');
+    const score = fullAdapter.capabilities.taskScores.high_stakes;
+    assert.ok(score < 0.95, `gpt-4o high_stakes score ${score} must be below 0.95 threshold`);
+  });
+
+  it('CR-003c: claude-sonnet meets 0.95 threshold for high_stakes', () => {
+    const sonnetAdapter = new AnthropicAdapter(makeMockAnthropicClient());
+    const score = sonnetAdapter.capabilities.taskScores.high_stakes;
+    assert.ok(score >= 0.95, `claude-sonnet high_stakes score ${score} must be >= 0.95`);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CR-004: MINI_MODEL_ENABLED=false path — orchestrator must fall back to gpt-4o
+//         Verified via structural check: orchestrator contains the gpt-4o fallback
+//         for the !MINI_MODEL_ENABLED branch
+// ---------------------------------------------------------------------------
+
+describe('CR-004: MINI_MODEL_ENABLED=false — gpt-4o forced for all non-Claude queries', () => {
+  it('CR-004a: orchestrator contains MINI_MODEL_ENABLED gate with gpt-4o fallback', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'orchestrator.js'), 'utf8');
+    assert.ok(
+      src.includes('!MINI_MODEL_ENABLED'),
+      'orchestrator must check MINI_MODEL_ENABLED flag'
+    );
+  });
+
+  it('CR-004b: gpt-4o fallback is present for non-MINI_MODEL_ENABLED path', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'orchestrator.js'), 'utf8');
+    // The fallback block must assign gpt-4o when MINI_MODEL_ENABLED is false
+    assert.ok(
+      src.includes("selectedModel = 'gpt-4o'"),
+      "orchestrator must set selectedModel to 'gpt-4o' when MINI_MODEL_ENABLED is false"
+    );
+  });
+
+  it('CR-004c: registry respects excludeProviders — anthropic excluded when useClaude=false', () => {
+    registerAdapters({
+      openaiClient:    makeMockOpenAIClient(),
+      anthropicClient: makeMockAnthropicClient(),
+    });
+    // Any task type with anthropic excluded must return an OpenAI adapter
+    const adapter = getAdapter({ taskType: 'summarization', minimumScore: 0.70, excludeProviders: ['anthropic'] });
+    assert.strictEqual(adapter.providerId, 'openai');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CR-005: simple_factual routes to cheapest capable adapter (gpt-4o-mini)
+// ---------------------------------------------------------------------------
+
+describe('CR-005: simple_factual — cheapest capable adapter', () => {
+  beforeEach(() => {
+    registerAdapters({
+      openaiClient:    makeMockOpenAIClient(),
+      anthropicClient: makeMockAnthropicClient(),
+    });
+  });
+
+  it('CR-005a: simple_factual task with 0.70 threshold selects gpt-4o-mini', () => {
+    const adapter = getAdapter({ taskType: 'simple_factual', minimumScore: 0.70, excludeProviders: ['anthropic'] });
+    assert.ok(adapter, 'adapter must be non-null');
+    assert.strictEqual(adapter.modelId, 'gpt-4o-mini');
+  });
+
+  it('CR-005b: orchestrator uses getRequiredTaskType and getMinimumScore for routing', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'orchestrator.js'), 'utf8');
+    assert.ok(src.includes('getRequiredTaskType'), 'orchestrator must call getRequiredTaskType');
+    assert.ok(src.includes('getMinimumScore'),     'orchestrator must call getMinimumScore');
+  });
+
+  it('CR-005c: orchestrator passes minimumScore and excludeProviders to getAdapter', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'orchestrator.js'), 'utf8');
+    assert.ok(src.includes('excludeProviders'), 'orchestrator must pass excludeProviders to getAdapter');
+    assert.ok(src.includes('minimumScore'),     'orchestrator must pass minimumScore to getAdapter');
+  });
+});
