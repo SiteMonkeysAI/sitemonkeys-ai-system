@@ -3186,6 +3186,7 @@ export class Orchestrator {
       const _mode = mode;
       const _aiResponse = aiResponse;
       const _historyDepth = aiResponse?.historyDepth ?? null;
+      const _retryCount = aiResponse?.retryCount ?? 0;
       const _computedDegradationTier = _degradationTier;
       setImmediate(async () => {
         try {
@@ -3199,11 +3200,11 @@ export class Orchestrator {
                 lookup_fired, lookup_tokens, history_depth,
                 model, personality, mode, max_memory_score,
                 lookup_disabled_by_cost, history_reduced_by_cost,
-                degradation_tier
+                degradation_tier, retry_count
               ) VALUES (
                 $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
                 $11,$12,$13,$14,$15,$16,$17,$18,$19,
-                $20,$21,$22
+                $20,$21,$22,$23
               )`,
               [
                 _userId || null,
@@ -3228,6 +3229,7 @@ export class Orchestrator {
                 _phase4Metadata?.lookup_disabled_by_cost || false,
                 _phase4Metadata?.history_reduced_by_cost || false,
                 _computedDegradationTier,
+                _retryCount,
               ]
             );
           }
@@ -5325,8 +5327,18 @@ export class Orchestrator {
     let isSafetyCritical = false;
     let capabilityGapEscalated = false;
     let capabilityGapReason = null;
+    let retryCount = 0;
 
     try {
+      // Hard cap on incoming conversation history to bound token cost and O(n) processing.
+      // The AI call further trims to historyDepth (≤5); this cap prevents wasteful
+      // processing of very long client-supplied histories over long sessions.
+      const MAX_HISTORY_HARD_CAP = 10;
+      if (conversationHistory.length > MAX_HISTORY_HARD_CAP) {
+        this.log(`[HISTORY-CAP] Capping conversationHistory from ${conversationHistory.length} to ${MAX_HISTORY_HARD_CAP} turns (hard cap)`);
+        conversationHistory = conversationHistory.slice(-MAX_HISTORY_HARD_CAP);
+      }
+
       // ========== CRITICAL FIX: Check vault/tokens BEFORE confidence ==========
       // Priority order: Vault presence → Token budget → Then confidence
 
@@ -5676,6 +5688,16 @@ export class Orchestrator {
         estimatedMessageTokens +
         estimatedHistoryTokens;
 
+      // Session token growth rate — visible in Railway logs
+      // session_cost_before_usd is the cumulative cost of the session BEFORE this turn.
+      const _sessionCostSoFar = context.sessionId ? costTracker.getSessionCost(context.sessionId) : 0;
+      this.log(
+        `[SESSION-GROWTH] session_id=${context.sessionId || 'none'} ` +
+        `turns_in=${conversationHistory.length} turns_sent=${trimmedHistory.length} ` +
+        `estimated_input_tokens=${estimatedTotalInputTokens} ` +
+        `session_cost_before_usd=${_sessionCostSoFar.toFixed(4)}`
+      );
+
       // ISSUE #787 FIX 2: Pre-flight check must REROUTE to Claude automatically (no user confirmation)
       // If we're using a GPT model and the full payload exceeds its limit, escalate to Claude deterministically
       // ISSUE #790 FIX: This escalation overrides user_declined_claude - payload size is safety-critical
@@ -5738,7 +5760,7 @@ export class Orchestrator {
         this.log(`[COST-DEGRADATION] tier=minimal — routing to gpt-4o-mini (non-high-stakes)`);
       }
 
-      const model = selectedModel;
+      let model = selectedModel;
       attemptedModel = model;
       const modelConfig = MODEL_LIMITS[model];
       const modelLimit = modelConfig.maxContext - modelConfig.reservedOutput;
@@ -5863,16 +5885,58 @@ export class Orchestrator {
 
         const gptAdapterKey = model === 'gpt-4o-mini' ? 'openai-gpt4o-mini' : 'openai-gpt4o';
         const openaiAdapter = getAdapterInstance(gptAdapterKey);
-        const gptResult = await openaiAdapter.call({
-          systemPrompt: effectiveSystemPrompt,
-          messages,
-          maxTokens,
-          temperature: 0.7,
-        });
-
-        response = gptResult.content;
-        inputTokens = gptResult.usage.inputTokens;
-        outputTokens = gptResult.usage.outputTokens;
+        let gptResult;
+        try {
+          gptResult = await openaiAdapter.call({
+            systemPrompt: effectiveSystemPrompt,
+            messages,
+            maxTokens,
+            temperature: 0.7,
+          });
+        } catch (firstCallError) {
+          // Retry on gpt-4o before escalating to Claude.
+          // Handles both: gpt-4o-mini failure (promote to gpt-4o) and gpt-4o transient failure (same-model retry).
+          retryCount++;
+          this.log(`[RETRY] ${model} failed (${firstCallError.message}) — retrying on gpt-4o (retry_count=${retryCount})`);
+          const gpt4oRetryAdapter = getAdapterInstance('openai-gpt4o');
+          try {
+            gptResult = await gpt4oRetryAdapter.call({
+              systemPrompt: effectiveSystemPrompt,
+              messages,
+              maxTokens,
+              temperature: 0.7,
+            });
+            model = 'gpt-4o'; // Update model to reflect which model actually succeeded
+          } catch (gpt4oRetryError) {
+            // gpt-4o also failed — escalate to Claude if available
+            const claudeEscalationAdapter = getAdapterInstance('anthropic-claude-sonnet');
+            if (claudeEscalationAdapter) {
+              retryCount++;
+              this.log(`[RETRY] gpt-4o failed (${gpt4oRetryError.message}) — escalating to Claude (retry_count=${retryCount})`);
+              try {
+                const claudeEscResult = await claudeEscalationAdapter.call({
+                  systemPrompt: effectiveSystemPrompt,
+                  messages,
+                  maxTokens,
+                });
+                response = claudeEscResult.content;
+                inputTokens = claudeEscResult.usage.inputTokens;
+                outputTokens = claudeEscResult.usage.outputTokens;
+                model = 'claude-sonnet-4-20250514';
+                gptResult = null; // signal: response already assigned via Claude escalation
+              } catch (claudeEscError) {
+                throw new Error(`AI retry chain exhausted — all models failed: ${claudeEscError.message}`);
+              }
+            } else {
+              throw new Error(`AI retry chain exhausted — Claude not configured: ${gpt4oRetryError.message}`);
+            }
+          }
+        }
+        if (gptResult) {
+          response = gptResult.content;
+          inputTokens = gptResult.usage.inputTokens;
+          outputTokens = gptResult.usage.outputTokens;
+        }
       }
 
       const cost = this.#calculateCost(model, inputTokens, outputTokens);
@@ -5885,7 +5949,7 @@ export class Orchestrator {
       }
 
       trackApiCall(
-        useClaude ? 'claude' : (mode === 'business_validation' ? 'eli' : 'roxy'),
+        model.startsWith('claude') ? 'claude' : (mode === 'business_validation' ? 'eli' : 'roxy'),
         inputTokens,
         outputTokens,
         context.vault ? (context.vault?.length || 0) / 4 : 0
@@ -5898,6 +5962,7 @@ export class Orchestrator {
         escalated: capabilityGapEscalated || escalatedDueToPayloadSize,
         escalationReason: capabilityGapReason || (escalatedDueToPayloadSize ? 'payload_size' : null),
         historyDepth: historyDepth,
+        retryCount: retryCount,
       };
     } catch (error) {
       this.error("[AI] Routing failed", error);

@@ -43,6 +43,7 @@ export async function createCostLogTable(pool) {
       tokens_saved INTEGER DEFAULT NULL,
       degradation_tier VARCHAR(20) DEFAULT 'normal',
       fallback_reason TEXT DEFAULT NULL,
+      retry_count INTEGER DEFAULT 0,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
@@ -93,6 +94,10 @@ export async function ensureCostLogTable(pool) {
     await pool.query(`
       ALTER TABLE query_cost_log
       ADD COLUMN IF NOT EXISTS fallback_reason TEXT DEFAULT NULL
+    `);
+    await pool.query(`
+      ALTER TABLE query_cost_log
+      ADD COLUMN IF NOT EXISTS retry_count INTEGER DEFAULT 0
     `);
     console.log('[COST-LOG] query_cost_log table and indexes ready');
   } catch (err) {
