@@ -5376,11 +5376,10 @@ export class Orchestrator {
         }
 
         // Business validation mode with high complexity: domain-specific override.
-        // Uses a lower threshold (0.7) than the generic detector (0.8) because
-        // business_validation queries benefit from advanced reasoning at moderate complexity.
-        // requiresExpertise is already handled inside detectRequiredCapabilities().
+        // Threshold raised from 0.7 to 0.8 to match the generic detector and reduce
+        // unnecessary Claude escalations on moderate complexity queries.
         if (!useClaude &&
-            mode === "business_validation" && analysis.complexity > 0.7) {
+            mode === "business_validation" && analysis.complexity > 0.8) {
           useClaude = true;
           capabilityGapEscalated = true;
           capabilityGapReason = capabilityGapReason || `high_complexity:${analysis.complexity.toFixed(2)}`;

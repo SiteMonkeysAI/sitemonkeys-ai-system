@@ -159,11 +159,12 @@ export function detectRequiredCapabilities(
   }
 
   if (!required.hallucination_control) {
-    // hallucination_control patterns are risk signals — two or more domain hits
+    // hallucination_control patterns are risk signals — three or more domain hits
     // (legal, medical, financial, safety) represent a genuine risk-level concern
-    // and can create a requirement independently.
+    // and can create a requirement independently. Threshold raised from 2 to 3 to
+    // avoid false escalations from incidental word co-occurrences (e.g. "specific" + "financial").
     const hallucinationSignals = countPatternSignals(query, 'hallucination_control');
-    if (hallucinationSignals >= 2) {
+    if (hallucinationSignals >= 3) {
       required.hallucination_control = 'high';
     }
   }
