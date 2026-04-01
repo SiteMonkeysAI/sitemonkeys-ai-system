@@ -41,6 +41,8 @@ export async function createCostLogTable(pool) {
       lookup_disabled_by_cost BOOLEAN DEFAULT FALSE,
       history_reduced_by_cost BOOLEAN DEFAULT FALSE,
       tokens_saved INTEGER DEFAULT NULL,
+      degradation_tier VARCHAR(20) DEFAULT 'normal',
+      fallback_reason TEXT DEFAULT NULL,
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
@@ -83,6 +85,14 @@ export async function ensureCostLogTable(pool) {
     await pool.query(`
       ALTER TABLE query_cost_log
       ADD COLUMN IF NOT EXISTS tokens_saved INTEGER DEFAULT NULL
+    `);
+    await pool.query(`
+      ALTER TABLE query_cost_log
+      ADD COLUMN IF NOT EXISTS degradation_tier VARCHAR(20) DEFAULT 'normal'
+    `);
+    await pool.query(`
+      ALTER TABLE query_cost_log
+      ADD COLUMN IF NOT EXISTS fallback_reason TEXT DEFAULT NULL
     `);
     console.log('[COST-LOG] query_cost_log table and indexes ready');
   } catch (err) {
@@ -157,12 +167,44 @@ export async function handleCostSummary(req, res) {
       ORDER BY day ASC
     `);
 
+    // Fallback and degradation counts (7 days)
+    const fallbackStats = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE query_type = 'emergency_fallback') AS fallback_count,
+        COUNT(*) FILTER (WHERE degradation_tier IS NOT NULL AND degradation_tier != 'normal') AS degradation_count
+      FROM query_cost_log
+      WHERE created_at > NOW() - INTERVAL '7 days'
+    `);
+
+    // Long-session aggregates (7 days)
+    const longSessions = await pool.query(`
+      SELECT
+        session_id,
+        COUNT(*) as query_count,
+        ROUND(SUM(cost_usd)::decimal, 6) as total_cost_usd,
+        MAX(degradation_tier) as peak_degradation_tier,
+        MIN(created_at) as started_at,
+        MAX(created_at) as last_activity_at,
+        BOOL_OR(lookup_disabled_by_cost) as approached_ceiling
+      FROM query_cost_log
+      WHERE created_at > NOW() - INTERVAL '7 days'
+        AND session_id IS NOT NULL
+      GROUP BY session_id
+      HAVING COUNT(*) > 10 OR SUM(cost_usd) > 0.50
+      ORDER BY SUM(cost_usd) DESC
+    `);
+
+    const fbRow = fallbackStats.rows[0] || {};
+
     return res.json({
       success: true,
       period: '7 days',
       rows: result.rows,
       model_breakdown: modelBreakdown.rows,
       daily_totals: dailyTotals.rows,
+      fallback_count: parseInt(fbRow.fallback_count || 0, 10),
+      degradation_count: parseInt(fbRow.degradation_count || 0, 10),
+      long_sessions: longSessions.rows,
       generated_at: new Date().toISOString(),
     });
   } catch (err) {
