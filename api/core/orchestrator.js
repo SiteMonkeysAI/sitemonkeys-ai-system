@@ -239,6 +239,36 @@ function getMaxTokens(earlyClassification, phase4Metadata) {
   return 2000;
 }
 
+// Maps a query classification to the capability task type required for adapter selection.
+// high_stakes always demands the highest-capability tier regardless of classification.
+function getRequiredTaskType(classification, highStakes) {
+  if (highStakes) return 'high_stakes';
+  const taskMap = {
+    'simple_factual':       'simple_factual',
+    'simple_short':         'simple_factual',
+    'greeting':             'simple_factual',
+    'news_current_events':  'summarization',
+    'medium_complexity':    'complex_reasoning',
+    'complex_analytical':   'complex_reasoning',
+    'decision_making':      'complex_reasoning',
+    'business_validation':  'complex_reasoning',
+  };
+  return taskMap[classification] || 'complex_reasoning';
+}
+
+// Returns the minimum capability score an adapter must meet for the given task type.
+// Higher thresholds ensure complex and high-stakes queries are not routed to cheap
+// low-capability models.
+function getMinimumScore(taskType) {
+  const thresholds = {
+    'simple_factual':   0.70,
+    'summarization':    0.70,
+    'complex_reasoning': 0.88,
+    'high_stakes':      0.95,
+  };
+  return thresholds[taskType] ?? 0.85;
+}
+
 // Extract a clean "commodity price" search query for commodity quantity calculations.
 // Prevents passing the full verbose message (e.g. "If I have 227 pounds of platinum
 // at today's price what's it worth") to the external lookup API.
@@ -5568,23 +5598,30 @@ export class Orchestrator {
       }
 
       // Update model selection after potential escalation
-      const useMinModel =
-        !useClaude &&
-        MINI_MODEL_ENABLED &&
-        ['simple_factual', 'simple_short'].includes(context.earlyClassification?.classification) &&
-        phase4Metadata?.truth_type === 'PERMANENT' &&
-        !phase4Metadata?.high_stakes?.isHighStakes;
+      const classification = context.earlyClassification?.classification;
+      const highStakes = !!phase4Metadata?.high_stakes?.isHighStakes;
+      const requiredTaskType = getRequiredTaskType(classification, highStakes);
+      const minimumScore = getMinimumScore(requiredTaskType);
 
-      this.log(`[EFFICIENCY] mini_routing_eligible=${useMinModel} mini_routing_enabled=${MINI_MODEL_ENABLED} classification=${context.earlyClassification?.classification} truth_type=${phase4Metadata?.truth_type} high_stakes=${!!phase4Metadata?.high_stakes?.isHighStakes}`);
+      let selectedModel;
+      if (useClaude) {
+        selectedModel = 'claude-sonnet-4-20250514';
+      } else if (!MINI_MODEL_ENABLED) {
+        selectedModel = 'gpt-4o';
+      } else {
+        const selectedAdapter = getAdapter({
+          taskType: requiredTaskType,
+          minimumScore,
+          excludeProviders: ['anthropic'],
+        });
+        selectedModel = selectedAdapter?.modelId ?? 'gpt-4o';
+      }
 
-      const model = useClaude
-        ? "claude-sonnet-4-20250514"
-        : useMinModel
-          ? "gpt-4o-mini"
-          : "gpt-4o";
+      this.log(`[EFFICIENCY] capability_routing=true task_type=${requiredTaskType} min_score=${minimumScore} mini_routing_enabled=${MINI_MODEL_ENABLED} selected_model=${selectedModel} classification=${classification} high_stakes=${highStakes}`);
+
+      const model = selectedModel;
       attemptedModel = model;
-      const modelConfigKey = useClaude ? 'claude-sonnet-4-20250514' : (useMinModel ? 'gpt-4o-mini' : 'gpt-4o');
-      const modelConfig = MODEL_LIMITS[modelConfigKey];
+      const modelConfig = MODEL_LIMITS[model];
       const modelLimit = modelConfig.maxContext - modelConfig.reservedOutput;
 
       // Log final routing decision if it changed due to payload size

@@ -53,20 +53,22 @@ export function getAdapterInstance(key) {
  * Returns the best registered adapter instance for the given task type.
  *
  * Routing logic:
- *   1. Filter registered adapters by minimum task score threshold (0.70)
+ *   1. Filter registered adapters by minimum task score threshold (default 0.70)
  *      for the required task type.
- *   2. Sort by cost ascending (input + output per-1k average).
- *   3. Return cheapest capable adapter.
- *   4. Fall back to the gpt-4o adapter if no adapter meets requirements.
+ *   2. Exclude adapters whose providerId appears in excludeProviders.
+ *   3. Sort by cost ascending (input + output per-1k average).
+ *   4. Return cheapest capable adapter.
+ *   5. Fall back to the gpt-4o adapter if no adapter meets requirements.
  *
- * @param {{ taskType?: string }} requirements
+ * @param {{ taskType?: string, minimumScore?: number, excludeProviders?: string[] }} requirements
  * @returns {import('./BaseAdapter.js').BaseAdapter}
  */
 export function getAdapter(requirements = {}) {
-  const { taskType } = requirements;
-  const MIN_SCORE = 0.70;
+  const { taskType, minimumScore, excludeProviders = [] } = requirements;
+  const MIN_SCORE = minimumScore ?? 0.70;
 
   const candidates = Array.from(_adapterInstances.values()).filter(adapter => {
+    if (excludeProviders.includes(adapter.providerId)) return false;
     if (!taskType) return true;
     const score = adapter.capabilities?.taskScores?.[taskType];
     return score === undefined || score >= MIN_SCORE;

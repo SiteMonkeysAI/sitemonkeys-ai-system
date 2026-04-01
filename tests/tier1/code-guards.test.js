@@ -7778,50 +7778,54 @@ describe('MINI. GPT-4o-mini Routing Foundation', () => {
     );
   });
 
-  it('MINI-002: useMinModel infrastructure is present in orchestrator.js', () => {
+  it('MINI-002: capability-based routing infrastructure is present in orchestrator.js', () => {
     assert.ok(orch, 'MINI-002 FAIL: api/core/orchestrator.js not found');
     assert.ok(
-      orch.includes('useMinModel') &&
       orch.includes('MINI_MODEL_ENABLED') &&
+      orch.includes('getRequiredTaskType') &&
       orch.includes('gpt-4o-mini'),
-      'MINI-002 FAIL: useMinModel routing infrastructure not found. ' +
-      'orchestrator.js must define useMinModel and reference "gpt-4o-mini" in the model selection block.'
+      'MINI-002 FAIL: capability-based routing infrastructure not found. ' +
+      'orchestrator.js must use getRequiredTaskType and reference "gpt-4o-mini" in adapter selection.'
     );
   });
 
-  it('MINI-003: useMinModel is false when MINI_MODEL_ENABLED is false', () => {
+  it('MINI-003: gpt-4o fallback is enforced when MINI_MODEL_ENABLED is false', () => {
     assert.ok(orch, 'MINI-003 FAIL: api/core/orchestrator.js not found');
-    // Verify that MINI_MODEL_ENABLED is part of the useMinModel guard
+    // Verify that MINI_MODEL_ENABLED gates the capability-based selection path
     assert.ok(
       orch.includes('MINI_MODEL_ENABLED') &&
-      orch.includes('useMinModel'),
-      'MINI-003 FAIL: MINI_MODEL_ENABLED must be part of the useMinModel condition. ' +
-      'When the flag is false, all GPT queries must route to gpt-4o.'
+      orch.includes("selectedModel = 'gpt-4o'"),
+      'MINI-003 FAIL: MINI_MODEL_ENABLED must gate capability-based routing. ' +
+      "When the flag is false, all GPT queries must route to gpt-4o via selectedModel = 'gpt-4o'."
     );
   });
 
   it('MINI-004: high_stakes guard prevents mini routing even when flag enabled', () => {
     assert.ok(orch, 'MINI-004 FAIL: api/core/orchestrator.js not found');
-    // The useMinModel expression must include a high_stakes guard
-    const miniStart = orch.indexOf('useMinModel');
-    assert.ok(miniStart !== -1, 'MINI-004 FAIL: useMinModel not found in orchestrator.js');
-    const miniBlock = orch.slice(miniStart, miniStart + 400);
+    // getRequiredTaskType must handle highStakes to force 'high_stakes' task type
+    // which has a 0.95 minimum score threshold that gpt-4o-mini cannot meet
+    const routingStart = orch.indexOf('getRequiredTaskType');
+    assert.ok(routingStart !== -1, 'MINI-004 FAIL: getRequiredTaskType not found in orchestrator.js');
+    const routingBlock = orch.slice(routingStart, routingStart + 600);
     assert.ok(
-      miniBlock.includes('isHighStakes') || miniBlock.includes('high_stakes'),
-      'MINI-004 FAIL: useMinModel must include a !isHighStakes guard. ' +
-      'High-stakes queries must always use the full gpt-4o or Claude model.'
+      routingBlock.includes('highStakes') || routingBlock.includes('high_stakes'),
+      'MINI-004 FAIL: getRequiredTaskType must handle highStakes. ' +
+      'High-stakes queries must always route to a high-capability model.'
     );
   });
 
-  it('MINI-005: Claude escalation takes priority over mini routing', () => {
+  it('MINI-005: Claude escalation takes priority over capability-based routing', () => {
     assert.ok(orch, 'MINI-005 FAIL: api/core/orchestrator.js not found');
-    const miniStart = orch.indexOf('useMinModel');
-    assert.ok(miniStart !== -1, 'MINI-005 FAIL: useMinModel not found in orchestrator.js');
-    const miniBlock = orch.slice(miniStart, miniStart + 400);
+    const routingStart = orch.indexOf('getRequiredTaskType');
+    assert.ok(routingStart !== -1, 'MINI-005 FAIL: getRequiredTaskType not found in orchestrator.js');
+    // The selectedModel assignment block must check useClaude first
+    const modelStart = orch.indexOf('selectedModel');
+    assert.ok(modelStart !== -1, 'MINI-005 FAIL: selectedModel not found in orchestrator.js');
+    const modelBlock = orch.slice(modelStart, modelStart + 300);
     assert.ok(
-      miniBlock.includes('!useClaude'),
-      'MINI-005 FAIL: useMinModel must include !useClaude guard. ' +
-      'Claude escalation must always take priority over mini routing.'
+      modelBlock.includes('useClaude'),
+      'MINI-005 FAIL: Claude escalation (useClaude) must take priority over capability-based routing. ' +
+      'Claude is checked first in the selectedModel assignment.'
     );
   });
 
