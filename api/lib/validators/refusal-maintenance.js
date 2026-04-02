@@ -157,22 +157,26 @@ class RefusalMaintenanceValidator {
    * Extract the reason for refusal from response
    */
   #extractRefusalReason(response) {
+    // Limit input length to prevent ReDoS on user-influenced content
+    const safeResponse = typeof response === 'string' && response.length > 10000
+      ? response.substring(0, 10000)
+      : response;
     // Try to extract explanation after refusal
     const reasonPatterns = [
-      /(?:because|as|since)\s+([^.]+\.)/, // "because X."
-      /I maintain my principles[^.]*\.([^.]+\.)/, // After principle statement
-      /I care too much[^.]*\.([^.]+\.)/ // After care statement
+      /(?:because|as|since)\s+([^.\n]{1,200}\.)/, // "because X."
+      /I maintain my principles[^.]{0,100}\.([^.\n]{1,200}\.)/, // After principle statement
+      /I care too much[^.]{0,100}\.([^.\n]{1,200}\.)/ // After care statement
     ];
     
     for (const pattern of reasonPatterns) {
-      const match = response.match(pattern);
+      const match = safeResponse.match(pattern);
       if (match) {
         return match[1].trim();
       }
     }
     
     // Fallback: use first sentence
-    const firstSentence = response.split(/[.!?]/)[0];
+    const firstSentence = safeResponse.split(/[.!?]/)[0];
     return firstSentence.trim();
   }
 

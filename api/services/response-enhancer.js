@@ -170,7 +170,8 @@ export function improveExamples(response) {
     improved = improved.replace(pattern, replacement);
   }
 
-  // Clean up double spaces and punctuation
+  // Clean up double spaces and punctuation (limit length to prevent ReDoS)
+  if (improved.length > 20000) improved = improved.substring(0, 20000);
   improved = improved.replace(/\s+/g, ' ');
   improved = improved.replace(/\s+([.,!?])/g, '$1');
 
