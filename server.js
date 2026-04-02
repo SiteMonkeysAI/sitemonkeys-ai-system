@@ -69,6 +69,7 @@ import {
   handleGetOrg,
 } from "./api/admin/organizations.js";
 import { handleClassifierTest } from "./api/routes/classifier-test.js";
+import evalRoutes from "./api/routes/eval.js";
 import { handleDeleteMemories } from "./api/admin/delete-memories.js";
 import rateLimit from "express-rate-limit";
 // ========== SEMANTIC INTEGRATION ==========
@@ -1316,6 +1317,9 @@ app.get('/api/admin/cost-summary', handleCostSummary);
 
 // Classifier validation test endpoint — lightweight, no AI generation
 app.post('/api/admin/classifier-test', handleClassifierTest);
+
+// Eval routes — temporary case context for enterprise evaluation testing
+app.use('/api/eval', evalRoutes);
 
 // Admin endpoint to delete specific memories by ID (requires user_id + memory_ids)
 app.delete('/api/admin/memories', handleDeleteMemories);

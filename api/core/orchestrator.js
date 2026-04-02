@@ -2861,7 +2861,9 @@ export class Orchestrator {
             // Truncating memory recall responses cuts off data the user explicitly asked for.
             else if (classification.classification === 'simple_factual' && !context.memory) {
               // Extract first sentence or up to maxLength
-              const sentences = personalityResponse.response.match(/[^.!?]+[.!?]+/g) || [personalityResponse.response];
+              // Limit input length to prevent ReDoS on unbounded response text
+              const boundedResponseText = personalityResponse.response.length > 10000 ? personalityResponse.response.substring(0, 10000) : personalityResponse.response;
+              const sentences = boundedResponseText.match(/[^.!?]+[.!?]+/g) || [boundedResponseText];
               const firstSentence = sentences[0].trim();
               if (firstSentence.length <= maxLength) {
                 personalityResponse.response = firstSentence;
@@ -2909,7 +2911,9 @@ export class Orchestrator {
           for (const constraint of formatConstraints) {
             if (constraint.pattern.test(message)) {
               if (constraint.maxSentences) {
-                const sentences = personalityResponse.response.match(/[^.!?]+[.!?]+/g) || [personalityResponse.response];
+                // Limit input length to prevent ReDoS on unbounded response text
+                const boundedResponseText = personalityResponse.response.length > 10000 ? personalityResponse.response.substring(0, 10000) : personalityResponse.response;
+                const sentences = boundedResponseText.match(/[^.!?]+[.!?]+/g) || [boundedResponseText];
                 if (sentences.length > constraint.maxSentences) {
                   personalityResponse.response = sentences.slice(0, constraint.maxSentences).join(' ').trim();
                   responseIntelligence.applied = true;
