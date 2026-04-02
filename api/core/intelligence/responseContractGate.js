@@ -68,11 +68,11 @@ const FALSE_CONTINUITY_PATTERNS = [
 
 // ENGAGEMENT BAIT ENDINGS (Issue #435 - strip for simple/factual queries)
 const ENGAGEMENT_BAIT_ENDINGS = [
-  /\n*Is there anything else (you'?d like to know|I can help you with|you need)\??\s*$/gi,
-  /\n*Would you like (to know more|me to explain|further details)\??\s*$/gi,
-  /\n*Do you (have|want) (other|any|more) questions\??\s*$/gi,
-  /\n*Should I explain (further|more|this)\??\s*$/gi,
-  /\n*Let me know if you (need|want|would like) (anything else|more information|help with anything)\!?\s*$/gi,
+  /\n{0,5}Is there anything else (you'?d like to know|I can help you with|you need)\??\s*$/gi,
+  /\n{0,5}Would you like (to know more|me to explain|further details)\??\s*$/gi,
+  /\n{0,5}Do you (have|want) (other|any|more) questions\??\s*$/gi,
+  /\n{0,5}Should I explain (further|more|this)\??\s*$/gi,
+  /\n{0,5}Let me know if you (need|want|would like) (anything else|more information|help with anything)\!?\s*$/gi,
 ];
 
 // HYGIENE BAD: False claims and theater phrases (ALWAYS strip)
@@ -312,6 +312,8 @@ function enforceResponseContract(response, query, phase4Metadata = {}, documentM
                        queryClassification?.classification === 'greeting';
 
   if (isSimpleFact) {
+    // Limit input length to prevent ReDoS on user-influenced content
+    if (cleanedResponse.length > 20000) cleanedResponse = cleanedResponse.substring(0, 20000);
     for (const pattern of ENGAGEMENT_BAIT_ENDINGS) {
       const matches = cleanedResponse.match(pattern);
       if (matches) {
