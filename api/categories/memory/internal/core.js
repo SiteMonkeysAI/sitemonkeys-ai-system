@@ -58,8 +58,8 @@ class CoreSystem {
         throw new Error("DATABASE_URL environment variable not found");
       }
 
-      // Connection Pool Management with specified configuration
-      this.pool = new Pool({
+      // Shared pool configuration — used for initial creation and keep-alive reconnect
+      this._poolConfig = {
         connectionString: process.env.DATABASE_URL,
         ssl:
           process.env.NODE_ENV === "production"
@@ -69,7 +69,10 @@ class CoreSystem {
         idleTimeoutMillis: 60000, // Doubled to 60s
         connectionTimeoutMillis: 15000, // Increased from 2s
         allowExitOnIdle: true, // Clean up idle connections
-      });
+      };
+
+      // Connection Pool Management with specified configuration
+      this.pool = new Pool(this._poolConfig);
       // Alias for external modules expecting `db` instead of `pool`
       // Added for intelligent-storage compatibility
       this.db = this.pool;
@@ -91,8 +94,9 @@ class CoreSystem {
           this.logger.error("[DB] Keep-alive failed:", e);
           this.logger.warn("[DB] Attempting to reconnect...");
           await this.pool.end();
-          this.pool = new Pool({ connectionString: process.env.DATABASE_URL });
+          this.pool = new Pool(this._poolConfig); // Reconnect with full config (preserves max:30)
           this.db = this.pool; // Re-assign alias after reconnect
+          this.logger.info(`[DB] Reconnected — pool max=${this._poolConfig.max}`);
         }
       }, 30000);
 

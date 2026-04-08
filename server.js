@@ -445,7 +445,7 @@ app.get("/api/run-tests", async (req, res) => {
 // SECURITY: Input validation and sanitization
 const chatRateLimit = rateLimit({
   windowMs: 60 * 1000,        // 1 minute window
-  max: 20,                     // 20 requests per minute per IP
+  max: 100,                    // 100 requests per minute per IP (raised from 20 to support concurrent load)
   standardHeaders: true,
   legacyHeaders: false,
   message: {

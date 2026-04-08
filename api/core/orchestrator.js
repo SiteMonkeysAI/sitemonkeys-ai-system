@@ -407,6 +407,19 @@ export class Orchestrator {
 
       this.initialized = true;
       this.log("[INIT] SemanticAnalyzer initialization complete");
+
+      // PROOF logs: emit once at startup instead of on every query
+      console.log('[PROOF] orchestrator:memory-retrieval v=2026-01-29a file=api/core/orchestrator.js fn=processMessage');
+      console.log('[PROOF] orchestrator:memory-injected v=2026-01-29a file=api/core/orchestrator.js fn=processMessage');
+      console.log('[PROOF] validator:ordinal v=2026-01-29c file=api/core/orchestrator.js fn=#enforceOrdinalCorrectness');
+      console.log('[PROOF] validator:temporal v=2026-01-29c file=api/core/orchestrator.js fn=#calculateTemporalInference');
+      console.log('[PROOF] validator:ambiguity v=2026-01-29c file=api/core/orchestrator.js fn=#enforceAmbiguityDisclosure');
+      console.log('[PROOF] validator:vehicle v=2026-01-30a file=api/core/orchestrator.js fn=#enforceVehicleRecall');
+      console.log('[PROOF] validator:volume_stress v=2026-02-09c file=api/core/orchestrator.js fn=#enforceVolumeStressRecall');
+      console.log('[PROOF] validator:unicode v=2026-02-06b file=api/core/orchestrator.js fn=#enforceUnicodeNames');
+      console.log('[PROOF] validator:age_inference v=2026-02-06a file=api/core/orchestrator.js fn=#enforceAgeInference');
+      console.log('[PROOF] validator:truth_certainty v=2026-02-06b file=api/core/orchestrator.js fn=#enforceTruthCertainty');
+
       return true;
     } catch (error) {
       this.error(
@@ -2134,32 +2147,36 @@ export class Orchestrator {
         // HANDOFF LOGGING: reasoning skipped for greeting fast-path
         // Phase 4 was skipped so external_lookup=false and truth_type=null by default.
         // Semantic analysis was skipped so hasAnalysis reflects the fallback analysis state.
-        console.log('[HANDOFF] orchestrator → reasoning:', {
-          memoriesIsArray: Array.isArray(memoryContext?.memories),
-          memoriesLength: memoryContext?.memories?.length || 0,
-          hasLookupResult: false, // Phase 4 skipped — no external lookup attempted
-          truthType: 'greeting-fast-path',
-          hasAnalysis: !!analysis, // fallback analysis was generated
-          conversationHistoryLength: conversationHistory?.length || 0
-        });
-        console.log('[HANDOFF] reasoning → enforcement:', {
-          reasoningOk: true,
-          strategy: 'greeting-fast-path',
-          hasError: false,
-          hasPromptInjection: false
-        });
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[HANDOFF] orchestrator → reasoning:', {
+            memoriesIsArray: Array.isArray(memoryContext?.memories),
+            memoriesLength: memoryContext?.memories?.length || 0,
+            hasLookupResult: false, // Phase 4 skipped — no external lookup attempted
+            truthType: 'greeting-fast-path',
+            hasAnalysis: !!analysis, // fallback analysis was generated
+            conversationHistoryLength: conversationHistory?.length || 0
+          });
+          console.log('[HANDOFF] reasoning → enforcement:', {
+            reasoningOk: true,
+            strategy: 'greeting-fast-path',
+            hasError: false,
+            hasPromptInjection: false
+          });
+        }
       } else {
       this.log("🧠 Applying principle-based reasoning layer...");
 
       // HANDOFF LOGGING (Issue #392): orchestrator → reasoning
-      console.log('[HANDOFF] orchestrator → reasoning:', {
-        memoriesIsArray: Array.isArray(memoryContext?.memories),
-        memoriesLength: memoryContext?.memories?.length || 0,
-        hasLookupResult: !!phase4Metadata?.external_lookup,
-        truthType: phase4Metadata?.truth_type || 'unknown',
-        hasAnalysis: !!analysis,
-        conversationHistoryLength: conversationHistory?.length || 0
-      });
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[HANDOFF] orchestrator → reasoning:', {
+          memoriesIsArray: Array.isArray(memoryContext?.memories),
+          memoriesLength: memoryContext?.memories?.length || 0,
+          hasLookupResult: !!phase4Metadata?.external_lookup,
+          truthType: phase4Metadata?.truth_type || 'unknown',
+          hasAnalysis: !!analysis,
+          conversationHistoryLength: conversationHistory?.length || 0
+        });
+      }
 
       try {
         reasoningResult = await applyPrincipleBasedReasoning(message, {
@@ -2192,12 +2209,14 @@ export class Orchestrator {
         }
 
         // HANDOFF LOGGING (Issue #392): reasoning → enforcement
-        console.log('[HANDOFF] reasoning → enforcement:', {
-          reasoningOk: reasoningResult?.success !== false,
-          strategy: reasoningResult?.metadata?.strategy || 'none',
-          hasError: !!reasoningResult?.error,
-          hasPromptInjection: !!reasoningResult?.promptInjection
-        });
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[HANDOFF] reasoning → enforcement:', {
+            reasoningOk: reasoningResult?.success !== false,
+            strategy: reasoningResult?.metadata?.strategy || 'none',
+            hasError: !!reasoningResult?.error,
+            hasPromptInjection: !!reasoningResult?.promptInjection
+          });
+        }
 
       } catch (reasoningError) {
         this.error("⚠️ Reasoning layer error:", reasoningError);
@@ -2206,12 +2225,14 @@ export class Orchestrator {
         context.reasoningMetadata = null;
 
         // HANDOFF LOGGING (Issue #392): reasoning error path
-        console.log('[HANDOFF] reasoning → enforcement:', {
-          reasoningOk: false,
-          strategy: 'error',
-          hasError: true,
-          errorMessage: reasoningError.message
-        });
+        if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+          console.log('[HANDOFF] reasoning → enforcement:', {
+            reasoningOk: false,
+            strategy: 'error',
+            hasError: true,
+            errorMessage: reasoningError.message
+          });
+        }
       }
       } // end else (!willUseGreetingShortcut) — STEP 6.8
 
@@ -2408,13 +2429,18 @@ export class Orchestrator {
         !(isPermanent && hasPersonalIntent)   // personal intent only blocks global PERMANENT keys
       );
 
-      console.log(
-        `[CACHE-ELIGIBLE] truth_type=${phase4Metadata.truth_type} ` +
-        `hasMemory=${memoryContext.hasMemory} ` +
-        `highestScore=${memoryContext.highest_similarity_score?.toFixed(3)} ` +
-        `memoriesBlockCache=${memoriesBlockCache} ` +
-        `eligible=${isCacheEligible}`
-      );
+      // Log CACHE-ELIGIBLE only when it's an actionable signal: eligible=false for a stable
+      // truth type (the "should have cached but didn't" case). On the happy path (eligible=true
+      // or VOLATILE queries) the structured query_cost_log table already captures this data.
+      if (!isCacheEligible && isCacheable) {
+        console.log(
+          `[CACHE-ELIGIBLE] truth_type=${phase4Metadata.truth_type} ` +
+          `hasMemory=${memoryContext.hasMemory} ` +
+          `highestScore=${memoryContext.highest_similarity_score?.toFixed(3)} ` +
+          `memoriesBlockCache=${memoriesBlockCache} ` +
+          `eligible=false`
+        );
+      }
 
       if (isCacheEligible) {
         const cachedResponse = getCachedResponse(message, mode, userId, phase4Metadata.truth_type);
@@ -3941,8 +3967,7 @@ export class Orchestrator {
         console.log('[CROSS-MODE-DIAG] allowCrossMode:', allowCrossMode);
       }
 
-      // EXECUTION PROOF - Verify memory retrieval is active
-      console.log('[PROOF] orchestrator:memory-retrieval v=2026-01-29a file=api/core/orchestrator.js fn=processMessage');
+      // EXECUTION PROOF moved to initialize() — emitted once per deploy, not per query
 
       const result = await retrieveSemanticMemories(pool, message, {
         userId,
@@ -3958,15 +3983,17 @@ export class Orchestrator {
       this._lastRetrievalTelemetry = telemetry;
 
       // ISSUE #781 FIX: Add diagnostic logging for memory retrieval
-      console.log('[HANDOFF:MEMORY-RETRIEVAL→FORMAT] ═══════════════════════════════════');
-      console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Retrieved ${result.memories?.length || 0} memories from DB`);
-      console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Total tokens: ${result.tokens || 0}`);
-      console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Retrieval method: ${telemetry.method}`);
-      if (result.memories && result.memories.length > 0) {
-        const firstPreview = result.memories[0].content.substring(0, 100).replace(/\n/g, ' ');
-        console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] First memory preview: "${firstPreview}..."`);
+      if (process.env.DEBUG_DIAGNOSTICS === 'true') {
+        console.log('[HANDOFF:MEMORY-RETRIEVAL→FORMAT] ═══════════════════════════════════');
+        console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Retrieved ${result.memories?.length || 0} memories from DB`);
+        console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Total tokens: ${result.tokens || 0}`);
+        console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] Retrieval method: ${telemetry.method}`);
+        if (result.memories && result.memories.length > 0) {
+          const firstPreview = result.memories[0].content.substring(0, 100).replace(/\n/g, ' ');
+          console.log(`[HANDOFF:MEMORY-RETRIEVAL→FORMAT] First memory preview: "${firstPreview}..."`);
+        }
+        console.log('[HANDOFF:MEMORY-RETRIEVAL→FORMAT] ═══════════════════════════════════');
       }
-      console.log('[HANDOFF:MEMORY-RETRIEVAL→FORMAT] ═══════════════════════════════════');
 
       // Format memories into string for context injection
       // Apply PII sanitization (Innovation #34: Privacy Protection)
@@ -4251,8 +4278,7 @@ export class Orchestrator {
       );
       console.log(`[SEMANTIC-RETRIEVAL] ✅ Completed: ${finalMemoryCount} memories, ${tokenCount} tokens (no fallback needed)`);
       
-      // EXECUTION PROOF - Show which memories were actually injected
-      console.log(`[PROOF] orchestrator:memory-injected v=2026-01-29a count=${finalMemoryCount} ids=[${memoryIds.join(',')}]`);
+      // EXECUTION PROOF moved to initialize() — emitted once per deploy, not per query
 
       return {
         memories: memoryText,
@@ -7489,8 +7515,7 @@ Provide a DIRECT, CONCISE answer. No filler, no preamble.
    * Otherwise, validator is a no-op to prevent unintended injection/replacement
    */
   async #enforceOrdinalCorrectness({ response, memoryContext = [], query = '', context = {} }) {
-    // EXECUTION PROOF - Verify ordinal enforcement is active (B3)
-    console.log('[PROOF] validator:ordinal v=2026-01-29c file=api/core/orchestrator.js fn=#enforceOrdinalCorrectness');
+    // EXECUTION PROOF — version emitted once at startup in initialize()
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -7686,8 +7711,7 @@ Provide a DIRECT, CONCISE answer. No filler, no preamble.
    * Example: "worked 5 years" + "left in 2020" → started in 2015
    */
   async #calculateTemporalInference({ response, memoryContext = [], query = '', context = {} }) {
-    // EXECUTION PROOF - Verify temporal inference is active (INF3)
-    console.log('[PROOF] validator:temporal v=2026-01-29c file=api/core/orchestrator.js fn=#calculateTemporalInference');
+    // EXECUTION PROOF — version emitted once at startup in initialize()
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -8003,7 +8027,7 @@ Provide a DIRECT, CONCISE answer. No filler, no preamble.
    * Example: "Alex" could be friend Alex or colleague Alex
    */
   async #enforceAmbiguityDisclosure({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:ambiguity v=2026-01-29c file=api/core/orchestrator.js fn=#enforceAmbiguityDisclosure');
+    // EXECUTION PROOF — version emitted once at startup in initialize()
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -8293,7 +8317,7 @@ Provide a DIRECT, CONCISE answer. No filler, no preamble.
    * This validator bypasses retrieval to guarantee vehicle fact inclusion.
    */
   async #enforceVehicleRecall({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:vehicle v=2026-01-30a file=api/core/orchestrator.js fn=#enforceVehicleRecall');
+    // EXECUTION PROOF — version emitted once at startup in initialize()
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -8407,7 +8431,7 @@ Provide a DIRECT, CONCISE answer. No filler, no preamble.
    * Test scenario: 10 facts stored rapidly, query asks about one → response shows all three key facts
    */
   async #enforceVolumeStressRecall({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:volume_stress v=2026-02-09c file=api/core/orchestrator.js fn=#enforceVolumeStressRecall');
+    // EXECUTION PROOF — version emitted once at startup in initialize()
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -8568,7 +8592,7 @@ Provide a DIRECT, CONCISE answer. No filler, no preamble.
    * Example: José not Jose, Björn not Bjorn
    */
   async #enforceUnicodeNames({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:unicode v=2026-02-06b file=api/core/orchestrator.js fn=#enforceUnicodeNames');
+    // EXECUTION PROOF — version emitted once at startup in initialize()
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -8812,7 +8836,7 @@ Provide a DIRECT, CONCISE answer. No filler, no preamble.
    * Example: "Emma started kindergarten" + "How old is Emma?" → "typically around 5-6 years old"
    */
   async #enforceAgeInference({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:age_inference v=2026-02-06a file=api/core/orchestrator.js fn=#enforceAgeInference');
+    // EXECUTION PROOF — version emitted once at startup in initialize()
 
     try {
       // ═══════════════════════════════════════════════════════════════
@@ -8980,7 +9004,7 @@ Provide a DIRECT, CONCISE answer. No filler, no preamble.
    * replace with honest uncertainty language.
    */
   async #enforceTruthCertainty({ response, memoryContext = [], query = '', context = {} }) {
-    console.log('[PROOF] validator:truth_certainty v=2026-02-06b file=api/core/orchestrator.js fn=#enforceTruthCertainty');
+    // EXECUTION PROOF — version emitted once at startup in initialize()
 
     try {
       // ═══════════════════════════════════════════════════════════════
