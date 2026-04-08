@@ -4795,7 +4795,10 @@ describe('SI. Selective Context Injection — History Depth and Memory Fallback'
     );
 
     // trimmedHistory must be defined before it is used in the estimate
-    const trimmedHistoryDefIdx = orch.indexOf('const trimmedHistory = conversationHistory.slice(-historyDepth)');
+    const trimmedHistoryDefIdx = Math.max(
+      orch.indexOf('const trimmedHistory = conversationHistory.slice(-historyDepth)'),
+      orch.indexOf('let trimmedHistory = conversationHistory.slice(-historyDepth)')
+    );
     const estimateIdx = orch.indexOf('trimmedHistory.reduce(');
     assert.ok(
       trimmedHistoryDefIdx !== -1 && estimateIdx !== -1 && trimmedHistoryDefIdx < estimateIdx,
