@@ -6512,40 +6512,42 @@ describe('MT. Dynamic max_tokens — Response Truncation Fix', () => {
     );
   });
 
-  it('MT-002: complex_analytical query returns max_tokens 3000 from getMaxTokens', () => {
+  it('MT-002: medium_complexity query returns max_tokens 1200 from getMaxTokens', () => {
     assert.ok(orch, 'MT-002 FAIL: api/core/orchestrator.js not found');
     const fnStart = orch.indexOf('function getMaxTokens(');
     assert.ok(fnStart !== -1, 'MT-002 FAIL: getMaxTokens not found');
     const fnEnd = orch.indexOf('\n}', fnStart);
     const fnBody = orch.slice(fnStart, fnEnd + 2);
     assert.ok(
-      fnBody.includes('complex_analytical') && fnBody.includes('3000'),
-      'MT-002 FAIL: getMaxTokens must return 3000 for complex_analytical classification.'
+      fnBody.includes('medium_complexity') && fnBody.includes('1200'),
+      'MT-002 FAIL: getMaxTokens must return 1200 for medium_complexity classification. ' +
+      'Real max observed: 534; 1200 provides a 2.25x safety buffer.'
     );
   });
 
-  it('MT-003: decision_making query returns max_tokens 3000 from getMaxTokens', () => {
+  it('MT-003: decision_making query returns max_tokens 800 from getMaxTokens', () => {
     assert.ok(orch, 'MT-003 FAIL: api/core/orchestrator.js not found');
     const fnStart = orch.indexOf('function getMaxTokens(');
     assert.ok(fnStart !== -1, 'MT-003 FAIL: getMaxTokens not found');
     const fnEnd = orch.indexOf('\n}', fnStart);
     const fnBody = orch.slice(fnStart, fnEnd + 2);
     assert.ok(
-      fnBody.includes('decision_making') && fnBody.includes('3000'),
-      'MT-003 FAIL: getMaxTokens must return 3000 for decision_making classification.'
+      fnBody.includes('decision_making') && fnBody.includes('800'),
+      'MT-003 FAIL: getMaxTokens must return 800 for decision_making classification. ' +
+      'Real max observed: 341; 800 provides a 2.3x safety buffer.'
     );
   });
 
-  it('MT-004: standard query default is max_tokens 2000', () => {
+  it('MT-004: high_stakes query still returns max_tokens 4000 (unchanged)', () => {
     assert.ok(orch, 'MT-004 FAIL: api/core/orchestrator.js not found');
     const fnStart = orch.indexOf('function getMaxTokens(');
     assert.ok(fnStart !== -1, 'MT-004 FAIL: getMaxTokens not found');
     const fnEnd = orch.indexOf('\n}', fnStart);
     const fnBody = orch.slice(fnStart, fnEnd + 2);
     assert.ok(
-      fnBody.includes('return 2000'),
-      'MT-004 FAIL: getMaxTokens must return 2000 as the default for standard queries. ' +
-      'Greeting and simple queries must not increase token budget.'
+      fnBody.includes('isHighStakes') && fnBody.includes('4000'),
+      'MT-004 FAIL: getMaxTokens must still return 4000 for high_stakes queries. ' +
+      'Medical, legal, and safety-critical queries must never be truncated.'
     );
   });
 
@@ -7567,14 +7569,14 @@ describe('DYN. Dynamic max_tokens — Extended Classification Coverage', () => {
     );
   });
 
-  it('DYN-002: complex_analytical classification returns max_tokens 3000 (unchanged)', () => {
+  it('DYN-002: complex_analytical classification returns max_tokens 2000 (right-sized)', () => {
     assert.ok(orch, 'DYN-002 FAIL: api/core/orchestrator.js not found');
     const fnBody = getMaxTokensFnBody(orch);
     assert.ok(fnBody, 'DYN-002 FAIL: getMaxTokens function not found');
     assert.ok(
-      fnBody.includes("'complex_analytical'") && fnBody.includes('3000'),
-      'DYN-002 FAIL: getMaxTokens must return 3000 for complex_analytical. ' +
-      'Complex analytical queries need thorough response space.'
+      fnBody.includes("'complex_analytical'") && fnBody.includes('2000'),
+      'DYN-002 FAIL: getMaxTokens must return 2000 for complex_analytical. ' +
+      'Right-sized from 3000 with conservative reduction pending real usage data.'
     );
   });
 
@@ -7611,36 +7613,36 @@ describe('DYN. Dynamic max_tokens — Extended Classification Coverage', () => {
     );
   });
 
-  it('DYN-006: medium_complexity classification returns max_tokens 1500', () => {
+  it('DYN-006: medium_complexity classification returns max_tokens 1200 (right-sized)', () => {
     assert.ok(orch, 'DYN-006 FAIL: api/core/orchestrator.js not found');
     const fnBody = getMaxTokensFnBody(orch);
     assert.ok(fnBody, 'DYN-006 FAIL: getMaxTokens function not found');
     assert.ok(
-      fnBody.includes("'medium_complexity'") && fnBody.includes('1500'),
-      'DYN-006 FAIL: getMaxTokens must return 1500 for medium_complexity. ' +
-      'Medium complexity queries need a moderate output budget, not the full 2000.'
+      fnBody.includes("'medium_complexity'") && fnBody.includes('1200'),
+      'DYN-006 FAIL: getMaxTokens must return 1200 for medium_complexity. ' +
+      'Real max observed: 534; 1200 provides a 2.25x safety buffer.'
     );
   });
 
-  it('DYN-007: news_current_events classification returns max_tokens 1500', () => {
+  it('DYN-007: news_current_events classification returns max_tokens 1000 (right-sized)', () => {
     assert.ok(orch, 'DYN-007 FAIL: api/core/orchestrator.js not found');
     const fnBody = getMaxTokensFnBody(orch);
     assert.ok(fnBody, 'DYN-007 FAIL: getMaxTokens function not found');
     assert.ok(
-      fnBody.includes("'news_current_events'") && fnBody.includes('1500'),
-      'DYN-007 FAIL: getMaxTokens must return 1500 for news_current_events. ' +
-      'News queries should lead with the key fact — 1500 tokens is sufficient.'
+      fnBody.includes("'news_current_events'") && fnBody.includes('1000'),
+      'DYN-007 FAIL: getMaxTokens must return 1000 for news_current_events. ' +
+      'News queries should lead with the key fact — 1000 tokens is sufficient.'
     );
   });
 
-  it('DYN-008: default (unclassified) query still returns max_tokens 2000', () => {
+  it('DYN-008: default (unclassified) query returns max_tokens 1500 (right-sized)', () => {
     assert.ok(orch, 'DYN-008 FAIL: api/core/orchestrator.js not found');
     const fnBody = getMaxTokensFnBody(orch);
     assert.ok(fnBody, 'DYN-008 FAIL: getMaxTokens function not found');
     assert.ok(
-      fnBody.includes('return 2000'),
-      'DYN-008 FAIL: getMaxTokens must return 2000 as the safe default. ' +
-      'Queries that cannot be classified should not have output truncated below the original limit.'
+      fnBody.includes('return 1500'),
+      'DYN-008 FAIL: getMaxTokens must return 1500 as the safe default. ' +
+      'Queries that cannot be classified should not reserve more tokens than needed.'
     );
   });
 

@@ -219,14 +219,16 @@ function getMaxTokens(earlyClassification, phase4Metadata) {
   if (phase4Metadata?.high_stakes?.isHighStakes) return 4000;
 
   // Complex analytical queries need room for thorough analysis
-  if (earlyClassification?.classification === 'complex_analytical') return 3000;
+  // Right-sized from 3000: no real data yet, conservative reduction with safety margin
+  if (earlyClassification?.classification === 'complex_analytical') return 2000;
 
-  // Decision making queries need room for complete comparison
-  if (earlyClassification?.classification === 'decision_making') return 3000;
+  // Decision making queries — real max observed: 341, new limit is 2.3x buffer
+  if (earlyClassification?.classification === 'decision_making') return 800;
 
-  // Medium complexity and current events — moderate output budget
-  if (earlyClassification?.classification === 'medium_complexity') return 1500;
-  if (earlyClassification?.classification === 'news_current_events') return 1500;
+  // Medium complexity — real max observed: 534, new limit is 2.25x buffer
+  if (earlyClassification?.classification === 'medium_complexity') return 1200;
+  // News/current events — right-sized from 1500 with safety margin
+  if (earlyClassification?.classification === 'news_current_events') return 1000;
 
   // Simple queries — short answers, small token budget
   if (earlyClassification?.classification === 'simple_factual') return 400;
@@ -236,7 +238,7 @@ function getMaxTokens(earlyClassification, phase4Metadata) {
   if (earlyClassification?.classification === 'greeting') return 150;
 
   // Safe default for unclassified or standard queries
-  return 2000;
+  return 1500;
 }
 
 // Maps a query classification to the capability task type required for adapter selection.
