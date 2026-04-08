@@ -184,6 +184,7 @@ function applySafetyCriticalBoost(memories) {
       console.log(`[SAFETY-CRITICAL] 🛡️ Boosting memory ID ${memory.id} by +${maxBoost} (markers: ${markers.join(', ')})`);
       return {
         ...memory,
+        raw_similarity: memory.raw_similarity ?? memory.similarity,
         similarity: Math.min(memory.similarity + maxBoost, 1.0),
         safety_boosted: true,
         safety_markers: markers
@@ -279,6 +280,7 @@ function applyOrdinalBoost(memories, query) {
       }
       return {
         ...memory,
+        raw_similarity: memory.raw_similarity ?? memory.similarity,
         similarity: newSimilarity,
         ordinal_boosted: true,
         ordinal_matched: queryOrdinal
@@ -1701,6 +1703,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
             console.log(`[EMBEDDING-LAG-SCORE] Memory ${memory.id}: EXPLICIT STORAGE REQUEST for memory recall - boosting to 0.99`);
             return {
               ...memory,
+              raw_similarity: memory.raw_similarity ?? memory.similarity ?? null,
               similarity: 0.99, // Maximum priority for explicit recall
               from_recent_unembedded: true,
               embedding: null,
@@ -1728,6 +1731,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         console.log(`[EMBEDDING-LAG-SCORE] Memory ${memory.id}: EXACT TOKEN MATCH - boosting to 0.95`);
         return {
           ...memory,
+          raw_similarity: memory.raw_similarity ?? memory.similarity ?? null,
           similarity: 0.95, // Very high score for exact token match
           from_recent_unembedded: true,
           embedding: null,
@@ -1916,6 +1920,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
             console.log(`[EXPLICIT-RECALL]    Content preview: "${(memory.content || '').substring(0, 60)}"`);
             return {
               ...memory,
+              raw_similarity: memory.raw_similarity ?? memory.similarity,
               similarity: boostedScore,
               explicit_recall_boosted: true,
               explicit_storage_request: true
@@ -1969,6 +1974,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
           return {
             ...memory,
+            raw_similarity: memory.raw_similarity ?? memory.similarity,
             similarity: boostedSim,
             entity_boosted: true,
             matched_entities: matchedEntities
@@ -2156,6 +2162,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
       return {
         ...memory,
+        raw_similarity: memory.raw_similarity ?? memory.similarity,
         similarity: Math.min(score, 1.0), // Cap at 1.0
         anchor_boosted: boostApplied,
         anchor_boost_reasons: boostReasons
