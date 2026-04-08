@@ -63,6 +63,13 @@ export class OpenAIAdapter extends BaseAdapter {
     const start = Date.now();
     const providerRequest = this.normalizeRequest(request);
     const response = await this.client.chat.completions.create(providerRequest);
+    const details = response.usage?.prompt_tokens_details;
+    if (details?.cached_tokens) {
+      const cachedTokens   = details.cached_tokens;
+      const uncachedTokens = (response.usage.prompt_tokens ?? 0) - cachedTokens;
+      const hitRate        = ((cachedTokens / (cachedTokens + uncachedTokens)) * 100).toFixed(1);
+      console.log(`[CACHE] OpenAI prompt cache hit: cached=${cachedTokens} uncached=${uncachedTokens} hit_rate=${hitRate}%`);
+    }
     return this.normalizeResponse(response, Date.now() - start);
   }
 }

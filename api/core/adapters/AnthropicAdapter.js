@@ -55,7 +55,13 @@ export class AnthropicAdapter extends BaseAdapter {
       max_tokens: request.maxTokens ?? 4000,
     };
     if (request.systemPrompt) {
-      providerRequest.system = request.systemPrompt;
+      providerRequest.system = [
+        {
+          type: 'text',
+          text: request.systemPrompt,
+          cache_control: { type: 'ephemeral' },
+        },
+      ];
     }
     return providerRequest;
   }
