@@ -7,6 +7,7 @@ import { randomBytes } from 'node:crypto';
  * - createOrganizationTables(pool) — idempotent DDL for organizations + organization_users
  * - ensureOrganizationTables(pool) — startup hook (never throws)
  * - resolveOrgId(headers, pool)    — resolves org_id from request headers
+ * - resolveAdminKeyForInjection(headers, pool) — resolves the key to inject into HTML (never exposes master key to org users)
  * - handleCreateOrg(req, res)      — POST /api/admin/organizations
  * - handleListOrgs(req, res)       — GET  /api/admin/organizations
  * - handleGetOrg(req, res)         — GET  /api/admin/organizations/:slug
@@ -131,6 +132,79 @@ export async function resolveOrgId(headers, pool) {
 
   // 3. Default to SiteMonkeys
   return 1;
+}
+
+/**
+ * Resolve the admin key that should be injected into index.html for the
+ * savings dashboard monthly history chart.
+ *
+ * Security rules:
+ *   - Master admin key (ADMIN_KEY env var) → inject it as-is (master user)
+ *   - Org-level admin key (x-admin-key matching an org row) → inject that org's key
+ *   - x-org-id header (no admin key) → look up and inject that org's admin_key
+ *   - No valid key in headers → return null (serve HTML unchanged)
+ *   - NEVER inject the master admin key for an org-level user
+ *
+ * @param {Object} headers - Request headers object
+ * @param {import('pg').Pool|null} pool - Database pool
+ * @param {string|undefined} masterAdminKey - Value of ADMIN_KEY env var
+ * @returns {Promise<string|null>} Key to inject, or null if none
+ */
+export async function resolveAdminKeyForInjection(headers, pool, masterAdminKey) {
+  const headerKey = headers['x-admin-key'];
+  const orgIdHeader = headers['x-org-id'];
+
+  // 1. x-admin-key provided
+  if (headerKey) {
+    // Master admin key → inject directly
+    if (masterAdminKey && headerKey === masterAdminKey) {
+      return headerKey;
+    }
+
+    // Org-level key → verify it exists and return it
+    if (pool) {
+      try {
+        const result = await pool.query(
+          'SELECT admin_key FROM organizations WHERE admin_key = $1 AND is_active = true',
+          [headerKey]
+        );
+        if (result.rows.length > 0) {
+          return result.rows[0].admin_key;
+        }
+      } catch (err) {
+        console.error('[ORG] resolveAdminKeyForInjection: lookup failed:', err.message);
+      }
+    }
+
+    // Key not recognised — do not inject
+    return null;
+  }
+
+  // 2. x-org-id header → look up that org's admin_key
+  if (orgIdHeader && pool) {
+    const parsed = parseInt(orgIdHeader, 10);
+    if (!isNaN(parsed) && parsed > 0) {
+      try {
+        const result = await pool.query(
+          'SELECT admin_key FROM organizations WHERE id = $1 AND is_active = true',
+          [parsed]
+        );
+        if (result.rows.length > 0) {
+          const orgKey = result.rows[0].admin_key;
+          // Never inject the master key via org-id lookup
+          if (masterAdminKey && orgKey === masterAdminKey) {
+            return null;
+          }
+          return orgKey;
+        }
+      } catch (err) {
+        console.error('[ORG] resolveAdminKeyForInjection: org-id lookup failed:', err.message);
+      }
+    }
+  }
+
+  // 3. No valid key
+  return null;
 }
 
 /**
