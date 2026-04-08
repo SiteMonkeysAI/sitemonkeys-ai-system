@@ -6762,42 +6762,6 @@ When memory contains conflicting facts (e.g., user is allergic to X but spouse l
 
     // Memory context is already injected earlier - no need for additional instructions here
 
-
-    // ISSUE #443: Add query-specific response guidance
-    if (queryClassification) {
-      if (queryClassification.classification === 'greeting') {
-        prompt += `
-IMPORTANT - GREETING DETECTED:
-This is a simple greeting. Respond warmly and concisely in ONE LINE.
-- DO NOT add biographical information unless specifically asked
-- DO NOT add context from memory unless relevant to greeting
-- DO NOT add engagement bait or follow-up questions
-- Maximum response length: 100 characters
-Example: "Hello! How can I help you today?"
-`;
-      } else if (queryClassification.classification === 'simple_factual') {
-        const maxLength = queryClassification.responseApproach?.maxLength || 200;
-        prompt += `
-IMPORTANT - SIMPLE QUERY DETECTED:
-This is a straightforward factual question. Provide a DIRECT, CONCISE answer.
-- Answer in ONE sentence if possible
-- DO NOT add explanations unless asked
-- DO NOT add context or background unless necessary
-- DO NOT add engagement bait or follow-up questions
-- Maximum response length: ${maxLength} characters
-- If it's a calculation, just give the answer
-`;
-      } else if (queryClassification.classification === 'medium_complexity') {
-        prompt += `\nResponse length: Aim for 2-4 paragraphs. Be complete but not exhaustive.`;
-      } else if (queryClassification.classification === 'complex_analytical') {
-        prompt += `\nResponse length: Structured response appropriate to depth needed. Avoid padding.`;
-      } else if (queryClassification.classification === 'decision_making') {
-        prompt += `\nResponse length: Focus on the decision. 2-3 key points maximum. Be direct.`;
-      } else if (queryClassification.classification === 'news_current_events') {
-        prompt += `\nResponse length: Lead with the key fact. Supporting context in 1-2 sentences.`;
-      }
-    }
-
     prompt += `
 UNCERTAINTY HANDLING:
 Apply ONLY when you genuinely lack the information needed to answer. Do NOT claim uncertainty about information that is present in MEMORY CONTEXT or DOCUMENT CONTEXT sections.
@@ -6895,6 +6859,41 @@ Mode: ${modeConfig?.display_name || mode}
     // - Admits when they don't know something, because honesty builds trust
     // These behaviors emerge from understanding and caring, not from following rules
 
+    // ISSUE #443: Add query-specific response guidance (VARIABLE — moved after static sections)
+    if (queryClassification) {
+      if (queryClassification.classification === 'greeting') {
+        prompt += `
+IMPORTANT - GREETING DETECTED:
+This is a simple greeting. Respond warmly and concisely in ONE LINE.
+- DO NOT add biographical information unless specifically asked
+- DO NOT add context from memory unless relevant to greeting
+- DO NOT add engagement bait or follow-up questions
+- Maximum response length: 100 characters
+Example: "Hello! How can I help you today?"
+`;
+      } else if (queryClassification.classification === 'simple_factual') {
+        const maxLength = queryClassification.responseApproach?.maxLength || 200;
+        prompt += `
+IMPORTANT - SIMPLE QUERY DETECTED:
+This is a straightforward factual question. Provide a DIRECT, CONCISE answer.
+- Answer in ONE sentence if possible
+- DO NOT add explanations unless asked
+- DO NOT add context or background unless necessary
+- DO NOT add engagement bait or follow-up questions
+- Maximum response length: ${maxLength} characters
+- If it's a calculation, just give the answer
+`;
+      } else if (queryClassification.classification === 'medium_complexity') {
+        prompt += `\nResponse length: Aim for 2-4 paragraphs. Be complete but not exhaustive.`;
+      } else if (queryClassification.classification === 'complex_analytical') {
+        prompt += `\nResponse length: Structured response appropriate to depth needed. Avoid padding.`;
+      } else if (queryClassification.classification === 'decision_making') {
+        prompt += `\nResponse length: Focus on the decision. 2-3 key points maximum. Be direct.`;
+      } else if (queryClassification.classification === 'news_current_events') {
+        prompt += `\nResponse length: Lead with the key fact. Supporting context in 1-2 sentences.`;
+      }
+    }
+
     // INJECT PRINCIPLE-BASED REASONING GUIDANCE
     // This is the key innovation that transforms rule-based execution into principle-based reasoning
     if (reasoningGuidance) {
@@ -6956,6 +6955,27 @@ Retrieved memories about Topic A must NEVER be presented as prior discussion abo
 `;
     }
 
+    prompt += `\nMode: ${modeConfig?.display_name || mode}\n`;
+
+    if (mode === "business_validation") {
+      prompt += `\nBusiness Validation Requirements:
+- Always analyze downside scenarios and risks
+- Consider cash flow and survival impact
+- Provide actionable recommendations with clear trade-offs
+- Surface hidden costs and dependencies
+`;
+    }
+
+    if (mode === "site_monkeys") {
+      prompt += `\nSite Monkeys Mode:
+- Use vault content as authoritative business guidance
+- Enforce founder protection principles
+- Focus on operational integrity and quality
+- Apply business-specific frameworks and constraints
+`;
+    }
+
+    // ISSUE #443: Add query-specific response guidance (VARIABLE — moved after static sections)
     if (queryClassification) {
       if (queryClassification.classification === 'greeting') {
         prompt += `
@@ -6985,26 +7005,6 @@ IMPORTANT - SIMPLE QUERY:
 Provide a DIRECT, CONCISE answer. No filler, no preamble.
 `;
       }
-    }
-
-    prompt += `\nMode: ${modeConfig?.display_name || mode}\n`;
-
-    if (mode === "business_validation") {
-      prompt += `\nBusiness Validation Requirements:
-- Always analyze downside scenarios and risks
-- Consider cash flow and survival impact
-- Provide actionable recommendations with clear trade-offs
-- Surface hidden costs and dependencies
-`;
-    }
-
-    if (mode === "site_monkeys") {
-      prompt += `\nSite Monkeys Mode:
-- Use vault content as authoritative business guidance
-- Enforce founder protection principles
-- Focus on operational integrity and quality
-- Apply business-specific frameworks and constraints
-`;
     }
 
     return prompt;

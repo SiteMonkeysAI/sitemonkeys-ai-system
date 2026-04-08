@@ -107,14 +107,17 @@ describe('AD-001: OpenAIAdapter.normalizeRequest — system role in messages', (
 // ---------------------------------------------------------------------------
 
 describe('AD-002: AnthropicAdapter.normalizeRequest — system as top-level param', () => {
-  it('AD-002a: system field is set when systemPrompt provided', () => {
+  it('AD-002a: system field is an array with cache_control when systemPrompt provided', () => {
     const adapter = new AnthropicAdapter(makeMockAnthropicClient());
     const req = adapter.normalizeRequest({
       systemPrompt: 'Be truthful.',
       messages:     [{ role: 'user', content: 'Hi' }],
       maxTokens:    2000,
     });
-    assert.strictEqual(req.system, 'Be truthful.');
+    assert.ok(Array.isArray(req.system), 'system must be an array');
+    assert.strictEqual(req.system[0].type, 'text');
+    assert.strictEqual(req.system[0].text, 'Be truthful.');
+    assert.deepEqual(req.system[0].cache_control, { type: 'ephemeral' });
   });
 
   it('AD-002b: messages array does NOT contain system role', () => {
