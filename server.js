@@ -31,6 +31,9 @@ import express from "express";
 import cors from "cors";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { persistentMemory } from "./api/categories/memory/index.js";
 import { uploadMiddleware, handleFileUpload } from "./api/upload-file.js";
 import {
@@ -64,6 +67,7 @@ import { handleCostSummary, ensureCostLogTable } from "./api/admin/cost-observab
 import {
   ensureOrganizationTables,
   resolveOrgId,
+  resolveAdminKeyForInjection,
   handleCreateOrg,
   handleListOrgs,
   handleGetOrg,
@@ -272,6 +276,57 @@ app.use(
 );
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ extended: true, limit: "50mb" }));
+
+// Serve index.html with admin key injected when a valid key is present in headers.
+// Must be registered BEFORE express.static so this handler takes precedence for GET /.
+const __filename_server = fileURLToPath(import.meta.url);
+const __dirname_server = dirname(__filename_server);
+const INDEX_HTML_PATH = join(__dirname_server, "public", "index.html");
+
+// Cache the HTML content once at startup to avoid per-request file I/O.
+let _indexHtmlCache = null;
+function getIndexHtml() {
+  if (!_indexHtmlCache) {
+    _indexHtmlCache = readFileSync(INDEX_HTML_PATH, "utf8");
+  }
+  return _indexHtmlCache;
+}
+
+// Rate-limit the GET / route to guard the file-system access and DB lookup.
+const indexHtmlRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 120, // 120 requests per minute per IP (normal browser traffic)
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.get("/", indexHtmlRateLimiter, async (req, res) => {
+  try {
+    const pool = global.memorySystem?.pool ?? null;
+    const resolvedKey = await resolveAdminKeyForInjection(
+      req.headers,
+      pool,
+      process.env.ADMIN_KEY
+    );
+
+    const html = getIndexHtml();
+
+    if (resolvedKey) {
+      const injected = html.replace(
+        'data-admin-key=""',
+        `data-admin-key="${resolvedKey}"`
+      );
+      console.log("[SERVER] admin key injected into index.html for request");
+      return res.type("html").send(injected);
+    }
+
+    return res.type("html").send(html);
+  } catch (err) {
+    console.error("[SERVER] Failed to serve index.html:", err.message);
+    return res.status(500).send("Internal Server Error");
+  }
+});
+
 app.use(express.static("public"));
 
 console.log("[SERVER] ✅ Middleware configured");
