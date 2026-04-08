@@ -2337,16 +2337,45 @@ export class Orchestrator {
       const REFERENTIAL_PHRASING_PATTERN = /\b(that one|the second one|the other one|explain that differently|what about the other|what does that mean)\b/i;
       const hasReferentialPhrasing = REFERENTIAL_PHRASING_PATTERN.test(message);
 
-      // Intent class guard: only cache queries classified as factual/simple by the
-      // early classifier.  Null earlyClassification (error) is treated as non-factual
+      const isSemiStable = phase4Metadata.truth_type === 'SEMI_STABLE';
+      const isPermanent = phase4Metadata.truth_type === 'PERMANENT';
+
+      // Intent class guard: only cache queries whose classification is in the
+      // appropriate allowlist for the truth_type.
+      //
+      // PERMANENT (global key) — strict list: only unambiguous factual queries
+      // whose answers are identical for every user in every session context.
+      //
+      // SEMI_STABLE (user-scoped key, 24hr TTL) — expanded list: analytical
+      // queries are cacheable when the answer depends only on the data stated
+      // in the query itself (not on conversation history or session context).
+      // e.g. "Our Q1 ARR is $4.8M growing 40% YoY. How does this compare to
+      // SaaS benchmarks?" → same numbers always produce the same comparison.
+      //
+      // news_current_events is excluded from both lists — volatile by nature.
+      //
+      // Null earlyClassification (classifier error) is treated as non-factual
       // to prevent accidental caching of unclassified queries.
+      const PERMANENT_CACHEABLE_CLASSIFICATIONS = [
+        // 'factual' — reserved; classifier currently emits 'simple_factual'
+        'factual',
+        'simple_factual',
+        'simple_short',
+      ];
+      const SEMI_STABLE_CACHEABLE_CLASSIFICATIONS = [
+        ...PERMANENT_CACHEABLE_CLASSIFICATIONS,
+        'medium_complexity',
+        'complex_analytical',
+        'decision_making',
+      ];
+      // isFactualIntentClass — name kept for compatibility with EFF-006 guard test.
+      // Semantics: "is this classification in the cache-eligible allowlist for this truth_type?"
       const isFactualIntentClass =
         earlyClassification !== null &&
         earlyClassification !== undefined &&
-        ['factual', 'simple_factual', 'simple_short'].includes(earlyClassification.classification);
-
-      const isSemiStable = phase4Metadata.truth_type === 'SEMI_STABLE';
-      const isPermanent = phase4Metadata.truth_type === 'PERMANENT';
+        (isSemiStable
+          ? SEMI_STABLE_CACHEABLE_CLASSIFICATIONS.includes(earlyClassification.classification)
+          : PERMANENT_CACHEABLE_CLASSIFICATIONS.includes(earlyClassification.classification));
       const isCacheable = isPermanent || isSemiStable;
 
       const isCacheEligible = (
