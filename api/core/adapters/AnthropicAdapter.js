@@ -87,7 +87,19 @@ export class AnthropicAdapter extends BaseAdapter {
   async call(request) {
     const start = Date.now();
     const providerRequest = this.normalizeRequest(request);
-    const response = await this.client.messages.create(providerRequest);
+    let response;
+    try {
+      response = await this.client.messages.create(providerRequest);
+    } catch (err) {
+      if (err.status === 429) {
+        const retryAfter = parseInt(err.headers?.['retry-after'] || '5') * 1000;
+        console.log(`[RETRY] Backoff ${retryAfter}ms before retry attempt 1`);
+        await new Promise(r => setTimeout(r, retryAfter));
+        response = await this.client.messages.create(providerRequest);
+      } else {
+        throw err;
+      }
+    }
     return this.normalizeResponse(response, Date.now() - start);
   }
 }

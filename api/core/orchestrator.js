@@ -279,6 +279,25 @@ function getMinimumScore(taskType) {
   return score ?? 0.85;
 }
 
+// Summarizes older conversation turns into a compact 2-3 sentence summary.
+// Used by history compression when SESSION_STATE_ENABLED and conversationHistory.length > 4.
+// Deliberately uses gpt-4o-mini (via openai-gpt4o-mini adapter) to keep summarization cheap.
+async function summarizeOlderTurns(turns) {
+  const text = turns.map(t => `${t.role}: ${t.content}`).join('\n');
+  const miniAdapter = getAdapterInstance('openai-gpt4o-mini');
+  if (!miniAdapter) {
+    // Fallback: return a placeholder if adapter not registered (e.g. tests without full setup)
+    return turns.map(t => `${t.role}: ${t.content.slice(0, 60)}`).join(' | ');
+  }
+  const res = await miniAdapter.call({
+    systemPrompt: 'Summarize this conversation in 2-3 sentences. Keep key facts, decisions, and context. Be concise.',
+    messages: [{ role: 'user', content: text }],
+    maxTokens: 150,
+    temperature: 0,
+  });
+  return res.content;
+}
+
 // Extract a clean "commodity price" search query for commodity quantity calculations.
 // Prevents passing the full verbose message (e.g. "If I have 227 pounds of platinum
 // at today's price what's it worth") to the external lookup API.
@@ -5707,7 +5726,36 @@ export class Orchestrator {
         phase4Metadata.history_reduced_by_cost = true;
         this.log('[COST-PROTECTION] History depth reduced to 2 — approaching session ceiling');
       }
-      const trimmedHistory = conversationHistory.slice(-historyDepth);
+      let trimmedHistory = conversationHistory.slice(-historyDepth);
+      // History summary compression: when SESSION_STATE_ENABLED and conversation is long,
+      // compress older turns into a compact summary to reduce token usage.
+      const _classificationForCompress = context.earlyClassification?.classification;
+      const _isSimpleOrGreeting =
+        _classificationForCompress === 'simple_factual' ||
+        _classificationForCompress === 'simple_short' ||
+        _classificationForCompress === 'greeting';
+      if (
+        SESSION_STATE_ENABLED &&
+        conversationHistory.length > 4 &&
+        !_isSimpleOrGreeting
+      ) {
+        const olderTurns = trimmedHistory.slice(0, -2);
+        const recentTurns = trimmedHistory.slice(-2);
+        if (olderTurns.length > 0) {
+          const summary = await summarizeOlderTurns(olderTurns);
+          const estimatedSaved = Math.ceil(
+            olderTurns.reduce((sum, t) => sum + t.content.length, 0) / 4
+          ) - Math.ceil(summary.length / 4);
+          this.log(
+            `[HISTORY-COMPRESS] Compressed ${olderTurns.length} turns into ${summary.length} chars` +
+            ` tokens_saved=~${estimatedSaved}`
+          );
+          trimmedHistory = [
+            { role: 'system', content: `Previous conversation summary: ${summary}` },
+            ...recentTurns,
+          ];
+        }
+      }
       this.log(`[EFFICIENCY] history_depth=${historyDepth} base_depth=${baseHistoryDepth} session_state_used=${sessionStateUsed}`);
       this.log(
         `[HISTORY-DEPTH] classification=${context.earlyClassification?.classification} ` +
@@ -5940,6 +5988,8 @@ export class Orchestrator {
           // Retry on gpt-4o before escalating to Claude.
           // Handles both: gpt-4o-mini failure (promote to gpt-4o) and gpt-4o transient failure (same-model retry).
           retryCount++;
+          this.log(`[RETRY] Backoff 1000ms before retry attempt ${retryCount}`);
+          await new Promise(r => setTimeout(r, 1000));
           this.log(`[RETRY] ${model} failed (${firstCallError.message}) — retrying on gpt-4o (retry_count=${retryCount})`);
           const gpt4oRetryAdapter = getAdapterInstance('openai-gpt4o');
           try {
@@ -5955,6 +6005,8 @@ export class Orchestrator {
             const claudeEscalationAdapter = getAdapterInstance('anthropic-claude-sonnet');
             if (claudeEscalationAdapter) {
               retryCount++;
+              this.log(`[RETRY] Backoff 2000ms before retry attempt ${retryCount}`);
+              await new Promise(r => setTimeout(r, 2000));
               this.log(`[RETRY] gpt-4o failed (${gpt4oRetryError.message}) — escalating to Claude (retry_count=${retryCount})`);
               try {
                 const claudeEscResult = await claudeEscalationAdapter.call({
