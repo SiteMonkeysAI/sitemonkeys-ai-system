@@ -283,7 +283,24 @@ const __filename_server = fileURLToPath(import.meta.url);
 const __dirname_server = dirname(__filename_server);
 const INDEX_HTML_PATH = join(__dirname_server, "public", "index.html");
 
-app.get("/", async (req, res) => {
+// Cache the HTML content once at startup to avoid per-request file I/O.
+let _indexHtmlCache = null;
+function getIndexHtml() {
+  if (!_indexHtmlCache) {
+    _indexHtmlCache = readFileSync(INDEX_HTML_PATH, "utf8");
+  }
+  return _indexHtmlCache;
+}
+
+// Rate-limit the GET / route to guard the file-system access and DB lookup.
+const indexHtmlRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // 1 minute
+  max: 120, // 120 requests per minute per IP (normal browser traffic)
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.get("/", indexHtmlRateLimiter, async (req, res) => {
   try {
     const pool = global.memorySystem?.pool ?? null;
     const resolvedKey = await resolveAdminKeyForInjection(
@@ -292,7 +309,7 @@ app.get("/", async (req, res) => {
       process.env.ADMIN_KEY
     );
 
-    const html = readFileSync(INDEX_HTML_PATH, "utf8");
+    const html = getIndexHtml();
 
     if (resolvedKey) {
       const injected = html.replace(
