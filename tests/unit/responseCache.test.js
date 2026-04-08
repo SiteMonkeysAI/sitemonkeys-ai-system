@@ -77,13 +77,35 @@ function setCachedResponse(message, mode, response, userId, truthType) {
 // SEMI_STABLE support added: caches with user-scoped keys (24hr TTL).
 // hasPersonalIntent only blocks PERMANENT (global key) — SEMI_STABLE keys are
 // user-scoped so personal intent is safe.
+//
+// Intent class allowlist is truth_type-aware:
+//   PERMANENT  — strict list (factual/simple only; context-free answers)
+//   SEMI_STABLE — expanded list (analytical queries whose answers depend only
+//                 on the data stated in the query, not on session context)
+// news_current_events excluded from both lists — volatile by nature.
+const PERMANENT_CACHEABLE_CLASSIFICATIONS = [
+  // 'factual' — reserved; classifier currently emits 'simple_factual'
+  'factual',
+  'simple_factual',
+  'simple_short',
+];
+const SEMI_STABLE_CACHEABLE_CLASSIFICATIONS = [
+  ...PERMANENT_CACHEABLE_CLASSIFICATIONS,
+  'medium_complexity',
+  'complex_analytical',
+  'decision_making',
+];
+
 function isCacheEligible({ truth_type, memory, effectiveDocumentData, vault, high_stakes, hasPersonalIntent, intent_class, query }) {
   const isSemiStable = truth_type === 'SEMI_STABLE';
   const isPermanent = truth_type === 'PERMANENT';
   const isCacheable = isPermanent || isSemiStable;
+  const allowlist = isSemiStable
+    ? SEMI_STABLE_CACHEABLE_CLASSIFICATIONS
+    : PERMANENT_CACHEABLE_CLASSIFICATIONS;
   const isFactualClass =
     intent_class === null || intent_class === undefined ||
-    ['factual', 'simple_factual', 'simple_short'].includes(intent_class);
+    allowlist.includes(intent_class);
   const REFERENTIAL_PHRASING = /\b(that one|the second one|the other one|explain that differently|what about the other|what does that mean)\b/i;
   const hasReferentialPhrasing = query ? REFERENTIAL_PHRASING.test(query) : false;
   return (
@@ -851,6 +873,123 @@ describe('RC. Response Cache — ttlCacheManager', () => {
     });
     assert.strictEqual(eligiblePermanent,  false, 'Document-loaded PERMANENT query must never cache');
     assert.strictEqual(eligibleSemiStable, false, 'Document-loaded SEMI_STABLE query must never cache');
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CE. Cache Eligibility — expanded SEMI_STABLE allowlist
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // CE-001 ----------------------------------------------------------------
+  it('CE-001: complex_analytical SEMI_STABLE query with memoriesBlockCache=false is eligible', () => {
+    // "Our Q1 ARR is $4.8M growing 40% YoY. How does this compare to SaaS benchmarks?"
+    // The answer depends only on the data stated in the query — not on session context.
+    const eligible = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'complex_analytical',
+      query: 'Our Q1 ARR is $4.8M growing 40% YoY. How does this compare to SaaS benchmarks?',
+    });
+    assert.strictEqual(eligible, true, 'CE-001 FAIL: complex_analytical SEMI_STABLE must be cache-eligible when memoriesBlockCache=false');
+  });
+
+  // CE-002 ----------------------------------------------------------------
+  it('CE-002: decision_making SEMI_STABLE query is eligible', () => {
+    const eligible = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'decision_making',
+      query: 'Should a SaaS startup prioritise NRR or logo retention when churn is under 2%?',
+    });
+    assert.strictEqual(eligible, true, 'CE-002 FAIL: decision_making SEMI_STABLE must be cache-eligible');
+  });
+
+  // CE-003 ----------------------------------------------------------------
+  it('CE-003: medium_complexity SEMI_STABLE query is eligible', () => {
+    const eligible = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'medium_complexity',
+      query: 'What gross margin benchmark should a B2B SaaS company target at Series A?',
+    });
+    assert.strictEqual(eligible, true, 'CE-003 FAIL: medium_complexity SEMI_STABLE must be cache-eligible');
+  });
+
+  // CE-004 ----------------------------------------------------------------
+  it('CE-004: news_current_events is ineligible regardless of memory state', () => {
+    // news_current_events is intentionally excluded — volatile by nature.
+    const noMemory = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'news_current_events',
+      query: 'What happened in the tech industry this week?',
+    });
+    const withMemory = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: { text: 'some memory' },
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'news_current_events',
+      query: 'What happened in the tech industry this week?',
+    });
+    assert.strictEqual(noMemory,   false, 'CE-004 FAIL: news_current_events must be ineligible (no memory)');
+    assert.strictEqual(withMemory, false, 'CE-004 FAIL: news_current_events must be ineligible (with memory)');
+  });
+
+  // CE-005 ----------------------------------------------------------------
+  it('CE-005: high_stakes query is ineligible even with expanded allowlist', () => {
+    // High-stakes queries (financial vocabulary like $4.8M, ARR, gross margin)
+    // must never be cached regardless of classification.
+    const eligible = isCacheEligible({
+      truth_type: 'SEMI_STABLE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: { isHighStakes: true },
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'complex_analytical',
+      query: 'Our gross margin is 72% with $4.8M ARR — what does that imply for valuation?',
+    });
+    assert.strictEqual(eligible, false, 'CE-005 FAIL: high_stakes query must never cache even with expanded allowlist');
+  });
+
+  // CE-006 ----------------------------------------------------------------
+  it('CE-006: VOLATILE query is ineligible regardless of expanded allowlist', () => {
+    const eligible = isCacheEligible({
+      truth_type: 'VOLATILE',
+      memory: null,
+      effectiveDocumentData: null,
+      vault: null,
+      high_stakes: null,
+      conversationHistory: [],
+      hasPersonalIntent: false,
+      intent_class: 'complex_analytical',
+      query: 'What is the current USD/EUR exchange rate?',
+    });
+    assert.strictEqual(eligible, false, 'CE-006 FAIL: VOLATILE query must never be cache-eligible');
   });
 
 });
