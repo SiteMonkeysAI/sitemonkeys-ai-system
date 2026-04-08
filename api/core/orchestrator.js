@@ -5769,6 +5769,7 @@ export class Orchestrator {
       const estimatedContextTokens = Math.ceil(contextString.length / 4);
       const estimatedExternalTokens = Math.ceil(externalContext.length / 4);
       const estimatedMessageTokens = Math.ceil(message.length / 4);
+      // Rough estimate: ~4 chars per token (standard heuristic, not exact)
       const estimatedHistoryTokens = Math.ceil(
         trimmedHistory.reduce((sum, msg) => sum + msg.content.length, 0) / 4
       );

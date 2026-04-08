@@ -67,7 +67,7 @@ export class OpenAIAdapter extends BaseAdapter {
       response = await this.client.chat.completions.create(providerRequest);
     } catch (err) {
       if (err.status === 429) {
-        const retryAfter = parseInt(err.headers?.['retry-after'] || '5') * 1000;
+        const retryAfter = (parseInt(err.headers?.['retry-after'] || '5', 10) || 5) * 1000;
         console.log(`[RETRY] Backoff ${retryAfter}ms before retry attempt 1`);
         await new Promise(r => setTimeout(r, retryAfter));
         response = await this.client.chat.completions.create(providerRequest);

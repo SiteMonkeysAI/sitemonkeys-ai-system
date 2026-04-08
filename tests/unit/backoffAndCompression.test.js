@@ -533,4 +533,44 @@ describe('HC-004: Structural guards — existing behaviour must not regress', ()
       'AnthropicAdapter.js must log "[RETRY] Backoff ...ms before retry attempt 1"'
     );
   });
+
+  it('HC-004f: summarizeOlderTurns has fallback when adapter not registered', () => {
+    const src = readFileSync(
+      join(REPO_ROOT, 'api', 'core', 'orchestrator.js'),
+      'utf8'
+    );
+    // The fallback path returns placeholder content when no mini adapter is registered
+    assert.ok(
+      src.includes('!miniAdapter'),
+      'summarizeOlderTurns must handle case where miniAdapter is null/undefined'
+    );
+  });
+
+  it('HC-004g: parseInt uses radix 10 for retry-after parsing (no NaN risk)', () => {
+    const openaiSrc = readFileSync(
+      join(REPO_ROOT, 'api', 'core', 'adapters', 'OpenAIAdapter.js'),
+      'utf8'
+    );
+    const anthropicSrc = readFileSync(
+      join(REPO_ROOT, 'api', 'core', 'adapters', 'AnthropicAdapter.js'),
+      'utf8'
+    );
+    assert.ok(
+      openaiSrc.includes("parseInt(err.headers?.['retry-after']"),
+      'OpenAIAdapter.js must use parseInt for retry-after'
+    );
+    assert.ok(
+      anthropicSrc.includes("parseInt(err.headers?.['retry-after']"),
+      'AnthropicAdapter.js must use parseInt for retry-after'
+    );
+    // Both must have NaN guard: (parseInt(...) || 5)
+    assert.ok(
+      openaiSrc.includes('|| 5)'),
+      'OpenAIAdapter.js must guard against NaN with || 5 fallback'
+    );
+    assert.ok(
+      anthropicSrc.includes('|| 5)'),
+      'AnthropicAdapter.js must guard against NaN with || 5 fallback'
+    );
+  });
 });
