@@ -298,20 +298,26 @@ export function getStats() {
 
 /**
  * Build a cache key for a full response entry.
- * SEMI_STABLE entries are scoped per user so User A's business analysis
- * never serves User B.  PERMANENT entries remain global (same answer for
- * all users).
+ * Keys are scoped by org_id to prevent cross-tenant cache leakage.
+ * SEMI_STABLE entries are additionally scoped per user so User A's business
+ * analysis never serves User B.  PERMANENT entries are org-scoped only
+ * (same answer for all users within the same org).
  * @param {string} message - The user's message
  * @param {string} mode - The active mode
  * @param {string} [userId] - User ID (required for SEMI_STABLE scoping)
  * @param {string} [truthType] - PERMANENT | SEMI_STABLE
+ * @param {number} [orgId] - Organization ID for tenant isolation (default: 1)
  * @returns {string} Cache key
  */
-export function buildResponseCacheKey(message, mode, userId, truthType) {
+export function buildResponseCacheKey(message, mode, userId, truthType, orgId = 1) {
   const fingerprint = semanticFingerprint(message);
+  const safeOrgId = (typeof orgId === 'number' && orgId > 0) ? orgId : 1;
+  if (safeOrgId !== orgId) {
+    console.warn('[CACHE] orgId fallback fired in buildResponseCacheKey', { expected: orgId, used: safeOrgId });
+  }
   const scope = truthType === 'SEMI_STABLE'
-    ? `${userId || 'anonymous'}:${mode}`
-    : mode;
+    ? `${safeOrgId}:${userId || 'anonymous'}:${mode}`
+    : `${safeOrgId}:${mode}`;
   return `response:${scope}:${fingerprint}`;
 }
 
@@ -321,10 +327,11 @@ export function buildResponseCacheKey(message, mode, userId, truthType) {
  * @param {string} mode - The active mode
  * @param {string} [userId] - User ID (required for SEMI_STABLE scoping)
  * @param {string} [truthType] - PERMANENT | SEMI_STABLE
+ * @param {number} [orgId] - Organization ID for tenant isolation (default: 1)
  * @returns {object|null} Cached response or null if not found / expired
  */
-export function getCachedResponse(message, mode, userId, truthType) {
-  const key = buildResponseCacheKey(message, mode, userId, truthType);
+export function getCachedResponse(message, mode, userId, truthType, orgId = 1) {
+  const key = buildResponseCacheKey(message, mode, userId, truthType, orgId);
   const entry = responseCache.get(key);
   if (!entry) return null;
   const ttl = truthType === 'SEMI_STABLE' ? TTL_CONFIG.SEMI_STABLE : TTL_CONFIG.PERMANENT;
@@ -342,9 +349,10 @@ export function getCachedResponse(message, mode, userId, truthType) {
  * @param {object} response - The response object to cache
  * @param {string} [userId] - User ID (required for SEMI_STABLE scoping)
  * @param {string} [truthType] - PERMANENT | SEMI_STABLE
+ * @param {number} [orgId] - Organization ID for tenant isolation (default: 1)
  */
-export function setCachedResponse(message, mode, response, userId, truthType) {
-  const key = buildResponseCacheKey(message, mode, userId, truthType);
+export function setCachedResponse(message, mode, response, userId, truthType, orgId = 1) {
+  const key = buildResponseCacheKey(message, mode, userId, truthType, orgId);
   responseCache.set(key, {
     response,
     cachedAt: Date.now()

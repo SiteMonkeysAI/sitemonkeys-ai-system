@@ -297,4 +297,114 @@ describe('MT. Multi-Tenant Organization Layer', () => {
     );
   });
 
+  it('ST-001: cache keys with different org_ids produce different entries even with same user_id and query', async () => {
+    const { buildResponseCacheKey } = await import('../../api/core/intelligence/ttlCacheManager.js');
+
+    const message = 'What is our refund policy?';
+    const mode = 'truth_general';
+    const userId = 'user-42';
+    const truthType = 'SEMI_STABLE';
+
+    const keyOrg1 = buildResponseCacheKey(message, mode, userId, truthType, 1);
+    const keyOrg2 = buildResponseCacheKey(message, mode, userId, truthType, 2);
+    const keyOrg5 = buildResponseCacheKey(message, mode, userId, truthType, 5);
+
+    assert.notStrictEqual(keyOrg1, keyOrg2, 'ST-001 FAIL: org 1 and org 2 produced the same cache key');
+    assert.notStrictEqual(keyOrg1, keyOrg5, 'ST-001 FAIL: org 1 and org 5 produced the same cache key');
+    assert.notStrictEqual(keyOrg2, keyOrg5, 'ST-001 FAIL: org 2 and org 5 produced the same cache key');
+
+    assert.ok(keyOrg1.includes(':1:'), `ST-001 FAIL: key for org 1 does not include ':1:' — key: ${keyOrg1}`);
+    assert.ok(keyOrg2.includes(':2:'), `ST-001 FAIL: key for org 2 does not include ':2:' — key: ${keyOrg2}`);
+  });
+
+  it('ST-001b: PERMANENT cache key also includes org_id (no cross-tenant global cache)', async () => {
+    const { buildResponseCacheKey } = await import('../../api/core/intelligence/ttlCacheManager.js');
+
+    const message = 'What is the definition of cash flow?';
+    const mode = 'truth_general';
+    const userId = 'user-42';
+    const truthType = 'PERMANENT';
+
+    const keyOrg1 = buildResponseCacheKey(message, mode, userId, truthType, 1);
+    const keyOrg2 = buildResponseCacheKey(message, mode, userId, truthType, 2);
+
+    assert.notStrictEqual(keyOrg1, keyOrg2, 'ST-001b FAIL: PERMANENT keys for org 1 and org 2 are identical — cross-tenant leakage possible');
+  });
+
+  it('ST-002: memory retrieval queries include org_id filter', () => {
+    const src = readRepoFile('api/memory/intelligent-storage.js');
+    assert.ok(src, 'ST-002 FAIL: Could not read api/memory/intelligent-storage.js');
+
+    // Verify findSimilarMemories accepts orgId parameter
+    assert.ok(
+      src.includes('findSimilarMemories(userId, category, facts, orgId = 1)'),
+      'ST-002 FAIL: findSimilarMemories does not have orgId parameter'
+    );
+
+    // Verify org_id filter in fallback text search query
+    assert.ok(
+      src.includes('AND org_id = $3') || src.includes("AND org_id = $3"),
+      'ST-002 FAIL: org_id filter missing from fallback text search query in findSimilarMemories'
+    );
+
+    // Verify org_id filter in pgvector query
+    assert.ok(
+      src.includes('AND org_id = $4'),
+      'ST-002 FAIL: org_id filter missing from pgvector similarity query in findSimilarMemories'
+    );
+
+    // Verify supersession check in storeCompressedMemory also filters by org_id
+    assert.ok(
+      src.includes('storeCompressedMemory(userId, category, facts, metadata, mode = \'truth-general\', orgId = 1)'),
+      'ST-002 FAIL: storeCompressedMemory does not have orgId parameter'
+    );
+  });
+
+  it('ST-003: orgId fallback logs a warning when it fires', () => {
+    const src = readRepoFile('api/core/orchestrator.js');
+    assert.ok(src, 'ST-003 FAIL: Could not read api/core/orchestrator.js');
+
+    assert.ok(
+      src.includes("[BILLING] orgId fallback fired"),
+      'ST-003 FAIL: [BILLING] orgId fallback fired warning not found in orchestrator.js'
+    );
+    assert.ok(
+      src.includes('console.warn'),
+      'ST-003 FAIL: console.warn not found in orchestrator.js'
+    );
+
+    // Verify safeOrgId validation pattern exists
+    assert.ok(
+      src.includes("typeof _orgId === 'number' && _orgId > 0") ||
+      src.includes('typeof _safeOrgId') ||
+      src.includes('_safeOrgId'),
+      'ST-003 FAIL: safeOrgId validation pattern not found in orchestrator.js'
+    );
+
+    // Verify server.js has explicit validation too
+    const serverSrc = readRepoFile('server.js');
+    assert.ok(serverSrc, 'ST-003 FAIL: Could not read server.js');
+    assert.ok(
+      serverSrc.includes('[SECURITY] orgId resolution failed'),
+      'ST-003 FAIL: [SECURITY] orgId resolution failed log not found in server.js'
+    );
+  });
+
+  it('ST-004: DB pool reconnect preserves max=50', () => {
+    const src = readRepoFile('api/categories/memory/internal/core.js');
+    assert.ok(src, 'ST-004 FAIL: Could not read api/categories/memory/internal/core.js');
+
+    assert.ok(
+      src.includes('max: 50'),
+      'ST-004 FAIL: DB pool max is not set to 50'
+    );
+
+    // Verify reconnect reuses _poolConfig (preserving the max value)
+    assert.ok(
+      src.includes('new Pool(this._poolConfig)'),
+      'ST-004 FAIL: pool reconnect does not use this._poolConfig — max connections not preserved on reconnect'
+    );
+  });
+
 });
+

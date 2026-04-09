@@ -1469,7 +1469,7 @@ export class IntelligentMemoryStorage {
 
       // Step 3: Check for duplicates (now also checks for supersession)
       console.log('[FLOW] Step 3: Checking for similar memories and supersession candidates...');
-      const existing = await this.findSimilarMemories(userId, category, facts);
+      const existing = await this.findSimilarMemories(userId, category, facts, orgId);
 
       // Step 4: Update existing OR create new (with supersession handled internally)
       if (existing) {
@@ -2468,7 +2468,11 @@ Facts (preserve user terminology + add synonyms):`;
    * @param {string} facts - Extracted facts to compare
    * @returns {Promise<object|null>} - Similar memory to boost, or null if supersession/no match
    */
-  async findSimilarMemories(userId, category, facts) {
+  async findSimilarMemories(userId, category, facts, orgId = 1) {
+    if (!orgId || typeof orgId !== 'number' || orgId <= 0) {
+      console.warn('[SECURITY] findSimilarMemories called without valid orgId — defaulting to 1', { received: orgId });
+      orgId = 1;
+    }
     try {
       // Generate embedding for new content
       const { generateEmbedding } = await import('../services/embedding-service.js');
@@ -2482,10 +2486,11 @@ Facts (preserve user terminology + add synonyms):`;
           FROM persistent_memories
           WHERE user_id = $1
             AND category_name = $2
+            AND org_id = $3
             AND is_current = true
             AND created_at > NOW() - INTERVAL '30 days'
           LIMIT 5
-        `, [userId, category]);
+        `, [userId, category, orgId]);
 
         if (result.rows.length > 0) {
           return result.rows[0];
@@ -2504,11 +2509,12 @@ Facts (preserve user terminology + add synonyms):`;
         FROM persistent_memories
         WHERE user_id = $2
           AND category_name = $3
+          AND org_id = $4
           AND is_current = true
           AND embedding IS NOT NULL
         ORDER BY distance ASC
         LIMIT 5
-      `, [JSON.stringify(embeddingResult.embedding), userId, category]);
+      `, [JSON.stringify(embeddingResult.embedding), userId, category, orgId]);
 
       // Check for semantic duplicates.
       // For pet/animal categories, use a slightly wider window (0.25) to catch name
@@ -2629,7 +2635,11 @@ Facts (preserve user terminology + add synonyms):`;
    * @param {string} mode - Mode (truth-general, business-validation, site-monkeys)
    * @returns {Promise<object>} - Storage result
    */
-  async storeCompressedMemory(userId, category, facts, metadata, mode = 'truth-general') {
+  async storeCompressedMemory(userId, category, facts, metadata, mode = 'truth-general', orgId = 1) {
+    if (!orgId || typeof orgId !== 'number' || orgId <= 0) {
+      console.warn('[SECURITY] storeCompressedMemory called without valid orgId — defaulting to 1', { received: orgId });
+      orgId = 1;
+    }
     try {
       // Normalize mode: convert underscore to hyphen for consistency
       const normalizedMode = mode.replace(/_/g, '-');
@@ -2726,11 +2736,12 @@ Facts (preserve user terminology + add synonyms):`;
           FROM persistent_memories
           WHERE user_id = $1
             AND category_name = $2
+            AND org_id = $3
             AND is_current = true
             AND embedding IS NOT NULL
           ORDER BY created_at DESC
           LIMIT 10
-        `, [userId, category]);
+        `, [userId, category, orgId]);
 
         if (existingMemories.rows.length > 0) {
           // Use semantic analyzer to detect supersession
