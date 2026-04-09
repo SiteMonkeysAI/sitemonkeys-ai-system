@@ -63,7 +63,7 @@ import testSemanticHandler from "./api/routes/test-semantic.js";
 import dbMigrationRouter, { addEmbeddingIndex } from "./api/admin/db-migration.js";
 import { handleCleanupRequest } from "./api/admin/cleanup.js";
 import { handleZombieCleanupRequest } from "./api/admin/cleanup-zombies.js";
-import { handleCostSummary, ensureCostLogTable } from "./api/admin/cost-observability.js";
+import { handleCostSummary, ensureCostLogTable, cleanupOldCostLogs } from "./api/admin/cost-observability.js";
 import {
   ensureOrganizationTables,
   resolveOrgId,
@@ -1446,7 +1446,25 @@ const server = app.listen(PORT, "0.0.0.0", () => {
     "⏰ Starting keepalive timer (60s interval) to prevent process exit",
   );
   setInterval(() => {
-    console.log("💓 Keepalive ping - process active");
+    try {
+      console.log("💓 Keepalive ping - process active");
+    } catch (err) {
+      console.error('[INTERVAL] Keepalive error — interval continues:', err.message);
+    }
   }, 60000);
   console.log("✅ Keepalive timer active - process will remain running");
+
+  // Daily cleanup of query_cost_log rows older than 90 days
+  setInterval(() => {
+    try {
+      const pool = global.memorySystem?.pool;
+      if (pool) {
+        cleanupOldCostLogs(pool);
+      } else {
+        console.warn('[INTERVAL] Cost log cleanup skipped — database pool not available');
+      }
+    } catch (err) {
+      console.error('[INTERVAL] Cost log cleanup error — interval continues:', err.message);
+    }
+  }, 24 * 60 * 60 * 1000);
 })();

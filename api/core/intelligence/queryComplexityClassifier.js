@@ -13,7 +13,16 @@ const openai = new OpenAI({
 
 // ==================== EMBEDDING CACHE ====================
 // Cache embeddings to avoid repeated API calls
+const MAX_EMBEDDING_CACHE = 500;
 const embeddingCache = new Map();
+
+/** Evict the oldest entry if the cache is at capacity, then store the new value. */
+function setCachedEmbedding(key, value) {
+  if (embeddingCache.size >= MAX_EMBEDDING_CACHE) {
+    embeddingCache.delete(embeddingCache.keys().next().value);
+  }
+  embeddingCache.set(key, value);
+}
 
 /**
  * Get embedding for text with caching
@@ -45,7 +54,7 @@ async function getCachedEmbedding(text) {
     });
     
     const embedding = response.data[0].embedding;
-    embeddingCache.set(cacheKey, embedding);
+    setCachedEmbedding(cacheKey, embedding);
     return embedding;
   } catch (error) {
     console.error('[QUERY_CLASSIFIER] Error getting embedding:', error);
@@ -55,7 +64,7 @@ async function getCachedEmbedding(text) {
     console.log('[QUERY_CLASSIFIER] 🔄 Returning zero vector fallback (classification will use query heuristics)');
     const zeroVector = new Array(1536).fill(0);
     // Cache the zero vector to avoid repeated API calls for the same failed request
-    embeddingCache.set(cacheKey, zeroVector);
+    setCachedEmbedding(cacheKey, zeroVector);
     return zeroVector;
   }
 }

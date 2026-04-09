@@ -274,7 +274,11 @@ const refusalMaintenanceValidator = new RefusalMaintenanceValidator();
 
 // Clean up old states every minute
 setInterval(() => {
-  refusalMaintenanceValidator.cleanupOldStates();
+  try {
+    refusalMaintenanceValidator.cleanupOldStates();
+  } catch (err) {
+    console.error('[INTERVAL] Refusal maintenance cleanup error — interval continues:', err.message);
+  }
 }, 60 * 1000);
 
 // ES6 EXPORTS

@@ -82,12 +82,16 @@ const sessionRefusals = new Map();
 
 // Cleanup interval for refusal tracking (every 10 minutes)
 setInterval(() => {
-  const now = Date.now();
-  const TTL = 30 * 60 * 1000; // 30 minutes
-  for (const [sessionId, refusal] of sessionRefusals.entries()) {
-    if (now - refusal.timestamp > TTL) {
-      sessionRefusals.delete(sessionId);
+  try {
+    const now = Date.now();
+    const TTL = 30 * 60 * 1000; // 30 minutes
+    for (const [sessionId, refusal] of sessionRefusals.entries()) {
+      if (now - refusal.timestamp > TTL) {
+        sessionRefusals.delete(sessionId);
+      }
     }
+  } catch (err) {
+    console.error('[INTERVAL] Refusal tracking cleanup error — interval continues:', err.message);
   }
 }, 10 * 60 * 1000);
 
