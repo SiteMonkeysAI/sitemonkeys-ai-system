@@ -26,13 +26,21 @@ const INJECTION_PATTERNS = [
 // ---------------------------------------------------------------------------
 // HTML / script patterns
 //
-// Script blocks are stripped in a loop until none remain (prevents re-assembly
-// via nested tags, e.g. "<scr<script>ipt>").  The closing-tag pattern allows
-// optional whitespace before ">" to cover "</script >" variants.
-// After script blocks are gone, remaining HTML tags are stripped the same way.
+// Script blocks: the closing-tag pattern uses [^>]* to allow any characters
+// between "script" and ">" (covers </script>, </script >, </script\t\n bar>).
+//
+// HTML tag stripping uses a bounded quantifier {0,2000} to prevent polynomial
+// backtracking on adversarial inputs with many '<' characters and no '>'.
+//
+// Both patterns are applied in a loop until no further matches remain, which
+// prevents re-assembly attacks using nested tags (e.g. "<scr<script>ipt>").
 // ---------------------------------------------------------------------------
-const SCRIPT_BLOCK_RE = /<script\b[^>]*>[\s\S]*?<\/script\s*>/gi;
-const HTML_TAG_RE     = /<[^>]*>/g;
+const SCRIPT_BLOCK_RE = /<script\b[^>]*>[\s\S]*?<\/script[^>]*>/gi;
+const HTML_TAG_RE     = /<[^>]{0,2000}>/g;
+
+// Maximum input length processed for HTML stripping — prevents DoS via
+// extremely long strings that combine with the loop-until-clean strategy.
+const MAX_INPUT_LENGTH = 10_000;
 
 // Strip a pattern repeatedly until no more matches remain.
 function stripUntilClean(str, pattern) {
@@ -54,6 +62,7 @@ function stripUntilClean(str, pattern) {
  * - Prompt-injection patterns are replaced with the literal token [removed].
  * - <script> blocks (with their content) are removed entirely.
  * - Remaining HTML tags are stripped.
+ * - Input longer than MAX_INPUT_LENGTH is truncated before HTML processing.
  * - The return value is always a string (never null/undefined).
  *
  * @param {string} text - Raw user input to sanitize.
@@ -78,12 +87,18 @@ export function sanitizeForMemoryStorage(text) {
     console.log('[SECURITY] Prompt injection attempt detected in memory storage input');
   }
 
-  // 2. Strip <script>…</script> blocks (content included) — loop until clean
+  // 2. Cap length before HTML processing to bound regex work
+  if (sanitized.length > MAX_INPUT_LENGTH) {
+    sanitized = sanitized.slice(0, MAX_INPUT_LENGTH);
+  }
+
+  // 3. Strip <script>…</script> blocks (content included) — loop until clean
   sanitized = stripUntilClean(sanitized, SCRIPT_BLOCK_RE);
 
-  // 3. Strip remaining HTML tags — loop until clean
+  // 4. Strip remaining HTML tags — loop until clean
   sanitized = stripUntilClean(sanitized, HTML_TAG_RE);
 
   return sanitized;
 }
+
 
