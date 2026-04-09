@@ -7,6 +7,7 @@ import coreSystem from "./core.js";
 import intelligenceSystem from "./intelligence.js";
 import { logMemoryOperation } from "../../../routes/debug.js";
 import { embedMemoryNonBlocking } from "../../../services/embedding-service.js";
+import { sanitizeForMemoryStorage } from "../../../utils/input-sanitizer.js";
 
 class PersistentMemoryOrchestrator {
   constructor() {
@@ -399,7 +400,7 @@ class PersistentMemoryOrchestrator {
         }
       }
 
-      const conversationContent = `User: ${userMessage}\nAssistant: ${aiResponse}`;
+      const conversationContent = `User: ${sanitizeForMemoryStorage(userMessage)}\nAssistant: ${sanitizeForMemoryStorage(aiResponse)}`;
       console.log('[TRACE-STORE] A4. Combined content length:', conversationContent.length);
 
       // ═══════════════════════════════════════════════════════════════
