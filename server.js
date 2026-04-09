@@ -85,6 +85,12 @@ import { sanitizePII } from "./api/memory/pii-sanitizer.js";
 console.log("[SERVER] ✅ Dependencies loaded");
 
 // ===== ENVIRONMENT VARIABLE VALIDATION =====
+/**
+ * Validates required and optional environment variables before the server starts.
+ * Exits with code 1 if any required variable is missing, preventing cryptic
+ * runtime errors deep inside request handlers on misconfigured deploys.
+ * Optional variables emit warnings but do not block startup.
+ */
 function validateRequiredEnvVars() {
   const required = [
     'DATABASE_URL',

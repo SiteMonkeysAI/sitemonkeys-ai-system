@@ -8079,7 +8079,16 @@ describe('EV. Environment Variable Validation', () => {
     assert.ok(serverSrcEV, 'EV-002 FAIL: server.js not found');
     const fnStart = serverSrcEV.indexOf('function validateRequiredEnvVars');
     assert.ok(fnStart !== -1, 'EV-002 FAIL: validateRequiredEnvVars function not found in server.js');
-    const fnBody = serverSrcEV.slice(fnStart, fnStart + 1500);
+    // Extract full function body up to its closing brace by counting brace depth
+    let depth = 0;
+    let fnEnd = fnStart;
+    let foundOpen = false;
+    for (let i = fnStart; i < serverSrcEV.length; i++) {
+      if (serverSrcEV[i] === '{') { depth++; foundOpen = true; }
+      else if (serverSrcEV[i] === '}') { depth--; }
+      if (foundOpen && depth === 0) { fnEnd = i + 1; break; }
+    }
+    const fnBody = serverSrcEV.slice(fnStart, fnEnd);
     assert.ok(
       fnBody.includes('DATABASE_URL'),
       'EV-002 FAIL: DATABASE_URL not in validateRequiredEnvVars required list'
