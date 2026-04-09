@@ -65,7 +65,7 @@ class CoreSystem {
           process.env.NODE_ENV === "production"
             ? { rejectUnauthorized: false }
             : false,
-        max: 30, // Increased from 20
+        max: 50, // Increased from 30 for enterprise workloads
         idleTimeoutMillis: 60000, // Doubled to 60s
         connectionTimeoutMillis: 15000, // Increased from 2s
         allowExitOnIdle: true, // Clean up idle connections
@@ -94,7 +94,7 @@ class CoreSystem {
           this.logger.error("[DB] Keep-alive failed:", e);
           this.logger.warn("[DB] Attempting to reconnect...");
           await this.pool.end();
-          this.pool = new Pool(this._poolConfig); // Reconnect with full config (preserves max:30)
+          this.pool = new Pool(this._poolConfig); // Reconnect with full config (preserves max:50)
           this.db = this.pool; // Re-assign alias after reconnect
           this.logger.info(`[DB] Reconnected — pool max=${this._poolConfig.max}`);
         }

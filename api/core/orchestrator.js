@@ -1089,6 +1089,10 @@ export class Orchestrator {
         const _trivialSessionId = sessionId;
         const _trivialMode = mode;
         const _trivialOrgId = orgId;
+        const _trivialSafeOrgId = (typeof _trivialOrgId === 'number' && _trivialOrgId > 0) ? _trivialOrgId : 1;
+        if (_trivialSafeOrgId !== _trivialOrgId) {
+          console.warn('[BILLING] orgId fallback fired', { expected: _trivialOrgId, used: _trivialSafeOrgId });
+        }
         setImmediate(async () => {
           try {
             if (_trivialPool) {
@@ -1098,7 +1102,7 @@ export class Orchestrator {
                   prompt_tokens, completion_tokens, cost_usd,
                   model, mode, tokens_saved, org_id
                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-                [_trivialUserId || null, _trivialSessionId || null, 'trivial_block', 0, 0, 0, 0, 'trivial-filter', _trivialMode || null, 500, _trivialOrgId || 1]
+                [_trivialUserId || null, _trivialSessionId || null, 'trivial_block', 0, 0, 0, 0, 'trivial-filter', _trivialMode || null, 500, _trivialSafeOrgId]
               );
             }
           } catch (err) {
@@ -2292,6 +2296,10 @@ export class Orchestrator {
         const _greetMode = mode;
         const _greetPersonality = personalitySelection.personality;
         const _greetOrgId = orgId;
+        const _greetSafeOrgId = (typeof _greetOrgId === 'number' && _greetOrgId > 0) ? _greetOrgId : 1;
+        if (_greetSafeOrgId !== _greetOrgId) {
+          console.warn('[BILLING] orgId fallback fired', { expected: _greetOrgId, used: _greetSafeOrgId });
+        }
         setImmediate(async () => {
           try {
             if (_greetPool) {
@@ -2301,7 +2309,7 @@ export class Orchestrator {
                   prompt_tokens, completion_tokens, cost_usd,
                   model, personality, mode, tokens_saved, org_id
                 ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-                [_greetUserId || null, _greetSessionId || null, 'greeting', 0, 0, 0, 0, 'greeting-shortcut', _greetPersonality || null, _greetMode || null, 500, _greetOrgId || 1]
+                [_greetUserId || null, _greetSessionId || null, 'greeting', 0, 0, 0, 0, 'greeting-shortcut', _greetPersonality || null, _greetMode || null, 500, _greetSafeOrgId]
               );
             }
           } catch (err) {
@@ -2443,7 +2451,7 @@ export class Orchestrator {
       }
 
       if (isCacheEligible) {
-        const cachedResponse = getCachedResponse(message, mode, userId, phase4Metadata.truth_type);
+        const cachedResponse = getCachedResponse(message, mode, userId, phase4Metadata.truth_type, orgId);
         if (cachedResponse) {
           console.log(
             `[RESPONSE-CACHE] Cache hit — ` +
@@ -2457,6 +2465,10 @@ export class Orchestrator {
           const _cacheMode = mode;
           const _cacheTruthType = phase4Metadata.truth_type;
           const _cacheOrgId = orgId;
+          const _cacheSafeOrgId = (typeof _cacheOrgId === 'number' && _cacheOrgId > 0) ? _cacheOrgId : 1;
+          if (_cacheSafeOrgId !== _cacheOrgId) {
+            console.warn('[BILLING] orgId fallback fired', { expected: _cacheOrgId, used: _cacheSafeOrgId });
+          }
           setImmediate(async () => {
             try {
               if (_cachePool) {
@@ -2466,7 +2478,7 @@ export class Orchestrator {
                     prompt_tokens, completion_tokens, cost_usd,
                     model, mode, tokens_saved, org_id
                   ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-                  [_cacheUserId || null, _cacheSessionId || null, 'cache_hit', _cacheTruthType, 0, 0, 0, 0, 'cache', _cacheMode || null, 800, _cacheOrgId || 1]
+                  [_cacheUserId || null, _cacheSessionId || null, 'cache_hit', _cacheTruthType, 0, 0, 0, 0, 'cache', _cacheMode || null, 800, _cacheSafeOrgId]
                 );
               }
             } catch (err) {
@@ -3273,6 +3285,10 @@ export class Orchestrator {
       const _retryCount = aiResponse?.retryCount ?? 0;
       const _computedDegradationTier = _degradationTier;
       const _orgId = orgId;
+      const _safeOrgId = (typeof _orgId === 'number' && _orgId > 0) ? _orgId : 1;
+      if (_safeOrgId !== _orgId) {
+        console.warn('[BILLING] orgId fallback fired', { expected: _orgId, used: _safeOrgId });
+      }
       setImmediate(async () => {
         try {
           if (_pool) {
@@ -3315,7 +3331,7 @@ export class Orchestrator {
                 _phase4Metadata?.history_reduced_by_cost || false,
                 _computedDegradationTier,
                 _retryCount,
-                _orgId || 1,
+                _safeOrgId,
               ]
             );
           }
@@ -3350,7 +3366,7 @@ export class Orchestrator {
             required: false,
             disclosure_added: false
           }
-        }, userId, _cacheTruthType);
+        }, userId, _cacheTruthType, orgId);
         console.log(
           `[RESPONSE-CACHE] Stored — ` +
           `truth_type=${_cacheTruthType} ` +
@@ -3607,6 +3623,10 @@ export class Orchestrator {
       const _fallbackMode = requestData.mode || null;
       const _fallbackReason = error?.message || 'unknown';
       const _fallbackOrgId = requestData.orgId || 1;
+      const _fallbackSafeOrgId = (typeof _fallbackOrgId === 'number' && _fallbackOrgId > 0) ? _fallbackOrgId : 1;
+      if (_fallbackSafeOrgId !== _fallbackOrgId) {
+        console.warn('[BILLING] orgId fallback fired', { expected: _fallbackOrgId, used: _fallbackSafeOrgId });
+      }
       setImmediate(async () => {
         try {
           if (_fallbackPool) {
@@ -3625,7 +3645,7 @@ export class Orchestrator {
                 _fallbackMode,
                 'emergency',
                 _fallbackReason,
-                _fallbackOrgId,
+                _fallbackSafeOrgId,
               ]
             );
           }

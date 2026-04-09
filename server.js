@@ -114,9 +114,27 @@ process.on("beforeExit", (code) => {
   console.log(`[SERVER] ⚠️ Process beforeExit event with code: ${code}`);
 });
 
-process.on("SIGTERM", () => {
-  console.log("[SERVER] 🛑 SIGTERM signal received, shutting down gracefully");
-  process.exit(0);
+process.on("SIGTERM", async () => {
+  console.log('[SERVER] SIGTERM received — graceful shutdown starting');
+
+  // Stop accepting new requests
+  server.close(() => {
+    console.log('[SERVER] HTTP server closed');
+  });
+
+  // Give in-flight requests 10s to complete, then close DB pool and exit
+  setTimeout(async () => {
+    if (global.memorySystem?.pool) {
+      try {
+        await global.memorySystem.pool.end();
+        console.log('[SERVER] DB pool closed');
+      } catch (err) {
+        console.error('[SERVER] Error closing DB pool:', err.message);
+      }
+    }
+    console.log('[SERVER] Shutdown complete');
+    process.exit(0);
+  }, 10000);
 });
 
 // SECURITY: Refuse to start if SESSION_SECRET is not set
@@ -624,7 +642,13 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
     // 2. x-admin-key header → look up org by admin_key in DB
     // 3. Default: org_id = 1 (SiteMonkeys)
     const orgPool = global.memorySystem?.pool || null;
-    const orgId = await resolveOrgId(req.headers, orgPool);
+    let orgId = await resolveOrgId(req.headers, orgPool);
+
+    // SECURITY: Explicit orgId validation — silent fallback would attribute data to wrong org
+    if (!orgId || typeof orgId !== 'number') {
+      console.error('[SECURITY] orgId resolution failed', { headers: req.headers });
+      orgId = 1; // explicit default — SiteMonkeys org
+    }
 
     // Process request through orchestrator
     const result = await orchestrator.processRequest({
@@ -1388,7 +1412,7 @@ console.log("[SERVER] ✅ Routes configured");
 
 // ===== START HTTP SERVER =====
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, "0.0.0.0", () => {
+const server = app.listen(PORT, "0.0.0.0", () => {
   console.log(`✅ Server listening on port ${PORT}`);
   console.log(`🔍 Health check available at /health`);
 });
