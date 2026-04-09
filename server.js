@@ -83,6 +83,49 @@ import { sanitizePII } from "./api/memory/pii-sanitizer.js";
 // ================================================
 
 console.log("[SERVER] ✅ Dependencies loaded");
+
+// ===== ENVIRONMENT VARIABLE VALIDATION =====
+/**
+ * Validates required and optional environment variables before the server starts.
+ * Exits with code 1 if any required variable is missing, preventing cryptic
+ * runtime errors deep inside request handlers on misconfigured deploys.
+ * Optional variables emit warnings but do not block startup.
+ */
+function validateRequiredEnvVars() {
+  const required = [
+    'DATABASE_URL',
+    'OPENAI_API_KEY',
+    'ADMIN_KEY',
+    'SESSION_SECRET',
+  ];
+
+  const optional = [
+    'ANTHROPIC_API_KEY',
+    'EVAL_API_KEY',
+    'SESSION_STATE_ENABLED',
+    'DEBUG_ORCHESTRATOR',
+    'MINI_MODEL_ENABLED',
+  ];
+
+  const missing = required.filter(key => !process.env[key]);
+
+  if (missing.length > 0) {
+    console.error('[STARTUP] Missing required environment variables:', missing.join(', '));
+    console.error('[STARTUP] Server cannot start without these variables.');
+    process.exit(1);
+  }
+
+  const missingOptional = optional.filter(key => !process.env[key]);
+
+  if (missingOptional.length > 0) {
+    console.warn('[STARTUP] Optional env vars not set (non-fatal):', missingOptional.join(', '));
+  }
+
+  console.log('[STARTUP] Environment variables validated ✅');
+}
+
+validateRequiredEnvVars();
+
 console.log("[SERVER] 🎯 Initializing Orchestrator...");
 
 const orchestrator = new Orchestrator();
@@ -136,12 +179,6 @@ process.on("SIGTERM", async () => {
     process.exit(0);
   }, 10000);
 });
-
-// SECURITY: Refuse to start if SESSION_SECRET is not set
-if (!process.env.SESSION_SECRET) {
-  console.error('[SERVER] FATAL: SESSION_SECRET environment variable is not set. Refusing to start.');
-  process.exit(1);
-}
 
 // NOW declare your variables:
 const app = express();

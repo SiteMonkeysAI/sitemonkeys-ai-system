@@ -8053,3 +8053,58 @@ describe('ML. Memory Leak Fixes', () => {
   });
 
 });
+
+// ============================================================
+// SECTION EV: ENVIRONMENT VARIABLE VALIDATION
+// Validates that required env vars are checked at startup
+// ============================================================
+
+const serverSrcEV = readRepoFile('server.js');
+
+describe('EV. Environment Variable Validation', () => {
+
+  it('EV-001: validateRequiredEnvVars function exists in server.js', () => {
+    assert.ok(serverSrcEV, 'EV-001 FAIL: server.js not found');
+    assert.ok(
+      serverSrcEV.includes('function validateRequiredEnvVars'),
+      'EV-001 FAIL: validateRequiredEnvVars function not found in server.js'
+    );
+    assert.ok(
+      serverSrcEV.includes('validateRequiredEnvVars()'),
+      'EV-001 FAIL: validateRequiredEnvVars() is not called in server.js'
+    );
+  });
+
+  it('EV-002: Function checks for DATABASE_URL, OPENAI_API_KEY, ADMIN_KEY, SESSION_SECRET', () => {
+    assert.ok(serverSrcEV, 'EV-002 FAIL: server.js not found');
+    const fnStart = serverSrcEV.indexOf('function validateRequiredEnvVars');
+    assert.ok(fnStart !== -1, 'EV-002 FAIL: validateRequiredEnvVars function not found in server.js');
+    // Extract full function body up to its closing brace by counting brace depth
+    let depth = 0;
+    let fnEnd = fnStart;
+    let foundOpen = false;
+    for (let i = fnStart; i < serverSrcEV.length; i++) {
+      if (serverSrcEV[i] === '{') { depth++; foundOpen = true; }
+      else if (serverSrcEV[i] === '}') { depth--; }
+      if (foundOpen && depth === 0) { fnEnd = i + 1; break; }
+    }
+    const fnBody = serverSrcEV.slice(fnStart, fnEnd);
+    assert.ok(
+      fnBody.includes('DATABASE_URL'),
+      'EV-002 FAIL: DATABASE_URL not in validateRequiredEnvVars required list'
+    );
+    assert.ok(
+      fnBody.includes('OPENAI_API_KEY'),
+      'EV-002 FAIL: OPENAI_API_KEY not in validateRequiredEnvVars required list'
+    );
+    assert.ok(
+      fnBody.includes('ADMIN_KEY'),
+      'EV-002 FAIL: ADMIN_KEY not in validateRequiredEnvVars required list'
+    );
+    assert.ok(
+      fnBody.includes('SESSION_SECRET'),
+      'EV-002 FAIL: SESSION_SECRET not in validateRequiredEnvVars required list'
+    );
+  });
+
+});
