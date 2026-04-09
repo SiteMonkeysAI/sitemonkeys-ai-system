@@ -2469,6 +2469,10 @@ Facts (preserve user terminology + add synonyms):`;
    * @returns {Promise<object|null>} - Similar memory to boost, or null if supersession/no match
    */
   async findSimilarMemories(userId, category, facts, orgId = 1) {
+    if (!orgId || typeof orgId !== 'number' || orgId <= 0) {
+      console.warn('[SECURITY] findSimilarMemories called without valid orgId — defaulting to 1', { received: orgId });
+      orgId = 1;
+    }
     try {
       // Generate embedding for new content
       const { generateEmbedding } = await import('../services/embedding-service.js');
@@ -2632,6 +2636,10 @@ Facts (preserve user terminology + add synonyms):`;
    * @returns {Promise<object>} - Storage result
    */
   async storeCompressedMemory(userId, category, facts, metadata, mode = 'truth-general', orgId = 1) {
+    if (!orgId || typeof orgId !== 'number' || orgId <= 0) {
+      console.warn('[SECURITY] storeCompressedMemory called without valid orgId — defaulting to 1', { received: orgId });
+      orgId = 1;
+    }
     try {
       // Normalize mode: convert underscore to hyphen for consistency
       const normalizedMode = mode.replace(/_/g, '-');

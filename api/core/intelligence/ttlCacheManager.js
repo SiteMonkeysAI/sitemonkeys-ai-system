@@ -312,6 +312,9 @@ export function getStats() {
 export function buildResponseCacheKey(message, mode, userId, truthType, orgId = 1) {
   const fingerprint = semanticFingerprint(message);
   const safeOrgId = (typeof orgId === 'number' && orgId > 0) ? orgId : 1;
+  if (safeOrgId !== orgId) {
+    console.warn('[CACHE] orgId fallback fired in buildResponseCacheKey', { expected: orgId, used: safeOrgId });
+  }
   const scope = truthType === 'SEMI_STABLE'
     ? `${safeOrgId}:${userId || 'anonymous'}:${mode}`
     : `${safeOrgId}:${mode}`;

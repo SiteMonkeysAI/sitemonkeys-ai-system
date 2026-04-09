@@ -646,7 +646,7 @@ app.post("/api/chat", chatRateLimit, async (req, res) => {
 
     // SECURITY: Explicit orgId validation — silent fallback would attribute data to wrong org
     if (!orgId || typeof orgId !== 'number') {
-      console.error('[SECURITY] orgId resolution failed', { headers: req.headers });
+      console.error('[SECURITY] orgId resolution failed', { headerKeys: Object.keys(req.headers) });
       orgId = 1; // explicit default — SiteMonkeys org
     }
 
