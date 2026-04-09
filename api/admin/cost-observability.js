@@ -110,6 +110,22 @@ export async function ensureCostLogTable(pool) {
 }
 
 /**
+ * Delete query_cost_log rows older than 90 days.
+ * Safe to call on a recurring schedule — logs but never throws.
+ * @param {import('pg').Pool} pool
+ */
+export async function cleanupOldCostLogs(pool) {
+  try {
+    const result = await pool.query(
+      `DELETE FROM query_cost_log WHERE created_at < NOW() - INTERVAL '90 days'`
+    );
+    console.log(`[COST-LOG] Cleanup: removed ${result.rowCount} rows older than 90 days`);
+  } catch (err) {
+    console.error('[COST-LOG] Cleanup error:', err.message);
+  }
+}
+
+/**
  * GET /api/admin/cost-summary
  * Returns aggregate cost breakdown by query type for the last 7 days,
  * plus a daily_totals array covering the last 30 days for history charts.

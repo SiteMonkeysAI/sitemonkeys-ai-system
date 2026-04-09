@@ -39,7 +39,11 @@ class SessionManager {
     
     // Auto-cleanup inactive sessions every 10 minutes
     this.cleanupInterval = setInterval(() => {
-      this._cleanupInactiveSessions();
+      try {
+        this._cleanupInactiveSessions();
+      } catch (err) {
+        console.error('[INTERVAL] Session cleanup error — interval continues:', err.message);
+      }
     }, 10 * 60 * 1000);
     
     this.log('Session manager initialized');

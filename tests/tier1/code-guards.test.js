@@ -7954,3 +7954,102 @@ describe('MINI. GPT-4o-mini Routing Foundation', () => {
   });
 
 });
+
+// ============================================================
+// SECTION ML: MEMORY LEAK FIXES
+// Validates that unbounded in-memory Maps have been capped
+// and that background intervals have error boundaries.
+// ============================================================
+
+const queryClassifierSrc = readRepoFile('api/core/intelligence/queryComplexityClassifier.js');
+const orchestratorSrcML  = readRepoFile('api/core/orchestrator.js');
+const serverSrc          = readRepoFile('server.js');
+const sessionManagerSrc  = readRepoFile('api/lib/session-manager.js');
+const aiProcessorsSrc    = readRepoFile('api/lib/ai-processors.js');
+const refusalMaintSrc    = readRepoFile('api/lib/validators/refusal-maintenance.js');
+const costObsSrc         = readRepoFile('api/admin/cost-observability.js');
+
+describe('ML. Memory Leak Fixes', () => {
+
+  it('ML-001: queryComplexityClassifier embeddingCache does not exceed 500 entries', () => {
+    assert.ok(queryClassifierSrc, 'ML-001 FAIL: queryComplexityClassifier.js not found');
+    assert.ok(
+      queryClassifierSrc.includes('MAX_EMBEDDING_CACHE'),
+      'ML-001 FAIL: MAX_EMBEDDING_CACHE constant not defined in queryComplexityClassifier.js'
+    );
+    assert.ok(
+      /MAX_EMBEDDING_CACHE\s*=\s*500/.test(queryClassifierSrc),
+      'ML-001 FAIL: MAX_EMBEDDING_CACHE must be set to 500'
+    );
+    // Eviction can be inline or via a helper — either form is acceptable
+    const hasInlineEviction = queryClassifierSrc.includes('embeddingCache.size >= MAX_EMBEDDING_CACHE');
+    const hasHelperEviction = queryClassifierSrc.includes('setCachedEmbedding');
+    assert.ok(
+      hasInlineEviction || hasHelperEviction,
+      'ML-001 FAIL: FIFO eviction (size guard) not found in queryComplexityClassifier.js'
+    );
+  });
+
+  it('ML-002: orchestrator sessionCache does not exceed 1000 entries', () => {
+    assert.ok(orchestratorSrcML, 'ML-002 FAIL: orchestrator.js not found');
+    assert.ok(
+      orchestratorSrcML.includes('sessionCache.size >= 1000'),
+      'ML-002 FAIL: FIFO eviction guard (sessionCache.size >= 1000) not found in orchestrator.js'
+    );
+  });
+
+  it('ML-003: all background intervals have try/catch error boundaries', () => {
+    // server.js keepalive
+    assert.ok(serverSrc, 'ML-003 FAIL: server.js not found');
+    const keepaliveIdx = serverSrc.indexOf('Keepalive ping');
+    assert.ok(keepaliveIdx !== -1, 'ML-003 FAIL: keepalive interval not found in server.js');
+    const keepaliveBlock = serverSrc.slice(Math.max(0, keepaliveIdx - 200), keepaliveIdx + 50);
+    assert.ok(
+      keepaliveBlock.includes('try {'),
+      'ML-003 FAIL: keepalive interval in server.js missing try/catch'
+    );
+
+    // session-manager.js cleanup interval
+    assert.ok(sessionManagerSrc, 'ML-003 FAIL: session-manager.js not found');
+    const smIdx = sessionManagerSrc.indexOf('_cleanupInactiveSessions');
+    assert.ok(smIdx !== -1, 'ML-003 FAIL: _cleanupInactiveSessions not found in session-manager.js');
+    const smBlock = sessionManagerSrc.slice(Math.max(0, smIdx - 200), smIdx + 50);
+    assert.ok(
+      smBlock.includes('try {'),
+      'ML-003 FAIL: session-manager.js cleanup interval missing try/catch'
+    );
+
+    // ai-processors.js refusal tracking cleanup
+    assert.ok(aiProcessorsSrc, 'ML-003 FAIL: ai-processors.js not found');
+    const apIdx = aiProcessorsSrc.indexOf('sessionRefusals.delete');
+    assert.ok(apIdx !== -1, 'ML-003 FAIL: sessionRefusals.delete not found in ai-processors.js');
+    const apBlock = aiProcessorsSrc.slice(Math.max(0, apIdx - 300), apIdx + 50);
+    assert.ok(
+      apBlock.includes('try {'),
+      'ML-003 FAIL: ai-processors.js refusal cleanup interval missing try/catch'
+    );
+
+    // refusal-maintenance.js cleanup
+    assert.ok(refusalMaintSrc, 'ML-003 FAIL: refusal-maintenance.js not found');
+    const rmIdx = refusalMaintSrc.lastIndexOf('cleanupOldStates');
+    assert.ok(rmIdx !== -1, 'ML-003 FAIL: cleanupOldStates not found in refusal-maintenance.js');
+    const rmBlock = refusalMaintSrc.slice(Math.max(0, rmIdx - 200), rmIdx + 50);
+    assert.ok(
+      rmBlock.includes('try {'),
+      'ML-003 FAIL: refusal-maintenance.js cleanup interval missing try/catch'
+    );
+  });
+
+  it('ML-004: cleanupOldCostLogs function exists and is exported from cost-observability.js', () => {
+    assert.ok(costObsSrc, 'ML-004 FAIL: api/admin/cost-observability.js not found');
+    assert.ok(
+      costObsSrc.includes('export async function cleanupOldCostLogs'),
+      'ML-004 FAIL: cleanupOldCostLogs is not exported from cost-observability.js'
+    );
+    assert.ok(
+      costObsSrc.includes("INTERVAL '90 days'"),
+      "ML-004 FAIL: cleanupOldCostLogs must delete rows older than 90 days"
+    );
+  });
+
+});

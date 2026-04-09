@@ -84,6 +84,20 @@ import { buildSessionContext } from "./intelligence/session-state-extractor.js";
 // This Map is keyed by sessionId and cleared when the server restarts.
 const _sessionClaudeDeclined = new Map();
 
+// Cleanup stale entries every 30 minutes — remove sessions older than 2 hours
+setInterval(() => {
+  try {
+    const cutoff = Date.now() - (2 * 60 * 60 * 1000);
+    for (const [key, val] of _sessionClaudeDeclined) {
+      if (val.timestamp < cutoff) {
+        _sessionClaudeDeclined.delete(key);
+      }
+    }
+  } catch (err) {
+    console.error('[INTERVAL] _sessionClaudeDeclined cleanup error — interval continues:', err.message);
+  }
+}, 30 * 60 * 1000);
+
 // Response Intelligence Configuration
 const GREETING_LIMIT = 150; // Max chars for greeting responses (Anti-Engagement)
 const MIN_SENTENCE_LENGTH = 50; // Minimum chars to consider a valid sentence
@@ -5564,12 +5578,12 @@ export class Orchestrator {
       const initialRoutingReason = [...routingReason];
 
       const sessionDeclinedClaude =
-        context.sessionId && _sessionClaudeDeclined.get(context.sessionId) === true;
+        context.sessionId && _sessionClaudeDeclined.get(context.sessionId)?.declined === true;
 
       // Record a new per-request decline into the session store
       if (context.claudeConfirmed === false) {
         if (context.sessionId) {
-          _sessionClaudeDeclined.set(context.sessionId, true);
+          _sessionClaudeDeclined.set(context.sessionId, { declined: true, timestamp: Date.now() });
           this.log(`[AI ROUTING] User declined Claude — stored for session ${context.sessionId}`);
         }
       }
@@ -7498,6 +7512,9 @@ Provide a DIRECT, CONCISE answer. No filler, no preamble.
     let session = this.sessionCache.get(sessionId);
     if (!session) {
       session = { documents: [] };
+      if (this.sessionCache.size >= 1000) {
+        this.sessionCache.delete(this.sessionCache.keys().next().value);
+      }
       this.sessionCache.set(sessionId, session);
     }
 
