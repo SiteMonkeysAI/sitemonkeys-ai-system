@@ -11,6 +11,7 @@ import { generateFactFingerprint, storeWithSupersession } from '../services/supe
 import { SemanticAnalyzer } from '../core/intelligence/semantic_analyzer.js';
 import { isEmptyExtractionResult } from './empty-extraction-guard.js';
 export { EMPTY_EXTRACTION_PATTERNS, isEmptyExtractionResult } from './empty-extraction-guard.js';
+import { sanitizeForMemoryStorage } from '../utils/input-sanitizer.js';
 
 // Initialize semantic analyzer for importance scoring
 const semanticAnalyzer = new SemanticAnalyzer();
@@ -1157,6 +1158,9 @@ export class IntelligentMemoryStorage {
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
         console.log('[TRACE-T2] User message:', userMessage?.substring(0, 200));
       }
+
+            // Sanitize user message to neutralise prompt-injection attempts and strip HTML
+      userMessage = sanitizeForMemoryStorage(userMessage);
 
       // STORAGE CONTRACT DIAGNOSTIC LOGGING (Issue #648)
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
