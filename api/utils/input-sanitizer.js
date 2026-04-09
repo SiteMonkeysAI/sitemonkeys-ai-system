@@ -24,25 +24,47 @@ const INJECTION_PATTERNS = [
 ];
 
 // ---------------------------------------------------------------------------
-// HTML / script patterns
+// HTML tag pattern
 //
-// Script blocks: the closing-tag pattern uses [^>]* to allow any characters
-// between "script" and ">" (covers </script>, </script >, </script\t\n bar>).
-//
-// HTML tag stripping uses a bounded quantifier {0,2000} to prevent polynomial
-// backtracking on adversarial inputs with many '<' characters and no '>'.
-//
-// Both patterns are applied in a loop until no further matches remain, which
-// prevents re-assembly attacks using nested tags (e.g. "<scr<script>ipt>").
+// Bounded quantifier {0,2000} prevents polynomial backtracking on adversarial
+// inputs that contain many '<' characters with no matching '>'.
 // ---------------------------------------------------------------------------
-const SCRIPT_BLOCK_RE = /<script\b[^>]*>[\s\S]*?<\/script[^>]*>/gi;
-const HTML_TAG_RE     = /<[^>]{0,2000}>/g;
+const HTML_TAG_RE = /<[^>]{0,2000}>/g;
 
-// Maximum input length processed for HTML stripping — prevents DoS via
-// extremely long strings that combine with the loop-until-clean strategy.
+// Maximum input length processed — bounds worst-case regex work.
 const MAX_INPUT_LENGTH = 10_000;
 
-// Strip a pattern repeatedly until no more matches remain.
+// ---------------------------------------------------------------------------
+// Script block removal (O(n), no backtracking regex)
+//
+// Uses split on closing tags + map to trim from the last opening tag.
+// This avoids the polynomial ReDoS risk of `[\s\S]*?` across long inputs.
+// The loop repeats until the string is stable to handle obfuscated nesting
+// such as "<scr<script>ipt>".
+// ---------------------------------------------------------------------------
+
+// Closing-tag pattern: allows arbitrary non-">" chars (covers "</script\t bar>").
+const SCRIPT_CLOSE_RE = /<\/script[^>]{0,2000}>/gi;
+// Opening-tag pattern: used inside map to locate start of each block.
+const SCRIPT_OPEN_RE  = /<script\b[^>]{0,2000}>/i;
+
+function stripScriptBlocks(input) {
+  let str = input;
+  let prev;
+  do {
+    prev = str;
+    // Split on every </script...> closing tag, then for each segment remove
+    // anything from the last <script...> opening tag to the end of the segment.
+    const parts = str.split(SCRIPT_CLOSE_RE);
+    str = parts.map(part => {
+      const m = SCRIPT_OPEN_RE.exec(part);
+      return m ? part.slice(0, m.index) : part;
+    }).join('');
+  } while (str !== prev);
+  return str;
+}
+
+// Strip a regex pattern repeatedly until no more matches remain.
 function stripUntilClean(str, pattern) {
   let prev;
   do {
@@ -92,13 +114,14 @@ export function sanitizeForMemoryStorage(text) {
     sanitized = sanitized.slice(0, MAX_INPUT_LENGTH);
   }
 
-  // 3. Strip <script>…</script> blocks (content included) — loop until clean
-  sanitized = stripUntilClean(sanitized, SCRIPT_BLOCK_RE);
+  // 3. Remove <script>…</script> blocks (content included) using O(n) splitter
+  sanitized = stripScriptBlocks(sanitized);
 
   // 4. Strip remaining HTML tags — loop until clean
   sanitized = stripUntilClean(sanitized, HTML_TAG_RE);
 
   return sanitized;
 }
+
 
 
