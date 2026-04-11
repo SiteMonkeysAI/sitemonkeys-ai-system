@@ -29,13 +29,13 @@ const MODEL_COSTS = {
     input: 0.00002 / 1000,
     output: 0,
   },
-  "grok-4-fast": {
+  "grok-4-1-fast-non-reasoning": {
     input: 0.20 / 1000000,
     output: 0.50 / 1000000,
   },
-  "grok-4": {
-    input: 3.00 / 1000000,
-    output: 15.00 / 1000000,
+  "grok-4.20-0309-non-reasoning": {
+    input: 2.00 / 1000000,
+    output: 6.00 / 1000000,
   },
 };
 

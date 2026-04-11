@@ -40,7 +40,7 @@ export function registerAdapters({ openaiClient, anthropicClient, grokClient }) 
   }
   // Register Grok adapter when API key is available
   if (grokClient && GrokAdapter.active()) {
-    _adapterInstances.set('xai-grok-fast', new GrokAdapter(grokClient, 'grok-4-fast'));
+    _adapterInstances.set('xai-grok-fast', new GrokAdapter(grokClient, 'grok-4-1-fast-non-reasoning'));
   }
 }
 
@@ -153,7 +153,7 @@ const ADAPTER_REGISTRY = {
 
   'xai-grok-fast': {
     provider: 'xai',
-    model: 'grok-4-fast',
+    model: 'grok-4-1-fast-non-reasoning',
     api: 'openai-compatible',
     primary: false,
     active: () => !!process.env.GROK_API_KEY,
