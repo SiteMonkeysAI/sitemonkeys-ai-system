@@ -1573,3 +1573,308 @@ header {
     content: none !important;
   }
 }
+
+/* ============================================================
+   PASS 5 — Consolidation, bug fixes, mobile regressions,
+   desktop charcoal theme, logo/robot/rocket repositioning.
+   Appended after Pass 4. CSS-only; no JS/HTML changes.
+   ============================================================ */
+
+/* ============================================================
+   SECTION A — BUG FIX (applies globally, no media query)
+   ============================================================ */
+
+/* A1 — Fix cross-pass hover bug on NEEDS REFRESH vault button.
+   Pass 2's hover rule (comma-listed with default state) set
+   background:blue !important. Pass 3 intended to supersede it
+   but only redeclared box-shadow/transform on the attribute-
+   selector hover — so on hover of the NEEDS REFRESH button,
+   Pass 2's blue background was still winning. Now redeclared
+   with red at later source order, same (1,1,1) specificity. */
+#refresh-vault-btn[style*="FF6B6B" i]:hover {
+  background: linear-gradient(180deg,
+    rgba(180, 20, 20, 0.95) 0%,
+    rgba(140, 10, 10, 1) 50%,
+    rgba(180, 20, 20, 0.95) 100%) !important;
+  border-color: rgba(255, 100, 100, 1) !important;
+  box-shadow:
+    0 0 20px rgba(255, 80, 80, 0.9),
+    0 0 40px rgba(255, 60, 60, 0.5),
+    inset 0 0 25px rgba(200, 30, 30, 0.35) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* ============================================================
+   SECTION B — MOBILE REGRESSION FIXES (< 900px only)
+   Undoes Pass 4's global overrides that broke mobile layouts.
+   ============================================================ */
+@media (max-width: 899px) {
+
+  /* B1 — Restore mobile attachment/analyze button sizes */
+  .attachment-button,
+  #analyze-btn {
+    width: 24px !important;
+    height: 24px !important;
+    font-size: 16px !important;
+    min-width: unset !important;
+  }
+
+  /* B2 — Restore mobile send button proportions */
+  .send-button {
+    width: 3.5rem !important;
+    height: 2.5rem !important;
+    min-width: unset !important;
+    font-size: 16px !important;
+    border-radius: 50px !important;
+  }
+
+  /* B3 — Restore mobile mode button padding */
+  .mode-btn {
+    padding: 4px 10px !important;
+    font-size: 0.8rem !important;
+    letter-spacing: 0.3px !important;
+    border-radius: 6px !important;
+  }
+
+  /* B4 — Remove status title panel treatment on mobile */
+  .status-title {
+    background: transparent !important;
+    padding: 0 !important;
+    border-radius: 0 !important;
+    border-bottom: none !important;
+    margin-bottom: 0 !important;
+  }
+
+  /* B5 — Remove panel borders on mobile (match embedded removal) */
+  .status-panel {
+    border: none !important;
+    box-shadow: none !important;
+    background: rgba(6, 14, 28, 0.98) !important;
+  }
+
+  .chat-panel {
+    border: none !important;
+    box-shadow: none !important;
+    background: rgba(6, 14, 28, 0.98) !important;
+  }
+
+  /* B6 — Restore header padding on mobile */
+  header {
+    padding-bottom: 4px !important;
+  }
+
+  /* B7 — Restore mode toggle container padding on mobile */
+  .mode-toggle-container {
+    padding: 2px 4px !important;
+  }
+
+  /* B8 — Remove mode toggle container sweep line on mobile */
+  .mode-toggle-container::before {
+    display: none !important;
+  }
+
+  /* B9 — Main content full width on mobile */
+  .main-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+  }
+
+}
+
+/* ============================================================
+   SECTION C — DESKTOP VISUAL FIXES (>= 900px only)
+   ============================================================ */
+@media (min-width: 900px) {
+
+  /* ---------------------------------------------------------
+     C1 — Logo: push to far left of header.
+     VERIFIED selector: .logo (single class match in
+     index.html line 1312). Speculative selectors omitted:
+     .site-logo, .header-logo, header img[alt*="Site"],
+     header img[alt*="Logo"], header img[src*="logo"] —
+     none exist or they are unnecessarily broad.
+
+     CRITICAL: .logo uses position:absolute with
+     left: calc(50% - 450px) relative to .header-row.
+     Flex `order` and `margin-auto` DO NOT apply to
+     absolutely positioned elements — so the user's
+     speculative order/margin approach cannot work here.
+     Instead we override the absolute offsets directly
+     and remove the .header-row max-width cap so the
+     edges reach the actual viewport edges.
+     --------------------------------------------------------- */
+  .header-row {
+    max-width: none !important;
+  }
+
+  .logo {
+    left: 20px !important;
+    right: auto !important;
+  }
+
+  /* ---------------------------------------------------------
+     C2 — AI robot wrapper: push to far right.
+     VERIFIED selector: .ai-robot-wrapper (also carries
+     id="confidenceToggleWrapper"). Both target the wrapper
+     <div> at line 1336, which is the absolutely positioned
+     element. The inner <img class="ai-robot"
+     id="confidenceToggleBtn"> is NOT absolutely positioned —
+     applying offset overrides to it would have no effect.
+     --------------------------------------------------------- */
+  .ai-robot-wrapper,
+  #confidenceToggleWrapper {
+    right: 20px !important;
+    left: auto !important;
+  }
+
+  /* ---------------------------------------------------------
+     C3 — Hide the desktop header rocket.
+     VERIFIED selector: .rocket-top (line 1340). This is the
+     only rocket visible on desktop — .mobile-rocket (line
+     1351) is display:none by default on desktop.
+
+     DELIBERATELY NOT USING the speculative broad selectors
+     img[src*="rocket"] and img[alt*="Rocket"] — those would
+     ALSO match the send button icon at line 1445
+     (<img src="rocket.png" alt="Rocket Send">) and hide
+     the send button's entire icon. Using .rocket-top avoids
+     that cross-hit.
+     --------------------------------------------------------- */
+  .rocket-top {
+    display: none !important;
+  }
+
+  /* ---------------------------------------------------------
+     C4 — Panel interiors: dark charcoal concrete
+     --------------------------------------------------------- */
+  .status-panel,
+  .chat-panel {
+    background: linear-gradient(145deg,
+      #1a1a1f 0%,
+      #141418 50%,
+      #1a1a1f 100%) !important;
+    border: 1px solid rgba(160, 160, 180, 0.35) !important;
+    box-shadow:
+      0 0 30px rgba(0, 0, 0, 0.6),
+      inset 0 0 40px rgba(0, 0, 0, 0.4) !important;
+  }
+
+  /* C5 — Chat box interior: near-black charcoal */
+  .chat-box,
+  #chat-box {
+    background: rgba(12, 12, 15, 0.97) !important;
+  }
+
+  /* C6 — Input area: near-black with silver outline */
+  .input-area {
+    background: rgba(14, 14, 18, 0.97) !important;
+    border: 1px solid rgba(160, 160, 180, 0.5) !important;
+    box-shadow:
+      0 0 15px rgba(0, 0, 0, 0.5),
+      inset 0 0 20px rgba(0, 0, 0, 0.4) !important;
+    border-radius: 16px !important;
+  }
+
+  .input-area:focus-within {
+    border-color: rgba(200, 200, 220, 0.7) !important;
+    box-shadow:
+      0 0 20px rgba(150, 150, 180, 0.25),
+      inset 0 0 20px rgba(0, 0, 0, 0.4) !important;
+  }
+
+  /* C7 — Mode buttons: dark steel gunmetal with neon edge */
+  .mode-btn {
+    background: linear-gradient(180deg,
+      #1e2028 0%,
+      #16181e 50%,
+      #1e2028 100%) !important;
+    border: 1.5px solid rgba(120, 140, 180, 0.5) !important;
+    box-shadow:
+      0 0 8px rgba(100, 120, 180, 0.2),
+      inset 0 1px 0 rgba(200, 210, 255, 0.08),
+      inset 0 -1px 0 rgba(0, 0, 30, 0.4) !important;
+    color: #b0b8d0 !important;
+    border-radius: 6px !important;
+    letter-spacing: 0.5px !important;
+  }
+
+  .mode-btn:hover:not(.active) {
+    background: linear-gradient(180deg,
+      #252830 0%,
+      #1c1f28 50%,
+      #252830 100%) !important;
+    border-color: rgba(180, 200, 255, 0.7) !important;
+    box-shadow:
+      0 0 14px rgba(140, 160, 255, 0.3),
+      inset 0 1px 0 rgba(200, 215, 255, 0.12) !important;
+    color: #e0e8ff !important;
+  }
+
+  .mode-btn.active,
+  .mode-btn[data-mode="truth_general"].active,
+  .mode-btn[data-mode="business_validation"].active,
+  .mode-btn[data-mode="site_monkeys"].active {
+    background: linear-gradient(180deg,
+      #1a2545 0%,
+      #111830 50%,
+      #1a2545 100%) !important;
+    border-color: rgba(100, 180, 255, 1) !important;
+    box-shadow:
+      0 0 18px rgba(80, 160, 255, 0.6),
+      0 0 35px rgba(60, 140, 255, 0.25),
+      inset 0 0 20px rgba(30, 100, 200, 0.3),
+      inset 0 1px 0 rgba(160, 210, 255, 0.3) !important;
+    color: #ffffff !important;
+    text-shadow: 0 0 8px rgba(140, 200, 255, 0.7) !important;
+  }
+
+  /* C8 — Send button: elongated pill, rocket fits inside */
+  .send-button {
+    width: 72px !important;
+    height: 44px !important;
+    min-width: 72px !important;
+    border-radius: 50px !important;
+    font-size: 20px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  /* C9 — Footer buttons: silver treatment */
+  .footer-icon-btn {
+    background: linear-gradient(180deg,
+      rgba(40, 42, 50, 0.95) 0%,
+      rgba(28, 30, 38, 0.98) 100%) !important;
+    border: 1.5px solid rgba(160, 165, 185, 0.5) !important;
+    box-shadow: 0 0 8px rgba(150, 155, 180, 0.2) !important;
+    border-radius: 8px !important;
+    color: #c0c4d8 !important;
+  }
+
+  .footer-icon-btn:hover {
+    border-color: rgba(200, 205, 230, 0.8) !important;
+    box-shadow: 0 0 14px rgba(180, 185, 220, 0.35) !important;
+    color: #ffffff !important;
+    transform: translateY(-1px) !important;
+  }
+
+  /* C10 — Vault info panel: silver border treatment */
+  #vault-info {
+    border: 1px solid rgba(160, 165, 185, 0.4) !important;
+    box-shadow:
+      0 0 15px rgba(255, 180, 0, 0.15),
+      inset 0 0 20px rgba(0, 0, 0, 0.4) !important;
+    background: rgba(16, 16, 20, 0.96) !important;
+  }
+
+  /* C11 — Main content outer glow updated for charcoal theme */
+  .main-content {
+    box-shadow:
+      0 0 60px rgba(0, 0, 0, 0.7),
+      0 0 120px rgba(0, 0, 0, 0.4),
+      0 20px 60px rgba(0, 0, 0, 0.6) !important;
+  }
+
+}
