@@ -1306,3 +1306,270 @@ header {
     z-index: 10 !important;
   }
 }
+
+/* ============================================================
+   PASS 4 — Layout widening, star field, deeper contrast
+   Appended after Pass 3. CSS-only; no JS/HTML changes.
+   Verified class names from index.html (no content-wrapper,
+   panels-wrapper, panel-container, mode-buttons, tab-buttons,
+   nav-buttons, or analyze-button exist — real names are
+   .main-wrapper / .main-content / .mode-toggle-container /
+   #analyze-btn / .attachment-button).
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   FIX 1 — Widen main content on desktop
+   Real wrapper structure: .main-wrapper > .main-content >
+   (.status-panel, .chat-panel). The speculative class names
+   in the brief (.content-wrapper, .panels-wrapper,
+   .panel-container) do not exist — omitted.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .main-content {
+    width: 92% !important;
+    max-width: 1400px !important;
+    margin: 0 auto !important;
+  }
+
+  .status-panel {
+    min-width: 340px !important;
+    flex: 0 0 38% !important;
+  }
+
+  .chat-panel {
+    flex: 1 1 auto !important;
+    min-width: 0 !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 2 — Deep space star field background (viewport-fixed)
+   ----------------------------------------------------------- */
+html,
+body {
+  background:
+    radial-gradient(1px 1px at 10% 15%, rgba(255, 255, 255, 0.4) 0%, transparent 100%),
+    radial-gradient(1px 1px at 25% 40%, rgba(255, 255, 255, 0.3) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 40% 8%, rgba(255, 255, 255, 0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 55% 25%, rgba(255, 255, 255, 0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 70% 60%, rgba(255, 255, 255, 0.4) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 80% 12%, rgba(255, 255, 255, 0.5) 0%, transparent 100%),
+    radial-gradient(1px 1px at 90% 45%, rgba(255, 255, 255, 0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 15% 70%, rgba(255, 255, 255, 0.25) 0%, transparent 100%),
+    radial-gradient(1px 1px at 35% 85%, rgba(255, 255, 255, 0.2) 0%, transparent 100%),
+    radial-gradient(1px 1px at 60% 75%, rgba(255, 255, 255, 0.3) 0%, transparent 100%),
+    radial-gradient(1px 1px at 75% 88%, rgba(255, 255, 255, 0.2) 0%, transparent 100%),
+    radial-gradient(1.5px 1.5px at 88% 78%, rgba(255, 255, 255, 0.35) 0%, transparent 100%),
+    radial-gradient(1px 1px at 5% 50%, rgba(255, 255, 255, 0.2) 0%, transparent 100%),
+    radial-gradient(1px 1px at 45% 55%, rgba(255, 255, 255, 0.15) 0%, transparent 100%),
+    radial-gradient(1px 1px at 95% 30%, rgba(255, 255, 255, 0.25) 0%, transparent 100%),
+    radial-gradient(ellipse at top center, #0d1b2e 0%, #060d1a 60%, #020608 100%) !important;
+  background-attachment: fixed !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 3 — Header gradient fade + cyan sweep under mode buttons
+   Real wrapper for the three mode buttons is
+   `.mode-toggle-container` — using that directly instead of
+   the speculative .mode-buttons / .tab-buttons / .nav-buttons
+   or the :has() selector (which would also work but is less
+   reliable across browser versions).
+   ----------------------------------------------------------- */
+header {
+  background: linear-gradient(180deg,
+    #020810 0%,
+    #061525 40%,
+    #0a2040 70%,
+    #061525 100%) !important;
+  padding-bottom: 12px !important;
+}
+
+.mode-toggle-container {
+  position: relative !important;
+  padding: 6px 12px !important;
+}
+
+.mode-toggle-container::before {
+  content: '' !important;
+  position: absolute !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  bottom: 0 !important;
+  width: 80% !important;
+  height: 1px !important;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(0, 212, 255, 0.4) 30%,
+    rgba(0, 212, 255, 0.6) 50%,
+    rgba(0, 212, 255, 0.4) 70%,
+    transparent 100%) !important;
+  pointer-events: none !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 4 — Mode buttons: sharper illuminated panel switch
+   Overrides Pass 2/3 mode-btn rules. Per-data-mode .active
+   variants included so the new active style beats the
+   (0,3,0)-specificity rules inherited from prior passes.
+   ----------------------------------------------------------- */
+.mode-btn {
+  border-radius: 6px !important;
+  border: 1.5px solid rgba(0, 180, 255, 0.6) !important;
+  background: linear-gradient(180deg,
+    rgba(15, 40, 70, 0.95) 0%,
+    rgba(8, 20, 45, 0.98) 50%,
+    rgba(15, 40, 70, 0.95) 100%) !important;
+  box-shadow:
+    0 0 12px rgba(0, 180, 255, 0.25),
+    inset 0 0 15px rgba(0, 100, 180, 0.15),
+    inset 0 1px 0 rgba(100, 200, 255, 0.2),
+    inset 0 -1px 0 rgba(0, 50, 100, 0.4) !important;
+  color: #a8d8f0 !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.8px !important;
+  transition: all 0.2s ease !important;
+  padding: 8px 20px !important;
+}
+
+.mode-btn:hover:not(.active) {
+  border-color: rgba(0, 220, 255, 0.9) !important;
+  background: linear-gradient(180deg,
+    rgba(20, 60, 100, 0.95) 0%,
+    rgba(12, 35, 70, 0.98) 50%,
+    rgba(20, 60, 100, 0.95) 100%) !important;
+  box-shadow:
+    0 0 20px rgba(0, 200, 255, 0.4),
+    inset 0 0 20px rgba(0, 150, 220, 0.25),
+    inset 0 1px 0 rgba(150, 220, 255, 0.3) !important;
+  color: #ffffff !important;
+}
+
+.mode-btn.active,
+.mode-btn[data-mode="truth_general"].active,
+.mode-btn[data-mode="business_validation"].active,
+.mode-btn[data-mode="site_monkeys"].active {
+  background: linear-gradient(180deg,
+    rgba(20, 80, 180, 0.95) 0%,
+    rgba(10, 50, 130, 1) 50%,
+    rgba(20, 80, 180, 0.95) 100%) !important;
+  border-color: rgba(80, 200, 255, 1) !important;
+  box-shadow:
+    0 0 20px rgba(60, 180, 255, 0.7),
+    0 0 40px rgba(40, 160, 255, 0.3),
+    inset 0 0 25px rgba(30, 120, 220, 0.4),
+    inset 0 1px 0 rgba(180, 230, 255, 0.4),
+    inset 0 -1px 0 rgba(10, 60, 150, 0.5) !important;
+  color: #ffffff !important;
+  text-shadow: 0 0 8px rgba(150, 220, 255, 0.8) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 5 — Panel interiors: deep near-black with border glow
+   ----------------------------------------------------------- */
+.status-panel {
+  background: linear-gradient(145deg,
+    rgba(6, 14, 28, 0.98) 0%,
+    rgba(4, 10, 22, 1) 50%,
+    rgba(6, 14, 28, 0.98) 100%) !important;
+  border: 1.5px solid rgba(0, 212, 255, 0.4) !important;
+  box-shadow:
+    0 0 30px rgba(0, 212, 255, 0.12),
+    0 0 60px rgba(0, 100, 200, 0.08),
+    inset 0 0 40px rgba(0, 0, 0, 0.6) !important;
+}
+
+.chat-panel {
+  background: linear-gradient(145deg,
+    rgba(6, 14, 28, 0.98) 0%,
+    rgba(4, 10, 22, 1) 50%,
+    rgba(6, 14, 28, 0.98) 100%) !important;
+  border: 1.5px solid rgba(0, 212, 255, 0.4) !important;
+  box-shadow:
+    0 0 30px rgba(0, 212, 255, 0.12),
+    0 0 60px rgba(0, 100, 200, 0.08),
+    inset 0 0 40px rgba(0, 0, 0, 0.6) !important;
+}
+
+.chat-box,
+#chat-box {
+  background: rgba(3, 8, 18, 0.95) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 6 — Status title dark panel treatment
+   ----------------------------------------------------------- */
+.status-title {
+  background: linear-gradient(135deg,
+    rgba(4, 10, 24, 0.98) 0%,
+    rgba(8, 18, 40, 0.95) 100%) !important;
+  padding: 10px 14px !important;
+  border-radius: 8px !important;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.2) !important;
+  margin-bottom: 10px !important;
+  display: block !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 7 — Larger paperclip and magnifier icons
+   The magnifier button is #analyze-btn (also carries class
+   .attachment-button). There is no .analyze-button class in
+   the HTML — targeting only the real ID plus the shared class.
+   ----------------------------------------------------------- */
+.attachment-button {
+  font-size: 22px !important;
+  width: 40px !important;
+  height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  opacity: 0.85 !important;
+  transition: opacity 0.2s ease, transform 0.2s ease !important;
+}
+
+.attachment-button:hover {
+  opacity: 1 !important;
+  transform: scale(1.15) !important;
+}
+
+#analyze-btn {
+  font-size: 22px !important;
+  width: 40px !important;
+  height: 40px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  opacity: 0.85 !important;
+  transition: opacity 0.2s ease, transform 0.2s ease !important;
+}
+
+#analyze-btn:hover {
+  opacity: 1 !important;
+  transform: scale(1.15) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 8 — Reduce send button size
+   ----------------------------------------------------------- */
+.send-button {
+  width: 52px !important;
+  height: 52px !important;
+  min-width: 52px !important;
+  font-size: 20px !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 9 — Remove Pass 3 robot peek ::after
+   Later !important declarations at equal specificity win
+   over the Pass 3 @media rule above.
+   ----------------------------------------------------------- */
+.input-area::after {
+  display: none !important;
+  content: none !important;
+}
+
+@media (min-width: 900px) {
+  .input-area::after {
+    display: none !important;
+    content: none !important;
+  }
+}
