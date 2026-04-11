@@ -14,6 +14,7 @@
 
 import { OpenAIAdapter }    from './OpenAIAdapter.js';
 import { AnthropicAdapter } from './AnthropicAdapter.js';
+import { GrokAdapter }      from './GrokAdapter.js';
 
 // ---------------------------------------------------------------------------
 // Adapter instance store — populated by registerAdapters()
@@ -26,9 +27,9 @@ const _adapterInstances = new Map();
  * Register live adapter instances backed by real SDK clients.
  * Call this once during orchestrator initialization.
  *
- * @param {{ openaiClient: object, anthropicClient: object }} clients
+ * @param {{ openaiClient: object, anthropicClient: object, grokClient?: object }} clients
  */
-export function registerAdapters({ openaiClient, anthropicClient }) {
+export function registerAdapters({ openaiClient, anthropicClient, grokClient }) {
   if (openaiClient) {
     _adapterInstances.set('openai-gpt4o',      new OpenAIAdapter(openaiClient, 'gpt-4o'));
     _adapterInstances.set('openai-gpt4o-mini', new OpenAIAdapter(openaiClient, 'gpt-4o-mini'));
@@ -36,6 +37,10 @@ export function registerAdapters({ openaiClient, anthropicClient }) {
   if (anthropicClient) {
     _adapterInstances.set('anthropic-claude-sonnet', new AnthropicAdapter(anthropicClient));
     _adapterInstances.set('anthropic-claude-haiku',  new AnthropicAdapter(anthropicClient, 'claude-haiku-4-5-20251001'));
+  }
+  // Register Grok adapter when API key is available
+  if (grokClient && GrokAdapter.active()) {
+    _adapterInstances.set('xai-grok-fast', new GrokAdapter(grokClient, 'grok-4.1-fast'));
   }
 }
 
@@ -139,12 +144,29 @@ const ADAPTER_REGISTRY = {
       hallucination_control: 'standard'
     },
     tier: 'standard'
-  }
+  },
 
   // Future adapters added here:
   // 'openai-gpt54': { ... }
   // 'google-gemini-pro': { ... }
   // 'meta-llama': { ... }
+
+  'xai-grok-fast': {
+    provider: 'xai',
+    model: 'grok-4.1-fast',
+    api: 'openai-compatible',
+    primary: false,
+    active: () => !!process.env.GROK_API_KEY,
+    capabilities: {
+      reasoning_tier: 'standard',
+      tool_reliable: true,
+      structured_output: true,
+      long_context: 'high',               // 2M token context window
+      hallucination_control: 'standard',
+      supportsRealTimeData: true,
+    },
+    tier: 'standard'
+  }
 };
 
 /**

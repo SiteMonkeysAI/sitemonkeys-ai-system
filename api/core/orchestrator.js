@@ -63,6 +63,7 @@ import {
   getAdapter,
   getAdapterInstance,
 } from "./adapters/adapter-registry.js";
+import { GROK_BASE_URL } from "./adapters/GrokAdapter.js";
 import {
   detectRequiredCapabilities,
   calculateCapabilityGap
@@ -349,10 +350,16 @@ export class Orchestrator {
       apiKey: process.env.ANTHROPIC_API_KEY,
     });
 
+    // Create Grok client when API key is available (xAI uses OpenAI-compatible API)
+    this.grok = process.env.GROK_API_KEY
+      ? new OpenAI({ apiKey: process.env.GROK_API_KEY, baseURL: GROK_BASE_URL })
+      : null;
+
     // Register adapter instances for model-agnostic routing
     registerAdapters({
       openaiClient:    this.openai,
       anthropicClient: this.anthropic,
+      grokClient:      this.grok,
     });
 
     // Database pool for semantic retrieval (set during initialization)
@@ -5469,7 +5476,9 @@ export class Orchestrator {
         'gpt-4': { maxContext: 8192, reservedOutput: 2000 },
         'gpt-4o': { maxContext: 128000, reservedOutput: 4000 },
         'gpt-4o-mini': { maxContext: 128000, reservedOutput: 4000 },
-        'claude-sonnet-4-20250514': { maxContext: 200000, reservedOutput: 4000 }
+        'claude-sonnet-4-20250514': { maxContext: 200000, reservedOutput: 4000 },
+        'grok-4.1-fast': { maxContext: 2000000, reservedOutput: 4000 },
+        'grok-4': { maxContext: 2000000, reservedOutput: 4000 },
       };
       const gpt4MaxInput = MODEL_LIMITS['gpt-4'].maxContext - MODEL_LIMITS['gpt-4'].reservedOutput;
       const gpt4oMaxInput = MODEL_LIMITS['gpt-4o'].maxContext - MODEL_LIMITS['gpt-4o'].reservedOutput;
@@ -5912,6 +5921,19 @@ export class Orchestrator {
         this.log(`[COST-DEGRADATION] tier=minimal — routing to gpt-4o-mini (non-high-stakes)`);
       }
 
+      // Grok routing: news_current_events → xai-grok-fast (real-time data advantage)
+      // Only when GROK_API_KEY is configured and not already escalated to Claude.
+      // Minimal cost-degradation tier bypasses this (gpt-4o-mini is already selected above).
+      if (
+        classification === 'news_current_events' &&
+        !useClaude &&
+        phase4Metadata?.degradation_tier !== 'minimal' &&
+        !!process.env.GROK_API_KEY
+      ) {
+        selectedModel = 'grok-4.1-fast';
+        this.log(`[AI ROUTING] news_current_events → xai-grok-fast (real-time data, GROK_API_KEY present)`);
+      }
+
       let model = selectedModel;
       attemptedModel = model;
       const modelConfig = MODEL_LIMITS[model];
@@ -6035,7 +6057,12 @@ export class Orchestrator {
           });
         }
 
-        const gptAdapterKey = model === 'gpt-4o-mini' ? 'openai-gpt4o-mini' : 'openai-gpt4o';
+        const ADAPTER_KEY_MAP = {
+          'gpt-4o-mini':    'openai-gpt4o-mini',
+          'grok-4.1-fast':  'xai-grok-fast',
+          'gpt-4o':         'openai-gpt4o',
+        };
+        const gptAdapterKey = ADAPTER_KEY_MAP[model] ?? 'openai-gpt4o';
         const openaiAdapter = getAdapterInstance(gptAdapterKey);
         let gptResult;
         try {
@@ -6062,29 +6089,59 @@ export class Orchestrator {
             });
             model = 'gpt-4o'; // Update model to reflect which model actually succeeded
           } catch (gpt4oRetryError) {
-            // gpt-4o also failed — escalate to Claude if available
-            const claudeEscalationAdapter = getAdapterInstance('anthropic-claude-sonnet');
-            if (claudeEscalationAdapter) {
+            // gpt-4o also failed — try Grok as intermediate fallback (non-high-stakes only),
+            // then escalate to Claude if Grok is unavailable or also fails.
+            let needsClaudeEscalation = true;
+            let escalationSourceError = gpt4oRetryError;
+
+            // Attempt Grok as intermediate fallback (non-high-stakes, if available)
+            const grokFallbackAdapter = !highStakes ? getAdapterInstance('xai-grok-fast') : null;
+            if (grokFallbackAdapter) {
               retryCount++;
-              this.log(`[RETRY] Backoff 2000ms before retry attempt ${retryCount}`);
-              await new Promise(r => setTimeout(r, 2000));
-              this.log(`[RETRY] gpt-4o failed (${gpt4oRetryError.message}) — escalating to Claude (retry_count=${retryCount})`);
+              this.log(`[RETRY] Backoff 1500ms before retry attempt ${retryCount}`);
+              await new Promise(r => setTimeout(r, 1500));
+              this.log(`[RETRY] gpt-4o failed (${gpt4oRetryError.message}) — trying Grok fallback (retry_count=${retryCount})`);
               try {
-                const claudeEscResult = await claudeEscalationAdapter.call({
+                const grokFallbackResult = await grokFallbackAdapter.call({
                   systemPrompt: effectiveSystemPrompt,
                   messages,
                   maxTokens,
+                  temperature: 0.7,
                 });
-                response = claudeEscResult.content;
-                inputTokens = claudeEscResult.usage.inputTokens;
-                outputTokens = claudeEscResult.usage.outputTokens;
-                model = 'claude-sonnet-4-20250514';
-                gptResult = null; // signal: response already assigned via Claude escalation
-              } catch (claudeEscError) {
-                throw new Error(`AI retry chain exhausted — all models failed: ${claudeEscError.message}`);
+                gptResult = grokFallbackResult;
+                model = 'grok-4.1-fast'; // Update model to reflect which model actually succeeded
+                needsClaudeEscalation = false;
+              } catch (grokFallbackError) {
+                this.log(`[RETRY] Grok fallback failed (${grokFallbackError.message}) — escalating to Claude`);
+                escalationSourceError = grokFallbackError;
               }
-            } else {
-              throw new Error(`AI retry chain exhausted — Claude not configured: ${gpt4oRetryError.message}`);
+            }
+
+            if (needsClaudeEscalation) {
+              // Escalate to Claude if available
+              const claudeEscalationAdapter = getAdapterInstance('anthropic-claude-sonnet');
+              if (claudeEscalationAdapter) {
+                retryCount++;
+                this.log(`[RETRY] Backoff 2000ms before retry attempt ${retryCount}`);
+                await new Promise(r => setTimeout(r, 2000));
+                this.log(`[RETRY] gpt-4o failed (${escalationSourceError.message}) — escalating to Claude (retry_count=${retryCount})`);
+                try {
+                  const claudeEscResult = await claudeEscalationAdapter.call({
+                    systemPrompt: effectiveSystemPrompt,
+                    messages,
+                    maxTokens,
+                  });
+                  response = claudeEscResult.content;
+                  inputTokens = claudeEscResult.usage.inputTokens;
+                  outputTokens = claudeEscResult.usage.outputTokens;
+                  model = 'claude-sonnet-4-20250514';
+                  gptResult = null; // signal: response already assigned via Claude escalation
+                } catch (claudeEscError) {
+                  throw new Error(`AI retry chain exhausted — all models failed: ${claudeEscError.message}`);
+                }
+              } else {
+                throw new Error(`AI retry chain exhausted — Claude not configured: ${escalationSourceError.message}`);
+              }
             }
           }
         }
@@ -7175,6 +7232,8 @@ Provide a DIRECT, CONCISE answer. No filler, no preamble.
       "gpt-4": { input: 0.01, output: 0.03 },
       "gpt-4o": { input: 0.005, output: 0.015 },
       "claude-sonnet-4-20250514": { input: 0.003, output: 0.015 },
+      "grok-4.1-fast": { input: 0.0002, output: 0.0005 },
+      "grok-4": { input: 0.003, output: 0.015 },
     };
 
     const rate = rates[model] || rates["gpt-4o"];
