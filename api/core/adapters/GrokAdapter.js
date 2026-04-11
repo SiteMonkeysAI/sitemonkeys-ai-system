@@ -1,5 +1,5 @@
 // GrokAdapter — wraps the xAI Grok API using OpenAI-compatible format.
-// Grok 4.1 Fast has real-time X/Twitter data and a 2M token context window.
+// Grok 4-1 Fast Non-Reasoning has real-time X/Twitter data and a 2M token context window.
 // The xAI API is OpenAI-compatible — same message format, different endpoint.
 // Accepts an OpenAI-SDK client pre-configured with the xAI base URL and API key.
 
@@ -9,8 +9,8 @@ import { BaseAdapter } from './BaseAdapter.js';
 export const GROK_BASE_URL = 'https://api.x.ai/v1';
 
 export class GrokAdapter extends BaseAdapter {
-  constructor(openaiCompatibleClient, modelId = 'grok-4.1-fast') {
-    const isHighCapability = modelId === 'grok-4';
+  constructor(openaiCompatibleClient, modelId = 'grok-4-1-fast-non-reasoning') {
+    const isHighCapability = modelId === 'grok-4.20-0309-non-reasoning';
     super({
       providerId: 'xai',
       modelId,
@@ -29,8 +29,8 @@ export class GrokAdapter extends BaseAdapter {
         },
       },
       costPer1kTokens: isHighCapability
-        ? { input: 0.003,   output: 0.015  }   // grok-4: $3.00/$15.00 per million
-        : { input: 0.0002,  output: 0.0005 },   // grok-4.1-fast: $0.20/$0.50 per million
+        ? { input: 0.002,   output: 0.006  }   // grok-4.20-0309-non-reasoning: $2.00/$6.00 per million
+        : { input: 0.0002,  output: 0.0005 },   // grok-4-1-fast-non-reasoning: $0.20/$0.50 per million
     });
 
     this.client = openaiCompatibleClient;

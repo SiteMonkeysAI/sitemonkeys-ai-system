@@ -600,42 +600,42 @@ describe('CR-005: simple_factual — cheapest capable adapter', () => {
 
 describe('GR-001: GrokAdapter extends BaseAdapter correctly', () => {
   it('GR-001a: GrokAdapter is an instance of BaseAdapter', () => {
-    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4-1-fast-non-reasoning');
     assert.ok(adapter instanceof BaseAdapter, 'GrokAdapter must extend BaseAdapter');
   });
 
   it('GR-001b: GrokAdapter has providerId = "xai"', () => {
-    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4-1-fast-non-reasoning');
     assert.strictEqual(adapter.providerId, 'xai');
   });
 
-  it('GR-001c: GrokAdapter sets modelId to grok-4.1-fast by default', () => {
+  it('GR-001c: GrokAdapter sets modelId to grok-4-1-fast-non-reasoning by default', () => {
     const adapter = new GrokAdapter(makeMockOpenAIClient());
-    assert.strictEqual(adapter.modelId, 'grok-4.1-fast');
+    assert.strictEqual(adapter.modelId, 'grok-4-1-fast-non-reasoning');
   });
 
   it('GR-001d: GrokAdapter sets modelId to grok-4 when specified', () => {
-    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4');
-    assert.strictEqual(adapter.modelId, 'grok-4');
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.20-0309-non-reasoning');
+    assert.strictEqual(adapter.modelId, 'grok-4.20-0309-non-reasoning');
   });
 
   it('GR-001e: GrokAdapter has supportsRealTimeData = true in capabilities', () => {
-    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4-1-fast-non-reasoning');
     assert.strictEqual(adapter.capabilities.supportsRealTimeData, true);
   });
 
   it('GR-001f: GrokAdapter has contextWindow = 2000000 in capabilities', () => {
-    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4-1-fast-non-reasoning');
     assert.strictEqual(adapter.capabilities.contextWindow, 2000000);
   });
 
   it('GR-001g: GrokAdapter has provider = "xai" in capabilities', () => {
-    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4-1-fast-non-reasoning');
     assert.strictEqual(adapter.capabilities.provider, 'xai');
   });
 
   it('GR-001h: GrokAdapter implements normalizeRequest (OpenAI-compatible format)', () => {
-    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4-1-fast-non-reasoning');
     const req = adapter.normalizeRequest({
       systemPrompt: 'You are helpful.',
       messages: [{ role: 'user', content: 'Hello' }],
@@ -643,11 +643,11 @@ describe('GR-001: GrokAdapter extends BaseAdapter correctly', () => {
     });
     assert.strictEqual(req.messages[0].role, 'system');
     assert.strictEqual(req.messages[1].role, 'user');
-    assert.strictEqual(req.model, 'grok-4.1-fast');
+    assert.strictEqual(req.model, 'grok-4-1-fast-non-reasoning');
   });
 
   it('GR-001i: GrokAdapter normalizeRequest omits system message when no systemPrompt', () => {
-    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4-1-fast-non-reasoning');
     const req = adapter.normalizeRequest({
       systemPrompt: '',
       messages: [{ role: 'user', content: 'Hello' }],
@@ -658,19 +658,19 @@ describe('GR-001: GrokAdapter extends BaseAdapter correctly', () => {
   });
 
   it('GR-001j: GrokAdapter.getCapabilities() returns expected fields', () => {
-    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4-1-fast-non-reasoning');
     const caps = adapter.getCapabilities();
     assert.strictEqual(caps.supportsRealTimeData, true);
     assert.strictEqual(caps.contextWindow, 2000000);
     assert.strictEqual(caps.provider, 'xai');
   });
 
-  it('GR-001k: grok-4 has higher cost than grok-4.1-fast', () => {
-    const fastAdapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
-    const highAdapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4');
+  it('GR-001k: grok-4 has higher cost than grok-4-1-fast-non-reasoning', () => {
+    const fastAdapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4-1-fast-non-reasoning');
+    const highAdapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.20-0309-non-reasoning');
     const fastCost = fastAdapter.calculateCost(1000, 1000);
     const highCost = highAdapter.calculateCost(1000, 1000);
-    assert.ok(highCost > fastCost, `grok-4 cost (${highCost}) must exceed grok-4.1-fast cost (${fastCost})`);
+    assert.ok(highCost > fastCost, `grok-4 cost (${highCost}) must exceed grok-4-1-fast-non-reasoning cost (${fastCost})`);
   });
 });
 
@@ -773,8 +773,8 @@ describe('GR-004: news_current_events routes to Grok when key is available', () 
       'adapter-registry must contain xai-grok-fast entry'
     );
     assert.ok(
-      src.includes("'grok-4.1-fast'"),
-      'adapter-registry must reference grok-4.1-fast model'
+      src.includes("'grok-4-1-fast-non-reasoning'"),
+      'adapter-registry must reference grok-4-1-fast-non-reasoning model'
     );
   });
 });
@@ -848,14 +848,14 @@ describe('GR-006: Existing adapter infrastructure unchanged', () => {
     assert.ok(adapter, 'anthropic-claude-sonnet must be registered');
   });
 
-  it('GR-006d: cost-tracker includes grok-4.1-fast pricing', () => {
+  it('GR-006d: cost-tracker includes grok-4-1-fast-non-reasoning pricing', () => {
     const src = readFileSync(join(REPO_ROOT, 'api', 'utils', 'cost-tracker.js'), 'utf8');
     assert.ok(
-      src.includes('"grok-4.1-fast"'),
-      'cost-tracker must include grok-4.1-fast pricing'
+      src.includes('"grok-4-1-fast-non-reasoning"'),
+      'cost-tracker must include grok-4-1-fast-non-reasoning pricing'
     );
     assert.ok(
-      src.includes('"grok-4"'),
+      src.includes('"grok-4.20-0309-non-reasoning"'),
       'cost-tracker must include grok-4 pricing'
     );
   });
