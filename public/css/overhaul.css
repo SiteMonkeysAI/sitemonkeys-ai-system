@@ -462,3 +462,426 @@
   margin-top: auto;
   flex-shrink: 0;
 }
+
+/* ============================================================
+   DEEP SPACE VISUAL UPGRADE — Premium theme (CSS only)
+   Appended after existing overhaul rules.
+   Uses !important selectively to override the embedded <style>
+   block in index.html, which comes AFTER this file in source
+   order. No JS, HTML, IDs, data-*, or event handlers touched.
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   1 — BACKGROUND: deep space radial gradient
+   ----------------------------------------------------------- */
+html,
+body {
+  background: radial-gradient(ellipse at top, #0d1b2e 0%, #050a0f 100%) !important;
+}
+
+/* -----------------------------------------------------------
+   11 — GLOBAL SCROLLBAR (webkit + firefox)
+   ----------------------------------------------------------- */
+::-webkit-scrollbar {
+  width: 6px !important;
+  height: 6px !important;
+}
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3) !important;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 255, 0.4) !important;
+  border-radius: 3px !important;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 212, 255, 0.65) !important;
+}
+html {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 212, 255, 0.4) rgba(0, 0, 0, 0.3);
+}
+
+/* -----------------------------------------------------------
+   2 — HEADER AREA
+   ----------------------------------------------------------- */
+header {
+  background: linear-gradient(180deg, #071222 0%, #050a0f 100%) !important;
+  border-bottom: 1px solid rgba(0, 212, 255, 0.18);
+  box-shadow:
+    0 2px 14px rgba(0, 0, 0, 0.7),
+    inset 0 -1px 0 rgba(0, 212, 255, 0.1) !important;
+}
+
+.site-title {
+  text-shadow:
+    0 0 10px rgba(255, 216, 17, 0.5),
+    0 0 22px rgba(255, 216, 17, 0.22),
+    0 2px 4px rgba(0, 0, 0, 0.65);
+}
+
+.subtitle {
+  color: #e8f4f8 !important;
+  letter-spacing: 2.5px !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65);
+}
+
+/* Mode tabs — cyan-bordered dark default, brighter blue glow when active */
+.mode-btn {
+  background: rgba(10, 25, 47, 0.75) !important;
+  color: #e8f4f8 !important;
+  border: 1px solid rgba(0, 212, 255, 0.4) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: all 0.25s ease !important;
+}
+
+.mode-btn:hover:not(.active) {
+  border-color: rgba(0, 212, 255, 0.75) !important;
+  box-shadow:
+    0 0 12px rgba(0, 212, 255, 0.4),
+    inset 0 0 8px rgba(0, 212, 255, 0.12) !important;
+}
+
+/* Active state — override all per-mode active rules from embedded CSS */
+.mode-btn.active,
+.mode-btn[data-mode="truth_general"].active,
+.mode-btn[data-mode="business_validation"].active,
+.mode-btn[data-mode="site_monkeys"].active {
+  background: linear-gradient(135deg, #1e4a7a, #2a6fb3) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(64, 160, 255, 0.9) !important;
+  box-shadow:
+    0 0 18px rgba(64, 160, 255, 0.55),
+    0 0 36px rgba(64, 160, 255, 0.22),
+    inset 0 0 14px rgba(64, 160, 255, 0.18) !important;
+}
+
+/* -----------------------------------------------------------
+   3 — MAIN CONTENT PANELS (status + chat)
+   Outer .main-content wraps both panels with the cyan glow
+   border so inner panels read as a unified premium card.
+   ----------------------------------------------------------- */
+.main-content {
+  background: rgba(7, 18, 34, 0.55) !important;
+  border: 1px solid rgba(0, 212, 255, 0.4) !important;
+  box-shadow:
+    0 0 30px rgba(0, 212, 255, 0.2),
+    0 14px 44px rgba(0, 0, 0, 0.65),
+    inset 0 0 30px rgba(0, 0, 0, 0.35) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.status-panel {
+  background: rgba(10, 25, 47, 0.82) !important;
+  box-shadow:
+    0 0 18px rgba(0, 212, 255, 0.12),
+    inset 0 0 24px rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.chat-panel {
+  background: rgba(10, 25, 47, 0.62) !important;
+  border-left: 2px solid rgba(0, 212, 255, 0.5) !important;
+  box-shadow:
+    0 0 18px rgba(0, 212, 255, 0.12),
+    inset 0 0 20px rgba(0, 0, 0, 0.3) !important;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.status-title {
+  color: #ffd811 !important;
+  text-shadow: 0 0 10px rgba(255, 216, 17, 0.4);
+  letter-spacing: 0.5px;
+}
+
+/* -----------------------------------------------------------
+   4 — SYSTEM READY banner (green glowing "all systems go")
+   Overrides the embedded red background + red systemGlow
+   animation by redeclaring animation with a new keyframes set.
+   ----------------------------------------------------------- */
+.system-ready {
+  background: linear-gradient(135deg, #0a5c1a, #12a832) !important;
+  border: 1px solid rgba(18, 168, 50, 0.6) !important;
+  color: #ffffff !important;
+  text-shadow:
+    0 0 8px rgba(255, 255, 255, 0.55),
+    0 0 14px rgba(120, 255, 160, 0.4);
+  box-shadow:
+    0 0 25px rgba(18, 168, 50, 0.6),
+    0 0 50px rgba(18, 168, 50, 0.2) !important;
+  border-radius: 14px !important;
+}
+
+.system-ready .check {
+  color: #ffffff !important;
+  text-shadow: 0 0 6px rgba(255, 255, 255, 0.6);
+}
+
+.system-ready.active {
+  animation: systemGlowGreen 2s ease-in-out infinite alternate !important;
+}
+
+@keyframes systemGlowGreen {
+  from {
+    box-shadow:
+      0 0 25px rgba(18, 168, 50, 0.55),
+      0 0 50px rgba(18, 168, 50, 0.2);
+  }
+  to {
+    box-shadow:
+      0 0 32px rgba(18, 168, 50, 0.85),
+      0 0 64px rgba(18, 168, 50, 0.35);
+  }
+}
+
+/* -----------------------------------------------------------
+   5 — VAULT INFO panel
+   Default/ready state: cyan panel glow.
+   "VAULT NEEDS REFRESH" state: amber warning glow, detected
+   via :has() + the inline-style coral button the JS injects.
+   ----------------------------------------------------------- */
+#vault-info {
+  background: rgba(10, 25, 47, 0.85) !important;
+  border: 1px solid rgba(0, 212, 255, 0.35) !important;
+  border-radius: 14px !important;
+  box-shadow:
+    0 0 18px rgba(0, 212, 255, 0.12),
+    inset 0 0 18px rgba(0, 0, 0, 0.35) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #e8f4f8 !important;
+}
+
+#vault-info:has(#refresh-vault-btn[style*="FF6B6B" i]) {
+  background: rgba(20, 30, 50, 0.9) !important;
+  border: 1px solid rgba(255, 180, 0, 0.4) !important;
+  box-shadow:
+    0 0 15px rgba(255, 180, 0, 0.15),
+    inset 0 0 15px rgba(0, 0, 0, 0.35) !important;
+}
+
+/* -----------------------------------------------------------
+   6 — REFRESH VAULT button
+   Default (READY) state: adds yellow glow (inline bg kept).
+   "REFRESH VAULT NOW" state (coral inline bg): coral/red CTA
+   gradient with red glow. Attribute selector targets the
+   inline style the JS injects — inline styles lose to our
+   !important declarations, so this wins.
+   ----------------------------------------------------------- */
+#refresh-vault-btn {
+  border: 1px solid rgba(255, 216, 17, 0.5) !important;
+  border-radius: 10px !important;
+  box-shadow: 0 0 12px rgba(255, 200, 0, 0.3) !important;
+  transition: all 0.2s ease !important;
+}
+#refresh-vault-btn:hover {
+  box-shadow:
+    0 0 18px rgba(255, 200, 0, 0.55),
+    0 0 32px rgba(255, 200, 0, 0.2) !important;
+  transform: translateY(-1px);
+}
+
+#refresh-vault-btn[style*="FF6B6B" i] {
+  background: linear-gradient(135deg, #c0392b, #e74c3c) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(231, 76, 60, 0.75) !important;
+  box-shadow: 0 0 15px rgba(231, 76, 60, 0.4) !important;
+}
+#refresh-vault-btn[style*="FF6B6B" i]:hover {
+  background: linear-gradient(135deg, #d84231, #ff5a48) !important;
+  box-shadow:
+    0 0 22px rgba(231, 76, 60, 0.65),
+    0 0 44px rgba(231, 76, 60, 0.25) !important;
+}
+
+/* -----------------------------------------------------------
+   7 — CHAT INPUT AREA + SEND BUTTON
+   ----------------------------------------------------------- */
+.input-area {
+  background: rgba(7, 18, 34, 0.85) !important;
+  border: 1px solid rgba(0, 212, 255, 0.4) !important;
+  border-radius: 22px !important;
+  box-shadow:
+    0 0 15px rgba(0, 212, 255, 0.18),
+    inset 0 0 12px rgba(0, 0, 0, 0.4) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.chat-input {
+  color: #e8f4f8 !important;
+}
+.chat-input::placeholder {
+  color: rgba(232, 244, 248, 0.7) !important;
+  opacity: 0.7 !important;
+}
+
+.attachment-button {
+  color: rgba(232, 244, 248, 0.7) !important;
+}
+.attachment-button:hover {
+  color: #00d4ff !important;
+  text-shadow: 0 0 8px rgba(0, 212, 255, 0.6);
+}
+
+.send-button {
+  background: linear-gradient(135deg, #ffd811, #ffb700) !important;
+  border: 2px solid rgba(255, 255, 255, 0.85) !important;
+  box-shadow:
+    0 0 15px rgba(255, 200, 0, 0.5),
+    0 2px 10px rgba(0, 0, 0, 0.5) !important;
+  transition: all 0.2s ease !important;
+}
+.send-button:hover {
+  background: linear-gradient(135deg, #ffe14c, #ffc730) !important;
+  box-shadow:
+    0 0 25px rgba(255, 200, 0, 0.75),
+    0 0 45px rgba(255, 200, 0, 0.25),
+    0 2px 14px rgba(0, 0, 0, 0.5) !important;
+  transform: scale(1.05) !important;
+}
+
+/* -----------------------------------------------------------
+   8 — FOOTER BAR (desktop + mobile)
+   ----------------------------------------------------------- */
+.footer,
+.mobile-footer {
+  background: linear-gradient(180deg, #050a0f 0%, #030508 100%) !important;
+  border-top: 1px solid rgba(0, 212, 255, 0.2) !important;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.75) !important;
+}
+
+.footer-text,
+.mobile-footer-text {
+  color: #ffd811 !important;
+  letter-spacing: 1.2px;
+  text-shadow:
+    0 0 8px rgba(255, 216, 17, 0.5),
+    0 0 18px rgba(255, 216, 17, 0.22);
+}
+
+.footer-icon-btn {
+  background: rgba(10, 25, 47, 0.6) !important;
+  border: 1px solid rgba(0, 212, 255, 0.3) !important;
+  color: #cfe8f4 !important;
+  transition: all 0.2s ease !important;
+}
+.footer-icon-btn:hover {
+  background: rgba(0, 212, 255, 0.14) !important;
+  border-color: rgba(0, 212, 255, 0.8) !important;
+  color: #ffffff !important;
+  box-shadow:
+    0 0 12px rgba(0, 212, 255, 0.6),
+    0 0 24px rgba(0, 212, 255, 0.22);
+}
+
+/* -----------------------------------------------------------
+   9 — STATUS CHECKLIST ITEMS
+   ----------------------------------------------------------- */
+.status-list li,
+.status-list li.loaded {
+  color: #e8f4f8 !important;
+}
+
+/* -----------------------------------------------------------
+   10 — GLOBAL PANEL / CARD FEEL
+   Rounded corners, frosted glass where semi-transparent.
+   ----------------------------------------------------------- */
+.vault-info {
+  border-radius: 14px !important;
+}
+.chat-box {
+  border-radius: 12px !important;
+}
+
+/* Chat bubbles — keep user=gold, ai=dark-cyan-glass */
+.bubble.user .bubble-content {
+  background: linear-gradient(135deg, #ffd811, #ffb700) !important;
+  border: 1px solid rgba(255, 255, 255, 0.55) !important;
+  box-shadow:
+    0 0 14px rgba(255, 200, 0, 0.25),
+    0 2px 8px rgba(0, 0, 0, 0.4) !important;
+  color: #1a1a1a !important;
+  border-radius: 12px !important;
+}
+.bubble.ai .bubble-content {
+  background: rgba(10, 25, 47, 0.85) !important;
+  border: 1px solid rgba(0, 212, 255, 0.35) !important;
+  box-shadow:
+    0 0 14px rgba(0, 212, 255, 0.15),
+    0 2px 8px rgba(0, 0, 0, 0.4) !important;
+  color: #e8f4f8 !important;
+  border-radius: 12px !important;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
+
+.bubble img.avatar {
+  background: rgba(7, 18, 34, 0.9) !important;
+  border: 2px solid rgba(0, 212, 255, 0.5) !important;
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+}
+
+/* Confidence panel — match gold theme on the fill */
+.confidence-bar-track {
+  background: rgba(0, 0, 0, 0.5) !important;
+}
+.confidence-bar-fill {
+  background: linear-gradient(90deg, #ffd811, #ffb700) !important;
+  box-shadow: 0 0 8px rgba(255, 200, 0, 0.5);
+}
+
+/* Slide panels (history + account) — match deep-space theme */
+.slide-panel {
+  background: linear-gradient(180deg, #071222 0%, #030508 100%) !important;
+  border: 1px solid rgba(0, 212, 255, 0.3) !important;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+.slide-panel-left {
+  border-right: 1px solid rgba(255, 216, 17, 0.45) !important;
+}
+.slide-panel-right {
+  border-left: 1px solid rgba(255, 216, 17, 0.45) !important;
+}
+
+.panel-header {
+  color: #ffd811 !important;
+  text-shadow: 0 0 8px rgba(255, 216, 17, 0.4);
+  border-bottom: 1px solid rgba(0, 212, 255, 0.22) !important;
+}
+
+.session-item {
+  border-bottom: 1px solid rgba(0, 212, 255, 0.08) !important;
+}
+.session-item:hover {
+  background: rgba(0, 212, 255, 0.1) !important;
+}
+.session-preview {
+  color: #cfe8f4 !important;
+}
+.session-date {
+  color: #7a9bb0 !important;
+}
+
+/* Auth form inputs */
+.auth-input {
+  background: rgba(7, 18, 34, 0.85) !important;
+  border: 1px solid rgba(0, 212, 255, 0.3) !important;
+  color: #e8f4f8 !important;
+}
+.auth-input:focus {
+  border-color: rgba(0, 212, 255, 0.75) !important;
+  box-shadow: 0 0 12px rgba(0, 212, 255, 0.35) !important;
+}
+.auth-submit {
+  background: linear-gradient(135deg, #ffd811, #ffb700) !important;
+  box-shadow: 0 0 12px rgba(255, 200, 0, 0.4) !important;
+}
+.auth-submit:hover {
+  background: linear-gradient(135deg, #ffe14c, #ffc730) !important;
+  box-shadow: 0 0 20px rgba(255, 200, 0, 0.6) !important;
+}
