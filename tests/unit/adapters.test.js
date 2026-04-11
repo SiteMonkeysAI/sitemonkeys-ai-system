@@ -16,7 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { BaseAdapter }    from '../../api/core/adapters/BaseAdapter.js';
 import { OpenAIAdapter }  from '../../api/core/adapters/OpenAIAdapter.js';
 import { AnthropicAdapter } from '../../api/core/adapters/AnthropicAdapter.js';
-import { GrokAdapter }    from '../../api/core/adapters/GrokAdapter.js';
+import { GrokAdapter, GROK_BASE_URL } from '../../api/core/adapters/GrokAdapter.js';
 import {
   registerAdapters,
   getAdapter,
@@ -724,11 +724,11 @@ describe('GR-002: GrokAdapter is inactive when GROK_API_KEY is not set', () => {
 // ---------------------------------------------------------------------------
 
 describe('GR-003: GrokAdapter uses correct xAI endpoint URL', () => {
-  it('GR-003a: GrokAdapter.js references https://api.x.ai/v1', () => {
-    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'adapters', 'GrokAdapter.js'), 'utf8');
-    assert.ok(
-      src.includes('https://api.x.ai/v1'),
-      'GrokAdapter must use xAI base URL https://api.x.ai/v1'
+  it('GR-003a: GROK_BASE_URL exported from GrokAdapter.js equals https://api.x.ai/v1', () => {
+    assert.strictEqual(
+      GROK_BASE_URL,
+      'https://api.x.ai/v1',
+      'GROK_BASE_URL must be exactly https://api.x.ai/v1'
     );
   });
 
