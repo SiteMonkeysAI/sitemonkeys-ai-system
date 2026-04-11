@@ -885,3 +885,209 @@ header {
   background: linear-gradient(135deg, #ffe14c, #ffc730) !important;
   box-shadow: 0 0 20px rgba(255, 200, 0, 0.6) !important;
 }
+
+/* ============================================================
+   PASS 2 — Premium polish refinements
+   Appended after Pass 1. Same rules: CSS-only, no JS/HTML
+   touched. Selectors here override Pass 1 where they conflict
+   because later declarations at equal specificity win.
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   FIX 1 — Mode tabs: stronger cyan glow treatment
+   NOTE: per-data-mode .active variants from Pass 1 have
+   specificity (0,3,0) which would beat a plain .mode-btn.active
+   at (0,2,0). We repeat the new active style under the same
+   per-data-mode selectors so the upgrade actually wins.
+   ----------------------------------------------------------- */
+.mode-btn {
+  border: 1.5px solid rgba(0, 212, 255, 0.5) !important;
+  box-shadow:
+    0 0 10px rgba(0, 212, 255, 0.2),
+    inset 0 0 10px rgba(0, 0, 0, 0.3) !important;
+  color: #e0f7ff !important;
+  background: rgba(10, 30, 50, 0.8) !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.5px !important;
+  transition: all 0.25s ease !important;
+}
+
+.mode-btn:hover:not(.active) {
+  border-color: rgba(0, 212, 255, 0.9) !important;
+  box-shadow:
+    0 0 18px rgba(0, 212, 255, 0.45),
+    inset 0 0 10px rgba(0, 0, 0, 0.2) !important;
+  color: #ffffff !important;
+  background: rgba(0, 60, 90, 0.8) !important;
+}
+
+.mode-btn.active,
+.mode-btn[data-mode="truth_general"].active,
+.mode-btn[data-mode="business_validation"].active,
+.mode-btn[data-mode="site_monkeys"].active {
+  background: linear-gradient(135deg, #1a6fbe, #0d4a8f) !important;
+  border-color: rgba(100, 180, 255, 1) !important;
+  box-shadow:
+    0 0 20px rgba(100, 180, 255, 0.6),
+    0 0 40px rgba(100, 180, 255, 0.2) !important;
+  color: #ffffff !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 2 — Vault info panel: stronger amber glow (always on)
+   ----------------------------------------------------------- */
+#vault-info {
+  border: 1.5px solid rgba(255, 180, 0, 0.6) !important;
+  box-shadow:
+    0 0 20px rgba(255, 180, 0, 0.25),
+    inset 0 0 15px rgba(0, 0, 0, 0.4) !important;
+  background: rgba(18, 26, 42, 0.95) !important;
+  border-radius: 14px !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 3 — Refresh Vault button: blue/cyan maintenance CTA
+   NOTE: Pass 1 added an ID+attribute selector for the
+   "NEEDS REFRESH" coral state at specificity (1,1,0). We
+   repeat the blue treatment under that selector so the new
+   intent (always blue maintenance action) wins in both states.
+   ----------------------------------------------------------- */
+#refresh-vault-btn,
+#refresh-vault-btn[style*="FF6B6B" i] {
+  background: linear-gradient(135deg, #0a4a7a, #0d6ebd) !important;
+  border: 1.5px solid rgba(0, 180, 255, 0.7) !important;
+  box-shadow: 0 0 18px rgba(0, 150, 255, 0.4) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.5px !important;
+  transition: all 0.25s ease !important;
+}
+
+#refresh-vault-btn:hover,
+#refresh-vault-btn[style*="FF6B6B" i]:hover {
+  background: linear-gradient(135deg, #0d6ebd, #1a8fe0) !important;
+  box-shadow: 0 0 28px rgba(0, 180, 255, 0.6) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 4 — Input area: stronger border glow + focus-within
+   ----------------------------------------------------------- */
+.input-area {
+  border: 1.5px solid rgba(0, 212, 255, 0.5) !important;
+  box-shadow:
+    0 0 20px rgba(0, 212, 255, 0.2),
+    inset 0 0 15px rgba(0, 0, 0, 0.4) !important;
+  background: rgba(8, 20, 38, 0.95) !important;
+  border-radius: 16px !important;
+}
+
+.input-area:focus-within {
+  border-color: rgba(0, 212, 255, 0.85) !important;
+  box-shadow:
+    0 0 30px rgba(0, 212, 255, 0.35),
+    inset 0 0 15px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 5 — Send button: enhanced gold glow + bigger hover pop
+   ----------------------------------------------------------- */
+.send-button {
+  box-shadow:
+    0 0 20px rgba(255, 200, 0, 0.6),
+    0 0 40px rgba(255, 180, 0, 0.25) !important;
+  border: 1.5px solid rgba(255, 210, 0, 0.8) !important;
+  transition: all 0.2s ease !important;
+}
+
+.send-button:hover {
+  box-shadow:
+    0 0 30px rgba(255, 200, 0, 0.8),
+    0 0 60px rgba(255, 180, 0, 0.4) !important;
+  transform: scale(1.08) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 6 — Robot icon: glowing gold drop-shadow + subtle pulse
+   The pulse animation only animates `filter`, which does NOT
+   collide with the JS toggleConfidenceScoring() handler that
+   sets inline style.outline / .outlineOffset / .borderRadius
+   / .boxShadow on #confidenceToggleBtn.
+   ----------------------------------------------------------- */
+#confidenceToggleWrapper,
+.ai-robot-wrapper,
+img[src*="AI Robot"],
+img[alt*="robot"],
+img[alt*="Robot"] {
+  filter: drop-shadow(0 0 8px rgba(255, 200, 0, 0.5)) !important;
+}
+
+@keyframes robotPulse {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(255, 200, 0, 0.4)); }
+  50%      { filter: drop-shadow(0 0 14px rgba(255, 200, 0, 0.8)); }
+}
+
+.ai-robot {
+  animation: robotPulse 3s ease-in-out infinite !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 7 — Status panel title: gold text glow
+   ----------------------------------------------------------- */
+.status-title {
+  text-shadow:
+    0 0 15px rgba(255, 200, 0, 0.5),
+    0 0 30px rgba(255, 180, 0, 0.2) !important;
+  letter-spacing: 0.3px !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 8 — AI bubble: subtle cyan left-border accent
+   (overrides only border-left; other sides remain from Pass 1)
+   ----------------------------------------------------------- */
+.bubble.ai .bubble-content {
+  border-left: 3px solid rgba(0, 212, 255, 0.6) !important;
+  padding-left: 14px !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 9 — Confidence bar: polished gold gradient + track
+   ----------------------------------------------------------- */
+.confidence-bar-fill {
+  background: linear-gradient(90deg, #f0a500, #ffd700, #ffe44d) !important;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.5) !important;
+}
+
+.confidence-bar-track {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 10 — Header separator: cyan glow line
+   ----------------------------------------------------------- */
+header {
+  border-bottom: 1px solid rgba(0, 212, 255, 0.3) !important;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.5),
+    0 1px 0 rgba(0, 212, 255, 0.2) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 11 — Footer separator: mirror of header treatment
+   ----------------------------------------------------------- */
+.footer,
+.mobile-footer {
+  border-top: 1px solid rgba(0, 212, 255, 0.3) !important;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 12 — Main content outer wrapper: soft floating glow
+   ----------------------------------------------------------- */
+.main-content {
+  box-shadow:
+    0 0 60px rgba(0, 212, 255, 0.08),
+    0 0 120px rgba(0, 100, 200, 0.06),
+    0 20px 60px rgba(0, 0, 0, 0.6) !important;
+}
