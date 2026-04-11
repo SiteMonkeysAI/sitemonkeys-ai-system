@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { BaseAdapter }    from '../../api/core/adapters/BaseAdapter.js';
 import { OpenAIAdapter }  from '../../api/core/adapters/OpenAIAdapter.js';
 import { AnthropicAdapter } from '../../api/core/adapters/AnthropicAdapter.js';
+import { GrokAdapter }    from '../../api/core/adapters/GrokAdapter.js';
 import {
   registerAdapters,
   getAdapter,
@@ -590,5 +591,270 @@ describe('CR-005: simple_factual — cheapest capable adapter', () => {
     const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'orchestrator.js'), 'utf8');
     assert.ok(src.includes('excludeProviders'), 'orchestrator must pass excludeProviders to getAdapter');
     assert.ok(src.includes('minimumScore'),     'orchestrator must pass minimumScore to getAdapter');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GR-001: GrokAdapter extends BaseAdapter correctly
+// ---------------------------------------------------------------------------
+
+describe('GR-001: GrokAdapter extends BaseAdapter correctly', () => {
+  it('GR-001a: GrokAdapter is an instance of BaseAdapter', () => {
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    assert.ok(adapter instanceof BaseAdapter, 'GrokAdapter must extend BaseAdapter');
+  });
+
+  it('GR-001b: GrokAdapter has providerId = "xai"', () => {
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    assert.strictEqual(adapter.providerId, 'xai');
+  });
+
+  it('GR-001c: GrokAdapter sets modelId to grok-4.1-fast by default', () => {
+    const adapter = new GrokAdapter(makeMockOpenAIClient());
+    assert.strictEqual(adapter.modelId, 'grok-4.1-fast');
+  });
+
+  it('GR-001d: GrokAdapter sets modelId to grok-4 when specified', () => {
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4');
+    assert.strictEqual(adapter.modelId, 'grok-4');
+  });
+
+  it('GR-001e: GrokAdapter has supportsRealTimeData = true in capabilities', () => {
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    assert.strictEqual(adapter.capabilities.supportsRealTimeData, true);
+  });
+
+  it('GR-001f: GrokAdapter has contextWindow = 2000000 in capabilities', () => {
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    assert.strictEqual(adapter.capabilities.contextWindow, 2000000);
+  });
+
+  it('GR-001g: GrokAdapter has provider = "xai" in capabilities', () => {
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    assert.strictEqual(adapter.capabilities.provider, 'xai');
+  });
+
+  it('GR-001h: GrokAdapter implements normalizeRequest (OpenAI-compatible format)', () => {
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const req = adapter.normalizeRequest({
+      systemPrompt: 'You are helpful.',
+      messages: [{ role: 'user', content: 'Hello' }],
+      maxTokens: 1000,
+    });
+    assert.strictEqual(req.messages[0].role, 'system');
+    assert.strictEqual(req.messages[1].role, 'user');
+    assert.strictEqual(req.model, 'grok-4.1-fast');
+  });
+
+  it('GR-001i: GrokAdapter normalizeRequest omits system message when no systemPrompt', () => {
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const req = adapter.normalizeRequest({
+      systemPrompt: '',
+      messages: [{ role: 'user', content: 'Hello' }],
+      maxTokens: 1000,
+    });
+    assert.strictEqual(req.messages[0].role, 'user');
+    assert.strictEqual(req.messages.length, 1);
+  });
+
+  it('GR-001j: GrokAdapter.getCapabilities() returns expected fields', () => {
+    const adapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const caps = adapter.getCapabilities();
+    assert.strictEqual(caps.supportsRealTimeData, true);
+    assert.strictEqual(caps.contextWindow, 2000000);
+    assert.strictEqual(caps.provider, 'xai');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GR-002: GrokAdapter is inactive when GROK_API_KEY is not set
+// ---------------------------------------------------------------------------
+
+describe('GR-002: GrokAdapter is inactive when GROK_API_KEY is not set', () => {
+  it('GR-002a: GrokAdapter.active() returns false when GROK_API_KEY is absent', () => {
+    const originalKey = process.env.GROK_API_KEY;
+    delete process.env.GROK_API_KEY;
+    try {
+      assert.strictEqual(GrokAdapter.active(), false);
+    } finally {
+      if (originalKey !== undefined) process.env.GROK_API_KEY = originalKey;
+    }
+  });
+
+  it('GR-002b: GrokAdapter.active() returns true when GROK_API_KEY is set', () => {
+    const originalKey = process.env.GROK_API_KEY;
+    process.env.GROK_API_KEY = 'test-key-12345';
+    try {
+      assert.strictEqual(GrokAdapter.active(), true);
+    } finally {
+      if (originalKey !== undefined) {
+        process.env.GROK_API_KEY = originalKey;
+      } else {
+        delete process.env.GROK_API_KEY;
+      }
+    }
+  });
+
+  it('GR-002c: xai-grok-fast is not registered when GROK_API_KEY is absent', () => {
+    const originalKey = process.env.GROK_API_KEY;
+    delete process.env.GROK_API_KEY;
+    try {
+      registerAdapters({
+        openaiClient:    makeMockOpenAIClient(),
+        anthropicClient: makeMockAnthropicClient(),
+      });
+      const instance = getAdapterInstance('xai-grok-fast');
+      assert.strictEqual(instance, null, 'xai-grok-fast must not be registered without GROK_API_KEY');
+    } finally {
+      if (originalKey !== undefined) process.env.GROK_API_KEY = originalKey;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GR-003: GrokAdapter uses correct xAI endpoint URL
+// ---------------------------------------------------------------------------
+
+describe('GR-003: GrokAdapter uses correct xAI endpoint URL', () => {
+  it('GR-003a: GrokAdapter.js references https://api.x.ai/v1', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'adapters', 'GrokAdapter.js'), 'utf8');
+    assert.ok(
+      src.includes('https://api.x.ai/v1'),
+      'GrokAdapter must use xAI base URL https://api.x.ai/v1'
+    );
+  });
+
+  it('GR-003b: GrokAdapter.js uses GROK_API_KEY environment variable', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'adapters', 'GrokAdapter.js'), 'utf8');
+    assert.ok(
+      src.includes('process.env.GROK_API_KEY'),
+      'GrokAdapter must use process.env.GROK_API_KEY'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GR-004: news_current_events routes to Grok when key is available
+// ---------------------------------------------------------------------------
+
+describe('GR-004: news_current_events routes to Grok when key is available', () => {
+  it('GR-004a: orchestrator contains news_current_events → xai-grok-fast routing logic', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'orchestrator.js'), 'utf8');
+    assert.ok(
+      src.includes("classification === 'news_current_events'"),
+      'orchestrator must check for news_current_events classification'
+    );
+    assert.ok(
+      src.includes('xai-grok-fast'),
+      'orchestrator must reference xai-grok-fast'
+    );
+  });
+
+  it('GR-004b: orchestrator gates Grok routing on GROK_API_KEY', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'orchestrator.js'), 'utf8');
+    assert.ok(
+      src.includes('process.env.GROK_API_KEY'),
+      'orchestrator must gate Grok routing on GROK_API_KEY'
+    );
+  });
+
+  it('GR-004c: adapter-registry contains xai-grok-fast entry with correct provider', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'adapters', 'adapter-registry.js'), 'utf8');
+    assert.ok(
+      src.includes("'xai-grok-fast'"),
+      'adapter-registry must contain xai-grok-fast entry'
+    );
+    assert.ok(
+      src.includes("'grok-4.1-fast'"),
+      'adapter-registry must reference grok-4.1-fast model'
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GR-005: news_current_events falls back to gpt-4o-mini when no Grok key
+// ---------------------------------------------------------------------------
+
+describe('GR-005: news_current_events falls back to gpt-4o-mini when no Grok key', () => {
+  it('GR-005a: orchestrator guards Grok routing with GROK_API_KEY check', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'orchestrator.js'), 'utf8');
+    // The routing block must only apply Grok when GROK_API_KEY is present
+    assert.ok(
+      src.includes('!!process.env.GROK_API_KEY'),
+      'orchestrator must use !!process.env.GROK_API_KEY to gate Grok routing'
+    );
+  });
+
+  it('GR-005b: without GROK_API_KEY, xai-grok-fast instance is null', () => {
+    const originalKey = process.env.GROK_API_KEY;
+    delete process.env.GROK_API_KEY;
+    try {
+      registerAdapters({
+        openaiClient:    makeMockOpenAIClient(),
+        anthropicClient: makeMockAnthropicClient(),
+      });
+      assert.strictEqual(
+        getAdapterInstance('xai-grok-fast'),
+        null,
+        'no xai-grok-fast instance when GROK_API_KEY is absent'
+      );
+    } finally {
+      if (originalKey !== undefined) process.env.GROK_API_KEY = originalKey;
+    }
+  });
+
+  it('GR-005c: existing routing (gpt-4o, gpt-4o-mini, claude) still exists in orchestrator', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'orchestrator.js'), 'utf8');
+    assert.ok(src.includes("'openai-gpt4o'"),      'orchestrator must still reference openai-gpt4o');
+    assert.ok(src.includes("'openai-gpt4o-mini'"),  'orchestrator must still reference openai-gpt4o-mini');
+    assert.ok(src.includes("'anthropic-claude-sonnet'"), 'orchestrator must still reference anthropic-claude-sonnet');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GR-006: All existing adapter tests still pass (structural smoke-check)
+// ---------------------------------------------------------------------------
+
+describe('GR-006: Existing adapter infrastructure unchanged', () => {
+  beforeEach(() => {
+    registerAdapters({
+      openaiClient:    makeMockOpenAIClient(),
+      anthropicClient: makeMockAnthropicClient(),
+    });
+  });
+
+  it('GR-006a: openai-gpt4o instance is still registered', () => {
+    const adapter = getAdapterInstance('openai-gpt4o');
+    assert.ok(adapter, 'openai-gpt4o must be registered');
+    assert.strictEqual(adapter.modelId, 'gpt-4o');
+  });
+
+  it('GR-006b: openai-gpt4o-mini instance is still registered', () => {
+    const adapter = getAdapterInstance('openai-gpt4o-mini');
+    assert.ok(adapter, 'openai-gpt4o-mini must be registered');
+    assert.strictEqual(adapter.modelId, 'gpt-4o-mini');
+  });
+
+  it('GR-006c: anthropic-claude-sonnet instance is still registered', () => {
+    const adapter = getAdapterInstance('anthropic-claude-sonnet');
+    assert.ok(adapter, 'anthropic-claude-sonnet must be registered');
+  });
+
+  it('GR-006d: cost-tracker includes grok-4.1-fast pricing', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'utils', 'cost-tracker.js'), 'utf8');
+    assert.ok(
+      src.includes('"grok-4.1-fast"'),
+      'cost-tracker must include grok-4.1-fast pricing'
+    );
+    assert.ok(
+      src.includes('"grok-4"'),
+      'cost-tracker must include grok-4 pricing'
+    );
+  });
+
+  it('GR-006e: adapter-registry still exports getActiveAdapters and getDefaultAdapter', () => {
+    const src = readFileSync(join(REPO_ROOT, 'api', 'core', 'adapters', 'adapter-registry.js'), 'utf8');
+    assert.ok(src.includes('export function getActiveAdapters'), 'getActiveAdapters must be exported');
+    assert.ok(src.includes('export function getDefaultAdapter'), 'getDefaultAdapter must be exported');
   });
 });
