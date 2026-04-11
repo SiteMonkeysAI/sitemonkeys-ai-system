@@ -664,6 +664,14 @@ describe('GR-001: GrokAdapter extends BaseAdapter correctly', () => {
     assert.strictEqual(caps.contextWindow, 2000000);
     assert.strictEqual(caps.provider, 'xai');
   });
+
+  it('GR-001k: grok-4 has higher cost than grok-4.1-fast', () => {
+    const fastAdapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4.1-fast');
+    const highAdapter = new GrokAdapter(makeMockOpenAIClient(), 'grok-4');
+    const fastCost = fastAdapter.calculateCost(1000, 1000);
+    const highCost = highAdapter.calculateCost(1000, 1000);
+    assert.ok(highCost > fastCost, `grok-4 cost (${highCost}) must exceed grok-4.1-fast cost (${fastCost})`);
+  });
 });
 
 // ---------------------------------------------------------------------------

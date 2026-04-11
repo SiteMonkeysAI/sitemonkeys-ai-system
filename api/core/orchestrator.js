@@ -6057,9 +6057,12 @@ export class Orchestrator {
           });
         }
 
-        const gptAdapterKey = model === 'gpt-4o-mini' ? 'openai-gpt4o-mini'
-          : model === 'grok-4.1-fast' ? 'xai-grok-fast'
-          : 'openai-gpt4o';
+        const ADAPTER_KEY_MAP = {
+          'gpt-4o-mini':    'openai-gpt4o-mini',
+          'grok-4.1-fast':  'xai-grok-fast',
+          'gpt-4o':         'openai-gpt4o',
+        };
+        const gptAdapterKey = ADAPTER_KEY_MAP[model] ?? 'openai-gpt4o';
         const openaiAdapter = getAdapterInstance(gptAdapterKey);
         let gptResult;
         try {
