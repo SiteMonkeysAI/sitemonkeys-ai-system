@@ -5905,7 +5905,9 @@ export class Orchestrator {
         const selectedAdapter = getAdapter({
           taskType: requiredTaskType,
           minimumScore,
-          excludeProviders: ['anthropic'],
+          // Exclude both anthropic and xai from automatic capability routing.
+          // Grok is only activated explicitly for news_current_events below.
+          excludeProviders: ['anthropic', 'xai'],
         });
         selectedModel = selectedAdapter?.modelId ?? 'gpt-4o';
       }
