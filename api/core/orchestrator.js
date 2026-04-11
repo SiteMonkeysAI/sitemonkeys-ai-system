@@ -5477,7 +5477,7 @@ export class Orchestrator {
         'gpt-4o': { maxContext: 128000, reservedOutput: 4000 },
         'gpt-4o-mini': { maxContext: 128000, reservedOutput: 4000 },
         'claude-sonnet-4-20250514': { maxContext: 200000, reservedOutput: 4000 },
-        'grok-4.1-fast': { maxContext: 2000000, reservedOutput: 4000 },
+        'grok-4-fast': { maxContext: 2000000, reservedOutput: 4000 },
         'grok-4': { maxContext: 2000000, reservedOutput: 4000 },
       };
       const gpt4MaxInput = MODEL_LIMITS['gpt-4'].maxContext - MODEL_LIMITS['gpt-4'].reservedOutput;
@@ -5930,7 +5930,7 @@ export class Orchestrator {
         phase4Metadata?.degradation_tier !== 'minimal' &&
         !!process.env.GROK_API_KEY
       ) {
-        selectedModel = 'grok-4.1-fast';
+        selectedModel = 'grok-4-fast';
         this.log(`[AI ROUTING] news_current_events → xai-grok-fast (real-time data, GROK_API_KEY present)`);
       }
 
@@ -6059,7 +6059,7 @@ export class Orchestrator {
 
         const ADAPTER_KEY_MAP = {
           'gpt-4o-mini':    'openai-gpt4o-mini',
-          'grok-4.1-fast':  'xai-grok-fast',
+          'grok-4-fast':  'xai-grok-fast',
           'gpt-4o':         'openai-gpt4o',
         };
         const gptAdapterKey = ADAPTER_KEY_MAP[model] ?? 'openai-gpt4o';
@@ -6109,7 +6109,7 @@ export class Orchestrator {
                   temperature: 0.7,
                 });
                 gptResult = grokFallbackResult;
-                model = 'grok-4.1-fast'; // Update model to reflect which model actually succeeded
+                model = 'grok-4-fast'; // Update model to reflect which model actually succeeded
                 needsClaudeEscalation = false;
               } catch (grokFallbackError) {
                 this.log(`[RETRY] Grok fallback failed (${grokFallbackError.message}) — escalating to Claude`);
@@ -7232,7 +7232,7 @@ Provide a DIRECT, CONCISE answer. No filler, no preamble.
       "gpt-4": { input: 0.01, output: 0.03 },
       "gpt-4o": { input: 0.005, output: 0.015 },
       "claude-sonnet-4-20250514": { input: 0.003, output: 0.015 },
-      "grok-4.1-fast": { input: 0.0002, output: 0.0005 },
+      "grok-4-fast": { input: 0.0002, output: 0.0005 },
       "grok-4": { input: 0.003, output: 0.015 },
     };
 
