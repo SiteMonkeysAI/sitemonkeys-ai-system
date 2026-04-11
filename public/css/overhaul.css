@@ -1091,3 +1091,218 @@ header {
     0 0 120px rgba(0, 100, 200, 0.06),
     0 20px 60px rgba(0, 0, 0, 0.6) !important;
 }
+
+/* ============================================================
+   PASS 3 — Neon tech panel refinements
+   Appended after Pass 2. Overrides earlier rules where it
+   conflicts (later declarations at equal specificity win).
+   CSS-only. No JS / HTML / ID changes.
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   FIX 1 — SYSTEM READY banner: deep green panel + neon edge
+   NOTE: This redefines @keyframes systemGlowGreen which was
+   first declared in Pass 1. CSS keyframes with a duplicate
+   name: the LAST declaration in source order wins entirely —
+   it is not merged with the earlier one. So the new stops
+   below fully replace the Pass 1 `from`/`to` keyframes.
+   ----------------------------------------------------------- */
+.system-ready {
+  background: linear-gradient(135deg,
+    #062a0e 0%,
+    #0a4a18 40%,
+    #0d5c1e 60%,
+    #062a0e 100%) !important;
+  border: 2px solid rgba(0, 255, 80, 0.8) !important;
+  box-shadow:
+    0 0 15px rgba(0, 255, 80, 0.6),
+    0 0 30px rgba(0, 255, 80, 0.3),
+    0 0 60px rgba(0, 255, 80, 0.15),
+    inset 0 0 30px rgba(0, 200, 60, 0.2),
+    inset 0 1px 0 rgba(0, 255, 80, 0.4) !important;
+  position: relative !important;
+  /* Text properties also applied directly to the container so
+     the bare "SYSTEM READY" text node (not wrapped in a span)
+     inherits the neon treatment — the .system-ready span rule
+     below only targets the <span class="check"> element. */
+  font-weight: 800 !important;
+  letter-spacing: 2px !important;
+  text-shadow:
+    0 0 10px rgba(0, 255, 80, 0.8),
+    0 0 20px rgba(0, 255, 80, 0.4) !important;
+}
+
+.system-ready.active {
+  animation: systemGlowGreen 2.5s ease-in-out infinite !important;
+}
+
+@keyframes systemGlowGreen {
+  0%, 100% {
+    box-shadow:
+      0 0 15px rgba(0, 255, 80, 0.6),
+      0 0 30px rgba(0, 255, 80, 0.3),
+      0 0 60px rgba(0, 255, 80, 0.15),
+      inset 0 0 30px rgba(0, 200, 60, 0.2);
+  }
+  50% {
+    box-shadow:
+      0 0 25px rgba(0, 255, 80, 0.9),
+      0 0 50px rgba(0, 255, 80, 0.5),
+      0 0 90px rgba(0, 255, 80, 0.25),
+      inset 0 0 40px rgba(0, 220, 70, 0.35);
+  }
+}
+
+.system-ready span,
+.system-ready .status-text {
+  text-shadow:
+    0 0 10px rgba(0, 255, 80, 0.8),
+    0 0 20px rgba(0, 255, 80, 0.4) !important;
+  font-weight: 800 !important;
+  letter-spacing: 2px !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 2 — Refresh Vault button: neon tech panel
+   ----------------------------------------------------------- */
+#refresh-vault-btn {
+  background: linear-gradient(180deg,
+    rgba(15, 60, 120, 0.9) 0%,
+    rgba(8, 35, 80, 0.95) 50%,
+    rgba(15, 60, 120, 0.9) 100%) !important;
+  border: 2px solid rgba(0, 180, 255, 0.9) !important;
+  box-shadow:
+    0 0 12px rgba(0, 180, 255, 0.6),
+    0 0 25px rgba(0, 150, 255, 0.3),
+    inset 0 0 20px rgba(0, 120, 220, 0.2),
+    inset 0 1px 0 rgba(100, 200, 255, 0.3) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+  letter-spacing: 1.5px !important;
+  text-shadow: 0 0 8px rgba(100, 200, 255, 0.6) !important;
+  text-transform: uppercase !important;
+  transition: all 0.25s ease !important;
+  border-radius: 10px !important;
+}
+
+#refresh-vault-btn:hover {
+  background: linear-gradient(180deg,
+    rgba(20, 80, 160, 0.95) 0%,
+    rgba(12, 50, 110, 1) 50%,
+    rgba(20, 80, 160, 0.95) 100%) !important;
+  border-color: rgba(80, 210, 255, 1) !important;
+  box-shadow:
+    0 0 20px rgba(0, 200, 255, 0.8),
+    0 0 40px rgba(0, 180, 255, 0.4),
+    inset 0 0 25px rgba(0, 150, 255, 0.3),
+    inset 0 1px 0 rgba(150, 220, 255, 0.4) !important;
+  transform: translateY(-2px) !important;
+  text-shadow: 0 0 12px rgba(150, 220, 255, 0.9) !important;
+}
+
+/* NEEDS REFRESH state — red neon variant, detected via the
+   inline background color the JS injects when vault is stale. */
+#refresh-vault-btn[style*="FF6B6B" i] {
+  background: linear-gradient(180deg,
+    rgba(120, 15, 15, 0.9) 0%,
+    rgba(80, 8, 8, 0.95) 50%,
+    rgba(120, 15, 15, 0.9) 100%) !important;
+  border: 2px solid rgba(255, 80, 80, 0.9) !important;
+  box-shadow:
+    0 0 12px rgba(255, 80, 80, 0.6),
+    0 0 25px rgba(255, 60, 60, 0.3),
+    inset 0 0 20px rgba(200, 40, 40, 0.2),
+    inset 0 1px 0 rgba(255, 150, 150, 0.3) !important;
+  text-shadow: 0 0 8px rgba(255, 150, 150, 0.6) !important;
+}
+
+#refresh-vault-btn[style*="FF6B6B" i]:hover {
+  box-shadow:
+    0 0 20px rgba(255, 80, 80, 0.8),
+    0 0 40px rgba(255, 60, 60, 0.4),
+    inset 0 0 25px rgba(200, 40, 40, 0.3) !important;
+  transform: translateY(-2px) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 3 — Send button: premium neon gold
+   ----------------------------------------------------------- */
+.send-button {
+  background: linear-gradient(145deg,
+    #c8960a 0%,
+    #f0b800 40%,
+    #ffd000 60%,
+    #c8960a 100%) !important;
+  border: 2px solid rgba(255, 220, 0, 1) !important;
+  box-shadow:
+    0 0 15px rgba(255, 200, 0, 0.8),
+    0 0 30px rgba(255, 180, 0, 0.4),
+    0 0 50px rgba(255, 160, 0, 0.2),
+    inset 0 1px 0 rgba(255, 255, 150, 0.5),
+    inset 0 -1px 0 rgba(180, 120, 0, 0.4) !important;
+  transition: all 0.2s ease !important;
+  border-radius: 50px !important;
+}
+
+.send-button:hover {
+  background: linear-gradient(145deg,
+    #e0a800 0%,
+    #ffd000 40%,
+    #ffe840 60%,
+    #e0a800 100%) !important;
+  box-shadow:
+    0 0 25px rgba(255, 210, 0, 1),
+    0 0 50px rgba(255, 190, 0, 0.6),
+    0 0 80px rgba(255, 170, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 180, 0.6) !important;
+  transform: scale(1.08) translateY(-1px) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 4 — Footer icon buttons: neon tech alignment
+   ----------------------------------------------------------- */
+.footer-icon-btn {
+  background: rgba(10, 25, 50, 0.9) !important;
+  border: 1.5px solid rgba(0, 180, 255, 0.5) !important;
+  box-shadow: 0 0 10px rgba(0, 180, 255, 0.25) !important;
+  border-radius: 10px !important;
+  transition: all 0.2s ease !important;
+}
+
+.footer-icon-btn:hover {
+  border-color: rgba(0, 210, 255, 0.9) !important;
+  box-shadow: 0 0 18px rgba(0, 200, 255, 0.5) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 5 — Desktop-only robot mascot peek on the input area
+   Pure CSS decoration via ::after pseudo-element.
+   Path resolution: this file is at /css/overhaul.css, so
+   `../AI Robot.png` resolves to /AI Robot.png which is where
+   the asset lives (same location the index.html <img> refs
+   use). Space in filename is safe inside single-quoted url().
+   pointer-events:none ensures zero interaction interference.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .input-area {
+    position: relative !important;
+  }
+
+  .input-area::after {
+    content: '' !important;
+    position: absolute !important;
+    right: -35px !important;
+    bottom: -5px !important;
+    width: 65px !important;
+    height: 65px !important;
+    background-image: url('../AI Robot.png') !important;
+    background-size: contain !important;
+    background-repeat: no-repeat !important;
+    background-position: bottom center !important;
+    pointer-events: none !important;
+    opacity: 0.85 !important;
+    filter: drop-shadow(0 0 8px rgba(255, 200, 0, 0.5)) !important;
+    z-index: 10 !important;
+  }
+}
