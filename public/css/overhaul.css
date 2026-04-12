@@ -2549,3 +2549,87 @@ header {
     transform: translateY(-50%) !important;
   }
 }
+
+/* ============================================================
+   PASS 13 — content-with-mascots wrapper + rocket/mode fixes
+   Appended after Pass 12. CSS-only additions here; the HTML
+   restructure to introduce .content-with-mascots is in
+   index.html.
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   FIX 1b — .content-with-mascots container
+   New positioning ancestor for the mascots. Same 92% width +
+   1400px max as .main-content so the mascots' absolute
+   positioning is relative to a box that exactly matches the
+   main-content card's outer edges.
+   ----------------------------------------------------------- */
+.content-with-mascots {
+  position: relative !important;
+  display: flex !important;
+  justify-content: center !important;
+  align-items: flex-start !important;
+  width: 92% !important;
+  max-width: 1400px !important;
+  margin: 0 auto !important;
+}
+
+/* -----------------------------------------------------------
+   FIX 1b — Mascot positioning relative to .content-with-mascots
+   left/right: 0 = panel edge. translateX ±82% pulls them
+   mostly outside with a slight overlap (ear/elbow/foot peek).
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .content-with-mascots .mascot {
+    position: absolute !important;
+    display: block !important;
+    top: 50% !important;
+    height: calc(100vh - 180px) !important;
+    min-height: 450px !important;
+    max-height: 580px !important;
+    width: auto !important;
+    z-index: 30 !important;
+    pointer-events: none !important;
+  }
+
+  .content-with-mascots .mascot-left {
+    left: 0 !important;
+    transform: translateX(-82%) translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: 0 !important;
+    transform: translateX(82%) translateY(-50%) !important;
+  }
+}
+
+@media (max-width: 899px) {
+  .content-with-mascots .mascot {
+    display: none !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 2 — Hide the mobile rocket on landscape mobile
+   ----------------------------------------------------------- */
+@media (max-width: 950px) and (orientation: landscape) {
+  .mobile-rocket {
+    display: none !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 3 — Mode buttons fit text on mobile landscape
+   ----------------------------------------------------------- */
+@media (max-width: 950px) and (orientation: landscape) {
+  .mode-btn {
+    font-size: 0.7rem !important;
+    padding: 4px 6px !important;
+    white-space: nowrap !important;
+    min-width: 0 !important;
+  }
+
+  .mode-toggle-container {
+    gap: 4px !important;
+  }
+}
