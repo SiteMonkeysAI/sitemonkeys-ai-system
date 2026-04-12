@@ -3296,3 +3296,36 @@ header {
     max-width: 88vw !important;
   }
 }
+
+/* Pass 29 — fix width:0 collapsing buttons, restate landscape rules */
+@media (max-width: 1100px) and (orientation: landscape) {
+
+  header .header-center .mode-toggle-container .mode-btn,
+  header .header-center .mode-toggle-container .mode-btn[data-mode="truth_general"],
+  header .header-center .mode-toggle-container .mode-btn[data-mode="business_validation"],
+  header .header-center .mode-toggle-container .mode-btn[data-mode="site_monkeys"] {
+    width: auto !important;
+    min-width: 0 !important;
+    flex: 1 1 0 !important;
+    font-size: 0.75rem !important;
+    padding: 5px 4px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    box-sizing: border-box !important;
+  }
+
+  .header-center {
+    flex: 1 1 auto !important;
+  }
+
+  .content-with-mascots .mascot-left {
+    left: -200px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: -200px !important;
+    transform: translateY(-50%) !important;
+  }
+}
