@@ -9,33 +9,33 @@ const COST_CEILINGS = {
 };
 
 const MODEL_COSTS = {
-  "gpt-4": {
+  'gpt-4': {
     input: 0.03 / 1000,
     output: 0.06 / 1000,
   },
-  "gpt-4o": {
+  'gpt-4o': {
     input: 0.005 / 1000,
     output: 0.015 / 1000,
   },
-  "claude-sonnet-4.5": {
+  'claude-sonnet-4.5': {
     input: 0.003 / 1000,
     output: 0.015 / 1000,
   },
-  "gpt-4o-mini": {
+  'gpt-4o-mini': {
     input: 0.00015 / 1000,
     output: 0.0006 / 1000,
   },
-  "text-embedding-3-small": {
+  'text-embedding-3-small': {
     input: 0.00002 / 1000,
     output: 0,
   },
-  "grok-4-1-fast-non-reasoning": {
-    input: 0.20 / 1000000,
-    output: 0.50 / 1000000,
+  'grok-4-1-fast-non-reasoning': {
+    input: 0.2 / 1000000,
+    output: 0.5 / 1000000,
   },
-  "grok-4.20-0309-non-reasoning": {
-    input: 2.00 / 1000000,
-    output: 6.00 / 1000000,
+  'grok-4.20-0309-non-reasoning': {
+    input: 2.0 / 1000000,
+    output: 6.0 / 1000000,
   },
 };
 
@@ -57,7 +57,7 @@ class CostTracker {
   isApproachingCeiling(sessionId, mode) {
     const ceiling = COST_CEILINGS[mode] || COST_CEILINGS.truth_general;
     const current = this.getSessionCost(sessionId);
-    return current >= (ceiling * 0.75);
+    return current >= ceiling * 0.75;
   }
 
   getDegradationTier(sessionId, mode) {
@@ -66,8 +66,8 @@ class CostTracker {
     const ratio = ceiling > 0 ? current / ceiling : 0;
 
     if (ratio >= 0.95) return 'hard_stop';
-    if (ratio >= 0.80) return 'minimal';
-    if (ratio >= 0.60) return 'efficiency';
+    if (ratio >= 0.8) return 'minimal';
+    if (ratio >= 0.6) return 'efficiency';
     return 'normal';
   }
 
@@ -93,7 +93,7 @@ class CostTracker {
       const inputTokens = queryTokens + contextTokens;
       const outputTokens = Math.min(1200, inputTokens * 1.5);
 
-      const model = "claude-sonnet-4.5";
+      const model = 'claude-sonnet-4.5';
       const costs = MODEL_COSTS[model];
 
       const inputCost = inputTokens * costs.input;
@@ -101,7 +101,7 @@ class CostTracker {
 
       return inputCost + outputCost;
     } catch (error) {
-      console.error("[COST-TRACKER] Estimation error:", error);
+      console.error('[COST-TRACKER] Estimation error:', error);
       return 0.05;
     }
   }
@@ -112,7 +112,7 @@ class CostTracker {
         this.sessionCosts.set(sessionId, {
           total: 0,
           breakdown: [],
-          mode: metadata.mode || "unknown",
+          mode: metadata.mode || 'unknown',
           startTime: Date.now(),
         });
       }
@@ -140,7 +140,7 @@ class CostTracker {
 
       return session.total;
     } catch (error) {
-      console.error("[COST-TRACKER] Record error:", error);
+      console.error('[COST-TRACKER] Record error:', error);
       return 0;
     }
   }
@@ -153,14 +153,12 @@ class CostTracker {
         return 0;
       }
 
-      const inputCost =
-        (usage.prompt_tokens || usage.input_tokens || 0) * costs.input;
-      const outputCost =
-        (usage.completion_tokens || usage.output_tokens || 0) * costs.output;
+      const inputCost = (usage.prompt_tokens || usage.input_tokens || 0) * costs.input;
+      const outputCost = (usage.completion_tokens || usage.output_tokens || 0) * costs.output;
 
       return inputCost + outputCost;
     } catch (error) {
-      console.error("[COST-TRACKER] Calculation error:", error);
+      console.error('[COST-TRACKER] Calculation error:', error);
       return 0;
     }
   }
@@ -214,16 +212,11 @@ class CostTracker {
       activeSessions: sessions.length,
       totalCost: sessions.reduce((sum, s) => sum + s.total, 0),
       averageCost:
-        sessions.length > 0
-          ? sessions.reduce((sum, s) => sum + s.total, 0) / sessions.length
-          : 0,
+        sessions.length > 0 ? sessions.reduce((sum, s) => sum + s.total, 0) / sessions.length : 0,
       byMode: {
-        truth_general: sessions.filter((s) => s.mode === "truth_general")
-          .length,
-        business_validation: sessions.filter(
-          (s) => s.mode === "business_validation",
-        ).length,
-        site_monkeys: sessions.filter((s) => s.mode === "site_monkeys").length,
+        truth_general: sessions.filter((s) => s.mode === 'truth_general').length,
+        business_validation: sessions.filter((s) => s.mode === 'business_validation').length,
+        site_monkeys: sessions.filter((s) => s.mode === 'site_monkeys').length,
       },
       totalRecords: this.costHistory.length,
     };

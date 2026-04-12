@@ -29,7 +29,7 @@ export const caseContextStore = new Map();
  * @returns {number}
  */
 export function countTokens(text) {
-  if (!text || typeof text !== "string") return 0;
+  if (!text || typeof text !== 'string') return 0;
   return Math.ceil(text.length / 4);
 }
 
@@ -88,9 +88,7 @@ export function buildMetrics({
   const their_total_tokens = (their_tokens_in || 0) + (their_tokens_out || 0);
   const tokens_saved = their_total_tokens - our_total_tokens;
   const savings_pct =
-    their_total_tokens > 0
-      ? Math.round((tokens_saved / their_total_tokens) * 1000) / 10
-      : 0;
+    their_total_tokens > 0 ? Math.round((tokens_saved / their_total_tokens) * 1000) / 10 : 0;
 
   return {
     context_tokens_provided,
@@ -100,7 +98,7 @@ export function buildMetrics({
     their_total_tokens,
     tokens_saved,
     savings_pct,
-    model: model || "unknown",
-    cost: typeof cost === "number" ? cost : 0,
+    model: model || 'unknown',
+    cost: typeof cost === 'number' ? cost : 0,
   };
 }

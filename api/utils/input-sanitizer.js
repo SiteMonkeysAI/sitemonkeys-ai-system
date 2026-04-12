@@ -46,7 +46,7 @@ const MAX_INPUT_LENGTH = 10_000;
 // Closing-tag pattern: allows arbitrary non-">" chars (covers "</script\t bar>").
 const SCRIPT_CLOSE_RE = /<\/script[^>]{0,2000}>/gi;
 // Opening-tag pattern: used inside map to locate start of each block.
-const SCRIPT_OPEN_RE  = /<script\b[^>]{0,2000}>/i;
+const SCRIPT_OPEN_RE = /<script\b[^>]{0,2000}>/i;
 
 function stripScriptBlocks(input) {
   let str = input;
@@ -56,10 +56,12 @@ function stripScriptBlocks(input) {
     // Split on every </script...> closing tag, then for each segment remove
     // anything from the last <script...> opening tag to the end of the segment.
     const parts = str.split(SCRIPT_CLOSE_RE);
-    str = parts.map(part => {
-      const m = SCRIPT_OPEN_RE.exec(part);
-      return m ? part.slice(0, m.index) : part;
-    }).join('');
+    str = parts
+      .map((part) => {
+        const m = SCRIPT_OPEN_RE.exec(part);
+        return m ? part.slice(0, m.index) : part;
+      })
+      .join('');
   } while (str !== prev);
   return str;
 }
@@ -122,6 +124,3 @@ export function sanitizeForMemoryStorage(text) {
 
   return sanitized;
 }
-
-
-

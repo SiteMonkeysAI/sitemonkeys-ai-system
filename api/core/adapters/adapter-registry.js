@@ -12,9 +12,9 @@
 // Capability tiers use coarse values — not decimal scores.
 // Decimal precision requires real evaluations and will be added after evals.
 
-import { OpenAIAdapter }    from './OpenAIAdapter.js';
+import { OpenAIAdapter } from './OpenAIAdapter.js';
 import { AnthropicAdapter } from './AnthropicAdapter.js';
-import { GrokAdapter }      from './GrokAdapter.js';
+import { GrokAdapter } from './GrokAdapter.js';
 
 // ---------------------------------------------------------------------------
 // Adapter instance store — populated by registerAdapters()
@@ -31,16 +31,22 @@ const _adapterInstances = new Map();
  */
 export function registerAdapters({ openaiClient, anthropicClient, grokClient }) {
   if (openaiClient) {
-    _adapterInstances.set('openai-gpt4o',      new OpenAIAdapter(openaiClient, 'gpt-4o'));
+    _adapterInstances.set('openai-gpt4o', new OpenAIAdapter(openaiClient, 'gpt-4o'));
     _adapterInstances.set('openai-gpt4o-mini', new OpenAIAdapter(openaiClient, 'gpt-4o-mini'));
   }
   if (anthropicClient) {
     _adapterInstances.set('anthropic-claude-sonnet', new AnthropicAdapter(anthropicClient));
-    _adapterInstances.set('anthropic-claude-haiku',  new AnthropicAdapter(anthropicClient, 'claude-haiku-4-5-20251001'));
+    _adapterInstances.set(
+      'anthropic-claude-haiku',
+      new AnthropicAdapter(anthropicClient, 'claude-haiku-4-5-20251001'),
+    );
   }
   // Register Grok adapter when API key is available
   if (grokClient && GrokAdapter.active()) {
-    _adapterInstances.set('xai-grok-fast', new GrokAdapter(grokClient, 'grok-4-1-fast-non-reasoning'));
+    _adapterInstances.set(
+      'xai-grok-fast',
+      new GrokAdapter(grokClient, 'grok-4-1-fast-non-reasoning'),
+    );
   }
 }
 
@@ -70,9 +76,9 @@ export function getAdapterInstance(key) {
  */
 export function getAdapter(requirements = {}) {
   const { taskType, minimumScore, excludeProviders = [] } = requirements;
-  const MIN_SCORE = minimumScore ?? 0.70;
+  const MIN_SCORE = minimumScore ?? 0.7;
 
-  const candidates = Array.from(_adapterInstances.values()).filter(adapter => {
+  const candidates = Array.from(_adapterInstances.values()).filter((adapter) => {
     if (excludeProviders.includes(adapter.providerId)) return false;
     if (!taskType) return true;
     const score = adapter.capabilities?.taskScores?.[taskType];
@@ -95,7 +101,6 @@ export function getAdapter(requirements = {}) {
 }
 
 const ADAPTER_REGISTRY = {
-
   'openai-gpt4o': {
     provider: 'openai',
     model: 'gpt-4o',
@@ -105,13 +110,13 @@ const ADAPTER_REGISTRY = {
     primary: true,
     active: () => !!process.env.OPENAI_API_KEY,
     capabilities: {
-      reasoning_tier: 'standard',     // standard | advanced
-      tool_reliable: true,            // stable tool/function call support
-      structured_output: true,        // reliable JSON / formatted output
-      long_context: 'medium',         // low | medium | high (128K window)
-      hallucination_control: 'standard' // standard | high
+      reasoning_tier: 'standard', // standard | advanced
+      tool_reliable: true, // stable tool/function call support
+      structured_output: true, // reliable JSON / formatted output
+      long_context: 'medium', // low | medium | high (128K window)
+      hallucination_control: 'standard', // standard | high
     },
-    tier: 'standard'
+    tier: 'standard',
   },
 
   'anthropic-claude-sonnet': {
@@ -124,10 +129,10 @@ const ADAPTER_REGISTRY = {
       reasoning_tier: 'advanced',
       tool_reliable: true,
       structured_output: true,
-      long_context: 'high',           // 200K window
-      hallucination_control: 'high'
+      long_context: 'high', // 200K window
+      hallucination_control: 'high',
     },
-    tier: 'advanced'
+    tier: 'advanced',
   },
 
   'anthropic-claude-haiku': {
@@ -140,10 +145,10 @@ const ADAPTER_REGISTRY = {
       reasoning_tier: 'standard',
       tool_reliable: true,
       structured_output: true,
-      long_context: 'high',           // 200K window
-      hallucination_control: 'standard'
+      long_context: 'high', // 200K window
+      hallucination_control: 'standard',
     },
-    tier: 'standard'
+    tier: 'standard',
   },
 
   // Future adapters added here:
@@ -161,12 +166,12 @@ const ADAPTER_REGISTRY = {
       reasoning_tier: 'standard',
       tool_reliable: true,
       structured_output: true,
-      long_context: 'high',               // 2M token context window
+      long_context: 'high', // 2M token context window
       hallucination_control: 'standard',
       supportsRealTimeData: true,
     },
-    tier: 'standard'
-  }
+    tier: 'standard',
+  },
 };
 
 /**
@@ -191,7 +196,7 @@ export function getActiveAdapters() {
 export function getDefaultAdapter() {
   const active = getActiveAdapters();
   // Prefer the adapter explicitly marked as primary
-  const primary = Object.values(active).find(a => a.primary === true);
+  const primary = Object.values(active).find((a) => a.primary === true);
   if (primary) return primary;
   // If the primary model is not configured, return the first active adapter
   const all = Object.values(active);
@@ -208,7 +213,7 @@ export function getDefaultAdapter() {
 export function getBestAdapterForCapabilities(required) {
   const active = getActiveAdapters();
 
-  const qualified = Object.values(active).filter(adapter => {
+  const qualified = Object.values(active).filter((adapter) => {
     return Object.entries(required).every(([capability, requiredValue]) => {
       const current = adapter.capabilities[capability];
       if (current === undefined) return false;
@@ -221,11 +226,10 @@ export function getBestAdapterForCapabilities(required) {
         case 'hallucination_control':
           if (requiredValue === 'high') return current === 'high';
           return true;
-        case 'long_context':
-          {
-            const rank = { low: 0, medium: 1, high: 2 };
-            return (rank[current] ?? -1) >= (rank[requiredValue] ?? 0);
-          }
+        case 'long_context': {
+          const rank = { low: 0, medium: 1, high: 2 };
+          return (rank[current] ?? -1) >= (rank[requiredValue] ?? 0);
+        }
         case 'tool_reliable':
         case 'structured_output':
           // Boolean: required true means adapter must have true
@@ -239,7 +243,7 @@ export function getBestAdapterForCapabilities(required) {
   if (qualified.length === 0) return null;
 
   // Among qualified adapters, prefer advanced tier, then primary
-  const advanced = qualified.filter(a => a.tier === 'advanced');
+  const advanced = qualified.filter((a) => a.tier === 'advanced');
   if (advanced.length > 0) return advanced[0];
   return qualified[0];
 }
@@ -265,18 +269,17 @@ export function checkContractLock(context) {
   if (context.requiresSpecificProvider) {
     return {
       locked: true,
-      reason: `tool_requires_provider:${context.requiresSpecificProvider}`
+      reason: `tool_requires_provider:${context.requiresSpecificProvider}`,
     };
   }
 
   // Gate 3: Output contract
   // If the request carries a strict output contract tied to a specific
   // provider's format guarantees, escalation is not safe.
-  if (context.outputContractProvider &&
-      context.outputContractProvider !== 'any') {
+  if (context.outputContractProvider && context.outputContractProvider !== 'any') {
     return {
       locked: true,
-      reason: `output_contract_locked_to:${context.outputContractProvider}`
+      reason: `output_contract_locked_to:${context.outputContractProvider}`,
     };
   }
 

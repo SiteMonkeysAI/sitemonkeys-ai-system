@@ -51,9 +51,15 @@ export function createEmptySessionState() {
 export function validateStateSchema(state) {
   if (!state || typeof state !== 'object') throw new Error('State must be an object');
   const required = [
-    'active_entities', 'current_focus', 'recent_references',
-    'decisions_made', 'unresolved_threads', 'open_dependencies',
-    'facts_established', 'constraints', 'risk_flags',
+    'active_entities',
+    'current_focus',
+    'recent_references',
+    'decisions_made',
+    'unresolved_threads',
+    'open_dependencies',
+    'facts_established',
+    'constraints',
+    'risk_flags',
     'active_objectives',
   ];
   for (const key of required) {
@@ -65,7 +71,7 @@ export function validateStateSchema(state) {
 
 function countPronouns(exchanges) {
   const pronounPattern = /\b(it|they|this|that|he|she|him|her|them|its|their)\b/gi;
-  const text = exchanges.map(e => (e.content || '')).join(' ');
+  const text = exchanges.map((e) => e.content || '').join(' ');
   return (text.match(pronounPattern) || []).length;
 }
 
@@ -78,7 +84,7 @@ function calculateReferenceDensity(exchanges) {
 
 function isKnownEntity(message, sessionState) {
   if (!sessionState || !sessionState.active_entities) return false;
-  return sessionState.active_entities.some(entity => {
+  return sessionState.active_entities.some((entity) => {
     const name = (entity.name || entity.description || '').toLowerCase();
     return name.length > 2 && message.toLowerCase().includes(name);
   });
@@ -99,7 +105,12 @@ const MEANINGFUL_SIGNALS = [
   /\b(goal|objective|trying to|need to)\b/i,
 ];
 
-export function shouldExtract(message, sessionState, rawExchanges = [], estimatedHistoryTokens = 0) {
+export function shouldExtract(
+  message,
+  sessionState,
+  rawExchanges = [],
+  estimatedHistoryTokens = 0,
+) {
   const rawWindowSize = calculateRawWindowSize(rawExchanges, sessionState);
 
   // 1. Token budget threshold
@@ -113,7 +124,13 @@ export function shouldExtract(message, sessionState, rawExchanges = [], estimate
   const hasNoUnresolvedThreads = !sessionState?.unresolved_threads?.length;
   const hasNoOpenDependencies = !sessionState?.open_dependencies?.length;
   const recentDensityLow = calculateReferenceDensity(rawExchanges) < 2;
-  if (rawExchanges.length > 0 && hasNoUnresolvedThreads && hasNoOpenDependencies && recentDensityLow) return true;
+  if (
+    rawExchanges.length > 0 &&
+    hasNoUnresolvedThreads &&
+    hasNoOpenDependencies &&
+    recentDensityLow
+  )
+    return true;
 
   // 4. Periodic maintenance — every 4 exchanges regardless of semantic conditions
   //    exchangeCount of 0 is excluded so a brand-new session with no history doesn't fire
@@ -121,15 +138,14 @@ export function shouldExtract(message, sessionState, rawExchanges = [], estimate
   if (rawExchanges.length >= 4 && exchangeCount > 0 && exchangeCount % 4 === 0) return true;
 
   // 5. Correction language
-  if (CORRECTION_SIGNALS.some(p => p.test(message))) return true;
+  if (CORRECTION_SIGNALS.some((p) => p.test(message))) return true;
 
   // 6. Meaningful state change
-  if (MEANINGFUL_SIGNALS.some(p => p.test(message))) return true;
+  if (MEANINGFUL_SIGNALS.some((p) => p.test(message))) return true;
 
   // 7. Named entity detection
   const newEntityDetected =
-    /\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b/.test(message) &&
-    !isKnownEntity(message, sessionState);
+    /\b[A-Z][a-z]+(?:\s[A-Z][a-z]+)*\b/.test(message) && !isKnownEntity(message, sessionState);
   if (newEntityDetected) return true;
 
   return false;
@@ -154,14 +170,14 @@ export function enforceStateSizeLimits(state) {
     if (!Array.isArray(arr) || arr.length <= limit) return arr;
 
     // Never prune entries matching the "always keep" predicate
-    const keep = arr.filter(item => alwaysKeepFn && alwaysKeepFn(item));
-    const candidates = arr.filter(item => !(alwaysKeepFn && alwaysKeepFn(item)));
+    const keep = arr.filter((item) => alwaysKeepFn && alwaysKeepFn(item));
+    const candidates = arr.filter((item) => !(alwaysKeepFn && alwaysKeepFn(item)));
 
     // Pruning order: superseded → resolved/completed → oldest provisional
-    const superseded = candidates.filter(i => i.status === 'superseded');
-    const resolved = candidates.filter(i => i.status === 'completed' || i.status === 'resolved');
-    const rest = candidates.filter(i =>
-      i.status !== 'superseded' && i.status !== 'completed' && i.status !== 'resolved'
+    const superseded = candidates.filter((i) => i.status === 'superseded');
+    const resolved = candidates.filter((i) => i.status === 'completed' || i.status === 'resolved');
+    const rest = candidates.filter(
+      (i) => i.status !== 'superseded' && i.status !== 'completed' && i.status !== 'resolved',
     );
 
     const combined = [...keep, ...rest, ...resolved, ...superseded];
@@ -169,16 +185,26 @@ export function enforceStateSizeLimits(state) {
   }
 
   // active_objectives — never prune
-  if (Array.isArray(state.active_objectives) && state.active_objectives.length > STATE_LIMITS.active_objectives) {
-    state.active_objectives = pruneArray(state.active_objectives, STATE_LIMITS.active_objectives, () => true);
+  if (
+    Array.isArray(state.active_objectives) &&
+    state.active_objectives.length > STATE_LIMITS.active_objectives
+  ) {
+    state.active_objectives = pruneArray(
+      state.active_objectives,
+      STATE_LIMITS.active_objectives,
+      () => true,
+    );
   }
 
   // decisions_made — never prune active/relevant
-  if (Array.isArray(state.decisions_made) && state.decisions_made.length > STATE_LIMITS.decisions_made) {
+  if (
+    Array.isArray(state.decisions_made) &&
+    state.decisions_made.length > STATE_LIMITS.decisions_made
+  ) {
     state.decisions_made = pruneArray(
       state.decisions_made,
       STATE_LIMITS.decisions_made,
-      i => i.status === 'active'
+      (i) => i.status === 'active',
     );
   }
 
@@ -190,11 +216,14 @@ export function enforceStateSizeLimits(state) {
   // unresolved_threads — never prune (spec: NEVER PRUNE)
 
   // facts_established — never prune confirmed
-  if (Array.isArray(state.facts_established) && state.facts_established.length > STATE_LIMITS.facts_established) {
+  if (
+    Array.isArray(state.facts_established) &&
+    state.facts_established.length > STATE_LIMITS.facts_established
+  ) {
     state.facts_established = pruneArray(
       state.facts_established,
       STATE_LIMITS.facts_established,
-      i => i.status === 'confirmed'
+      (i) => i.status === 'confirmed',
     );
   }
 
@@ -204,23 +233,32 @@ export function enforceStateSizeLimits(state) {
   }
 
   // recent_references
-  if (Array.isArray(state.recent_references) && state.recent_references.length > STATE_LIMITS.recent_references) {
+  if (
+    Array.isArray(state.recent_references) &&
+    state.recent_references.length > STATE_LIMITS.recent_references
+  ) {
     state.recent_references = state.recent_references.slice(-STATE_LIMITS.recent_references);
   }
 
   // open_dependencies — never prune (spec: NEVER PRUNE)
 
   // active_entities — never prune primary
-  if (Array.isArray(state.active_entities) && state.active_entities.length > STATE_LIMITS.active_entities_per_category) {
+  if (
+    Array.isArray(state.active_entities) &&
+    state.active_entities.length > STATE_LIMITS.active_entities_per_category
+  ) {
     state.active_entities = pruneArray(
       state.active_entities,
       STATE_LIMITS.active_entities_per_category,
-      i => i.is_primary === true
+      (i) => i.is_primary === true,
     );
   }
 
   // user_preferences
-  if (Array.isArray(state.user_preferences) && state.user_preferences.length > STATE_LIMITS.user_preferences) {
+  if (
+    Array.isArray(state.user_preferences) &&
+    state.user_preferences.length > STATE_LIMITS.user_preferences
+  ) {
     state.user_preferences = state.user_preferences.slice(-STATE_LIMITS.user_preferences);
   }
 
@@ -254,10 +292,10 @@ export function mergeSessionState(existing, extracted) {
   }
 
   // active_entities — deduplicate by name/description
-  for (const entity of (extracted.active_entities || [])) {
+  for (const entity of extracted.active_entities || []) {
     const key = (entity.name || entity.description || '').toLowerCase().trim();
-    const existingIdx = merged.active_entities.findIndex(e =>
-      (e.name || e.description || '').toLowerCase().trim() === key
+    const existingIdx = merged.active_entities.findIndex(
+      (e) => (e.name || e.description || '').toLowerCase().trim() === key,
     );
     if (existingIdx === -1) {
       merged.active_entities.push(entity);
@@ -273,9 +311,9 @@ export function mergeSessionState(existing, extracted) {
   // Merge arrays with deduplication + status upgrade logic
   function mergeArray(existingArr, newItems, getKey) {
     const result = [...existingArr];
-    for (const item of (newItems || [])) {
+    for (const item of newItems || []) {
       const key = getKey(item);
-      const existingIdx = result.findIndex(e => getKey(e) === key);
+      const existingIdx = result.findIndex((e) => getKey(e) === key);
       if (existingIdx === -1) {
         result.push(item);
       } else {
@@ -295,30 +333,43 @@ export function mergeSessionState(existing, extracted) {
 
   // Key function: prefer stable text fields; fall back to description/content; last resort uses a
   // concatenation of sorted values rather than full JSON to avoid property-order sensitivity.
-  const textKey = i => {
+  const textKey = (i) => {
     const primary = i.text || i.description || i.content;
     if (primary) return primary.toLowerCase().slice(0, 80);
     // Predictable fallback: sorted key-value pairs (avoids JSON property-order variance)
-    return Object.keys(i).sort().map(k => `${k}:${i[k]}`).join('|').toLowerCase().slice(0, 80);
+    return Object.keys(i)
+      .sort()
+      .map((k) => `${k}:${i[k]}`)
+      .join('|')
+      .toLowerCase()
+      .slice(0, 80);
   };
 
   merged.decisions_made = mergeArray(merged.decisions_made, extracted.decisions_made, textKey);
-  merged.facts_established = mergeArray(merged.facts_established, extracted.facts_established, textKey);
+  merged.facts_established = mergeArray(
+    merged.facts_established,
+    extracted.facts_established,
+    textKey,
+  );
   merged.constraints = mergeArray(merged.constraints, extracted.constraints, textKey);
   merged.risk_flags = mergeArray(merged.risk_flags, extracted.risk_flags, textKey);
-  merged.active_objectives = mergeArray(merged.active_objectives, extracted.active_objectives, textKey);
+  merged.active_objectives = mergeArray(
+    merged.active_objectives,
+    extracted.active_objectives,
+    textKey,
+  );
 
   // Unresolved threads — append new, remove ones that appear resolved
   const resolvedKeys = new Set(
-    (extracted.unresolved_threads || [])
-      .filter(t => t.resolved === true)
-      .map(t => textKey(t))
+    (extracted.unresolved_threads || []).filter((t) => t.resolved === true).map((t) => textKey(t)),
   );
-  merged.unresolved_threads = merged.unresolved_threads.filter(t => !resolvedKeys.has(textKey(t)));
-  for (const thread of (extracted.unresolved_threads || [])) {
+  merged.unresolved_threads = merged.unresolved_threads.filter(
+    (t) => !resolvedKeys.has(textKey(t)),
+  );
+  for (const thread of extracted.unresolved_threads || []) {
     if (!thread.resolved) {
       const key = textKey(thread);
-      if (!merged.unresolved_threads.find(t => textKey(t) === key)) {
+      if (!merged.unresolved_threads.find((t) => textKey(t) === key)) {
         merged.unresolved_threads.push(thread);
       }
     }
@@ -326,15 +377,13 @@ export function mergeSessionState(existing, extracted) {
 
   // Open dependencies — same pattern
   const resolvedDeps = new Set(
-    (extracted.open_dependencies || [])
-      .filter(d => d.resolved === true)
-      .map(d => textKey(d))
+    (extracted.open_dependencies || []).filter((d) => d.resolved === true).map((d) => textKey(d)),
   );
-  merged.open_dependencies = merged.open_dependencies.filter(d => !resolvedDeps.has(textKey(d)));
-  for (const dep of (extracted.open_dependencies || [])) {
+  merged.open_dependencies = merged.open_dependencies.filter((d) => !resolvedDeps.has(textKey(d)));
+  for (const dep of extracted.open_dependencies || []) {
     if (!dep.resolved) {
       const key = textKey(dep);
-      if (!merged.open_dependencies.find(d => textKey(d) === key)) {
+      if (!merged.open_dependencies.find((d) => textKey(d) === key)) {
         merged.open_dependencies.push(dep);
       }
     }
@@ -344,7 +393,11 @@ export function mergeSessionState(existing, extracted) {
   merged.recent_references = [...merged.recent_references, ...(extracted.recent_references || [])];
 
   // User preferences — merge
-  merged.user_preferences = mergeArray(merged.user_preferences, extracted.user_preferences || [], textKey);
+  merged.user_preferences = mergeArray(
+    merged.user_preferences,
+    extracted.user_preferences || [],
+    textKey,
+  );
 
   return enforceStateSizeLimits(merged);
 }
@@ -431,10 +484,10 @@ Return JSON only. No explanation.`;
 
 function getMostRecentPrimaryEntity(sessionState) {
   if (!sessionState?.active_entities) return null;
-  const primaries = sessionState.active_entities.filter(e => e.is_primary === true);
+  const primaries = sessionState.active_entities.filter((e) => e.is_primary === true);
   if (primaries.length === 0) return null;
   return primaries.reduce((best, e) =>
-    (e.last_mentioned || 0) > (best.last_mentioned || 0) ? e : best
+    (e.last_mentioned || 0) > (best.last_mentioned || 0) ? e : best,
   );
 }
 
@@ -460,15 +513,15 @@ function getRawWindow(rawHistory, sessionState) {
 }
 
 function getPrimaryEntities(sessionState) {
-  return (sessionState?.active_entities || []).filter(e => e.is_primary === true);
+  return (sessionState?.active_entities || []).filter((e) => e.is_primary === true);
 }
 
 function getActiveDecisions(sessionState) {
-  return (sessionState?.decisions_made || []).filter(d => d.status !== 'superseded');
+  return (sessionState?.decisions_made || []).filter((d) => d.status !== 'superseded');
 }
 
 function getConfirmedFacts(sessionState) {
-  return (sessionState?.facts_established || []).filter(f => f.status === 'confirmed');
+  return (sessionState?.facts_established || []).filter((f) => f.status === 'confirmed');
 }
 
 /**
@@ -509,14 +562,14 @@ export function buildSessionContext(sessionState, rawHistory) {
   // Estimate token usage
   const highPriorityText = JSON.stringify(highPriority);
   const lowPriorityText = JSON.stringify(lowPriority);
-  const rawWindowText = rawWindow.map(m => m.content || '').join(' ');
+  const rawWindowText = rawWindow.map((m) => m.content || '').join(' ');
 
   const rawTokens = Math.ceil(rawWindowText.length / CHARS_PER_TOKEN);
   const highTokens = Math.ceil(highPriorityText.length / CHARS_PER_TOKEN);
   const lowTokens = Math.ceil(lowPriorityText.length / CHARS_PER_TOKEN);
 
   // Determine what fits in budget
-  const includeLowPriority = (rawTokens + highTokens + lowTokens) <= BUDGET_HISTORY;
+  const includeLowPriority = rawTokens + highTokens + lowTokens <= BUDGET_HISTORY;
 
   // Build messages array
   const messages = [];
@@ -570,4 +623,3 @@ export function buildSessionContext(sessionState, rawHistory) {
 
   return messages;
 }
-

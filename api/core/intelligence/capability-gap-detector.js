@@ -27,13 +27,12 @@
 // Regex patterns — secondary supporting signals only.
 // Patterns REINFORCE primary triggers but do not drive escalation by themselves.
 const SECONDARY_PATTERNS = {
-
   reasoning_tier: [
     /\b(analyze|analysis|compare|contrast|evaluate|assess)\b/i,
     /\b(why|how does|what causes|what leads to)\b/i,
     /\b(implications|consequences|impact of)\b/i,
     /\b(strategy|strategic|recommend|recommendation)\b/i,
-    /\b(pros and cons|trade.?offs|weighing)\b/i
+    /\b(pros and cons|trade.?offs|weighing)\b/i,
   ],
 
   hallucination_control: [
@@ -41,20 +40,20 @@ const SECONDARY_PATTERNS = {
     /\b(medical|clinical|diagnosis|treatment|drug)\b/i,
     /\b(financial|investment|securities|tax|audit)\b/i,
     /\b(safety|critical|dangerous|hazardous)\b/i,
-    /\b(exact|precise|specific|actual|statistic|percentage)\b/i
+    /\b(exact|precise|specific|actual|statistic|percentage)\b/i,
   ],
 
   long_context: [
     /\b(summarize|summary|overview|across)\b/i,
     /\b(multiple|several|various|different sources)\b/i,
-    /\b(document|report|paper|article)\b/i
+    /\b(document|report|paper|article)\b/i,
   ],
 
   structured_output: [
     /\b(first|second|third|then|finally|additionally)\b/i,
     /\b(format|structure|organize|bullet|numbered|table)\b/i,
-    /\b(only|must|never|always|exactly|precisely)\b/i
-  ]
+    /\b(only|must|never|always|exactly|precisely)\b/i,
+  ],
 };
 
 /**
@@ -64,7 +63,7 @@ const SECONDARY_PATTERNS = {
 function countPatternSignals(query, capability) {
   const patterns = SECONDARY_PATTERNS[capability];
   if (!patterns) return 0;
-  return patterns.filter(p => p.test(query)).length;
+  return patterns.filter((p) => p.test(query)).length;
 }
 
 /**
@@ -92,7 +91,7 @@ export function detectRequiredCapabilities(
   contextTokens,
   confidenceScore,
   requiresExpertise = false,
-  analysisComplexity = 0
+  analysisComplexity = 0,
 ) {
   const required = {};
 
@@ -173,9 +172,11 @@ export function detectRequiredCapabilities(
   // Low confidence does NOT create new requirements.
   // It only promotes an already-identified 'standard' reasoning_tier to
   // 'advanced' — and only when other requirements already exist.
-  if (confidenceScore < 0.65 &&
-      Object.keys(required).length > 0 &&
-      required.reasoning_tier !== 'advanced') {
+  if (
+    confidenceScore < 0.65 &&
+    Object.keys(required).length > 0 &&
+    required.reasoning_tier !== 'advanced'
+  ) {
     required.reasoning_tier = 'advanced';
   }
 
@@ -230,6 +231,6 @@ export function calculateCapabilityGap(currentAdapter, requiredCapabilities) {
 
   return {
     hasGap: Object.keys(gaps).length > 0,
-    gaps
+    gaps,
   };
 }

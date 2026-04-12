@@ -14,8 +14,8 @@
 import { persistentMemory } from '../categories/memory/index.js';
 
 export async function handleDeleteMemories(req, res) {
-  const adminKey = req.headers['x-admin-key'] ||
-                   req.headers['authorization']?.replace('Bearer ', '');
+  const adminKey =
+    req.headers['x-admin-key'] || req.headers['authorization']?.replace('Bearer ', '');
   if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
@@ -30,8 +30,8 @@ export async function handleDeleteMemories(req, res) {
     return res.status(400).json({ error: 'memory_ids must be a non-empty array' });
   }
 
-  const ids = memory_ids.map(id => parseInt(id, 10));
-  if (ids.some(id => !Number.isFinite(id) || id <= 0)) {
+  const ids = memory_ids.map((id) => parseInt(id, 10));
+  if (ids.some((id) => !Number.isFinite(id) || id <= 0)) {
     return res.status(400).json({ error: 'All memory_ids must be positive integers' });
   }
 
@@ -47,12 +47,14 @@ export async function handleDeleteMemories(req, res) {
       `DELETE FROM persistent_memories
        WHERE user_id = $1 AND id = ANY($2)
        RETURNING id`,
-      [user_id.trim(), ids]
+      [user_id.trim(), ids],
     );
 
-    const deletedIds = result.rows.map(row => row.id);
+    const deletedIds = result.rows.map((row) => row.id);
 
-    console.log(`[ADMIN-DELETE] Deleted ${deletedIds.length} memories for user=${user_id.trim()}, ids=${deletedIds.join(',')}`);
+    console.log(
+      `[ADMIN-DELETE] Deleted ${deletedIds.length} memories for user=${user_id.trim()}, ids=${deletedIds.join(',')}`,
+    );
 
     return res.json({ deleted: deletedIds.length, ids: deletedIds });
   } catch (error) {

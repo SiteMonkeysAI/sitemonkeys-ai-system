@@ -28,7 +28,7 @@
       return {
         role: entry.role,
         content: entry.content,
-        timestamp: Date.now()
+        timestamp: Date.now(),
       };
     });
 
@@ -42,7 +42,7 @@
       id: Date.now().toString(),
       startedAt: new Date().toISOString(),
       firstMessage: firstUserMsg ? firstUserMsg.content.substring(0, 200) : 'Conversation',
-      messages: messages
+      messages: messages,
     });
 
     // Cap at 50 sessions
@@ -195,11 +195,11 @@
       var dateStr = date.toLocaleDateString(undefined, {
         month: 'short',
         day: 'numeric',
-        year: 'numeric'
+        year: 'numeric',
       });
       var timeStr = date.toLocaleTimeString(undefined, {
         hour: '2-digit',
-        minute: '2-digit'
+        minute: '2-digit',
       });
       var preview = session.firstMessage
         ? session.firstMessage.substring(0, 80)
@@ -209,10 +209,20 @@
       }
 
       html +=
-        '<div class="session-item" data-session-id="' + session.id + '">' +
-        '<button class="session-delete" data-delete-id="' + session.id + '" title="Delete">&times;</button>' +
-        '<div class="session-date">' + dateStr + ' at ' + timeStr + '</div>' +
-        '<div class="session-preview">' + escapeHtml(preview) + '</div>' +
+        '<div class="session-item" data-session-id="' +
+        session.id +
+        '">' +
+        '<button class="session-delete" data-delete-id="' +
+        session.id +
+        '" title="Delete">&times;</button>' +
+        '<div class="session-date">' +
+        dateStr +
+        ' at ' +
+        timeStr +
+        '</div>' +
+        '<div class="session-preview">' +
+        escapeHtml(preview) +
+        '</div>' +
         '</div>';
     });
 
@@ -251,7 +261,12 @@
 
     // Save current conversation first (if any)
     var box = document.getElementById('chat-box');
-    if (box && box.children.length > 0 && typeof conversationHistory !== 'undefined' && conversationHistory.length > 0) {
+    if (
+      box &&
+      box.children.length > 0 &&
+      typeof conversationHistory !== 'undefined' &&
+      conversationHistory.length > 0
+    ) {
       saveCurrentSession();
     }
 
@@ -268,15 +283,10 @@
       if (msg.role === 'user') {
         bubble.className = 'bubble user';
         bubble.innerHTML =
-          '<div class="bubble-content"><strong>You:</strong> ' +
-          escapeHtml(msg.content) +
-          '</div>';
+          '<div class="bubble-content"><strong>You:</strong> ' + escapeHtml(msg.content) + '</div>';
       } else {
         bubble.className = 'bubble ai';
-        bubble.innerHTML =
-          '<div class="bubble-content">' +
-          escapeHtml(msg.content) +
-          '</div>';
+        bubble.innerHTML = '<div class="bubble-content">' + escapeHtml(msg.content) + '</div>';
       }
 
       box.appendChild(bubble);
