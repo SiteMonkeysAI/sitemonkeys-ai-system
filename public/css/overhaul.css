@@ -3500,3 +3500,28 @@ header {
     transform: translateY(-50%) !important;
   }
 }
+
+/* Pass 34 — landscape mascots scoped to 900-1100px only */
+@media (min-width: 900px) and (max-width: 1100px) and (orientation: landscape) {
+  .content-with-mascots .mascot {
+    display: block !important;
+    position: absolute !important;
+    top: 50% !important;
+    height: calc(100vh - 160px) !important;
+    min-height: 200px !important;
+    max-height: 260px !important;
+    width: auto !important;
+    z-index: 30 !important;
+    pointer-events: none !important;
+  }
+
+  .content-with-mascots .mascot-left {
+    left: -220px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: -220px !important;
+    transform: translateY(-50%) !important;
+  }
+}
