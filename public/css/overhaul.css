@@ -3329,3 +3329,43 @@ header {
     transform: translateY(-50%) !important;
   }
 }
+
+/* Pass 30 — landscape mascot sizing + button text cutoff fix */
+@media (max-width: 1100px) and (orientation: landscape) {
+
+  .content-with-mascots .mascot {
+    display: block !important;
+    position: absolute !important;
+    top: 50% !important;
+    height: calc(100vh - 160px) !important;
+    min-height: 180px !important;
+    max-height: 240px !important;
+    width: auto !important;
+    z-index: 30 !important;
+    pointer-events: none !important;
+  }
+
+  .content-with-mascots .mascot-left {
+    left: -160px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: -160px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  /* Fix Site Monkeys button text cutoff */
+  header .header-center .mode-toggle-container {
+    gap: 4px !important;
+    padding: 4px 6px !important;
+  }
+
+  header .header-center .mode-toggle-container .mode-btn,
+  header .header-center .mode-toggle-container .mode-btn[data-mode="truth_general"],
+  header .header-center .mode-toggle-container .mode-btn[data-mode="business_validation"],
+  header .header-center .mode-toggle-container .mode-btn[data-mode="site_monkeys"] {
+    font-size: 0.68rem !important;
+    letter-spacing: -0.02em !important;
+  }
+}
