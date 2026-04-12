@@ -1878,3 +1878,186 @@ header {
   }
 
 }
+
+/* ============================================================
+   PASS 6 — Targeted fixes
+   Appended after Pass 5. CSS-only; no JS/HTML changes.
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   FIX 1 — Hide .mobile-rocket on mobile portrait
+   Overrides the embedded @media (max-width: 768px) rule that
+   sets .mobile-rocket { display: block }. Scoped exactly to
+   the 768px breakpoint per spec (NOT 899px).
+   ----------------------------------------------------------- */
+@media (max-width: 768px) {
+  .mobile-rocket {
+    display: none !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 2 — Main content taller on desktop
+   Overrides embedded default cap of max-height: 720px and
+   min-height: 630px with a viewport-relative fill.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .main-content {
+    height: calc(100vh - 160px) !important;
+    min-height: 680px !important;
+    max-height: calc(100vh - 160px) !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 3 part A — Header logo/robot aligned with 4% side gutters
+   Desktop 900-1399px: the main content is 92% wide (4% gutters
+   on each side), so the logo and robot sit at 4% from the edges.
+   Header-row loses its max-width cap AND gets matching 4%
+   horizontal padding so flex children stay within the same
+   gutter as the main-content card.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .header-row {
+    max-width: none !important;
+    padding-left: 4% !important;
+    padding-right: 4% !important;
+    box-sizing: border-box !important;
+  }
+
+  .logo {
+    left: 4% !important;
+    right: auto !important;
+  }
+
+  .ai-robot-wrapper,
+  #confidenceToggleWrapper {
+    right: 4% !important;
+    left: auto !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 3 part B — Very wide viewports: clamp to main-content
+   max-width of 1400px. Placed AFTER the min-width:900px block
+   so this rule's !important wins on viewports ≥ 1400px where
+   both queries match.
+   Note: main-content hits its 1400px max at viewport ≈1522px,
+   so between 1400 and ~1522 the logo/robot sit slightly outside
+   main-content's edges; alignment becomes exact at ≥1522px.
+   ----------------------------------------------------------- */
+@media (min-width: 1400px) {
+  .logo {
+    left: calc((100vw - 1400px) / 2) !important;
+  }
+
+  .ai-robot-wrapper,
+  #confidenceToggleWrapper {
+    right: calc((100vw - 1400px) / 2) !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 4 — Mode buttons full width on mobile
+   Pass 5 B3 set .mode-btn padding: 4px 10px; overridden here.
+   Pass 5 B7 set .mode-toggle-container padding: 2px 4px;
+   also overridden. Pass 6 later in source order → wins.
+   ----------------------------------------------------------- */
+@media (max-width: 899px) {
+  .mode-toggle-container {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: stretch !important;
+    gap: 6px !important;
+    padding: 4px 8px !important;
+    box-sizing: border-box !important;
+  }
+
+  .mode-btn {
+    flex: 1 1 0 !important;
+    text-align: center !important;
+    min-width: 0 !important;
+    font-size: 0.78rem !important;
+    padding: 5px 4px !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 5 — Header row unified look on mobile
+   ----------------------------------------------------------- */
+@media (max-width: 899px) {
+  .header-row {
+    max-width: 100% !important;
+    padding: 0 8px !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 6 — Concrete texture on desktop panels
+   Layered repeating gradients on top of the base diagonal
+   gradient simulate a subtle concrete grain. Overrides
+   Pass 5 C4's background and border on .status-panel and
+   .chat-panel.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .status-panel,
+  .chat-panel {
+    background:
+      repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(255, 255, 255, 0.008) 2px,
+        rgba(255, 255, 255, 0.008) 4px
+      ),
+      repeating-linear-gradient(
+        90deg,
+        transparent,
+        transparent 3px,
+        rgba(255, 255, 255, 0.005) 3px,
+        rgba(255, 255, 255, 0.005) 6px
+      ),
+      linear-gradient(145deg,
+        #1e1e22 0%,
+        #18181c 40%,
+        #1a1a1e 60%,
+        #161618 100%) !important;
+    border: 1px solid rgba(140, 142, 160, 0.3) !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 7 — Stronger cyan sweep line under mode buttons
+   Overrides the Pass 4 Fix 3 .mode-toggle-container::before
+   width/height/background. Position, content, left, transform,
+   bottom, pointer-events persist from Pass 4.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .mode-toggle-container::before {
+    height: 2px !important;
+    background: linear-gradient(90deg,
+      transparent 0%,
+      rgba(0, 200, 255, 0.3) 15%,
+      rgba(0, 220, 255, 0.8) 35%,
+      rgba(100, 230, 255, 1) 50%,
+      rgba(0, 220, 255, 0.8) 65%,
+      rgba(0, 200, 255, 0.3) 85%,
+      transparent 100%) !important;
+    width: 100% !important;
+    opacity: 1 !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 8 — Input area cleanup on mobile
+   Pass 2 Fix 4's unguarded .input-area styles still apply on
+   mobile; this rule supersedes them for < 900px viewports.
+   ----------------------------------------------------------- */
+@media (max-width: 899px) {
+  .input-area {
+    background: rgba(14, 14, 18, 0.97) !important;
+    border: 1px solid rgba(140, 140, 160, 0.45) !important;
+    border-radius: 14px !important;
+    padding: 8px 12px !important;
+  }
+}
