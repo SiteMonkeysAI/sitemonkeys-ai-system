@@ -3125,3 +3125,49 @@ header {
     letter-spacing: 0 !important;
   }
 }
+
+/* Pass 25 — mascots -260px desktop / -160px landscape, higher-specificity buttons */
+@media (min-width: 900px) {
+  .content-with-mascots .mascot-left {
+    left: -260px !important;
+    transform: translateY(-50%) !important;
+  }
+  .content-with-mascots .mascot-right {
+    right: -260px !important;
+    transform: translateY(-50%) !important;
+  }
+}
+
+@media (max-width: 1100px) and (orientation: landscape) {
+  .content-with-mascots .mascot-left {
+    left: -160px !important;
+    transform: translateY(-50%) !important;
+  }
+  .content-with-mascots .mascot-right {
+    right: -160px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  /* Higher specificity to beat all prior button rules */
+  header .mode-toggle-container {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 6px !important;
+    padding: 4px 8px !important;
+    box-sizing: border-box !important;
+  }
+
+  header .mode-toggle-container .mode-btn {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    font-size: 0.75rem !important;
+    padding: 5px 4px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+    letter-spacing: 0 !important;
+  }
+}
