@@ -3272,3 +3272,27 @@ header {
     letter-spacing: 0 !important;
   }
 }
+
+/* Pass 28 — landscape header-center flex:1 + mascots -200px + 88vw box */
+@media (max-width: 1100px) and (orientation: landscape) {
+  .header-center {
+    flex: 1 1 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .content-with-mascots .mascot-left {
+    left: -200px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: -200px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .main-content {
+    width: 88vw !important;
+    max-width: 88vw !important;
+  }
+}
