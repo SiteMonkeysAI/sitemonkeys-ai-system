@@ -2425,3 +2425,33 @@ header {
     right: -80px !important;
   }
 }
+
+/* ============================================================
+   PASS 10 — Mascot offset loosened further + landscape hide
+   Appended after Pass 9. CSS-only; no JS/HTML changes.
+   ============================================================ */
+
+@media (min-width: 900px) {
+  .mascot-left {
+    left: calc(4vw - 210px) !important;
+  }
+  .mascot-right {
+    right: calc(4vw - 210px) !important;
+  }
+}
+
+@media (min-width: 1522px) {
+  .mascot-left {
+    left: calc((100vw - 1400px) / 2 - 210px) !important;
+  }
+  .mascot-right {
+    right: calc((100vw - 1400px) / 2 - 210px) !important;
+  }
+}
+
+/* Hide mascots on landscape mobile — no room */
+@media (max-width: 950px) and (orientation: landscape) {
+  .mascot {
+    display: none !important;
+  }
+}
