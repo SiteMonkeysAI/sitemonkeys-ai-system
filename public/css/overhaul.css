@@ -2894,3 +2894,53 @@ header {
     box-sizing: border-box !important;
   }
 }
+
+/* LANDSCAPE MOBILE - buttons, mascots */
+@media (max-width: 1100px) and (orientation: landscape) {
+
+  .mode-toggle-container {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 2px !important;
+    padding: 2px 2px !important;
+    box-sizing: border-box !important;
+  }
+
+  .mode-btn {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    width: 0 !important;
+    font-size: 0.52rem !important;
+    padding: 3px 1px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+    letter-spacing: 0 !important;
+  }
+
+  .content-with-mascots .mascot-left {
+    left: 0 !important;
+    transform: translateX(-78%) translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: 0 !important;
+    transform: translateX(78%) translateY(-50%) !important;
+  }
+}
+
+/* DESKTOP - push mascots further outside */
+@media (min-width: 900px) {
+  .content-with-mascots .mascot-left {
+    left: 0 !important;
+    transform: translateX(-78%) translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: 0 !important;
+    transform: translateX(78%) translateY(-50%) !important;
+  }
+}
