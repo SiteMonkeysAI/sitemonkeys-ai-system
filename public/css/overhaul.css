@@ -2752,3 +2752,64 @@ header {
     box-sizing: border-box !important;
   }
 }
+
+/* ============================================================
+   PASS 16 — Raise landscape breakpoint from 950px to 1100px
+   Catches wider iPhones (iPhone 14/15/16 Pro Max etc.) in
+   landscape where viewport width is 932px-956px. The embedded
+   CSS landscape queries stop at 950px, so 951-1100px landscape
+   previously fell back to desktop layout. This block mirrors
+   the Pass 15 landscape rules at the wider 1100px breakpoint.
+   Appended after Pass 15. CSS-only; no JS/HTML changes.
+   ============================================================ */
+
+@media (max-width: 1100px) and (orientation: landscape) {
+
+  .mobile-rocket {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  .content-with-mascots .mascot {
+    display: block !important;
+    height: calc(100vh - 160px) !important;
+    min-height: 180px !important;
+    max-height: 240px !important;
+    width: auto !important;
+    position: absolute !important;
+    top: 50% !important;
+    z-index: 30 !important;
+    pointer-events: none !important;
+  }
+
+  .content-with-mascots .mascot-left {
+    left: 0 !important;
+    transform: translateX(-65%) translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: 0 !important;
+    transform: translateX(65%) translateY(-50%) !important;
+  }
+
+  .mode-toggle-container {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 3px !important;
+    padding: 2px 4px !important;
+    box-sizing: border-box !important;
+  }
+
+  .mode-btn {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    font-size: 0.6rem !important;
+    padding: 3px 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+  }
+}
