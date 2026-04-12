@@ -2510,3 +2510,42 @@ header {
     transform: translateX(75%) translateY(-50%) !important;
   }
 }
+
+/* PASS 11 — Simple viewport-relative mascot positioning.
+   Removes all complex transform/calc approaches.
+   Uses simple vw-based offsets that scale with screen width. */
+
+@media (min-width: 900px) {
+  .mascot {
+    display: block !important;
+  }
+
+  .mascot-left {
+    left: -8vw !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .mascot-right {
+    right: -8vw !important;
+    transform: translateY(-50%) !important;
+  }
+}
+
+@media (max-width: 950px) and (orientation: landscape) {
+  .mascot {
+    display: block !important;
+    height: calc(100vh - 140px) !important;
+    min-height: 200px !important;
+    max-height: 260px !important;
+  }
+
+  .mascot-left {
+    left: -6vw !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .mascot-right {
+    right: -6vw !important;
+    transform: translateY(-50%) !important;
+  }
+}
