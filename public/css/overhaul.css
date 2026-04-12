@@ -3036,3 +3036,26 @@ header {
     letter-spacing: 0 !important;
   }
 }
+
+/* Pass 22 — mascot translateX to ±55% (desktop + landscape) */
+@media (min-width: 900px) {
+  .content-with-mascots .mascot-left {
+    left: 0 !important;
+    transform: translateX(-55%) translateY(-50%) !important;
+  }
+  .content-with-mascots .mascot-right {
+    right: 0 !important;
+    transform: translateX(55%) translateY(-50%) !important;
+  }
+}
+
+@media (max-width: 1100px) and (orientation: landscape) {
+  .content-with-mascots .mascot-left {
+    left: 0 !important;
+    transform: translateX(-55%) translateY(-50%) !important;
+  }
+  .content-with-mascots .mascot-right {
+    right: 0 !important;
+    transform: translateX(55%) translateY(-50%) !important;
+  }
+}
