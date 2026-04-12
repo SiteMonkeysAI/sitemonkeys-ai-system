@@ -2993,3 +2993,46 @@ header {
     letter-spacing: 0 !important;
   }
 }
+
+/* Revert mascots to Pass 15 values that were closest
+   to correct on desktop */
+@media (min-width: 900px) {
+  .content-with-mascots .mascot-left {
+    left: 0 !important;
+    transform: translateX(-72%) translateY(-50%) !important;
+  }
+  .content-with-mascots .mascot-right {
+    right: 0 !important;
+    transform: translateX(72%) translateY(-50%) !important;
+  }
+}
+
+@media (max-width: 1100px) and (orientation: landscape) {
+  .content-with-mascots .mascot-left {
+    left: 0 !important;
+    transform: translateX(-65%) translateY(-50%) !important;
+  }
+  .content-with-mascots .mascot-right {
+    right: 0 !important;
+    transform: translateX(65%) translateY(-50%) !important;
+  }
+  .mode-toggle-container {
+    width: 100% !important;
+    display: flex !important;
+    gap: 3px !important;
+    padding: 2px 4px !important;
+    box-sizing: border-box !important;
+  }
+  .mode-btn {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    font-size: 0.6rem !important;
+    padding: 3px 4px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+    letter-spacing: 0 !important;
+  }
+}
