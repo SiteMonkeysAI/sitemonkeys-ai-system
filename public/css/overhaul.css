@@ -2061,3 +2061,215 @@ header {
     padding: 8px 12px !important;
   }
 }
+
+/* ============================================================
+   PASS 7 — Desktop refinements + mobile header restructure
+   Appended after Pass 6. CSS-only additions here; the HTML
+   change to wrap .mode-toggle-container in a .mode-row is in
+   index.html (the ONLY HTML change in this pass).
+   ============================================================ */
+
+/* ============================================================
+   PART A — Desktop refinements (>= 900px)
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   A1 — Main content height pulled back to a balanced range
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .main-content {
+    height: calc(100vh - 190px) !important;
+    min-height: 650px !important;
+    max-height: 840px !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   A2 — Replace concrete grid (Pass 6 Fix 6) with clean smooth
+   gradient — no visible scanlines.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .status-panel,
+  .chat-panel {
+    background: linear-gradient(160deg,
+      #222228 0%,
+      #1a1a20 30%,
+      #161619 60%,
+      #1e1e24 100%) !important;
+    border: 1px solid rgba(130, 133, 155, 0.3) !important;
+    box-shadow:
+      0 0 40px rgba(0, 0, 0, 0.7),
+      inset 0 0 60px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   A3 — Eli + Roxy mascots 25% taller on desktop.
+
+   VERIFIED selector: .mascot (the shared class on both
+   <img class="mascot mascot-left"> and
+   <img class="mascot mascot-right">). The speculative
+   selectors .boy-mascot / .girl-mascot do not exist, and
+   img[src*="boy-mascot"] / img[src*="girl-mascot"] would
+   INCORRECTLY match the footer <img class="footer-mascot">
+   elements and the chat-bubble <img class="avatar"> elements
+   that JS creates with those same source files — all of
+   which would be inappropriately enlarged.
+
+   Embedded default heights (index.html L179-190):
+     height:     calc(100vh - 180px)
+     min-height: 450px
+     max-height: 550px
+   × 1.25:
+     height:     calc(125vh - 225px)   (= (100vh - 180px) × 1.25)
+     min-height: 562.5px
+     max-height: 687.5px
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .mascot {
+    height: calc(125vh - 225px) !important;
+    min-height: 562.5px !important;
+    max-height: 687.5px !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   A4 — Radial gold spotlight behind status title
+   Overrides Pass 4 Fix 6's flat dark panel background.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .status-title {
+    background:
+      radial-gradient(ellipse at center,
+        rgba(255, 200, 0, 0.12) 0%,
+        rgba(255, 180, 0, 0.06) 40%,
+        transparent 70%) !important;
+    border-radius: 8px !important;
+    padding: 10px 14px !important;
+    position: relative !important;
+    overflow: visible !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   A5 — Mode buttons wider and bolder on desktop
+   Overrides Pass 5 C7 and Pass 6 padding/font-size rules.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .mode-btn {
+    padding: 10px 24px !important;
+    font-size: clamp(0.85rem, 1.2vw, 1rem) !important;
+    font-weight: 700 !important;
+    min-width: 110px !important;
+  }
+}
+
+/* ============================================================
+   PART B — Mobile header restructure (<= 768px)
+   Uses the new .mode-row wrapper div added to index.html.
+   ============================================================ */
+@media (max-width: 768px) {
+
+  /* Make header-row wrap so mode-row can drop below */
+  .header-row {
+    flex-wrap: wrap !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 6px 10px 0 10px !important;
+    gap: 0 !important;
+  }
+
+  /* Robot: reorder to far left, small */
+  .ai-robot-wrapper,
+  #confidenceToggleWrapper {
+    order: 1 !important;
+    width: 44px !important;
+    height: 44px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Title block: center, takes remaining space */
+  .header-center {
+    order: 2 !important;
+    flex: 1 1 auto !important;
+    text-align: center !important;
+    padding: 0 8px !important;
+  }
+
+  /* Hide mode-row inside header-center on mobile
+     — it will be shown via .mode-row below */
+  .header-center .mode-row {
+    display: none !important;
+  }
+
+  /* Logo: far right */
+  .logo {
+    order: 3 !important;
+    position: static !important;
+    height: clamp(55px, 10vw, 80px) !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* Mode row: full width below the logo/robot/title row */
+  .mode-row {
+    order: 4 !important;
+    width: 100% !important;
+    display: flex !important;
+    padding: 4px 8px 6px 8px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Mode toggle container fills the row */
+  .mode-row .mode-toggle-container {
+    width: 100% !important;
+    display: flex !important;
+    gap: 6px !important;
+    padding: 0 !important;
+  }
+
+  /* Each button fills equal space */
+  .mode-row .mode-btn {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    padding: 6px 4px !important;
+    font-size: 0.8rem !important;
+    font-weight: 700 !important;
+    text-align: center !important;
+    white-space: nowrap !important;
+  }
+
+  /* Site title larger on mobile */
+  .site-title {
+    font-size: clamp(1.1rem, 5vw, 1.5rem) !important;
+  }
+
+  /* Subtitle smaller to give title room */
+  .subtitle {
+    font-size: clamp(0.55rem, 2vw, 0.7rem) !important;
+    letter-spacing: 1px !important;
+  }
+
+}
+
+/* -----------------------------------------------------------
+   PASS 7 CORRECTION — Re-enable .mode-row visibility on mobile
+
+   The spec above contains `.header-center .mode-row {
+   display: none !important; }` with specificity (0,2,0), which
+   beats the subsequent `.mode-row { display: flex !important; }`
+   at specificity (0,1,0). As written, the literal CSS would
+   hide the .mode-row (and with it all three mode buttons) on
+   mobile ≤768px — violating the stated constraint "Zero
+   functional changes" at the top of Pass 7 Part A and making
+   mode switching unreachable on mobile.
+
+   Adding this rule with matching specificity (0,2,0) and later
+   source order so display: flex wins. Removing this block will
+   revert to the hidden behavior.
+   ----------------------------------------------------------- */
+@media (max-width: 768px) {
+  .header-center .mode-row {
+    display: flex !important;
+  }
+}
