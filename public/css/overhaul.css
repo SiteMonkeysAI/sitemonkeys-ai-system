@@ -2633,3 +2633,54 @@ header {
     gap: 4px !important;
   }
 }
+
+/* ============================================================
+   PASS 14 — Mascot overlap tweak + landscape fixes
+   Appended after Pass 13. CSS-only; no JS/HTML changes.
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   FIX 1 — Mascot translateX reduced from 82% to 60%
+   Overrides the Pass 13 Fix 1b mascot transform values at
+   matching specificity + later source order.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .content-with-mascots .mascot-left {
+    transform: translateX(-60%) translateY(-50%) !important;
+  }
+  .content-with-mascots .mascot-right {
+    transform: translateX(60%) translateY(-50%) !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 2 — Hide mobile rocket on landscape
+   (Pass 13 also hid it; repeating here for clarity.)
+   ----------------------------------------------------------- */
+@media (max-width: 950px) and (orientation: landscape) {
+  .mobile-rocket {
+    display: none !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 3 — Mode buttons fit on landscape mobile (tighter)
+   Overrides Pass 13 Fix 3's font/padding with smaller values
+   and adds flex stretching + ellipsis overflow on the buttons.
+   ----------------------------------------------------------- */
+@media (max-width: 950px) and (orientation: landscape) {
+  .mode-toggle-container {
+    width: 100% !important;
+    display: flex !important;
+    gap: 3px !important;
+  }
+  .mode-btn {
+    flex: 1 1 0 !important;
+    font-size: 0.65rem !important;
+    padding: 3px 2px !important;
+    white-space: nowrap !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+}
