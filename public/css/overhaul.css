@@ -2813,3 +2813,22 @@ header {
     box-sizing: border-box !important;
   }
 }
+
+/* ============================================================
+   PASS 17 — Hide .rocket-top on landscape mobile
+   Appended after Pass 16. CSS-only; no JS/HTML changes.
+
+   Pass 5 Section C only hid .rocket-top inside
+   @media (min-width: 900px) — desktop only. On landscape
+   mobile ≤1100px the embedded landscape CSS shows it at
+   right:25px / top:85px, overlapping the upper-right of the
+   header. This block hides it there too.
+   ============================================================ */
+
+/* Hide the header rocket on landscape mobile */
+@media (max-width: 1100px) and (orientation: landscape) {
+  .rocket-top {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
