@@ -3436,3 +3436,67 @@ header {
     letter-spacing: -0.02em !important;
   }
 }
+
+/* Pass 33 — landscape header-center constrained + mascots -220px */
+@media (max-width: 1100px) and (orientation: landscape) {
+
+  /* Fix header - constrain center so buttons don't
+     bleed to edges, logo and robot stay visible */
+  .header-center {
+    flex: 0 0 auto !important;
+    width: auto !important;
+    min-width: 300px !important;
+    max-width: 60vw !important;
+  }
+
+  .header-center .mode-row,
+  .header-center .mode-row .mode-toggle-container {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 4px !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .header-center .mode-row .mode-toggle-container .mode-btn,
+  .header-center .mode-row .mode-toggle-container .mode-btn[data-mode="truth_general"],
+  .header-center .mode-row .mode-toggle-container .mode-btn[data-mode="business_validation"],
+  .header-center .mode-row .mode-toggle-container .mode-btn[data-mode="site_monkeys"] {
+    flex: 1 1 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    font-size: 0.65rem !important;
+    padding: 4px 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+    letter-spacing: -0.02em !important;
+  }
+
+  /* Mascots - same treatment as desktop,
+     scaled for narrower landscape panels */
+  .content-with-mascots .mascot {
+    display: block !important;
+    position: absolute !important;
+    top: 50% !important;
+    height: calc(100vh - 160px) !important;
+    min-height: 200px !important;
+    max-height: 260px !important;
+    width: auto !important;
+    z-index: 30 !important;
+    pointer-events: none !important;
+  }
+
+  .content-with-mascots .mascot-left {
+    left: -220px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: -220px !important;
+    transform: translateY(-50%) !important;
+  }
+}
