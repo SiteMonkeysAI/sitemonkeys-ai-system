@@ -3059,3 +3059,26 @@ header {
     transform: translateX(55%) translateY(-50%) !important;
   }
 }
+
+/* Pass 23 — revert to simple px offsets like embedded defaults */
+@media (min-width: 900px) {
+  .content-with-mascots .mascot-left {
+    left: -120px !important;
+    transform: translateY(-50%) !important;
+  }
+  .content-with-mascots .mascot-right {
+    right: -120px !important;
+    transform: translateY(-50%) !important;
+  }
+}
+
+@media (max-width: 1100px) and (orientation: landscape) {
+  .content-with-mascots .mascot-left {
+    left: -80px !important;
+    transform: translateY(-50%) !important;
+  }
+  .content-with-mascots .mascot-right {
+    right: -80px !important;
+    transform: translateY(-50%) !important;
+  }
+}
