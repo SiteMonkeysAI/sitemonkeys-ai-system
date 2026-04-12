@@ -2354,3 +2354,74 @@ header {
     right: -40px !important;
   }
 }
+
+/* ============================================================
+   PASS 9 — Mascot correction (remove squash, loosen offsets)
+   Appended after all Pass 8 rules. CSS-only; no JS/HTML changes.
+
+   Pass 8 Fix 1 applied `max-width: 180px !important` to
+   `.mascot` which — combined with `height: calc(100vh - 180px)`
+   and the mascot images' natural aspect ratio — was squashing
+   them horizontally. This pass removes the width cap and moves
+   the mascots further outward (offset 140px instead of 60px)
+   so they peek in less aggressively.
+
+   All three blocks below come AFTER their Pass 8 counterparts
+   in source order, so at equal specificity + !important they
+   win the cascade.
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   Desktop correction (>= 900px)
+   Overrides Pass 8 Fix 1: removes max-width cap and moves
+   mascots outward.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .mascot {
+    max-width: none !important;
+    width: auto !important;
+  }
+
+  .mascot-left {
+    left: calc(4vw - 140px) !important;
+  }
+
+  .mascot-right {
+    right: calc(4vw - 140px) !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   Very wide correction (>= 1522px)
+   Overrides Pass 8 Fix 1b. Keeps the "lock to main-content
+   edge minus offset" math but with the new 140px offset.
+   ----------------------------------------------------------- */
+@media (min-width: 1522px) {
+  .mascot-left {
+    left: calc((100vw - 1400px) / 2 - 140px) !important;
+  }
+
+  .mascot-right {
+    right: calc((100vw - 1400px) / 2 - 140px) !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   Landscape mobile correction (<= 950px landscape)
+   Overrides Pass 8 Fix 2: removes max-width cap and moves
+   mascots further outside the wrapper at -80px.
+   ----------------------------------------------------------- */
+@media (max-width: 950px) and (orientation: landscape) {
+  .mascot {
+    max-width: none !important;
+    width: auto !important;
+  }
+
+  .mascot-left {
+    left: -80px !important;
+  }
+
+  .mascot-right {
+    right: -80px !important;
+  }
+}
