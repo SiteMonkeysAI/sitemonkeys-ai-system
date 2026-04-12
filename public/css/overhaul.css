@@ -3369,3 +3369,25 @@ header {
     letter-spacing: -0.02em !important;
   }
 }
+
+/* Pass 31 — landscape mascots -100px, buttons 0.62rem tighter */
+@media (max-width: 1100px) and (orientation: landscape) {
+
+  .content-with-mascots .mascot-left {
+    left: -100px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: -100px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  header .header-center .mode-toggle-container .mode-btn,
+  header .header-center .mode-toggle-container .mode-btn[data-mode="truth_general"],
+  header .header-center .mode-toggle-container .mode-btn[data-mode="business_validation"],
+  header .header-center .mode-toggle-container .mode-btn[data-mode="site_monkeys"] {
+    font-size: 0.62rem !important;
+    letter-spacing: -0.03em !important;
+  }
+}
