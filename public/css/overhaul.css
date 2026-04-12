@@ -2455,3 +2455,58 @@ header {
     display: none !important;
   }
 }
+
+/* ============================================================
+   PASS 11 — Mascot percentage-based panel-edge anchoring
+   Appended after Pass 10. CSS-only; no JS/HTML changes.
+
+   Lock mascots to panel edges using percentage positioning
+   tied to .main-wrapper width, matching .main-content which
+   is 92% wide centered = 4% gutter each side.
+   Negative offset pulls them outside, positive pulls inside.
+   Target: mostly outside with slight overlap (ear/elbow/foot).
+
+   NOTE: the new transforms include translateY(-50%) to
+   preserve the vertical centering from the embedded
+   `.mascot { top: 50%; transform: translateY(-50%) }` rule.
+   ============================================================ */
+
+@media (min-width: 900px) {
+  .mascot-left {
+    left: 0% !important;
+    transform: translateX(-75%) translateY(-50%) !important;
+  }
+  .mascot-right {
+    right: 0% !important;
+    transform: translateX(75%) translateY(-50%) !important;
+  }
+}
+
+@media (min-width: 1522px) {
+  .mascot-left {
+    left: 0% !important;
+    transform: translateX(-75%) translateY(-50%) !important;
+  }
+  .mascot-right {
+    right: 0% !important;
+    transform: translateX(75%) translateY(-50%) !important;
+  }
+}
+
+/* Show mascots on landscape but small and tucked */
+@media (max-width: 950px) and (orientation: landscape) {
+  .mascot {
+    display: block !important;
+    height: calc(100vh - 140px) !important;
+    min-height: 220px !important;
+    max-height: 280px !important;
+  }
+  .mascot-left {
+    left: 0% !important;
+    transform: translateX(-75%) translateY(-50%) !important;
+  }
+  .mascot-right {
+    right: 0% !important;
+    transform: translateX(75%) translateY(-50%) !important;
+  }
+}
