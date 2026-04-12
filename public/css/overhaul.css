@@ -2813,3 +2813,84 @@ header {
     box-sizing: border-box !important;
   }
 }
+
+/* ============================================================
+   PASS 17 — Hide .rocket-top on landscape mobile
+   Appended after Pass 16. CSS-only; no JS/HTML changes.
+
+   Pass 5 Section C only hid .rocket-top inside
+   @media (min-width: 900px) — desktop only. On landscape
+   mobile ≤1100px the embedded landscape CSS shows it at
+   right:25px / top:85px, overlapping the upper-right of the
+   header. This block hides it there too.
+   ============================================================ */
+
+/* Hide the header rocket on landscape mobile */
+@media (max-width: 1100px) and (orientation: landscape) {
+  .rocket-top {
+    display: none !important;
+    visibility: hidden !important;
+  }
+}
+
+/* ============================================================
+   PASS 18 — Consolidated landscape mobile rules
+   Appended after Pass 17. CSS-only; no JS/HTML changes.
+   Single @media (max-width: 1100px) landscape block that
+   restates all prior landscape mobile rules together. Same
+   values as Pass 16 + Pass 17 — appended per spec.
+   ============================================================ */
+
+@media (max-width: 1100px) and (orientation: landscape) {
+
+  /* Hide header rocket */
+  .rocket-top {
+    display: none !important;
+    visibility: hidden !important;
+  }
+
+  /* Show mascots small on landscape */
+  .content-with-mascots .mascot {
+    display: block !important;
+    height: calc(100vh - 160px) !important;
+    min-height: 180px !important;
+    max-height: 240px !important;
+    width: auto !important;
+    position: absolute !important;
+    top: 50% !important;
+    z-index: 30 !important;
+    pointer-events: none !important;
+  }
+
+  .content-with-mascots .mascot-left {
+    left: 0 !important;
+    transform: translateX(-65%) translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: 0 !important;
+    transform: translateX(65%) translateY(-50%) !important;
+  }
+
+  /* Fix mode buttons to fit text */
+  .mode-toggle-container {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 3px !important;
+    padding: 2px 4px !important;
+    box-sizing: border-box !important;
+  }
+
+  .mode-btn {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    font-size: 0.6rem !important;
+    padding: 3px 2px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+  }
+}
