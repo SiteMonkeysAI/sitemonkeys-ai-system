@@ -3391,3 +3391,48 @@ header {
     letter-spacing: -0.03em !important;
   }
 }
+
+/* Pass 32 — landscape mascots -180px, target .mode-row path for buttons */
+@media (max-width: 1100px) and (orientation: landscape) {
+
+  .content-with-mascots .mascot-left {
+    left: -180px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: -180px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .header-center .mode-row {
+    width: 100% !important;
+    display: block !important;
+  }
+
+  .header-center .mode-row .mode-toggle-container {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 4px !important;
+    padding: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .header-center .mode-row .mode-toggle-container .mode-btn,
+  .header-center .mode-row .mode-toggle-container .mode-btn[data-mode="truth_general"],
+  .header-center .mode-row .mode-toggle-container .mode-btn[data-mode="business_validation"],
+  .header-center .mode-row .mode-toggle-container .mode-btn[data-mode="site_monkeys"] {
+    flex: 1 1 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    font-size: 0.65rem !important;
+    padding: 4px 0 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+    letter-spacing: -0.02em !important;
+  }
+}
