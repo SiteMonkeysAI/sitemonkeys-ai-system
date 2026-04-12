@@ -3525,3 +3525,33 @@ header {
     transform: translateY(-50%) !important;
   }
 }
+
+/* Pass 35 — expand .content-with-mascots to 100% on landscape so mascots visible */
+@media (min-width: 900px) and (max-width: 1100px) and (orientation: landscape) {
+
+  /* Expand container to full viewport width so mascots
+     have room outside panels without being clipped */
+  .content-with-mascots {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+  }
+
+  /* .main-content stays centered inside it */
+  .main-content {
+    margin: 0 auto !important;
+  }
+
+  /* Now mascots at -40px will peek outside the full-width
+     container — body overflow-x:hidden clips at viewport
+     edge but mascots are mostly visible */
+  .content-with-mascots .mascot-left {
+    left: -40px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: -40px !important;
+    transform: translateY(-50%) !important;
+  }
+}
