@@ -3171,3 +3171,59 @@ header {
     letter-spacing: 0 !important;
   }
 }
+
+/* Pass 26 — desktop -320px, landscape 75vw box + max-specificity buttons */
+
+/* Desktop - push further outside */
+@media (min-width: 900px) {
+  .content-with-mascots .mascot-left {
+    left: -320px !important;
+    transform: translateY(-50%) !important;
+  }
+  .content-with-mascots .mascot-right {
+    right: -320px !important;
+    transform: translateY(-50%) !important;
+  }
+}
+
+/* Landscape - keep mascot position, fix box size,
+   fix buttons with maximum specificity */
+@media (max-width: 1100px) and (orientation: landscape) {
+
+  .main-content {
+    width: 75vw !important;
+    max-width: 75vw !important;
+  }
+
+  .content-with-mascots .mascot-left {
+    left: -160px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  .content-with-mascots .mascot-right {
+    right: -160px !important;
+    transform: translateY(-50%) !important;
+  }
+
+  header .header-center .mode-toggle-container {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 6px !important;
+    padding: 4px 8px !important;
+    box-sizing: border-box !important;
+  }
+
+  header .header-center .mode-toggle-container .mode-btn {
+    flex: 1 1 0 !important;
+    min-width: 0 !important;
+    font-size: 0.75rem !important;
+    padding: 5px 4px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    text-align: center !important;
+    box-sizing: border-box !important;
+    letter-spacing: 0 !important;
+  }
+}
