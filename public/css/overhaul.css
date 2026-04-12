@@ -2273,3 +2273,84 @@ header {
     display: flex !important;
   }
 }
+
+/* ============================================================
+   PASS 8 — Mascot sizing & edge-anchored positioning
+   Appended after Pass 7. CSS-only; no JS/HTML changes.
+
+   Placed AFTER the Pass 7 A3 `.mascot` rule (line ~2129) so
+   these declarations win the cascade at equal specificity.
+
+   First overhaul.css rules ever to target `.mascot-left` and
+   `.mascot-right` (verified: prior passes had zero rules on
+   these two selectors — only the embedded styles in
+   index.html set their `left: -120px` / `right: -120px`).
+   ============================================================ */
+
+/* -----------------------------------------------------------
+   FIX 1 — Desktop mascot sizing and edge-anchored positioning
+   Overrides the Pass 7 A3 .mascot rule. Mascots scale with
+   viewport and stay anchored to the outer edge of .main-content
+   (which is 92% wide, so each gutter is 4vw). Offset of 60px
+   inward from that gutter gives a slight peek-over-the-panel.
+   ----------------------------------------------------------- */
+@media (min-width: 900px) {
+  .mascot {
+    height: calc(100vh - 180px) !important;
+    min-height: 480px !important;
+    max-height: 600px !important;
+    max-width: 180px !important;
+    width: auto !important;
+  }
+
+  .mascot-left {
+    left: calc(4vw - 60px) !important;
+  }
+
+  .mascot-right {
+    right: calc(4vw - 60px) !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 1b — Very wide viewports (>=1522px) where .main-content
+   actually hits its 1400px max-width. The side gutter becomes
+   fixed at (100vw - 1400px) / 2 instead of 4vw, so the mascots
+   are locked to that instead.
+   Placed AFTER the 900px block so this wins on the overlap.
+   ----------------------------------------------------------- */
+@media (min-width: 1522px) {
+  .mascot-left {
+    left: calc((100vw - 1400px) / 2 - 60px) !important;
+  }
+
+  .mascot-right {
+    right: calc((100vw - 1400px) / 2 - 60px) !important;
+  }
+}
+
+/* -----------------------------------------------------------
+   FIX 2 — Landscape mobile mascot sizing override
+   At 900-950px landscape, the Fix 1 `@media (min-width: 900px)`
+   rule above would force full desktop mascot sizes on a narrow
+   landscape phone. This block re-applies the embedded landscape
+   values so mascots stay proportional on narrow landscape
+   screens. Later source order + !important ensures it wins in
+   the 900-950px landscape overlap.
+   ----------------------------------------------------------- */
+@media (max-width: 950px) and (orientation: landscape) {
+  .mascot {
+    height: calc(100vh - 140px) !important;
+    min-height: 220px !important;
+    max-height: 280px !important;
+    max-width: 120px !important;
+  }
+
+  .mascot-left {
+    left: -40px !important;
+  }
+
+  .mascot-right {
+    right: -40px !important;
+  }
+}
