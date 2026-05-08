@@ -9,9 +9,9 @@ export const DOCTRINE_CONFIG = {
 
   // Enforcement levels
   enforcement: {
-    standard: 'warn',      // Log warning, return response
-    strict: 'enhance',     // Auto-enhance failing responses
-    maximum: 'block'       // Block responses that can't be fixed
+    standard: 'warn', // Log warning, return response
+    strict: 'enhance', // Auto-enhance failing responses
+    maximum: 'block', // Block responses that can't be fixed
   },
 
   // Current enforcement level
@@ -22,7 +22,7 @@ export const DOCTRINE_CONFIG = {
     casual: 0.5,
     standard: 0.6,
     professional: 0.7,
-    highStakes: 0.8        // Financial, medical, legal
+    highStakes: 0.8, // Financial, medical, legal
   },
 
   // High-stakes topic detection
@@ -30,6 +30,6 @@ export const DOCTRINE_CONFIG = {
     /invest|stock|crypto|financial/i,
     /medical|diagnosis|symptom|treatment/i,
     /legal|lawsuit|contract|liability/i,
-    /suicide|self-harm|emergency/i
-  ]
+    /suicide|self-harm|emergency/i,
+  ],
 };

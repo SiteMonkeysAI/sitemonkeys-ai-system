@@ -1,75 +1,69 @@
 // PRODUCTION SYSTEM VALIDATOR - ZERO-DRIFT SAFETY HARNESS
 // Version: PROD-1.0 - COMPLETE ARCHITECTURAL INTEGRITY ENFORCEMENT
 
-import fs from "fs";
-import _path from "_path";
+import fs from 'fs';
+import _path from '_path';
 
 // ==================== SYSTEM CONTRACT DEFINITIONS ====================
 
 const REQUIRED_RESPONSE_SCHEMA = {
   // TIER 1: Core Framework Fields (MANDATORY)
-  core_fields: [
-    "response",
-    "mode_active",
-    "vault_loaded",
-    "ai_used",
-    "routing_decision",
-  ],
+  core_fields: ['response', 'mode_active', 'vault_loaded', 'ai_used', 'routing_decision'],
 
   // TIER 2: Cognitive Firewall Fields (MANDATORY)
   enforcement_fields: [
-    "political_guardrails_applied",
-    "product_validation_enforced",
-    "mode_compliance_enforced",
-    "assumptions_flagged",
-    "pressure_resistance_applied",
-    "vault_enforcement_triggered",
+    'political_guardrails_applied',
+    'product_validation_enforced',
+    'mode_compliance_enforced',
+    'assumptions_flagged',
+    'pressure_resistance_applied',
+    'vault_enforcement_triggered',
   ],
 
   // TIER 3: Integrity Fields (MANDATORY)
   integrity_fields: [
-    "confidence",
-    "enforcement_metadata",
-    "override_patterns",
-    "session_stats",
-    "security_pass",
-    "system_status",
-    "cognitive_firewall_version",
+    'confidence',
+    'enforcement_metadata',
+    'override_patterns',
+    'session_stats',
+    'security_pass',
+    'system_status',
+    'cognitive_firewall_version',
   ],
 
   // Frontend Integration Fields (MANDATORY)
-  ui_fields: ["processing_time", "tokens_used", "cost_tracking"],
+  ui_fields: ['processing_time', 'tokens_used', 'cost_tracking'],
 };
 
 const ENFORCEMENT_LAYER_SEQUENCE = [
-  "POLITICAL_GUARDRAILS",
-  "PRODUCT_RECOMMENDATION_VALIDATION",
-  "MODE_COMPLIANCE_ENFORCEMENT",
-  "ASSUMPTION_DETECTION",
-  "PRESSURE_RESISTANCE",
-  "VAULT_RULE_ENFORCEMENT",
+  'POLITICAL_GUARDRAILS',
+  'PRODUCT_RECOMMENDATION_VALIDATION',
+  'MODE_COMPLIANCE_ENFORCEMENT',
+  'ASSUMPTION_DETECTION',
+  'PRESSURE_RESISTANCE',
+  'VAULT_RULE_ENFORCEMENT',
 ];
 
 const MODE_CONTRACTS = {
   truth_general: {
-    required_content: ["confidence", "uncertainty"],
-    forbidden_content: ["probably", "likely", "speculation"],
-    required_metadata: ["assumption_health", "conflicts_detected"],
-    ai_routing_preference: ["Roxy", "Claude"],
+    required_content: ['confidence', 'uncertainty'],
+    forbidden_content: ['probably', 'likely', 'speculation'],
+    required_metadata: ['assumption_health', 'conflicts_detected'],
+    ai_routing_preference: ['Roxy', 'Claude'],
   },
 
   business_validation: {
-    required_content: ["cash", "survival", "risk"],
-    forbidden_content: ["guaranteed", "certainly profitable"],
-    required_metadata: ["cost_tracking", "business_survival_analysis"],
-    ai_routing_preference: ["Eli", "Claude"],
+    required_content: ['cash', 'survival', 'risk'],
+    forbidden_content: ['guaranteed', 'certainly profitable'],
+    required_metadata: ['cost_tracking', 'business_survival_analysis'],
+    ai_routing_preference: ['Eli', 'Claude'],
   },
 
   site_monkeys: {
-    required_content: ["🍌"],
+    required_content: ['🍌'],
     forbidden_pricing: [/\$[1-6]\d{2}/, /\$[1-9]\d{1}/, /\$\d{1,2}/], // Block anything under $697
-    required_metadata: ["vault_enforcement_triggered", "triggered_frameworks"],
-    ai_routing_preference: ["Eli", "Roxy", "Claude"],
+    required_metadata: ['vault_enforcement_triggered', 'triggered_frameworks'],
+    ai_routing_preference: ['Eli', 'Roxy', 'Claude'],
   },
 };
 
@@ -79,7 +73,7 @@ class CognitiveFirewallValidator {
   constructor() {
     this.validationResults = {
       timestamp: Date.now(),
-      overall_status: "PENDING",
+      overall_status: 'PENDING',
       critical_failures: [],
       warnings: [],
       recommendations: [],
@@ -90,9 +84,7 @@ class CognitiveFirewallValidator {
 
   // MASTER VALIDATION ORCHESTRATOR
   async validateCompleteSystem(apiResponse = null, mode = null) {
-    console.log(
-      "🔒 COGNITIVE FIREWALL VALIDATOR: Initiating complete system audit",
-    );
+    console.log('🔒 COGNITIVE FIREWALL VALIDATOR: Initiating complete system audit');
 
     try {
       // Phase 1: File Structure Integrity
@@ -125,10 +117,10 @@ class CognitiveFirewallValidator {
       return this.validationResults;
     } catch (error) {
       this.validationResults.critical_failures.push({
-        type: "VALIDATOR_SYSTEM_FAILURE",
-        description: "Safety harness itself failed",
+        type: 'VALIDATOR_SYSTEM_FAILURE',
+        description: 'Safety harness itself failed',
         error: error.message,
-        severity: "CRITICAL",
+        severity: 'CRITICAL',
       });
 
       return this.validationResults;
@@ -138,29 +130,25 @@ class CognitiveFirewallValidator {
   // ==================== PHASE 1: FILE STRUCTURE INTEGRITY ====================
 
   async validateFileStructure() {
-    console.log("📁 Validating file structure integrity...");
+    console.log('📁 Validating file structure integrity...');
 
     const requiredFiles = [
-      "api/chat.js",
-      "api/lib/ai-processors.js",
-      "api/config/modes.js",
-      "public/js/app.js",
+      'api/chat.js',
+      'api/lib/ai-processors.js',
+      'api/config/modes.js',
+      'public/js/app.js',
     ];
 
     const _criticalFunctions = {
-      "ai-processors.js": [
-        "processWithEliAndRoxy",
-        "validateModeCompliance",
-        "enforceVaultRules",
-        "applyPoliticalGuardrails",
-        "detectAndFlagAssumptions",
-        "applyPressureResistance",
+      'ai-processors.js': [
+        'processWithEliAndRoxy',
+        'validateModeCompliance',
+        'enforceVaultRules',
+        'applyPoliticalGuardrails',
+        'detectAndFlagAssumptions',
+        'applyPressureResistance',
       ],
-      "chat.js": [
-        "handler",
-        "detectPoliticalPressure",
-        "detectAuthorityPressure",
-      ],
+      'chat.js': ['handler', 'detectPoliticalPressure', 'detectAuthorityPressure'],
     };
 
     // Check file existence
@@ -168,18 +156,18 @@ class CognitiveFirewallValidator {
       try {
         if (!fs.existsSync(file)) {
           this.validationResults.critical_failures.push({
-            type: "MISSING_CRITICAL_FILE",
+            type: 'MISSING_CRITICAL_FILE',
             file: file,
             description: `Required system file is missing: ${file}`,
-            severity: "CRITICAL",
+            severity: 'CRITICAL',
           });
         }
       } catch (error) {
         this.validationResults.warnings.push({
-          type: "FILE_ACCESS_ERROR",
+          type: 'FILE_ACCESS_ERROR',
           file: file,
           description: `Cannot access file: ${error.message}`,
-          severity: "WARNING",
+          severity: 'WARNING',
         });
       }
     }
@@ -189,14 +177,14 @@ class CognitiveFirewallValidator {
   }
 
   validateCriticalExports() {
-    console.log("🔍 Validating critical function exports...");
+    console.log('🔍 Validating critical function exports...');
 
     // This would normally parse the actual files, but for safety we'll do basic checks
     const exportValidations = [
       {
-        file: "ai-processors.js",
-        exports: ["processWithEliAndRoxy", "getSessionStats"],
-        severity: "CRITICAL",
+        file: 'ai-processors.js',
+        exports: ['processWithEliAndRoxy', 'getSessionStats'],
+        severity: 'CRITICAL',
       },
     ];
 
@@ -212,16 +200,16 @@ class CognitiveFirewallValidator {
   // ==================== PHASE 2: RESPONSE SCHEMA VALIDATION ====================
 
   validateResponseSchema(response, _mode) {
-    console.log("📋 Validating response schema compliance...");
+    console.log('📋 Validating response schema compliance...');
 
     // Check Core Fields
     REQUIRED_RESPONSE_SCHEMA.core_fields.forEach((field) => {
       if (!(field in response)) {
         this.validationResults.critical_failures.push({
-          type: "MISSING_CORE_FIELD",
+          type: 'MISSING_CORE_FIELD',
           field: field,
           description: `Critical response field missing: ${field}`,
-          severity: "CRITICAL",
+          severity: 'CRITICAL',
         });
       }
     });
@@ -230,10 +218,10 @@ class CognitiveFirewallValidator {
     REQUIRED_RESPONSE_SCHEMA.enforcement_fields.forEach((field) => {
       if (!(field in response)) {
         this.validationResults.critical_failures.push({
-          type: "MISSING_ENFORCEMENT_FIELD",
+          type: 'MISSING_ENFORCEMENT_FIELD',
           field: field,
           description: `Enforcement tracking field missing: ${field}`,
-          severity: "CRITICAL",
+          severity: 'CRITICAL',
         });
       }
     });
@@ -242,10 +230,10 @@ class CognitiveFirewallValidator {
     REQUIRED_RESPONSE_SCHEMA.integrity_fields.forEach((field) => {
       if (!(field in response)) {
         this.validationResults.critical_failures.push({
-          type: "MISSING_INTEGRITY_FIELD",
+          type: 'MISSING_INTEGRITY_FIELD',
           field: field,
           description: `Integrity tracking field missing: ${field}`,
-          severity: "CRITICAL",
+          severity: 'CRITICAL',
         });
       }
     });
@@ -254,10 +242,10 @@ class CognitiveFirewallValidator {
     REQUIRED_RESPONSE_SCHEMA.ui_fields.forEach((field) => {
       if (!(field in response)) {
         this.validationResults.warnings.push({
-          type: "MISSING_UI_FIELD",
+          type: 'MISSING_UI_FIELD',
           field: field,
           description: `Frontend integration field missing: ${field}`,
-          severity: "WARNING",
+          severity: 'WARNING',
         });
       }
     });
@@ -267,31 +255,27 @@ class CognitiveFirewallValidator {
   }
 
   validateResponseStructure(response) {
-    console.log("🏗️ Validating response structure integrity...");
+    console.log('🏗️ Validating response structure integrity...');
 
     // Check for proper enforcement metadata structure
     if (response.enforcement_metadata) {
-      const requiredMetadataFields = [
-        "total_enforcements",
-        "enforcement_types",
-        "integrity_score",
-      ];
+      const requiredMetadataFields = ['total_enforcements', 'enforcement_types', 'integrity_score'];
 
       requiredMetadataFields.forEach((field) => {
         if (!(field in response.enforcement_metadata)) {
           this.validationResults.warnings.push({
-            type: "INCOMPLETE_ENFORCEMENT_METADATA",
+            type: 'INCOMPLETE_ENFORCEMENT_METADATA',
             field: field,
             description: `Enforcement metadata incomplete: missing ${field}`,
-            severity: "WARNING",
+            severity: 'WARNING',
           });
         }
       });
     } else {
       this.validationResults.critical_failures.push({
-        type: "MISSING_ENFORCEMENT_METADATA",
-        description: "Enforcement metadata completely missing",
-        severity: "CRITICAL",
+        type: 'MISSING_ENFORCEMENT_METADATA',
+        description: 'Enforcement metadata completely missing',
+        severity: 'CRITICAL',
       });
     }
 
@@ -299,10 +283,10 @@ class CognitiveFirewallValidator {
     if (response.confidence !== undefined) {
       if (response.confidence < 0 || response.confidence > 100) {
         this.validationResults.critical_failures.push({
-          type: "INVALID_CONFIDENCE_RANGE",
+          type: 'INVALID_CONFIDENCE_RANGE',
           value: response.confidence,
           description: `Confidence score out of range: ${response.confidence}`,
-          severity: "CRITICAL",
+          severity: 'CRITICAL',
         });
       }
     }
@@ -311,7 +295,7 @@ class CognitiveFirewallValidator {
   // ==================== PHASE 3: ENFORCEMENT LAYER AUDIT ====================
 
   validateEnforcementLayers() {
-    console.log("🛡️ Auditing enforcement layer integrity...");
+    console.log('🛡️ Auditing enforcement layer integrity...');
 
     // Check that all 6 enforcement layers are represented
     const requiredLayers = ENFORCEMENT_LAYER_SEQUENCE;
@@ -328,7 +312,7 @@ class CognitiveFirewallValidator {
   }
 
   validateEnforcementSequence() {
-    console.log("📋 Validating enforcement sequence order...");
+    console.log('📋 Validating enforcement sequence order...');
 
     // This would check that enforcement layers execute in proper order
     // Political → Product → Mode → Assumption → Pressure → Vault
@@ -342,11 +326,11 @@ class CognitiveFirewallValidator {
     // For now, assume sequence is intact since we can't trace execution
     if (!sequenceValidation.sequence_intact) {
       this.validationResults.critical_failures.push({
-        type: "ENFORCEMENT_SEQUENCE_VIOLATION",
+        type: 'ENFORCEMENT_SEQUENCE_VIOLATION',
         expected: sequenceValidation.expected_order,
         actual: sequenceValidation.actual_order,
-        description: "Enforcement layers executing out of sequence",
-        severity: "CRITICAL",
+        description: 'Enforcement layers executing out of sequence',
+        severity: 'CRITICAL',
       });
     }
   }
@@ -359,10 +343,10 @@ class CognitiveFirewallValidator {
     const modeContract = MODE_CONTRACTS[mode];
     if (!modeContract) {
       this.validationResults.warnings.push({
-        type: "UNKNOWN_MODE",
+        type: 'UNKNOWN_MODE',
         mode: mode,
         description: `No contract defined for mode: ${mode}`,
-        severity: "WARNING",
+        severity: 'WARNING',
       });
       return;
     }
@@ -372,11 +356,11 @@ class CognitiveFirewallValidator {
       modeContract.required_content.forEach((requiredItem) => {
         if (!response.response.includes(requiredItem)) {
           this.validationResults.critical_failures.push({
-            type: "MODE_CONTRACT_VIOLATION",
+            type: 'MODE_CONTRACT_VIOLATION',
             mode: mode,
             missing_content: requiredItem,
             description: `Mode ${mode} requires content: ${requiredItem}`,
-            severity: "CRITICAL",
+            severity: 'CRITICAL',
           });
         }
       });
@@ -385,31 +369,28 @@ class CognitiveFirewallValidator {
     // Check forbidden content
     if (modeContract.forbidden_content) {
       modeContract.forbidden_content.forEach((forbiddenItem) => {
-        if (
-          response.response.toLowerCase().includes(forbiddenItem.toLowerCase())
-        ) {
+        if (response.response.toLowerCase().includes(forbiddenItem.toLowerCase())) {
           this.validationResults.critical_failures.push({
-            type: "MODE_CONTRACT_VIOLATION",
+            type: 'MODE_CONTRACT_VIOLATION',
             mode: mode,
             forbidden_content: forbiddenItem,
             description: `Mode ${mode} forbids content: ${forbiddenItem}`,
-            severity: "CRITICAL",
+            severity: 'CRITICAL',
           });
         }
       });
     }
 
     // Check Site Monkeys specific pricing rules
-    if (mode === "site_monkeys" && modeContract.forbidden_pricing) {
+    if (mode === 'site_monkeys' && modeContract.forbidden_pricing) {
       modeContract.forbidden_pricing.forEach((pricingPattern) => {
         if (pricingPattern.test(response.response)) {
           this.validationResults.critical_failures.push({
-            type: "VAULT_PRICING_VIOLATION",
+            type: 'VAULT_PRICING_VIOLATION',
             mode: mode,
-            violation: "pricing_below_minimum",
-            description:
-              "Pricing below $697 minimum detected in Site Monkeys mode",
-            severity: "CRITICAL",
+            violation: 'pricing_below_minimum',
+            description: 'Pricing below $697 minimum detected in Site Monkeys mode',
+            severity: 'CRITICAL',
           });
         }
       });
@@ -420,11 +401,11 @@ class CognitiveFirewallValidator {
       modeContract.required_metadata.forEach((metadataField) => {
         if (!(metadataField in response)) {
           this.validationResults.critical_failures.push({
-            type: "MODE_METADATA_MISSING",
+            type: 'MODE_METADATA_MISSING',
             mode: mode,
             missing_field: metadataField,
             description: `Mode ${mode} requires metadata field: ${metadataField}`,
-            severity: "CRITICAL",
+            severity: 'CRITICAL',
           });
         }
       });
@@ -434,27 +415,27 @@ class CognitiveFirewallValidator {
   // ==================== PHASE 5: FRONTEND/BACKEND CONTRACT VERIFICATION ====================
 
   validateFrontendContracts(response) {
-    console.log("🖥️ Validating frontend/backend contracts...");
+    console.log('🖥️ Validating frontend/backend contracts...');
 
     // Check that response includes fingerprint (required by frontend)
-    if (!response.response.includes("🔒 [SM-")) {
+    if (!response.response.includes('🔒 [SM-')) {
       this.validationResults.critical_failures.push({
-        type: "MISSING_SYSTEM_FINGERPRINT",
-        description: "Response missing system fingerprint required by frontend",
-        severity: "CRITICAL",
+        type: 'MISSING_SYSTEM_FINGERPRINT',
+        description: 'Response missing system fingerprint required by frontend',
+        severity: 'CRITICAL',
       });
     }
 
     // Validate token tracking structure for UI display
     if (response.session_stats) {
-      const requiredStatsFields = ["total_tokens", "total_cost", "breakdown"];
+      const requiredStatsFields = ['total_tokens', 'total_cost', 'breakdown'];
       requiredStatsFields.forEach((field) => {
         if (!(field in response.session_stats)) {
           this.validationResults.warnings.push({
-            type: "INCOMPLETE_SESSION_STATS",
+            type: 'INCOMPLETE_SESSION_STATS',
             missing_field: field,
             description: `Session stats missing field required by UI: ${field}`,
-            severity: "WARNING",
+            severity: 'WARNING',
           });
         }
       });
@@ -463,20 +444,20 @@ class CognitiveFirewallValidator {
     // Validate override pattern structure for UI
     if (response.override_patterns) {
       const requiredOverrideFields = [
-        "political_neutralizations",
-        "authority_resistances",
-        "vault_violations",
-        "mode_compliance_fixes",
-        "assumption_challenges",
+        'political_neutralizations',
+        'authority_resistances',
+        'vault_violations',
+        'mode_compliance_fixes',
+        'assumption_challenges',
       ];
 
       requiredOverrideFields.forEach((field) => {
         if (!(field in response.override_patterns)) {
           this.validationResults.warnings.push({
-            type: "INCOMPLETE_OVERRIDE_PATTERNS",
+            type: 'INCOMPLETE_OVERRIDE_PATTERNS',
             missing_field: field,
             description: `Override patterns missing field: ${field}`,
-            severity: "WARNING",
+            severity: 'WARNING',
           });
         }
       });
@@ -486,39 +467,35 @@ class CognitiveFirewallValidator {
   // ==================== PHASE 6: ARCHITECTURAL DRIFT DETECTION ====================
 
   detectArchitecturalDrift() {
-    console.log("🔄 Detecting architectural drift...");
+    console.log('🔄 Detecting architectural drift...');
 
     // This would compare current response structure against known good baseline
     // For now, we'll implement basic drift indicators
 
     const driftIndicators = {
-      missing_enforcement_layers:
-        this.validationResults.critical_failures.filter(
-          (f) => f.type === "MISSING_ENFORCEMENT_FIELD",
-        ).length,
+      missing_enforcement_layers: this.validationResults.critical_failures.filter(
+        (f) => f.type === 'MISSING_ENFORCEMENT_FIELD',
+      ).length,
 
       contract_violations: this.validationResults.critical_failures.filter(
-        (f) => f.type === "MODE_CONTRACT_VIOLATION",
+        (f) => f.type === 'MODE_CONTRACT_VIOLATION',
       ).length,
 
       structural_issues: this.validationResults.critical_failures.filter(
-        (f) => f.type.includes("MISSING_") || f.type.includes("INCOMPLETE_"),
+        (f) => f.type.includes('MISSING_') || f.type.includes('INCOMPLETE_'),
       ).length,
     };
 
-    const totalDriftScore = Object.values(driftIndicators).reduce(
-      (a, b) => a + b,
-      0,
-    );
+    const totalDriftScore = Object.values(driftIndicators).reduce((a, b) => a + b, 0);
 
     if (totalDriftScore > 0) {
       this.validationResults.drift_detected = true;
       this.validationResults.warnings.push({
-        type: "ARCHITECTURAL_DRIFT_DETECTED",
+        type: 'ARCHITECTURAL_DRIFT_DETECTED',
         drift_score: totalDriftScore,
         indicators: driftIndicators,
         description: `System showing signs of architectural drift (score: ${totalDriftScore})`,
-        severity: "WARNING",
+        severity: 'WARNING',
       });
     }
   }
@@ -526,11 +503,10 @@ class CognitiveFirewallValidator {
   // ==================== FINAL REPORT GENERATION ====================
 
   generateValidationReport() {
-    console.log("📊 Generating validation report...");
+    console.log('📊 Generating validation report...');
 
     const _totalIssues =
-      this.validationResults.critical_failures.length +
-      this.validationResults.warnings.length;
+      this.validationResults.critical_failures.length + this.validationResults.warnings.length;
     const criticalIssues = this.validationResults.critical_failures.length;
 
     // Calculate integrity score
@@ -541,11 +517,11 @@ class CognitiveFirewallValidator {
 
     // Determine overall status
     if (criticalIssues === 0 && this.validationResults.warnings.length === 0) {
-      this.validationResults.overall_status = "PASS";
+      this.validationResults.overall_status = 'PASS';
     } else if (criticalIssues === 0) {
-      this.validationResults.overall_status = "PASS_WITH_WARNINGS";
+      this.validationResults.overall_status = 'PASS_WITH_WARNINGS';
     } else {
-      this.validationResults.overall_status = "FAIL";
+      this.validationResults.overall_status = 'FAIL';
     }
 
     // Generate recommendations
@@ -561,24 +537,24 @@ class CognitiveFirewallValidator {
 
     if (this.validationResults.critical_failures.length > 0) {
       recommendations.push({
-        priority: "CRITICAL",
-        action: "Fix all critical failures before deployment",
+        priority: 'CRITICAL',
+        action: 'Fix all critical failures before deployment',
         count: this.validationResults.critical_failures.length,
       });
     }
 
     if (this.validationResults.drift_detected) {
       recommendations.push({
-        priority: "HIGH",
-        action: "Investigate architectural drift indicators",
-        description: "System showing signs of structural degradation",
+        priority: 'HIGH',
+        action: 'Investigate architectural drift indicators',
+        description: 'System showing signs of structural degradation',
       });
     }
 
     if (this.validationResults.warnings.length > 5) {
       recommendations.push({
-        priority: "MEDIUM",
-        action: "Address accumulated warnings",
+        priority: 'MEDIUM',
+        action: 'Address accumulated warnings',
         count: this.validationResults.warnings.length,
       });
     }
@@ -596,38 +572,34 @@ class CognitiveFirewallValidator {
 
   // Log validation results in readable format
   logResults() {
-    console.log("\n=== COGNITIVE FIREWALL VALIDATION REPORT ===");
+    console.log('\n=== COGNITIVE FIREWALL VALIDATION REPORT ===');
     console.log(`Status: ${this.validationResults.overall_status}`);
-    console.log(
-      `Integrity Score: ${this.validationResults.integrity_score}/100`,
-    );
-    console.log(
-      `Critical Failures: ${this.validationResults.critical_failures.length}`,
-    );
+    console.log(`Integrity Score: ${this.validationResults.integrity_score}/100`);
+    console.log(`Critical Failures: ${this.validationResults.critical_failures.length}`);
     console.log(`Warnings: ${this.validationResults.warnings.length}`);
 
     if (this.validationResults.critical_failures.length > 0) {
-      console.log("\n🚨 CRITICAL FAILURES:");
+      console.log('\n🚨 CRITICAL FAILURES:');
       this.validationResults.critical_failures.forEach((failure, index) => {
         console.log(`${index + 1}. ${failure.type}: ${failure.description}`);
       });
     }
 
     if (this.validationResults.warnings.length > 0) {
-      console.log("\n⚠️ WARNINGS:");
+      console.log('\n⚠️ WARNINGS:');
       this.validationResults.warnings.forEach((warning, index) => {
         console.log(`${index + 1}. ${warning.type}: ${warning.description}`);
       });
     }
 
     if (this.validationResults.recommendations.length > 0) {
-      console.log("\n💡 RECOMMENDATIONS:");
+      console.log('\n💡 RECOMMENDATIONS:');
       this.validationResults.recommendations.forEach((rec, index) => {
         console.log(`${index + 1}. [${rec.priority}] ${rec.action}`);
       });
     }
 
-    console.log("\n=== END VALIDATION REPORT ===\n");
+    console.log('\n=== END VALIDATION REPORT ===\n');
   }
 }
 
@@ -654,10 +626,7 @@ export function quickHealthCheck(response) {
   const validator = new CognitiveFirewallValidator();
   validator.validateResponseSchema(response);
   return {
-    health:
-      validator.validationResults.critical_failures.length === 0
-        ? "HEALTHY"
-        : "DEGRADED",
+    health: validator.validationResults.critical_failures.length === 0 ? 'HEALTHY' : 'DEGRADED',
     issues:
       validator.validationResults.critical_failures.length +
       validator.validationResults.warnings.length,

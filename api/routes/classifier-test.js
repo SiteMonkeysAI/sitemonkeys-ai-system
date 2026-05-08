@@ -20,17 +20,18 @@ import { CLASSIFIER_VALIDATION_SET } from '../admin/classifier-validation-set.js
  * POST /api/admin/classifier-test
  */
 export async function handleClassifierTest(req, res) {
-  const adminKey = req.headers['x-admin-key'] ||
-                   req.headers['authorization']?.replace('Bearer ', '');
+  const adminKey =
+    req.headers['x-admin-key'] || req.headers['authorization']?.replace('Bearer ', '');
 
   if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
 
   const body = req.body || {};
-  const queries = (Array.isArray(body.queries) && body.queries.length > 0)
-    ? body.queries
-    : CLASSIFIER_VALIDATION_SET;
+  const queries =
+    Array.isArray(body.queries) && body.queries.length > 0
+      ? body.queries
+      : CLASSIFIER_VALIDATION_SET;
 
   console.log(`[CLASSIFIER-TEST] Running ${queries.length} queries`);
 
@@ -53,19 +54,19 @@ export async function handleClassifierTest(req, res) {
       // Classify query complexity (may use embeddings)
       const classResult = await classifyQueryComplexity(query, {
         truthType: patternResult.type,
-        externalLookupRequired: patternResult.externalLookupRequired
+        externalLookupRequired: patternResult.externalLookupRequired,
       });
 
       actual_classification = classResult.classification;
       actual_truth_type = patternResult.type;
       // Decision-making queries (and any classifier that explicitly sets externalLookupRequired: false)
       // must not trigger lookup regardless of truth type.
-      actual_lookup = classResult.externalLookupRequired === false
-        ? false
-        : (patternResult.type === 'VOLATILE' || patternResult.type === 'SEMI_STABLE') &&
-          patternResult.skipExternalLookup !== true;
+      actual_lookup =
+        classResult.externalLookupRequired === false
+          ? false
+          : (patternResult.type === 'VOLATILE' || patternResult.type === 'SEMI_STABLE') &&
+            patternResult.skipExternalLookup !== true;
       confidence = typeof classResult.confidence === 'number' ? classResult.confidence : null;
-
     } catch (err) {
       console.error('[CLASSIFIER-TEST] Error on %s:', id, err.message);
       failure_reason = `classifier_error: ${err.message}`;
@@ -78,14 +79,20 @@ export async function handleClassifierTest(req, res) {
 
     if (!pass && !failure_reason) {
       const reasons = [];
-      if (!classMatch) reasons.push(`classification: expected=${expected_classification} actual=${actual_classification}`);
-      if (!truthMatch) reasons.push(`truth_type: expected=${expected_truth_type} actual=${actual_truth_type}`);
+      if (!classMatch)
+        reasons.push(
+          `classification: expected=${expected_classification} actual=${actual_classification}`,
+        );
+      if (!truthMatch)
+        reasons.push(`truth_type: expected=${expected_truth_type} actual=${actual_truth_type}`);
       if (!lookupMatch) reasons.push(`lookup: expected=${expected_lookup} actual=${actual_lookup}`);
       failure_reason = reasons.join('; ');
     }
 
     if (!pass) {
-      const failureCategory = failure_reason?.includes('classifier_error') ? 'ambiguous' : (expected_truth_type || 'ambiguous');
+      const failureCategory = failure_reason?.includes('classifier_error')
+        ? 'ambiguous'
+        : expected_truth_type || 'ambiguous';
       failuresByType[failureCategory] = (failuresByType[failureCategory] || 0) + 1;
     }
 
@@ -100,12 +107,12 @@ export async function handleClassifierTest(req, res) {
       actual_lookup,
       confidence,
       pass,
-      failure_reason: pass ? null : failure_reason
+      failure_reason: pass ? null : failure_reason,
     });
   }
 
   const total = results.length;
-  const passed = results.filter(r => r.pass).length;
+  const passed = results.filter((r) => r.pass).length;
   const failed = total - passed;
 
   const summary = {
@@ -113,10 +120,12 @@ export async function handleClassifierTest(req, res) {
     passed,
     failed,
     pass_rate: total > 0 ? Math.round((passed / total) * 1000) / 1000 : 0,
-    failures_by_type: failuresByType
+    failures_by_type: failuresByType,
   };
 
-  console.log(`[CLASSIFIER-TEST] Complete: ${passed}/${total} passed (${(summary.pass_rate * 100).toFixed(1)}%)`);
+  console.log(
+    `[CLASSIFIER-TEST] Complete: ${passed}/${total} passed (${(summary.pass_rate * 100).toFixed(1)}%)`,
+  );
 
   return res.json({ results, summary });
 }

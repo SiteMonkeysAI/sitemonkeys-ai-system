@@ -23,7 +23,18 @@ const MIN_VIABLE_CHARS = 50;
 
 // File extension lists
 const IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.tiff'];
-const TEXT_EXTENSIONS = ['.txt', '.md', '.csv', '.json', '.xml', '.html', '.htm', '.log', '.yaml', '.yml'];
+const TEXT_EXTENSIONS = [
+  '.txt',
+  '.md',
+  '.csv',
+  '.json',
+  '.xml',
+  '.html',
+  '.htm',
+  '.log',
+  '.yaml',
+  '.yml',
+];
 
 // Method identifiers that represent stubs (no usable content extracted)
 export const STUB_METHODS = ['pdf_stub', 'image_stub', 'unsupported_stub'];
@@ -70,7 +81,7 @@ function getVisionClient() {
   if (!credentialsJson) {
     throw new Error(
       'GOOGLE_CREDENTIALS_JSON environment variable is not set. ' +
-      'Set it to the JSON content of your Google Cloud service account credentials file.'
+        'Set it to the JSON content of your Google Cloud service account credentials file.',
     );
   }
 
@@ -83,7 +94,9 @@ function getVisionClient() {
 
   const projectId = process.env.GOOGLE_PROJECT_ID;
   if (!projectId) {
-    console.log('[UPLOAD] Warning: GOOGLE_PROJECT_ID is not set — using project from service account credentials');
+    console.log(
+      '[UPLOAD] Warning: GOOGLE_PROJECT_ID is not set — using project from service account credentials',
+    );
   }
 
   _visionClient = new vision.ImageAnnotatorClient({
@@ -224,7 +237,9 @@ export async function extractDocumentText(file) {
   const ext = path.extname(file.originalname).toLowerCase();
   const mime = file.mimetype;
 
-  console.log(`[UPLOAD] file_received name="${file.originalname}" mime="${mime}" size=${file.size}`);
+  console.log(
+    `[UPLOAD] file_received name="${file.originalname}" mime="${mime}" size=${file.size}`,
+  );
 
   // 1) DOCX
   if (
@@ -291,7 +306,9 @@ export async function extractDocumentText(file) {
         };
       }
 
-      console.log(`[UPLOAD] stored_stub method=pdf_stub reason="OCR returned insufficient content"`);
+      console.log(
+        `[UPLOAD] stored_stub method=pdf_stub reason="OCR returned insufficient content"`,
+      );
     } catch (ocrErr) {
       console.log(`[UPLOAD] pdf_ocr_failed reason="${ocrErr.message}"`);
     }
@@ -332,7 +349,9 @@ export async function extractDocumentText(file) {
         return { text: ocrText, method: 'image_ocr', confidence: ocrResult.confidence };
       }
 
-      console.log(`[UPLOAD] stored_stub method=image_stub reason="OCR returned insufficient content"`);
+      console.log(
+        `[UPLOAD] stored_stub method=image_stub reason="OCR returned insufficient content"`,
+      );
     } catch (ocrErr) {
       console.log(`[UPLOAD] image_ocr_failed reason="${ocrErr.message}"`);
     }

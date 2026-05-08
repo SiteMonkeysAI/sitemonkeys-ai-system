@@ -1,9 +1,9 @@
 // api/upload-for-analysis.js
 // EXACT COPY of working upload-file.js with minimal changes for analysis
 
-import multer from "multer";
-import path from "path";
-import { extractDocumentText, STUB_METHODS } from "./lib/document-extractor.js";
+import multer from 'multer';
+import path from 'path';
+import { extractDocumentText, STUB_METHODS } from './lib/document-extractor.js';
 
 // Session storage for extracted documents with automatic cleanup
 export const extractedDocuments = new Map();
@@ -23,16 +23,12 @@ function autoCleanupDocuments() {
   }
 
   if (cleanedCount > 0) {
-    console.log(
-      `[DOCUMENT-CLEANUP] Removed ${cleanedCount} expired documents from memory`,
-    );
+    console.log(`[DOCUMENT-CLEANUP] Removed ${cleanedCount} expired documents from memory`);
   }
 
   const currentSize = extractedDocuments.size;
   if (currentSize > 0) {
-    console.log(
-      `[DOCUMENT-CLEANUP] Current documents in memory: ${currentSize}/${MAX_DOCUMENTS}`,
-    );
+    console.log(`[DOCUMENT-CLEANUP] Current documents in memory: ${currentSize}/${MAX_DOCUMENTS}`);
   }
 }
 
@@ -44,7 +40,7 @@ export function stopDocumentCleanup() {
   if (cleanupInterval) {
     clearInterval(cleanupInterval);
     cleanupInterval = null;
-    console.log("[DOCUMENT-CLEANUP] Cleanup interval stopped");
+    console.log('[DOCUMENT-CLEANUP] Cleanup interval stopped');
   }
 }
 
@@ -78,84 +74,62 @@ function detectFileType(filename, mimetype) {
   const _ext = path.extname(filename).toLowerCase();
 
   // Images
-  if (
-    /\.(jpg|jpeg|png|gif|bmp|svg|tiff|webp)$/i.test(filename) ||
-    mimetype.startsWith("image/")
-  ) {
-    return "image";
+  if (/\.(jpg|jpeg|png|gif|bmp|svg|tiff|webp)$/i.test(filename) || mimetype.startsWith('image/')) {
+    return 'image';
   }
 
   // Documents
   if (
     /\.(pdf|doc|docx|txt|md|rtf|odt)$/i.test(filename) ||
-    mimetype.includes("document") ||
-    mimetype.includes("pdf") ||
-    mimetype.includes("text")
+    mimetype.includes('document') ||
+    mimetype.includes('pdf') ||
+    mimetype.includes('text')
   ) {
-    return "document";
+    return 'document';
   }
 
   // Spreadsheets
-  if (
-    /\.(xls|xlsx|csv|ods)$/i.test(filename) ||
-    mimetype.includes("spreadsheet")
-  ) {
-    return "spreadsheet";
+  if (/\.(xls|xlsx|csv|ods)$/i.test(filename) || mimetype.includes('spreadsheet')) {
+    return 'spreadsheet';
   }
 
   // Presentations
-  if (
-    /\.(ppt|pptx|odp)$/i.test(filename) ||
-    mimetype.includes("presentation")
-  ) {
-    return "presentation";
+  if (/\.(ppt|pptx|odp)$/i.test(filename) || mimetype.includes('presentation')) {
+    return 'presentation';
   }
 
   // Audio
-  if (
-    /\.(mp3|wav|m4a|ogg|aac|flac)$/i.test(filename) ||
-    mimetype.startsWith("audio/")
-  ) {
-    return "audio";
+  if (/\.(mp3|wav|m4a|ogg|aac|flac)$/i.test(filename) || mimetype.startsWith('audio/')) {
+    return 'audio';
   }
 
   // Video
-  if (
-    /\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i.test(filename) ||
-    mimetype.startsWith("video/")
-  ) {
-    return "video";
+  if (/\.(mp4|avi|mov|wmv|flv|webm|mkv)$/i.test(filename) || mimetype.startsWith('video/')) {
+    return 'video';
   }
 
   // Archives
   if (
     /\.(zip|rar|7z|tar|gz)$/i.test(filename) ||
-    mimetype.includes("archive") ||
-    mimetype.includes("compressed")
+    mimetype.includes('archive') ||
+    mimetype.includes('compressed')
   ) {
-    return "archive";
+    return 'archive';
   }
 
   // Code files
   if (/\.(js|html|css|json|xml|py|java|cpp|c|php|rb|go|rs)$/i.test(filename)) {
-    return "code";
+    return 'code';
   }
 
-  return "other";
+  return 'other';
 }
 
 // Function 3: Extract key phrases (simple, memory-efficient)
 function extractKeyPhrases(preview) {
   // Find sentences with key indicator words
   const sentences = preview.split(/[.!?]+/);
-  const keyIndicators = [
-    "objective",
-    "goal",
-    "action",
-    "next step",
-    "deadline",
-    "important",
-  ];
+  const keyIndicators = ['objective', 'goal', 'action', 'next step', 'deadline', 'important'];
 
   const keyPhrases = sentences
     .filter((sentence) => {
@@ -172,16 +146,18 @@ function extractKeyPhrases(preview) {
 // Process uploaded file - EXACT COPY
 async function processFile(file) {
   // ISSUE #814 ITEM 1: Add diagnostic logging at EVERY decision point for visibility
-  console.log(`[UPLOAD] File received: name="${file.originalname}", mimetype="${file.mimetype}", size=${file.size}, bufferExists=${!!file.buffer}`);
-  
+  console.log(
+    `[UPLOAD] File received: name="${file.originalname}", mimetype="${file.mimetype}", size=${file.size}, bufferExists=${!!file.buffer}`,
+  );
+
   const fileType = detectFileType(file.originalname, file.mimetype);
 
   let processingResult = {
     success: true,
-    message: "",
+    message: '',
     type: fileType,
     size: file.size,
-    preview: "",
+    preview: '',
     contentExtracted: false,
     docxAnalysis: null,
   };
@@ -246,7 +222,7 @@ async function processFile(file) {
   } catch (error) {
     processingResult.success = false;
     processingResult.message = `Failed to process ${file.originalname}: ${error.message}`;
-    console.error("❌ Error in processFile:", error);
+    console.error('❌ Error in processFile:', error);
   }
 
   return processingResult;
@@ -265,7 +241,7 @@ function handleMulterError(err, req, res, next) {
 
     return res.status(400).json({
       success: false,
-      status: "error",
+      status: 'error',
       message: `Upload error: ${err.message}`,
       error: err.message,
       field: err.field || null,
@@ -287,8 +263,8 @@ async function handleAnalysisUpload(req, res) {
     if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
       console.log(`[${timestamp}] [ANALYSIS] No files in request`);
       return res.status(400).json({
-        status: "error",
-        message: "No files uploaded",
+        status: 'error',
+        message: 'No files uploaded',
         successful_uploads: 0,
         failed_uploads: 0,
         files: [],
@@ -306,10 +282,9 @@ async function handleAnalysisUpload(req, res) {
       if (extractedDocuments.size >= MAX_DOCUMENTS) {
         console.error(`[${timestamp}] [ANALYSIS] Still at limit after cleanup - rejecting upload`);
         return res.status(429).json({
-          status: "error",
-          message:
-            "Document storage limit reached. Please try again in a few minutes.",
-          error: "Too many documents in memory",
+          status: 'error',
+          message: 'Document storage limit reached. Please try again in a few minutes.',
+          error: 'Too many documents in memory',
           successful_uploads: 0,
           failed_uploads: req.files.length,
           files: [],
@@ -323,8 +298,8 @@ async function handleAnalysisUpload(req, res) {
     if (!Array.isArray(req.files)) {
       console.log(`[${timestamp}] [ANALYSIS] Unexpected type for req.files: ${typeof req.files}`);
       return res.status(400).json({
-        status: "error",
-        message: "Malformed upload: files must be an array",
+        status: 'error',
+        message: 'Malformed upload: files must be an array',
         successful_uploads: 0,
         failed_uploads: 0,
         files: [],
@@ -339,9 +314,7 @@ async function handleAnalysisUpload(req, res) {
 
     // Process each uploaded file
     for (const file of req.files) {
-      console.log(
-        `🔄 [Analysis] Processing: ${file.originalname} (${file.size} bytes)`,
-      );
+      console.log(`🔄 [Analysis] Processing: ${file.originalname} (${file.size} bytes)`);
 
       try {
         const result = await processFile(file);
@@ -354,22 +327,20 @@ async function handleAnalysisUpload(req, res) {
             message: result.message,
             type: result.type,
             size: result.size,
-            folder: "analysis",
+            folder: 'analysis',
             preview: result.preview,
             metadata: result.metadata,
             contentExtracted: result.contentExtracted,
             docxAnalysis: result.docxAnalysis, // This contains the word count, analysis, etc.
           });
-          console.log(
-            `✅ [Analysis] Successfully processed: ${file.originalname}`,
-          );
+          console.log(`✅ [Analysis] Successfully processed: ${file.originalname}`);
         } else {
           failureCount++;
           results.push({
             success: false,
             filename: file.originalname,
             message: result.message,
-            error: "Processing failed",
+            error: 'Processing failed',
           });
           console.log(`❌ [Analysis] Failed to process: ${file.originalname}`);
         }
@@ -381,17 +352,14 @@ async function handleAnalysisUpload(req, res) {
           message: `Upload failed: ${error.message}`,
           error: error.message,
         });
-        console.log(
-          `❌ [Analysis] Error processing ${file.originalname}:`,
-          error,
-        );
+        console.log(`❌ [Analysis] Error processing ${file.originalname}:`, error);
       }
     }
 
     // Return results - FRONTEND COMPATIBLE
     const response = {
       success: successCount > 0,
-      status: successCount > 0 ? "success" : "error",
+      status: successCount > 0 ? 'success' : 'error',
       message: `Analysis upload complete: ${successCount} successful, ${failureCount} failed`,
       files_processed: successCount,
       successful_uploads: successCount,
@@ -458,15 +426,13 @@ async function handleAnalysisUpload(req, res) {
     // Clean old documents
     cleanOldDocuments();
 
-    console.log(
-      `📊 [Analysis] Upload complete: ${successCount}/${req.files.length} successful`,
-    );
+    console.log(`📊 [Analysis] Upload complete: ${successCount}/${req.files.length} successful`);
     res.json(response);
   } catch (error) {
-    console.error("❌ [Analysis] Upload endpoint error:", error);
+    console.error('❌ [Analysis] Upload endpoint error:', error);
     res.status(500).json({
-      status: "error",
-      message: "Server error during file upload",
+      status: 'error',
+      message: 'Server error during file upload',
       error: error.message,
       successful_uploads: 0,
       failed_uploads: req.files ? req.files.length : 0,
@@ -477,5 +443,5 @@ async function handleAnalysisUpload(req, res) {
 
 // Export with different names to avoid conflicts - EXACT PATTERN
 // Accept field name "files" to match frontend FormData
-export const analysisMiddleware = upload.array("files", 10);
+export const analysisMiddleware = upload.array('files', 10);
 export { handleAnalysisUpload, handleMulterError };

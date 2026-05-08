@@ -38,5 +38,5 @@ export const EMPTY_EXTRACTION_PATTERNS = [
  */
 export function isEmptyExtractionResult(content) {
   if (!content) return false;
-  return EMPTY_EXTRACTION_PATTERNS.some(p => p.test(content.trim()));
+  return EMPTY_EXTRACTION_PATTERNS.some((p) => p.test(content.trim()));
 }

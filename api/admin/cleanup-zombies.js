@@ -48,7 +48,9 @@ export async function handleZombieCleanupRequest(req, res) {
     return res.status(500).json({ error: 'Database pool not available' });
   }
 
-  const poolSource = global.memorySystem?.pool ? 'global.memorySystem.pool' : 'persistentMemory.pool';
+  const poolSource = global.memorySystem?.pool
+    ? 'global.memorySystem.pool'
+    : 'persistentMemory.pool';
   console.log(`[ADMIN-ZOMBIE] Using pool source: ${poolSource}`);
 
   try {
@@ -73,13 +75,13 @@ async function dryRun(pool, res) {
          FROM persistent_memories
         WHERE id = ANY($1::int[])
         ORDER BY id`,
-      [KNOWN_ZOMBIE_IDS]
+      [KNOWN_ZOMBIE_IDS],
     ),
     pool.query(buildPatternSelectQuery()),
   ]);
 
   console.log(
-    `[ADMIN-ZOMBIE] Dry run complete — known IDs: ${knownIds.rows.length}, pattern matches: ${patternMatches.rows.length}`
+    `[ADMIN-ZOMBIE] Dry run complete — known IDs: ${knownIds.rows.length}, pattern matches: ${patternMatches.rows.length}`,
   );
 
   return res.json({
@@ -106,7 +108,7 @@ async function executeCleanup(pool, res) {
     `DELETE FROM persistent_memories
       WHERE id = ANY($1::int[])
   RETURNING id, LEFT(content, 100) AS content_preview`,
-    [KNOWN_ZOMBIE_IDS]
+    [KNOWN_ZOMBIE_IDS],
   );
   console.log(`[ADMIN-ZOMBIE] Deleted known IDs: ${deleteIds.rows.length} row(s)`);
 
@@ -120,7 +122,7 @@ async function executeCleanup(pool, res) {
       `SELECT COUNT(*) AS remaining
          FROM persistent_memories
         WHERE id = ANY($1::int[])`,
-      [KNOWN_ZOMBIE_IDS]
+      [KNOWN_ZOMBIE_IDS],
     ),
     pool.query(buildPatternCountQuery()),
   ]);
@@ -129,7 +131,7 @@ async function executeCleanup(pool, res) {
   const remainingSystemMetadata = parseInt(verifyPatterns.rows[0].remaining, 10);
 
   console.log(
-    `[ADMIN-ZOMBIE] Verification — remaining zombie IDs: ${remainingZombieIds}, remaining system metadata: ${remainingSystemMetadata}`
+    `[ADMIN-ZOMBIE] Verification — remaining zombie IDs: ${remainingZombieIds}, remaining system metadata: ${remainingSystemMetadata}`,
   );
 
   return res.json({

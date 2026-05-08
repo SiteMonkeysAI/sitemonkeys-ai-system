@@ -1,15 +1,15 @@
 /**
  * SEMANTIC RETRIEVAL SERVICE
- * 
+ *
  * Retrieves memories using semantic similarity with mode-aware prefiltering.
- * 
+ *
  * Pipeline:
  * 1. Embed query (single API call)
  * 2. Prefilter candidates via SQL (mode, category, is_current, recency)
  * 3. Score candidates with cosine similarity in Node
  * 4. Hybrid ranking (semantic + recency + confidence)
  * 5. Return top results with telemetry
- * 
+ *
  * @module api/services/semantic-retrieval
  */
 
@@ -20,24 +20,24 @@ import { generateEmbedding, cosineSimilarity, rankBySimilarity } from './embeddi
 // ============================================
 
 const RETRIEVAL_CONFIG = {
-  maxCandidates: 500,           // Max memories to pull from DB for scoring
-  defaultTopK: 10,              // Default number of results to return
-  minSimilarity: 0.35,          // Minimum similarity threshold for non-personal queries (Issue #4)
-                                 // Raised from 0.20 (was previously 0.25 before #609 lowered it)
-                                 // At 0.20, up to 230 rows of low-relevance memories were injected per query
-  minSimilarityPersonal: 0.15,  // Lower threshold for personal fact queries - LOWERED from 0.18 for #609
-  recencyBoostDays: 7,          // Boost memories from last N days
-  recencyBoostWeight: 0.1,      // How much to boost recent memories
-  confidenceWeight: 0.05,       // Weight for fingerprint confidence
-  embeddingTimeout: 5000,       // Timeout for query embedding
+  maxCandidates: 500, // Max memories to pull from DB for scoring
+  defaultTopK: 10, // Default number of results to return
+  minSimilarity: 0.35, // Minimum similarity threshold for non-personal queries (Issue #4)
+  // Raised from 0.20 (was previously 0.25 before #609 lowered it)
+  // At 0.20, up to 230 rows of low-relevance memories were injected per query
+  minSimilarityPersonal: 0.15, // Lower threshold for personal fact queries - LOWERED from 0.18 for #609
+  recencyBoostDays: 7, // Boost memories from last N days
+  recencyBoostWeight: 0.1, // How much to boost recent memories
+  confidenceWeight: 0.05, // Weight for fingerprint confidence
+  embeddingTimeout: 5000, // Timeout for query embedding
   // Issue #916: Retrieval diversity enforcement
-  diversityEnforcement: true,          // Master switch for MMR-style diversity
-  diversityPenaltyWeight: 0.3,         // How aggressively to penalize similar results
-  diversitySimilarityThreshold: 0.85,  // Cosine similarity above which penalty applies
-  prefilterUseEmbedding: true,         // Use pgvector <=> when embedding available
+  diversityEnforcement: true, // Master switch for MMR-style diversity
+  diversityPenaltyWeight: 0.3, // How aggressively to penalize similar results
+  diversitySimilarityThreshold: 0.85, // Cosine similarity above which penalty applies
+  prefilterUseEmbedding: true, // Use pgvector <=> when embedding available
   // Issue #2903: Per-record token cap to prevent a single bloated record from
   // consuming the majority of the token budget and starving other memories.
-  maxTokensPerRecord: 500,             // Hard cap per individual memory record (≈2,000 chars)
+  maxTokensPerRecord: 500, // Hard cap per individual memory record (≈2,000 chars)
 };
 
 // ============================================
@@ -59,37 +59,37 @@ const SAFETY_CRITICAL_DOMAINS = {
       /\b(restaurant|dining|food|meal|eat|eating|dish|menu|cuisine|chef|cook|recipe)\b/i,
       /\b(recommendation|suggest|recommend|where.*to.*eat|what.*to.*eat|keep.*in.*mind.*restaurant)\b/i,
       /\b(lunch|dinner|breakfast|brunch|snack)\b/i,
-      /\b(italian|chinese|mexican|thai|indian|japanese|french)(\s+food|\s+restaurant|\s+cuisine)?\b/i
+      /\b(italian|chinese|mexican|thai|indian|japanese|french)(\s+food|\s+restaurant|\s+cuisine)?\b/i,
     ],
     safetyCriticalCategories: ['health_wellness'],
-    reason: 'food_decisions_intersect_allergies_dietary_restrictions'
+    reason: 'food_decisions_intersect_allergies_dietary_restrictions',
   },
   physical_activity: {
     patterns: [
       /\b(activity|activities|exercise|workout|gym|sport|sports|physical|hike|hiking|climb|climbing)\b/i,
       /\b(travel|trip|vacation|adventure|outdoor)\b/i,
-      /\b(run|running|swim|swimming|bike|biking|walk|walking)\b/i
+      /\b(run|running|swim|swimming|bike|biking|walk|walking)\b/i,
     ],
     safetyCriticalCategories: ['health_wellness'],
-    reason: 'physical_activities_intersect_health_conditions'
+    reason: 'physical_activities_intersect_health_conditions',
   },
   medical_health: {
     patterns: [
       /\b(medical|health|doctor|medication|symptom|condition|treatment|therapy)\b/i,
-      /\b(appointment|hospital|clinic|prescription)\b/i
+      /\b(appointment|hospital|clinic|prescription)\b/i,
     ],
     safetyCriticalCategories: ['health_wellness'],
-    reason: 'medical_queries_require_health_context'
+    reason: 'medical_queries_require_health_context',
   },
   pets_animals: {
     patterns: [
       /\b(pet|pets|cat|cats|dog|dogs|animal|animals|puppy|kitten)\b/i,
       /\b(get\s+(a|an)|adopt|buy|purchase|bring\s+home).*(cat|dog|pet)\b/i,
-      /\b(should\s+i|can\s+i|thinking\s+about).*(cat|dog|pet)\b/i
+      /\b(should\s+i|can\s+i|thinking\s+about).*(cat|dog|pet)\b/i,
     ],
     safetyCriticalCategories: ['health_wellness', 'relationships_social'],
-    reason: 'pet_decisions_intersect_allergies_and_family_preferences'
-  }
+    reason: 'pet_decisions_intersect_allergies_and_family_preferences',
+  },
 };
 
 /**
@@ -105,7 +105,7 @@ const SAFETY_BYPASS_CATEGORIES = new Set([
   'health',
   'medical',
   'allergies',
-  'medications'
+  'medications',
 ]);
 
 /**
@@ -122,10 +122,12 @@ function detectSafetyCriticalCategories(query) {
   const safetyCat = new Set();
 
   for (const [domainName, config] of Object.entries(SAFETY_CRITICAL_DOMAINS)) {
-    const matches = config.patterns.some(pattern => pattern.test(query));
+    const matches = config.patterns.some((pattern) => pattern.test(query));
     if (matches) {
-      config.safetyCriticalCategories.forEach(cat => safetyCat.add(cat));
-      console.log(`[SAFETY-CRITICAL] 🚨 Domain "${domainName}" detected → injecting category: [${config.safetyCriticalCategories.join(', ')}]`);
+      config.safetyCriticalCategories.forEach((cat) => safetyCat.add(cat));
+      console.log(
+        `[SAFETY-CRITICAL] 🚨 Domain "${domainName}" detected → injecting category: [${config.safetyCriticalCategories.join(', ')}]`,
+      );
       console.log(`[SAFETY-CRITICAL]    Reason: ${config.reason}`);
     }
   }
@@ -134,7 +136,7 @@ function detectSafetyCriticalCategories(query) {
 
   return {
     categories: [...safetyCat],
-    isSafetyCritical
+    isSafetyCritical,
   };
 }
 
@@ -148,22 +150,32 @@ function detectSafetyCriticalCategories(query) {
 function applySafetyCriticalBoost(memories) {
   const SAFETY_MARKERS = {
     allergy: {
-      patterns: [/\b(allerg(y|ic|ies))\b/i, /\b(cannot eat|can't eat|avoid eating)\b/i, /\b(intolerant|intolerance)\b/i],
-      boost: 0.25
+      patterns: [
+        /\b(allerg(y|ic|ies))\b/i,
+        /\b(cannot eat|can't eat|avoid eating)\b/i,
+        /\b(intolerant|intolerance)\b/i,
+      ],
+      boost: 0.25,
     },
     medication: {
-      patterns: [/\b(medication|medicine|prescription|insulin|inhaler)\b/i, /\b(take daily|must take)\b/i],
-      boost: 0.20
+      patterns: [
+        /\b(medication|medicine|prescription|insulin|inhaler)\b/i,
+        /\b(take daily|must take)\b/i,
+      ],
+      boost: 0.2,
     },
     condition: {
-      patterns: [/\b(diabetes|asthma|heart condition|chronic)\b/i, /\b(disability|limitation|restricted)\b/i],
-      boost: 0.15
-    }
+      patterns: [
+        /\b(diabetes|asthma|heart condition|chronic)\b/i,
+        /\b(disability|limitation|restricted)\b/i,
+      ],
+      boost: 0.15,
+    },
   };
 
   let boostedCount = 0;
 
-  const result = memories.map(memory => {
+  const result = memories.map((memory) => {
     if (memory.category_name !== 'health_wellness') {
       return memory;
     }
@@ -173,7 +185,7 @@ function applySafetyCriticalBoost(memories) {
     const markers = [];
 
     for (const [markerName, config] of Object.entries(SAFETY_MARKERS)) {
-      if (config.patterns.some(p => p.test(content))) {
+      if (config.patterns.some((p) => p.test(content))) {
         markers.push(markerName);
         maxBoost = Math.max(maxBoost, config.boost);
       }
@@ -181,13 +193,15 @@ function applySafetyCriticalBoost(memories) {
 
     if (maxBoost > 0) {
       boostedCount++;
-      console.log(`[SAFETY-CRITICAL] 🛡️ Boosting memory ID ${memory.id} by +${maxBoost} (markers: ${markers.join(', ')})`);
+      console.log(
+        `[SAFETY-CRITICAL] 🛡️ Boosting memory ID ${memory.id} by +${maxBoost} (markers: ${markers.join(', ')})`,
+      );
       return {
         ...memory,
         raw_similarity: memory.raw_similarity ?? memory.similarity,
         similarity: Math.min(memory.similarity + maxBoost, 1.0),
         safety_boosted: true,
-        safety_markers: markers
+        safety_markers: markers,
       };
     }
 
@@ -195,7 +209,9 @@ function applySafetyCriticalBoost(memories) {
   });
 
   if (boostedCount > 0) {
-    console.log(`[SAFETY-CRITICAL] ⚡ Applied safety boost to ${boostedCount} health_wellness memories`);
+    console.log(
+      `[SAFETY-CRITICAL] ⚡ Applied safety boost to ${boostedCount} health_wellness memories`,
+    );
   }
 
   return result;
@@ -228,7 +244,7 @@ function applyOrdinalBoost(memories, query) {
     fifth: /\b(fifth|5th)\b/i,
     last: /\b(last|final)\b/i,
     previous: /\b(previous|prior|earlier)\b/i,
-    next: /\b(next|following|upcoming)\b/i
+    next: /\b(next|following|upcoming)\b/i,
   };
 
   // Check if query contains any ordinal indicators
@@ -254,8 +270,8 @@ function applyOrdinalBoost(memories, query) {
 
   // FIX #557-T3: Increased from 0.25 to 0.40 to overcome high semantic similarity
   // When "first code" and "second code" have ~0.85 similarity, need strong boost to separate them
-  const ORDINAL_BOOST = 0.40;
-  const ORDINAL_PENALTY = -0.20; // Penalize memories with DIFFERENT ordinals (FIX #557-T3)
+  const ORDINAL_BOOST = 0.4;
+  const ORDINAL_PENALTY = -0.2; // Penalize memories with DIFFERENT ordinals (FIX #557-T3)
   let boostedCount = 0;
   let penalizedCount = 0;
   let nonMatchCount = 0;
@@ -265,7 +281,7 @@ function applyOrdinalBoost(memories, query) {
     .filter(([name, _]) => name !== queryOrdinal)
     .map(([_, pattern]) => pattern);
 
-  const result = memories.map(memory => {
+  const result = memories.map((memory) => {
     const content = (memory.content || '').toLowerCase();
     const pattern = ORDINAL_PATTERNS[queryOrdinal];
 
@@ -275,7 +291,9 @@ function applyOrdinalBoost(memories, query) {
       const originalScore = memory.similarity;
       const newSimilarity = Math.min(originalScore + ORDINAL_BOOST, 1.0);
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-        console.log(`[ORDINAL-BOOST] ✅ Memory ${memory.id}: "${queryOrdinal}" MATCH - boosting ${originalScore.toFixed(3)} → ${newSimilarity.toFixed(3)} (+${ORDINAL_BOOST})`);
+        console.log(
+          `[ORDINAL-BOOST] ✅ Memory ${memory.id}: "${queryOrdinal}" MATCH - boosting ${originalScore.toFixed(3)} → ${newSimilarity.toFixed(3)} (+${ORDINAL_BOOST})`,
+        );
         console.log(`[ORDINAL-BOOST]    Content preview: "${content.substring(0, 60)}..."`);
       }
       return {
@@ -283,31 +301,36 @@ function applyOrdinalBoost(memories, query) {
         raw_similarity: memory.raw_similarity ?? memory.similarity,
         similarity: newSimilarity,
         ordinal_boosted: true,
-        ordinal_matched: queryOrdinal
+        ordinal_matched: queryOrdinal,
       };
     } else {
       // Check if memory contains a DIFFERENT ordinal (e.g., query asks "first" but content has "second")
-      const hasDifferentOrdinal = otherOrdinals.some(otherPattern => otherPattern.test(content));
+      const hasDifferentOrdinal = otherOrdinals.some((otherPattern) => otherPattern.test(content));
 
       if (hasDifferentOrdinal) {
         penalizedCount++;
         const originalScore = memory.similarity;
         const newSimilarity = Math.max(originalScore + ORDINAL_PENALTY, 0.0);
         if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-          console.log(`[ORDINAL-BOOST] ⬇️  Memory ${memory.id}: DIFFERENT ordinal detected - penalizing ${originalScore.toFixed(3)} → ${newSimilarity.toFixed(3)} (${ORDINAL_PENALTY})`);
+          console.log(
+            `[ORDINAL-BOOST] ⬇️  Memory ${memory.id}: DIFFERENT ordinal detected - penalizing ${originalScore.toFixed(3)} → ${newSimilarity.toFixed(3)} (${ORDINAL_PENALTY})`,
+          );
           console.log(`[ORDINAL-BOOST]    Content preview: "${content.substring(0, 60)}..."`);
         }
         return {
           ...memory,
           similarity: newSimilarity,
           ordinal_penalized: true,
-          ordinal_mismatch: true
+          ordinal_mismatch: true,
         };
       } else {
         nonMatchCount++;
         // Log non-matches for debugging ordinal detection issues
-        if (nonMatchCount <= 3 && process.env.DEBUG_DIAGNOSTICS === 'true') {  // Only log first 3 non-matches to avoid spam
-          console.log(`[ORDINAL-BOOST] ❌ Memory ${memory.id}: No ordinal in content - score stays ${memory.similarity.toFixed(3)}`);
+        if (nonMatchCount <= 3 && process.env.DEBUG_DIAGNOSTICS === 'true') {
+          // Only log first 3 non-matches to avoid spam
+          console.log(
+            `[ORDINAL-BOOST] ❌ Memory ${memory.id}: No ordinal in content - score stays ${memory.similarity.toFixed(3)}`,
+          );
           console.log(`[ORDINAL-BOOST]    Content preview: "${content.substring(0, 60)}..."`);
         }
       }
@@ -320,10 +343,16 @@ function applyOrdinalBoost(memories, query) {
     if (boostedCount > 0 || penalizedCount > 0) {
       console.log(`[ORDINAL-BOOST] ⚡ Applied ordinal adjustments for "${queryOrdinal}":`);
       console.log(`[ORDINAL-BOOST]    ✅ Boosted: ${boostedCount} memories (+${ORDINAL_BOOST})`);
-      console.log(`[ORDINAL-BOOST]    ⬇️  Penalized: ${penalizedCount} memories (${ORDINAL_PENALTY})`);
-      console.log(`[ORDINAL-BOOST]    ➖ Neutral: ${nonMatchCount} memories (no ordinal in content)`);
+      console.log(
+        `[ORDINAL-BOOST]    ⬇️  Penalized: ${penalizedCount} memories (${ORDINAL_PENALTY})`,
+      );
+      console.log(
+        `[ORDINAL-BOOST]    ➖ Neutral: ${nonMatchCount} memories (no ordinal in content)`,
+      );
     } else {
-      console.log(`[ORDINAL-BOOST] ⚠️ Query has "${queryOrdinal}" but NO memories matched - possible detection issue`);
+      console.log(
+        `[ORDINAL-BOOST] ⚠️ Query has "${queryOrdinal}" but NO memories matched - possible detection issue`,
+      );
     }
   }
 
@@ -333,7 +362,9 @@ function applyOrdinalBoost(memories, query) {
   }
   result.slice(0, 5).forEach((m, idx) => {
     if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-      console.log(`[TRACE-T3]   ${idx+1}. Memory ${m.id}: score=${m.similarity?.toFixed(3)}, boosted=${m.ordinal_boosted || false}, penalized=${m.ordinal_penalized || false}`);
+      console.log(
+        `[TRACE-T3]   ${idx + 1}. Memory ${m.id}: score=${m.similarity?.toFixed(3)}, boosted=${m.ordinal_boosted || false}, penalized=${m.ordinal_penalized || false}`,
+      );
       console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
     }
   });
@@ -348,7 +379,7 @@ function applyOrdinalBoost(memories, query) {
 /**
  * Escapes special regex characters to prevent Regular Expression Injection
  * SECURITY: User input must be escaped before using in RegExp constructor
- * 
+ *
  * @param {string} str - String to escape
  * @returns {string} Escaped string safe for use in RegExp
  */
@@ -384,33 +415,164 @@ function detectProperNames(query) {
   // document section headers, causing 70+ false-positive entity boosts on a forensic document query.
   const commonWords = new Set([
     // Question words
-    'the', 'what', 'when', 'where', 'which', 'who', 'how', 'why',
+    'the',
+    'what',
+    'when',
+    'where',
+    'which',
+    'who',
+    'how',
+    'why',
     // Auxiliary/modal verbs
-    'can', 'could', 'would', 'should', 'will', 'do', 'does', 'did',
-    'have', 'has', 'had', 'is', 'are', 'was', 'were', 'be', 'been', 'being',
+    'can',
+    'could',
+    'would',
+    'should',
+    'will',
+    'do',
+    'does',
+    'did',
+    'have',
+    'has',
+    'had',
+    'is',
+    'are',
+    'was',
+    'were',
+    'be',
+    'been',
+    'being',
     // Pronouns
-    'my', 'your', 'their', 'our', 'his', 'her', 'its',
-    'this', 'that', 'these', 'those',
-    'i', 'you', 'he', 'she', 'it', 'we', 'they',
-    'me', 'him', 'us', 'them',
+    'my',
+    'your',
+    'their',
+    'our',
+    'his',
+    'her',
+    'its',
+    'this',
+    'that',
+    'these',
+    'those',
+    'i',
+    'you',
+    'he',
+    'she',
+    'it',
+    'we',
+    'they',
+    'me',
+    'him',
+    'us',
+    'them',
     // Prepositions and conjunctions (commonly capitalized in headers/titles)
-    'no', 'not', 'nor', 'and', 'but', 'or', 'so', 'yet', 'for',
-    'in', 'on', 'at', 'to', 'of', 'up', 'by', 'as', 'if',
-    'with', 'into', 'onto', 'from', 'than', 'then', 'both',
-    'each', 'all', 'any', 'few', 'more', 'most', 'other', 'some',
-    'such', 'own', 'same', 'too', 'very',
+    'no',
+    'not',
+    'nor',
+    'and',
+    'but',
+    'or',
+    'so',
+    'yet',
+    'for',
+    'in',
+    'on',
+    'at',
+    'to',
+    'of',
+    'up',
+    'by',
+    'as',
+    'if',
+    'with',
+    'into',
+    'onto',
+    'from',
+    'than',
+    'then',
+    'both',
+    'each',
+    'all',
+    'any',
+    'few',
+    'more',
+    'most',
+    'other',
+    'some',
+    'such',
+    'own',
+    'same',
+    'too',
+    'very',
     // Common document/technical terms that appear capitalized in section headers
-    'file', 'files', 'data', 'type', 'date', 'time', 'name', 'user', 'users',
-    'content', 'contents', 'control', 'access', 'hit', 'hits',
-    'section', 'note', 'notes', 'page', 'pages', 'item', 'items',
-    'true', 'false', 'yes', 'null', 'none', 'new', 'old',
-    'key', 'value', 'result', 'error', 'info', 'list', 'set',
+    'file',
+    'files',
+    'data',
+    'type',
+    'date',
+    'time',
+    'name',
+    'user',
+    'users',
+    'content',
+    'contents',
+    'control',
+    'access',
+    'hit',
+    'hits',
+    'section',
+    'note',
+    'notes',
+    'page',
+    'pages',
+    'item',
+    'items',
+    'true',
+    'false',
+    'yes',
+    'null',
+    'none',
+    'new',
+    'old',
+    'key',
+    'value',
+    'result',
+    'error',
+    'info',
+    'list',
+    'set',
     // Common adjectives/adverbs that appear capitalized
-    'good', 'bad', 'high', 'low', 'large', 'small', 'full', 'empty',
-    'first', 'last', 'next', 'back', 'left', 'right', 'here', 'there',
-    'just', 'even', 'only', 'also', 'about', 'above', 'below',
+    'good',
+    'bad',
+    'high',
+    'low',
+    'large',
+    'small',
+    'full',
+    'empty',
+    'first',
+    'last',
+    'next',
+    'back',
+    'left',
+    'right',
+    'here',
+    'there',
+    'just',
+    'even',
+    'only',
+    'also',
+    'about',
+    'above',
+    'below',
     // Time/date words
-    'today', 'now', 'after', 'before', 'since', 'until', 'while'
+    'today',
+    'now',
+    'after',
+    'before',
+    'since',
+    'until',
+    'while',
   ]);
 
   // Extract capitalized words that aren't at the start of sentence
@@ -437,10 +599,10 @@ function detectProperNames(query) {
     /\b(Dr\.?\s+[A-Z][a-z]+)\b/g, // Dr. Smith
   ];
 
-  entityPatterns.forEach(pattern => {
+  entityPatterns.forEach((pattern) => {
     const matches = query.match(pattern);
     if (matches) {
-      matches.forEach(match => {
+      matches.forEach((match) => {
         const cleaned = match.replace(/[.,!?;:'"()]/g, '');
         if (cleaned.length >= 2 && !names.includes(cleaned)) {
           names.push(cleaned);
@@ -483,7 +645,7 @@ function expandQuery(query) {
     return { expanded: '', isPersonal: false, isMemoryRecall: false };
   }
   if (Array.isArray(query)) {
-    const first = query.find(v => typeof v === 'string') ?? query[0];
+    const first = query.find((v) => typeof v === 'string') ?? query[0];
     query = typeof first === 'string' ? first : String(first);
   } else if (typeof query !== 'string') {
     query = String(query);
@@ -494,73 +656,81 @@ function expandQuery(query) {
   // CRITICAL FIX #562-T2: Detect memory recall queries
   // These queries are asking "what did I tell you?" not "give me semantically similar info"
   // Examples: "What did I tell you to remember?", "What phrase did I ask you to remember?", "What do you remember about X?"
-  const isMemoryRecall = /\b(what|recall|tell me)\b.*\b(did i|have i|i asked|i told|i said|you to).*\b(remember|store|save|told|asked|said|mention)\b/i.test(query) ||
-    /\b(what|which).*\b(phrase|token|code|identifier|thing).*\b(remember|asked|told|said|stored)\b/i.test(query) ||
-    /\b(what do you|what can you)\b.*\b(remember|recall|know)\b.*\b(about|that i|i told)\b/i.test(query);
+  const isMemoryRecall =
+    /\b(what|recall|tell me)\b.*\b(did i|have i|i asked|i told|i said|you to).*\b(remember|store|save|told|asked|said|mention)\b/i.test(
+      query,
+    ) ||
+    /\b(what|which).*\b(phrase|token|code|identifier|thing).*\b(remember|asked|told|said|stored)\b/i.test(
+      query,
+    ) ||
+    /\b(what do you|what can you)\b.*\b(remember|recall|know)\b.*\b(about|that i|i told)\b/i.test(
+      query,
+    );
 
   // Synonym expansions for common personal fact categories
   const expansions = {
     // Memory recall terms (FIX #557-T2: Handle "What did I ask you to remember?")
-    'remember': ['asked', 'told', 'said', 'mentioned', 'phrase', 'token', 'code', 'identifier'],
-    'asked': ['remember', 'told', 'said', 'mentioned', 'requested'],
-    'phrase': ['token', 'code', 'identifier', 'remember', 'asked'],
-    'token': ['phrase', 'code', 'identifier', 'remember', 'asked'],
+    remember: ['asked', 'told', 'said', 'mentioned', 'phrase', 'token', 'code', 'identifier'],
+    asked: ['remember', 'told', 'said', 'mentioned', 'requested'],
+    phrase: ['token', 'code', 'identifier', 'remember', 'asked'],
+    token: ['phrase', 'code', 'identifier', 'remember', 'asked'],
 
     // Financial/Income terms
-    'salary': ['income', 'pay', 'compensation', 'earnings', 'wage', 'make', 'earn'],
-    'make': ['salary', 'income', 'pay', 'earn', 'compensation', 'paid', 'earning'],
-    'earn': ['salary', 'income', 'pay', 'make', 'compensation', 'earning'],
-    'paid': ['salary', 'income', 'pay', 'make', 'compensation', 'earn'],
-    'compensation': ['salary', 'income', 'pay', 'make', 'earn'],
-    'income': ['salary', 'pay', 'compensation', 'earnings', 'make', 'earn'],
-    'situation': ['salary', 'income', 'pay', 'status', 'compensation'],
-    'pay': ['salary', 'income', 'compensation', 'make', 'earn', 'earning'],
+    salary: ['income', 'pay', 'compensation', 'earnings', 'wage', 'make', 'earn'],
+    make: ['salary', 'income', 'pay', 'earn', 'compensation', 'paid', 'earning'],
+    earn: ['salary', 'income', 'pay', 'make', 'compensation', 'earning'],
+    paid: ['salary', 'income', 'pay', 'make', 'compensation', 'earn'],
+    compensation: ['salary', 'income', 'pay', 'make', 'earn'],
+    income: ['salary', 'pay', 'compensation', 'earnings', 'make', 'earn'],
+    situation: ['salary', 'income', 'pay', 'status', 'compensation'],
+    pay: ['salary', 'income', 'compensation', 'make', 'earn', 'earning'],
 
     // Location terms
-    'live': ['location', 'home', 'residence', 'address', 'city', 'based', 'reside'],
-    'location': ['live', 'home', 'residence', 'address', 'based', 'city'],
-    'home': ['live', 'location', 'residence', 'address', 'based'],
-    'address': ['live', 'location', 'home', 'residence'],
+    live: ['location', 'home', 'residence', 'address', 'city', 'based', 'reside'],
+    location: ['live', 'home', 'residence', 'address', 'based', 'city'],
+    home: ['live', 'location', 'residence', 'address', 'based'],
+    address: ['live', 'location', 'home', 'residence'],
 
     // Job/Work terms
-    'job': ['work', 'career', 'role', 'position', 'title', 'occupation', 'employed'],
-    'work': ['job', 'career', 'role', 'position', 'title', 'employed', 'company', 'employer'],
-    'title': ['job', 'position', 'role', 'work', 'career'],
-    'position': ['job', 'title', 'role', 'work', 'career'],
-    'employment': ['work', 'job', 'company', 'employer', 'workplace', 'office'],
-    'place': ['location', 'city', 'address', 'where', 'office', 'workplace'],
-    'company': ['employer', 'work', 'job', 'workplace', 'organization'],
-    'employer': ['company', 'work', 'job', 'workplace', 'organization'],
+    job: ['work', 'career', 'role', 'position', 'title', 'occupation', 'employed'],
+    work: ['job', 'career', 'role', 'position', 'title', 'employed', 'company', 'employer'],
+    title: ['job', 'position', 'role', 'work', 'career'],
+    position: ['job', 'title', 'role', 'work', 'career'],
+    employment: ['work', 'job', 'company', 'employer', 'workplace', 'office'],
+    place: ['location', 'city', 'address', 'where', 'office', 'workplace'],
+    company: ['employer', 'work', 'job', 'workplace', 'organization'],
+    employer: ['company', 'work', 'job', 'workplace', 'organization'],
 
     // Health/Medical terms
-    'allergy': ['allergic', 'intolerant', 'reaction', 'sensitive'],
-    'allergic': ['allergy', 'intolerant', 'reaction', 'sensitive'],
+    allergy: ['allergic', 'intolerant', 'reaction', 'sensitive'],
+    allergic: ['allergy', 'intolerant', 'reaction', 'sensitive'],
 
     // Meeting/Appointment terms
-    'meeting': ['appointment', 'call', 'scheduled', 'rescheduled'],
+    meeting: ['appointment', 'call', 'scheduled', 'rescheduled'],
 
     // Pet/Animal terms (FIX #533-B3)
-    'cat': ['pet', 'animal', 'feline', 'kitty', 'kitten'],
-    'dog': ['pet', 'animal', 'canine', 'puppy'],
-    'pet': ['cat', 'dog', 'animal', 'bird', 'fish'],
-    'animal': ['pet', 'cat', 'dog'],
+    cat: ['pet', 'animal', 'feline', 'kitty', 'kitten'],
+    dog: ['pet', 'animal', 'canine', 'puppy'],
+    pet: ['cat', 'dog', 'animal', 'bird', 'fish'],
+    animal: ['pet', 'cat', 'dog'],
 
     // Name/Identity terms (FIX #533-B3)
-    'name': ['called', 'named', 'title'],
-    'called': ['name', 'named'],
+    name: ['called', 'named', 'title'],
+    called: ['name', 'named'],
 
     // Vehicle/Transportation terms (FIX #609-STR1)
-    'car': ['vehicle', 'drive', 'automobile', 'tesla', 'model', 'driving'],
-    'vehicle': ['car', 'drive', 'automobile', 'driving'],
-    'drive': ['car', 'vehicle', 'automobile', 'driving', 'drove'],
-    'driving': ['drive', 'car', 'vehicle']
+    car: ['vehicle', 'drive', 'automobile', 'tesla', 'model', 'driving'],
+    vehicle: ['car', 'drive', 'automobile', 'driving'],
+    drive: ['car', 'vehicle', 'automobile', 'driving', 'drove'],
+    driving: ['drive', 'car', 'vehicle'],
   };
 
   // Check if this is a personal fact query (uses first-person pronouns + personal terms)
   // EXPANDED for FIX #533-B3 to include pet and name queries
   // EXPANDED for FIX #557-T2 to include explicit recall queries
   // EXPANDED for FIX #609-STR1 to include vehicle queries
-  const personalPattern = /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location|cat|dog|pet|animal|called|remember|asked|told|phrase|token|code|car|vehicle|drive|driving)\b/i;
+  const personalPattern =
+    /\b(my|i|me|our|we)\b.*\b(salary|income|pay|make|earn|live|work|name|allergy|meeting|job|title|home|location|cat|dog|pet|animal|called|remember|asked|told|phrase|token|code|car|vehicle|drive|driving)\b/i;
   const isPersonal = personalPattern.test(query);
 
   let expanded = query;
@@ -570,7 +740,7 @@ function expandQuery(query) {
   for (const [term, synonyms] of Object.entries(expansions)) {
     if (queryLower.includes(term)) {
       // Add top 3-4 synonyms to improve matching without overwhelming the query
-      const synToAdd = synonyms.slice(0, 4).filter(s => !queryLower.includes(s));
+      const synToAdd = synonyms.slice(0, 4).filter((s) => !queryLower.includes(s));
       addedSynonyms.push(...synToAdd);
     }
   }
@@ -590,7 +760,9 @@ function expandQuery(query) {
   if (isMemoryRecall) {
     if (process.env.DEBUG_DIAGNOSTICS === 'true') {
       console.log(`[MEMORY-RECALL] 🎯 Memory recall query detected: "${query}"`);
-      console.log(`[MEMORY-RECALL] This query asks "what did I tell you?" - will use lower similarity threshold and prioritize recent explicit storage`);
+      console.log(
+        `[MEMORY-RECALL] This query asks "what did I tell you?" - will use lower similarity threshold and prioritize recent explicit storage`,
+      );
     }
   }
 
@@ -621,8 +793,8 @@ function buildPrefilterQuery(options) {
     includeAllModes = false,
     allowCrossMode = false,
     limit = RETRIEVAL_CONFIG.maxCandidates,
-    intent = null,  // FIX #683: Accept intent for EXPLICIT_RECALL queries
-    queryEmbedding = null  // Fix #916: Accept query embedding for pgvector distance ordering
+    intent = null, // FIX #683: Accept intent for EXPLICIT_RECALL queries
+    queryEmbedding = null, // Fix #916: Accept query embedding for pgvector distance ordering
   } = options;
 
   if (process.env.DEBUG_DIAGNOSTICS === 'true') {
@@ -636,11 +808,7 @@ function buildPrefilterQuery(options) {
   const params = [userId];
   let paramIndex = 2;
 
-  const conditions = [
-    'user_id = $1',
-    'embedding IS NOT NULL',
-    "embedding_status = 'ready'"
-  ];
+  const conditions = ['user_id = $1', 'embedding IS NOT NULL', "embedding_status = 'ready'"];
 
   // Filter out superseded memories (Innovation #3)
   // Include history only if explicitly requested
@@ -699,7 +867,9 @@ function buildPrefilterQuery(options) {
   if (intent && intent.type === 'EXPLICIT_RECALL') {
     // Add OR condition: also fetch memories that have explicit_token anchors
     // This uses PostgreSQL's JSONB operators to check if metadata has explicit_token anchors
-    console.log(`[FIX-683] 🎯 EXPLICIT_RECALL intent detected - including memories with explicit_token anchors`);
+    console.log(
+      `[FIX-683] 🎯 EXPLICIT_RECALL intent detected - including memories with explicit_token anchors`,
+    );
     whereClauses = `(${whereClauses}) OR (user_id = $1 AND metadata->'anchors' ? 'explicit_token' AND embedding IS NOT NULL AND embedding_status = 'ready' AND (is_current = true OR is_current IS NULL))`;
   }
 
@@ -713,7 +883,9 @@ function buildPrefilterQuery(options) {
     params.push(embeddingLiteral);
     orderByClause = `embedding <=> $${paramIndex}::vector ASC, created_at DESC`;
     paramIndex++;
-    console.log('[PREFILTER] Ordering strategy: pgvector_distance (semantic distance from query embedding)');
+    console.log(
+      '[PREFILTER] Ordering strategy: pgvector_distance (semantic distance from query embedding)',
+    );
   } else {
     orderByClause = 'relevance_score DESC, created_at DESC';
     console.log('[PREFILTER] Ordering strategy: relevance_score (no query embedding available)');
@@ -768,7 +940,7 @@ function calculateHybridScore(memory, options = {}) {
     recencyBoostDays = RETRIEVAL_CONFIG.recencyBoostDays,
     recencyBoostWeight = RETRIEVAL_CONFIG.recencyBoostWeight,
     confidenceWeight = RETRIEVAL_CONFIG.confidenceWeight,
-    isMemoryRecall = false  // CRITICAL FIX #562-T2
+    isMemoryRecall = false, // CRITICAL FIX #562-T2
   } = options;
 
   let score = memory.similarity;
@@ -776,20 +948,29 @@ function calculateHybridScore(memory, options = {}) {
   // CRITICAL FIX #562-T2: Strong recency boost for memory recall queries
   // When user asks "What did I tell you to remember?", prioritize very recent memories
   if (isMemoryRecall && memory.days_ago !== undefined) {
-    if (memory.days_ago < 0.01) {  // Last ~15 minutes
-      score += 0.50;  // Massive boost for very recent memories
-      console.log(`[MEMORY-RECALL] Memory ${memory.id}: Very recent (${(memory.days_ago * 24 * 60).toFixed(1)} min ago) - boosting by +0.50`);
-    } else if (memory.days_ago < 0.1) {  // Last ~2.4 hours
-      score += 0.35;  // Strong boost for recent memories
-      console.log(`[MEMORY-RECALL] Memory ${memory.id}: Recent (${(memory.days_ago * 24).toFixed(1)} hrs ago) - boosting by +0.35`);
-    } else if (memory.days_ago < 1) {  // Last day
-      score += 0.20;  // Moderate boost for today's memories
-      console.log(`[MEMORY-RECALL] Memory ${memory.id}: Today (${memory.days_ago.toFixed(2)} days ago) - boosting by +0.20`);
+    if (memory.days_ago < 0.01) {
+      // Last ~15 minutes
+      score += 0.5; // Massive boost for very recent memories
+      console.log(
+        `[MEMORY-RECALL] Memory ${memory.id}: Very recent (${(memory.days_ago * 24 * 60).toFixed(1)} min ago) - boosting by +0.50`,
+      );
+    } else if (memory.days_ago < 0.1) {
+      // Last ~2.4 hours
+      score += 0.35; // Strong boost for recent memories
+      console.log(
+        `[MEMORY-RECALL] Memory ${memory.id}: Recent (${(memory.days_ago * 24).toFixed(1)} hrs ago) - boosting by +0.35`,
+      );
+    } else if (memory.days_ago < 1) {
+      // Last day
+      score += 0.2; // Moderate boost for today's memories
+      console.log(
+        `[MEMORY-RECALL] Memory ${memory.id}: Today (${memory.days_ago.toFixed(2)} days ago) - boosting by +0.20`,
+      );
     }
   } else {
     // Standard recency boost for non-recall queries
     if (memory.days_ago !== undefined && memory.days_ago < recencyBoostDays) {
-      const recencyFactor = 1 - (memory.days_ago / recencyBoostDays);
+      const recencyFactor = 1 - memory.days_ago / recencyBoostDays;
       score += recencyFactor * recencyBoostWeight;
     }
   }
@@ -808,11 +989,12 @@ function calculateHybridScore(memory, options = {}) {
   // memories could outrank boosted low-similarity memories
   // FIX #697-STR1: keyword_boosted now included to fix car/Tesla retrieval
   // ═══════════════════════════════════════════════════════════════
-  const isHighPriority = memory.explicit_recall_boosted ||
-                         memory.entity_boosted ||
-                         memory.ordinal_boosted ||
-                         memory.safety_boosted ||
-                         memory.keyword_boosted;  // FIX #697: Include keyword matches
+  const isHighPriority =
+    memory.explicit_recall_boosted ||
+    memory.entity_boosted ||
+    memory.ordinal_boosted ||
+    memory.safety_boosted ||
+    memory.keyword_boosted; // FIX #697: Include keyword matches
 
   if (isHighPriority) {
     // Add priority tier: high-priority memories get +2.0 to their score
@@ -826,10 +1008,14 @@ function calculateHybridScore(memory, options = {}) {
     if (memory.entity_boosted) priorityTypes.push('entity');
     if (memory.ordinal_boosted) priorityTypes.push('ordinal');
     if (memory.safety_boosted) priorityTypes.push('safety');
-    if (memory.keyword_boosted) priorityTypes.push('keyword');  // FIX #697
+    if (memory.keyword_boosted) priorityTypes.push('keyword'); // FIX #697
 
-    console.log(`[PRIORITY-TIER] Memory ${memory.id}: High-priority types=[${priorityTypes.join(', ')}], adding +2.0 tier boost`);
-    console.log(`[PRIORITY-TIER]   Final hybrid_score: ${score.toFixed(3)} (guaranteed top-tier ranking)`);
+    console.log(
+      `[PRIORITY-TIER] Memory ${memory.id}: High-priority types=[${priorityTypes.join(', ')}], adding +2.0 tier boost`,
+    );
+    console.log(
+      `[PRIORITY-TIER]   Final hybrid_score: ${score.toFixed(3)} (guaranteed top-tier ranking)`,
+    );
   } else {
     // Cap non-boosted memories at 1.0 to maintain separation
     score = Math.min(score, 1.0);
@@ -850,10 +1036,12 @@ function calculateHybridScore(memory, options = {}) {
     //       `relevance_score` below is the numeric local; `memory.relevance_score` is the raw string
     // ═══════════════════════════════════════════════════════════════
     const relevance_score = parseFloat(memory.relevance_score) || 0;
-    if (relevance_score >= 0.90) {
-      const importanceBoost = (relevance_score - 0.90) * 6.0;
+    if (relevance_score >= 0.9) {
+      const importanceBoost = (relevance_score - 0.9) * 6.0;
       score += importanceBoost;
-      console.log(`[IMPORTANCE-BOOST] Memory ${memory.id}: relevance_score=${relevance_score.toFixed(2)} → +${importanceBoost.toFixed(3)} importance boost (final: ${score.toFixed(3)})`);
+      console.log(
+        `[IMPORTANCE-BOOST] Memory ${memory.id}: relevance_score=${relevance_score.toFixed(2)} → +${importanceBoost.toFixed(3)} importance boost (final: ${score.toFixed(3)})`,
+      );
     }
   }
 
@@ -873,19 +1061,17 @@ const RETRIEVAL_INTENTS = {
     patterns: [
       /\b(?:what(?:'s| is| was)?|tell me|show me|give me)\s+my\s+(\w+)/i,
       /\bmy\s+(\w+)\s+(?:is|was|code|token|number)/i,
-      /\bremember(?:ed)?\s+my\s+(\w+)/i
+      /\bremember(?:ed)?\s+my\s+(\w+)/i,
     ],
     strategy: 'BROAD_CATEGORY_SEARCH',
-    boost: { explicit_token: 10.0, ordinal: 5.0 }
+    boost: { explicit_token: 10.0, ordinal: 5.0 },
   },
 
   ORDINAL_QUERY: {
     // "first code", "second option", "primary contact"
-    patterns: [
-      /\b(first|second|third|primary|secondary|main|original)\s+(\w+)/i
-    ],
+    patterns: [/\b(first|second|third|primary|secondary|main|original)\s+(\w+)/i],
     strategy: 'ORDINAL_MATCH',
-    boost: { ordinal: 15.0 }
+    boost: { ordinal: 15.0 },
   },
 
   TEMPORAL_QUERY: {
@@ -893,32 +1079,28 @@ const RETRIEVAL_INTENTS = {
     patterns: [
       /\bwhen\s+(?:did|was|is)/i,
       /\bwhat\s+(?:year|date|time)/i,
-      /\b(?:in|during|around)\s+(19|20)\d{2}/i
+      /\b(?:in|during|around)\s+(19|20)\d{2}/i,
     ],
     strategy: 'TEMPORAL_MATCH',
-    boost: { temporal: 10.0 }
+    boost: { temporal: 10.0 },
   },
 
   PRICING_QUERY: {
     // "how much", "cost", "price", "budget"
-    patterns: [
-      /\bhow\s+much/i,
-      /\b(?:cost|price|budget|spend|paid|worth)/i,
-      /[$€£¥₹]/
-    ],
+    patterns: [/\bhow\s+much/i, /\b(?:cost|price|budget|spend|paid|worth)/i, /[$€£¥₹]/],
     strategy: 'PRICING_MATCH',
-    boost: { pricing: 10.0 }
+    boost: { pricing: 10.0 },
   },
 
   VOLUME_RECALL: {
     // Implied when many facts exist and user asks general question
     patterns: [
       /\b(?:all|everything|list)\s+(?:about|regarding|I)/i,
-      /\bwhat\s+do\s+you\s+(?:know|remember)/i
+      /\bwhat\s+do\s+you\s+(?:know|remember)/i,
     ],
     strategy: 'MULTI_CATEGORY_SCAN',
-    maxResults: 20
-  }
+    maxResults: 20,
+  },
 };
 
 /**
@@ -935,8 +1117,8 @@ function detectRetrievalIntent(query) {
           strategy: config.strategy,
           boost: config.boost || {},
           maxResults: config.maxResults,
-          extractedValue: match[1],  // Captured group
-          extractedOrdinal: match[2]  // For ordinal queries
+          extractedValue: match[1], // Captured group
+          extractedOrdinal: match[2], // For ordinal queries
         };
       }
     }
@@ -945,7 +1127,7 @@ function detectRetrievalIntent(query) {
   return {
     type: 'GENERAL',
     strategy: 'SEMANTIC_DEFAULT',
-    boost: {}
+    boost: {},
   };
 }
 
@@ -972,7 +1154,7 @@ function applyDiversityReranking(candidates, topK) {
 
   const {
     diversityPenaltyWeight: penaltyWeight,
-    diversitySimilarityThreshold: similarityThreshold
+    diversitySimilarityThreshold: similarityThreshold,
   } = RETRIEVAL_CONFIG;
 
   const selected = [];
@@ -1015,7 +1197,9 @@ function applyDiversityReranking(candidates, topK) {
         effectiveScore -= penalty;
         penalizedIds.add(candidate.id);
         totalPenaltyApplied += penalty;
-        console.log(`[DIVERSITY] Memory ${candidate.id}: max_sim_to_selected=${maxSimilarityToSelected.toFixed(3)} >= threshold=${similarityThreshold} → penalty=-${penalty.toFixed(3)}, effective_score=${effectiveScore.toFixed(3)}`);
+        console.log(
+          `[DIVERSITY] Memory ${candidate.id}: max_sim_to_selected=${maxSimilarityToSelected.toFixed(3)} >= threshold=${similarityThreshold} → penalty=-${penalty.toFixed(3)}, effective_score=${effectiveScore.toFixed(3)}`,
+        );
       }
 
       if (effectiveScore > bestEffectiveScore) {
@@ -1028,8 +1212,12 @@ function applyDiversityReranking(candidates, topK) {
     remaining.splice(bestIdx, 1);
   }
 
-  console.log(`[DIVERSITY] Re-ranking complete: ${selected.length} selected from ${candidates.length} candidates`);
-  console.log(`[DIVERSITY] Unique candidates penalized: ${penalizedIds.size}, total penalty applied: ${totalPenaltyApplied.toFixed(3)}`);
+  console.log(
+    `[DIVERSITY] Re-ranking complete: ${selected.length} selected from ${candidates.length} candidates`,
+  );
+  console.log(
+    `[DIVERSITY] Unique candidates penalized: ${penalizedIds.size}, total penalty applied: ${totalPenaltyApplied.toFixed(3)}`,
+  );
 
   // Return selected (diversity-enforced) followed by remaining candidates
   return [...selected, ...remaining];
@@ -1056,7 +1244,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     topK = RETRIEVAL_CONFIG.defaultTopK,
     minSimilarity = RETRIEVAL_CONFIG.minSimilarity,
     includeAllModes = false,
-    allowCrossMode = false
+    allowCrossMode = false,
   } = options;
 
   // Normalize query to a single string to prevent type confusion
@@ -1064,7 +1252,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
   if (normalizedQuery == null) {
     normalizedQuery = '';
   } else if (Array.isArray(normalizedQuery)) {
-    const first = normalizedQuery.find(v => typeof v === 'string') ?? normalizedQuery[0];
+    const first = normalizedQuery.find((v) => typeof v === 'string') ?? normalizedQuery[0];
     normalizedQuery = typeof first === 'string' ? first : String(first);
   } else if (typeof normalizedQuery !== 'string') {
     normalizedQuery = String(normalizedQuery);
@@ -1091,9 +1279,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     token_budget: options.tokenBudget || 2000,
     tokens_used: 0,
     fallback_reason: null,
-    fallback_used: false,  // #536: Track when embedding-lag fallback is used
-    fallback_candidates: 0,  // #536: Count of candidates from fallback
-    semantic_candidates: 0,  // #536: Count of candidates from semantic search
+    fallback_used: false, // #536: Track when embedding-lag fallback is used
+    fallback_candidates: 0, // #536: Count of candidates from fallback
+    semantic_candidates: 0, // #536: Count of candidates from semantic search
     latency_ms: 0,
     // Legacy telemetry (for compatibility)
     candidates_fetched: 0,
@@ -1103,14 +1291,16 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     query_embedding_ms: 0,
     db_fetch_ms: 0,
     scoring_ms: 0,
-    total_ms: 0
+    total_ms: 0,
   };
 
   // ═══════════════════════════════════════════════════════════════
   // EXECUTION PROOF - Verify this code path is active
   // ═══════════════════════════════════════════════════════════════
-  console.log(`[PROOF] semantic-retrieval v=2026-01-29a file=api/services/semantic-retrieval.js fn=retrieveSemanticMemories`);
-  
+  console.log(
+    `[PROOF] semantic-retrieval v=2026-01-29a file=api/services/semantic-retrieval.js fn=retrieveSemanticMemories`,
+  );
+
   // ═══════════════════════════════════════════════════════════════
   // CRITICAL DIAGNOSTIC LOGGING #549, #553: Track userId through retrieval
   // ═══════════════════════════════════════════════════════════════
@@ -1134,7 +1324,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       success: false,
       error: 'userId is required and must be a non-empty string',
       memories: [],
-      telemetry
+      telemetry,
     };
   }
 
@@ -1144,7 +1334,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       success: false,
       error: 'Query is required',
       memories: [],
-      telemetry
+      telemetry,
     };
   }
 
@@ -1161,11 +1351,17 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       if (categories && Array.isArray(categories) && categories.length > 0) {
         // Merge with existing categories
         effectiveCategories = [...new Set([...categories, ...safetyCriticalCategories])];
-        console.log(`[SAFETY-CRITICAL] 📋 Merged categories: ${JSON.stringify(categories)} + ${JSON.stringify(safetyCriticalCategories)} → ${JSON.stringify(effectiveCategories)}`);
+        console.log(
+          `[SAFETY-CRITICAL] 📋 Merged categories: ${JSON.stringify(categories)} + ${JSON.stringify(safetyCriticalCategories)} → ${JSON.stringify(effectiveCategories)}`,
+        );
       } else {
         // No categories specified - keep searching all categories but log detection
-        console.log(`[SAFETY-CRITICAL] 🔍 Safety-critical domains detected: ${JSON.stringify(safetyCriticalCategories)}`);
-        console.log(`[SAFETY-CRITICAL] 📋 Searching ALL categories but will boost safety-critical memories`);
+        console.log(
+          `[SAFETY-CRITICAL] 🔍 Safety-critical domains detected: ${JSON.stringify(safetyCriticalCategories)}`,
+        );
+        console.log(
+          `[SAFETY-CRITICAL] 📋 Searching ALL categories but will boost safety-critical memories`,
+        );
         // Keep effectiveCategories = null to search all
       }
     }
@@ -1194,7 +1390,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // STEP 1: Generate query embedding (use expanded query for better semantic matching)
     const embedStart = Date.now();
     const queryEmbeddingResult = await generateEmbedding(expandedQuery, {
-      timeout: RETRIEVAL_CONFIG.embeddingTimeout
+      timeout: RETRIEVAL_CONFIG.embeddingTimeout,
     });
     telemetry.query_embedding_ms = Date.now() - embedStart;
 
@@ -1204,10 +1400,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // or skip the retrieval, injection, or enforcement chain"
     let queryEmbedding = null;
     let useKeywordFallback = false;
-    
+
     if (!queryEmbeddingResult.success) {
       console.log(`[SEMANTIC RETRIEVAL] ⚠️ Query embedding failed: ${queryEmbeddingResult.error}`);
-      console.log(`[SEMANTIC RETRIEVAL] 🔄 Falling back to keyword-based retrieval (no embedding required)`);
+      console.log(
+        `[SEMANTIC RETRIEVAL] 🔄 Falling back to keyword-based retrieval (no embedding required)`,
+      );
       useKeywordFallback = true;
       telemetry.query_embedding_failed = true;
       telemetry.query_embedding_error = queryEmbeddingResult.error;
@@ -1223,13 +1421,19 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // we must return it because that's what they explicitly asked us to remember
     let effectiveMinSimilarity;
     if (isMemoryRecall) {
-      effectiveMinSimilarity = 0.10; // Very low threshold - prioritize recent explicit memories
-      console.log(`[MEMORY-RECALL] 🎯 Memory recall query - using ultra-low threshold: ${effectiveMinSimilarity}`);
-      console.log(`[MEMORY-RECALL] Will prioritize recently stored memories and explicit storage requests`);
+      effectiveMinSimilarity = 0.1; // Very low threshold - prioritize recent explicit memories
+      console.log(
+        `[MEMORY-RECALL] 🎯 Memory recall query - using ultra-low threshold: ${effectiveMinSimilarity}`,
+      );
+      console.log(
+        `[MEMORY-RECALL] Will prioritize recently stored memories and explicit storage requests`,
+      );
     } else if (isPersonal) {
       // CRITICAL FIX #504: Use lower similarity threshold for personal queries
       effectiveMinSimilarity = RETRIEVAL_CONFIG.minSimilarityPersonal;
-      console.log(`[SEMANTIC RETRIEVAL] 🎯 Personal query detected - using lower threshold: ${effectiveMinSimilarity}`);
+      console.log(
+        `[SEMANTIC RETRIEVAL] 🎯 Personal query detected - using lower threshold: ${effectiveMinSimilarity}`,
+      );
     } else {
       effectiveMinSimilarity = minSimilarity || RETRIEVAL_CONFIG.minSimilarity;
     }
@@ -1243,8 +1447,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       includeAllModes,
       allowCrossMode,
       limit: RETRIEVAL_CONFIG.maxCandidates,
-      intent,  // FIX #683: Pass intent to ensure explicit_token anchors are included for EXPLICIT_RECALL
-      queryEmbedding  // Fix #916: Use pgvector <=> ordering when embedding is available
+      intent, // FIX #683: Pass intent to ensure explicit_token anchors are included for EXPLICIT_RECALL
+      queryEmbedding, // Fix #916: Use pgvector <=> ordering when embedding is available
     });
 
     const { rows: candidates } = await pool.query(sql, params);
@@ -1261,7 +1465,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ═══════════════════════════════════════════════════════════════
     console.log(`[TRUTH-TELEMETRY] ═══════════════════════════════════════════════`);
     console.log(`[TRUTH-TELEMETRY] Query: "${normalizedQuery.substring(0, 100)}"`);
-    console.log(`[TRUTH-TELEMETRY] Filters: userId=${userId}, mode=${mode}, categories=${JSON.stringify(effectiveCategories)}, is_current=true, limit=${RETRIEVAL_CONFIG.maxCandidates}`);
+    console.log(
+      `[TRUTH-TELEMETRY] Filters: userId=${userId}, mode=${mode}, categories=${JSON.stringify(effectiveCategories)}, is_current=true, limit=${RETRIEVAL_CONFIG.maxCandidates}`,
+    );
     console.log(`[TRUTH-TELEMETRY] Rows returned: ${candidates.length}`);
 
     // Log each row with key diagnostic info
@@ -1272,12 +1478,18 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       // Parse metadata safely
       let metadata = row.metadata || {};
       if (typeof metadata === 'string') {
-        try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+        try {
+          metadata = JSON.parse(metadata);
+        } catch {
+          metadata = {};
+        }
       }
 
       const anchorsKeys = metadata.anchors ? Object.keys(metadata.anchors) : [];
 
-      console.log(`[TRUTH-TELEMETRY] Row #${i+1}: id=${row.id}, category=${row.category_name}, is_current=${row.is_current}, fingerprint=${row.fact_fingerprint || 'none'}`);
+      console.log(
+        `[TRUTH-TELEMETRY] Row #${i + 1}: id=${row.id}, category=${row.category_name}, is_current=${row.is_current}, fingerprint=${row.fact_fingerprint || 'none'}`,
+      );
       console.log(`[TRUTH-TELEMETRY]   content="${contentPreview}"`);
       console.log(`[TRUTH-TELEMETRY]   anchors_keys=[${anchorsKeys.join(', ')}]`);
     }
@@ -1292,17 +1504,23 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     console.log(`[USER-ISOLATION] Retrieved ${candidates.length} candidates`);
 
     // Check if any candidates have wrong user_id
-    const wrongUserCandidates = candidates.filter(c => c.user_id !== userId);
+    const wrongUserCandidates = candidates.filter((c) => c.user_id !== userId);
     if (wrongUserCandidates.length > 0) {
-      console.error(`[USER-ISOLATION] 🚨 CRITICAL SECURITY VIOLATION: Found ${wrongUserCandidates.length} memories from wrong users!`);
-      console.error(`[USER-ISOLATION] Wrong user_ids:`, [...new Set(wrongUserCandidates.map(c => c.user_id))]);
+      console.error(
+        `[USER-ISOLATION] 🚨 CRITICAL SECURITY VIOLATION: Found ${wrongUserCandidates.length} memories from wrong users!`,
+      );
+      console.error(`[USER-ISOLATION] Wrong user_ids:`, [
+        ...new Set(wrongUserCandidates.map((c) => c.user_id)),
+      ]);
       console.error(`[USER-ISOLATION] Expected userId: ${userId}`);
       console.error(`[USER-ISOLATION] SQL params:`, params);
 
       // Filter out wrong-user memories (safety check - should never happen)
       const beforeCount = candidates.length;
-      const filteredCandidates = candidates.filter(c => c.user_id === userId);
-      console.error(`[USER-ISOLATION] ⚠️ Filtered ${beforeCount - filteredCandidates.length} cross-user memories`);
+      const filteredCandidates = candidates.filter((c) => c.user_id === userId);
+      console.error(
+        `[USER-ISOLATION] ⚠️ Filtered ${beforeCount - filteredCandidates.length} cross-user memories`,
+      );
 
       // Replace candidates array with filtered version
       candidates.length = 0;
@@ -1319,7 +1537,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // Count how many superseded facts were filtered out (if not including history)
     if (!options.includeHistory) {
-      const { rows: [countRow] } = await pool.query(`
+      const {
+        rows: [countRow],
+      } = await pool.query(
+        `
         SELECT COUNT(*) as superseded_count
         FROM persistent_memories
         WHERE user_id = $1
@@ -1327,7 +1548,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           AND is_current = false
           AND embedding IS NOT NULL
           AND embedding_status = 'ready'
-      `, [userId, mode]);
+      `,
+        [userId, mode],
+      );
       telemetry.filtered_superseded_count = parseInt(countRow.superseded_count || 0);
     }
 
@@ -1340,19 +1563,24 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     try {
       console.log('[EMBEDDING-LAG-CHECK] Checking for recent memories without embeddings...');
 
-      const { rows: recentWithoutEmbeddings } = await pool.query(`
+      const { rows: recentWithoutEmbeddings } = await pool.query(
+        `
         SELECT COUNT(*) as count
         FROM persistent_memories
         WHERE user_id = $1
           AND created_at > NOW() - INTERVAL '2 minutes'
           AND (embedding IS NULL OR embedding_status != 'ready')
           AND (is_current = true OR is_current IS NULL)
-      `, [userId]);
+      `,
+        [userId],
+      );
 
       const hasRecentUnembedded = parseInt(recentWithoutEmbeddings[0]?.count || 0) > 0;
 
       if (hasRecentUnembedded) {
-        console.log(`[EMBEDDING-LAG-CHECK] ✅ Found ${recentWithoutEmbeddings[0].count} recent memories without embeddings - including in search`);
+        console.log(
+          `[EMBEDDING-LAG-CHECK] ✅ Found ${recentWithoutEmbeddings[0].count} recent memories without embeddings - including in search`,
+        );
 
         // Build query for recent unembedded memories
         let recentQuery = `
@@ -1397,16 +1625,22 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         const { rows: recentRows } = await pool.query(recentQuery, recentParams);
 
         // SECURITY FIX #549: Validate user_id isolation for recent memories
-        const wrongUserRecent = recentRows.filter(r => r.user_id !== userId);
+        const wrongUserRecent = recentRows.filter((r) => r.user_id !== userId);
         if (wrongUserRecent.length > 0) {
-          console.error(`[USER-ISOLATION] 🚨 SECURITY: Found ${wrongUserRecent.length} wrong-user recent memories!`);
-          console.error(`[USER-ISOLATION] Expected: ${userId}, Found: ${[...new Set(wrongUserRecent.map(r => r.user_id))]}`);
-          recentUnembeddedMemories = recentRows.filter(r => r.user_id === userId);
+          console.error(
+            `[USER-ISOLATION] 🚨 SECURITY: Found ${wrongUserRecent.length} wrong-user recent memories!`,
+          );
+          console.error(
+            `[USER-ISOLATION] Expected: ${userId}, Found: ${[...new Set(wrongUserRecent.map((r) => r.user_id))]}`,
+          );
+          recentUnembeddedMemories = recentRows.filter((r) => r.user_id === userId);
         } else {
           recentUnembeddedMemories = recentRows;
         }
 
-        console.log(`[EMBEDDING-LAG-CHECK] Retrieved ${recentUnembeddedMemories.length} recent unembedded memories`);
+        console.log(
+          `[EMBEDDING-LAG-CHECK] Retrieved ${recentUnembeddedMemories.length} recent unembedded memories`,
+        );
       }
     } catch (lagCheckError) {
       console.error(`[EMBEDDING-LAG-CHECK] ⚠️ Check failed: ${lagCheckError.message}`);
@@ -1416,7 +1650,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // CRITICAL FIX #588: When ZERO candidates with embeddings exist, check for memories without embeddings
     // This handles the case where memories exist but embeddings failed, timed out, or are still pending
     if (candidates.length === 0 && recentUnembeddedMemories.length === 0) {
-      console.log(`[SEMANTIC RETRIEVAL] No candidates with embeddings found for user ${userId} in mode ${mode}`);
+      console.log(
+        `[SEMANTIC RETRIEVAL] No candidates with embeddings found for user ${userId} in mode ${mode}`,
+      );
 
       // ═══════════════════════════════════════════════════════════════
       // CRITICAL FIX #536, #588: EMBEDDING-LAG FALLBACK
@@ -1435,18 +1671,23 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         // 1. Memories were stored but embeddings failed/timed out
         // 2. Memories were stored more than 5 minutes ago and embeddings are still pending
         // 3. Test data was created in a previous run without embeddings
-        const { rows: memoriesWithoutEmbeddings } = await pool.query(`
+        const { rows: memoriesWithoutEmbeddings } = await pool.query(
+          `
           SELECT COUNT(*) as count
           FROM persistent_memories
           WHERE user_id = $1
             AND (embedding IS NULL OR embedding_status != 'ready')
             AND (is_current = true OR is_current IS NULL)
-        `, [userId]);
+        `,
+          [userId],
+        );
 
         const hasUnembedded = parseInt(memoriesWithoutEmbeddings[0]?.count || 0) > 0;
 
         if (hasUnembedded) {
-          console.log(`[EMBEDDING-FALLBACK] ✅ Found ${memoriesWithoutEmbeddings[0].count} memories without embeddings - using fallback retrieval`);
+          console.log(
+            `[EMBEDDING-FALLBACK] ✅ Found ${memoriesWithoutEmbeddings[0].count} memories without embeddings - using fallback retrieval`,
+          );
 
           // Run bounded fallback retrieval: all unembedded memories + basic text matching
           // IMPORTANT: No time restriction here - if embeddings are missing, we should still retrieve
@@ -1487,7 +1728,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           }
 
           // Apply category filter if specified
-          if (effectiveCategories && Array.isArray(effectiveCategories) && effectiveCategories.length > 0) {
+          if (
+            effectiveCategories &&
+            Array.isArray(effectiveCategories) &&
+            effectiveCategories.length > 0
+          ) {
             fallbackQuery += ` AND category_name = ANY($${paramIndex}::text[])`;
             fallbackParams.push(effectiveCategories);
             paramIndex++;
@@ -1503,10 +1748,14 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
             // FIX #555-T2: Updated pattern to match 2+ segment tokens like ZEBRA-ANCHOR-123
             const uniqueTokens = safeQuery.match(/\b[A-Z0-9]{3,20}(?:-[A-Z0-9]{2,20})+\b/gi);
             if (uniqueTokens && uniqueTokens.length > 0) {
-              console.log(`[EMBEDDING-FALLBACK] Matching unique tokens: ${uniqueTokens.join(', ')}`);
-              const tokenFilters = uniqueTokens.map((_, i) => `content ILIKE $${paramIndex + i}`).join(' OR ');
+              console.log(
+                `[EMBEDDING-FALLBACK] Matching unique tokens: ${uniqueTokens.join(', ')}`,
+              );
+              const tokenFilters = uniqueTokens
+                .map((_, i) => `content ILIKE $${paramIndex + i}`)
+                .join(' OR ');
               fallbackQuery += ` AND (${tokenFilters})`;
-              fallbackParams.push(...uniqueTokens.map(t => `%${t}%`));
+              fallbackParams.push(...uniqueTokens.map((t) => `%${t}%`));
               paramIndex += uniqueTokens.length;
             } else {
               // Try matching the original user phrase from metadata
@@ -1521,55 +1770,67 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           const { rows: fallbackCandidates } = await pool.query(fallbackQuery, fallbackParams);
 
           // SECURITY FIX #549: Validate user_id isolation for fallback results
-          const wrongUserFallback = fallbackCandidates.filter(f => f.user_id !== userId);
+          const wrongUserFallback = fallbackCandidates.filter((f) => f.user_id !== userId);
           if (wrongUserFallback.length > 0) {
-            console.error(`[USER-ISOLATION] 🚨 SECURITY: Found ${wrongUserFallback.length} wrong-user fallback memories!`);
-            console.error(`[USER-ISOLATION] Expected: ${userId}, Found: ${[...new Set(wrongUserFallback.map(f => f.user_id))]}`);
+            console.error(
+              `[USER-ISOLATION] 🚨 SECURITY: Found ${wrongUserFallback.length} wrong-user fallback memories!`,
+            );
+            console.error(
+              `[USER-ISOLATION] Expected: ${userId}, Found: ${[...new Set(wrongUserFallback.map((f) => f.user_id))]}`,
+            );
           }
-          const validFallbackCandidates = fallbackCandidates.filter(f => f.user_id === userId);
+          const validFallbackCandidates = fallbackCandidates.filter((f) => f.user_id === userId);
 
           telemetry.fallback_used = true;
           telemetry.fallback_reason = 'embedding_missing';
           telemetry.semantic_candidates = 0;
           telemetry.fallback_candidates = validFallbackCandidates.length;
 
-          console.log(`[EMBEDDING-FALLBACK] Retrieved ${validFallbackCandidates.length} candidates via fallback (from ${fallbackCandidates.length} total unembedded)`);
+          console.log(
+            `[EMBEDDING-FALLBACK] Retrieved ${validFallbackCandidates.length} candidates via fallback (from ${fallbackCandidates.length} total unembedded)`,
+          );
 
           if (validFallbackCandidates.length > 0) {
             // Apply basic text similarity scoring
-            const scoredFallback = validFallbackCandidates.map(candidate => {
+            const scoredFallback = validFallbackCandidates.map((candidate) => {
               // Simple text-based similarity (contains query terms)
-              const queryTerms = expandedQuery.toLowerCase().split(/\s+/).filter(t => t.length > 3);
+              const queryTerms = expandedQuery
+                .toLowerCase()
+                .split(/\s+/)
+                .filter((t) => t.length > 3);
               const contentLower = (candidate.content || '').toLowerCase();
-              const matchedTerms = queryTerms.filter(term => contentLower.includes(term)).length;
+              const matchedTerms = queryTerms.filter((term) => contentLower.includes(term)).length;
               const textSimilarity = queryTerms.length > 0 ? matchedTerms / queryTerms.length : 0;
 
               return {
                 ...candidate,
                 similarity: textSimilarity,
                 hybrid_score: textSimilarity,
-                fallback_matched: true
+                fallback_matched: true,
               };
             });
 
             // Filter by a lower threshold for fallback (0.1 for text matching)
             const filtered = scoredFallback
-              .filter(m => m.similarity >= 0.1 || hasRememberExactly)  // Lower threshold for fallback
+              .filter((m) => m.similarity >= 0.1 || hasRememberExactly) // Lower threshold for fallback
               .sort((a, b) => b.hybrid_score - a.hybrid_score)
-              .slice(0, Math.min(topK, 5));  // Limit fallback to 5 results max
+              .slice(0, Math.min(topK, 5)); // Limit fallback to 5 results max
 
             telemetry.candidates_above_threshold = filtered.length;
             telemetry.results_returned = filtered.length;
             telemetry.results_injected = filtered.length;
-            telemetry.injected_memory_ids = filtered.map(r => r.id);
-            telemetry.top_scores = filtered.slice(0, 10).map(r => parseFloat(r.similarity.toFixed(3)));
+            telemetry.injected_memory_ids = filtered.map((r) => r.id);
+            telemetry.top_scores = filtered
+              .slice(0, 10)
+              .map((r) => parseFloat(r.similarity.toFixed(3)));
 
             // Calculate tokens used
             let usedTokens = 0;
             const tokenBudget = options.tokenBudget || 2000;
             const results = [];
             for (const memory of filtered) {
-              const memoryTokens = memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
+              const memoryTokens =
+                memory.token_count || Math.ceil((memory.content?.length || 0) / 4);
               if (usedTokens + memoryTokens > tokenBudget) break;
               results.push(memory);
               usedTokens += memoryTokens;
@@ -1579,7 +1840,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
             if (results.length > 0) {
               telemetry.top_similarity = results[0].similarity;
-              telemetry.avg_similarity = results.reduce((sum, r) => sum + r.similarity, 0) / results.length;
+              telemetry.avg_similarity =
+                results.reduce((sum, r) => sum + r.similarity, 0) / results.length;
             }
 
             telemetry.total_ms = Date.now() - startTime;
@@ -1588,15 +1850,17 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
             const cleanResults = results.map(({ embedding, ...rest }) => ({
               ...rest,
               similarity: Math.round(rest.similarity * 1000) / 1000,
-              hybrid_score: Math.round(rest.hybrid_score * 1000) / 1000
+              hybrid_score: Math.round(rest.hybrid_score * 1000) / 1000,
             }));
 
-            console.log(`[EMBEDDING-FALLBACK] ✅ Returning ${results.length} memories via fallback (${telemetry.total_ms}ms)`);
+            console.log(
+              `[EMBEDDING-FALLBACK] ✅ Returning ${results.length} memories via fallback (${telemetry.total_ms}ms)`,
+            );
 
             return {
               success: true,
               memories: cleanResults,
-              telemetry
+              telemetry,
             };
           }
         }
@@ -1611,7 +1875,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       return {
         success: true,
         memories: [],
-        telemetry
+        telemetry,
       };
     }
 
@@ -1619,7 +1883,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const scoringStart = Date.now();
 
     // Parse embeddings (handle both FLOAT4[] and vector(1536) types)
-    const candidatesWithParsedEmbeddings = candidates.map(c => {
+    const candidatesWithParsedEmbeddings = candidates.map((c) => {
       let embedding = c.embedding;
 
       // If embedding is a string (from pgvector vector type), parse it
@@ -1628,7 +1892,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           // pgvector returns vectors as strings like "[0.1,0.2,0.3,...]"
           embedding = JSON.parse(embedding);
         } catch (error) {
-          console.warn(`[SEMANTIC RETRIEVAL] Failed to parse embedding for memory ${c.id}: ${error.message}`);
+          console.warn(
+            `[SEMANTIC RETRIEVAL] Failed to parse embedding for memory ${c.id}: ${error.message}`,
+          );
           embedding = null;
         }
       }
@@ -1639,44 +1905,45 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // DETERMINISTIC FALLBACK: If query embedding failed, use keyword-based scoring for ALL candidates
     let scored;
     if (useKeywordFallback) {
-      console.log(`[KEYWORD-FALLBACK] Using keyword-based scoring for all ${candidatesWithParsedEmbeddings.length} candidates (query embedding unavailable)`);
-      
+      console.log(
+        `[KEYWORD-FALLBACK] Using keyword-based scoring for all ${candidatesWithParsedEmbeddings.length} candidates (query embedding unavailable)`,
+      );
+
       // Use the same keyword scoring logic as used for unembedded memories
-      scored = candidatesWithParsedEmbeddings.map(candidate => {
+      scored = candidatesWithParsedEmbeddings.map((candidate) => {
         const contentLower = (candidate.content || '').toLowerCase();
         const queryLower = normalizedQuery.toLowerCase();
-        
+
         // Extract query terms and count matches
-        const queryTerms = queryLower.split(/\s+/).filter(t => t.length > 3);
-        const matchedTerms = queryTerms.filter(term => contentLower.includes(term)).length;
+        const queryTerms = queryLower.split(/\s+/).filter((t) => t.length > 3);
+        const matchedTerms = queryTerms.filter((term) => contentLower.includes(term)).length;
         const textSimilarity = queryTerms.length > 0 ? matchedTerms / queryTerms.length : 0;
-        
+
         return {
           ...candidate,
           similarity: textSimilarity,
-          keyword_fallback: true
+          keyword_fallback: true,
         };
       });
-      
+
       telemetry.candidates_with_embeddings = 0; // No embeddings were used
       telemetry.vectors_compared = 0;
       telemetry.semantic_candidates = 0;
       telemetry.keyword_fallback_candidates = candidatesWithParsedEmbeddings.length;
-      
     } else {
       // Normal semantic scoring path
       // Filter to only those with valid embeddings
-      const withEmbeddings = candidatesWithParsedEmbeddings.filter(c =>
-        c.embedding && Array.isArray(c.embedding) && c.embedding.length > 0
+      const withEmbeddings = candidatesWithParsedEmbeddings.filter(
+        (c) => c.embedding && Array.isArray(c.embedding) && c.embedding.length > 0,
       );
       telemetry.candidates_with_embeddings = withEmbeddings.length;
       telemetry.vectors_compared = withEmbeddings.length;
-      telemetry.semantic_candidates = withEmbeddings.length;  // #536: Track semantic candidates for comparison with fallback
+      telemetry.semantic_candidates = withEmbeddings.length; // #536: Track semantic candidates for comparison with fallback
 
       // Calculate similarity scores
-      scored = withEmbeddings.map(candidate => ({
+      scored = withEmbeddings.map((candidate) => ({
         ...candidate,
-        similarity: cosineSimilarity(queryEmbedding, candidate.embedding)
+        similarity: cosineSimilarity(queryEmbedding, candidate.embedding),
       }));
     }
 
@@ -1686,7 +1953,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // CRITICAL FIX #551: Enhanced scoring to detect exact tokens/identifiers
     // CRITICAL FIX #564-T2: Check for explicit storage requests first
     // ═══════════════════════════════════════════════════════════════
-    const recentScoredMemories = recentUnembeddedMemories.map(memory => {
+    const recentScoredMemories = recentUnembeddedMemories.map((memory) => {
       const contentLower = (memory.content || '').toLowerCase();
       const queryLower = normalizedQuery.toLowerCase();
 
@@ -1695,12 +1962,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       // give it absolute priority regardless of semantic similarity
       if (isMemoryRecall) {
         try {
-          const metadata = typeof memory.metadata === 'string'
-            ? JSON.parse(memory.metadata)
-            : memory.metadata;
+          const metadata =
+            typeof memory.metadata === 'string' ? JSON.parse(memory.metadata) : memory.metadata;
 
           if (metadata?.explicit_storage_request === true) {
-            console.log(`[EMBEDDING-LAG-SCORE] Memory ${memory.id}: EXPLICIT STORAGE REQUEST for memory recall - boosting to 0.99`);
+            console.log(
+              `[EMBEDDING-LAG-SCORE] Memory ${memory.id}: EXPLICIT STORAGE REQUEST for memory recall - boosting to 0.99`,
+            );
             return {
               ...memory,
               raw_similarity: memory.raw_similarity ?? memory.similarity ?? null,
@@ -1708,11 +1976,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
               from_recent_unembedded: true,
               embedding: null,
               match_reason: 'explicit_storage_recall',
-              explicit_storage_request: true
+              explicit_storage_request: true,
             };
           }
         } catch (parseError) {
-          console.warn(`[EMBEDDING-LAG-SCORE] Failed to parse metadata for memory ${memory.id}: ${parseError.message}`);
+          console.warn(
+            `[EMBEDDING-LAG-SCORE] Failed to parse metadata for memory ${memory.id}: ${parseError.message}`,
+          );
         }
       }
 
@@ -1723,19 +1993,21 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       const contentTokens = (memory.content || '').match(uniqueTokenPattern) || [];
 
       // If query is asking about a token and content contains that exact token
-      const hasExactTokenMatch = queryTokens.some(qt =>
-        contentTokens.some(ct => ct.toUpperCase() === qt.toUpperCase())
+      const hasExactTokenMatch = queryTokens.some((qt) =>
+        contentTokens.some((ct) => ct.toUpperCase() === qt.toUpperCase()),
       );
 
       if (hasExactTokenMatch) {
-        console.log(`[EMBEDDING-LAG-SCORE] Memory ${memory.id}: EXACT TOKEN MATCH - boosting to 0.95`);
+        console.log(
+          `[EMBEDDING-LAG-SCORE] Memory ${memory.id}: EXACT TOKEN MATCH - boosting to 0.95`,
+        );
         return {
           ...memory,
           raw_similarity: memory.raw_similarity ?? memory.similarity ?? null,
           similarity: 0.95, // Very high score for exact token match
           from_recent_unembedded: true,
           embedding: null,
-          match_reason: 'exact_token_match'
+          match_reason: 'exact_token_match',
         };
       }
 
@@ -1744,43 +2016,52 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       const significantQueryTerms = normalizedQuery
         .toLowerCase()
         .split(/\s+/)
-        .filter(t => t.length > 4 && !['what', 'where', 'when', 'which', 'remember', 'asked'].includes(t));
+        .filter(
+          (t) =>
+            t.length > 4 && !['what', 'where', 'when', 'which', 'remember', 'asked'].includes(t),
+        );
 
       if (significantQueryTerms.length > 0) {
-        const exactMatches = significantQueryTerms.filter(term => contentLower.includes(term)).length;
+        const exactMatches = significantQueryTerms.filter((term) =>
+          contentLower.includes(term),
+        ).length;
         if (exactMatches > 0) {
           const exactMatchRatio = exactMatches / significantQueryTerms.length;
           if (exactMatchRatio >= 0.5) {
-            const exactMatchScore = 0.70 + (exactMatchRatio * 0.20); // 0.70-0.90 range
-            console.log(`[EMBEDDING-LAG-SCORE] Memory ${memory.id}: ${exactMatches}/${significantQueryTerms.length} exact term matches - score ${exactMatchScore.toFixed(3)}`);
+            const exactMatchScore = 0.7 + exactMatchRatio * 0.2; // 0.70-0.90 range
+            console.log(
+              `[EMBEDDING-LAG-SCORE] Memory ${memory.id}: ${exactMatches}/${significantQueryTerms.length} exact term matches - score ${exactMatchScore.toFixed(3)}`,
+            );
             return {
               ...memory,
               similarity: exactMatchScore,
               from_recent_unembedded: true,
               embedding: null,
-              match_reason: 'exact_term_match'
+              match_reason: 'exact_term_match',
             };
           }
         }
       }
 
       // Strategy 3: Original text-based similarity scoring (fallback)
-      const queryTerms = queryLower.split(/\s+/).filter(t => t.length > 3);
-      const matchedTerms = queryTerms.filter(term => contentLower.includes(term)).length;
+      const queryTerms = queryLower.split(/\s+/).filter((t) => t.length > 3);
+      const matchedTerms = queryTerms.filter((term) => contentLower.includes(term)).length;
       const textSimilarity = queryTerms.length > 0 ? matchedTerms / queryTerms.length : 0;
 
       // Boost recent memories slightly to prioritize fresh information
       const recencyBoost = 0.15; // 15% boost for very recent memories
       const finalSimilarity = Math.min(textSimilarity + recencyBoost, 1.0);
 
-      console.log(`[EMBEDDING-LAG-SCORE] Memory ${memory.id}: text similarity ${textSimilarity.toFixed(3)} + recency boost ${recencyBoost} = ${finalSimilarity.toFixed(3)}`);
+      console.log(
+        `[EMBEDDING-LAG-SCORE] Memory ${memory.id}: text similarity ${textSimilarity.toFixed(3)} + recency boost ${recencyBoost} = ${finalSimilarity.toFixed(3)}`,
+      );
 
       return {
         ...memory,
         similarity: finalSimilarity,
         from_recent_unembedded: true,
         embedding: null,
-        match_reason: 'text_similarity'
+        match_reason: 'text_similarity',
       };
     });
 
@@ -1788,19 +2069,21 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const allScored = [...scored, ...recentScoredMemories];
 
     if (recentScoredMemories.length > 0) {
-      console.log(`[EMBEDDING-LAG-FIX] ✅ Merged ${scored.length} semantic candidates + ${recentScoredMemories.length} recent unembedded = ${allScored.length} total`);
+      console.log(
+        `[EMBEDDING-LAG-FIX] ✅ Merged ${scored.length} semantic candidates + ${recentScoredMemories.length} recent unembedded = ${allScored.length} total`,
+      );
       telemetry.recent_unembedded_included = recentScoredMemories.length;
     }
 
     // CRITICAL FIX #511, ENHANCED #688: Apply safety-critical boost ONLY when query is safety-critical
     // This prevents safety memories from crowding out task-relevant memories on unrelated queries
     // Safety boost still ensures allergies rise to top when query involves food/dining/activities
-    const safetyBoosted = isSafetyCritical
-      ? applySafetyCriticalBoost(allScored)
-      : allScored;  // No boost if query isn't safety-critical
+    const safetyBoosted = isSafetyCritical ? applySafetyCriticalBoost(allScored) : allScored; // No boost if query isn't safety-critical
 
-    if (!isSafetyCritical && allScored.some(m => m.category_name === 'health_wellness')) {
-      console.log(`[SAFETY-BOOST-SKIP] ⏭️ Query not safety-critical - skipping safety boost for ${allScored.filter(m => m.category_name === 'health_wellness').length} health_wellness memories`);
+    if (!isSafetyCritical && allScored.some((m) => m.category_name === 'health_wellness')) {
+      console.log(
+        `[SAFETY-BOOST-SKIP] ⏭️ Query not safety-critical - skipping safety boost for ${allScored.filter((m) => m.category_name === 'health_wellness').length} health_wellness memories`,
+      );
     }
 
     // FIX #555-T3: Apply ordinal-aware boost for queries like "first code" vs "second code"
@@ -1816,20 +2099,43 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // Query "What car do I drive?" expands to include "tesla", "model", "vehicle"
     // So memory "I drive a Tesla Model 3" should get keyword boost
     // ═══════════════════════════════════════════════════════════════
-    const keywordBoosted = ordinalBoosted.map(memory => {
+    const keywordBoosted = ordinalBoosted.map((memory) => {
       const contentLower = (memory.content || '').toLowerCase();
 
       // Extract meaningful query words
       // Include important 3-letter words like "car", "dog", "job", "who"
-      const meaningfulShortWords = new Set(['car', 'dog', 'cat', 'pet', 'job', 'who', 'age', 'old', 'new']);
-      const stopwords = new Set(['what', 'does', 'have', 'this', 'that', 'your', 'their', 'about', 'the', 'and', 'for']);
+      const meaningfulShortWords = new Set([
+        'car',
+        'dog',
+        'cat',
+        'pet',
+        'job',
+        'who',
+        'age',
+        'old',
+        'new',
+      ]);
+      const stopwords = new Set([
+        'what',
+        'does',
+        'have',
+        'this',
+        'that',
+        'your',
+        'their',
+        'about',
+        'the',
+        'and',
+        'for',
+      ]);
 
       // ISSUE #699 FIX: Use expandedQuery (includes synonyms) instead of normalizedQuery
       // This ensures expanded terms like "tesla", "model" are checked against memory content
-      const queryWords = expandedQuery.toLowerCase()
-        .replace(/[^\w\s]/g, ' ')  // Remove punctuation
+      const queryWords = expandedQuery
+        .toLowerCase()
+        .replace(/[^\w\s]/g, ' ') // Remove punctuation
         .split(/\s+/)
-        .filter(word => {
+        .filter((word) => {
           if (stopwords.has(word)) return false;
           if (meaningfulShortWords.has(word)) return true;
           return word.length > 3;
@@ -1854,14 +2160,26 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         const matchRatio = matchCount / queryWords.length;
 
         // ISSUE #702-STR1: Extra boost for vehicle queries (car, drive, tesla, vehicle)
-        const vehicleTerms = ['car', 'vehicle', 'drive', 'driving', 'tesla', 'honda', 'toyota', 'ford'];
-        const hasVehicleTerm = queryWords.some(word => vehicleTerms.includes(word));
-        const contentHasVehicle = /\b(tesla|honda|toyota|ford|chevrolet|model\s*[0-9sxy]|drive|car)\b/i.test(contentLower);
+        const vehicleTerms = [
+          'car',
+          'vehicle',
+          'drive',
+          'driving',
+          'tesla',
+          'honda',
+          'toyota',
+          'ford',
+        ];
+        const hasVehicleTerm = queryWords.some((word) => vehicleTerms.includes(word));
+        const contentHasVehicle =
+          /\b(tesla|honda|toyota|ford|chevrolet|model\s*[0-9sxy]|drive|car)\b/i.test(contentLower);
 
         // FIX #718 STR1: Extra boost for pet/dog queries
         const petTerms = ['dog', 'pet', 'pets', 'puppy', 'cat', 'cats'];
-        const hasPetTerm = queryWords.some(word => petTerms.includes(word));
-        const contentHasPet = /\b(dog:|pet canine|cat:|puppy|kitten|pet feline)\b/i.test(contentLower);
+        const hasPetTerm = queryWords.some((word) => petTerms.includes(word));
+        const contentHasPet = /\b(dog:|pet canine|cat:|puppy|kitten|pet feline)\b/i.test(
+          contentLower,
+        );
 
         // INCREASED from 0.15 to 0.25 for Issue #603 - STR1 volume stress test
         // INCREASED to 0.35 for vehicle queries for Issue #702-STR1
@@ -1877,10 +2195,17 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         const originalScore = memory.similarity;
         const boostedScore = Math.min(originalScore + keywordBoost, 1.0);
 
-        if (keywordBoost >= 0.10) { // Only log significant boosts
-          const boostType = (hasVehicleTerm && contentHasVehicle) ? '[VEHICLE-BOOST]' :
-                           (hasPetTerm && contentHasPet) ? '[PET-BOOST]' : '';
-          console.log(`[KEYWORD-BOOST] Memory ${memory.id}: ${matchCount}/${queryWords.length} keywords matched - boosting ${originalScore.toFixed(3)} → ${boostedScore.toFixed(3)} (+${keywordBoost.toFixed(3)}) ${boostType}`);
+        if (keywordBoost >= 0.1) {
+          // Only log significant boosts
+          const boostType =
+            hasVehicleTerm && contentHasVehicle
+              ? '[VEHICLE-BOOST]'
+              : hasPetTerm && contentHasPet
+                ? '[PET-BOOST]'
+                : '';
+          console.log(
+            `[KEYWORD-BOOST] Memory ${memory.id}: ${matchCount}/${queryWords.length} keywords matched - boosting ${originalScore.toFixed(3)} → ${boostedScore.toFixed(3)} (+${keywordBoost.toFixed(3)}) ${boostType}`,
+          );
           console.log(`[KEYWORD-BOOST]    Matched words: [${matchedWords.join(', ')}]`);
           console.log(`[KEYWORD-BOOST]    Content: "${contentLower.substring(0, 80)}"`);
         }
@@ -1891,7 +2216,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           similarity: boostedScore,
           keyword_boosted: true,
           keyword_match_ratio: matchRatio,
-          matched_keywords: matchedWords
+          matched_keywords: matchedWords,
         };
       }
 
@@ -1905,36 +2230,43 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // where metadata.explicit_storage_request === true
     // This is NOT a similarity problem - it's a command-intent matching problem
     // ═══════════════════════════════════════════════════════════════
-    const explicitMemoryBoosted = keywordBoosted.map(memory => {
+    const explicitMemoryBoosted = keywordBoosted.map((memory) => {
       // Check if this is a memory recall query AND memory has explicit storage flag
       if (isMemoryRecall) {
         try {
-          const metadata = typeof memory.metadata === 'string'
-            ? JSON.parse(memory.metadata)
-            : memory.metadata;
+          const metadata =
+            typeof memory.metadata === 'string' ? JSON.parse(memory.metadata) : memory.metadata;
 
           if (metadata?.explicit_storage_request === true) {
             const originalScore = memory.similarity;
-            const boostedScore = Math.min(originalScore + 0.70, 1.0); // Massive boost for explicit storage
-            console.log(`[EXPLICIT-RECALL] Memory ${memory.id}: explicit_storage_request=true - boosting ${originalScore.toFixed(3)} → ${boostedScore.toFixed(3)} (+0.70)`);
-            console.log(`[EXPLICIT-RECALL]    Content preview: "${(memory.content || '').substring(0, 60)}"`);
+            const boostedScore = Math.min(originalScore + 0.7, 1.0); // Massive boost for explicit storage
+            console.log(
+              `[EXPLICIT-RECALL] Memory ${memory.id}: explicit_storage_request=true - boosting ${originalScore.toFixed(3)} → ${boostedScore.toFixed(3)} (+0.70)`,
+            );
+            console.log(
+              `[EXPLICIT-RECALL]    Content preview: "${(memory.content || '').substring(0, 60)}"`,
+            );
             return {
               ...memory,
               raw_similarity: memory.raw_similarity ?? memory.similarity,
               similarity: boostedScore,
               explicit_recall_boosted: true,
-              explicit_storage_request: true
+              explicit_storage_request: true,
             };
           }
         } catch (parseError) {
           // Metadata parse failed, continue without boost
-          console.warn(`[EXPLICIT-RECALL] Failed to parse metadata for memory ${memory.id}: ${parseError.message}`);
+          console.warn(
+            `[EXPLICIT-RECALL] Failed to parse metadata for memory ${memory.id}: ${parseError.message}`,
+          );
         }
       }
       return memory;
     });
 
-    console.log('[SEMANTIC RETRIEVAL] Applied scoring pipeline: semantic → safety → ordinal → keyword → explicit-recall');
+    console.log(
+      '[SEMANTIC RETRIEVAL] Applied scoring pipeline: semantic → safety → ordinal → keyword → explicit-recall',
+    );
     // ═══════════════════════════════════════════════════════════════
 
     // ═══════════════════════════════════════════════════════════════
@@ -1948,11 +2280,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       console.log(`[ENTITY-BOOST] 🏷️  Query contains entities: [${detectedEntities.join(', ')}]`);
       console.log(`[ENTITY-BOOST] Will force-include ALL memories containing these names`);
 
-      entityBoosted = explicitMemoryBoosted.map(memory => {
+      entityBoosted = explicitMemoryBoosted.map((memory) => {
         const contentLower = (memory.content || '').toLowerCase();
 
         // Check if this memory contains any of the detected entities
-        const matchedEntities = detectedEntities.filter(entity => {
+        const matchedEntities = detectedEntities.filter((entity) => {
           // Case-insensitive match for the entity name
           // FIX #691-CMP2: Normalize Unicode for international names (Björn, José, etc.)
           // SECURITY: Escape regex special characters to prevent RegExp injection
@@ -1968,8 +2300,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           const originalSim = memory.similarity || 0;
           const boostedSim = Math.max(baseBoost, originalSim);
 
-          console.log(`[ENTITY-BOOST] Memory ${memory.id}: Contains entities [${matchedEntities.join(', ')}]`);
-          console.log(`[ENTITY-BOOST]    Original similarity: ${originalSim.toFixed(3)} → Boosted to: ${boostedSim.toFixed(3)}`);
+          console.log(
+            `[ENTITY-BOOST] Memory ${memory.id}: Contains entities [${matchedEntities.join(', ')}]`,
+          );
+          console.log(
+            `[ENTITY-BOOST]    Original similarity: ${originalSim.toFixed(3)} → Boosted to: ${boostedSim.toFixed(3)}`,
+          );
           console.log(`[ENTITY-BOOST]    Content: "${(memory.content || '').substring(0, 100)}"`);
 
           return {
@@ -1977,7 +2313,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
             raw_similarity: memory.raw_similarity ?? memory.similarity,
             similarity: boostedSim,
             entity_boosted: true,
-            matched_entities: matchedEntities
+            matched_entities: matchedEntities,
           };
         }
 
@@ -1985,26 +2321,40 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       });
 
       // Count how many memories were entity-boosted
-      const boostedCount = entityBoosted.filter(m => m.entity_boosted).length;
+      const boostedCount = entityBoosted.filter((m) => m.entity_boosted).length;
       if (boostedCount > 0) {
-        console.log(`[ENTITY-BOOST] ✅ Boosted ${boostedCount} memories containing detected entities`);
-        console.log(`[ENTITY-BOOST] This ensures ALL memories about these entities are shown, allowing ambiguity detection`);
+        console.log(
+          `[ENTITY-BOOST] ✅ Boosted ${boostedCount} memories containing detected entities`,
+        );
+        console.log(
+          `[ENTITY-BOOST] This ensures ALL memories about these entities are shown, allowing ambiguity detection`,
+        );
 
         // TRUTH-TELEMETRY for NUA1: Show which specific memories were boosted for ambiguity detection
         console.log(`[NUA1-TELEMETRY] Entity-boosted memories for ambiguity detection:`);
-        entityBoosted.filter(m => m.entity_boosted).forEach((mem, idx) => {
-          console.log(`[NUA1-TELEMETRY]   Memory ${idx+1}: id=${mem.id}, category=${mem.category_name}`);
-          console.log(`[NUA1-TELEMETRY]     matched_entities=[${mem.matched_entities.join(', ')}]`);
-          console.log(`[NUA1-TELEMETRY]     content="${(mem.content || '').substring(0, 100)}"`);
+        entityBoosted
+          .filter((m) => m.entity_boosted)
+          .forEach((mem, idx) => {
+            console.log(
+              `[NUA1-TELEMETRY]   Memory ${idx + 1}: id=${mem.id}, category=${mem.category_name}`,
+            );
+            console.log(
+              `[NUA1-TELEMETRY]     matched_entities=[${mem.matched_entities.join(', ')}]`,
+            );
+            console.log(`[NUA1-TELEMETRY]     content="${(mem.content || '').substring(0, 100)}"`);
 
-          // Parse metadata to check anchors
-          let metadata = mem.metadata || {};
-          if (typeof metadata === 'string') {
-            try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
-          }
-          const anchorsKeys = metadata.anchors ? Object.keys(metadata.anchors) : [];
-          console.log(`[NUA1-TELEMETRY]     anchors_keys=[${anchorsKeys.join(', ')}]`);
-        });
+            // Parse metadata to check anchors
+            let metadata = mem.metadata || {};
+            if (typeof metadata === 'string') {
+              try {
+                metadata = JSON.parse(metadata);
+              } catch {
+                metadata = {};
+              }
+            }
+            const anchorsKeys = metadata.anchors ? Object.keys(metadata.anchors) : [];
+            console.log(`[NUA1-TELEMETRY]     anchors_keys=[${anchorsKeys.join(', ')}]`);
+          });
       }
     }
     // ═══════════════════════════════════════════════════════════════
@@ -2017,10 +2367,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // prevents Apple memories from slipping through on semantic similarity alone.
     // ═══════════════════════════════════════════════════════════════
     if (detectedEntities.length > 0) {
-      const crossEntityPattern = /\b(Amazon|Google|Microsoft|Apple|Facebook|Tesla|Netflix|Twitter|LinkedIn|GitHub)\b/g;
-      const detectedLower = detectedEntities.map(e => e.toLowerCase());
+      const crossEntityPattern =
+        /\b(Amazon|Google|Microsoft|Apple|Facebook|Tesla|Netflix|Twitter|LinkedIn|GitHub)\b/g;
+      const detectedLower = detectedEntities.map((e) => e.toLowerCase());
 
-      entityBoosted = entityBoosted.map(memory => {
+      entityBoosted = entityBoosted.map((memory) => {
         // Already entity-boosted by the current query entities → pass through
         if (memory.entity_boosted) return memory;
 
@@ -2028,14 +2379,14 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
         // Collect named entities found in the memory that are NOT in the query entities
         const otherEntities = [...memoryContent.matchAll(crossEntityPattern)]
-          .map(m => m[0])
-          .filter(e => !detectedLower.includes(e.toLowerCase()));
+          .map((m) => m[0])
+          .filter((e) => !detectedLower.includes(e.toLowerCase()));
 
         if (otherEntities.length === 0) return memory; // No conflicting entities found
 
         // Check whether the memory also contains at least one query entity.
         // If it does, the memory covers both topics so we keep it as-is.
-        const hasQueryEntity = detectedEntities.some(entity => {
+        const hasQueryEntity = detectedEntities.some((entity) => {
           const entityRegex = new RegExp(`\\b${escapeRegex(entity)}\\b`, 'i');
           return entityRegex.test(memoryContent);
         });
@@ -2045,12 +2396,14 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         const uniqueOther = [...new Set(otherEntities)];
         const originalSim = memory.similarity || 0;
         const penalizedSim = originalSim * 0.3;
-        console.log(`[CROSS-ENTITY-FILTER] Memory ${memory.id}: contains [${uniqueOther.join(', ')}] but query targets [${detectedEntities.join(', ')}] — penalizing similarity ${originalSim.toFixed(3)} → ${penalizedSim.toFixed(3)}`);
+        console.log(
+          `[CROSS-ENTITY-FILTER] Memory ${memory.id}: contains [${uniqueOther.join(', ')}] but query targets [${detectedEntities.join(', ')}] — penalizing similarity ${originalSim.toFixed(3)} → ${penalizedSim.toFixed(3)}`,
+        );
         return {
           ...memory,
           similarity: penalizedSim,
           entity_cross_contaminated: true,
-          conflicting_entities: uniqueOther
+          conflicting_entities: uniqueOther,
         };
       });
     }
@@ -2060,7 +2413,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // FIX #670 - FIX D: Anchor-aware re-ranking based on intent
     // When query intent suggests specific anchor types, boost memories with matching anchors
     // ═══════════════════════════════════════════════════════════════
-    const anchorBoosted = entityBoosted.map(memory => {
+    const anchorBoosted = entityBoosted.map((memory) => {
       // Skip if no anchor boost needed
       if (!intent.boost || Object.keys(intent.boost).length === 0) {
         return memory;
@@ -2069,7 +2422,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       // Parse metadata
       let metadata = memory.metadata || {};
       if (typeof metadata === 'string') {
-        try { metadata = JSON.parse(metadata); } catch { metadata = {}; }
+        try {
+          metadata = JSON.parse(metadata);
+        } catch {
+          metadata = {};
+        }
       }
 
       const anchors = metadata.anchors || {};
@@ -2086,7 +2443,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           let anchorMatches = false;
 
           if (Array.isArray(anchorValues) && anchorValues.length > 0) {
-            anchorMatches = anchorValues.some(anchor => {
+            anchorMatches = anchorValues.some((anchor) => {
               const queryLower = normalizedQuery.toLowerCase();
 
               // FIX #675: Handle anchor objects properly (explicit_token, ordinal)
@@ -2097,20 +2454,28 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
                 // FIX #675: Debug log for anchor matching
                 if (anchorType === 'explicit_token' && anchor.value) {
-                  console.log(`[FIX-675] Checking explicit_token anchor: "${anchor.value}" against query: "${normalizedQuery}"`);
+                  console.log(
+                    `[FIX-675] Checking explicit_token anchor: "${anchor.value}" against query: "${normalizedQuery}"`,
+                  );
                 }
 
                 // Check the value field (primary match)
                 if (anchor.value) {
                   const valueStr = String(anchor.value).toLowerCase();
-                  if (queryLower.includes(valueStr) || valueStr.includes(queryLower.split(' ').pop())) {
+                  if (
+                    queryLower.includes(valueStr) ||
+                    valueStr.includes(queryLower.split(' ').pop())
+                  ) {
                     return true;
                   }
                 }
 
                 // For ordinal anchors, also check position and item fields
                 if (anchorType === 'ordinal') {
-                  if (anchor.position && queryLower.includes(String(anchor.position).toLowerCase())) {
+                  if (
+                    anchor.position &&
+                    queryLower.includes(String(anchor.position).toLowerCase())
+                  ) {
                     return true;
                   }
                   if (anchor.item && queryLower.includes(String(anchor.item).toLowerCase())) {
@@ -2120,16 +2485,20 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
                 // Fallback: stringify the whole object
                 const anchorStr = JSON.stringify(anchor).toLowerCase();
-                return queryLower.includes(anchorStr) || anchorStr.includes(queryLower.split(' ').pop());
+                return (
+                  queryLower.includes(anchorStr) || anchorStr.includes(queryLower.split(' ').pop())
+                );
               } else {
                 // For simple string anchors (unicode names, pricing strings)
                 const anchorStr = String(anchor).toLowerCase();
-                return queryLower.includes(anchorStr) || anchorStr.includes(queryLower.split(' ').pop());
+                return (
+                  queryLower.includes(anchorStr) || anchorStr.includes(queryLower.split(' ').pop())
+                );
               }
             });
           } else if (typeof anchorValues === 'object' && Object.keys(anchorValues).length > 0) {
             // Temporal anchors are objects, not arrays
-            anchorMatches = Object.values(anchorValues).some(val => {
+            anchorMatches = Object.values(anchorValues).some((val) => {
               const valStr = String(val).toLowerCase();
               return normalizedQuery.toLowerCase().includes(valStr);
             });
@@ -2140,24 +2509,30 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
             score *= boostFactor;
             boostApplied = true;
             boostReasons.push(`${anchorType} anchor match (${boostFactor}x)`);
-            console.log(`[ANCHOR-RERANK] Memory ${memory.id}: ${anchorType} anchor match, boost ${boostFactor}x`);
+            console.log(
+              `[ANCHOR-RERANK] Memory ${memory.id}: ${anchorType} anchor match, boost ${boostFactor}x`,
+            );
           } else {
             // Smaller boost just for having the anchor type
-            score *= (1 + boostFactor * 0.1);
-            boostReasons.push(`${anchorType} anchor present (${(1 + boostFactor * 0.1).toFixed(2)}x)`);
+            score *= 1 + boostFactor * 0.1;
+            boostReasons.push(
+              `${anchorType} anchor present (${(1 + boostFactor * 0.1).toFixed(2)}x)`,
+            );
           }
         }
       }
 
       // Penalize memories with no anchors when query clearly expects them
       if (intent.type !== 'GENERAL' && (!anchors || Object.keys(anchors).length === 0)) {
-        score *= 0.7;  // 30% penalty
+        score *= 0.7; // 30% penalty
         boostReasons.push('no anchors penalty (0.7x)');
       }
 
       if (boostApplied) {
         console.log(`[ANCHOR-RERANK] Memory ${memory.id}: ${boostReasons.join(', ')}`);
-        console.log(`[ANCHOR-RERANK]   Original: ${memory.similarity.toFixed(3)} → Adjusted: ${score.toFixed(3)}`);
+        console.log(
+          `[ANCHOR-RERANK]   Original: ${memory.similarity.toFixed(3)} → Adjusted: ${score.toFixed(3)}`,
+        );
       }
 
       return {
@@ -2165,23 +2540,25 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         raw_similarity: memory.raw_similarity ?? memory.similarity,
         similarity: Math.min(score, 1.0), // Cap at 1.0
         anchor_boosted: boostApplied,
-        anchor_boost_reasons: boostReasons
+        anchor_boost_reasons: boostReasons,
       };
     });
 
     if (Object.keys(intent.boost).length > 0) {
-      const boostedCount = anchorBoosted.filter(m => m.anchor_boosted).length;
+      const boostedCount = anchorBoosted.filter((m) => m.anchor_boosted).length;
       if (boostedCount > 0) {
-        console.log(`[ANCHOR-RERANK] ✅ Applied anchor boost to ${boostedCount} memories based on intent: ${intent.type}`);
+        console.log(
+          `[ANCHOR-RERANK] ✅ Applied anchor boost to ${boostedCount} memories based on intent: ${intent.type}`,
+        );
       }
     }
     // ═══════════════════════════════════════════════════════════════
 
     // Apply hybrid scoring
     // CRITICAL FIX #562-T2: Pass isMemoryRecall flag to enable strong recency boost
-    const hybridScored = anchorBoosted.map(memory => ({
+    const hybridScored = anchorBoosted.map((memory) => ({
       ...memory,
-      hybrid_score: calculateHybridScore(memory, { isMemoryRecall })
+      hybrid_score: calculateHybridScore(memory, { isMemoryRecall }),
     }));
 
     // Filter by minimum similarity and sort
@@ -2191,7 +2568,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // Fix: Bypass is scoped to health/safety categories only — non-health memories that
     //      accumulated high relevance_score through repeated access must not bypass.
     let filtered = hybridScored
-      .filter(m => m.similarity >= effectiveMinSimilarity || (parseFloat(m.relevance_score || 0) >= 0.90 && SAFETY_BYPASS_CATEGORIES.has(m.category_name)))
+      .filter(
+        (m) =>
+          m.similarity >= effectiveMinSimilarity ||
+          (parseFloat(m.relevance_score || 0) >= 0.9 &&
+            SAFETY_BYPASS_CATEGORIES.has(m.category_name)),
+      )
       .sort((a, b) => b.hybrid_score - a.hybrid_score);
 
     // ═══════════════════════════════════════════════════════════════
@@ -2211,7 +2593,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       }
       const dupCount = filtered.length - deduplicated.length;
       if (dupCount > 0) {
-        console.log(`[DEDUP] Removed ${dupCount} duplicate memory IDs from result set (kept highest-scoring instance of each)`);
+        console.log(
+          `[DEDUP] Removed ${dupCount} duplicate memory IDs from result set (kept highest-scoring instance of each)`,
+        );
       } else {
         console.log(`[DEDUP] No duplicate memory IDs found (${filtered.length} candidates)`);
       }
@@ -2232,10 +2616,18 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     }
     filtered.slice(0, 5).forEach((m, idx) => {
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-        console.log(`[TRACE-T3]   ${idx+1}. Memory ${m.id}: hybrid_score=${m.hybrid_score?.toFixed(3)}, similarity=${m.similarity?.toFixed(3)}`);
-        console.log(`[TRACE-T3]      ordinal_boosted=${m.ordinal_boosted || false}, ordinal_penalized=${m.ordinal_penalized || false}`);
-        console.log(`[TRACE-T3]      keyword_boosted=${m.keyword_boosted || false}, keyword_match_ratio=${m.keyword_match_ratio?.toFixed(2) || 'N/A'}`);
-        console.log(`[TRACE-T3]      explicit_recall_boosted=${m.explicit_recall_boosted || false}, explicit_storage=${m.explicit_storage_request || false}`);
+        console.log(
+          `[TRACE-T3]   ${idx + 1}. Memory ${m.id}: hybrid_score=${m.hybrid_score?.toFixed(3)}, similarity=${m.similarity?.toFixed(3)}`,
+        );
+        console.log(
+          `[TRACE-T3]      ordinal_boosted=${m.ordinal_boosted || false}, ordinal_penalized=${m.ordinal_penalized || false}`,
+        );
+        console.log(
+          `[TRACE-T3]      keyword_boosted=${m.keyword_boosted || false}, keyword_match_ratio=${m.keyword_match_ratio?.toFixed(2) || 'N/A'}`,
+        );
+        console.log(
+          `[TRACE-T3]      explicit_recall_boosted=${m.explicit_recall_boosted || false}, explicit_storage=${m.explicit_storage_request || false}`,
+        );
         console.log(`[TRACE-T3]      Content: "${(m.content || '').substring(0, 80)}"`);
       }
     });
@@ -2244,7 +2636,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ISSUE #575: STR1 DEBUG - Detect car/temporal queries for diagnostics
     // ═══════════════════════════════════════════════════════════════
     const isCarQuery = /\b(car|vehicle|drive|tesla|model)\b/i.test(normalizedQuery);
-    const isTemporalQuery = /\b(year|when|started|graduated|worked|duration|time|date|amazon|google|mit)\b/i.test(normalizedQuery);
+    const isTemporalQuery =
+      /\b(year|when|started|graduated|worked|duration|time|date|amazon|google|mit)\b/i.test(
+        normalizedQuery,
+      );
 
     // FOUNDER DIAGNOSTIC #579-STR1: Log ALL ranks for car-related queries
     if (isCarQuery && filtered.length > 0) {
@@ -2253,8 +2648,10 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       filtered.forEach((m, idx) => {
         const isTesla = /tesla|model\s*3/i.test(m.content || '');
         const marker = isTesla ? '🚗 TESLA' : '   ';
-        console.log(`[FOUNDER-STR1]   ${marker} Rank #${idx+1}: Memory ${m.id}`);
-        console.log(`[FOUNDER-STR1]      Score: ${m.hybrid_score?.toFixed(3)}, Similarity: ${m.similarity?.toFixed(3)}`);
+        console.log(`[FOUNDER-STR1]   ${marker} Rank #${idx + 1}: Memory ${m.id}`);
+        console.log(
+          `[FOUNDER-STR1]      Score: ${m.hybrid_score?.toFixed(3)}, Similarity: ${m.similarity?.toFixed(3)}`,
+        );
         console.log(`[FOUNDER-STR1]      Keyword boost: ${m.keyword_boosted || false}`);
         console.log(`[FOUNDER-STR1]      Entity boost: ${m.entity_boosted || false}`);
         console.log(`[FOUNDER-STR1]      Content: "${(m.content || '').substring(0, 100)}"`);
@@ -2281,9 +2678,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // Log threshold impact for debugging
     if (filtered.length > 0) {
-      const belowOldThreshold = filtered.filter(m => m.similarity < RETRIEVAL_CONFIG.minSimilarity).length;
+      const belowOldThreshold = filtered.filter(
+        (m) => m.similarity < RETRIEVAL_CONFIG.minSimilarity,
+      ).length;
       if (belowOldThreshold > 0 && isPersonal) {
-        console.log(`[SEMANTIC RETRIEVAL] ✅ Lower threshold recovered ${belowOldThreshold} personal fact memories`);
+        console.log(
+          `[SEMANTIC RETRIEVAL] ✅ Lower threshold recovered ${belowOldThreshold} personal fact memories`,
+        );
       }
     }
 
@@ -2303,7 +2704,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       }
 
       // Find any Tesla memories in candidates
-      const teslaCandidates = candidates.filter(c => /tesla|model\s*3/i.test(c.content || ''));
+      const teslaCandidates = candidates.filter((c) => /tesla|model\s*3/i.test(c.content || ''));
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
         console.log(`[STR1-DEBUG] Tesla memories in candidates: ${teslaCandidates.length}`);
       }
@@ -2318,7 +2719,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       }
 
       // Check if Tesla is in filtered results
-      const teslaFiltered = filtered.filter(m => /tesla|model\s*3/i.test(m.content || ''));
+      const teslaFiltered = filtered.filter((m) => /tesla|model\s*3/i.test(m.content || ''));
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
         console.log(`[STR1-DEBUG] Tesla memories after filtering: ${teslaFiltered.length}`);
       }
@@ -2329,7 +2730,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
             console.log(`[STR1-DEBUG]     Similarity: ${mem.similarity?.toFixed(3)}`);
             console.log(`[STR1-DEBUG]     Hybrid score: ${mem.hybrid_score?.toFixed(3)}`);
             console.log(`[STR1-DEBUG]     Keyword boost: ${mem.keyword_boosted || false}`);
-            console.log(`[STR1-DEBUG]     Final rank: ${filtered.indexOf(mem) + 1} of ${filtered.length}`);
+            console.log(
+              `[STR1-DEBUG]     Final rank: ${filtered.indexOf(mem) + 1} of ${filtered.length}`,
+            );
           }
         });
       } else {
@@ -2341,11 +2744,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           if (process.env.DEBUG_DIAGNOSTICS === 'true') {
             console.log('[STR1-DEBUG]   Tesla candidates were retrieved but filtered out:');
           }
-          teslaCandidates.forEach(mem => {
-            const scored = allScored.find(s => s.id === mem.id);
+          teslaCandidates.forEach((mem) => {
+            const scored = allScored.find((s) => s.id === mem.id);
             if (scored) {
               if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-                console.log(`[STR1-DEBUG]     ID ${mem.id}: similarity ${scored.similarity?.toFixed(3)} (below ${effectiveMinSimilarity})`);
+                console.log(
+                  `[STR1-DEBUG]     ID ${mem.id}: similarity ${scored.similarity?.toFixed(3)} (below ${effectiveMinSimilarity})`,
+                );
               }
             }
           });
@@ -2363,22 +2768,22 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // are retrieved together, even if it means exceeding topK slightly
     // This fixes NUA1 (both Alexes), NUA2 (allergy + wife), INF3 (both temporal facts)
     // ═══════════════════════════════════════════════════════════════
-    
+
     // Separate high-priority memories that MUST be included together
-    const entityBoostedMemories = filtered.filter(m => m.entity_boosted);
-    const explicitRecallMemories = filtered.filter(m => m.explicit_recall_boosted);
-    const ordinalBoostedMemories = filtered.filter(m => m.ordinal_boosted);
-    const keywordBoostedMemories = filtered.filter(m => m.keyword_boosted);  // FIX #697-STR1
+    const entityBoostedMemories = filtered.filter((m) => m.entity_boosted);
+    const explicitRecallMemories = filtered.filter((m) => m.explicit_recall_boosted);
+    const ordinalBoostedMemories = filtered.filter((m) => m.ordinal_boosted);
+    const keywordBoostedMemories = filtered.filter((m) => m.keyword_boosted); // FIX #697-STR1
 
     // Collect IDs of high-priority memories to track what we've already added
     // FIX #697-STR1: Include keyword_boosted memories in high-priority set
     const highPriorityIds = new Set([
-      ...entityBoostedMemories.map(m => m.id),
-      ...explicitRecallMemories.map(m => m.id),
-      ...ordinalBoostedMemories.map(m => m.id),
-      ...keywordBoostedMemories.map(m => m.id)  // FIX #697-STR1
+      ...entityBoostedMemories.map((m) => m.id),
+      ...explicitRecallMemories.map((m) => m.id),
+      ...ordinalBoostedMemories.map((m) => m.id),
+      ...keywordBoostedMemories.map((m) => m.id), // FIX #697-STR1
     ]);
-    
+
     // Group related memories by detected entities
     const relatedGroups = new Map();
     if (detectedEntities.length > 0) {
@@ -2390,43 +2795,49 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       while ((orgMatch = organizationPattern.exec(normalizedQuery)) !== null) {
         organizations.add(orgMatch[2]);
       }
-      
+
       // Group memories by detected entities AND organizations
-      detectedEntities.forEach(entity => {
+      detectedEntities.forEach((entity) => {
         const normalizeUnicode = (str) => str.normalize('NFC');
-        const relatedMemories = filtered.filter(m => {
+        const relatedMemories = filtered.filter((m) => {
           // SECURITY: Escape regex special characters to prevent RegExp injection
           const entityRegex = new RegExp(`\\b${escapeRegex(normalizeUnicode(entity))}\\b`, 'i');
           return entityRegex.test(normalizeUnicode(m.content || ''));
         });
         if (relatedMemories.length > 0) {
           relatedGroups.set(entity, relatedMemories);
-          console.log(`[RELATED-GROUP] Entity "${entity}": ${relatedMemories.length} related memories`);
+          console.log(
+            `[RELATED-GROUP] Entity "${entity}": ${relatedMemories.length} related memories`,
+          );
         }
       });
-      
+
       // FIX #691-INF3: Group temporal facts about same organization
-      organizations.forEach(org => {
-        const temporalMemories = filtered.filter(m => {
+      organizations.forEach((org) => {
+        const temporalMemories = filtered.filter((m) => {
           // SECURITY: Escape regex special characters to prevent RegExp injection
           const orgRegex = new RegExp(`\\b${escapeRegex(org)}\\b`, 'i');
-          const hasTemporal = /\b(\d+\s+years?|worked|left|started|joined|\d{4})\b/i.test(m.content || '');
+          const hasTemporal = /\b(\d+\s+years?|worked|left|started|joined|\d{4})\b/i.test(
+            m.content || '',
+          );
           return orgRegex.test(m.content || '') && hasTemporal;
         });
         if (temporalMemories.length > 0) {
           relatedGroups.set(`temporal_${org}`, temporalMemories);
-          console.log(`[TEMPORAL-GROUP] Organization "${org}": ${temporalMemories.length} temporal memories`);
+          console.log(
+            `[TEMPORAL-GROUP] Organization "${org}": ${temporalMemories.length} temporal memories`,
+          );
         }
       });
     }
-    
+
     console.log(`[RETRIEVAL-GROUPING] High-priority memories:`);
     console.log(`  Entity-boosted: ${entityBoostedMemories.length}`);
     console.log(`  Explicit-recall: ${explicitRecallMemories.length}`);
     console.log(`  Ordinal-boosted: ${ordinalBoostedMemories.length}`);
-    console.log(`  Keyword-boosted: ${keywordBoostedMemories.length}`);  // FIX #697-STR1
+    console.log(`  Keyword-boosted: ${keywordBoostedMemories.length}`); // FIX #697-STR1
     console.log(`  Related groups: ${relatedGroups.size}`);
-    
+
     // Issue #2903: Apply per-record token cap before budget accounting.
     // A single bloated record (e.g. id=2903 at 1,322 tokens) can consume >50% of the
     // 2,000-token budget, leaving insufficient room for other relevant memories.
@@ -2443,7 +2854,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       const lastSentence = Math.max(
         truncated.lastIndexOf('. '),
         truncated.lastIndexOf('.\n'),
-        truncated.lastIndexOf('\n\n')
+        truncated.lastIndexOf('\n\n'),
       );
       // 0.7 threshold: only snap to a sentence boundary when the boundary falls within the
       // last 30% of the target range. Boundaries earlier than that sacrifice too much content
@@ -2455,7 +2866,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         truncated = lastSpace > 0 ? truncated.substring(0, lastSpace) : truncated;
       }
       truncated += ' [truncated]';
-      console.log(`[RETRIEVAL-TOKEN-CAP] Memory ${memory.id} capped: ${rawTokens} → ${Math.ceil(truncated.length / 4)} tokens`);
+      console.log(
+        `[RETRIEVAL-TOKEN-CAP] Memory ${memory.id} capped: ${rawTokens} → ${Math.ceil(truncated.length / 4)} tokens`,
+      );
       return { ...memory, content: truncated, token_count: Math.ceil(truncated.length / 4) };
     };
 
@@ -2464,44 +2877,55 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       if (highPriorityIds.has(memory.id)) {
         const capped = capRecordTokens(memory);
         const memoryTokens = capped.token_count || Math.ceil((capped.content?.length || 0) / 4);
-        
+
         // For high-priority memories, be more lenient with token budget
         // Allow up to 20% overflow to ensure related memories stay together
         const allowedOverflow = tokenBudget * 0.2;
         if (usedTokens + memoryTokens > tokenBudget + allowedOverflow) {
-          console.log(`[RETRIEVAL-GROUPING] ⚠️  High-priority memory ${memory.id} would exceed budget + overflow`);
+          console.log(
+            `[RETRIEVAL-GROUPING] ⚠️  High-priority memory ${memory.id} would exceed budget + overflow`,
+          );
           break;
         }
-        
+
         results.push(capped);
         usedTokens += memoryTokens;
-        console.log(`[RETRIEVAL-GROUPING] ✅ Added high-priority memory ${memory.id} (${memoryTokens} tokens)`);
+        console.log(
+          `[RETRIEVAL-GROUPING] ✅ Added high-priority memory ${memory.id} (${memoryTokens} tokens)`,
+        );
       }
     }
-    
+
     // Second pass: Fill remaining space with other memories
     for (const memory of filtered) {
       // Skip if already added
-      if (results.find(r => r.id === memory.id)) {
+      if (results.find((r) => r.id === memory.id)) {
         continue;
       }
-      
+
       const capped = capRecordTokens(memory);
       const memoryTokens = capped.token_count || Math.ceil((capped.content?.length || 0) / 4);
-      
+
       // Check if adding this memory would exceed budget
       if (usedTokens + memoryTokens > tokenBudget) {
-        console.log(`[SEMANTIC RETRIEVAL] Token budget reached: ${usedTokens}/${tokenBudget} tokens used`);
+        console.log(
+          `[SEMANTIC RETRIEVAL] Token budget reached: ${usedTokens}/${tokenBudget} tokens used`,
+        );
         break;
       }
-      
+
       results.push(capped);
       usedTokens += memoryTokens;
-      
+
       // For non-high-priority memories, respect strict topK limit
       // But allow high-priority memories to have pushed us over topK
-      if (results.length >= topK && results.filter(r => !highPriorityIds.has(r.id)).length >= topK) {
-        console.log(`[SEMANTIC RETRIEVAL] TopK limit reached (${topK}), high-priority additions: ${results.filter(r => highPriorityIds.has(r.id)).length}`);
+      if (
+        results.length >= topK &&
+        results.filter((r) => !highPriorityIds.has(r.id)).length >= topK
+      ) {
+        console.log(
+          `[SEMANTIC RETRIEVAL] TopK limit reached (${topK}), high-priority additions: ${results.filter((r) => highPriorityIds.has(r.id)).length}`,
+        );
         break;
       }
     }
@@ -2517,91 +2941,118 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       // Cohesion = average similarity between all pairs of memories
       let totalPairwiseSimilarity = 0;
       let pairCount = 0;
-      
+
       for (let i = 0; i < Math.min(results.length, 10); i++) {
         for (let j = i + 1; j < Math.min(results.length, 10); j++) {
           const mem1 = results[i];
           const mem2 = results[j];
-          
+
           // Only check cohesion between memories that have embeddings
-          if (mem1.embedding && mem2.embedding && 
-              Array.isArray(mem1.embedding) && Array.isArray(mem2.embedding)) {
+          if (
+            mem1.embedding &&
+            mem2.embedding &&
+            Array.isArray(mem1.embedding) &&
+            Array.isArray(mem2.embedding)
+          ) {
             const similarity = cosineSimilarity(mem1.embedding, mem2.embedding);
             totalPairwiseSimilarity += similarity;
             pairCount++;
           }
         }
       }
-      
+
       if (pairCount > 0) {
         const avgCohesion = totalPairwiseSimilarity / pairCount;
         const MIN_COHESION = 0.05; // Minimum average cohesion threshold (lowered from 0.15 to fix Issue #612 regressions)
 
-        console.log(`[SEMANTIC-COHESION] Checking cohesion: ${pairCount} pairs, avg=${avgCohesion.toFixed(3)}`);
+        console.log(
+          `[SEMANTIC-COHESION] Checking cohesion: ${pairCount} pairs, avg=${avgCohesion.toFixed(3)}`,
+        );
 
         // If cohesion is below threshold, drop lowest-scoring memories until restored
         // Only prune if we have MORE than needed (not when we have exactly what we need)
         if (avgCohesion < MIN_COHESION && results.length > 5) {
-          console.log(`[SEMANTIC-COHESION] ⚠️  Cohesion ${avgCohesion.toFixed(3)} below threshold ${MIN_COHESION}`);
+          console.log(
+            `[SEMANTIC-COHESION] ⚠️  Cohesion ${avgCohesion.toFixed(3)} below threshold ${MIN_COHESION}`,
+          );
           console.log(`[SEMANTIC-COHESION] Dropping lowest-scoring memories to restore cohesion`);
-          
+
           // Keep high-priority memories (entity-boosted, explicit-recall, ordinal-boosted, keyword-boosted)
           // FIX #697-STR1: Include keyword_boosted in cohesion protection
-          const highPriorityResults = results.filter(r =>
-            r.entity_boosted || r.explicit_recall_boosted || r.ordinal_boosted || r.keyword_boosted
+          const highPriorityResults = results.filter(
+            (r) =>
+              r.entity_boosted ||
+              r.explicit_recall_boosted ||
+              r.ordinal_boosted ||
+              r.keyword_boosted,
           );
 
           // Sort non-high-priority by score
           const normalResults = results
-            .filter(r => !r.entity_boosted && !r.explicit_recall_boosted && !r.ordinal_boosted && !r.keyword_boosted)
+            .filter(
+              (r) =>
+                !r.entity_boosted &&
+                !r.explicit_recall_boosted &&
+                !r.ordinal_boosted &&
+                !r.keyword_boosted,
+            )
             .sort((a, b) => b.hybrid_score - a.hybrid_score);
-          
+
           // Gradually drop low-scoring memories and recalculate cohesion
           let prunedResults = [...highPriorityResults];
           let bestCohesion = 0;
-          
+
           for (let keepCount = Math.min(normalResults.length, 7); keepCount >= 2; keepCount--) {
             const testResults = [...highPriorityResults, ...normalResults.slice(0, keepCount)];
-            
+
             // Recalculate cohesion for this subset
             let testPairwiseSim = 0;
             let testPairCount = 0;
-            
+
             for (let i = 0; i < testResults.length; i++) {
               for (let j = i + 1; j < testResults.length; j++) {
                 if (testResults[i].embedding && testResults[j].embedding) {
-                  testPairwiseSim += cosineSimilarity(testResults[i].embedding, testResults[j].embedding);
+                  testPairwiseSim += cosineSimilarity(
+                    testResults[i].embedding,
+                    testResults[j].embedding,
+                  );
                   testPairCount++;
                 }
               }
             }
-            
+
             const testCohesion = testPairCount > 0 ? testPairwiseSim / testPairCount : 0;
-            
+
             if (testCohesion >= MIN_COHESION) {
               prunedResults = testResults;
               bestCohesion = testCohesion;
-              console.log(`[SEMANTIC-COHESION] ✅ Restored cohesion at ${testResults.length} memories: ${testCohesion.toFixed(3)}`);
+              console.log(
+                `[SEMANTIC-COHESION] ✅ Restored cohesion at ${testResults.length} memories: ${testCohesion.toFixed(3)}`,
+              );
               break;
             }
           }
-          
+
           // If we found a better cohesion, use pruned results
           if (prunedResults.length < results.length && bestCohesion >= MIN_COHESION) {
             const droppedCount = results.length - prunedResults.length;
             console.log(`[SEMANTIC-COHESION] Dropped ${droppedCount} low-coherence memories`);
-            console.log(`[SEMANTIC-COHESION] Final: ${prunedResults.length} memories with cohesion ${bestCohesion.toFixed(3)}`);
-            
+            console.log(
+              `[SEMANTIC-COHESION] Final: ${prunedResults.length} memories with cohesion ${bestCohesion.toFixed(3)}`,
+            );
+
             // Update results and recalculate tokens
             results.length = 0;
             results.push(...prunedResults.sort((a, b) => b.hybrid_score - a.hybrid_score));
-            
+
             usedTokens = results.reduce((sum, m) => {
               return sum + (m.token_count || Math.ceil((m.content?.length || 0) / 4));
             }, 0);
           }
         } else if (avgCohesion >= MIN_COHESION) {
-          console.log(`[SEMANTIC-COHESION] ✅ Cohesion check passed: ${avgCohesion.toFixed(3)} >= ${MIN_COHESION}`);
+          console.log(
+            `[SEMANTIC-COHESION] ✅ Cohesion check passed: ${avgCohesion.toFixed(3)} >= ${MIN_COHESION}`,
+          );
         }
       }
     }
@@ -2611,17 +3062,22 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // ISSUE #575: STR1 DEBUG - Check if Tesla made it to final results
     // ═══════════════════════════════════════════════════════════════
     if (isCarQuery) {
-      const teslaInResults = results.filter(r => /tesla|model\s*3/i.test(r.content || ''));
+      const teslaInResults = results.filter((r) => /tesla|model\s*3/i.test(r.content || ''));
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
         console.log(`[STR1-DEBUG] Tesla in final injection: ${teslaInResults.length > 0}`);
       }
-      if (teslaInResults.length === 0 && filtered.some(m => /tesla|model\s*3/i.test(m.content || ''))) {
+      if (
+        teslaInResults.length === 0 &&
+        filtered.some((m) => /tesla|model\s*3/i.test(m.content || ''))
+      ) {
         if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-          console.log('[STR1-DEBUG]   ⚠️ Tesla was in filtered results but NOT injected (token budget or topK limit)');
+          console.log(
+            '[STR1-DEBUG]   ⚠️ Tesla was in filtered results but NOT injected (token budget or topK limit)',
+          );
         }
       }
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-        console.log(`[STR1-DEBUG] Memories injected: ${results.map(r => r.id).join(', ')}`);
+        console.log(`[STR1-DEBUG] Memories injected: ${results.map((r) => r.id).join(', ')}`);
         console.log('[STR1-DEBUG] ═══════════════════════════════════════════════════════');
       }
     }
@@ -2638,9 +3094,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       }
 
       // Look for temporal facts in results
-      const temporalFacts = results.filter(m => {
+      const temporalFacts = results.filter((m) => {
         const content = (m.content || '').toLowerCase();
-        return /\d{4}|years?|months?|graduated|started|worked|joined|left|duration|google|amazon|mit/.test(content);
+        return /\d{4}|years?|months?|graduated|started|worked|joined|left|duration|google|amazon|mit/.test(
+          content,
+        );
       });
 
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
@@ -2671,11 +3129,11 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     telemetry.results_returned = results.length;
     telemetry.results_injected = results.length;
-    telemetry.tokens_used = usedTokens;  // Actual tokens used (within budget)
+    telemetry.tokens_used = usedTokens; // Actual tokens used (within budget)
 
     // Collect memory IDs and scores
-    telemetry.injected_memory_ids = results.map(r => r.id);
-    telemetry.top_scores = results.slice(0, 10).map(r => parseFloat(r.similarity.toFixed(3)));
+    telemetry.injected_memory_ids = results.map((r) => r.id);
+    telemetry.top_scores = results.slice(0, 10).map((r) => parseFloat(r.similarity.toFixed(3)));
 
     // Calculate telemetry stats
     if (results.length > 0) {
@@ -2689,8 +3147,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     // Add safety-critical telemetry (Issue #511, FIX #688)
     telemetry.safety_critical_detected = isSafetyCritical;
     telemetry.safety_categories_injected = safetyCriticalCategories;
-    telemetry.safety_memories_boosted = results.filter(r => r.safety_boosted).length;
-    telemetry.safety_boost_applied = isSafetyCritical;  // FIX #688: Track whether boost was applied
+    telemetry.safety_memories_boosted = results.filter((r) => r.safety_boosted).length;
+    telemetry.safety_boost_applied = isSafetyCritical; // FIX #688: Track whether boost was applied
 
     // INNOVATION #7: Track semantic access to update importance scores
     // High-importance memories are those frequently semantically relevant to queries
@@ -2700,9 +3158,13 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       // and bypassing the similarity threshold on unrelated queries.
       // Note: An empty healthMemoryIds array is valid — PostgreSQL's ANY('{}') matches
       //       nothing, so all memories are capped at 0.85, which is the correct behavior.
-      const memoryIds = results.map(r => r.id);
-      const healthMemoryIds = results.filter(r => SAFETY_BYPASS_CATEGORIES.has(r.category_name)).map(r => r.id);
-      pool.query(`
+      const memoryIds = results.map((r) => r.id);
+      const healthMemoryIds = results
+        .filter((r) => SAFETY_BYPASS_CATEGORIES.has(r.category_name))
+        .map((r) => r.id);
+      pool
+        .query(
+          `
         UPDATE persistent_memories
         SET
           usage_frequency = usage_frequency + 1,
@@ -2712,11 +3174,15 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
           END,
           last_accessed = CURRENT_TIMESTAMP
         WHERE id = ANY($1::int[])
-      `, [memoryIds, healthMemoryIds])
+      `,
+          [memoryIds, healthMemoryIds],
+        )
         .then(() => {
-          console.log(`[SEMANTIC-IMPORTANCE] Updated importance for ${memoryIds.length} semantically retrieved memories`);
+          console.log(
+            `[SEMANTIC-IMPORTANCE] Updated importance for ${memoryIds.length} semantically retrieved memories`,
+          );
         })
-        .catch(err => {
+        .catch((err) => {
           console.error(`[SEMANTIC-IMPORTANCE] ⚠️ Failed to update importance: ${err.message}`);
         });
     }
@@ -2739,7 +3205,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       const cat = (mem.category_name || 'unknown').substring(0, 10).padEnd(10);
       const preview = (mem.content || '').substring(0, 50);
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-        console.log(`[ISSUE-697]  #${rank.toString().padStart(2)}  | ${id} | ${score} | ${sim} | ${cat} | ${preview}`);
+        console.log(
+          `[ISSUE-697]  #${rank.toString().padStart(2)}  | ${id} | ${score} | ${sim} | ${cat} | ${preview}`,
+        );
       }
     });
 
@@ -2748,7 +3216,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       const cutOff = filtered.slice(results.length, Math.min(filtered.length, results.length + 5));
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
         console.log('[ISSUE-697] ');
-        console.log(`[ISSUE-697] MEMORIES CUT OFF: ${filtered.length - results.length} memories didn't make it`);
+        console.log(
+          `[ISSUE-697] MEMORIES CUT OFF: ${filtered.length - results.length} memories didn't make it`,
+        );
         console.log('[ISSUE-697] Next 5 memories that were cut:');
       }
       cutOff.forEach((mem, idx) => {
@@ -2759,28 +3229,40 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
         const cat = (mem.category_name || 'unknown').substring(0, 10).padEnd(10);
         const preview = (mem.content || '').substring(0, 50);
         if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-          console.log(`[ISSUE-697]  #${rank.toString().padStart(2)}  | ${id} | ${score} | ${sim} | ${cat} | ${preview}`);
+          console.log(
+            `[ISSUE-697]  #${rank.toString().padStart(2)}  | ${id} | ${score} | ${sim} | ${cat} | ${preview}`,
+          );
         }
       });
     }
 
     // STR1-specific: Check for car/vehicle keywords in results and filtered
     if (isCarQuery) {
-      const carInResults = results.filter(m => /car|tesla|model|vehicle|drive/i.test(m.content || ''));
-      const carInFiltered = filtered.filter(m => /car|tesla|model|vehicle|drive/i.test(m.content || ''));
+      const carInResults = results.filter((m) =>
+        /car|tesla|model|vehicle|drive/i.test(m.content || ''),
+      );
+      const carInFiltered = filtered.filter((m) =>
+        /car|tesla|model|vehicle|drive/i.test(m.content || ''),
+      );
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
         console.log('[ISSUE-697] ');
-        console.log(`[ISSUE-697] STR1 CAR QUERY: Found ${carInResults.length}/${carInFiltered.length} car-related memories in results`);
+        console.log(
+          `[ISSUE-697] STR1 CAR QUERY: Found ${carInResults.length}/${carInFiltered.length} car-related memories in results`,
+        );
       }
       if (carInFiltered.length > carInResults.length) {
-        const missing = carInFiltered.filter(m => !results.find(r => r.id === m.id));
+        const missing = carInFiltered.filter((m) => !results.find((r) => r.id === m.id));
         if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-          console.log(`[ISSUE-697] STR1 MISSING: ${missing.length} car memories were filtered but not returned`);
+          console.log(
+            `[ISSUE-697] STR1 MISSING: ${missing.length} car memories were filtered but not returned`,
+          );
         }
-        missing.forEach(mem => {
+        missing.forEach((mem) => {
           const rank = filtered.indexOf(mem) + 1;
           if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-            console.log(`[ISSUE-697]   Rank #${rank}: ID ${mem.id}, Score ${(mem.hybrid_score || 0).toFixed(3)}, "${(mem.content || '').substring(0, 60)}"`);
+            console.log(
+              `[ISSUE-697]   Rank #${rank}: ID ${mem.id}, Score ${(mem.hybrid_score || 0).toFixed(3)}, "${(mem.content || '').substring(0, 60)}"`,
+            );
           }
         });
       }
@@ -2788,23 +3270,31 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 
     // NUA1-specific: Check for entity-boosted memories
     if (detectedEntities.length > 0) {
-      const entitiesInResults = results.filter(m => m.entity_boosted);
-      const entitiesInFiltered = filtered.filter(m => m.entity_boosted);
+      const entitiesInResults = results.filter((m) => m.entity_boosted);
+      const entitiesInFiltered = filtered.filter((m) => m.entity_boosted);
       if (process.env.DEBUG_DIAGNOSTICS === 'true') {
         console.log('[ISSUE-697] ');
-        console.log(`[ISSUE-697] NUA1 ENTITY QUERY: Detected entities [${detectedEntities.join(', ')}]`);
-        console.log(`[ISSUE-697] NUA1 ENTITY QUERY: Found ${entitiesInResults.length}/${entitiesInFiltered.length} entity-boosted memories in results`);
+        console.log(
+          `[ISSUE-697] NUA1 ENTITY QUERY: Detected entities [${detectedEntities.join(', ')}]`,
+        );
+        console.log(
+          `[ISSUE-697] NUA1 ENTITY QUERY: Found ${entitiesInResults.length}/${entitiesInFiltered.length} entity-boosted memories in results`,
+        );
       }
       if (entitiesInFiltered.length > entitiesInResults.length) {
-        const missing = entitiesInFiltered.filter(m => !results.find(r => r.id === m.id));
+        const missing = entitiesInFiltered.filter((m) => !results.find((r) => r.id === m.id));
         if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-          console.log(`[ISSUE-697] NUA1 MISSING: ${missing.length} entity-boosted memories were filtered but not returned`);
+          console.log(
+            `[ISSUE-697] NUA1 MISSING: ${missing.length} entity-boosted memories were filtered but not returned`,
+          );
         }
-        missing.forEach(mem => {
+        missing.forEach((mem) => {
           const rank = filtered.indexOf(mem) + 1;
           const entities = mem.matched_entities ? mem.matched_entities.join(', ') : 'unknown';
           if (process.env.DEBUG_DIAGNOSTICS === 'true') {
-            console.log(`[ISSUE-697]   Rank #${rank}: ID ${mem.id}, Score ${(mem.hybrid_score || 0).toFixed(3)}, Entities [${entities}]`);
+            console.log(
+              `[ISSUE-697]   Rank #${rank}: ID ${mem.id}, Score ${(mem.hybrid_score || 0).toFixed(3)}, Entities [${entities}]`,
+            );
             console.log(`[ISSUE-697]     Content: "${(mem.content || '').substring(0, 80)}"`);
           }
         });
@@ -2819,10 +3309,12 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     const cleanResults = results.map(({ embedding, ...rest }) => ({
       ...rest,
       similarity: Math.round(rest.similarity * 1000) / 1000,
-      hybrid_score: Math.round(rest.hybrid_score * 1000) / 1000
+      hybrid_score: Math.round(rest.hybrid_score * 1000) / 1000,
     }));
 
-    console.log(`[SEMANTIC RETRIEVAL] ✅ Found ${results.length} memories for "${query.substring(0, 50)}..." (${telemetry.total_ms}ms)`);
+    console.log(
+      `[SEMANTIC RETRIEVAL] ✅ Found ${results.length} memories for "${query.substring(0, 50)}..." (${telemetry.total_ms}ms)`,
+    );
 
     // DIAGNOSTIC: CMP2 - Log retrieval details for name preservation tests
     if (query && /who are my|my contacts|my key contacts/i.test(query)) {
@@ -2831,7 +3323,9 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       console.log(`[DIAG-CMP2] Retrieved ${cleanResults.length} memories`);
       cleanResults.slice(0, 10).forEach((mem, idx) => {
         const preview = (mem.content || '').substring(0, 100).replace(/\n/g, ' ');
-        console.log(`[DIAG-CMP2]   #${idx + 1} Sim:${(mem.similarity || 0).toFixed(3)} "${preview}"`);
+        console.log(
+          `[DIAG-CMP2]   #${idx + 1} Sim:${(mem.similarity || 0).toFixed(3)} "${preview}"`,
+        );
       });
       console.log('[DIAG-CMP2] ═══════════════════════════════════════════════════════');
     }
@@ -2839,9 +3333,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
     return {
       success: true,
       memories: cleanResults,
-      telemetry
+      telemetry,
     };
-
   } catch (error) {
     telemetry.total_ms = Date.now() - startTime;
     console.error(`[SEMANTIC RETRIEVAL] ❌ Error: ${error.message}`);
@@ -2849,7 +3342,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
       success: false,
       error: error.message,
       memories: [],
-      telemetry
+      telemetry,
     };
   }
 }
@@ -2861,7 +3354,7 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
 /**
  * Find memories with matching or similar fingerprint
  * Used for fact supersession detection
- * 
+ *
  * @param {object} pool - PostgreSQL connection pool
  * @param {string} userId - User ID
  * @param {string} fingerprint - Fact fingerprint to match
@@ -2869,7 +3362,8 @@ export async function retrieveSemanticMemories(pool, query, options = {}) {
  */
 export async function findByFingerprint(pool, userId, fingerprint) {
   try {
-    const { rows } = await pool.query(`
+    const { rows } = await pool.query(
+      `
       SELECT id, user_id, content, fact_fingerprint, fingerprint_confidence, created_at, metadata
       FROM persistent_memories
       WHERE user_id = $1
@@ -2877,18 +3371,20 @@ export async function findByFingerprint(pool, userId, fingerprint) {
         AND fact_fingerprint = $2
       ORDER BY created_at DESC
       LIMIT 10
-    `, [userId, fingerprint]);
+    `,
+      [userId, fingerprint],
+    );
 
     return {
       success: true,
       matches: rows,
-      count: rows.length
+      count: rows.length,
     };
   } catch (error) {
     return {
       success: false,
       error: error.message,
-      matches: []
+      matches: [],
     };
   }
 }
@@ -2900,14 +3396,17 @@ export async function findByFingerprint(pool, userId, fingerprint) {
 /**
  * Get retrieval statistics for a user
  * Useful for debugging and optimization
- * 
+ *
  * @param {object} pool - PostgreSQL connection pool
  * @param {string} userId - User ID
  * @returns {Promise<object>} Statistics object
  */
 export async function getRetrievalStats(pool, userId) {
   try {
-    const { rows: [stats] } = await pool.query(`
+    const {
+      rows: [stats],
+    } = await pool.query(
+      `
       SELECT
         COUNT(*) as total_memories,
         COUNT(*) FILTER (WHERE is_current = true) as current_memories,
@@ -2921,7 +3420,9 @@ export async function getRetrievalStats(pool, userId) {
         MAX(created_at) as newest_memory
       FROM persistent_memories
       WHERE user_id = $1
-    `, [userId]);
+    `,
+      [userId],
+    );
 
     return {
       success: true,
@@ -2936,15 +3437,16 @@ export async function getRetrievalStats(pool, userId) {
         unique_modes: parseInt(stats.unique_modes),
         oldest_memory: stats.oldest_memory,
         newest_memory: stats.newest_memory,
-        embedding_coverage: stats.total_memories > 0 
-          ? Math.round(stats.with_embeddings / stats.total_memories * 100) + '%'
-          : 'N/A'
-      }
+        embedding_coverage:
+          stats.total_memories > 0
+            ? Math.round((stats.with_embeddings / stats.total_memories) * 100) + '%'
+            : 'N/A',
+      },
     };
   } catch (error) {
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
@@ -2957,5 +3459,5 @@ export default {
   retrieveSemanticMemories,
   findByFingerprint,
   getRetrievalStats,
-  config: RETRIEVAL_CONFIG
+  config: RETRIEVAL_CONFIG,
 };

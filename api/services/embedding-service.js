@@ -22,12 +22,12 @@ const AbortController = globalThis.AbortController;
 // ============================================
 
 const EMBEDDING_CONFIG = {
-  model: 'text-embedding-3-small',  // OpenAI model
-  dimensions: 1536,                  // Vector dimensions
-  timeout: 5000,                     // 5 second timeout for inline generation
-  maxRetries: 2,                     // Retries for failed embeddings
-  batchSize: 20,                     // Batch size for backfill
-  maxContentLength: 8000             // Max chars to embed (truncate if longer)
+  model: 'text-embedding-3-small', // OpenAI model
+  dimensions: 1536, // Vector dimensions
+  timeout: 5000, // 5 second timeout for inline generation
+  maxRetries: 2, // Retries for failed embeddings
+  batchSize: 20, // Batch size for backfill
+  maxContentLength: 8000, // Max chars to embed (truncate if longer)
 };
 
 // ============================================
@@ -36,7 +36,7 @@ const EMBEDDING_CONFIG = {
 
 /**
  * Generate embedding for text content
- * 
+ *
  * @param {string} content - Text to embed
  * @param {object} options - Optional settings
  * @returns {Promise<{success: boolean, embedding?: number[], error?: string, model?: string}>}
@@ -47,17 +47,18 @@ export async function generateEmbedding(content, options = {}) {
 
   // Validate input
   if (!content || typeof content !== 'string' || content.trim().length === 0) {
-    return { 
-      success: false, 
+    return {
+      success: false,
       error: 'Empty or invalid content',
-      timeMs: Date.now() - startTime 
+      timeMs: Date.now() - startTime,
     };
   }
 
   // Truncate if too long
-  const truncatedContent = content.length > EMBEDDING_CONFIG.maxContentLength
-    ? content.substring(0, EMBEDDING_CONFIG.maxContentLength) + '...'
-    : content;
+  const truncatedContent =
+    content.length > EMBEDDING_CONFIG.maxContentLength
+      ? content.substring(0, EMBEDDING_CONFIG.maxContentLength) + '...'
+      : content;
 
   try {
     const controller = new AbortController();
@@ -66,14 +67,14 @@ export async function generateEmbedding(content, options = {}) {
     const response = await fetch('https://api.openai.com/v1/embeddings', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: EMBEDDING_CONFIG.model,
-        input: truncatedContent
+        input: truncatedContent,
       }),
-      signal: controller.signal
+      signal: controller.signal,
     });
 
     clearTimeout(timeoutId);
@@ -83,7 +84,7 @@ export async function generateEmbedding(content, options = {}) {
       return {
         success: false,
         error: `OpenAI API error: ${response.status} - ${errorData.error?.message || 'Unknown'}`,
-        timeMs: Date.now() - startTime
+        timeMs: Date.now() - startTime,
       };
     }
 
@@ -94,7 +95,7 @@ export async function generateEmbedding(content, options = {}) {
       return {
         success: false,
         error: 'Invalid embedding response from OpenAI',
-        timeMs: Date.now() - startTime
+        timeMs: Date.now() - startTime,
       };
     }
 
@@ -103,21 +104,20 @@ export async function generateEmbedding(content, options = {}) {
       embedding: embedding,
       model: EMBEDDING_CONFIG.model,
       dimensions: embedding.length,
-      timeMs: Date.now() - startTime
+      timeMs: Date.now() - startTime,
     };
-
   } catch (error) {
     if (error.name === 'AbortError') {
       return {
         success: false,
         error: `Embedding generation timed out after ${timeout}ms`,
-        timeMs: Date.now() - startTime
+        timeMs: Date.now() - startTime,
       };
     }
     return {
       success: false,
       error: `Embedding generation failed: ${error.message}`,
-      timeMs: Date.now() - startTime
+      timeMs: Date.now() - startTime,
     };
   }
 }
@@ -129,7 +129,7 @@ export async function generateEmbedding(content, options = {}) {
 /**
  * Generate and store embedding for a memory
  * Never blocks memory storage - degrades to 'pending' status on failure
- * 
+ *
  * @param {object} pool - PostgreSQL connection pool
  * @param {string} memoryId - UUID of the memory
  * @param {string} content - Content to embed
@@ -150,7 +150,8 @@ export async function embedMemory(pool, memoryId, content, options = {}) {
       // pgvector expects JSON array format: "[0.1,0.2,0.3,...]"
       const embeddingStr = JSON.stringify(result.embedding);
 
-      await pool.query(`
+      await pool.query(
+        `
         UPDATE persistent_memories
         SET
           embedding = $1::vector(1536),
@@ -158,15 +159,17 @@ export async function embedMemory(pool, memoryId, content, options = {}) {
           embedding_updated_at = NOW(),
           embedding_model = $2
         WHERE id = $3
-      `, [embeddingStr, result.model, memoryId]);
+      `,
+        [embeddingStr, result.model, memoryId],
+      );
 
       console.log(`[EMBEDDING] ✅ Generated for memory ${memoryId} (${result.timeMs}ms)`);
-      
+
       return {
         success: true,
         status: 'ready',
         timeMs: Date.now() - startTime,
-        dimensions: result.dimensions
+        dimensions: result.dimensions,
       };
     } catch (dbError) {
       console.error(`[EMBEDDING] ❌ DB error storing embedding: ${dbError.message}`);
@@ -174,32 +177,35 @@ export async function embedMemory(pool, memoryId, content, options = {}) {
         success: false,
         status: 'failed',
         error: `Database error: ${dbError.message}`,
-        timeMs: Date.now() - startTime
+        timeMs: Date.now() - startTime,
       };
     }
   } else {
     // Failed: mark as pending/failed for backfill
     const status = result.error.includes('timed out') ? 'pending' : 'failed';
-    
+
     try {
-      await pool.query(`
+      await pool.query(
+        `
         UPDATE persistent_memories 
         SET 
           embedding_status = $1,
           embedding_updated_at = NOW()
         WHERE id = $2
-      `, [status, memoryId]);
+      `,
+        [status, memoryId],
+      );
     } catch (dbError) {
       console.error(`[EMBEDDING] ❌ Could not update status: ${dbError.message}`);
     }
 
     console.log(`[EMBEDDING] ⚠️ Marked ${memoryId} as ${status}: ${result.error}`);
-    
+
     return {
       success: false,
       status: status,
       error: result.error,
-      timeMs: Date.now() - startTime
+      timeMs: Date.now() - startTime,
     };
   }
 }
@@ -224,19 +230,20 @@ export async function embedMemoryNonBlocking(pool, memoryId, content, options = 
   try {
     const result = await Promise.race([
       embedMemory(pool, memoryId, content, { timeout }),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Embedding timeout')), timeout)
-      )
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Embedding timeout')), timeout)),
     ]);
     return result;
   } catch (error) {
     // Timeout or failure - mark as pending for backfill
     try {
-      await pool.query(`
+      await pool.query(
+        `
         UPDATE persistent_memories
         SET embedding_status = 'pending', embedding_updated_at = NOW()
         WHERE id = $1
-      `, [memoryId]);
+      `,
+        [memoryId],
+      );
 
       console.log(`[EMBEDDING] ⏳ Marked ${memoryId} as pending (${error.message})`);
       return { success: false, status: 'pending', error: error.message };
@@ -260,10 +267,10 @@ export async function embedMemoryNonBlocking(pool, memoryId, content, options = 
  * @returns {Promise<{processed: number, succeeded: number, failed: number, remaining: number}>}
  */
 export async function backfillEmbeddings(pool, options = {}) {
-  const { 
-    batchSize = EMBEDDING_CONFIG.batchSize, 
+  const {
+    batchSize = EMBEDDING_CONFIG.batchSize,
     maxBatches = 5,
-    statusFilter = ['pending', 'failed']
+    statusFilter = ['pending', 'failed'],
   } = options;
 
   const stats = {
@@ -271,14 +278,17 @@ export async function backfillEmbeddings(pool, options = {}) {
     succeeded: 0,
     failed: 0,
     remaining: 0,
-    startTime: Date.now()
+    startTime: Date.now(),
   };
 
-  console.log(`[EMBEDDING BACKFILL] Starting (batch size: ${batchSize}, max batches: ${maxBatches})`);
+  console.log(
+    `[EMBEDDING BACKFILL] Starting (batch size: ${batchSize}, max batches: ${maxBatches})`,
+  );
 
   for (let batch = 0; batch < maxBatches; batch++) {
     // Fetch batch of memories needing embeddings
-    const { rows: memories } = await pool.query(`
+    const { rows: memories } = await pool.query(
+      `
       SELECT id, content
       FROM persistent_memories
       WHERE (
@@ -287,7 +297,9 @@ export async function backfillEmbeddings(pool, options = {}) {
       )
       ORDER BY created_at DESC
       LIMIT $2
-    `, [statusFilter, batchSize]);
+    `,
+      [statusFilter, batchSize],
+    );
 
     if (memories.length === 0) {
       console.log(`[EMBEDDING BACKFILL] No more memories to process`);
@@ -297,10 +309,10 @@ export async function backfillEmbeddings(pool, options = {}) {
     console.log(`[EMBEDDING BACKFILL] Processing batch ${batch + 1}: ${memories.length} memories`);
 
     for (const memory of memories) {
-      const result = await embedMemory(pool, memory.id, memory.content, { 
-        timeout: 10000 // Longer timeout for backfill
+      const result = await embedMemory(pool, memory.id, memory.content, {
+        timeout: 10000, // Longer timeout for backfill
       });
-      
+
       stats.processed++;
       if (result.success) {
         stats.succeeded++;
@@ -309,23 +321,30 @@ export async function backfillEmbeddings(pool, options = {}) {
       }
 
       // Small delay to avoid rate limiting
-      await new Promise(r => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 100));
     }
   }
 
   // Count remaining
-  const { rows: [{ count }] } = await pool.query(`
+  const {
+    rows: [{ count }],
+  } = await pool.query(
+    `
     SELECT COUNT(*) as count
     FROM persistent_memories
     WHERE (
       embedding_status = ANY($1::varchar[])
       OR (embedding IS NULL AND content IS NOT NULL AND embedding_status != 'failed')
     )
-  `, [statusFilter]);
+  `,
+    [statusFilter],
+  );
   stats.remaining = parseInt(count);
   stats.timeMs = Date.now() - stats.startTime;
 
-  console.log(`[EMBEDDING BACKFILL] Complete: ${stats.succeeded}/${stats.processed} succeeded, ${stats.remaining} remaining (${stats.timeMs}ms)`);
+  console.log(
+    `[EMBEDDING BACKFILL] Complete: ${stats.succeeded}/${stats.processed} succeeded, ${stats.remaining} remaining (${stats.timeMs}ms)`,
+  );
 
   return stats;
 }
@@ -336,7 +355,7 @@ export async function backfillEmbeddings(pool, options = {}) {
 
 /**
  * Calculate cosine similarity between two vectors
- * 
+ *
  * @param {number[]} a - First vector
  * @param {number[]} b - Second vector
  * @returns {number} Similarity score (0-1, higher is more similar)
@@ -362,7 +381,7 @@ export function cosineSimilarity(a, b) {
 
 /**
  * Rank memories by semantic similarity to query
- * 
+ *
  * @param {number[]} queryEmbedding - Query embedding vector
  * @param {Array<{id: string, embedding: number[], ...}>} candidates - Memory candidates with embeddings
  * @param {object} options - Ranking options
@@ -372,12 +391,12 @@ export function rankBySimilarity(queryEmbedding, candidates, options = {}) {
   const { minSimilarity = 0.3, maxResults = 20 } = options;
 
   const scored = candidates
-    .filter(c => c.embedding && Array.isArray(c.embedding))
-    .map(candidate => ({
+    .filter((c) => c.embedding && Array.isArray(c.embedding))
+    .map((candidate) => ({
       ...candidate,
-      similarity: cosineSimilarity(queryEmbedding, candidate.embedding)
+      similarity: cosineSimilarity(queryEmbedding, candidate.embedding),
     }))
-    .filter(c => c.similarity >= minSimilarity)
+    .filter((c) => c.similarity >= minSimilarity)
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, maxResults);
 
@@ -398,7 +417,7 @@ export function createEmbeddingTelemetry() {
     embeddingsFailed: 0,
     totalTimeMs: 0,
     avgTimeMs: 0,
-    
+
     record(operation, timeMs, success) {
       this.queriesProcessed++;
       this.totalTimeMs += timeMs;
@@ -415,12 +434,13 @@ export function createEmbeddingTelemetry() {
         queriesProcessed: this.queriesProcessed,
         embeddingsGenerated: this.embeddingsGenerated,
         embeddingsFailed: this.embeddingsFailed,
-        successRate: this.queriesProcessed > 0 
-          ? (this.embeddingsGenerated / this.queriesProcessed * 100).toFixed(1) + '%'
-          : 'N/A',
-        avgTimeMs: Math.round(this.avgTimeMs)
+        successRate:
+          this.queriesProcessed > 0
+            ? ((this.embeddingsGenerated / this.queriesProcessed) * 100).toFixed(1) + '%'
+            : 'N/A',
+        avgTimeMs: Math.round(this.avgTimeMs),
       };
-    }
+    },
   };
 }
 
@@ -436,5 +456,5 @@ export default {
   cosineSimilarity,
   rankBySimilarity,
   createEmbeddingTelemetry,
-  config: EMBEDDING_CONFIG
+  config: EMBEDDING_CONFIG,
 };

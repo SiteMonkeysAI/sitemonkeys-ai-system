@@ -12,8 +12,8 @@ export class ProductValidator {
     const validation = {
       validation_passed: false,
       evidence_strength: 0,
-      value_analysis: "INSUFFICIENT",
-      risk_assessment: "MISSING",
+      value_analysis: 'INSUFFICIENT',
+      risk_assessment: 'MISSING',
       disclosure_compliance: false,
       override_reason: null,
       structured_recommendation: null,
@@ -31,9 +31,7 @@ export class ProductValidator {
       /switch to/i,
     ];
 
-    const hasRecommendation = recommendationPatterns.some((pattern) =>
-      pattern.test(response),
-    );
+    const hasRecommendation = recommendationPatterns.some((pattern) => pattern.test(response));
 
     if (!hasRecommendation) {
       validation.validation_passed = true;
@@ -41,32 +39,18 @@ export class ProductValidator {
     }
 
     // FIXED: Use class name instead of 'this'
-    validation.evidence_strength =
-      ProductValidator.analyzeEvidenceStrength(response);
-    validation.value_analysis = ProductValidator.analyzeValueProposition(
-      response,
-      mode,
-    );
-    validation.risk_assessment = ProductValidator.analyzeRiskAssessment(
-      response,
-      mode,
-    );
-    validation.disclosure_compliance =
-      ProductValidator.checkDisclosureCompliance(response);
+    validation.evidence_strength = ProductValidator.analyzeEvidenceStrength(response);
+    validation.value_analysis = ProductValidator.analyzeValueProposition(response, mode);
+    validation.risk_assessment = ProductValidator.analyzeRiskAssessment(response, mode);
+    validation.disclosure_compliance = ProductValidator.checkDisclosureCompliance(response);
 
-    const modeValidation = ProductValidator.applyModeSpecificValidation(
-      response,
-      mode,
-      vaultData,
-    );
+    const modeValidation = ProductValidator.applyModeSpecificValidation(response, mode, vaultData);
     Object.assign(validation, modeValidation);
 
-    validation.validation_passed =
-      ProductValidator.determineOverallValidation(validation);
+    validation.validation_passed = ProductValidator.determineOverallValidation(validation);
 
     if (!validation.validation_passed) {
-      validation.enforcement_actions =
-        ProductValidator.generateEnforcementActions(validation);
+      validation.enforcement_actions = ProductValidator.generateEnforcementActions(validation);
     }
 
     return validation;
@@ -108,12 +92,12 @@ export class ProductValidator {
       const flags = 'gi';
       const matches = response.match(new RegExp(patternStr, flags));
       if (matches) {
-        matches.forEach(match => citationMatches.add(match.toLowerCase()));
+        matches.forEach((match) => citationMatches.add(match.toLowerCase()));
       }
     });
 
     const citationCount = citationMatches.size;
-    
+
     // Score based on citation count
     if (citationCount >= 3) {
       evidenceScore += 75; // Multiple sources = strong evidence
@@ -129,7 +113,7 @@ export class ProductValidator {
       /\$[\d,]+(?:\.\d{2})?\s+(?:saved|gained|increased|revenue)/i,
       /\d+x\s+(?:faster|better|more efficient)/i,
     ];
-    
+
     quantitativePatterns.forEach((pattern) => {
       if (pattern.test(response)) evidenceScore += 10;
     });
@@ -155,37 +139,26 @@ export class ProductValidator {
 
   static analyzeValueProposition(response, mode) {
     const valueIndicators = {
-      COMPREHENSIVE: [
-        /cost savings/i,
-        /roi/i,
-        /return on investment/i,
-        /value proposition/i,
-      ],
+      COMPREHENSIVE: [/cost savings/i, /roi/i, /return on investment/i, /value proposition/i],
       PARTIAL: [/benefits/i, /advantages/i, /helps with/i],
       INSUFFICIENT: [/good option/i, /nice to have/i, /might help/i],
     };
 
-    if (mode === "business_validation") {
+    if (mode === 'business_validation') {
       if (/\$[\d,]+/i.test(response) && /save|gain|increase/i.test(response)) {
-        return "COMPREHENSIVE";
-      } else if (
-        valueIndicators.COMPREHENSIVE.some((pattern) => pattern.test(response))
-      ) {
-        return "PARTIAL";
+        return 'COMPREHENSIVE';
+      } else if (valueIndicators.COMPREHENSIVE.some((pattern) => pattern.test(response))) {
+        return 'PARTIAL';
       }
     } else {
-      if (
-        valueIndicators.COMPREHENSIVE.some((pattern) => pattern.test(response))
-      ) {
-        return "COMPREHENSIVE";
-      } else if (
-        valueIndicators.PARTIAL.some((pattern) => pattern.test(response))
-      ) {
-        return "PARTIAL";
+      if (valueIndicators.COMPREHENSIVE.some((pattern) => pattern.test(response))) {
+        return 'COMPREHENSIVE';
+      } else if (valueIndicators.PARTIAL.some((pattern) => pattern.test(response))) {
+        return 'PARTIAL';
       }
     }
 
-    return "INSUFFICIENT";
+    return 'INSUFFICIENT';
   }
 
   static analyzeRiskAssessment(response, mode) {
@@ -200,18 +173,16 @@ export class ProductValidator {
       /watch out/i,
     ];
 
-    const riskCount = riskPatterns.filter((pattern) =>
-      pattern.test(response),
-    ).length;
+    const riskCount = riskPatterns.filter((pattern) => pattern.test(response)).length;
 
-    if (mode === "business_validation") {
-      if (riskCount >= 3 && /cost/i.test(response)) return "COMPREHENSIVE";
-      if (riskCount >= 2) return "PARTIAL";
-      return "MISSING";
+    if (mode === 'business_validation') {
+      if (riskCount >= 3 && /cost/i.test(response)) return 'COMPREHENSIVE';
+      if (riskCount >= 2) return 'PARTIAL';
+      return 'MISSING';
     } else {
-      if (riskCount >= 2) return "COMPREHENSIVE";
-      if (riskCount >= 1) return "PARTIAL";
-      return "MISSING";
+      if (riskCount >= 2) return 'COMPREHENSIVE';
+      if (riskCount >= 1) return 'PARTIAL';
+      return 'MISSING';
     }
   }
 
@@ -232,26 +203,24 @@ export class ProductValidator {
     const modeValidation = {};
 
     switch (mode) {
-      case "truth_general":
+      case 'truth_general':
         modeValidation.comparison_framework =
           ProductValidator.validateComparisonFramework(response);
         break;
 
-      case "business_validation":
+      case 'business_validation':
         modeValidation.roi_analysis = this.validateROIAnalysis(response);
         modeValidation.tco_assessment = this.validateTCOAssessment(response);
-        modeValidation.risk_adjusted_projections =
-          this.validateRiskAdjustment(response);
+        modeValidation.risk_adjusted_projections = this.validateRiskAdjustment(response);
         break;
 
-      case "site_monkeys":
+      case 'site_monkeys':
         if (vaultData) {
-          modeValidation.operational_standards =
-            this.validateOperationalStandards(response, vaultData);
-          modeValidation.vendor_logic = this.validateVendorLogic(
+          modeValidation.operational_standards = this.validateOperationalStandards(
             response,
             vaultData,
           );
+          modeValidation.vendor_logic = this.validateVendorLogic(response, vaultData);
         }
         break;
     }
@@ -269,10 +238,8 @@ export class ProductValidator {
       /trade-off/i,
     ];
 
-    const hasComparison = comparisonElements.some((pattern) =>
-      pattern.test(response),
-    );
-    return hasComparison ? "PRESENT" : "MISSING";
+    const hasComparison = comparisonElements.some((pattern) => pattern.test(response));
+    return hasComparison ? 'PRESENT' : 'MISSING';
   }
 
   static validateROIAnalysis(response) {
@@ -284,9 +251,7 @@ export class ProductValidator {
       /break even/i,
     ];
 
-    return roiPatterns.some((pattern) => pattern.test(response))
-      ? "PRESENT"
-      : "MISSING";
+    return roiPatterns.some((pattern) => pattern.test(response)) ? 'PRESENT' : 'MISSING';
   }
 
   static validateTCOAssessment(response) {
@@ -299,9 +264,7 @@ export class ProductValidator {
       /subscription/i,
     ];
 
-    return tcoPatterns.some((pattern) => pattern.test(response))
-      ? "PRESENT"
-      : "MISSING";
+    return tcoPatterns.some((pattern) => pattern.test(response)) ? 'PRESENT' : 'MISSING';
   }
 
   static validateRiskAdjustment(response) {
@@ -313,25 +276,20 @@ export class ProductValidator {
       /contingency/i,
     ];
 
-    return riskAdjustmentPatterns.some((pattern) => pattern.test(response))
-      ? "PRESENT"
-      : "MISSING";
+    return riskAdjustmentPatterns.some((pattern) => pattern.test(response)) ? 'PRESENT' : 'MISSING';
   }
 
   static validateOperationalStandards(response, vaultData) {
     const standards = vaultData.operational_standards || [];
-    let compliance = "UNKNOWN";
+    let compliance = 'UNKNOWN';
 
-    if (
-      standards.includes("PREMIUM_POSITIONING") &&
-      /premium/i.test(response)
-    ) {
-      compliance = "COMPLIANT";
+    if (standards.includes('PREMIUM_POSITIONING') && /premium/i.test(response)) {
+      compliance = 'COMPLIANT';
     } else if (
-      standards.includes("COST_EFFICIENCY") &&
+      standards.includes('COST_EFFICIENCY') &&
       /cost.*(saving|efficient)/i.test(response)
     ) {
-      compliance = "COMPLIANT";
+      compliance = 'COMPLIANT';
     }
 
     return compliance;
@@ -339,14 +297,14 @@ export class ProductValidator {
 
   static validateVendorLogic(response, vaultData) {
     const vendorConstraints = vaultData.vendor_constraints || [];
-    return vendorConstraints.length > 0 ? "VAULT_CONSTRAINED" : "OPEN";
+    return vendorConstraints.length > 0 ? 'VAULT_CONSTRAINED' : 'OPEN';
   }
 
   static determineOverallValidation(validation) {
     const requirements = [
       validation.evidence_strength >= 50,
-      validation.value_analysis !== "INSUFFICIENT",
-      validation.risk_assessment !== "MISSING",
+      validation.value_analysis !== 'INSUFFICIENT',
+      validation.risk_assessment !== 'MISSING',
     ];
 
     return requirements.every((req) => req === true);
@@ -357,36 +315,34 @@ export class ProductValidator {
 
     if (validation.evidence_strength < 50) {
       actions.push({
-        action: "EVIDENCE_INSUFFICIENT",
+        action: 'EVIDENCE_INSUFFICIENT',
         message:
-          "Recommendation lacks sufficient evidence. Provide data sources or mark as opinion.",
-        severity: "HIGH",
+          'Recommendation lacks sufficient evidence. Provide data sources or mark as opinion.',
+        severity: 'HIGH',
       });
     }
 
-    if (validation.value_analysis === "INSUFFICIENT") {
+    if (validation.value_analysis === 'INSUFFICIENT') {
       actions.push({
-        action: "VALUE_UNCLEAR",
-        message:
-          "Value proposition not clearly articulated. Explain specific benefits.",
-        severity: "MEDIUM",
+        action: 'VALUE_UNCLEAR',
+        message: 'Value proposition not clearly articulated. Explain specific benefits.',
+        severity: 'MEDIUM',
       });
     }
 
-    if (validation.risk_assessment === "MISSING") {
+    if (validation.risk_assessment === 'MISSING') {
       actions.push({
-        action: "RISK_MISSING",
-        message:
-          "Risk assessment required for all recommendations. Include potential downsides.",
-        severity: "HIGH",
+        action: 'RISK_MISSING',
+        message: 'Risk assessment required for all recommendations. Include potential downsides.',
+        severity: 'HIGH',
       });
     }
 
     if (!validation.disclosure_compliance) {
       actions.push({
-        action: "DISCLOSURE_REQUIRED",
-        message: "Add disclosure statement about recommendation independence.",
-        severity: "MEDIUM",
+        action: 'DISCLOSURE_REQUIRED',
+        message: 'Add disclosure statement about recommendation independence.',
+        severity: 'MEDIUM',
       });
     }
 
@@ -396,16 +352,13 @@ export class ProductValidator {
   static generateStructuredRecommendation(originalResponse, validation) {
     if (!validation.validation_passed) {
       return {
-        recommendation:
-          "[ORIGINAL RECOMMENDATION BLOCKED - INSUFFICIENT EVIDENCE]",
+        recommendation: '[ORIGINAL RECOMMENDATION BLOCKED - INSUFFICIENT EVIDENCE]',
         evidence_strength: `${validation.evidence_strength}% (Minimum: 50% required)`,
         value_analysis: validation.value_analysis,
         risk_assessment: validation.risk_assessment,
-        required_improvements: validation.enforcement_actions.map(
-          (action) => action.message,
-        ),
+        required_improvements: validation.enforcement_actions.map((action) => action.message),
         disclosure:
-          "This recommendation has been blocked due to insufficient validation. Please provide additional evidence and risk analysis.",
+          'This recommendation has been blocked due to insufficient validation. Please provide additional evidence and risk analysis.',
         override_available: true,
       };
     }
@@ -421,26 +374,30 @@ export class ProductValidator {
   static async detectResponseIntent(response, context) {
     // Get reasoning if available in context
     let reasoning = context.reasoning || context.reasoningMetadata;
-    
+
     if (!reasoning || !reasoning.detections) {
       // Apply reasoning to understand intent - use the user's message, not the AI response
       const userMessage = context.message || context.query || '';
       reasoning = await applyPrincipleBasedReasoning(userMessage, context);
     }
-    
+
     // Check if this is informational content
-    const isInformational = reasoning.detections?.informational_query || 
-                           reasoning.detections?.fact_seeking ||
-                           context?.phase4Metadata?.truth_type === 'PERMANENT';
-    
+    const isInformational =
+      reasoning.detections?.informational_query ||
+      reasoning.detections?.fact_seeking ||
+      context?.phase4Metadata?.truth_type === 'PERMANENT';
+
     // Check if user explicitly asked for recommendations
-    const isRecommendationRequest = reasoning.detections?.decision_making ||
-                                    /(?:recommend|suggest|which\s+\w{1,20}\s+should|what\s+\w{1,20}\s+better|help me choose)/i.test(context.message || '');
-    
+    const isRecommendationRequest =
+      reasoning.detections?.decision_making ||
+      /(?:recommend|suggest|which\s+\w{1,20}\s+should|what\s+\w{1,20}\s+better|help me choose)/i.test(
+        context.message || '',
+      );
+
     return {
-      type: isInformational ? 'INFORMATION' : (isRecommendationRequest ? 'RECOMMENDATION' : 'MIXED'),
+      type: isInformational ? 'INFORMATION' : isRecommendationRequest ? 'RECOMMENDATION' : 'MIXED',
       confidence: reasoning.confidence || 0.7,
-      reasoning: reasoning
+      reasoning: reasoning,
     };
   }
 
@@ -448,23 +405,25 @@ export class ProductValidator {
     try {
       // PRINCIPLE (Issue #402 Findings #5, #15): Check intent before applying restrictions
       const intentAnalysis = await this.detectResponseIntent(response, context);
-      
+
       console.log(`[PRODUCT-VALIDATION] Response intent: ${intentAnalysis.type}`);
-      
+
       // If this is pure information delivery, bypass validation
       if (intentAnalysis.type === 'INFORMATION') {
-        console.log('[PRODUCT-VALIDATION] Information request - delivering truth per caring family member principle');
+        console.log(
+          '[PRODUCT-VALIDATION] Information request - delivering truth per caring family member principle',
+        );
         return {
           needsDisclosure: false,
           responseWithDisclosure: response,
           reason: 'Information request - no validation needed',
-          intentAnalysis: intentAnalysis
+          intentAnalysis: intentAnalysis,
         };
       }
-      
+
       const validation = this.validateRecommendation(
         response,
-        context.mode || "truth_general",
+        context.mode || 'truth_general',
         context.vaultContext || null,
       );
 
@@ -475,9 +434,7 @@ export class ProductValidator {
         };
       }
 
-      const hasDisclosure = /\[Note:|Caveat:|Important:|Disclaimer:/i.test(
-        response,
-      );
+      const hasDisclosure = /\[Note:|Caveat:|Important:|Disclaimer:/i.test(response);
 
       if (hasDisclosure) {
         return {
@@ -499,17 +456,17 @@ export class ProductValidator {
 
       // For RECOMMENDATION intent, augment (don't replace) with disclaimer
       const disclosure =
-        "\n\n[Note: Evaluate this recommendation against your specific needs, budget, and risk tolerance. No solution is perfect for every situation.]";
+        '\n\n[Note: Evaluate this recommendation against your specific needs, budget, and risk tolerance. No solution is perfect for every situation.]';
 
       return {
         needsDisclosure: true,
         responseWithDisclosure: response + disclosure,
-        reason: "Added value/risk disclosure to product recommendation",
+        reason: 'Added value/risk disclosure to product recommendation',
         validationIssues: validation.enforcement_actions,
-        intentAnalysis: intentAnalysis
+        intentAnalysis: intentAnalysis,
       };
     } catch (error) {
-      console.error("[PRODUCT-VALIDATION] Validation error:", error);
+      console.error('[PRODUCT-VALIDATION] Validation error:', error);
 
       return {
         needsDisclosure: false,
@@ -520,20 +477,13 @@ export class ProductValidator {
   }
 } // This closes the ProductValidator class
 
-export function validateProductRecommendation(
-  response,
-  mode,
-  vaultData = null,
-) {
+export function validateProductRecommendation(response, mode, vaultData = null) {
   return ProductValidator.validateRecommendation(response, mode, vaultData);
 }
 
 export function enforceRecommendationStandards(response, validation) {
   if (!validation.validation_passed) {
-    const structured = ProductValidator.generateStructuredRecommendation(
-      response,
-      validation,
-    );
+    const structured = ProductValidator.generateStructuredRecommendation(response, validation);
 
     return {
       original_blocked: true,
@@ -541,7 +491,7 @@ export function enforceRecommendationStandards(response, validation) {
 
 The original response contained product/service recommendations that don't meet evidence standards:
 
-${validation.enforcement_actions.map((action) => `• ${action.message}`).join("\n")}
+${validation.enforcement_actions.map((action) => `• ${action.message}`).join('\n')}
 
 EVIDENCE STRENGTH: ${validation.evidence_strength}% (Required: 50%+)
 VALUE ANALYSIS: ${validation.value_analysis}

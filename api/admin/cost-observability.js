@@ -117,7 +117,7 @@ export async function ensureCostLogTable(pool) {
 export async function cleanupOldCostLogs(pool) {
   try {
     const result = await pool.query(
-      `DELETE FROM query_cost_log WHERE created_at < NOW() - INTERVAL '90 days'`
+      `DELETE FROM query_cost_log WHERE created_at < NOW() - INTERVAL '90 days'`,
     );
     console.log(`[COST-LOG] Cleanup: removed ${result.rowCount} rows older than 90 days`);
   } catch (err) {
@@ -133,8 +133,7 @@ export async function cleanupOldCostLogs(pool) {
  */
 export async function handleCostSummary(req, res) {
   const adminKey =
-    req.headers['x-admin-key'] ||
-    req.headers['authorization']?.replace('Bearer ', '');
+    req.headers['x-admin-key'] || req.headers['authorization']?.replace('Bearer ', '');
   if (!adminKey) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
@@ -152,7 +151,7 @@ export async function handleCostSummary(req, res) {
     if (!isMasterAdmin) {
       const orgResult = await pool.query(
         'SELECT id FROM organizations WHERE admin_key = $1 AND is_active = true',
-        [adminKey]
+        [adminKey],
       );
       if (orgResult.rows.length === 0) {
         return res.status(403).json({ error: 'Unauthorized' });
@@ -165,7 +164,8 @@ export async function handleCostSummary(req, res) {
     const orgPlaceholder = orgId ? ' AND org_id = $1' : '';
 
     // Returns cost breakdown by query type for efficiency proof
-    const result = await pool.query(`
+    const result = await pool.query(
+      `
       SELECT
         query_type,
         truth_type,
@@ -185,9 +185,12 @@ export async function handleCostSummary(req, res) {
       WHERE created_at > NOW() - INTERVAL '7 days'${orgPlaceholder}
       GROUP BY query_type, truth_type
       ORDER BY avg_tokens DESC
-    `, orgParams);
+    `,
+      orgParams,
+    );
 
-    const modelBreakdown = await pool.query(`
+    const modelBreakdown = await pool.query(
+      `
       SELECT
         model,
         COUNT(*) as query_count,
@@ -201,9 +204,12 @@ export async function handleCostSummary(req, res) {
         AND model IS NOT NULL${orgPlaceholder}
       GROUP BY model
       ORDER BY total_cost_usd DESC
-    `, orgParams);
+    `,
+      orgParams,
+    );
 
-    const dailyTotals = await pool.query(`
+    const dailyTotals = await pool.query(
+      `
       SELECT
         DATE(created_at) as day,
         COUNT(*) as query_count,
@@ -212,19 +218,25 @@ export async function handleCostSummary(req, res) {
       WHERE created_at > NOW() - INTERVAL '30 days'${orgPlaceholder}
       GROUP BY DATE(created_at)
       ORDER BY day ASC
-    `, orgParams);
+    `,
+      orgParams,
+    );
 
     // Fallback and degradation counts (7 days)
-    const fallbackStats = await pool.query(`
+    const fallbackStats = await pool.query(
+      `
       SELECT
         COUNT(*) FILTER (WHERE query_type = 'emergency_fallback') AS fallback_count,
         COUNT(*) FILTER (WHERE degradation_tier IS NOT NULL AND degradation_tier != 'normal') AS degradation_count
       FROM query_cost_log
       WHERE created_at > NOW() - INTERVAL '7 days'${orgPlaceholder}
-    `, orgParams);
+    `,
+      orgParams,
+    );
 
     // Long-session aggregates (7 days)
-    const longSessions = await pool.query(`
+    const longSessions = await pool.query(
+      `
       SELECT
         session_id,
         COUNT(*) as query_count,
@@ -239,7 +251,9 @@ export async function handleCostSummary(req, res) {
       GROUP BY session_id
       HAVING COUNT(*) > 10 OR SUM(cost_usd) > 0.50
       ORDER BY SUM(cost_usd) DESC
-    `, orgParams);
+    `,
+      orgParams,
+    );
 
     const fbRow = fallbackStats.rows[0] || {};
 

@@ -1,9 +1,9 @@
 /**
  * SEMANTIC LAYER MIGRATION V2
- * 
+ *
  * Adds FLOAT4[] embedding storage with proper status tracking
  * Designed for graceful degradation and future pgvector migration
- * 
+ *
  * Usage: GET /api/migrate-semantic-v2
  * DELETE THIS FILE AFTER SUCCESSFUL MIGRATION
  */
@@ -14,21 +14,21 @@ export default async function handler(req, res) {
   }
 
   const { Pool } = await import('pg');
-  
+
   const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
   });
 
   const results = {
     success: false,
     steps: [],
     errors: [],
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 
   let client;
-  
+
   try {
     client = await pool.connect();
     results.steps.push('✅ Database connected');
@@ -180,7 +180,7 @@ export default async function handler(req, res) {
     // STEP 7: Create mode-aware indexes
     // ============================================
     results.steps.push('Creating mode-aware indexes...');
-    
+
     // Index 1: Primary retrieval index (user + mode + current)
     try {
       await client.query(`
@@ -256,13 +256,15 @@ export default async function handler(req, res) {
       )
       ORDER BY column_name
     `);
-    
+
     results.verification = verification.rows;
     results.columnsFound = verification.rows.length;
-    
+
     const expectedColumns = 10;
     if (verification.rows.length >= expectedColumns - 1) {
-      results.steps.push(`✅ Migration verified: ${verification.rows.length} semantic columns confirmed`);
+      results.steps.push(
+        `✅ Migration verified: ${verification.rows.length} semantic columns confirmed`,
+      );
       results.success = true;
     } else {
       results.steps.push(`⚠️ Only ${verification.rows.length}/${expectedColumns} columns verified`);
@@ -281,7 +283,6 @@ export default async function handler(req, res) {
     } catch (err) {
       results.pendingEmbeddings = 'unknown';
     }
-
   } catch (error) {
     results.errors.push('Connection error: ' + error.message);
     results.steps.push('❌ Migration failed: ' + error.message);
@@ -291,26 +292,24 @@ export default async function handler(req, res) {
   }
 
   // Final response
-  results.message = results.success 
-    ? '🎉 Semantic Layer V2 migration completed!' 
+  results.message = results.success
+    ? '🎉 Semantic Layer V2 migration completed!'
     : '⚠️ Migration had issues. Check errors.';
-  
-  results.nextSteps = results.success ? [
-    '1. Deploy embedding-service.js for store-time embedding generation',
-    '2. Deploy semantic-retrieval.js for query-time retrieval',
-    '3. Run backfill for existing memories if needed',
-    '4. Delete this migration file'
-  ] : [
-    '1. Review errors above',
-    '2. Fix any blocking issues',
-    '3. Re-run migration'
-  ];
+
+  results.nextSteps = results.success
+    ? [
+        '1. Deploy embedding-service.js for store-time embedding generation',
+        '2. Deploy semantic-retrieval.js for query-time retrieval',
+        '3. Run backfill for existing memories if needed',
+        '4. Delete this migration file',
+      ]
+    : ['1. Review errors above', '2. Fix any blocking issues', '3. Re-run migration'];
 
   results.schema = {
     embeddingStorage: 'FLOAT4[] (1536 dimensions, OpenAI compatible)',
     statusTracking: 'pending → ready | failed',
     indexStrategy: 'Mode-aware prefiltering with recency support',
-    migrationPath: 'Direct upgrade to pgvector vector(1536) when available'
+    migrationPath: 'Direct upgrade to pgvector vector(1536) when available',
   };
 
   res.status(results.success ? 200 : 500).json(results);

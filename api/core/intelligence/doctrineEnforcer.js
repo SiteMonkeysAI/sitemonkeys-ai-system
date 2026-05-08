@@ -1,10 +1,10 @@
 /**
  * doctrineEnforcer.js
  * Phase 5: Doctrine Enforcement Gates
- * 
+ *
  * Purpose: Enforce truth-first principles on every AI response
  * Runs AFTER AI generation, BEFORE returning to user
- * 
+ *
  * Location: /api/core/intelligence/doctrineEnforcer.js
  */
 
@@ -13,27 +13,27 @@ export const GATE_CONFIG = {
   TRUTH_GATE: {
     enabled: true,
     confidence_threshold: 0.5,
-    description: 'Block response if confidence < 0.5 AND no external verification attempted'
+    description: 'Block response if confidence < 0.5 AND no external verification attempted',
   },
   PROVENANCE_GATE: {
     enabled: true,
     required_tags: ['source_class', 'verified_at', 'confidence'],
-    description: 'Ensure external claims have proper source attribution'
+    description: 'Ensure external claims have proper source attribution',
   },
   VOLATILITY_GATE: {
     enabled: true,
-    description: 'Block caching of VOLATILE data beyond TTL'
+    description: 'Block caching of VOLATILE data beyond TTL',
   },
   BUSINESS_POLICY_GATE: {
     enabled: true,
     protected_modes: ['site_monkeys'],
-    description: 'Block external override of vault content in Site Monkeys mode'
+    description: 'Block external override of vault content in Site Monkeys mode',
   },
   DISCLOSURE_GATE: {
     enabled: true,
     confidence_threshold: 0.6,
-    description: 'Force disclosure when lookup fails or confidence is low'
-  }
+    description: 'Force disclosure when lookup fails or confidence is low',
+  },
 };
 
 /**
@@ -44,7 +44,8 @@ export const GATE_CONFIG = {
  */
 export function truthGate(response, phase4Data) {
   const confidence = phase4Data.confidence || 0.5;
-  const externalLookupPerformed = phase4Data.external_lookup || phase4Data.lookup_performed || false;
+  const externalLookupPerformed =
+    phase4Data.external_lookup || phase4Data.lookup_performed || false;
   const truthType = phase4Data.truth_type;
 
   // If confidence is above threshold, pass
@@ -66,7 +67,8 @@ export function truthGate(response, phase4Data) {
   return {
     passed: false,
     violation: `Low confidence (${confidence}) without external verification for ${truthType} claim`,
-    correction: 'I want to be transparent: my confidence in this answer is limited, and I was unable to verify it against external sources. Please verify this information independently.'
+    correction:
+      'I want to be transparent: my confidence in this answer is limited, and I was unable to verify it against external sources. Please verify this information independently.',
   };
 }
 
@@ -78,14 +80,14 @@ export function truthGate(response, phase4Data) {
  */
 export function provenanceGate(response, phase4Data) {
   const sourceClass = phase4Data.source_class;
-  
+
   // Only check provenance for external sources
   if (sourceClass !== 'external') {
     return { passed: true, violation: null, correction: null };
   }
 
   const missingTags = [];
-  
+
   if (!phase4Data.source_class) missingTags.push('source_class');
   if (!phase4Data.verified_at) missingTags.push('verified_at');
   if (phase4Data.confidence === undefined) missingTags.push('confidence');
@@ -97,7 +99,7 @@ export function provenanceGate(response, phase4Data) {
   return {
     passed: false,
     violation: `External claim missing provenance tags: ${missingTags.join(', ')}`,
-    correction: null // No text correction, just metadata issue
+    correction: null, // No text correction, just metadata issue
   };
 }
 
@@ -131,7 +133,7 @@ export function volatilityGate(response, phase4Data) {
     return {
       passed: false,
       violation: `VOLATILE data cached for ${Math.round(ttlMs / 60000)} minutes (max: 5 minutes)`,
-      correction: null // System-level fix, not text correction
+      correction: null, // System-level fix, not text correction
     };
   }
 
@@ -160,16 +162,21 @@ export function businessPolicyGate(response, phase4Data, mode) {
     return {
       passed: false,
       violation: 'External source used for business policy claim in Site Monkeys mode',
-      correction: 'Note: This response should be based on Site Monkeys internal policies, not external sources. Please verify against your vault documentation.'
+      correction:
+        'Note: This response should be based on Site Monkeys internal policies, not external sources. Please verify against your vault documentation.',
     };
   }
 
   // If hierarchy should be VAULT_FIRST but external was used as primary
-  if (hierarchyUsed === 'VAULT_FIRST' && sourceClass === 'external' && claimType === 'BUSINESS_POLICY') {
+  if (
+    hierarchyUsed === 'VAULT_FIRST' &&
+    sourceClass === 'external' &&
+    claimType === 'BUSINESS_POLICY'
+  ) {
     return {
       passed: false,
       violation: 'VAULT_FIRST hierarchy violated - external source overrode vault',
-      correction: null
+      correction: null,
     };
   }
 
@@ -190,10 +197,8 @@ export function disclosureGate(response, phase4Data) {
   const responseText = response.response || response;
 
   // Check if disclosure is needed
-  const needsDisclosure = 
-    confidence < GATE_CONFIG.DISCLOSURE_GATE.confidence_threshold ||
-    degraded ||
-    lookupFailed;
+  const needsDisclosure =
+    confidence < GATE_CONFIG.DISCLOSURE_GATE.confidence_threshold || degraded || lookupFailed;
 
   if (!needsDisclosure) {
     return { passed: true, violation: null, correction: null };
@@ -207,10 +212,10 @@ export function disclosureGate(response, phase4Data) {
     /\bcould(n't| not) verify\b/i,
     /\bplease verify\b/i,
     /\bthis (may|might) (not be|be outdated)\b/i,
-    /\bbased on (my training|internal data)\b/i
+    /\bbased on (my training|internal data)\b/i,
   ];
 
-  const hasDisclosure = disclosurePatterns.some(pattern => pattern.test(responseText));
+  const hasDisclosure = disclosurePatterns.some((pattern) => pattern.test(responseText));
 
   if (hasDisclosure) {
     return { passed: true, violation: null, correction: null };
@@ -220,7 +225,8 @@ export function disclosureGate(response, phase4Data) {
   let disclosure = '';
 
   if (lookupFailed || degraded) {
-    disclosure = "\n\n**Note:** I was unable to verify this information against current external sources. This response is based on my training data and may not reflect the most recent information.";
+    disclosure =
+      '\n\n**Note:** I was unable to verify this information against current external sources. This response is based on my training data and may not reflect the most recent information.';
   } else if (confidence < GATE_CONFIG.DISCLOSURE_GATE.confidence_threshold) {
     disclosure = `\n\n**Note:** My confidence in this response is ${Math.round(confidence * 100)}%. I recommend verifying this information from authoritative sources.`;
   }
@@ -231,7 +237,7 @@ export function disclosureGate(response, phase4Data) {
     passed: true,
     violation: null,
     correction: disclosure,
-    disclosure_added: true
+    disclosure_added: true,
   };
 }
 
@@ -244,7 +250,7 @@ export function disclosureGate(response, phase4Data) {
  */
 export function enforceAll(response, phase4Data, mode = 'truth') {
   console.log('[doctrineEnforcer] Running all enforcement gates...');
-  
+
   const gateResults = {};
   const violations = [];
   let correctedResponse = response.response || response;
@@ -294,10 +300,12 @@ export function enforceAll(response, phase4Data, mode = 'truth') {
   }
 
   const enforcementPassed = violations.length === 0;
-  
-  console.log(`[doctrineEnforcer] Enforcement complete: ${enforcementPassed ? 'PASSED' : 'VIOLATIONS FOUND'}`);
+
+  console.log(
+    `[doctrineEnforcer] Enforcement complete: ${enforcementPassed ? 'PASSED' : 'VIOLATIONS FOUND'}`,
+  );
   if (violations.length > 0) {
-    console.log(`[doctrineEnforcer] Violations: ${violations.map(v => v.gate).join(', ')}`);
+    console.log(`[doctrineEnforcer] Violations: ${violations.map((v) => v.gate).join(', ')}`);
   }
 
   return {
@@ -307,7 +315,7 @@ export function enforceAll(response, phase4Data, mode = 'truth') {
     corrected_response: modified ? correctedResponse : null,
     original_response_modified: modified,
     gates_run: Object.keys(gateResults).length,
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
   };
 }
 
@@ -320,11 +328,11 @@ export function enforceAll(response, phase4Data, mode = 'truth') {
  */
 export function testEnforcement(testResponse, testPhase4Data, testMode = 'truth') {
   console.log('[doctrineEnforcer] Running test enforcement...');
-  
-  const defaultResponse = testResponse || { 
-    response: 'This is a test response about Bitcoin prices.' 
+
+  const defaultResponse = testResponse || {
+    response: 'This is a test response about Bitcoin prices.',
   };
-  
+
   const defaultPhase4Data = testPhase4Data || {
     truth_type: 'VOLATILE',
     confidence: 0.7,
@@ -332,7 +340,7 @@ export function testEnforcement(testResponse, testPhase4Data, testMode = 'truth'
     external_lookup: false,
     lookup_performed: false,
     verified_at: null,
-    degraded: false
+    degraded: false,
   };
 
   return enforceAll(defaultResponse, defaultPhase4Data, testMode);
@@ -347,5 +355,5 @@ export default {
   businessPolicyGate,
   disclosureGate,
   enforceAll,
-  testEnforcement
+  testEnforcement,
 };

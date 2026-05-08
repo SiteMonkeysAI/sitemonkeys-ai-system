@@ -18,16 +18,36 @@ const COST_LIMITS = {
   maxEmbeddingsPerRun: 200,
   maxTotalEmbeddingsPerUser: 5000,
   batchSize: 50,
-  maxMemoriesPerTestUser: 25000
+  maxMemoriesPerTestUser: 25000,
 };
 
 // Tripwire test facts
 const TRIPWIRES = [
-  { content: "The user's secret code is ALPHA-7749", fingerprint: "tripwire_secret_code", query: "What is my secret code?" },
-  { content: "The user's favorite dinosaur is Velociraptor", fingerprint: "tripwire_dinosaur", query: "What's my favorite dinosaur?" },
-  { content: "The user's lucky number is 42", fingerprint: "tripwire_lucky_number", query: "What's my lucky number?" },
-  { content: "The user was born in Helsinki", fingerprint: "tripwire_birthplace", query: "Where was I born?" },
-  { content: "The user's childhood pet was named Sparky", fingerprint: "tripwire_pet", query: "What was my childhood pet's name?" }
+  {
+    content: "The user's secret code is ALPHA-7749",
+    fingerprint: 'tripwire_secret_code',
+    query: 'What is my secret code?',
+  },
+  {
+    content: "The user's favorite dinosaur is Velociraptor",
+    fingerprint: 'tripwire_dinosaur',
+    query: "What's my favorite dinosaur?",
+  },
+  {
+    content: "The user's lucky number is 42",
+    fingerprint: 'tripwire_lucky_number',
+    query: "What's my lucky number?",
+  },
+  {
+    content: 'The user was born in Helsinki',
+    fingerprint: 'tripwire_birthplace',
+    query: 'Where was I born?',
+  },
+  {
+    content: "The user's childhood pet was named Sparky",
+    fingerprint: 'tripwire_pet',
+    query: "What was my childhood pet's name?",
+  },
 ];
 
 /**
@@ -55,21 +75,24 @@ export async function generateTestData(pool, userId, count, options = {}) {
     for (let i = 0; i < regularCount; i++) {
       const content = `Test memory ${i + 1} for scale testing - random content ${crypto.randomUUID().substring(0, 8)}`;
 
-      const result = await pool.query(`
+      const result = await pool.query(
+        `
         INSERT INTO persistent_memories (
           user_id, content, is_current, mode, embedding_status, category_name, token_count,
           metadata, created_at
         ) VALUES ($1, $2, true, $3, $4, $5, $6, $7, NOW())
         RETURNING id
-      `, [
-        userId,
-        content,
-        mode,
-        skipEmbedding ? 'skipped' : 'pending',
-        'general',
-        10,
-        JSON.stringify({ run_id: runId })
-      ]);
+      `,
+        [
+          userId,
+          content,
+          mode,
+          skipEmbedding ? 'skipped' : 'pending',
+          'general',
+          10,
+          JSON.stringify({ run_id: runId }),
+        ],
+      );
 
       const memoryId = result.rows[0].id;
       memoryIds.push(memoryId);
@@ -83,28 +106,31 @@ export async function generateTestData(pool, userId, count, options = {}) {
 
       // Respect batch size limits
       if (i > 0 && i % COST_LIMITS.batchSize === 0) {
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
     }
 
     // Generate tripwires (always embedded for testing)
     for (const tripwire of TRIPWIRES) {
-      const result = await pool.query(`
+      const result = await pool.query(
+        `
         INSERT INTO persistent_memories (
           user_id, content, is_current, mode, embedding_status, category_name, token_count,
           fact_fingerprint, fingerprint_confidence, metadata, created_at
         ) VALUES ($1, $2, true, $3, 'pending', $4, $5, $6, $7, $8, NOW())
         RETURNING id
-      `, [
-        userId,
-        tripwire.content,
-        mode,
-        'personal_info',
-        10,
-        tripwire.fingerprint,
-        0.95,
-        JSON.stringify({ run_id: runId, is_tripwire: true })
-      ]);
+      `,
+        [
+          userId,
+          tripwire.content,
+          mode,
+          'personal_info',
+          10,
+          tripwire.fingerprint,
+          0.95,
+          JSON.stringify({ run_id: runId, is_tripwire: true }),
+        ],
+      );
 
       const memoryId = result.rows[0].id;
       memoryIds.push(memoryId);
@@ -116,7 +142,9 @@ export async function generateTestData(pool, userId, count, options = {}) {
 
     const elapsedMs = Date.now() - startTime;
 
-    console.log(`[SCALE-HARNESS] Generated ${generated} memories (${embedded} embedded) in ${elapsedMs}ms`);
+    console.log(
+      `[SCALE-HARNESS] Generated ${generated} memories (${embedded} embedded) in ${elapsedMs}ms`,
+    );
 
     return {
       success: true,
@@ -125,16 +153,15 @@ export async function generateTestData(pool, userId, count, options = {}) {
       runId,
       memoryIds,
       tripwireCount: TRIPWIRES.length,
-      elapsedMs
+      elapsedMs,
     };
-
   } catch (error) {
     console.error('[SCALE-HARNESS] Generation error:', error.message);
     return {
       success: false,
       error: error.message,
       generated,
-      embedded
+      embedded,
     };
   }
 }
@@ -171,23 +198,23 @@ export async function generateSupersessionChains(pool, userId, runId, mode = 'tr
           mode,
           categoryName: 'general',
           tokenCount: 10,
-          metadata: { run_id: runId, chain: i, version }
+          metadata: { run_id: runId, chain: i, version },
         });
 
         chainMemories.push({
           memoryId: result.memoryId,
           content,
           version,
-          supersededCount: result.supersededCount
+          supersededCount: result.supersededCount,
         });
 
         // Small delay between versions
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
 
       chains.push({
         fingerprint,
-        memories: chainMemories
+        memories: chainMemories,
       });
     }
 
@@ -196,15 +223,14 @@ export async function generateSupersessionChains(pool, userId, runId, mode = 'tr
     return {
       success: true,
       chains,
-      totalMemories: chains.length * 3
+      totalMemories: chains.length * 3,
     };
-
   } catch (error) {
     console.error('[SCALE-HARNESS] Supersession chain error:', error.message);
     return {
       success: false,
       error: error.message,
-      chains
+      chains,
     };
   }
 }
@@ -236,14 +262,14 @@ export async function runBenchmark(pool, userId, queryCount, options = {}) {
       const result = await retrieveSemanticMemories(pool, tripwire.query, {
         userId,
         mode,
-        topK: 10
+        topK: 10,
       });
 
       const latency = Date.now() - queryStart;
       latencies.push(latency);
 
-      const found = result.memories?.some(m =>
-        m.content && m.content.includes(tripwire.content.split(' ').pop())
+      const found = result.memories?.some(
+        (m) => m.content && m.content.includes(tripwire.content.split(' ').pop()),
       );
 
       if (found) tripwireHits++;
@@ -253,7 +279,7 @@ export async function runBenchmark(pool, userId, queryCount, options = {}) {
         type: 'tripwire',
         latency,
         found,
-        memoriesReturned: result.memories?.length || 0
+        memoriesReturned: result.memories?.length || 0,
       });
     }
 
@@ -266,7 +292,7 @@ export async function runBenchmark(pool, userId, queryCount, options = {}) {
       const result = await retrieveSemanticMemories(pool, randomQuery, {
         userId,
         mode,
-        topK: 10
+        topK: 10,
       });
 
       const latency = Date.now() - queryStart;
@@ -276,33 +302,36 @@ export async function runBenchmark(pool, userId, queryCount, options = {}) {
         query: randomQuery.substring(0, 50),
         type: 'random',
         latency,
-        memoriesReturned: result.memories?.length || 0
+        memoriesReturned: result.memories?.length || 0,
       });
 
       // Small delay to avoid overwhelming the system
       if (i > 0 && i % 10 === 0) {
-        await new Promise(resolve => setTimeout(resolve, 50));
+        await new Promise((resolve) => setTimeout(resolve, 50));
       }
     }
 
     // Test supersession determinism if requested
     let supersessionDeterminism = null;
     if (includeSupersession) {
-      const { rows } = await pool.query(`
+      const { rows } = await pool.query(
+        `
         SELECT fact_fingerprint, COUNT(*) as total, SUM(CASE WHEN is_current THEN 1 ELSE 0 END) as current
         FROM persistent_memories
         WHERE user_id = $1 AND fact_fingerprint LIKE 'test_chain_%'
         GROUP BY fact_fingerprint
-      `, [userId]);
+      `,
+        [userId],
+      );
 
-      const allDeterministic = rows.every(r => parseInt(r.current) === 1);
+      const allDeterministic = rows.every((r) => parseInt(r.current) === 1);
       supersessionDeterminism = {
         passed: allDeterministic,
-        chains: rows.map(r => ({
+        chains: rows.map((r) => ({
           fingerprint: r.fact_fingerprint,
           total: parseInt(r.total),
-          current: parseInt(r.current)
-        }))
+          current: parseInt(r.current),
+        })),
       };
     }
 
@@ -320,16 +349,15 @@ export async function runBenchmark(pool, userId, queryCount, options = {}) {
       latency: percentiles,
       supersessionDeterminism,
       elapsedMs,
-      results: results.slice(0, 10) // Return first 10 for inspection
+      results: results.slice(0, 10), // Return first 10 for inspection
     };
-
   } catch (error) {
     console.error('[SCALE-HARNESS] Benchmark error:', error.message);
     return {
       success: false,
       error: error.message,
       queryCount: results.length,
-      results
+      results,
     };
   }
 }
@@ -351,19 +379,19 @@ export async function validateInvariants(pool, userId, benchmarkResults) {
     // 1. Token budget never exceeded (check retrieval telemetry)
     invariants.tokenBudgetRespected = {
       passed: true, // Would need to check actual token counts from retrieval
-      note: "Token tracking needs telemetry integration"
+      note: 'Token tracking needs telemetry integration',
     };
 
     // 2. Supersession deterministic
     if (benchmarkResults.supersessionDeterminism) {
       invariants.supersessionDeterministic = {
         passed: benchmarkResults.supersessionDeterminism.passed,
-        details: benchmarkResults.supersessionDeterminism.chains
+        details: benchmarkResults.supersessionDeterminism.chains,
       };
     } else {
       invariants.supersessionDeterministic = {
         passed: null,
-        note: "No supersession chains tested"
+        note: 'No supersession chains tested',
       };
     }
 
@@ -371,64 +399,66 @@ export async function validateInvariants(pool, userId, benchmarkResults) {
     invariants.tripwirePrecision = {
       passed: benchmarkResults.tripwirePrecision >= 0.9,
       value: benchmarkResults.tripwirePrecision,
-      threshold: 0.9
+      threshold: 0.9,
     };
 
     // 4. Latency p99 < 2000ms
     invariants.latencyP99 = {
       passed: benchmarkResults.latency.p99 < 2000,
       value: benchmarkResults.latency.p99,
-      threshold: 2000
+      threshold: 2000,
     };
 
     // 5. Fallback rate < 0.1 (would need telemetry)
     invariants.fallbackRate = {
       passed: true,
-      note: "Fallback tracking needs telemetry integration"
+      note: 'Fallback tracking needs telemetry integration',
     };
 
     // 6. Mode isolation maintained
-    const { rows: modeCheck } = await pool.query(`
+    const { rows: modeCheck } = await pool.query(
+      `
       SELECT mode, COUNT(*) as count
       FROM persistent_memories
       WHERE user_id = $1
       GROUP BY mode
-    `, [userId]);
+    `,
+      [userId],
+    );
 
     invariants.modeIsolation = {
       passed: true, // Pass if modes are properly separated
-      modes: modeCheck.map(r => ({ mode: r.mode, count: parseInt(r.count) }))
+      modes: modeCheck.map((r) => ({ mode: r.mode, count: parseInt(r.count) })),
     };
 
     // 7. Candidate ceiling not exceeded (<= 1000)
     invariants.candidateCeiling = {
       passed: true,
-      note: "Candidate ceiling needs telemetry integration"
+      note: 'Candidate ceiling needs telemetry integration',
     };
 
     // 8. Vectors compared matches candidates
     invariants.vectorCandidateMatch = {
       passed: true,
-      note: "Vector comparison tracking needs telemetry integration"
+      note: 'Vector comparison tracking needs telemetry integration',
     };
 
     const allPassed = Object.values(invariants)
-      .filter(inv => inv.passed !== null)
-      .every(inv => inv.passed === true);
+      .filter((inv) => inv.passed !== null)
+      .every((inv) => inv.passed === true);
 
     console.log(`[SCALE-HARNESS] Invariant validation: ${allPassed ? 'PASSED' : 'FAILED'}`);
 
     return {
       allPassed,
-      invariants
+      invariants,
     };
-
   } catch (error) {
     console.error('[SCALE-HARNESS] Invariant validation error:', error.message);
     return {
       allPassed: false,
       error: error.message,
-      invariants
+      invariants,
     };
   }
 }
@@ -460,7 +490,7 @@ export function calculatePercentiles(values) {
     p99: Math.round(p99),
     min: Math.round(min),
     max: Math.round(max),
-    avg: Math.round(avg)
+    avg: Math.round(avg),
   };
 }
 
@@ -476,42 +506,52 @@ export function calculatePercentiles(values) {
 export async function cleanup(pool, userId, runId = null, options = {}) {
   const { force = false, minAgeMinutes = 10 } = options;
 
-  console.log(`[SCALE-HARNESS] Cleaning up test data for ${userId}${runId ? ` (runId: ${runId})` : ''}`);
+  console.log(
+    `[SCALE-HARNESS] Cleaning up test data for ${userId}${runId ? ` (runId: ${runId})` : ''}`,
+  );
 
   try {
     // Safety check: Verify user ID matches test pattern
     const CLEANUP_SAFE_PATTERN = /^test-scale-|^scale-test-|^acceptance-test-/;
     if (!CLEANUP_SAFE_PATTERN.test(userId)) {
-      console.log(`[SCALE-HARNESS] Safety check: userId "${userId}" does not match test pattern - skipping cleanup`);
+      console.log(
+        `[SCALE-HARNESS] Safety check: userId "${userId}" does not match test pattern - skipping cleanup`,
+      );
       return {
         success: false,
-        error: 'User ID does not match test pattern (must start with test-scale-, scale-test-, or acceptance-test-)',
+        error:
+          'User ID does not match test pattern (must start with test-scale-, scale-test-, or acceptance-test-)',
         userId,
-        deleted: 0
+        deleted: 0,
       };
     }
 
     // Safety check: Check for recent activity unless force is true
     if (!force) {
-      const activityCheck = await pool.query(`
+      const activityCheck = await pool.query(
+        `
         SELECT MAX(created_at) as last_activity
         FROM persistent_memories
         WHERE user_id = $1 ${runId ? "AND metadata->>'run_id' = $2" : ''}
-      `, runId ? [userId, runId] : [userId]);
+      `,
+        runId ? [userId, runId] : [userId],
+      );
 
       if (activityCheck.rows.length > 0 && activityCheck.rows[0].last_activity) {
         const lastActivity = new Date(activityCheck.rows[0].last_activity);
         const ageMinutes = (Date.now() - lastActivity.getTime()) / (1000 * 60);
 
         if (ageMinutes < minAgeMinutes) {
-          console.log(`[SCALE-HARNESS] Safety check: Test data has activity within ${minAgeMinutes} minutes (${ageMinutes.toFixed(1)}m ago) - skipping cleanup to avoid interfering with active runs`);
+          console.log(
+            `[SCALE-HARNESS] Safety check: Test data has activity within ${minAgeMinutes} minutes (${ageMinutes.toFixed(1)}m ago) - skipping cleanup to avoid interfering with active runs`,
+          );
           return {
             success: false,
             error: `Test data has recent activity (${ageMinutes.toFixed(1)} minutes ago). Wait ${minAgeMinutes} minutes or use force=true`,
             userId,
             runId,
             deleted: 0,
-            lastActivity: activityCheck.rows[0].last_activity
+            lastActivity: activityCheck.rows[0].last_activity,
           };
         }
       }
@@ -543,16 +583,15 @@ export async function cleanup(pool, userId, runId = null, options = {}) {
       success: true,
       deleted,
       userId,
-      runId
+      runId,
     };
-
   } catch (error) {
     console.error('[SCALE-HARNESS] Cleanup error:', error.message);
     return {
       success: false,
       error: error.message,
       userId,
-      runId
+      runId,
     };
   }
 }
@@ -567,51 +606,69 @@ export async function cleanup(pool, userId, runId = null, options = {}) {
 export async function getStatus(pool, userId) {
   try {
     // Count total memories
-    const { rows: [{ count }] } = await pool.query(`
+    const {
+      rows: [{ count }],
+    } = await pool.query(
+      `
       SELECT COUNT(*) as count
       FROM persistent_memories
       WHERE user_id = $1
-    `, [userId]);
+    `,
+      [userId],
+    );
 
     // Count by run_id
-    const { rows: runCounts } = await pool.query(`
+    const { rows: runCounts } = await pool.query(
+      `
       SELECT metadata->>'run_id' as run_id, COUNT(*) as count
       FROM persistent_memories
       WHERE user_id = $1 AND metadata->>'run_id' IS NOT NULL
       GROUP BY metadata->>'run_id'
       ORDER BY COUNT(*) DESC
-    `, [userId]);
+    `,
+      [userId],
+    );
 
     // Count tripwires
-    const { rows: [{ tripwireCount }] } = await pool.query(`
+    const {
+      rows: [{ tripwireCount }],
+    } = await pool.query(
+      `
       SELECT COUNT(*) as count
       FROM persistent_memories
       WHERE user_id = $1 AND fact_fingerprint LIKE 'tripwire_%'
-    `, [userId]);
+    `,
+      [userId],
+    );
 
     // Count by embedding status
-    const { rows: embeddingStatus } = await pool.query(`
+    const { rows: embeddingStatus } = await pool.query(
+      `
       SELECT embedding_status, COUNT(*) as count
       FROM persistent_memories
       WHERE user_id = $1
       GROUP BY embedding_status
-    `, [userId]);
+    `,
+      [userId],
+    );
 
     return {
       success: true,
       userId,
       totalMemories: parseInt(count),
       tripwires: parseInt(tripwireCount),
-      runs: runCounts.map(r => ({ runId: r.run_id, count: parseInt(r.count) })),
-      embeddingStatus: embeddingStatus.map(r => ({ status: r.embedding_status, count: parseInt(r.count) }))
+      runs: runCounts.map((r) => ({ runId: r.run_id, count: parseInt(r.count) })),
+      embeddingStatus: embeddingStatus.map((r) => ({
+        status: r.embedding_status,
+        count: parseInt(r.count),
+      })),
     };
-
   } catch (error) {
     console.error('[SCALE-HARNESS] Status error:', error.message);
     return {
       success: false,
       error: error.message,
-      userId
+      userId,
     };
   }
 }

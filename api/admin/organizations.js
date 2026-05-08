@@ -120,7 +120,7 @@ export async function resolveOrgId(headers, pool) {
     try {
       const result = await pool.query(
         'SELECT id FROM organizations WHERE admin_key = $1 AND is_active = true',
-        [adminKey]
+        [adminKey],
       );
       if (result.rows.length > 0) {
         return result.rows[0].id;
@@ -166,7 +166,7 @@ export async function resolveAdminKeyForInjection(headers, pool, masterAdminKey)
       try {
         const result = await pool.query(
           'SELECT admin_key FROM organizations WHERE admin_key = $1 AND is_active = true',
-          [headerKey]
+          [headerKey],
         );
         if (result.rows.length > 0) {
           return result.rows[0].admin_key;
@@ -187,7 +187,7 @@ export async function resolveAdminKeyForInjection(headers, pool, masterAdminKey)
       try {
         const result = await pool.query(
           'SELECT admin_key FROM organizations WHERE id = $1 AND is_active = true',
-          [parsed]
+          [parsed],
         );
         if (result.rows.length > 0) {
           const orgKey = result.rows[0].admin_key;
@@ -214,8 +214,7 @@ export async function resolveAdminKeyForInjection(headers, pool, masterAdminKey)
  */
 export async function handleCreateOrg(req, res) {
   const adminKey =
-    req.headers['x-admin-key'] ||
-    req.headers['authorization']?.replace('Bearer ', '');
+    req.headers['x-admin-key'] || req.headers['authorization']?.replace('Bearer ', '');
   if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
@@ -243,7 +242,7 @@ export async function handleCreateOrg(req, res) {
       `INSERT INTO organizations (name, slug, admin_key, plan)
        VALUES ($1, $2, $3, $4)
        RETURNING id, name, slug, admin_key, plan, created_at`,
-      [name, slug, orgAdminKey, plan]
+      [name, slug, orgAdminKey, plan],
     );
 
     const org = result.rows[0];
@@ -274,8 +273,7 @@ export async function handleCreateOrg(req, res) {
  */
 export async function handleListOrgs(req, res) {
   const adminKey =
-    req.headers['x-admin-key'] ||
-    req.headers['authorization']?.replace('Bearer ', '');
+    req.headers['x-admin-key'] || req.headers['authorization']?.replace('Bearer ', '');
   if (!adminKey || adminKey !== process.env.ADMIN_KEY) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
@@ -321,8 +319,7 @@ export async function handleListOrgs(req, res) {
  */
 export async function handleGetOrg(req, res) {
   const adminKey =
-    req.headers['x-admin-key'] ||
-    req.headers['authorization']?.replace('Bearer ', '');
+    req.headers['x-admin-key'] || req.headers['authorization']?.replace('Bearer ', '');
   if (!adminKey) {
     return res.status(403).json({ error: 'Unauthorized' });
   }
@@ -336,10 +333,7 @@ export async function handleGetOrg(req, res) {
     const { slug } = req.params;
     const isMasterAdmin = adminKey === process.env.ADMIN_KEY;
 
-    const orgResult = await pool.query(
-      'SELECT * FROM organizations WHERE slug = $1',
-      [slug]
-    );
+    const orgResult = await pool.query('SELECT * FROM organizations WHERE slug = $1', [slug]);
 
     if (orgResult.rows.length === 0) {
       return res.status(404).json({ error: 'Organization not found' });
@@ -351,7 +345,8 @@ export async function handleGetOrg(req, res) {
       return res.status(403).json({ error: 'Unauthorized' });
     }
 
-    const statsResult = await pool.query(`
+    const statsResult = await pool.query(
+      `
       SELECT
         COUNT(DISTINCT ou.user_id) AS user_count,
         COALESCE(SUM(qcl.cost_usd), 0)::DECIMAL(10,4) AS total_cost_usd
@@ -360,7 +355,9 @@ export async function handleGetOrg(req, res) {
       LEFT JOIN query_cost_log qcl ON qcl.org_id = o.id
       WHERE o.id = $1
       GROUP BY o.id
-    `, [org.id]);
+    `,
+      [org.id],
+    );
 
     const stats = statsResult.rows[0] || { user_count: 0, total_cost_usd: 0 };
 

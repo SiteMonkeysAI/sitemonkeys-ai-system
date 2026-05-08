@@ -9,21 +9,21 @@ const ANTHROPIC_MODEL_CONFIG = {
   'claude-sonnet-4-20250514': {
     costPer1kTokens: { input: 0.003, output: 0.015 },
     taskScores: {
-      simple_factual:    0.95,
+      simple_factual: 0.95,
       complex_reasoning: 0.98,
-      creative:          0.97,
-      summarization:     0.97,
-      high_stakes:       0.98,
+      creative: 0.97,
+      summarization: 0.97,
+      high_stakes: 0.98,
     },
   },
   'claude-haiku-4-5-20251001': {
     costPer1kTokens: { input: 0.0008, output: 0.004 },
     taskScores: {
-      simple_factual:    0.85,
+      simple_factual: 0.85,
       complex_reasoning: 0.75,
-      creative:          0.80,
-      summarization:     0.85,
-      high_stakes:       0.65,
+      creative: 0.8,
+      summarization: 0.85,
+      high_stakes: 0.65,
     },
   },
 };
@@ -50,8 +50,8 @@ export class AnthropicAdapter extends BaseAdapter {
     // Claude takes system as a separate top-level parameter, not in messages.
     // Omit the system key entirely when no system prompt is provided.
     const providerRequest = {
-      model:      this.modelId,
-      messages:   request.messages,
+      model: this.modelId,
+      messages: request.messages,
       max_tokens: request.maxTokens ?? 4000,
     };
     if (request.systemPrompt) {
@@ -68,7 +68,7 @@ export class AnthropicAdapter extends BaseAdapter {
 
   normalizeResponse(response, latencyMs) {
     const usage = response.usage;
-    const inputTokens  = usage.input_tokens;
+    const inputTokens = usage.input_tokens;
     const outputTokens = usage.output_tokens;
     return {
       content: response.content[0].text,
@@ -77,8 +77,8 @@ export class AnthropicAdapter extends BaseAdapter {
         outputTokens,
         totalTokens: inputTokens + outputTokens,
       },
-      cost:     this.calculateCost(inputTokens, outputTokens),
-      model:    this.modelId,
+      cost: this.calculateCost(inputTokens, outputTokens),
+      model: this.modelId,
       provider: this.providerId,
       latencyMs,
     };
@@ -94,7 +94,7 @@ export class AnthropicAdapter extends BaseAdapter {
       if (err.status === 429) {
         const retryAfter = (parseInt(err.headers?.['retry-after'] || '5', 10) || 5) * 1000;
         console.log(`[RETRY] Backoff ${retryAfter}ms before retry attempt 1`);
-        await new Promise(r => setTimeout(r, retryAfter));
+        await new Promise((r) => setTimeout(r, retryAfter));
         response = await this.client.messages.create(providerRequest);
       } else {
         throw err;

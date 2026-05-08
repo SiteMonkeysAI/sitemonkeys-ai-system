@@ -18,7 +18,7 @@ export const PURE_GREETINGS = new Set([
   'thanks',
   'thank you',
   'bye',
-  'goodbye'
+  'goodbye',
 ]);
 
 // Internal helper — not exported; used only by normalizeGreeting

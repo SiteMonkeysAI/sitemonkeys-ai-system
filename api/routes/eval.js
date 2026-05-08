@@ -11,13 +11,13 @@
  *           If not set the routes are open (development / local mode).
  */
 
-import express from "express";
+import express from 'express';
 import {
   caseContextStore,
   cleanExpiredEntries,
   countTokens,
   buildMetrics,
-} from "./eval-helpers.js";
+} from './eval-helpers.js';
 
 export { caseContextStore, cleanExpiredEntries, countTokens, buildMetrics };
 
@@ -31,9 +31,9 @@ function evalAuth(req, res, next) {
     // Dev mode — no key configured, allow all.
     return next();
   }
-  const supplied = req.headers["x-eval-key"];
+  const supplied = req.headers['x-eval-key'];
   if (!supplied || supplied !== requiredKey) {
-    return res.status(401).json({ success: false, error: "Invalid or missing x-eval-key" });
+    return res.status(401).json({ success: false, error: 'Invalid or missing x-eval-key' });
   }
   next();
 }
@@ -44,16 +44,16 @@ function evalAuth(req, res, next) {
  * POST /api/eval/context
  * Body: { case_id, context, expires_minutes? }
  */
-router.post("/context", evalAuth, (req, res) => {
+router.post('/context', evalAuth, (req, res) => {
   cleanExpiredEntries();
 
   const { case_id, context, expires_minutes = 30 } = req.body || {};
 
-  if (!case_id || typeof case_id !== "string") {
-    return res.status(400).json({ success: false, error: "case_id is required" });
+  if (!case_id || typeof case_id !== 'string') {
+    return res.status(400).json({ success: false, error: 'case_id is required' });
   }
-  if (!context || typeof context !== "string") {
-    return res.status(400).json({ success: false, error: "context is required" });
+  if (!context || typeof context !== 'string') {
+    return res.status(400).json({ success: false, error: 'context is required' });
   }
 
   const tokens = countTokens(context);
@@ -62,7 +62,9 @@ router.post("/context", evalAuth, (req, res) => {
 
   caseContextStore.set(case_id, { context, tokens, created_at, expires_at });
 
-  console.log(`[EVAL] Context stored for case_id="${case_id}" (${tokens} tokens, expires ${expires_at.toISOString()})`);
+  console.log(
+    `[EVAL] Context stored for case_id="${case_id}" (${tokens} tokens, expires ${expires_at.toISOString()})`,
+  );
 
   return res.json({
     success: true,
@@ -76,32 +78,39 @@ router.post("/context", evalAuth, (req, res) => {
  * POST /api/eval/query
  * Body: { case_id, question, their_tokens_in?, their_tokens_out? }
  */
-router.post("/query", evalAuth, async (req, res) => {
+router.post('/query', evalAuth, async (req, res) => {
   cleanExpiredEntries();
 
   const { case_id, question, their_tokens_in = 0, their_tokens_out = 0 } = req.body || {};
 
-  if (!case_id || typeof case_id !== "string") {
-    return res.status(400).json({ success: false, error: "case_id is required" });
+  if (!case_id || typeof case_id !== 'string') {
+    return res.status(400).json({ success: false, error: 'case_id is required' });
   }
-  if (!question || typeof question !== "string") {
-    return res.status(400).json({ success: false, error: "question is required" });
+  if (!question || typeof question !== 'string') {
+    return res.status(400).json({ success: false, error: 'question is required' });
   }
 
   const entry = caseContextStore.get(case_id);
   if (!entry) {
-    return res.status(404).json({ success: false, error: `No context found for case_id="${case_id}". Load context first via POST /api/eval/context.` });
+    return res
+      .status(404)
+      .json({
+        success: false,
+        error: `No context found for case_id="${case_id}". Load context first via POST /api/eval/context.`,
+      });
   }
 
   // Verify not expired (cleanExpiredEntries already ran but double-check)
   if (entry.expires_at && entry.expires_at.getTime() <= Date.now()) {
     caseContextStore.delete(case_id);
-    return res.status(404).json({ success: false, error: `Context for case_id="${case_id}" has expired.` });
+    return res
+      .status(404)
+      .json({ success: false, error: `Context for case_id="${case_id}" has expired.` });
   }
 
   const orch = global.orchestrator;
   if (!orch) {
-    return res.status(503).json({ success: false, error: "Orchestrator not ready" });
+    return res.status(503).json({ success: false, error: 'Orchestrator not ready' });
   }
 
   let result;
@@ -109,7 +118,7 @@ router.post("/query", evalAuth, async (req, res) => {
     result = await orch.processRequest({
       message: question,
       userId: `eval-${case_id}`,
-      mode: "truth_general",
+      mode: 'truth_general',
       // Pass stored context through the document injection pipeline so our
       // relevance-filtering and token-budget logic applies — NOT stuffed into
       // the user message.
@@ -117,8 +126,8 @@ router.post("/query", evalAuth, async (req, res) => {
       sessionId: `eval-session-${case_id}`,
     });
   } catch (err) {
-    console.error("[EVAL] Orchestrator error for case_id:", case_id, err.message);
-    return res.status(500).json({ success: false, error: "Orchestrator processing error" });
+    console.error('[EVAL] Orchestrator error for case_id:', case_id, err.message);
+    return res.status(500).json({ success: false, error: 'Orchestrator processing error' });
   }
 
   const meta = result.metadata || {};
@@ -138,15 +147,17 @@ router.post("/query", evalAuth, async (req, res) => {
     system_tokens,
     their_tokens_in,
     their_tokens_out,
-    model: meta.model || "gpt-4o-mini",
+    model: meta.model || 'gpt-4o-mini',
     cost: meta.cost?.totalCost || 0,
   });
 
-  console.log(`[EVAL] Query answered for case_id="${case_id}". Savings: ${metrics.savings_pct}% (${metrics.tokens_saved} tokens)`);
+  console.log(
+    `[EVAL] Query answered for case_id="${case_id}". Savings: ${metrics.savings_pct}% (${metrics.tokens_saved} tokens)`,
+  );
 
   return res.json({
     success: true,
-    answer: result.response || "",
+    answer: result.response || '',
     metrics,
   });
 });
@@ -154,14 +165,16 @@ router.post("/query", evalAuth, async (req, res) => {
 /**
  * DELETE /api/eval/context/:case_id
  */
-router.delete("/context/:case_id", evalAuth, (req, res) => {
+router.delete('/context/:case_id', evalAuth, (req, res) => {
   cleanExpiredEntries();
 
   const { case_id } = req.params;
   const existed = caseContextStore.has(case_id);
   caseContextStore.delete(case_id);
 
-  console.log(`[EVAL] Context ${existed ? "deleted" : "not found (already gone)"} for case_id="${case_id}"`);
+  console.log(
+    `[EVAL] Context ${existed ? 'deleted' : 'not found (already gone)'} for case_id="${case_id}"`,
+  );
 
   return res.json({ success: true, case_id, was_present: existed });
 });
@@ -170,7 +183,7 @@ router.delete("/context/:case_id", evalAuth, (req, res) => {
  * GET /api/eval/cases
  * List all active (non-expired) cases.
  */
-router.get("/cases", evalAuth, (req, res) => {
+router.get('/cases', evalAuth, (req, res) => {
   cleanExpiredEntries();
 
   const cases = [];
